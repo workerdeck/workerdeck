@@ -5,13 +5,6 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-/**
- * The `/fs/*` routes end to end. The containment core has its own adversarial
- * suite (`host-files.test.ts`); this one is about the door in front of it — that
- * the routes are absent unless configured, that writes are conditional, and that
- * a refusal from the core still reaches the client as a status code.
- */
-
 let running: WorkerServer | undefined
 let root: string
 let outside: string
@@ -19,8 +12,7 @@ let outside: string
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex')
 
 beforeEach(() => {
-  // realpath because macOS's tmpdir is itself a symlink — the server answers with
-  // canonical paths, so the expectations have to be canonical too.
+  // realpath because macOS's tmpdir is itself a symlink, and the server answers in canonical paths.
   const box = realpathSync(mkdtempSync(join(tmpdir(), 'wd-fs-')))
   root = join(box, 'project')
   outside = join(box, 'secrets')
@@ -65,19 +57,14 @@ describe('host file routes', () => {
       body: JSON.stringify({ path: join(root, 'x'), content: 'x' }),
     })
     expect(res.status).toBe(404)
-    // `allowedCwdRoots` unset means "a session may run anywhere", which is a
-    // statement about paths the operator types — never a licence to serve `/`.
   })
 
   it('serves the cwd roots when hostFiles names none of its own', async () => {
-    // A caller who may start a session in a tree can already read that tree
-    // through the agent, so reading it over /fs adds no authority.
     const base = await start(undefined, [root])
     const [status, body] = await get(base, '/fs/roots')
     expect(status).toBe(200)
     expect(body.roots).toEqual([{ path: root, name: 'project' }])
     expect((await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`))[0]).toBe(200)
-    // Read follows the cwd policy; write is still its own switch.
     expect(body.canWrite).toBe(false)
   })
 
@@ -85,13 +72,10 @@ describe('host file routes', () => {
     const base = await start({ roots: [join(root, 'src')] }, [root])
     const [, body] = await get(base, '/fs/roots')
     expect(body.roots).toEqual([{ path: join(root, 'src'), name: 'src' }])
-    // README.md is inside a *cwd* root but outside the narrower file root.
     expect((await get(base, `/fs/read?path=${encodeURIComponent(join(root, 'README.md'))}`))[0]).toBe(404)
   })
 
   it('an empty roots array is a policy, not an absence', async () => {
-    // An operator writing `roots: []` is turning the routes off, and must not
-    // fall through to the cwd roots.
     const base = await start({ roots: [] }, [root])
     expect((await get(base, '/fs/roots'))[0]).toBe(404)
   })
@@ -126,7 +110,6 @@ describe('host file routes', () => {
     const base = await start({ roots: [root] })
     const [, listing] = await get(base, `/fs/list?path=${encodeURIComponent(root)}`)
     const link = listing.entries.find((e: { name: string }) => e.name === 'escape')
-    // Listed, and listed as a link — never silently resolved into the tree.
     expect(link.type).toBe('symlink')
 
     const [status] = await get(base, `/fs/list?path=${encodeURIComponent(join(root, 'escape'))}`)
@@ -187,8 +170,6 @@ describe('host file routes', () => {
       const base = await start({ roots: [root] })
 
       const body = await find(base, root, 'seslist')
-      // 'other.swift' lives under a path containing 's','e','s'… but the hit in
-      // the *name* is the one a person means.
       expect(body.matches[0].relative).toBe(join('src', 'sessions', 'SessionListView.swift'))
     })
 
@@ -212,7 +193,6 @@ describe('host file routes', () => {
       const body = await find(base, root)
       const paths: string[] = body.matches.map((m: { relative: string }) => m.relative)
       expect(paths.some((p) => p.includes('node_modules'))).toBe(false)
-      // Never offer a path a later /fs/read would refuse.
       expect(paths.some((p) => p.includes('escape'))).toBe(false)
     })
 
@@ -264,7 +244,6 @@ describe('host file routes', () => {
       expect(status).toBe(200)
       expect(body).toMatchObject({ path, bytes: 19, hash: sha256('export const y = 2\n') })
 
-      // Creating over an existing file is the mistake the precondition exists for.
       const [again, err] = await write(base, { path, content: 'clobber' })
       expect(again).toBe(409)
       expect(err.error).toMatch(/expectedHash/)
@@ -278,7 +257,6 @@ describe('host file routes', () => {
 
       const [ok, body] = await write(base, { path, content: '# bye\n', expectedHash: sha256('# hello\n') })
       expect(ok).toBe(200)
-      // The write's own hash chains into the next edit without a re-read.
       const [second] = await write(base, { path, content: '# again\n', expectedHash: body.hash })
       expect(second).toBe(200)
     })
@@ -303,8 +281,6 @@ describe('host file routes', () => {
   })
 
   it('answers 401 before it answers "not configured"', async () => {
-    // Otherwise an unauthenticated probe learns whether this gateway exposes a
-    // filesystem at all.
     running = createWorkerServer({
       authenticate: (req) => (req.headers.authorization === 'Bearer k' ? { ok: true } : null),
       hostFiles: { roots: [root] },

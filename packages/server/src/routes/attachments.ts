@@ -1,15 +1,3 @@
-/**
- * `{basePath}/sessions/:id/attachments` — the files a client sends with a message.
- *
- * `POST ?name=<name>` takes raw bytes as the body and the media type from `content-type`;
- * no multipart parsing on purpose, so a phone and a browser both upload with one plain
- * request and this file stays dependency-free.
- *
- * The download always answers `content-disposition: attachment` and `nosniff`, like `/files`:
- * an upload is client-supplied content served from the gateway's own origin and must never
- * render as a document there. (`<img src>` is unaffected — disposition does not apply to
- * subresources.)
- */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { attachmentKind } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
@@ -32,8 +20,6 @@ export const handleAttachments = async (
       json(res, 400, { error: 'content-type header is required' })
       return
     }
-    // The engine's capability record names the kinds its sendMessage can deliver ('document'
-    // is the record's 'pdf'), so an upload that succeeds is one the message can use.
     const accepted = (session.capabilities ?? ENGINE_CAPABILITIES[session.engine ?? 'claude']).attachments
     const kind = attachmentKind(mediaType)
     if (kind && !accepted.includes(kind === 'document' ? 'pdf' : kind)) {

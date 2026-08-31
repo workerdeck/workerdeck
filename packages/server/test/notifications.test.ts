@@ -4,8 +4,7 @@ import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/c
 import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-/** The SDK stand-in: tests push messages in and hold `canUseTool` to raise a
- * permission request, which is the notification that matters most. */
+// The SDK stand-in: tests hold `canUseTool` open to raise a permission request.
 const fakeHarness = () => {
   const buffered: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -42,7 +41,7 @@ const fakeHarness = () => {
     captured.options = params.options
     void (async () => {
       for await (const _ of params.prompt as AsyncIterable<SDKUserMessage>) {
-        // drained so the runner's input queue doesn't block
+        // Drained so the runner's input queue doesn't block.
       }
     })()
     return query
@@ -65,7 +64,6 @@ const turnResult = {
   uuid: 'uuid-result',
 } as unknown as SDKMessage
 
-/** A webhook receiver that records what it was POSTed. */
 const startReceiver = async (respond: () => number = () => 200) => {
   const received: SessionNotification[] = []
   const server: Server = createServer((req, res) => {
@@ -137,8 +135,6 @@ describe('session notifications', () => {
       const permission = receiver.received.find((n) => n.type === 'permission_requested')!
       expect(permission.sessionId).toBe(session.id)
       expect(permission.preview).toBe('Bash')
-      // The whole request rides along: without its id a lock-screen Approve action
-      // has nothing to POST to.
       expect(permission.request?.toolName).toBe('Bash')
       expect(permission.request?.id).toBeTruthy()
       expect(permission.seq).toBeGreaterThan(0)
@@ -153,7 +149,6 @@ describe('session notifications', () => {
         totalCostUsd: 0.02,
       })
 
-      // The local observer sees everything the webhook does.
       expect(observed.map((n) => n.type)).toEqual(expect.arrayContaining(['permission_requested', 'turn_completed']))
     } finally {
       await receiver.close()
@@ -243,7 +238,6 @@ describe('session notifications', () => {
       await vi.waitFor(() => expect(harness.captured.options?.canUseTool).toBeDefined())
       harness.emit(turnResult)
 
-      // Two rejections, then the third attempt lands — same notification each time.
       await vi.waitFor(() => expect(receiver.received.length).toBe(3))
       expect(new Set(receiver.received.map((n) => n.type))).toEqual(new Set(['turn_completed']))
       expect((await fetch(`${base}/sessions/${session.id}`)).status).toBe(200)
@@ -263,7 +257,6 @@ describe('session notifications', () => {
     const base = `http://127.0.0.1:${port}/v1`
     const session = await createSession(base)
     harness.emit(turnResult)
-    // The turn still lands; there is simply nowhere for it to be announced.
     await vi.waitFor(async () => {
       const res = await fetch(`${base}/sessions/${session.id}`)
       // 2 = the turn_result's own num_turns, which SessionInfo accumulates.

@@ -1,16 +1,7 @@
 import type { ParkedExecution, Runner, RunnerSnapshot, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
 import type { SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 
-/**
- * A runner that parks the way the provider engine does: it announces the park with
- * `status_changed: 'parked'` once its deferred executions are dispatched, hands
- * over a snapshot on `park()`, and comes back as a NEW object under the same id.
- *
- * Deliberately not the real `AiSdkRunner`: this package must never depend on a
- * model SDK. The engine's own park/restore semantics are covered in
- * `packages/core/test/park-restore.test.ts`; what is under test here is the
- * server's half — persist, evict, index, wake, and the routes around it.
- */
+// Parks the way the provider engine does, without the model SDK this package must never depend on.
 export class ParkableRunner implements Runner {
   readonly id: string
   readonly createdAt = Date.now()
@@ -25,8 +16,6 @@ export class ParkableRunner implements Runner {
   #pending = new Map<string, ParkedExecution>()
   #files: Record<string, string>
   #parked = false
-  /** Stands in for the provider engine's `ModelMessage[]`: the thing a park
-   * preserves and a write-through has to carry across a restart. */
   #messages: string[] = []
 
   constructor(id: string, config: SessionRunnerConfig, restore?: RunnerSnapshot) {
@@ -46,15 +35,11 @@ export class ParkableRunner implements Runner {
       for (const execution of restore.parked) {
         this.#pending.set(execution.executionId, execution)
       }
-      // Derived, exactly as the real runner derives it: a snapshot with nothing
-      // pending is an *idle* session that was written through, not a parked one.
-      // Hardcoding 'parked' here would have every restored live session come
-      // back claiming to wait on work it does not have.
+      // Derived as the real runner derives it: a snapshot with nothing pending is an idle write-through, not a park.
       this.#status = this.#pending.size > 0 ? 'parked' : 'idle'
     }
   }
 
-  /** Dispatch a deferred execution and come to rest on it, like a parked turn. */
   defer(executionId: string, toolName = 'remote_task', expiresAt?: number): void {
     this.#pending.set(executionId, { executionId, toolName, expiresAt })
     this.#emit({ type: 'execution_dispatched', executionId, toolName, backend: 'remote', deferred: true, expiresAt })
@@ -71,9 +56,6 @@ export class ParkableRunner implements Runner {
     return this.#buildSnapshot()
   }
 
-  /** The non-destructive half, mirroring the real runner: same value, nothing
-   * torn down, and allowed at rest with nothing pending — which is exactly the
-   * case `park()` above refuses. */
   snapshot(): RunnerSnapshot | undefined {
     if (this.#parked) {
       return undefined
@@ -94,12 +76,10 @@ export class ParkableRunner implements Runner {
     }
   }
 
-  /** What the session has said and been told — the history a restart must keep. */
   get messages(): string[] {
     return [...this.#messages]
   }
 
-  /** Write to the scratch filesystem, so a round-trip has something to prove. */
   writeFile(path: string, content: string): void {
     this.#files[path] = content
   }
@@ -122,8 +102,6 @@ export class ParkableRunner implements Runner {
     return true
   }
 
-  /** Take a turn, the way a live conversation does: the prompt and the answer
-   * both land in the history, and the turn ends. */
   turn(prompt: string, answer: string): void {
     this.#status = 'running'
     this.#emit({ type: 'status_changed', status: 'running' })
@@ -140,8 +118,6 @@ export class ParkableRunner implements Runner {
     this.#emit({ type: 'status_changed', status: 'idle' })
   }
 
-  /** A settled tool call in the log — the oversized result a parked session
-   * still has to be able to serve from its snapshot. */
   toolResult(toolUseId: string, content: string, name = 'Bash'): void {
     this.#emit({
       type: 'assistant_message',
@@ -160,13 +136,10 @@ export class ParkableRunner implements Runner {
     })
   }
 
-  /** Switch the model — one of the write-through triggers, and the one that can
-   * fire while the session is anything but idle. */
   changeModel(model: string): void {
     this.#emit({ type: 'model_changed', model })
   }
 
-  /** Finish the run, the way a completed turn would. */
   finish(): void {
     this.#status = 'idle'
     this.#emit({
@@ -192,13 +165,7 @@ export class ParkableRunner implements Runner {
       createdAt: this.createdAt,
       lastSeq: this.#seq,
       pendingPermissionCount: 0,
-      // Echoed like every real runner — `buildRunner` asserts on it, and every
-      // scope check downstream reads it.
       scope: this.#config.scope,
-      // `info().meta` IS the live `#config.meta`, which is what `setTitle`
-      // writes — the property both record kinds depend on to carry a rename
-      // across a restart. Absent here, a rename looked correct in the listing
-      // and died on the wake, which is exactly the bug it must not have.
       meta: this.#config.meta,
       title: typeof this.#config.meta?.title === 'string' ? this.#config.meta.title : undefined,
     }

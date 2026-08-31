@@ -3,9 +3,7 @@ import { attachmentKind, normalizeMediaType, type AttachmentInput } from '@worke
 import type { MessageAttachment } from '@workerdeck/protocol'
 
 export type AttachmentStoreOptions = {
-  /** Largest single upload. Default 10 MiB. */
   maxFileBytes?: number
-  /** Ceiling on everything one session is holding. Default 64 MiB. */
   maxSessionBytes?: number
 }
 
@@ -20,14 +18,6 @@ export type PutResult = { ok: true; attachment: MessageAttachment } | { ok: fals
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024
 const DEFAULT_MAX_SESSION_BYTES = 64 * 1024 * 1024
 
-/**
- * Per-session hold for files the user attached to a message.
- *
- * In memory for the session's lifetime, the same bargain `GET /sessions/:id/files` makes — an
- * attachment is only *needed* between the upload and the message that names it. Both caps live
- * here rather than at the route so a host embedding the server cannot forget one (413 either
- * way). See `docs/GOTCHAS.md` §Message attachments.
- */
 export class AttachmentStore {
   #bySession = new Map<string, Map<string, AttachmentInput>>()
   #maxFileBytes: number
@@ -85,19 +75,10 @@ export class AttachmentStore {
     return { ok: true, attachment: ref(attachment) }
   }
 
-  /** The stored record, bytes included — for the download route and for the send
-   * path that turns ids into content blocks. */
   get(sessionId: string, id: string): AttachmentInput | undefined {
     return this.#bySession.get(sessionId)?.get(id)
   }
 
-  /**
-   * Resolve the ids a `user_message` named, in the order given.
-   *
-   * Missing ids are reported rather than skipped: a message that quietly lost its
-   * picture reads as the model ignoring it, which is a far worse failure than a
-   * command that errors.
-   */
   resolve(sessionId: string, ids: readonly string[]): { ok: true; attachments: AttachmentInput[] } | { ok: false; missing: string[] } {
     const held = this.#bySession.get(sessionId)
     const attachments: AttachmentInput[] = []
@@ -127,16 +108,8 @@ const ref = (attachment: AttachmentInput): MessageAttachment => {
   }
 }
 
-/**
- * A display name, not a path. The name is echoed back to clients and put in front
- * of the model in the text-attachment envelope, so directory separators, control
- * characters and unbounded length all come off here.
- */
 const safeName = (name: string): string => {
   const leaf = name.split(/[/\\]/).pop() ?? ''
-  // Control characters, plus the two delimiters of the text-attachment envelope.
-  // The control range is exactly what makes this worth doing: the name is
-  // client-supplied and ends up both in a response header and in front of a model.
   // oxlint-disable-next-line no-control-regex
   const cleaned = leaf.replace(/[\u0000-\u001f\u007f"<>]/g, '').trim()
   if (cleaned === '' || cleaned === '.' || cleaned === '..') {

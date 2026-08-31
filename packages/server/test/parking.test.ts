@@ -76,9 +76,7 @@ describe('deferred execution: parking and result ingestion', () => {
       expect((await running!.parking.get(session.id))?.kind).toBe('parked')
     })
 
-    // The runner is gone from the registry...
     expect(running!.registry.get(session.id)).toBeUndefined()
-    // ...but the session is not: it reads, lists, and serves its files.
     const read = (await fetch(`${h.base}/sessions/${session.id}`).then((r) => r.json())) as {
       session: SessionInfo
     }
@@ -108,16 +106,13 @@ describe('deferred execution: parking and result ingestion', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ applied: true, sessionId: session.id })
 
-    // Rebuilt under the same id, with the result in its loop.
     expect(h.runners).toHaveLength(2)
     const resumed = h.runners[1]!
     expect(resumed.id).toBe(session.id)
     expect(running!.registry.get(session.id)).toBe(resumed)
     expect(resumed.settled).toEqual([{ executionId: 'exec-1', result: { status: 'ok', output: { answer: 42 }, logs: undefined } }])
-    // The parked record is gone; the session is live again.
     expect(await running!.parking.get(session.id)).toBeNull()
 
-    // A duplicate delivery is a no-op, not a second application and not an error.
     const again = await submitResult(h.base, 'exec-1', {
       status: 'ok',
       output: { type: 'json', value: { answer: 42 } },
@@ -190,8 +185,6 @@ describe('deferred execution: parking and result ingestion', () => {
     runners[0]!.defer('exec-1')
     await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
 
-    // A principal scoped to another profile cannot steer this session's loop —
-    // and can't tell whether the execution exists at all.
     const refused = await submitResult(
       base,
       'exec-1',
@@ -216,7 +209,6 @@ describe('deferred execution: parking and result ingestion', () => {
 
     h.runners[0]!.defer('exec-1')
     await new Promise((r) => setTimeout(r, 60))
-    // Someone is watching: parking would pull the runner out from under them.
     expect(running!.registry.get(session.id)).toBeDefined()
     expect(await running!.parking.get(session.id)).toBeNull()
 
@@ -253,17 +245,6 @@ describe('deferred execution: parking and result ingestion', () => {
     expect(h.runners).toHaveLength(1)
   })
 
-  /**
-   * On-demand tool results, against a session whose runner is gone.
-   *
-   * The route resolves a park through its snapshot's own events, and that arm
-   * had never been executed — the truncation suite runs entirely against a live
-   * runner. It is the arm that matters most, too: a park is precisely the
-   * session read days later, and the reason the snapshot keeps its log
-   * untruncated. `ParkableRunner` has no `eventAt`, so live it 501s and parked
-   * it must still answer — which also proves the fallback is the snapshot's and
-   * not the runner's.
-   */
   it('serves a parked session’s whole tool result from its snapshot', async () => {
     const h = await startServer()
     const session = await createSession(h.base)
@@ -284,8 +265,6 @@ describe('deferred execution: parking and result ingestion', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ seq, toolUseId: 'call-1', content: big, isError: false })
 
-    // The same guards, on the same arm: a seq the caller cached can name a
-    // different call after a rebuild, so the id is verified against the block.
     expect((await fetch(`${h.base}/sessions/${session.id}/events/${seq}/result?toolUseId=other`)).status).toBe(404)
     expect((await fetch(`${h.base}/sessions/${session.id}/events/99999/result?toolUseId=call-1`)).status).toBe(404)
   })
@@ -313,7 +292,6 @@ describe('deferred execution: parking and result ingestion', () => {
       expect(job.job.status).toBe('parked')
       expect(job.job.parkedExecutionId).toBe('exec-1')
     })
-    // The freed slot let the second job start.
     await vi.waitFor(() => expect(h.runners).toHaveLength(2))
     const stats = (await fetch(`${h.base}/queue`).then((r) => r.json())) as {
       stats: { running: number; parked: number }
@@ -333,11 +311,7 @@ describe('deferred execution: parking and result ingestion', () => {
   })
 })
 
-/**
- * The half a memory store cannot cover: the process goes away mid-park. Two servers
- * over one directory, sequentially — which is also the only way a file store is ever
- * legal (see `createFileSessionStore`).
- */
+// Two servers over one directory, sequentially — the only way a file store is ever legal.
 describe('deferred execution: durability across a restart', () => {
   let dir: string
   afterEach(async () => {
@@ -349,9 +323,7 @@ describe('deferred execution: durability across a restart', () => {
       parking: { parkDelayMs: 10, expiredGraceMs, store: createFileSessionStore({ dir }) },
     })
 
-  /** Age a parked record's deadline past, the way an outage of any real length
-   * would. Done on the file rather than with a short timer so the park itself
-   * can't race the watchdog. */
+  // Aged on the file rather than with a short timer, so the park itself cannot race the watchdog.
   const backdateDeadline = async (sessionId: string): Promise<void> => {
     const path = join(dir, `${sessionId}.json`)
     const file = JSON.parse(await readFile(path, 'utf8')) as {
@@ -375,17 +347,14 @@ describe('deferred execution: durability across a restart', () => {
     await vi.waitFor(async () => expect(await running!.parking.get(session.id)).not.toBeNull())
     expect(await readdir(dir)).toEqual([`${session.id}.json`])
 
-    // The deploy restart, mid-park.
     await running!.close()
     const second = await withStore()
 
-    // The new process knows the session without having built anything for it.
     expect(second.runners).toHaveLength(0)
     const listed = (await fetch(`${second.base}/sessions`).then((r) => r.json())) as {
       sessions: SessionInfo[]
     }
     expect(listed.sessions.map((s) => [s.id, s.status])).toEqual([[session.id, 'parked']])
-    // Its snapshot came back whole, transcript and scratch files included.
     const download = await fetch(`${second.base}/sessions/${session.id}/files/out/report.md`)
     expect(await download.text()).toBe('# draft')
 
@@ -398,18 +367,12 @@ describe('deferred execution: durability across a restart', () => {
     const resumed = second.runners[0]!
     expect(resumed.id).toBe(session.id)
     expect(resumed.settled).toEqual([{ executionId: 'exec-1', result: { status: 'ok', output: 42, logs: undefined } }])
-    // Seq numbering continues from the snapshot: a client reattaching with the
-    // afterSeq it had before the restart sees one unbroken stream.
     expect(resumed.info().lastSeq).toBeGreaterThan(2)
     expect(await running!.parking.get(session.id)).toBeNull()
     expect(await readdir(dir)).toEqual([])
   })
 
-  /**
-   * A store whose `save` takes real time — which every durable one does, and the
-   * memory store never did. The park evicts the runner before the write lands, so
-   * this is the window where the session is in neither the registry nor the store.
-   */
+  // A store whose `save` takes real time: the park evicts before the write lands, opening the window these tests aim at.
   const slowSaveStore = (delayMs: number): SessionStore => {
     const inner = createFileSessionStore({ dir })
     return {
@@ -426,9 +389,6 @@ describe('deferred execution: durability across a restart', () => {
     const h = await startServer({ parking: { parkDelayMs: 10, store: slowSaveStore(80) } })
     const session = await createSession(h.base)
     h.runners[0]!.defer('exec-1')
-    // Deliver into the save window: the runner is already evicted, the record is
-    // still in flight. Reading past the write would 404 the caller, file the
-    // execution as settled, and leave a record nothing could ever wake.
     await vi.waitFor(() => expect(running!.registry.get(session.id)).toBeUndefined())
 
     const res = await submitResult(h.base, 'exec-1', {
@@ -451,8 +411,6 @@ describe('deferred execution: durability across a restart', () => {
 
     const deleted = await fetch(`${h.base}/sessions/${session.id}`, { method: 'DELETE' })
     expect(deleted.status).toBe(200)
-    // The save lands after the delete: without ordering it would resurrect a
-    // session the caller was told was closed — and hydrate() would wake it later.
     await new Promise((resolve) => setTimeout(resolve, 150))
     expect(await readdir(dir)).toEqual([])
     const listed = (await fetch(`${h.base}/sessions`).then((r) => r.json())) as {
@@ -471,13 +429,10 @@ describe('deferred execution: durability across a restart', () => {
     await running!.close()
     await backdateDeadline(session.id)
 
-    // Deadline long past by the time the process is back — the result could not
-    // have been delivered while it was down, so the watchdog holds off.
     const second = await withStore(10_000)
     await new Promise((resolve) => setTimeout(resolve, 60))
     expect(second.runners).toHaveLength(0)
 
-    // A delivery still lands, which is the point of holding off.
     expect((await submitResult(second.base, 'exec-1', { status: 'ok', output: { type: 'json', value: 1 } })).status).toBe(200)
     expect(second.runners[0]!.settled[0]).toMatchObject({ result: { status: 'ok' } })
   })

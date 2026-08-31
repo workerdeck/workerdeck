@@ -8,7 +8,6 @@ import type { Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerde
 import type { ProfileInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type EngineRunnerContext, type WorkerServer } from '../src/index.ts'
 
-/** Minimal Runner implementation — engine selection is what's under test, not the engine. */
 const fakeRunner = (id: string, config: SessionRunnerConfig): Runner => {
   return {
     id,
@@ -102,11 +101,8 @@ describe('provider profiles and engine selection', () => {
     expect(createEngineRunner).toHaveBeenCalledOnce()
     const ctx = createEngineRunner.mock.calls[0]![0]
     expect(ctx.profile.name).toBe('kimi')
-    // Profile defaults fill unset request fields...
     expect(ctx.config.model).toBe('kimi-k3')
-    // ...but no config dir is pinned: credentials come from the environment.
     expect(ctx.config.env?.CLAUDE_CONFIG_DIR).toBeUndefined()
-    // The bridge is handed over so the engine can execute tools in the tab.
     expect(typeof ctx.bridge.executorFor).toBe('function')
   })
 
@@ -189,8 +185,6 @@ describe('provider profiles and engine selection', () => {
     })
     expect(pending.status).toBe('pending')
 
-    // The server wires the answer into the runner itself — no host boilerplate —
-    // and the host's own onResult observer still fires.
     await vi.waitFor(() => expect(settled).toHaveLength(1))
     expect(settled[0]).toMatchObject({
       executionId: 'exec-1',
@@ -273,7 +267,6 @@ describe('provider profiles and engine selection', () => {
       engine: 'provider',
       provider: { id: 'moonshotai', model: 'kimi-k3', apiKeyEnv: 'MOONSHOT_API_KEY' },
     })
-    // Names only, never values — the key itself is never on the wire.
     expect(JSON.stringify(body.profile)).not.toContain('sk-')
     expect(body.config.skills).toEqual([])
   })
@@ -284,7 +277,6 @@ describe('provider profiles and engine selection', () => {
       allowUnauthenticated: true,
       allowedCwdRoots: ['/tmp'],
       profiles: [providerProfile()],
-      // The shape a per-session MCP connect needs: assembly that resolves later.
       createEngineRunner: async ({ config }) => {
         await new Promise((resolve) => setTimeout(resolve, 5))
         assembled = true
@@ -299,7 +291,6 @@ describe('provider profiles and engine selection', () => {
     })
     expect(res.status).toBe(201)
     expect(assembled).toBe(true)
-    // Adopted into the registry, so it is attachable like any other session.
     expect(((await res.json()) as { session: SessionInfo }).session.id).toBe('engine-async')
     const listed = (await fetch(`http://127.0.0.1:${port}/v1/sessions`).then((r) => r.json())) as {
       sessions: SessionInfo[]
@@ -322,7 +313,6 @@ describe('provider profiles and engine selection', () => {
     })
     expect(res.status).toBe(500)
     expect(((await res.json()) as { error: string }).error).toBe('MCP server unreachable')
-    // Nothing half-registered: a failed assembly leaves no session behind.
     const listed = (await fetch(`http://127.0.0.1:${port}/v1/sessions`).then((r) => r.json())) as {
       sessions: SessionInfo[]
     }
@@ -345,7 +335,6 @@ describe('provider profiles and engine selection', () => {
     })
     expect(res.status).toBe(400)
     expect(((await res.json()) as { error: string }).error).toMatch(/'plan' is not supported by profile 'kimi'/)
-    // Refused at the gateway — the engine is never asked to make sense of it.
     expect(createEngineRunner).not.toHaveBeenCalled()
   })
 
@@ -473,8 +462,6 @@ describe('provider profiles and engine selection', () => {
       body: JSON.stringify({
         cwd: '/tmp/project',
         profile: 'kimi',
-        // MCP tools are authoritative — a client that could name one could point
-        // an authoritative tool at anything it liked.
         mcpServers: { evil: { type: 'http', url: 'https://attacker.example/mcp' } },
       }),
     })

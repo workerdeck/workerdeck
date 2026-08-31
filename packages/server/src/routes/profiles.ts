@@ -1,5 +1,3 @@
-/** `{basePath}/profiles[/:name]` — the profile list every create form renders
- * from, and (with a `profileStore`) the management routes. */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ProfileInfo, UpdateProfileRequest } from '@workerdeck/protocol'
 import { json, readJsonBody } from '../lib/http.ts'
@@ -27,7 +25,6 @@ export const handleProfiles = async (
   if (rest === '') {
     if (req.method === 'GET') {
       const visible = auth.allowedProfiles ? profiles.all().filter((p) => auth.allowedProfiles!.includes(p.name)) : profiles.all()
-      // Stale-while-revalidate: answer from the cache, re-probe anything older than the TTL.
       availability.refresh(visible)
       json(res, 200, {
         profiles: visible.map((p) => profiles.forResponse(p)),
@@ -67,10 +64,6 @@ export const handleProfiles = async (
     return
   }
   if (req.method === 'GET') {
-    // The config snapshot is the operator's own config directory read back — skill, agent,
-    // command and hook names, and the *keys* of the env in `settings.json`. A profile a
-    // scoped end user may *run* is not thereby a directory they may inventory, so it is
-    // withheld from a non-operator while the profile record itself still answers.
     json(res, 200, {
       profile: profiles.forResponse(profile),
       config: authSvc.isOperator(auth) ? readProfileConfig(profile) : undefined,
@@ -90,8 +83,6 @@ export const handleProfiles = async (
       return
     }
     const patch = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateProfileRequest
-    // `name` is the route, not the body — a rename would orphan every session
-    // and job already pinned to the old one.
     await saveManaged({ ...profile, ...patch, name: profile.name })
     return
   }

@@ -1,9 +1,3 @@
-/**
- * `{basePath}/sessions/:id/mcp` — the session's MCP servers (reconnect, enable, disable).
- *
- * Every answer goes through `mcpStatusInfo`, which drops the servers' `env` and
- * `headers`: reading this route must not be a way to read the operator's API tokens.
- */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Runner } from '@workerdeck/core'
 import type { McpServerActionRequest } from '@workerdeck/protocol'
@@ -36,9 +30,6 @@ export const handleMcp = async (
       json(res, 400, { error: "action must be 'reconnect', 'enable' or 'disable'" })
       return
     }
-    // Checked before dispatching, because the calls below are optionally chained: an engine
-    // that lists its servers but cannot act on one (codex) would no-op and answer 200 with
-    // the unchanged list.
     const canAct =
       body.action === 'reconnect' ? typeof runner.reconnectMcpServer === 'function' : typeof runner.setMcpServerEnabled === 'function'
     if (!canAct) {
@@ -54,7 +45,6 @@ export const handleMcp = async (
         await runner.setMcpServerEnabled?.(serverName, body.action === 'enable')
       }
     } catch (error) {
-      // The CLI's own message ("No MCP server found named x") is the useful one.
       json(res, 400, { error: error instanceof Error ? error.message : 'MCP action failed' })
       return
     }

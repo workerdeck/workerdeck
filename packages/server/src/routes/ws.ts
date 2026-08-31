@@ -1,6 +1,3 @@
-/** The session WebSocket: attach (replay + live), and the client command
- * surface. One live attach per client socket; the bridge registration is what
- * lets this client execute bridged tool calls in its own sandbox. */
 import type { IncomingMessage } from 'node:http'
 import type { WebSocket } from 'ws'
 import type { Runner } from '@workerdeck/core'
@@ -11,13 +8,7 @@ export const attachClient = (ctx: ServerContext, ws: WebSocket, runner: Runner, 
   const { bridge, parking } = ctx
   const url = new URL(req.url ?? '/', 'http://internal')
   const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
-  // Opt-in, from the query string, because only the attaching *renderer* knows whether it can
-  // fetch the rest (see `Runner.subscribe`). A gateway that truncated for everyone would hand
-  // an older client a head with no marker.
   const truncateResults = url.searchParams.get('truncateResults') === '1'
-  // Its own flag, never a widening of `truncateResults`: these families ship without a
-  // protocol bump only because "a client that never asked cannot receive one" holds by
-  // construction, and a caller that asked for text heads never asked for image addresses.
   const imageRefs = url.searchParams.get('imageRefs') === '1'
 
   const send = (frame: ServerFrame): void => {
@@ -29,21 +20,14 @@ export const attachClient = (ctx: ServerContext, ws: WebSocket, runner: Runner, 
   send({
     type: 'attached',
     protocolVersion: PROTOCOL_VERSION,
-    // The attach snapshot is the session-level source (no event carries it), so project
-    // identity is stamped here like everywhere a SessionInfo ships.
     session: ctx.projects.withProject(runner.info()),
     replayingFrom: afterSeq,
   })
-  // `coalesceReplay` is opt-in and this is the one caller: a client's reducer is
-  // last-write-wins for the readings it drops, whereas the in-process subscribers (parking
-  // above all) read those same events as *transitions* and must keep every one.
   const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
     coalesceReplay: true,
     truncateResults,
     imageRefs,
   })
-  // Register for bridged tool calls: this client can be asked to execute them in its own
-  // sandbox (see BridgeHub).
   const detachBridge = bridge.attach(runner.id, send)
 
   ws.on('message', (data: Buffer) => {
@@ -64,8 +48,6 @@ export const attachClient = (ctx: ServerContext, ws: WebSocket, runner: Runner, 
   ws.on('close', () => {
     unsubscribe()
     detachBridge()
-    // Nobody watching any more: a session waiting on a deferred execution can give its
-    // runner back (after a grace period, so a reconnect costs nothing).
     parking.onDetach(runner.id)
   })
 }
@@ -78,7 +60,6 @@ const handleCommand = async (ctx: ServerContext, frame: ClientFrame, runner: Run
         runner.sendMessage(frame.text)
         return
       }
-      // A missing id throws rather than sending a message that lost its picture.
       const resolved = attachmentStore.resolve(runner.id, frame.attachmentIds)
       if (!resolved.ok) {
         throw new Error(`unknown attachment(s): ${resolved.missing.join(', ')}`)
@@ -106,8 +87,6 @@ const handleCommand = async (ctx: ServerContext, frame: ClientFrame, runner: Run
       return
     }
     case 'clear_context': {
-      // Optional on `Runner`, like every member added after it became public API; an engine
-      // that declines it is what `EngineCapabilities.clearContext` told the client to expect.
       if (!runner.clearContext) {
         throw new Error(`the ${runner.info().engine ?? 'claude'} engine cannot clear a conversation`)
       }
@@ -126,9 +105,6 @@ const handleCommand = async (ctx: ServerContext, frame: ClientFrame, runner: Run
       return
     }
     case 'tool_call_result': {
-      // Untrusted client input by contract — never a source for server-authoritative state.
-      // Unknown or already settled ids are ignored rather than erroring: a late answer racing
-      // a timeout is expected, not a client bug.
       bridge.resolve(runner.id, frame.executionId, { output: frame.output, logs: frame.logs })
       return
     }

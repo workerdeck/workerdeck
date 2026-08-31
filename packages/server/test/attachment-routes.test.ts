@@ -4,10 +4,8 @@ import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/c
 import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-/** A 1x1 red PNG — small enough to inline, real enough to be a legal upload. */
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
-/** Minimal fake CLI: records what it was sent, answers nothing. */
 const fakeHarness = () => {
   const captured: SDKUserMessage[] = []
   let done = false
@@ -73,7 +71,6 @@ const upload = async (base: string, id: string, name: string, mediaType: string,
   })
 }
 
-/** Attach, run `fn`, and hand back every session event seen. */
 const withSocket = async (wsBase: string, id: string, fn: (ws: WebSocket, events: SessionEvent[]) => Promise<void>): Promise<void> => {
   const ws = new WebSocket(`${wsBase}/sessions/${id}/ws`)
   const events: SessionEvent[] = []
@@ -118,7 +115,6 @@ describe('session attachments', () => {
       )
       await settle()
 
-      // The CLI gets the bytes: image block first, then the typed text.
       const sent = harness.captured.at(-1)!
       expect(sent.message.content).toEqual([
         {
@@ -128,7 +124,6 @@ describe('session attachments', () => {
         { type: 'text', text: 'what is this?' },
       ])
 
-      // The event log gets the reference and nothing else — no base64 anywhere.
       const logged = events.find((e) => e.type === 'user_message')
       expect(logged).toMatchObject({
         message: { role: 'user', content: 'what is this?' },
@@ -149,7 +144,6 @@ describe('session attachments', () => {
     await withSocket(wsBase, id, async (ws) => {
       ws.send(JSON.stringify({ type: 'user_message', text: '', attachmentIds: [uploaded.attachment.id] }))
       await settle()
-      // No empty text block: the API rejects one, so it is simply absent.
       expect(harness.captured.at(-1)!.message.content).toEqual([
         {
           type: 'image',
@@ -166,7 +160,6 @@ describe('session attachments', () => {
     const uploaded = (await (await upload(base, id, 'notes.txt', 'text/plain; charset=utf-8', 'hello there')).json()) as {
       attachment: { id: string; mediaType: string }
     }
-    // The charset parameter is normalized away.
     expect(uploaded.attachment.mediaType).toBe('text/plain')
 
     await withSocket(wsBase, id, async (ws) => {
@@ -246,7 +239,6 @@ describe('session attachments', () => {
       attachment: { id: string }
     }
     await fetch(`${base}/sessions/${id}`, { method: 'DELETE' })
-    // The session is gone, so the route 404s before it ever looks for the file.
     const res = await fetch(`${base}/sessions/${id}/attachments/${uploaded.attachment.id}`)
     expect(res.status).toBe(404)
   })
@@ -292,7 +284,6 @@ describe('session MCP routes', () => {
         config: {
           command: 'node',
           args: ['./server.js'],
-          // Both of these are secrets, and neither may come back out.
           env: { GTM_TOKEN: 'sk-live-do-not-leak' },
         },
         tools: [{ name: 'TaskUpsert', description: 'Create or update a task' }],

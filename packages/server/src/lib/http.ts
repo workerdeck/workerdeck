@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-/** Conservative content types for VFS downloads: text formats the agent actually
- * produces; anything unrecognized ships as plain text (the VFS is string-backed). */
 const CONTENT_TYPES: Record<string, string> = {
   json: 'application/json; charset=utf-8',
   md: 'text/markdown; charset=utf-8',
@@ -29,8 +27,6 @@ export const readJsonBody = async (req: IncomingMessage, maxBytes: number): Prom
   return JSON.parse(body.toString('utf8')) as Record<string, unknown>
 }
 
-/** Body as bytes, refusing anything over `maxBytes`. Attachments are the one
- * thing this server takes that isn't JSON. */
 export const readRawBody = async (req: IncomingMessage, maxBytes: number): Promise<Buffer> => {
   const chunks: Buffer[] = []
   let size = 0
@@ -44,18 +40,11 @@ export const readRawBody = async (req: IncomingMessage, maxBytes: number): Promi
   return Buffer.concat(chunks)
 }
 
-/** sha256 hex — the currency of the conditional-write protocol on `/fs/write`. */
 export const hashBytes = (bytes: Buffer): string => {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-/**
- * The file's text, or null if it isn't text. Decoding never fails in Node — invalid
- * bytes become U+FFFD — so the only honest test is a round trip: if re-encoding the
- * decoded string reproduces the original bytes, nothing was lost and the client can
- * safely edit and send it back. Anything else ships base64, which an editor can
- * refuse to open rather than silently corrupt on save.
- */
+// Decoding never fails in Node — invalid bytes become U+FFFD — so a round trip is the only honest test.
 export const asUtf8 = (bytes: Buffer): string | null => {
   const text = bytes.toString('utf8')
   return Buffer.from(text, 'utf8').equals(bytes) ? text : null

@@ -15,10 +15,7 @@ import {
 
 const posix = process.platform !== 'win32'
 
-// The tree lives under os.tmpdir(), which on macOS is itself a symlink
-// (/var/folders/... -> /private/var/...). The root is configured in the
-// symlinky spelling on purpose: a resolver that realpaths targets but not the
-// root fails every containment check on this machine.
+// The root is configured in tmpdir's symlinky spelling on purpose: a resolver that realpaths targets but not the root fails here.
 let base: string
 let root: string
 let canonicalRoot: string
@@ -70,7 +67,6 @@ describe('createHostFileRoots', () => {
 
   it('canonicalizes roots so a symlinky spelling still contains its tree', () => {
     expect(roots.roots[0]!.canonical).toBe(canonicalRoot)
-    // A root that is ITSELF a symlink guards the resolved tree.
     const viaLink = createHostFileRoots([join(base, 'rootlink')])
     expect(resolveExisting(viaLink, join(base, 'rootlink', 'file.txt'))).toEqual({
       ok: true,
@@ -100,14 +96,12 @@ describe('resolveExisting', () => {
       path: join(canonicalRoot, 'sub', 'nested.txt'),
       kind: 'file',
     })
-    // The canonical spelling works too.
     expect(resolveExisting(roots, join(canonicalRoot, 'file.txt'))).toMatchObject({ ok: true })
   })
 
   it('refuses .. traversal that leaves the root, allows one that returns', () => {
     expect(resolveExisting(roots, join(root, '..', 'outside.txt'))).toEqual(REFUSED)
     expect(resolveExisting(roots, join(root, 'sub', '..', '..', 'outside.txt'))).toEqual(REFUSED)
-    // Physical resolution, not lexical: this lands back on a contained file.
     expect(resolveExisting(roots, join(root, 'sub', '..', 'file.txt'))).toMatchObject({
       ok: true,
       path: join(canonicalRoot, 'file.txt'),
@@ -266,8 +260,7 @@ describe('readContained / writeContained', () => {
   })
 
   it.runIf(posix)('refuses a fifo without hanging', () => {
-    // The no-hang guarantee: O_NONBLOCK opens the reader-less fifo instantly,
-    // the fstat gate refuses it. A blocking open here would park the test forever.
+    // A blocking open on the reader-less fifo would park the test forever; O_NONBLOCK is what keeps it a refusal.
     expect(readContained(join(root, 'pipe'))).toMatchObject({ ok: false, status: 403 })
     expect(writeContained(join(root, 'pipe'), 'x')).toMatchObject({ ok: false, status: 403 })
   })

@@ -1,14 +1,3 @@
-/**
- * Project identity (`SessionInfo.project` + `GET /sessions/:id/project/icon`),
- * over real HTTP and a real filesystem.
- *
- * The filesystem is the point: discovery is an ancestor walk and the icon rules
- * are realpath containment, so a unit test against a fake fs would check the
- * resolver against its author's assumptions. Every refusal asserted here — the
- * `..` escape, the planted symlink, the oversized file — is the exact bug class
- * docs/GOTCHAS.md §Host filesystem exists to prevent, pointed at a path that
- * came out of a config file the agent can write.
- */
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -19,12 +8,10 @@ import type { ProjectInfo, SessionInfo } from '@workerdeck/protocol'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-/** A query that emits nothing and unblocks its consumer on close — these tests
- * only ever need sessions to exist, never to speak. */
+// A query that emits nothing and unblocks its consumer on close: these sessions never speak.
 const queryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }): Query => {
   void (async () => {
     for await (const _ of params.prompt) {
-      // Input is drained, never answered.
     }
   })()
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -87,8 +74,7 @@ const createSession = async (base: string, cwd: string, headers: Record<string, 
 
 const sha256 = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex')
 
-// Anything at all decodes as a PNG here — the gateway types by declared
-// extension and never sniffs, which the media-type assertion below relies on.
+// Anything at all passes as a PNG here: the gateway types by declared extension and never sniffs.
 const PNG_BYTES = Buffer.from('89504e470d0a1a0a-not-a-real-png', 'utf8')
 
 describe('project discovery', () => {
@@ -103,13 +89,10 @@ describe('project discovery', () => {
     const session = await createSession(base, cwd)
     expect(session.project).toEqual({ name: 'WorkerDeck', root: realpathSync(repo) })
 
-    // The list serves the same decoration as the create response.
     const list = (await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }
     expect(list.sessions[0]?.project?.name).toBe('WorkerDeck')
 
-    // Nearest wins: a file closer to the cwd shadows the repo root's. A fresh
-    // cwd on purpose — the resolver caches per cwd for its TTL, so re-resolving
-    // the first one here would (correctly) serve the cached answer.
+    // A fresh cwd on purpose: the resolver caches per cwd for its TTL, so reusing one would serve the cached answer.
     writeFileSync(join(repo, 'packages', '.workerdeck.json'), JSON.stringify({ name: 'UI Kit' }))
     const cwd2 = join(repo, 'packages', 'react')
     mkdirSync(cwd2, { recursive: true })
@@ -144,7 +127,6 @@ describe('project discovery', () => {
     const base = await startServer(root)
     for (const cwd of [broken, huge, linked]) {
       const session = await createSession(base, cwd)
-      // The broken nested file must not shadow the root's valid one.
       expect(session.project?.name).toBe('Valid')
       expect(session.project?.root).toBe(realpathSync(repo))
     }
@@ -223,14 +205,11 @@ describe('project icon route', () => {
 
   it('refuses a `..` escape, an absolute path, and a planted symlink — identically to no icon', async () => {
     const root = tempRoot()
-    // The "secret" sits outside every project root but inside the cwd
-    // allowlist, so only the icon containment stands between it and the route.
+    // The "secret" sits outside every project root but inside the cwd allowlist, so only icon containment stands in the way.
     const secret = join(root, 'secret.png')
     writeFileSync(secret, 'not for serving')
 
     const base = await startServer(root)
-    // One repo per case: the resolver caches per cwd for its TTL, so reusing a
-    // cwd would test the cache rather than the refusal.
     const cases: Array<[string, string]> = [
       ['dotdot', '../secret.png'],
       ['absolute', secret],
@@ -244,9 +223,7 @@ describe('project icon route', () => {
       }
       writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Deck', icon: declared }))
       const session = await createSession(base, repo)
-      // Refused at discovery: the wire carries no icon, as if never declared…
       expect(session.project).toEqual({ name: 'Deck', root: realpathSync(repo) })
-      // …and the route answers exactly what a glyph-only project answers.
       const res = await fetch(`${base}/sessions/${session.id}/project/icon`)
       expect(res.status).toBe(404)
       expect(await res.json()).toEqual({ error: 'no project icon' })
@@ -300,7 +277,6 @@ describe('project icon route', () => {
     expect(crossScope.status).toBe(404)
     expect(await crossScope.text()).toBe(expected)
 
-    // The owner still gets the bytes, proving the 404 above was the scope.
     const own = await fetch(`${base}/sessions/${session.id}/project/icon`, {
       headers: { authorization: 'Bearer alice' },
     })

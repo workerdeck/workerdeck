@@ -3,12 +3,7 @@ import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type { ProfileInfo, RateLimitInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-/**
- * A runner that reports plan usage on demand. `emitRateLimit` takes an explicit
- * event timestamp because the tracker's whole ordering rule — last-write-wins
- * by the event's own clock, not arrival order — is what these tests pin: a
- * replayed old reading arriving *after* a fresh one must lose.
- */
+// `emitRateLimit` takes an explicit event timestamp because the ordering rule under test is by event clock, not arrival.
 class ReportingRunner implements Runner {
   readonly id: string
   readonly createdAt = Date.now()
@@ -125,7 +120,7 @@ const getProfile = async (base: string, name: string): Promise<ProfileInfo> => {
   return found!
 }
 
-/** Epoch seconds (the protocol's `resetsAt` unit), offset from now in ms. */
+// Epoch seconds (the protocol's `resetsAt` unit), offset from now in ms.
 const resetsAtIn = (offsetMs: number): number => (Date.now() + offsetMs) / 1000
 
 describe('per-profile plan usage on GET /profiles', () => {
@@ -133,7 +128,6 @@ describe('per-profile plan usage on GET /profiles', () => {
     const gateway = await startGateway()
     await create(gateway.base, 'plan-a')
 
-    // Nothing reported yet: absent means unknown — never an empty map, never 0%.
     expect((await getProfile(gateway.base, 'plan-a')).usage).toBeUndefined()
 
     const first = gateway.built[0]!
@@ -149,7 +143,6 @@ describe('per-profile plan usage on GET /profiles', () => {
     })
     expect(usage?.seven_day?.info.utilization).toBe(10)
 
-    // A newer reading from the same session replaces only its own window.
     const t2 = t1 + 2_000
     first.emitRateLimit({ status: 'allowed', rateLimitType: 'five_hour', utilization: 63, resetsAt: fiveHourResets }, t2)
     usage = (await getProfile(gateway.base, 'plan-a')).usage
@@ -157,8 +150,6 @@ describe('per-profile plan usage on GET /profiles', () => {
     expect(usage?.five_hour?.updatedAt).toBe(t2)
     expect(usage?.seven_day?.info.utilization).toBe(10)
 
-    // A second session on the same profile feeds the same state: the account is
-    // the profile, not the session.
     await create(gateway.base, 'plan-a')
     const second = gateway.built[1]!
     const t3 = t2 + 2_000
@@ -166,9 +157,6 @@ describe('per-profile plan usage on GET /profiles', () => {
     usage = (await getProfile(gateway.base, 'plan-a')).usage
     expect(usage?.five_hour?.info.utilization).toBe(70)
 
-    // The stale case this feature exists for: a reading with an *older* event
-    // timestamp arriving later (a replayed idle session's log) must not clobber
-    // the fresher truth another session already reported.
     first.emitRateLimit({ status: 'allowed', rateLimitType: 'five_hour', utilization: 55, resetsAt: fiveHourResets }, t1)
     usage = (await getProfile(gateway.base, 'plan-a')).usage
     expect(usage?.five_hour?.info.utilization).toBe(70)
@@ -196,7 +184,6 @@ describe('per-profile plan usage on GET /profiles', () => {
     const runner = gateway.built[0]!
     const reportedAt = Date.now() - 10 * 60_000
 
-    // 91% of a window that reset a minute ago: the number is provably wrong now.
     runner.emitRateLimit(
       {
         status: 'allowed_warning',
@@ -207,22 +194,17 @@ describe('per-profile plan usage on GET /profiles', () => {
       },
       reportedAt,
     )
-    // An engine-reported 0 with a live reset time, for contrast.
     runner.emitRateLimit({ status: 'allowed', rateLimitType: 'seven_day', utilization: 0, resetsAt: resetsAtIn(86_400_000) }, reportedAt)
 
     const usage = (await getProfile(gateway.base, 'plan-a')).usage
-    // Inferred: utilization 0 as a floor, elapsed resetsAt (and the previous
-    // window's status/overage) dropped, and the flag that keeps it honest.
     expect(usage?.five_hour).toEqual({
       info: { status: 'allowed', rateLimitType: 'five_hour', utilization: 0 },
       updatedAt: reportedAt,
       inferredReset: true,
     })
-    // Reported 0 carries no flag — the two zeros stay distinguishable.
     expect(usage?.seven_day?.info.utilization).toBe(0)
     expect(usage?.seven_day?.inferredReset).toBeUndefined()
 
-    // A fresh reading lands by timestamp and ends the inference.
     runner.emitRateLimit({
       status: 'allowed',
       rateLimitType: 'five_hour',
@@ -241,9 +223,6 @@ describe('per-profile plan usage on GET /profiles', () => {
     gateway.built[0]!.emitRateLimit({ status: 'allowed', rateLimitType: 'seven_day_opus', utilization: 44 }, reportedAt)
 
     const usage = (await getProfile(gateway.base, 'plan-a')).usage
-    // Days old and served as-is: without `resetsAt` the server cannot know the
-    // window rolled, and a stale reading beats an invented one. `updatedAt` is
-    // what lets a client say how old it is.
     expect(usage?.seven_day_opus).toEqual({
       info: { status: 'allowed', rateLimitType: 'seven_day_opus', utilization: 44 },
       updatedAt: reportedAt,
@@ -251,10 +230,6 @@ describe('per-profile plan usage on GET /profiles', () => {
   })
 
   it('answers the same on the detail route as in the list', async () => {
-    // The detail route had served the bare stored record, so a profile page
-    // could learn *less* about a profile than the list it was opened from — and
-    // the one client that renders plan usage without a session open is that
-    // page. Same decoration, one `forResponse`.
     const gateway = await startGateway()
     await create(gateway.base, 'plan-a')
     gateway.built[0]!.emitRateLimit({
@@ -268,7 +243,6 @@ describe('per-profile plan usage on GET /profiles', () => {
     expect(res.status).toBe(200)
     const { profile } = (await res.json()) as { profile: ProfileInfo }
     expect(profile.usage?.five_hour?.info.utilization).toBe(61)
-    // The rest of the decoration rides along, for the same reason.
     expect(profile.capabilities).toBeDefined()
   })
 })

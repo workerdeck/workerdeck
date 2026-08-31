@@ -456,6 +456,13 @@ principal scope unrestricted (`allowedProfiles`' precedent, so the operator's da
 untouched), and a miss is **404, never 403**. Enforced at the `/sessions/:id/*` gate, the list,
 the WS attach *before* the wake (waking rebuilds a runner and reconnects MCP — not for someone
 about to get a 404), `POST /executions/:id/result`, and the job routes via `JobInfo.scope`; the
+`GET /sdk-sessions` resolves *which* store to list in three steps, and the last is a
+compatibility decision rather than an omission: `?profile=` names it; absent that, the choice is
+implicit only when the server declares exactly one profile **and the principal may use it** (a
+caller scoped away from it falls back rather than being handed a store it cannot create sessions
+in); with several declared, `profile` stays `undefined` and the **claude** engine's global store
+is listed, because old clients cannot answer a new 400. An engine whose adapter has no
+`listSessions` 400s with the profile named. The
 operator surfaces (`/fs/*`, `/sdk-sessions`, `/queue`, `/queue/ws`) are refused outright to a
 scoped principal, because they answer about the *gateway* and there is nothing to filter. Two
 guards keep it honest: `buildRunnerConfig` re-stamps the scope over the host hook's output, and

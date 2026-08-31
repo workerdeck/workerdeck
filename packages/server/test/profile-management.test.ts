@@ -51,16 +51,13 @@ const kimi = (): ProfileInfo => ({
   provider: { id: 'moonshotai', model: 'kimi-k3', apiKeyEnv: 'MOONSHOT_API_KEY' },
 })
 
-/** A server whose principal manages profiles unless the request says otherwise:
- * `x-readonly: 1` returns a principal without the flag. */
+// The principal manages profiles unless the request sends `x-readonly: 1`.
 const manageableServer = (options: Parameters<typeof createWorkerServer>[0] = {}) =>
   createWorkerServer({
     authenticate: (req) => ({ canManageProfiles: req.headers['x-readonly'] !== '1' }),
     allowedCwdRoots: ['/tmp'],
     profileStore: createMemoryProfileStore(),
     createEngineRunner: ({ config }) => fakeRunner('engine-1', config),
-    // A store does not suppress the auto-detected 'default' profile from the
-    // operator's own ~/.claude — opting out of that is still `profiles: []`.
     profiles: [],
     ...options,
   })
@@ -81,7 +78,6 @@ describe('profile management', () => {
     expect(created.status).toBe(200)
     expect(((await created.json()) as { profile: ProfileInfo }).profile.name).toBe('kimi')
 
-    // Listed, and live on the create path — not merely persisted.
     const listed = (await fetch(`http://127.0.0.1:${port}/v1/profiles`).then((r) => r.json())) as {
       profiles: ProfileInfo[]
     }
@@ -106,10 +102,8 @@ describe('profile management', () => {
     })
     expect(res.status).toBe(200)
     const { profile } = (await res.json()) as { profile: ProfileInfo }
-    // A rename would orphan every session and job pinned to the old name.
     expect(profile.name).toBe('kimi')
     expect(profile.description).toBe('now with a description')
-    // Untouched fields survive the merge.
     expect(profile.provider?.model).toBe('kimi-k3')
   })
 
@@ -225,7 +219,6 @@ describe('createFileProfileStore', () => {
     await post(port, kimi())
     await running.close()
 
-    // The file is the state: a new server over the same path sees the profile.
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject([{ name: 'kimi' }])
     running = manageableServer({ profileStore: createFileProfileStore(path) })
     const restarted = await running.listen(0, '127.0.0.1')
@@ -238,13 +231,12 @@ describe('createFileProfileStore', () => {
     writeFileSync(path, '{ not json')
     const store = createFileProfileStore(path)
     expect(store.list()).toEqual([])
-    // And a write repairs it rather than merging into the garbage.
     store.save(kimi())
     expect((store.list() as ProfileInfo[]).map((p) => p.name)).toEqual(['kimi'])
   })
 })
 
-/** A path that is definitely outside a fresh temp dir. */
+// A path that is definitely outside a fresh temp dir.
 const homedirLike = (): string => {
   return join(tmpdir(), 'cw-definitely-elsewhere')
 }

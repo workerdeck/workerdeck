@@ -8,9 +8,7 @@ import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/c
 import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, ServerFrame, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-/** `models` makes the fake query answer `supportedModels`, which is what makes a
- * runner emit `capabilities` — the event the server learns a profile's models
- * from. */
+// `models` makes the fake query answer `supportedModels`, which is what makes a runner emit `capabilities`.
 const fakeHarness = (models?: Array<Record<string, unknown>>) => {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -93,7 +91,6 @@ const initMessage = {
   uuid: 'uuid-init',
 } as unknown as SDKMessage
 
-/** Collects server frames and lets tests await one matching a predicate. */
 const frameCollector = (ws: WebSocket) => {
   const frames: ServerFrame[] = []
   const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
@@ -163,7 +160,6 @@ describe('createWorkerServer', () => {
 
       expect(await (await fetch(`${base}/`)).text()).toBe('from the host')
       expect(await (await fetch(`${base}/assets/app.js`)).text()).toBe('from the host')
-      // `/v1` itself and everything under it stays the server's.
       expect((await fetch(`${base}/v1/nope`)).status).toBe(404)
       expect(await (await fetch(`${base}/v1/nope`)).json()).toEqual({ error: 'not found' })
 
@@ -179,8 +175,6 @@ describe('createWorkerServer', () => {
         },
       })
       const { port } = await running.listen(0, '127.0.0.1')
-      // '/v1x' is not under '/v1' — a naive startsWith(basePath) would steal it
-      // from the host, and a naive one the other way would hand it the API.
       const res = await fetch(`http://127.0.0.1:${port}/v1x`)
       expect(await res.text()).toBe('host')
     })
@@ -227,13 +221,11 @@ describe('createWorkerServer', () => {
     harness.emit(initMessage)
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'system_init')
 
-    // command: user_message reaches the SDK input stream
     ws.send(JSON.stringify({ type: 'user_message', text: 'follow-up' }))
     await vi.waitFor(() => {
       expect(harness.captured.inputs.map((m) => m.message.content)).toContain('follow-up')
     })
 
-    // command: set_model reaches the query and round-trips a model_changed event
     ws.send(JSON.stringify({ type: 'set_model', model: 'claude-opus-4-8' }))
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'model_changed' && f.event.model === 'claude-opus-4-8')
     expect(harness.setModel).toHaveBeenCalledWith('claude-opus-4-8')
@@ -249,7 +241,6 @@ describe('createWorkerServer', () => {
     await expect(resultPromise).resolves.toMatchObject({ behavior: 'allow' })
     await collector.waitFor((f) => f.type === 'event' && f.event.type === 'permission_resolved')
 
-    // reconnect with afterSeq replays only the tail
     const lastSeqRes = await fetch(`${base}/sessions/${session.id}`)
     const { session: current } = (await lastSeqRes.json()) as { session: SessionInfo }
     ws.close()
@@ -260,7 +251,6 @@ describe('createWorkerServer', () => {
     expect(replayed.type === 'event' && replayed.event.seq).toBe(current.lastSeq)
     ws2.close()
 
-    // delete closes the session
     const delRes = await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })
     expect(delRes.status).toBe(200)
     const gone = await fetch(`${base}/sessions/${session.id}`)
@@ -277,7 +267,6 @@ describe('createWorkerServer', () => {
       body: JSON.stringify({ cwd: '/tmp/project', prompt: 'ship the thing' }),
     })
     const { session } = (await createRes.json()) as { session: SessionInfo }
-    // Derived from the first prompt until the host names it.
     expect(session.title).toBe('ship the thing')
 
     const patch = async (body: unknown) =>
@@ -291,7 +280,6 @@ describe('createWorkerServer', () => {
     expect(named.status).toBe(200)
     expect(((await named.json()) as { session: SessionInfo }).session.title).toBe('Release prep')
 
-    // The rename is what the rollup carries, not just the PATCH response.
     const listed = (await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }
     expect(listed.sessions.find((s) => s.id === session.id)?.title).toBe('Release prep')
 
@@ -350,7 +338,6 @@ describe('createWorkerServer', () => {
     })
     expect(bogus.status).toBe(404)
 
-    // A real controller reads the id from the WS/webhook permission_requested payload.
     const requestId = running!.registry.get(session.id)!.pendingApprovals[0]!.id
     const answers = { 'Proceed?': 'Yes' }
     const resolveRes = await fetch(`${base}/sessions/${session.id}/permissions/${requestId}`, {
@@ -366,7 +353,6 @@ describe('createWorkerServer', () => {
       toolUseID: 'q-1',
     })
 
-    // Resolving again 404s (already settled).
     const again = await fetch(`${base}/sessions/${session.id}/permissions/${requestId}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -461,7 +447,6 @@ describe('createWorkerServer', () => {
       const { port } = await running.listen(0, '127.0.0.1')
       const base = `http://127.0.0.1:${port}/v1`
 
-      // cwd policy applies to jobs too
       const outside = await fetch(`${base}/jobs`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -482,7 +467,6 @@ describe('createWorkerServer', () => {
       const { job } = (await createRes.json()) as { job: JobInfo }
       expect(job.status).toBe('queued')
 
-      // the job runs as a real registry session
       await vi.waitFor(async () => {
         const res = await fetch(`${base}/jobs/${job.id}`)
         const body = (await res.json()) as { job: JobInfo }
@@ -529,7 +513,6 @@ describe('createWorkerServer', () => {
       })
       expect(deliveries[1]!.job.status).toBe('succeeded')
 
-      // stats reflect the accounted run
       const stats = ((await (await fetch(`${base}/queue`)).json()) as { stats: QueueStats }).stats
       expect(stats).toMatchObject({
         maxConcurrency: 1,
@@ -540,7 +523,6 @@ describe('createWorkerServer', () => {
         paused: false,
       })
 
-      // list + cancel of a fresh queued job
       const listBody = (await (await fetch(`${base}/jobs`)).json()) as { jobs: JobInfo[] }
       expect(listBody.jobs.map((j) => j.id)).toContain(job.id)
       expect((await fetch(`${base}/jobs/unknown`, { method: 'DELETE' })).status).toBe(404)
@@ -604,7 +586,6 @@ describe('createWorkerServer', () => {
       const completed = frames.find((f) => f.type === 'job_event' && f.event.type === 'job_completed' && f.event.job.id === job.id)
       expect(completed).toBeDefined()
     })
-    // lifecycle changes push refreshed stats
     await vi.waitFor(() => {
       const stats = frames.filter((f) => f.type === 'queue_stats')
       expect(stats.length).toBeGreaterThan(0)
@@ -619,9 +600,7 @@ describe('createWorkerServer', () => {
       lastModified: 1000,
       cwd: '/tmp/project',
     }
-    // Stands in for the SDK: `dir` narrows to one project directory, and a bare
-    // call spans the whole host — including a project outside the roots and one
-    // whose cwd it cannot report.
+    // Stands in for the SDK: a bare call spans the whole host, including a project outside the roots and one with no cwd.
     const lister = vi.fn(async (options: { dir?: string; limit?: number; offset?: number }) =>
       options.dir
         ? [inProject]
@@ -639,13 +618,8 @@ describe('createWorkerServer', () => {
     const { port } = await running.listen(0, '127.0.0.1')
     const base = `http://127.0.0.1:${port}/v1`
 
-    // A dir must be inside the roots…
     expect((await fetch(`${base}/sdk-sessions?dir=/etc`)).status).toBe(403)
 
-    // …and no dir at all lists everything, then drops what is outside them —
-    // including a session the server cannot place, which fails closed. Asking per
-    // root instead would miss all of these: `dir` means one project directory, not
-    // everything beneath it.
     const all = await fetch(`${base}/sdk-sessions`)
     expect(all.status).toBe(200)
     const listed = (await all.json()) as { sdkSessions: Array<{ sessionId: string }> }
@@ -689,7 +663,6 @@ describe('createWorkerServer', () => {
       const listBody = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
       expect(listBody.profiles.map((p) => p.name)).toEqual(['toby', 'dan'])
 
-      // with several declared, session creates must pick one
       const missing = await fetch(`${base}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -717,11 +690,9 @@ describe('createWorkerServer', () => {
       await vi.waitFor(() => {
         expect(harness.captured.options?.env?.CLAUDE_CONFIG_DIR).toBe(tobyDir)
       })
-      // profile defaults fill unset fields...
       expect(harness.captured.options?.model).toBe('opus')
       expect(harness.captured.options?.permissionMode).toBe('acceptEdits')
 
-      // ...but an explicit request value wins
       await fetch(`${base}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -731,7 +702,6 @@ describe('createWorkerServer', () => {
         expect(harness.captured.options?.model).toBe('sonnet')
       })
 
-      // allowDangerouslySkipPermissions passes through to the SDK options
       await fetch(`${base}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -774,7 +744,6 @@ describe('createWorkerServer', () => {
       const base = `http://127.0.0.1:${port}/v1`
       const asDan = { 'content-type': 'application/json', authorization: 'Bearer dan' }
 
-      // the listing only shows what the caller may use
       const danList = (await (await fetch(`${base}/profiles`, { headers: { authorization: 'Bearer dan' } })).json()) as {
         profiles: ProfileInfo[]
       }
@@ -799,7 +768,6 @@ describe('createWorkerServer', () => {
       expect(allowed.status).toBe(201)
       expect(((await allowed.json()) as { session: SessionInfo }).session.profile).toBe('dan')
 
-      // the detail endpoint is scoped the same way
       expect((await fetch(`${base}/profiles/toby`, { headers: { authorization: 'Bearer dan' } })).status).toBe(403)
       expect((await fetch(`${base}/profiles/dan`, { headers: { authorization: 'Bearer dan' } })).status).toBe(200)
     } finally {
@@ -812,7 +780,6 @@ describe('createWorkerServer', () => {
     const harness = fakeHarness()
     const profileDir = mkdtempSync(join(tmpdir(), 'cw-bypass-'))
     try {
-      // a profile defaulting to bypass contradicts the policy — fail fast
       expect(() =>
         createWorkerServer({
           allowUnauthenticated: true,
@@ -831,7 +798,6 @@ describe('createWorkerServer', () => {
       const { port } = await running.listen(0, '127.0.0.1')
       const base = `http://127.0.0.1:${port}/v1`
 
-      // explicit bypass mode → 403, for sessions and jobs alike
       const sessionRes = await fetch(`${base}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -847,7 +813,6 @@ describe('createWorkerServer', () => {
       })
       expect(jobRes.status).toBe(403)
 
-      // the pre-authorization capability is stripped, not rejected
       const stripped = await fetch(`${base}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -908,16 +873,10 @@ describe('createWorkerServer', () => {
       const { port } = await running.listen(0, '127.0.0.1')
       const base = `http://127.0.0.1:${port}/v1`
 
-      // Nothing has run, and the picker is already real: the adapter's shipped
-      // catalog, plus the engine's capability record. This is the regression
-      // test for the deleted learned-models map (the iOS cold-start text-field
-      // bug that motivated the refactor).
       const before = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
       expect(before.profiles[0]!.models?.length).toBeGreaterThan(0)
       expect(before.profiles[0]!.models?.some((m) => m.value === 'default')).toBe(false)
       expect(before.profiles[0]!.capabilities?.interactiveApprovals).toBe(true)
-      // The default model is the one thing the catalog cannot know (it is the
-      // operator's CLI config) — absent until a session reports it.
       expect(before.profiles[0]!.defaultModel).toBeUndefined()
 
       await fetch(`${base}/sessions`, {
@@ -989,7 +948,6 @@ describe('createWorkerServer', () => {
           hooks: ['PreToolUse'],
         },
       })
-      // env VALUES must never appear anywhere in the response
       expect(JSON.stringify(body)).not.toContain('secret-value')
     } finally {
       rmSync(dir, { recursive: true, force: true })

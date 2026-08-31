@@ -828,6 +828,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Parking & bridged execution
 
+- **`parking.touch()` writes *both* record kinds, and dropping either half is the same bug one
+  engine over.** A session has exactly one of a dormant record and a live one, and the PATCH route
+  has no business knowing which — so `touch()` calls `#rememberDormant` *and* `#persistLive`, each
+  of which no-ops for the engine it does not apply to (no `resume` capability; no `snapshot()`).
+  With only the dormant half, a renamed **provider** session under `persistLive` lists correctly
+  right up to the restart and then comes back under its old title — exactly the bug the dormant
+  half was added for.
+
 - **Two ways a session outlives its runner, and they are not interchangeable.** Parking preserves
   *mid-task* state, which means a `RunnerSnapshot` — and `Runner.park()` is optional on the
   interface for a reason: `AiSdkRunner` is the only implementation, because the claude and codex
@@ -1037,7 +1045,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   — which on macOS is the login Keychain, where `claude login` puts a claude.ai login. So pinning
   even the CLI's default `~/.claude` turns a working Mac login into "Not logged in · Please run
   /login" (reproduced: same prompt, same cwd, only the env var differs; `apiKeySource` is 'none'
-  both ways, so it can't discriminate). `claudeSessionEnv` in server.ts therefore *skips* the pin
+  both ways, so it can't discriminate). `claudeSessionEnv` (`server/src/lib/profile-env.ts`) therefore *skips* the pin
   when the baseline env already lands the CLI in the profile's dir — that skip is load-bearing
   (it's what makes the auto-detected `default` profile work on a Mac), and so is its converse:
   a baseline carrying a *different* `CLAUDE_CONFIG_DIR` is still overridden by the profile, or

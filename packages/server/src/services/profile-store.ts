@@ -2,23 +2,12 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { ProfileInfo } from '@workerdeck/protocol'
 
-/**
- * Where dashboard-managed profiles live — a seam for the same reason `QueueAdapter` is one.
- * Profiles declared in `createWorkerServer({ profiles })` never enter a store; the two sets are
- * unioned by name. **A store holds NO credentials**: `apiKeyEnv` is a variable name and `configDir`
- * a path, both resolved from the server's own environment at session time, which is what keeps a
- * stored profile safe to write to disk and safe to serve from `GET /profiles`.
- */
 export type ProfileStore = {
-  /** Every stored profile. Called once at `listen()` and after each mutation. */
   list(): ProfileInfo[] | Promise<ProfileInfo[]>
-  /** Create or replace by `profile.name`. */
   save(profile: ProfileInfo): void | Promise<void>
-  /** Remove by name. Removing something absent is not an error. */
   delete(name: string): void | Promise<void>
 }
 
-/** Non-durable store for tests and ephemeral deployments. */
 export const createMemoryProfileStore = (seed: ProfileInfo[] = []): ProfileStore => {
   const profiles = new Map(seed.map((p) => [p.name, p]))
   return {
@@ -28,14 +17,6 @@ export const createMemoryProfileStore = (seed: ProfileInfo[] = []): ProfileStore
   }
 }
 
-/**
- * JSON-file store: one array of profiles at `path` (default
- * `<cwd>/.workerdeck/profiles.json`). Writes go through a temp file and a
- * rename so a crash mid-write cannot truncate the operator's profile list.
- *
- * Single-process by design, exactly like the bundled queue adapter — two servers
- * sharing one file would race. That is what the seam is for.
- */
 export const createFileProfileStore = (path = join(process.cwd(), '.workerdeck', 'profiles.json')): ProfileStore => {
   const read = (): Map<string, ProfileInfo> => {
     try {
@@ -46,8 +27,6 @@ export const createFileProfileStore = (path = join(process.cwd(), '.workerdeck',
       const profiles = parsed as ProfileInfo[]
       return new Map(profiles.filter((p) => p && typeof p.name === 'string').map((p) => [p.name, p]))
     } catch {
-      // Absent or unparseable: start empty rather than refusing to boot. A
-      // corrupt file is replaced on the next write, not silently merged into.
       return new Map()
     }
   }

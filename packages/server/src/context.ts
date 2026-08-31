@@ -1,9 +1,3 @@
-/**
- * The one shared-state record every route module takes. Built once inside
- * `createWorkerServer` after assembly; routes destructure what they need.
- * Nothing here is optional at request time — the assembly fills every field
- * before the server accepts a connection.
- */
 import type { EngineAdapter } from '@workerdeck/core'
 import type { JobQueue } from '@workerdeck/queue'
 import type { ProfileEngine } from '@workerdeck/protocol'
@@ -25,7 +19,6 @@ export type ServerContext = {
   basePath: string
   maxBodyBytes: number
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
-  /** Injectable claude lister for GET /sdk-sessions (tests). */
   listSdkSessions?: SdkSessionLister
 
   profiles: ProfileService
@@ -36,14 +29,11 @@ export type ServerContext = {
   registry: SessionRegistry
   parking: SessionParkManager
   bridge: BridgeHub
-  /** Serve-time `.workerdeck.json` discovery — every route that writes a
-   * `SessionInfo` to a client stamps `project` through `withProject`. */
   projects: ProjectInfoService
   queue: JobQueue | undefined
   attachmentStore: AttachmentStore
   producedFiles: ProducedFileStore
 
-  /** Host filesystem routes; null = the routes do not exist. */
   hostFiles: HostFileRoots | null
   hostFilesWritable: boolean
   maxHostFileBytes: number

@@ -1,9 +1,3 @@
-/**
- * `createWorkerServer` — the assembly. Option types live in `options.ts`, the
- * shared-state record routes take in `context.ts`, per-route behaviour in
- * `routes/`, the stateful pieces in `services/`, and the pure rules in `lib/`.
- * This file only wires them together and dispatches requests.
- */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -39,7 +33,6 @@ import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
 import { isDormant, MemorySessionStore } from './services/session-store.ts'
 
-// Re-exported so `import { ... } from './server.ts'` keeps working for in-repo callers.
 export type {
   Authenticator,
   EngineRunnerContext,
@@ -55,30 +48,13 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
   }
   const basePath = options.basePath ?? '/v1'
   const fallback = options.fallback
-  // Exact origins only — a `Set` because the check runs on every request, and
-  // exactness is the whole guarantee (no wildcards, no suffix matching).
   const corsOrigins = options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
-  /** The engine's adapter, honoring the test-only `engines` override. */
   const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter => options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
 
-  // ---- Profiles, decorated at response time from the trackers below.
-  /**
-   * What each claude profile's *default* model resolves to, learned from the
-   * `capabilities` events of sessions that ran on it. The model *list* is the
-   * adapter's static catalog now; the default is the one thing a catalog
-   * cannot know (it is the operator's CLI config), so it alone is still
-   * learned — and still absent on a cold server, the accepted regression.
-   */
   const profileDefaultModels = new Map<string, string>()
-  /** The single plan-usage state per profile, fed from every session's
-   * `rate_limit` events and served by `forResponse` (see ProfileUsageTracker). */
   const profileUsage = new ProfileUsageTracker()
   const profiles = new ProfileService({
-    // Declared at startup, or a single 'default' auto-created from the
-    // operator's own config dir. Misdeclared dirs fail fast — the CLI would
-    // otherwise silently start from an empty config (and a different
-    // credential chain).
     declared: options.profiles ?? detectDefaultProfiles(),
     store: options.profileStore,
     allowedConfigDirRoots: options.allowedConfigDirRoots,
@@ -98,9 +74,6 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
     }
   }
 
-  // ---- The create pipeline. Registry/parking/bridge are late-bound refs,
-  // filled just below — construction is mutually recursive (parking's rebuild
-  // calls the factory's buildRunner).
   const refs: { registry?: SessionRegistry; parking?: SessionParkManager; bridge?: BridgeHub } = {}
   const factory = createSessionFactory({
     adapterFor,
@@ -120,26 +93,16 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
     sessionEnvFor: factory.sessionEnvFor,
   })
 
-  // ---- The stateful services.
-  // Project identity (`SessionInfo.project`), resolved from `.workerdeck.json`
-  // at serve time and never persisted — see ProjectInfoService.
   const projects = new ProjectInfoService()
-  // Notifications ride the registry hook rather than the create paths, because the
-  // session that most needs to reach a phone may be one that parked and was
-  // rebuilt — and that path never goes near `createRunner`.
   const notifier = new SessionNotifier({
     ...options.notifications,
-    // A push consumer reads the same decorated record every REST caller does.
     decorateInfo: (info) => projects.withProject(info),
   })
   const producedFiles = new ProducedFileStore()
   const registry = new SessionRegistry({
     onRegister: (runner) => {
       notifier.watch(runner)
-      // Same hook, opposite replay choice: from 0, because a rebuilt session's
-      // earlier pictures must stay fetchable (see ProducedFileStore.watch).
       producedFiles.watch(runner)
-      // Also from 0 — replay is guarded by the events' own timestamps there.
       profileUsage.watch(runner)
       const profile = runner.info().profile
       if (!profile) {
@@ -157,10 +120,6 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
   const bridge = new BridgeHub({
     ...options.bridge,
     onResult: (sessionId, executionId, result) => {
-      // A runner that executes out-of-band (the model-agnostic engine bridging
-      // to a browser tab) gets the result fed straight back into its loop —
-      // operators don't wire this themselves. The host callback still fires,
-      // for observability.
       registry.get(sessionId)?.settleExecution?.(executionId, result)
       options.bridge?.onResult?.(sessionId, executionId, result)
     },
@@ -172,27 +131,12 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
     expiredGraceMs: options.parking?.expiredGraceMs,
     persistLive: options.parking?.persistLive,
     onError: options.parking?.onError,
-    // A park restores from its snapshot; a dormant record has none, so it is
-    // rebuilt like an ordinary create — the config back through
-    // `buildRunnerConfig` (so the profile's env pin and the host hook's
-    // injections are re-derived rather than read off disk), `resume` pointed at
-    // the engine's own session, and the WorkerDeck id carried over by hand,
-    // because nothing in the config would otherwise preserve it.
     rebuild: (record) =>
       isDormant(record)
         ? factory.buildRunner(
             factory.buildRunnerConfig({
               ...record.config,
-              // A wake is "come back as you were", never a new turn: `prompt`
-              // persists in the record and `start()` sends it unconditionally,
-              // so it is cleared here — at the one call site that means
-              // rehydration, never in the runners, where `{ resume, prompt }`
-              // legitimately means "continue this thread, and here is the next
-              // thing" (docs/GOTCHAS.md §Parking).
               prompt: undefined,
-              // Dropping the prompt would cost the session its name (`#title()`
-              // derives from `prompt` when `meta.title` is unset), so the
-              // resolved title is frozen into `meta`.
               meta: record.info.title ? { ...record.config.meta, title: record.info.title } : record.config.meta,
               resume: record.sdkSessionId,
             }),
@@ -201,8 +145,6 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
           )
         : factory.buildRunner(record.config, record.snapshot),
     attachedCount: (sessionId) => bridge.attachedCount(sessionId),
-    // Accounting is the queue's: it frees the run's slot and stops its clock, and
-    // refuses the park outright when the run is already finalizing.
     onParking: (sessionId, executionId) => queue?.onSessionParking(sessionId, executionId) ?? true,
     onResumed: (sessionId, runner) => queue?.onSessionResumed(sessionId, runner),
   })
@@ -214,8 +156,6 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
 
   const wss = new WebSocketServer({ noServer: true })
 
-  // Live queue watchers (`{basePath}/queue/ws`): every job event is fanned out, and
-  // lifecycle changes push refreshed stats so dashboards stay current without polling.
   const queueSockets = new Set<WebSocket>()
   const sendQueueFrame = (ws: WebSocket, frame: QueueServerFrame): void => {
     if (ws.readyState === ws.OPEN) {
@@ -251,32 +191,19 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
             broadcastJobEvent(event)
           }
         },
-        // Job sessions are ordinary registry sessions (attachable/watchable) and go
-        // through the same config hook, engine selection, and auth-provenance
-        // watcher as client sessions.
         createRunner: async (config) => {
           const runner = await factory.createRunner(config)
           factory.watchAuthSource(runner)
           return runner
         },
         buildRunnerConfig: factory.buildRunnerConfig,
-        // A run that ends while parked (canceled, killed) leaves a snapshot behind
-        // that nothing will ever wake.
         discardSession: (sessionId) => parking.discard(sessionId),
       })
     : undefined
 
-  // Host filesystem: built once at startup so a misdeclared root fails here rather
-  // than on the first request from a phone. Null = the routes do not exist.
-  //
-  // Reading inherits the cwd policy — a caller who can start a session in a root
-  // can already read it through the agent — so `hostFiles.roots` is a narrowing,
-  // not the enabling grant. `??` and not `||`: an explicit `roots: []` is an
-  // operator turning the routes off, which must not fall through to the cwd roots.
   const hostFileRootPaths = options.hostFiles?.roots ?? options.allowedCwdRoots
   const hostFiles = hostFileRootPaths?.length ? createHostFileRoots(hostFileRootPaths) : null
 
-  // ---- The record every route module reads.
   const ctx: ServerContext = {
     options,
     basePath,
@@ -303,20 +230,12 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const pathname = new URL(req.url ?? '/', 'http://internal').pathname
 
-    // CORS, when the host configured it. Resource-sharing policy, not a
-    // credential: every route stays behind `authenticate`, and an allowlisted
-    // page still has to present the key. `Access-Control-Allow-Credentials` is
-    // never sent — that is what keeps the cookie transport same-origin-only, so
-    // opening this up cannot turn an ambient cookie into cross-origin authority.
     const origin = req.headers.origin
     const originAllowed = typeof origin === 'string' && corsOrigins !== undefined && corsOrigins.has(origin)
     if (originAllowed) {
       res.setHeader('access-control-allow-origin', origin)
       res.setHeader('vary', 'origin')
     }
-    // Preflights arrive without credentials (browsers strip them), so they must
-    // be answered *before* `authenticate` or every cross-origin call 401s on the
-    // OPTIONS. Answering one grants nothing: no body, no side effect.
     if (req.method === 'OPTIONS' && req.headers['access-control-request-method'] !== undefined) {
       if (!originAllowed) {
         res.writeHead(403)
@@ -326,8 +245,7 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
       res.setHeader('access-control-allow-methods', 'GET, HEAD, POST, PATCH, PUT, DELETE')
       res.setHeader('access-control-allow-headers', 'authorization, content-type, x-workerdeck-key')
       res.setHeader('access-control-max-age', '600')
-      // Chrome's Private Network Access: a public page reaching a private
-      // address (a tailnet's 100.64/10, a LAN) preflights for this explicitly.
+      // Chrome's Private Network Access: a public page reaching a private address (a tailnet, a LAN) preflights for this explicitly.
       if (req.headers['access-control-request-private-network'] === 'true') {
         res.setHeader('access-control-allow-private-network', 'true')
       }
@@ -336,9 +254,6 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
       return
     }
 
-    // Everything outside basePath belongs to the host, if it wants it. Checked
-    // first so the fallback owns a total, contiguous namespace rather than
-    // whatever the route table happens to leave over.
     if (fallback && pathname !== basePath && !pathname.startsWith(basePath + '/')) {
       await fallback(req, res)
       return
@@ -376,8 +291,6 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
         json(res, 401, { error: 'unauthorized' })
         return
       }
-      // The engine's own on-disk store, which is the operator's and spans every
-      // scope: there is no per-session id here to filter by.
       if (!auth.isOperator(authCtx)) {
         json(res, 404, { error: 'not found' })
         return
@@ -386,16 +299,12 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
       return
     }
     if (pathname.startsWith(basePath + '/fs/')) {
-      // Authenticated before the 404-when-unconfigured answer, so an unauthenticated
-      // caller cannot learn whether this server exposes a filesystem at all.
+      // Authenticated before the 404-when-unconfigured answer: an unauthenticated caller must not learn whether a filesystem is exposed.
       const authCtx = await auth.authenticate(req)
       if (!authCtx.ok) {
         json(res, 401, { error: 'unauthorized' })
         return
       }
-      // Operator privilege by design (see `hostFiles`), so a scoped principal is
-      // simply not who these routes are for — and it answers the same 404 an
-      // unconfigured gateway does.
       if (!auth.isOperator(authCtx)) {
         json(res, 404, { error: 'not found' })
         return
@@ -442,11 +351,6 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
           socket.destroy()
           return
         }
-        // Every job's events — prompts, progress previews, result text — are
-        // fanned to every socket here. There is no per-socket filter yet, so a
-        // scoped principal is refused the firehose outright rather than being
-        // handed other scopes' runs. (Per-socket filtering is the later fix; a
-        // 404 now is the honest version of not having built it.)
         if (!auth.isOperator(queueAuth)) {
           socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
           socket.destroy()
@@ -473,22 +377,13 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
         socket.destroy()
         return
       }
-      // Scope is checked *before* the wake, off the record's stored info: waking
-      // rebuilds the runner and reconnects its MCP servers, and doing that for a
-      // caller who is about to get a 404 spends the session's resources on
-      // someone with no claim to it.
       const known = registry.get(route.id)?.info() ?? (await parking.get(route.id))?.info
       if (known && !auth.canSee(authCtx, known)) {
         socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
         socket.destroy()
         return
       }
-      // Attaching to a parked session wakes it: the client wants to drive it, and
-      // its whole event log comes back with it, so `afterSeq` still lines up.
       const runner = await parking.ensureLive(route.id).catch(() => undefined)
-      // Re-checked after the wake as well: the pre-check can only consult what
-      // the registry and the store already know, and this is the socket that
-      // can drive the session.
       if (!runner || !auth.canSee(authCtx, runner.info())) {
         socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
         socket.destroy()
@@ -507,16 +402,11 @@ export const createWorkerServer = (options: WorkerServerOptions = {}): WorkerSer
     bridge,
     parking,
     listen: async (port, host) => {
-      // Before the first request: every lookup on the request path reads the
-      // in-memory mirror, so it has to be populated before anything can hit it.
       await profiles.refreshStored()
-      // Re-index and re-arm anything a durable store carried across a restart.
       await parking.hydrate()
       return new Promise((resolve, reject) => {
         server.once('error', reject)
         server.listen(port, host, () => {
-          // After the bind and after refreshStored(), so stored profiles are
-          // probed too; advisory, so it must never delay or wedge the listen.
           availability.preflight(profiles.all())
           const address = server.address()
           resolve({ port: typeof address === 'object' && address ? address.port : port })

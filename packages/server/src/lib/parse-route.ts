@@ -1,8 +1,3 @@
-/** The `/sessions` route family, parsed. Pattern:
- * {basePath}/sessions[/:id[/ws | /permissions/:requestId | /files[/<path>] |
- *   /attachments[/:attachmentId] | /mcp[/:serverName] | /produced[/:fileId] |
- *   /events/:seq/result | /project/icon]]
- */
 export type SessionRoute = {
   id?: string
   ws?: boolean
@@ -15,9 +10,7 @@ export type SessionRoute = {
   mcpServer?: string
   produced?: boolean
   producedFileId?: string
-  /** `/events/:seq/result` — the untruncated tool result in that event. */
   resultSeq?: number
-  /** `/project/icon` — the bytes behind `SessionInfo.project.icon`. */
   projectIcon?: boolean
 }
 
@@ -65,8 +58,7 @@ export const parseSessionRoute = (basePath: string, url: string): SessionRoute |
     return { id: decodeURIComponent(parts[0]!), resultSeq: seq }
   }
   if (parts.length <= 3 && parts[1] === 'mcp') {
-    // Server names are opaque and may contain ':' (plugin:gtm:gtm) — one segment,
-    // decoded whole.
+    // MCP server names are opaque and may contain ':' (plugin:gtm:gtm) — one segment, decoded whole.
     return {
       id: decodeURIComponent(parts[0]!),
       mcp: true,
@@ -74,8 +66,6 @@ export const parseSessionRoute = (basePath: string, url: string): SessionRoute |
     }
   }
   if (parts.length >= 2 && parts[1] === 'files') {
-    // The remainder is a VFS path — slashes are its separators, so segments
-    // are decoded individually and rejoined.
     const filePath = parts.slice(2).map(decodeURIComponent).join('/')
     return {
       id: decodeURIComponent(parts[0]!),

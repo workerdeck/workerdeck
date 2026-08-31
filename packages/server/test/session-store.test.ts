@@ -49,7 +49,6 @@ describe('createFileSessionStore', () => {
     const read = await store.get('s1')
     expect(read).toEqual(record('s1'))
     expect(await store.list()).toEqual([record('s1')])
-    // The engine's opaque state survives verbatim — it is the continuation.
     expect((read as ParkedSessionRecord).snapshot.state).toEqual({ messages: [{ role: 'assistant' }] })
 
     expect(await store.delete('s1')).toBe(true)
@@ -74,7 +73,6 @@ describe('createFileSessionStore', () => {
         queryFn: (() => {}) as unknown as SessionRunnerConfig['queryFn'],
         historyFn: (() => {}) as unknown as SessionRunnerConfig['historyFn'],
         extraOptions: { hooks: {} },
-        // Kept: wire config is what a rebuild actually needs.
         model: 'kimi-k3',
       }),
     )
@@ -105,8 +103,6 @@ describe('createFileSessionStore', () => {
     await writeFile(join(dir, 'notes.txt'), 'ignored entirely')
 
     expect((await store.list()).map((r) => r.id)).toEqual(['good'])
-    // Unparseable is reported (a lost session is worth a log line); a shape that
-    // simply isn't ours is not an error.
     expect(onError).toHaveBeenCalledTimes(1)
     expect(onError.mock.calls[0]![1]).toMatchObject({ op: 'read' })
   })
@@ -119,8 +115,6 @@ describe('createFileSessionStore', () => {
     const onError = vi.fn()
     const store = createFileSessionStore({ dir, onError })
     await store.save(record('s1'))
-    // Reported as "nothing is parked", this is how a restart guard ends up saying
-    // the coast is clear over sessions it simply cannot see.
     await chmod(dir, 0o000)
     try {
       await expect(store.list()).rejects.toThrow()
@@ -136,7 +130,6 @@ describe('createFileSessionStore', () => {
     await store.save(record('s1'))
     await rename(join(dir, 's1.json'), join(dir, 'copy-of-s1.json'))
 
-    // Listing it would serve a session that `get`/`delete` can never reach again.
     expect(await store.list()).toEqual([])
     expect(onError.mock.calls[0]![0]).toMatchObject({ message: expect.stringContaining('s1') })
   })
@@ -165,7 +158,6 @@ describe('toDurableRecord', () => {
     const durable = toDurableRecord(source)
     expect(durable.config).toEqual({ cwd: '/tmp/project', profile: 'kimi', model: 'kimi-k3' })
     expect(durable.snapshot).toBe(source.snapshot)
-    // The input is left alone: the live record still drives the live session.
     expect(source.config.env).toEqual({ SECRET: 'x' })
   })
 })

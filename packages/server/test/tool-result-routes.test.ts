@@ -1,13 +1,3 @@
-/**
- * On-demand tool results, over a real socket and a real route.
- *
- * Three claims are load-bearing here and none of them can be made in a unit
- * test: an attach that did **not** ask for truncation is byte-identical to what
- * this gateway sent before the feature existed (backward compatibility asserted,
- * not argued); an attach that did ask gets the head with its markers; and the
- * rest is one GET away — but only when the caller names the right tool, because
- * a seq alone can point at a different call after a rebuild.
- */
 import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -86,7 +76,6 @@ const createSession = async (base: string): Promise<string> => {
   return ((await res.json()) as { session: SessionInfo }).session.id
 }
 
-/** Attach once, collect the replay, close. `query` is the raw suffix. */
 const replay = async (wsBase: string, id: string, query = ''): Promise<SessionEvent[]> => {
   const ws = new WebSocket(`${wsBase}/sessions/${id}/ws${query}`)
   const events: SessionEvent[] = []
@@ -109,7 +98,6 @@ const resultBlock = (event: SessionEvent | undefined): ToolResultBlock | undefin
   return event.message.content.find((b) => b.type === 'tool_result') as ToolResultBlock | undefined
 }
 
-/** A settled tool call with a very large result, in the log. */
 const seed = async (harness: ReturnType<typeof fakeHarness>, base: string) => {
   const id = await createSession(base)
   harness.emit({
@@ -188,10 +176,6 @@ describe('GET /sessions/:id/events/:seq/result', () => {
   })
 
   it('refuses a seq that does not carry the named call, rather than guessing', async () => {
-    // The failure this guard exists for: a woken dormant session has a fresh log
-    // with fresh seqs, so a cached sourceSeq can name a different event — and
-    // being handed another tool's output under the row you pressed is worse than
-    // an error.
     const harness = fakeHarness()
     const { base, wsBase } = await start(harness)
     const id = await seed(harness, base)
@@ -209,20 +193,11 @@ describe('GET /sessions/:id/events/:seq/result', () => {
   })
 })
 
-/**
- * Image parts replayed as references, over the same real socket and route.
- *
- * The claim that matters most is the first one, and it is the same claim Part 4
- * had to make: an attach that did **not** ask is byte-identical to what this
- * gateway sent before the rule existed. That is what keeps this additive at
- * protocol 7 — asserted here rather than argued in a doc.
- */
 const IMG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02])
 const IMG_B64 = IMG.toString('base64')
 
 const imagePart = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG_B64 } }
 
-/** A settled tool call whose result carries text and a picture. */
 const seedImage = async (harness: ReturnType<typeof fakeHarness>, base: string) => {
   const id = await createSession(base)
   harness.emit({

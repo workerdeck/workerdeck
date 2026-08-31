@@ -1,39 +1,25 @@
-/**
- * Pure profile/environment/path rules: which engine a profile runs, where the
- * CLI's config resolution lands, the CLAUDE_CONFIG_DIR pin, and the cwd-roots
- * policy. No state, no I/O beyond reads of the filesystem the rules are about.
- */
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import type { ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
 
-/** A profile runs the model-agnostic engine rather than Claude Code. `engine` is
- * optional so profiles written before provider support keep meaning 'claude'. */
 export const isProviderProfile = (profile: ProfileInfo): boolean => {
   return profile.engine === 'provider'
 }
 
-/** The engine a profile runs, absent meaning 'claude' (pre-provider profiles). */
 export const engineOf = (profile: ProfileInfo | undefined): ProfileEngine => {
   return profile?.engine ?? 'claude'
 }
 
-/** Where the CLI's own resolution lands for a given environment: an explicit
- * CLAUDE_CONFIG_DIR, else ~/.claude. */
 export const cliConfigDir = (env: Record<string, string | undefined>): string => {
   return env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
 }
 
-/** Auto-created profile when none are declared: the operator's own config dir. */
 export const detectDefaultProfiles = (): ProfileInfo[] => {
   const dir = cliConfigDir(process.env)
   return existsSync(dir) ? [{ name: 'default', configDir: dir }] : []
 }
 
-/** Compare config dirs by what they name on disk: declared paths arrive with
- * trailing slashes or symlinked prefixes (`/var` vs `/private/var` on macOS); a
- * path that doesn't exist falls back to plain normalization. */
 export const canonicalDir = (path: string): string => {
   try {
     return realpathSync(path)
@@ -42,18 +28,7 @@ export const canonicalDir = (path: string): string => {
   }
 }
 
-/**
- * The env a Claude session under `profile` is spawned with, starting from
- * `base` (the host hook's env, else the server's own). The pin is skipped when
- * `base` would already land the CLI in the profile's dir, and that skip is
- * load-bearing, not an optimisation: CLAUDE_CONFIG_DIR *set at all* switches
- * the CLI's credential source to `<dir>/.credentials.json` — on macOS a
- * claude.ai login lives in the login Keychain, consulted only while the
- * variable is UNSET, so pinning even the CLI's own default `~/.claude` turns a
- * working login into "Not logged in". When `base` names a *different* dir than
- * the profile, the pin stands: the profile must win over hook- or operator-set
- * env, or sessions under two profiles quietly collapse into one identity.
- */
+// Skipping the pin is load-bearing: CLAUDE_CONFIG_DIR set at all moves the CLI off the macOS Keychain.
 export const claudeSessionEnv = (profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined> => {
   return canonicalDir(profile.configDir!) === canonicalDir(cliConfigDir(base)) ? base : { ...base, CLAUDE_CONFIG_DIR: profile.configDir! }
 }
@@ -69,14 +44,7 @@ export const cwdAllowed = (cwd: string, roots: string[] | undefined): boolean =>
   })
 }
 
-/**
- * Curated, view-only snapshot of a profile's config dir for GET /profiles/:name.
- * Best-effort: a missing or unparseable settings.json just omits the settings block.
- * Env var VALUES are never read into the response — names only.
- *
- * Provider profiles have no config dir, so the snapshot is empty for them: their
- * configuration is the `provider` block already on ProfileInfo.
- */
+// Env var VALUES are never read into this snapshot — names only.
 export const readProfileConfig = (profile: ProfileInfo): ProfileConfigSnapshot => {
   const dir = profile.configDir
   if (!dir) {
@@ -123,8 +91,6 @@ export const readProfileConfig = (profile: ProfileInfo): ProfileConfigSnapshot =
       envKeys: raw.env && typeof raw.env === 'object' ? Object.keys(raw.env).sort() : undefined,
       hooks: raw.hooks && typeof raw.hooks === 'object' ? Object.keys(raw.hooks).sort() : undefined,
     }
-  } catch {
-    // settings.json absent or unparseable — snapshot ships without the block
-  }
+  } catch {}
   return snapshot
 }

@@ -1,6 +1,3 @@
-/** `{basePath}/jobs` + `{basePath}/queue` — job submission, listing, cancel,
- * and the gateway-wide queue stats. Jobs run as ordinary registry sessions;
- * these routes are the queue's REST face. */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CreateJobRequest } from '@workerdeck/protocol'
 import { json, readJsonBody } from '../lib/http.ts'
@@ -24,7 +21,6 @@ export const handleJobs = async (
       json(res, 405, { error: 'method not allowed' })
       return
     }
-    // Gateway-wide counters across every scope, with no id to filter on.
     if (!authSvc.isOperator(auth)) {
       json(res, 404, { error: 'not found' })
       return
@@ -35,8 +31,6 @@ export const handleJobs = async (
   const rest = pathname.slice((basePath + '/jobs').length).replace(/^\//, '')
   if (rest === '') {
     if (req.method === 'GET') {
-      // Same rule as the sessions list, over the job's copy of the tags: the
-      // queue must not be a side door into a session the caller cannot attach to.
       const jobs = await queue.list()
       json(res, 200, { jobs: jobs.filter((job) => authSvc.canSeeJob(auth, job)) })
       return
@@ -84,8 +78,6 @@ export const handleJobs = async (
         return
       }
       factory.stripInertFields(body.session, resolved.profile)
-      // Normalize to the resolved name so an implicit single profile still lands
-      // on JobInfo.profile and reaches the runner config at claim time.
       body.session.profile = resolved.profile?.name
       try {
         json(res, 201, { job: await queue.submit(body) })
@@ -112,8 +104,7 @@ export const handleJobs = async (
     return
   }
   if (req.method === 'DELETE') {
-    // Checked before the cancel, not after: a refused caller must not be able
-    // to kill a run and then be told it does not exist.
+    // Checked before the cancel: a refused caller must not be able to kill a run and then be told it does not exist.
     const existing = await queue.get(id)
     if (!existing || !authSvc.canSeeJob(auth, existing)) {
       json(res, 404, { error: 'job not found' })

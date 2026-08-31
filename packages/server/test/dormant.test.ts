@@ -8,12 +8,7 @@ import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { ProfileInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
 
-/**
- * A runner standing in for claude/codex: it cannot park (no `park()`), but it
- * *can* resume — its transcript lives in an engine-owned store keyed by
- * `sdkSessionId`, which is the whole premise of a dormant record. `resumeBackfill`
- * is what the real engines do with the replay; nothing here depends on it.
- */
+// Stands in for claude/codex: no `park()`, but resumable from an engine-owned store keyed by `sdkSessionId`.
 class ResumableRunner implements Runner {
   readonly id: string
   readonly createdAt = Date.now()
@@ -24,8 +19,6 @@ class ResumableRunner implements Runner {
   #listeners = new Set<(event: SessionEvent) => void>()
   #seq = 0
   #sdkSessionId: string | undefined
-  /** Mirrors the real runner, where `info().meta` IS the live `#config.meta` —
-   * which is what a rename writes and what the dormant record must capture. */
   #meta: Record<string, unknown> | undefined
 
   constructor(id: string, config: SessionRunnerConfig) {
@@ -34,13 +27,9 @@ class ResumableRunner implements Runner {
     this.#meta = config.meta
   }
 
-  /** Every turn this runner was asked to take, in order — what proves a wake
-   * does not quietly re-run the session's opening prompt. */
   readonly sent: string[] = []
 
-  /** What every engine does on its way up: name the session it is running, and
-   * send the opening prompt if it was given one (`SessionRunner.start` and
-   * `CodexRunner` both do this unconditionally — the behaviour under test). */
+  // Both real engines name their session and send `prompt` unconditionally on start — the behaviour under test.
   async start(): Promise<void> {
     this.#sdkSessionId = this.config.resume ?? 'engine-session-1'
     if (this.config.prompt) {
@@ -77,8 +66,6 @@ class ResumableRunner implements Runner {
       lastSeq: this.#seq,
       pendingPermissionCount: 0,
       meta: this.#meta,
-      // The real `#title()`'s precedence, which the wake depends on: an explicit
-      // `meta.title`, else one derived from the opening prompt.
       title: typeof this.#meta?.title === 'string' ? this.#meta.title : this.config.prompt || undefined,
     }
   }
@@ -108,10 +95,6 @@ class ResumableRunner implements Runner {
     return false
   }
   async interrupt(): Promise<void> {}
-  /** A conversation reset, in both the shapes real engines produce it: one that
-   * names the fresh engine session in the same breath (claude, and codex when
-   * its child is already up), and one that has no id to name until its next
-   * turn (codex with no live child). */
   async clearContext(adopt?: string): Promise<void> {
     this.#sdkSessionId = adopt
     this.#emit({ type: 'conversation_reset', sdkSessionId: adopt })
@@ -132,7 +115,6 @@ class ResumableRunner implements Runner {
   }
 }
 
-/** A provider profile whose runner cannot resume — the control case. */
 class UnresumableRunner extends ResumableRunner {
   override info(): SessionInfo {
     return { ...super.info(), capabilities: ENGINE_CAPABILITIES.provider }
@@ -158,14 +140,12 @@ afterEach(async () => {
   for (const server of servers.splice(0)) {
     await server.close()
   }
-  // retries: a wake-up's own save can still be in flight as the server closes.
+  // Retried: a wake-up's own save can still be in flight as the server closes.
   for (const dir of dirs.splice(0)) {
     await rm(dir, { recursive: true, force: true, maxRetries: 5 })
   }
 })
 
-/** Start a gateway over `store`. Calling it twice with the same store is the
- * restart this whole feature is about. */
 const startGateway = async (store: SessionStore): Promise<Gateway> => {
   const built: ResumableRunner[] = []
   const server = createWorkerServer({
@@ -223,8 +203,6 @@ describe('sessions that survive a restart', () => {
     await vi.waitFor(async () => {
       expect((await store.get(session.id))?.kind).toBe('dormant')
     })
-    // The registry owns it while it is live — the record is the way back, not a
-    // second row.
     const rows = await list(gateway.base)
     expect(rows.filter((row) => row.id === session.id)).toHaveLength(1)
     expect(rows[0]!.status).not.toBe('idle-duplicate')
@@ -238,20 +216,16 @@ describe('sessions that survive a restart', () => {
       expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
     })
 
-    // The restart. A close is not a session end: the records stay.
     await first.server.close()
     servers.splice(servers.indexOf(first.server), 1)
 
     const second = await startGateway(createFileSessionStore({ dir }))
     const rows = await list(second.base)
     expect(rows.map((row) => row.id)).toEqual([session.id])
-    // Not 'starting' and not 'running': nothing is running it.
     expect(rows[0]!.status).toBe('idle')
     expect(rows[0]!.cwd).toBe('/tmp/project')
-    // Lazily: listing fifty sessions must not spawn fifty engines.
     expect(second.built).toHaveLength(0)
 
-    // Attaching is what wakes it.
     const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
     await new Promise((resolve, reject) => {
       ws.once('open', resolve)
@@ -262,7 +236,6 @@ describe('sessions that survive a restart', () => {
     expect(second.built).toHaveLength(1)
     const rebuilt = second.built[0]!
     expect(rebuilt.id).toBe(session.id)
-    // The transcript comes back from the engine's own store, not from ours.
     expect(rebuilt.config.resume).toBe('engine-session-1')
   })
 
@@ -276,7 +249,6 @@ describe('sessions that survive a restart', () => {
 
     const renamed = await rename(first.base, session.id, 'The one I named')
     expect(renamed.title).toBe('The one I named')
-    // A rename emits no event, so the re-save is the route's own doing.
     await vi.waitFor(async () => {
       const record = await createFileSessionStore({ dir }).get(session.id)
       expect((record as { config: SessionRunnerConfig }).config.meta?.title).toBe('The one I named')
@@ -286,11 +258,8 @@ describe('sessions that survive a restart', () => {
     servers.splice(servers.indexOf(first.server), 1)
 
     const second = await startGateway(createFileSessionStore({ dir }))
-    // The listing reads `record.info`, so it was never the half that broke.
     expect((await list(second.base))[0]!.title).toBe('The one I named')
 
-    // The wake is: it rebuilds from `record.config` and discards `record.info`,
-    // so a config still carrying the build-time meta resurrects the old title.
     const ws = new WebSocket(`${second.base.replace('http', 'ws')}/sessions/${session.id}/ws`)
     await new Promise((resolve, reject) => {
       ws.once('open', resolve)
@@ -306,7 +275,6 @@ describe('sessions that survive a restart', () => {
     const dir = await stateDir()
     const first = await startGateway(createFileSessionStore({ dir }))
     const session = await create(first.base, 'resumable', 'Summarize the repo')
-    // The original run really does send it — that is what must not happen twice.
     expect(first.built[0]!.sent).toEqual(['Summarize the repo'])
     expect(session.title).toBe('Summarize the repo')
     await vi.waitFor(async () => {
@@ -325,12 +293,9 @@ describe('sessions that survive a restart', () => {
     ws.close()
 
     const woken = second.built[0]!
-    // The thread comes back from the engine's own store; the prompt that opened
-    // it is history, not an instruction to carry out again.
     expect(woken.config.resume).toBe('engine-session-1')
     expect(woken.sent).toEqual([])
     expect(woken.config.prompt).toBeUndefined()
-    // And dropping it must not cost the session the name it derived from it.
     expect(woken.info().title).toBe('Summarize the repo')
   })
 
@@ -387,12 +352,6 @@ describe('sessions that survive a restart', () => {
   })
 
   it('forgets the dormant record when a clear leaves nothing to come back to', async () => {
-    // The record names the conversation that was just cleared, and no
-    // `status_changed` follows a clear to correct it — so a restart in this
-    // window would wake the session straight back into the transcript the user
-    // threw away. Codex is the engine that gets here: its fresh thread id is not
-    // known until the next turn's `thread/start`, so with no live child there is
-    // nothing to re-save under.
     const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
     const gateway = await startGateway(store)
     const session = await create(gateway.base)
@@ -405,9 +364,6 @@ describe('sessions that survive a restart', () => {
     await vi.waitFor(async () => {
       expect(await store.get(session.id)).toBeNull()
     })
-    // The live session is untouched — this is narrower than `discard`, which
-    // would also drop the config and cost the session its ability to go dormant
-    // again for the rest of its life.
     expect((await list(gateway.base)).map((row) => row.id)).toEqual([session.id])
   })
 

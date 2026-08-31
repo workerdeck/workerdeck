@@ -5,7 +5,6 @@ import type { ServerFrame, SessionInfo, ToolCallRequestFrame } from '@workerdeck
 import type { ToolExecutionResult } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
-/** Minimal stand-in for the SDK: the bridge tests never drive the model. */
 const idleHarness = () => {
   const query = {
     [Symbol.asyncIterator]() {
@@ -196,8 +195,6 @@ describe('browser-bridged tool execution over the wire', () => {
         output: { type: 'text', value: 'too late' },
       }),
     )
-    // A late answer is expected (it raced the timeout), so it must not produce a
-    // protocol_error — and must not re-open the settled execution.
     await new Promise((r) => setTimeout(r, 100))
     expect(collector.frames.some((f) => f.type === 'protocol_error')).toBe(false)
     expect(results).toHaveLength(1)

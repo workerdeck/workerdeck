@@ -1,10 +1,3 @@
-/**
- * Availability per profile: the adapter's probe over the env the *real* assembly path produces,
- * cached and served as `available`/`unavailableReason`. Gated on `checkCredentials` (a library
- * must spawn nothing), and **display-only** downstream — a probe can be stale in both directions,
- * so refusing on it would turn a probe bug into an outage. `requireAvailableProfile` is the one
- * deliberate exception, and only on a definite `false`; 'unknown' is never evidence of anything.
- */
 import { checkClaudeAuth } from '@workerdeck/core'
 import type { ClaudeAuthProbe, EngineAdapter, EngineAvailability } from '@workerdeck/core'
 import type { ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
@@ -17,13 +10,11 @@ export type AvailabilityTrackerOptions = {
   checkCredentials?: boolean | { probe?: ClaudeAuthProbe; timeoutMs?: number }
   requireAvailableProfile?: boolean
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
-  /** The env the real assembly path would spawn this profile's session with. */
   sessionEnvFor: (profile: ProfileInfo) => Record<string, string | undefined>
 }
 
 export class AvailabilityTracker {
   readonly #verdicts = new Map<string, { verdict: EngineAvailability; at: number }>()
-  /** Profiles already warned about on the console, so re-probes don't spam. */
   readonly #warned = new Set<string>()
   readonly #opts: AvailabilityTrackerOptions
 
@@ -31,7 +22,6 @@ export class AvailabilityTracker {
     this.#opts = opts
   }
 
-  /** The cached verdict, if any probe has answered. */
   get(name: string): EngineAvailability | undefined {
     return this.#verdicts.get(name)?.verdict
   }
@@ -48,8 +38,6 @@ export class AvailabilityTracker {
       at: Date.now(),
     })
     const adapter = adapterFor(profile.engine)
-    // The injectable claude probe predates the adapter layer and is honored
-    // for claude profiles (existing tests and hosts wire it).
     const claudeProbe: ClaudeAuthProbe | undefined =
       engineOf(profile) !== 'claude'
         ? undefined
@@ -76,16 +64,9 @@ export class AvailabilityTracker {
           this.#warned.delete(profile.name)
         }
       })
-      .catch(() => {
-        // a probe that breaks is 'unknown', and unknown stays silent
-      })
+      .catch(() => {})
   }
 
-  /**
-   * The create-time half of `requireAvailableProfile`. Only a definite `false`
-   * refuses: an unprobed profile ('unknown', or probes turned off entirely) is
-   * not evidence of anything and must not become a closed door.
-   */
   checkAvailable(profile: ProfileInfo | undefined): Refusal | null {
     if (!this.#opts.requireAvailableProfile || !profile) {
       return null
@@ -100,16 +81,12 @@ export class AvailabilityTracker {
     }
   }
 
-  /** Launch-time sweep, concurrent and fire-and-forget. */
   preflight(profiles: ProfileInfo[]): void {
     for (const profile of profiles) {
       this.probe(profile)
     }
   }
 
-  /** Lazy re-probe on reads, so an operator who just ran `codex login` (or
-   * exported a key) sees the profile go green without a restart. Serves the
-   * cached verdict now; the refreshed one lands on the next request. */
   refresh(profiles: ProfileInfo[]): void {
     if (!this.#opts.checkCredentials) {
       return

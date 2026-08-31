@@ -1,10 +1,3 @@
-/**
- * `POST {basePath}/executions/:executionId/result` — a deferred executor delivering its
- * outcome. Wakes the parked session and applies the result to its agent loop.
- *
- * Scoped like every other session route: a result is trusted tool input, so settling an
- * execution outside the caller's scope would be a way to steer another tenant's loop.
- */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ToolExecutionResult } from '@workerdeck/core'
 import type { SubmitExecutionResultRequest } from '@workerdeck/protocol'
@@ -52,8 +45,7 @@ export const handleExecutionResult = async (
     const owner = parking.sessionFor(executionId)
     const info = owner === undefined ? undefined : (registry.get(owner)?.info() ?? (await parking.get(owner))?.info)
     const profile = info?.profile
-    // Indistinguishable from an unknown id on purpose: whether an execution exists elsewhere
-    // is not this caller's business.
+    // Indistinguishable from an unknown id on purpose: whether an execution exists elsewhere is not this caller's business.
     const refused =
       owner === undefined ||
       (auth.allowedProfiles !== undefined && profile !== undefined && !auth.allowedProfiles.includes(profile)) ||

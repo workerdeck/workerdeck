@@ -18,19 +18,12 @@ const USAGE = {
   totalTokens: 125,
 }
 
-/**
- * The real codex adapter shape with the binary swapped for a scripted
- * app-server JSON-RPC peer — what the `engines` override exists for: the full
- * HTTP→adapter→CodexRunner→WS path runs, and `pnpm test` spawns no binary.
- * Each `turns` entry is the agent's answer text for one turn.
- */
+// The codex adapter with the binary swapped for a scripted app-server peer, so the full path runs and `pnpm test` spawns nothing.
 const fakeCodexAdapter = (options: {
   turns?: string[]
   probe?: () => EngineAvailability
   onCreate?: (config: SessionRunnerConfig) => void
-  /** Extra notifications to emit mid-turn, before the agent message. */
   onTurn?: (notify: (method: string, params: unknown) => void) => void
-  /** What `mcpServerStatus/list` answers with (codex's own shape). */
   mcpServers?: unknown[]
 }): { adapter: EngineAdapter; probeCalls: () => number } => {
   let probeCalls = 0
@@ -125,7 +118,6 @@ describe('codex engine over the gateway', () => {
     const { port } = await running.listen(0, '127.0.0.1')
     const base = `http://127.0.0.1:${port}/v1`
 
-    // The cold-start promise, codex edition: catalog + record on request one.
     const profiles = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
     expect(profiles.profiles[0]!.models?.[0]?.value).toBe('gpt-5.6-sol')
     expect(profiles.profiles[0]!.models?.[0]?.reasoningEfforts).toContain('ultra')
@@ -153,7 +145,6 @@ describe('codex engine over the gateway', () => {
     await vi.waitFor(() => {
       const attached = frames.find((f) => f.type === 'attached')
       expect(attached).toBeDefined()
-      // The attach snapshot is the session-level capability source.
       expect((attached as { session: { capabilities?: { streaming?: string } } }).session.capabilities?.streaming).toBe('token')
       const events = frames.filter((f) => f.type === 'event').map((f) => f.event)
       expect(events.some((e) => e.type === 'turn_result' && e.result === 'hello from codex')).toBe(true)
@@ -163,8 +154,7 @@ describe('codex engine over the gateway', () => {
 
   it('serves a generated image from the produced-file route, with no host-file roots', async () => {
     scratchDir = mkdtempSync(join(tmpdir(), 'wd-produced-'))
-    // A 2 MiB "PNG": past the 1 MiB `/fs/read` default, which is exactly the
-    // case that used to leave the operator looking at a path.
+    // A 2 MiB "PNG": past the 1 MiB `/fs/read` default, which is the case this route exists for.
     const png = Buffer.alloc(2 * 1024 * 1024, 7)
     const savedPath = join(scratchDir, 'flower.png')
     writeFileSync(savedPath, png)
@@ -189,9 +179,7 @@ describe('codex engine over the gateway', () => {
       allowedCwdRoots: ['/tmp'],
       profiles: [codexProfile()],
       engines: { codex: adapter },
-      // Deliberately NOT configured: no `hostFiles`, so `/fs/*` does not even
-      // exist on this gateway. The produced route must still serve the picture
-      // — that is the whole point of the channel.
+      // No `hostFiles` on purpose: `/fs/*` does not exist on this gateway and the produced route must still serve the picture.
     })
     const { port } = await running.listen(0, '127.0.0.1')
     const base = `http://127.0.0.1:${port}/v1`
@@ -203,7 +191,6 @@ describe('codex engine over the gateway', () => {
     })
     const { session } = (await created.json()) as { session: { id: string } }
 
-    // The announcement reaches clients as an ordinary event…
     let fileId = ''
     await vi.waitFor(async () => {
       const res = await fetch(`${base}/sessions/${session.id}/produced`)
@@ -219,24 +206,17 @@ describe('codex engine over the gateway', () => {
       fileId = body.files[0]!.fileId
     })
 
-    // …and the bytes come back whole, uncapped.
     const file = await fetch(`${base}/sessions/${session.id}/produced/${fileId}`)
     expect(file.status).toBe(200)
     expect(file.headers.get('content-type')).toBe('image/png')
-    // Model-authored bytes must never render as a document on this origin.
     expect(file.headers.get('x-content-type-options')).toBe('nosniff')
     expect(Buffer.from(await file.arrayBuffer()).length).toBe(png.length)
 
-    // The allowlist is exact: an id nobody produced is a 404, and so is a real
-    // id under a different session.
     expect((await fetch(`${base}/sessions/${session.id}/produced/deadbeef`)).status).toBe(404)
 
-    // A file that has since left the disk fails at the fetch, not at the
-    // announcement — the card still knows where it went.
     rmSync(savedPath)
     expect((await fetch(`${base}/sessions/${session.id}/produced/${fileId}`)).status).toBe(404)
 
-    // The session's hold ends with the session.
     await fetch(`${base}/sessions/${session.id}`, { method: 'DELETE' })
     const afterDelete = await fetch(`${base}/sessions/${session.id}/produced/${fileId}`)
     expect(afterDelete.status).toBe(404)
@@ -269,7 +249,6 @@ describe('codex engine over the gateway', () => {
     })
     const { session } = (await created.json()) as { session: { id: string } }
 
-    // Listing works, and carries what the Agent SDK cannot: a tool's schema.
     await vi.waitFor(async () => {
       const res = await fetch(`${base}/sessions/${session.id}/mcp`)
       expect(res.status).toBe(200)
@@ -280,9 +259,6 @@ describe('codex engine over the gateway', () => {
       expect(body.servers[0]!.tools?.[0]?.inputSchema).toEqual({ type: 'object' })
     })
 
-    // Acting does NOT. The runner exposes no reconnect/enable/disable, and the
-    // route's optional chaining would otherwise no-op and answer 200 with the
-    // unchanged list — a button reporting success having done nothing.
     for (const action of ['reconnect', 'enable', 'disable'] as const) {
       const res = await fetch(`${base}/sessions/${session.id}/mcp/scratch`, {
         method: 'POST',
@@ -293,8 +269,6 @@ describe('codex engine over the gateway', () => {
       expect(((await res.json()) as { error?: string }).error).toMatch(/cannot .* an MCP server/)
     }
 
-    // And the record says so, which is what lets clients hide the buttons
-    // instead of discovering the 501.
     expect(ENGINE_CAPABILITIES.codex.mcpStatus).toBe(true)
     expect(ENGINE_CAPABILITIES.codex.mcpServerActions).toBe(false)
   })
@@ -363,12 +337,9 @@ describe('codex engine over the gateway', () => {
         body: 'payload',
       })
 
-    // No codex representation for a PDF — refused at the door, before the bytes
-    // are held and a later send can trip over them.
     const pdf = await upload('doc.pdf', 'application/pdf')
     expect(pdf.status).toBe(415)
     expect(((await pdf.json()) as { error: string }).error).toMatch(/codex engine does not accept document/)
-    // Text is in the record: it inlines into the prompt envelope.
     expect((await upload('notes.txt', 'text/plain')).status).toBe(201)
   })
 
@@ -398,8 +369,6 @@ describe('codex engine over the gateway', () => {
   })
 
   it('passes questionBehavior through to codex (it has an approval channel), strips it for provider', async () => {
-    // Codex's requestUserInput rides the AskUserQuestion convention, so the
-    // policy is meaningful and must reach the runner …
     let codexConfig: SessionRunnerConfig | undefined
     let providerConfig: SessionRunnerConfig | undefined
     const { adapter } = fakeCodexAdapter({ onCreate: (config) => (codexConfig = config) })
@@ -422,8 +391,6 @@ describe('codex engine over the gateway', () => {
     expect(res.status).toBe(201)
     expect(codexConfig?.questionBehavior).toBe('auto')
 
-    // … while an engine with no approval channel still has it stripped, so job
-    // webhooks never grow phantom permission_requested expectations.
     await fetch(`http://127.0.0.1:${port}/v1/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -489,7 +456,6 @@ describe('availability', () => {
     })
     const afterLaunch = probeCalls()
 
-    // Inside the TTL nothing re-probes; past it, the next read refreshes.
     await fetch(`${base}/profiles`)
     expect(probeCalls()).toBe(afterLaunch)
     verdict = { available: true }
@@ -523,7 +489,6 @@ describe('availability', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ cwd: '/tmp/p', profile: 'codex', prompt: 'go' }),
     })
-    // Display-only by design: a stale probe must never turn into an outage.
     expect(res.status).toBe(201)
   })
 
@@ -551,8 +516,6 @@ describe('availability', () => {
     const { port } = await running.listen(0, '127.0.0.1')
     const base = `http://127.0.0.1:${port}/v1`
 
-    // The codex profile\u2019s store, through its adapter \u2014 profile and complete
-    // env handed over, dir/limit passed through.
     const codexRes = await fetch(`${base}/sdk-sessions?profile=codex&dir=/tmp/project&limit=5`)
     expect(codexRes.status).toBe(200)
     expect(((await codexRes.json()) as { sdkSessions: unknown[] }).sdkSessions).toEqual(codexRows)
@@ -569,27 +532,20 @@ describe('availability', () => {
     expect(call.env).toBeDefined()
     expect(claudeList).not.toHaveBeenCalled()
 
-    // No profile named, several declared \u2192 the pre-engine-aware behavior: the
-    // claude store via the injectable lister (old clients keep working).
     const legacy = await fetch(`${base}/sdk-sessions?dir=/tmp/project`)
     expect(legacy.status).toBe(200)
     expect(((await legacy.json()) as { sdkSessions: Array<{ sessionId: string }> }).sdkSessions[0]!.sessionId).toBe('sdk-1')
     expect(claudeList).toHaveBeenCalledTimes(1)
 
-    // A claude profile named explicitly rides the same injectable seam.
     expect((await fetch(`${base}/sdk-sessions?profile=toby`)).status).toBe(200)
     expect(claudeList).toHaveBeenCalledTimes(2)
 
-    // Unknown profile: told, not defaulted.
     const unknown = await fetch(`${base}/sdk-sessions?profile=nope`)
     expect(unknown.status).toBe(400)
     expect(((await unknown.json()) as { error: string }).error).toMatch(/unknown profile/)
 
-    // The cwd policy binds the codex listing the same way it binds claude\u2019s.
     expect((await fetch(`${base}/sdk-sessions?profile=codex&dir=/etc`)).status).toBe(403)
 
-    // A lister failure surfaces the engine\u2019s own message, as a response \u2014 not
-    // a socket error.
     codexList.mockRejectedValueOnce(new Error('@openai/codex is not installed'))
     const failed = await fetch(`${base}/sdk-sessions?profile=codex&dir=/tmp/project`)
     expect(failed.status).toBe(500)
@@ -606,8 +562,6 @@ describe('availability', () => {
       engines: { codex: adapter },
     })
     const { port } = await running.listen(0, '127.0.0.1')
-    // No ?profile= \u2014 but the server declares exactly one, so its engine (codex)
-    // answers rather than the legacy claude store.
     const res = await fetch(`http://127.0.0.1:${port}/v1/sdk-sessions`)
     expect(res.status).toBe(200)
     expect(codexList).toHaveBeenCalledTimes(1)
