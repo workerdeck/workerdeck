@@ -5,22 +5,9 @@ import { TerminalDiff, previewPatch } from './diff.tsx'
 import { Choices, Hint, PromptInput, PromptTitle, Rule } from './prompt.tsx'
 import { Blank, Row } from './row.tsx'
 
-/**
- * The approval, as the CLI draws it. Two rules taken from the CLI:
- *
- * - A file edit renders as a diff, not its JSON payload — without line
- *   numbers, necessarily: this client has never read the file (see
- *   {@link previewPatch}).
- * - The heading is the engine's own sentence (`displayName` over `title`),
- *   never "wants to use {tool}" composed here — for codex an approval is an
- *   escalation after a sandbox refusal, and the runner already wrote the
- *   sentence that says so.
- */
 export interface TerminalPermissionPromptProps {
   request: PermissionRequest
   onApprove: (requestId: string) => void
-  /** `message` is fed back to the agent, which can then try something else;
-   * `interrupt` also stops the turn. */
   onDeny: (requestId: string, message?: string, interrupt?: boolean) => void
   className?: string
 }
@@ -40,10 +27,8 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
   const patch = previewPatch(request.input)
   const summary = toolInputPreview(request.input)
   const heading = request.displayName ?? request.title ?? 'Permission needed'
-  // For a Bash approval the input preview is the command itself.
   const subject = patch?.path ?? (summary || undefined)
 
-  // "Deny" opens the reason field rather than acting; an empty field still denies.
   const options = [
     { key: 'allow', label: 'Yes' },
     {

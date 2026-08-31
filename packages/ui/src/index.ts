@@ -1,4 +1,3 @@
-// Primitives
 export { Button, buttonVariants, type ButtonProps } from './components/ui/Button.tsx'
 export { Badge, badgeVariants, type BadgeProps } from './components/ui/Badge.tsx'
 export { Card, CardContent, CardHeader, CardTitle } from './components/ui/Card.tsx'
@@ -23,7 +22,6 @@ export { CodeBlock, type CodeBlockProps } from './components/ui/CodeBlock.tsx'
 export { Splitter, type SplitterProps } from './components/ui/Splitter.tsx'
 export { Empty, EmptyKey } from './components/ui/Empty.tsx'
 export { ProgressRing, type ProgressRingProps } from './components/ui/ProgressRing.tsx'
-// Prompt input (vendored just-marketing/prompt-area, themed to these tokens)
 export {
   PromptArea,
   usePromptAreaState,
@@ -43,7 +41,6 @@ export {
   type TriggerSuggestion,
 } from './components/prompt-area/index.ts'
 
-// Agent-control components
 export {
   SessionPanel,
   type SessionControls,
@@ -52,11 +49,7 @@ export {
   type SessionVitals,
   type TerminalMetrics,
 } from './components/agent/SessionPanel.tsx'
-// The workspace layout and its Monaco editor stay unreachable from this entry, at
-// `@workerdeck/ui/workspace` — see `src/workspace.ts`.
 export { Transcript, type TranscriptProps } from './components/agent/Transcript.tsx'
-// The terminal theme. `SessionPanel`/`Transcript` reach it through `variant:
-// 'terminal'`; these exports are for a host composing the surface by hand.
 export { TerminalSurface, type TerminalSurfaceProps } from './components/terminal/surface.tsx'
 export { TerminalTranscript, TerminalItemView, type TerminalTranscriptProps } from './components/terminal/TerminalTranscript.tsx'
 export { TerminalStatusLine, type TerminalStatusLineProps } from './components/terminal/StatusLine.tsx'
@@ -111,13 +104,10 @@ export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsD
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export { SessionList, SessionListItem, type SessionListItemProps, type SessionListProps } from './components/agent/SessionList.tsx'
 export { SessionBrowser, rowShapeClass, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
-// The session card itself — one component, every client; `SessionBrowser` is the
-// dashboard's list *around* it.
 export { SessionItem, type SessionItemProps } from './components/agent/SessionItem.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
 export { type Step, StepRow, StepToggle, runningSteps, sessionSteps } from './components/agent/SessionSteps.tsx'
-// The sub-agent takeover's one line, for hosts drawing their own panel chrome.
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
 export { SessionEmptyState, type SessionEmptyStateProps } from './components/agent/SessionEmptyState.tsx'
@@ -125,7 +115,6 @@ export { PromptTokenText } from './components/agent/PromptTokenText.tsx'
 export { STATUS_META } from './components/agent/status.ts'
 export { ContextRing } from './components/agent/ContextRing.tsx'
 
-// Utilities
 export { cn } from './lib/utils.ts'
 export { copyText } from './lib/clipboard.ts'
 export { isMutatingTool, toolIcon } from './lib/tool-icon.ts'

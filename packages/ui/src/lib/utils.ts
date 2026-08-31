@@ -1,9 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { extendTailwindMerge } from 'tailwind-merge'
 
-// Register the custom text-* font-size utilities as a font-size class group, or
-// tailwind-merge collapses a size class and a color class (e.g. `text-label
-// text-muted-foreground`) into one bucket and silently drops the size.
+// Register the custom text-* utilities as a font-size group, or tailwind-merge buckets a size class with a colour class and drops the size.
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {

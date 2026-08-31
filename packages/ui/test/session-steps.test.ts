@@ -12,11 +12,6 @@ const sub = (over: Partial<SubagentInfo>): SubagentInfo => ({
   ...over,
 })
 
-/**
- * Which lines a person can press. An agent has work of its own and a frame to
- * show it in; a task does not, and a row that offered a screen and then drew an
- * empty one is worse than a row that offered nothing.
- */
 describe('isAgentRecord', () => {
   it('is an agent when it carries a subagent type', () => {
     expect(isAgentRecord(sub({ agentType: 'Explore' }))).toBe(true)
@@ -34,13 +29,6 @@ describe('isAgentRecord', () => {
 })
 
 describe('sessionSteps', () => {
-  /**
-   * The bug this pins: every step used to be handed the same callback, so
-   * pressing a **task** went down the sub-agent path and the panel framed a
-   * tool-use id with no agent behind it — `subagentItems` matched nothing and it
-   * drew an **empty agent view**. The kind has to reach the caller, because the
-   * caller is what routes the two destinations apart.
-   */
   it('tells the caller which kind was pressed', () => {
     const info = {
       subagents: [sub({ toolUseId: 'a', agentType: 'Explore' }), sub({ toolUseId: 'b', description: 'check the deploy' })],
@@ -56,11 +44,6 @@ describe('sessionSteps', () => {
     ])
   })
 
-  /**
-   * Agents above tasks — the rows you can open are a block at the top, and the
-   * markers are a tail you can skip. Stable *within* each group, because
-   * dispatch order is the only order these records carry that means anything.
-   */
   it('sorts agents above tasks without reordering either group', () => {
     const info = {
       subagents: [

@@ -4,20 +4,10 @@ import { parseUserQuestions } from '../agent/QuestionPrompt.tsx'
 import { Box, Choices, Hint, PromptInput, Rule, TabStrip, type Choice } from './prompt.tsx'
 import { Blank, Ink, Row } from './row.tsx'
 
-/**
- * The AskUserQuestion form, in the CLI's shape: one question at a time behind
- * a strip of chips, ending in a review step. One-at-a-time keeps the keyboard
- * unambiguous (`↑↓` within, `Tab` between, `Enter` to take); the review step
- * shows answers given one screen at a time together before they go back to the
- * model.
- */
-
 type Selection = { labels: string[]; other: string; otherActive: boolean }
 
 const EMPTY: Selection = { labels: [], other: '', otherActive: false }
 
-/** A question's answer: chosen label(s), comma-joined, with any free-text
- * "Other" appended — the shape the CLI's own UI puts in `updatedInput.answers`. */
 const answerFor = (selection: Selection): string => {
   const parts = [...selection.labels]
   if (selection.otherActive && selection.other.trim()) {
@@ -27,11 +17,8 @@ const answerFor = (selection: Selection): string => {
 }
 
 export interface TerminalQuestionPromptProps {
-  /** A pending permission whose toolName is 'AskUserQuestion'. */
   request: PermissionRequest
-  /** Allow the tool with `updatedInput` (the original input plus `answers`). */
   onAnswer: (requestId: string, updatedInput: Record<string, unknown>) => void
-  /** Deny the tool — the model proceeds without an answer. */
   onDismiss: (requestId: string, message?: string) => void
   className?: string
 }
@@ -40,8 +27,6 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
   const questions = parseUserQuestions(request.input)
   const [selections, setSelections] = useState<Selection[]>(() => questions.map(() => EMPTY))
   const [cursors, setCursors] = useState<number[]>(() => questions.map(() => 0))
-  // Tabs are the questions plus the review step, so `questions.length` is the
-  // review — one index space, which is what makes Tab a single `+1`.
   const [tab, setTab] = useState(0)
   const [reviewCursor, setReviewCursor] = useState(0)
 
@@ -53,9 +38,6 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
   const update = (index: number, patch: Partial<Selection>) =>
     setSelections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)))
 
-  // Functional, and it has to be: two toggles in one tick computed from the
-  // render closure would both use the same base, and the second silently
-  // drops the first.
   const toggle = (index: number, label: string, multiSelect: boolean) => {
     setSelections((prev) =>
       prev.map((current, i) => {
@@ -127,9 +109,7 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
         />
       ) : (
         <QuestionStep
-          // Keyed by question, and load-bearing: without it React reuses the
-          // step across a Tab, the option list never re-arms its focus, and
-          // the keyboard lands on nothing.
+          // Keyed by question and load-bearing: without it React reuses the step across a Tab and the option list never re-arms its focus.
           key={tab}
           question={questions[tab]!}
           selection={selection}
@@ -175,13 +155,9 @@ function QuestionStep({
         key: option.label,
         label: option.label,
         description: option.description,
-        // Markers only where there is state to keep: a multi-select must show
-        // its set; a one-of answers itself by being chosen. The CLI draws it
-        // the same way.
         checked: multiSelect ? selected : undefined,
         marker: 'check',
         selected: !multiSelect && selected,
-        // A preview shows on focus, not only on selection.
         detail:
           option.preview && cursor === index ? (
             <Box>
@@ -197,7 +173,6 @@ function QuestionStep({
     {
       key: '__other',
       label: 'Other…',
-      // Always markered: this row is a mode (the field is open or it isn't).
       checked: selection.otherActive,
       marker: 'check' as const,
       detail: selection.otherActive ? (
@@ -210,7 +185,6 @@ function QuestionStep({
         />
       ) : undefined,
     },
-    // Multi-select has no natural end, so it needs a "done with this one" row.
     ...(multiSelect ? [{ key: '__next', label: 'Submit' }] : []),
     { key: '__chat', label: 'Chat about this' },
   ]
@@ -230,7 +204,6 @@ function QuestionStep({
         onChoose={(index) => {
           if (index < question.options.length) {
             onToggle(question.options[index]!.label)
-            // A one-of is finished the moment it is picked.
             if (!multiSelect) {
               onAdvance()
             }
@@ -251,7 +224,6 @@ function QuestionStep({
   )
 }
 
-/** The last chip: every answer together, and one more chance to change it. */
 function ReviewStep({
   questions,
   answers,
@@ -290,8 +262,6 @@ function ReviewStep({
       <Choices
         label="Submit answers"
         options={[
-          // Offered even when incomplete: an unanswered question is a
-          // legitimate answer, and the model is told which ones were skipped.
           { key: 'submit', label: complete ? 'Submit answers' : 'Submit anyway' },
           { key: 'cancel', label: 'Cancel', danger: true },
         ]}

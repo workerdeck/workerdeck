@@ -23,7 +23,6 @@ export const formatDuration = (ms: number): string => {
   return `${m}m ${Math.round(s % 60)}s`
 }
 
-/** Compact token count, Claude Code-style: 850 → "850", 359_000 → "359.0k", 1_200_000 → "1.2M". */
 export const formatTokens = (tokens: number): string => {
   if (tokens >= 1_000_000) {
     return `${(tokens / 1_000_000).toFixed(1)}M`
@@ -44,7 +43,6 @@ export const formatBytes = (bytes: number): string => {
   return `${bytes} B`
 }
 
-/** Countdown to an epoch-ms deadline: "2h 18m", "12m", "<1m"; "now" once passed. */
 export const formatCountdown = (untilEpochMs: number, now = Date.now()): string => {
   const remaining = untilEpochMs - now
   if (remaining <= 0) {
@@ -85,11 +83,6 @@ export const formatRelativeTime = (epochMs: number | undefined, now = Date.now()
   return `${d}d ago`
 }
 
-/**
- * Human label for a rate-limit window key, compact: 'five_hour' → "5h",
- * 'seven_day_opus' → "7d opus". The per-model suffix is an open set — the CLI
- * adds buckets as plans gain them — so it is rewritten rather than enumerated.
- */
 export const formatRateLimitWindow = (key: string): string => {
   if (key === 'five_hour') {
     return '5h'
@@ -101,8 +94,6 @@ export const formatRateLimitWindow = (key: string): string => {
   return key.startsWith('seven_day_') ? `7d ${spaced.slice('seven day '.length)}` : spaced
 }
 
-/** The same key spelled out, where there is room: 'five_hour' → "5-hour
- * session", 'seven_day_fable' → "Weekly · Fable". */
 export const formatRateLimitWindowLong = (key: string): string => {
   if (key === 'five_hour') {
     return '5-hour session'
@@ -120,12 +111,6 @@ export const formatRateLimitWindowLong = (key: string): string => {
   return `Weekly · ${capitalize(key.slice('seven_day_'.length).replaceAll('_', ' '))}`
 }
 
-/**
- * How long a rate-limit window is, in seconds — the denominator behind the pace
- * marker. Derived from the key rather than reported: the CLI sends a reset time
- * and a percentage, never a duration. `undefined` for a window whose key doesn't
- * say, and the marker is then simply not drawn rather than guessed.
- */
 export const rateLimitWindowSeconds = (key: string): number | undefined => {
   if (key === 'five_hour') {
     return 5 * 3600
@@ -136,8 +121,6 @@ export const rateLimitWindowSeconds = (key: string): number | undefined => {
   return undefined
 }
 
-/** "8 secs ago" / "3 mins ago" — a freshness line finer-grained than
- * {@link formatRelativeTime}, because a poll that just landed should say so. */
 export const formatAgoPrecise = (epochMs: number, now = Date.now()): string => {
   const seconds = Math.max(0, Math.floor((now - epochMs) / 1000))
   if (seconds < 60) {
@@ -151,7 +134,6 @@ export const formatAgoPrecise = (epochMs: number, now = Date.now()): string => {
   return `${hours} hour${hours === 1 ? '' : 's'} ago`
 }
 
-/** Compact one-line preview of a tool input for card headers. */
 export const toolInputPreview = (input: unknown, max = 80): string => {
   if (input === null || input === undefined) {
     return ''
@@ -167,9 +149,6 @@ export const toolInputPreview = (input: unknown, max = 80): string => {
   return text.length > max ? text.slice(0, max - 1) + '…' : text
 }
 
-/** Families whose name isn't just a capitalised first letter, and how the
- * vendor writes the version after it. GPT is `GPT-5.6`; everyone else spaces
- * it. Anything unlisted is title-cased and spaced. */
 const MODEL_FAMILIES: Record<string, { name: string; joiner?: string }> = {
   gpt: { name: 'GPT', joiner: '-' },
   deepseek: { name: 'DeepSeek' },
@@ -181,15 +160,6 @@ const MODEL_FAMILIES: Record<string, { name: string; joiner?: string }> = {
   grok: { name: 'Grok' },
 }
 
-/**
- * The name a person says, from a wire model id: `claude-opus-5[1m]` → "Opus 5",
- * `claude-haiku-4-5-20251001` → "Haiku 4.5", `gpt-5.6-luna` → "GPT-5.6 Luna",
- * `o3-mini` → "o3 Mini". Version tokens join with dots, code names/tiers are
- * capitalised, snapshot dates (`20251001`) are dropped; anything unreadable
- * falls back to the raw id. Render-time counterpart of core's narrower
- * `friendlyModelName` — this one must cope with every vendor the provider
- * engine can reach.
- */
 export const friendlyModel = (id: string | undefined): string | undefined => {
   if (!id) {
     return undefined
@@ -206,8 +176,7 @@ export const friendlyModel = (id: string | undefined): string | undefined => {
   const family = MODEL_FAMILIES[familyToken]
   const name =
     family?.name ??
-    // OpenAI's reasoning series is lower-case by its own convention ('o3-mini'),
-    // and "O3" reads as a different product.
+    // OpenAI's reasoning series is lower-case by its own convention ('o3-mini'); "O3" reads as a different product.
     (/^o\d+$/.test(familyToken) ? familyToken : `${familyToken.charAt(0).toUpperCase()}${familyToken.slice(1)}`)
 
   const version: string[] = []

@@ -36,9 +36,7 @@ describe('toolFamily', () => {
   })
 
   it('keeps a hyphenated server name whole', () => {
-    // The regex is lazy across `_`-joined segments, so the *first* `__` after at
-    // least one segment ends the server. A `chrome-devtools` server arrives as
-    // `chrome_devtools` and must not truncate to `chrome`.
+    // The regex is lazy across `_`-joined segments, so the first `__` after one segment ends the server: `chrome_devtools` must not truncate to `chrome`.
     expect(toolFamily('mcp__chrome_devtools__take_screenshot')).toBe('chrome-devtools')
     expect(toolFamily('mcp__plugin_gtm_warehouse__execute_query')).toBe('plugin-gtm-warehouse')
   })
@@ -68,8 +66,6 @@ describe('runSummary', () => {
   })
 
   it('orders the breakdown by count, then alphabetically', () => {
-    // A stable order is load-bearing: this string *is* the row's measured
-    // height, so a breakdown that reordered between renders would remeasure.
     const items = [call('Read'), call('mcp__gtm__TaskUpsert'), call('WebFetch')]
     expect(runSummary(items, false)).toBe('Ran 3 tools · 1 gtm, 1 read, 1 webfetch')
   })
@@ -90,8 +86,6 @@ describe('foldsTogether', () => {
   })
 
   it('refuses to fold a subagent’s call with a top-level one', () => {
-    // They are drawn in two different frames of reference — one stepped in
-    // behind a rule — so a single count over both would claim they were one act.
     expect(foldsTogether(call('Bash'), call('Read', 'agent-1'))).toBe(false)
     expect(foldsTogether(call('Bash', 'agent-1'), call('Read', 'agent-2'))).toBe(false)
   })
@@ -100,8 +94,6 @@ describe('foldsTogether', () => {
     expect(foldsTogether(call('Bash', 'agent-1'), call('Read', 'agent-1'))).toBe(true)
   })
 })
-
-/* ── The task block's one line ────────────────────────────────────────────── */
 
 const taskCall = (over: Partial<ToolCallItem> = {}): ToolCallItem => ({
   kind: 'tool_call',
@@ -128,27 +120,14 @@ const said: TranscriptItem = {
 
 describe('taskBrief', () => {
   it('is the call’s prompt — the one place the engine puts the instruction', () => {
-    // Measured against a live claude session: the Agent SDK sends
-    // {description, subagent_type, run_in_background, prompt} and never emits
-    // the brief as a nested user message, so no `parentToolUseId` item carries
-    // it and only the call does.
     expect(taskBrief(taskCall({ input: { prompt: 'Find every caller of parseRoute.' } }))).toBe('Find every caller of parseRoute.')
   })
 
   it('is the fallback for a background agent, whose stream carries no brief at all', () => {
-    // The distinction that decides whether the row is drawn: a foreground Task
-    // forwards its brief as a real nested user item (the reducer stamps the
-    // parent on it), so the frame already has one and the callers skip this. A
-    // background agent forwards nothing — measured on a session with eight —
-    // and those are exactly the runs a takeover gets opened on. `taskBrief`
-    // itself answers the same either way; the guard lives at the call sites.
     expect(taskBrief(taskCall({ input: { prompt: 'Go.', run_in_background: true } }))).toBe('Go.')
   })
 
   it('is absent when the engine has no brief to give, and never borrows the description', () => {
-    // Codex is this case for real: its spawn message is encrypted on the wire.
-    // Falling back to `description` would claim we know the instruction when we
-    // have only the 3–5 word label the header already prints.
     expect(taskBrief(taskCall({ input: { description: 'find the auth check' } }))).toBeUndefined()
     expect(taskBrief(taskCall({ input: {} }))).toBeUndefined()
     expect(taskBrief(taskCall({ input: { prompt: '   ' } }))).toBeUndefined()
@@ -170,10 +149,6 @@ describe('taskLabel', () => {
   })
 
   it('treats a blank-padded description as absent, not as a name', () => {
-    // A model told to omit an optional field sends "" or " " — the same lesson
-    // `apps/embedded` paid for. `Task( )` would be that bug, drawn; the fallback
-    // preview happens to be empty for this input too, which is exactly what the
-    // plain tool row's header shows for it.
     expect(taskLabel(taskCall({ input: { subagent_type: ' ', description: '' } }))).toBe('Task()')
   })
 
@@ -212,8 +187,6 @@ describe('taskBusy', () => {
   })
 
   it('stays busy while a child call still runs, even after the task settled', () => {
-    // A bridged or deferred child can outlive the call; a pulse that stopped
-    // while one still worked would read as a hang.
     const children = [{ ...call('Read', 'task-1'), status: 'running' as const }]
     expect(taskBusy(taskCall(), children)).toBe(true)
   })
@@ -227,10 +200,6 @@ describe('taskFailed', () => {
   })
 
   it('does not colour on a child’s failure — the agent’s outcome is the claim', () => {
-    // The case that motivated the rule: an agent runs a hundred calls, one of
-    // them a grep that matched nothing, and comes back having done exactly what
-    // it was asked. A red line saying otherwise spends the one colour reserved
-    // for things that need a human. The child is still red on its own row.
     const children = [{ ...call('Read', 'task-1'), status: 'failed' as const }]
     expect(taskFailed(taskCall())).toBe(false)
     expect(children).toHaveLength(1)

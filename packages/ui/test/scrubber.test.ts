@@ -3,12 +3,6 @@ import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { buildClusters, railScale, type TerminalScrubberProps } from '../src/components/terminal/scrubber.tsx'
 
-/**
- * The rail's mark model. Both bugs it has shipped were here and neither needed a
- * DOM: the streaming answer that went unmarked, and the replayed history whose
- * right lane came back empty.
- */
-
 let seq = 0
 const user = (text: string): TranscriptItem => ({ kind: 'user', id: `u${++seq}`, text })
 const assistant = (text: string, parentToolUseId: string | null = null): TranscriptItem => ({
@@ -42,8 +36,7 @@ const toolCall = (status: 'running' | 'settled' | 'failed', result?: { text: str
   ...(result ? { result } : {}),
 })
 
-/** One row per item, 100px each — so a mark's y is its index × 10 at the scale
- * below, and two marks five items apart do not merge. */
+// One row per item, 100px each — so a mark's y is its index × 10 at this scale, and two marks five items apart do not merge.
 const ROW = 100
 const RAIL = 100
 
@@ -62,18 +55,13 @@ const props = (items: TranscriptItem[], extra: Partial<TerminalScrubberProps> = 
   ...extra,
 })
 
-/** Every mark, with the lane its cluster drew it in — clusters merge, so a
- * cluster-level filter silently loses the quieter member. */
+// Every mark with the lane its cluster drew it in — clusters merge, so a cluster-level filter silently loses the quieter member.
 const members = (clusters: ReturnType<typeof buildClusters>) => clusters.flatMap((c) => c.marks.map((m) => ({ lane: c.lane, ...m.mark })))
 
 const kinds = (items: TranscriptItem[], extra?: Partial<TerminalScrubberProps>) =>
   buildClusters(props(items, extra), RAIL).map((c) => `${c.lane}:${c.kind}`)
 
 describe('inside a sub-agent frame', () => {
-  // The takeover renders `subagentItems`, so EVERY item there has a parent. The
-  // rail's three "top level only" tests then excluded all of them and it came
-  // out mounted, banded, and marking nothing on a hundred-tool agent — which is
-  // exactly the run that needs a rail. "Top level" is now the frame's level.
   const framed = (text: string) => assistant(text, 'task-1')
   const failedChild = (): TranscriptItem => ({
     kind: 'tool_call',
@@ -85,12 +73,8 @@ describe('inside a sub-agent frame', () => {
   })
 
   it('marks every narration step, where the conversation marks one per segment', () => {
-    // No prompts and no `turn_result` exist in a sub-agent's stream, so the
-    // segment machinery would fold the lot into a single mark at the final
-    // report — the one place a reader can already reach.
     const items = [framed('looking'), framed('found it'), framed('done')]
-    // Counted as members, not clusters: three marks this close merge into one
-    // cluster on a 100px rail, which is the rail working, not the rule failing.
+    // Counted as members, not clusters: three marks this close merge into one cluster on a 100px rail.
     const marks = members(buildClusters(props(items, { frameParentId: 'task-1' }), RAIL))
     expect(marks.map((m) => m.kind)).toEqual(['turn', 'turn', 'turn'])
     expect(marks.map((m) => m.itemIndex)).toEqual([0, 1, 2])
@@ -102,9 +86,6 @@ describe('inside a sub-agent frame', () => {
   })
 
   it('still marks nothing of a sub-agent’s in the conversation itself', () => {
-    // The rule this generalisation must not break: at the top level a
-    // sub-agent's steps are represented by its `Task` band, not by a second set
-    // of marks threaded through the rail.
     expect(kinds([user('go'), framed('looking'), assistant('done'), turn()])).toEqual(['l:user', 'r:turn'])
   })
 })
@@ -115,10 +96,6 @@ describe('railScale', () => {
   })
 
   it('clamps the denominator to the viewport when everything fits', () => {
-    // The bug: 90px of content in a 906px window gave a scale of ~10, so the
-    // viewport band came out at 9120px inside a 906px rail — and because the
-    // rail is positioned inside the scroller, that overflow became ~8000px of
-    // real, empty, scrollable height under a three-row session.
     const scale = railScale(906, 90, 906)
     expect(scale).toBe(1)
     expect(906 * scale).toBeLessThanOrEqual(906) // the band can never exceed the rail
@@ -136,17 +113,11 @@ describe('buildClusters', () => {
   })
 
   it('marks a live answer that has no turn_result yet', () => {
-    // A turn in flight is exactly when the rail matters most; anchoring the
-    // right lane on `turn_result` left a two-minute answer unrepresented for
-    // the whole two minutes.
     const items = [user('do it'), assistant('still going')]
     expect(kinds(items)).toContain('r:turn')
   })
 
   it('marks a replayed history that carries no turn rows at all', () => {
-    // `#backfillHistory` maps only `user` and `assistant` entries, so a session
-    // replayed after a gateway restart has no `turn_result` anywhere — and the
-    // whole white lane used to come back empty.
     const items = [user('one'), assistant('a'), user('two'), assistant('b')]
     expect(kinds(items).filter((k) => k === 'r:turn')).toHaveLength(2)
   })
@@ -155,8 +126,8 @@ describe('buildClusters', () => {
     const items = [user('do it'), assistant('the answer'), turn(true)]
     const clusters = buildClusters(props(items), RAIL)
     const right = clusters.find((c) => c.lane === 'r')!
-    expect(right.kind).toBe('turnFailed') // the failure is the decoration
-    expect(right.marks[0]!.mark.itemIndex).toBe(1) // …on the answer's row
+    expect(right.kind).toBe('turnFailed')
+    expect(right.marks[0]!.mark.itemIndex).toBe(1)
     expect(right.marks[0]!.mark.turnIndex).toBe(2)
   })
 
@@ -166,10 +137,6 @@ describe('buildClusters', () => {
   })
 
   it('paints no prompt mark for a subagent’s brief', () => {
-    // A brief is a `user` item too (optional `parentToolUseId`, set only on
-    // briefs). Marked, it would claim someone typed mid-turn — and closing the
-    // segment there mis-anchors the turn mark whenever a task runs between the
-    // prompt and the answer.
     const brief: TranscriptItem = {
       kind: 'user',
       id: `u${++seq}`,
@@ -179,17 +146,12 @@ describe('buildClusters', () => {
     const items = [user('do it'), assistant('working on it'), brief, assistant('the answer')]
     const clusters = buildClusters(props(items), RAIL)
     expect(clusters.filter((c) => c.kind === 'user')).toHaveLength(1)
-    // The segment survived the brief: one turn mark, anchored on the LAST
-    // top-level answer, not on the one the brief would have closed at.
     const turns = clusters.filter((c) => c.kind === 'turn')
     expect(turns).toHaveLength(1)
     expect(turns[0]!.marks[0]!.mark.itemIndex).toBe(3)
   })
 
   it('bands a sub-agent in the input lane, by membership and not by name', () => {
-    // The spawning call is named `Agent` here, not `Task`: the SDK's name is a
-    // convention (a background agent arrives as `Agent`), so the rule is that an
-    // id other items demonstrably nest under IS a sub-agent.
     const spawn: TranscriptItem = {
       kind: 'tool_call',
       id: 'agent-1',
@@ -207,9 +169,7 @@ describe('buildClusters', () => {
       status: 'settled',
     }
     const clusters = buildClusters(props([user('go'), spawn, child, assistant('done')]), RAIL)
-    // Marks, not clusters: a dispatch a row below the prompt merges with it in
-    // the shared input lane, which is the intended behaviour and would hide the
-    // mark from a cluster-level filter.
+    // Marks, not clusters: a dispatch a row below the prompt merges with it in the shared input lane and would vanish from a cluster-level filter.
     const band = members(clusters).filter((m) => m.kind === 'subagent')
     expect(band).toHaveLength(1)
     expect(band[0]!.lane).toBe('l')
@@ -238,8 +198,6 @@ describe('buildClusters', () => {
       status: 'settled',
     }
     const marks = members(buildClusters(props([user('go'), spawn, child]), RAIL))
-    // The two lanes answer different questions: a sub-agent ran here, and it
-    // came back broken.
     expect(marks.filter((m) => m.kind === 'subagent').map((m) => m.lane)).toEqual(['l'])
     expect(marks.filter((m) => m.kind === 'toolFailed').map((m) => m.lane)).toEqual(['r'])
   })
@@ -261,21 +219,14 @@ describe('buildClusters', () => {
       parentToolUseId: 'task-1',
       status: 'settled',
     }
-    // Same row for both, so they merge: the prompt is the step you navigate by
-    // and must keep the cluster's colour.
     const clusters = buildClusters(props([user('go'), spawn, child], { rowIndexFor: () => 0, offsetOfRow: () => 0 }), RAIL)
     const left = clusters.filter((c) => c.lane === 'l')
     expect(left).toHaveLength(1)
     expect(left[0]!.kind).toBe('user')
-    // ...and the dispatch is still IN it, one press away.
     expect(left[0]!.marks.map((m) => m.mark.kind)).toContain('subagent')
   })
 
   it('does NOT mark a failed tool call inside a subagent', () => {
-    // The rail marks what the transcript reddens, and `taskFailed` already
-    // refuses to redden a `Task` for a child's failure: an agent that ran a
-    // hundred calls, one of them a grep that matched nothing, did not fail. A
-    // red tick on the rail says exactly what the row is forbidden from saying.
     const failed: TranscriptItem = {
       kind: 'tool_call',
       id: `t${++seq}`,
@@ -288,13 +239,7 @@ describe('buildClusters', () => {
   })
 
   it('does NOT mark a failure the model recovered from inside its run', () => {
-    // The measured case, and the reason the rail's exemption was withdrawn:
-    // over one real session, 178 tool calls, 9 failed and EIGHT of the nine
-    // were recovered from two calls later. The rail showed nine alarms for a
-    // transcript that reddens one row.
-    //
-    // `kinds` maps every item to one row per item by default, so a run has to
-    // be spelled by pinning them to a shared row — which is what folding does.
+    // `kinds` maps one row per item by default, so a run has to be spelled by pinning them to a shared row — which is what folding does.
     const a = toolCall('settled', { text: 'no such file', isError: true })
     const b = toolCall('settled', { text: 'ok', isError: false })
     expect(kinds([a, b], { rowIndexFor: () => 0 })).toEqual([])
@@ -312,9 +257,6 @@ describe('buildClusters', () => {
   })
 
   it('marks a failed tool call by either spelling', () => {
-    // Both are needed: an out-of-loop execution failure sets `status` with no
-    // `is_error` block to read, and an engine can flag `is_error` on a call the
-    // reducer has not settled.
     expect(kinds([toolCall('failed')])).toEqual(['r:toolFailed'])
     expect(kinds([toolCall('settled', { text: 'no matches', isError: true })])).toEqual(['r:toolFailed'])
     expect(kinds([toolCall('settled', { text: 'ok', isError: false })])).toEqual([])
@@ -322,7 +264,6 @@ describe('buildClusters', () => {
   })
 
   it('lets a session error keep the colour when it merges with a tool failure', () => {
-    // Same lane, a pixel apart: they merge, and the louder kind must win.
     const items = [toolCall('failed'), notice('error', 'boom')]
     const clusters = buildClusters(props(items), RAIL)
     expect(clusters).toHaveLength(1)
@@ -357,8 +298,6 @@ describe('buildClusters', () => {
   })
 
   it('floors a mark at the hit target and never runs it past the rail', () => {
-    // 400 rows at rail scale is a quarter-pixel each; every one still has to be
-    // findable, and the last must not be drawn below the rail's own foot.
     const items = Array.from({ length: 400 }, (_, i) => user(`p${i}`))
     for (const cluster of buildClusters(props(items), RAIL)) {
       expect(cluster.h).toBeGreaterThanOrEqual(2)
@@ -373,14 +312,10 @@ describe('buildClusters', () => {
 })
 
 describe('marks inside a shared row', () => {
-  // A hundred-call task collapsed is one line and expanded is the whole
-  // subagent area — `sizeOfRow` reports the measurement either way, so one
-  // failed child used to paint a band down the entire rail.
   const failedChild = () => [user('go'), toolCall('failed')]
 
   it('anchors a shared-row mark fractionally, at the hit-target height', () => {
-    // rowH 400 with viewportH 200 and RAIL 100 → scale 0.25; ordinal 2 of 4
-    // sits halfway down a row whose top is at 0 → y = round(200 × 0.25) = 50.
+    // rowH 400, viewportH 200, RAIL 100 → scale 0.25; ordinal 2 of 4 is halfway down a row whose top is 0 → y = round(200 × 0.25) = 50.
     const clusters = buildClusters(
       props(failedChild(), {
         rowIndexFor: () => 0,
@@ -410,9 +345,7 @@ describe('marks inside a shared row', () => {
   })
 
   it('merges siblings when the row is collapsed to one line', () => {
-    // Collapsed, the shared row is one 20px line inside a long transcript:
-    // every fraction of it rounds into the same rail pixel, so two failed
-    // children read as one mark — exactly as they did before the fraction.
+    // Collapsed, the shared row is one 20px line in a long transcript: every fraction rounds into the same rail pixel, so two failures read as one mark.
     const items = [user('go'), toolCall('failed'), toolCall('failed')]
     const collapsed = {
       rowIndexFor: () => 0,

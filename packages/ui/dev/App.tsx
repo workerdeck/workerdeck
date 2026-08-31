@@ -16,8 +16,6 @@ import { auditHeights } from './height-audit.ts'
 import { perfSweep } from './perf-audit.ts'
 import { cn } from '../src/lib/utils.ts'
 
-/** The prompts are not transcript items — they are the panel's, rendered under
- * it — so the playground mounts them the same way an embedder would. */
 const PROMPTS = [
   { key: 'none', label: '—' },
   { key: 'edit', label: 'edit approval' },
@@ -25,7 +23,6 @@ const PROMPTS = [
   { key: 'ask', label: 'questions' },
 ] as const
 
-/** A stand-in thumbnail: a 1x1 PNG, stretched by `object-cover`. */
 const ATTACHMENT_PREVIEW =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
@@ -43,17 +40,10 @@ export function App() {
   const [answered, setAnswered] = useState<string>()
   const surface = useRef<HTMLDivElement>(null)
 
-  // Attach replay, simulated: a real attach grows the transcript in bursts as the
-  // reducer appends the replayed log, which a fixture switch cannot reproduce.
-  // `undefined` = not replaying, show the fixture whole.
+  // Attach replay, simulated: a real attach grows the transcript in bursts, which a fixture switch cannot reproduce. `undefined` = not replaying.
   const [replayTo, setReplayTo] = useState<number | undefined>(undefined)
-  // The replay hold, as `useClaudeSession`'s `replaying` drives it: true from the
-  // first burst, false in the SAME commit as the last one.
   const [replayHold, setReplayHold] = useState(false)
-  // Overridable because scroll behaviour is status-dependent.
   const [statusOverride, setStatusOverride] = useState<TranscriptState['status'] | undefined>()
-  // What a send appends: the re-pin is only interesting against a transcript that
-  // grows under it. See `__wdPinTrace`.
   const [sent, setSent] = useState<TranscriptItem[]>([])
   const fixtureState = FIXTURES.find((f) => f.key === fixture)!.state
   const whole = useMemo(
@@ -70,13 +60,9 @@ export function App() {
       ...(replayTo === undefined ? {} : { items: whole.items.slice(0, replayTo) }),
     }
   }, [whole, replayTo, statusOverride])
-  // The huge fixture carries a catch-up splice, so the recap jump (the re-aim
-  // loop) can be exercised across hundreds of unmeasured rows.
   const catchUp = fixture === 'huge' ? { from: 300 } : undefined
   const jumpRef = useRef<(() => void) | null>(null)
   const repinRef = useRef<(() => void) | null>(null)
-  // A send as `SessionPanel.handleSend` shapes it: the typed row lands immediately,
-  // the answer arrives later and keeps growing.
   const sendFixture = (text: string) => {
     const stamp = Date.now()
     setSent((prior) => [...prior, { id: `sent-${stamp}`, kind: 'user', text } as TranscriptItem])
@@ -99,8 +85,6 @@ export function App() {
     reply(2, 'Reading the files that matter, then the two rules underneath them.')
     reply(3, 'Done — the change is in `packages/ui`, and the reason is in the header comment.')
   }
-  // Staged attachments, faked (the real hook needs a gateway): one of each state, so
-  // the strip's geometry lands in the grid audit.
   const [attachmentCount, setAttachmentCount] = useState(0)
   const stagedAttachments = useMemo(() => {
     const states = ['ready', 'uploading', 'failed', 'ready'] as const
@@ -129,28 +113,18 @@ export function App() {
     }
   }, [attachmentCount])
 
-  // Hooks for driving the audits headlessly (chrome devtools).
-  // `__wdAudit` audits whatever rows are mounted; the driver scrolls and merges.
+  // Console hooks for driving the audits headlessly; `__wdAudit` reports only the rows currently mounted, so the driver scrolls and merges.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
-    // The boundary goes in explicitly: the recap row shifts every row index
-    // after it, and it is unmounted exactly when you are auditing the rows that
-    // shift (see `recapRowIndex`).
     w.__wdAudit = () => (surface.current ? auditHeights(state, surface.current, catchUp?.from) : undefined)
     w.__wdJumpRecap = () => jumpRef.current?.()
     w.__wdRepin = () => repinRef.current?.()
-    // Stage N fake attachments — the strip needs a gateway otherwise.
     w.__wdAttach = (n?: number) => setAttachmentCount(n ?? 4)
-    // The scroll-performance sweep (`perf-audit.ts`) — run it on `perf`.
     w.__wdPerf = (step?: number) => {
       const scroller = surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div')
       return scroller ? perfSweep(scroller, { step }) : undefined
     }
-    // Does sending re-pin the transcript, and does the pin survive what sending sets
-    // off — the composer shedding lines (a scroller resize `use-stick-to-bottom` reads
-    // as the reader scrolling up), the typed row appending, the reply growing. Call it,
-    // then send; it samples every frame for `ms`, and `final` is the gap to the bottom:
-    // 0 is pinned, anything else is the reply streaming off screen.
+    // `__wdPinTrace`: samples the gap to the bottom every frame for `ms` — 0 is pinned, anything else is the reply streaming off screen.
     w.__wdPinTrace = (ms = 2000) => {
       const scroller = () =>
         surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div') ??
@@ -174,7 +148,6 @@ export function App() {
         requestAnimationFrame(raf)
       })
     }
-    // The reader's escape from the bottom — the precondition for everything above.
     w.__wdScrollUp = (px = 1200) => {
       const el =
         surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div') ??
@@ -184,8 +157,7 @@ export function App() {
       }
       return el ? Math.round(el.scrollTop) : -1
     }
-    // A row that GROWS, not one that appends: only a changing last-row height fires
-    // the virtualizer's size-change correction, the other writer of `scrollTop`.
+    // A row that GROWS, not one that appends: only a changing last-row height fires the virtualizer's size-change correction.
     w.__wdStream = (deltas = 20, everyMs = 60) => {
       const id = `stream-${Date.now()}`
       let n = 0
@@ -218,11 +190,7 @@ export function App() {
       return id
     }
     w.__wdSetFixture = (key: string) => setFixture(key)
-    // Replay in bursts, sampling `scrollTop` every frame: "does opening a long session
-    // travel". A pinned transcript shows one scrollTop per burst and never an
-    // intermediate value. `hold` drives it under the panel's replay hold, released in
-    // the same commit as the final burst, so the trace also carries per-frame
-    // visibility: every burst lands hidden, and the first VISIBLE frame is final.
+    // Replay in bursts, sampling `scrollTop` every frame: a pinned transcript shows one value per burst and never an intermediate one.
     w.__wdReplay = (batch = 25, everyMs = 30, status: TranscriptState['status'] = 'running', hold = false) => {
       const root = () => surface.current?.querySelector<HTMLElement>('[data-slot="conversation"]')
       const scroller = () =>
@@ -262,8 +230,6 @@ export function App() {
           setReplayTo(shown)
           if (shown >= total) {
             clearInterval(timer)
-            // Same synchronous block as the final `setReplayTo`, so React commits the
-            // last rows and the reveal together.
             setReplayHold(false)
             setTimeout(() => {
               sampling = false
@@ -291,15 +257,12 @@ export function App() {
       setFontSize(fs)
       setLineHeight(lh)
     }
-    // Debug probes for the spike.
     w.__wdMd = (md: string, width: number, line = lineHeight) => {
       const el = surface.current?.querySelector<HTMLElement>('[data-terminal]')
       return el ? markdownHeight(md, { width, ch: measureCh(el), line }) : undefined
     }
     w.__wdLines = (text: string, cols: number) => textLines(text, cols)
-    // The item→row mapping's regression check: binary search vs a linear reference,
-    // plus containment (the found row must cover the item), across every fixture ×
-    // item index × recap-splice position.
+    // The item→row mapping's regression check: binary search against a linear reference, plus containment, over every fixture × item × splice.
     w.__wdCheckMapping = () => {
       const buildRows = (items: typeof state.items, boundary?: number): TranscriptRow[] =>
         boundary === undefined
@@ -310,8 +273,6 @@ export function App() {
               ...terminalBlocks(items.slice(boundary), boundary, true),
             ]
       const linear = (rows: TranscriptRow[], itemIndex: number): number => {
-        // An absorbed child maps to its task's row wherever it fell in the
-        // stream; everything else to the last row whose start is ≤ the target.
         let absorbed: number | undefined
         let best = 0
         rows.forEach((row, index) => {
@@ -339,8 +300,6 @@ export function App() {
             const got = rowIndexForItem(rows, i)
             const want = linear(rows, i)
             const row = rows[got]!
-            // Identity membership, not index arithmetic: a run can fold across an
-            // absorbed gap, so `[index, index + len)` no longer describes its coverage.
             const covers =
               'run' in row
                 ? row.run.includes(items[i]! as (typeof row.run)[number])
@@ -445,9 +404,6 @@ export function App() {
       </aside>
 
       <main className="flex min-w-0 flex-1 justify-center overflow-auto">
-        {/* Panel-shaped, exactly as `SessionPanel` mounts it: the composer is a
-            *sibling* of the scroller, so every line it grows or sheds resizes the
-            scroller — the other party writing `scrollTop`. */}
         <div ref={surface} className="flex h-[80vh] min-h-0 min-w-0 flex-1 flex-col" style={width ? { maxWidth: width } : undefined}>
           <Transcript
             stickyPrompt
@@ -464,15 +420,10 @@ export function App() {
             repinRef={repinRef}
             className={cn('min-h-0 flex-1', grid && 'term-grid-overlay')}
           />
-          {/* Mounted the way the panel mounts it — inside the variant provider, at the
-              same metrics — so the grid audit reaches it too. */}
           <TranscriptVariantProvider value="terminal">
             <Composer
               attachments={stagedAttachments}
               onSend={(text) => {
-                // The panel re-pins on send (`SessionPanel.handleSend`), so the
-                // playground does too, and appends: a re-pin that survives the send but
-                // not the reply is the bug this reproduces.
                 repinRef.current?.()
                 setAnswered(`sent: ${text}`)
                 sendFixture(text)

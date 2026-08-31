@@ -2,17 +2,9 @@ import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 
-/**
- * Canned transcripts for the playground — hand-written, and chosen for the cases that
- * break a renderer: prose that wraps, a message that is mostly markdown, output far
- * longer than its row, a call in flight, a failure, and a turn that ended.
- */
-
 let seq = 0
 
-/** Stamps the id, so a fixture says what it is about and nothing else. `Omit` must
- * distribute over the union by hand: applied to the union directly it collapses to the
- * members' common keys and every fixture's own fields would be rejected. */
+// `Omit` must distribute over the union by hand: applied to the union directly it collapses to the members' common keys.
 type ItemDraft = TranscriptItem extends infer T ? (T extends object ? Omit<T, 'id'> : never) : never
 
 const item = (draft: ItemDraft): TranscriptItem => ({ ...draft, id: `f${++seq}` }) as TranscriptItem
@@ -30,7 +22,6 @@ const base = (items: TranscriptItem[], status: TranscriptState['status']): Trans
   lastSeq: items.length,
 })
 
-/** A run in progress: prose, a tool call, its output, and the working line. */
 const run: TranscriptItem[] = [
   item({ kind: 'user', text: 'Set up prettier for the repo, but only for code — markdown and JSON churn buys nothing.' }),
   item({
@@ -75,9 +66,6 @@ const run: TranscriptItem[] = [
   }),
 ]
 
-/** A file edit, with the engine's own hunks — the CLI's most distinctive row.
- * Modelled on the reference screenshot: a `.prettierrc` gaining ignore patterns,
- * plus a second, far-off hunk so the separator and the number jump are visible. */
 const diff: TranscriptItem[] = [
   item({ kind: 'user', text: 'Add the ignore patterns we agreed on.' }),
   item({ kind: 'assistant_text', streaming: false, parentToolUseId: null, text: 'Adding them:' }),
@@ -123,7 +111,6 @@ const diff: TranscriptItem[] = [
   }),
 ]
 
-/** Everything a message can contain: the markdown map's whole surface. */
 const markdown: TranscriptItem[] = [
   item({ kind: 'user', text: 'Summarise the packaging rules.' }),
   item({
@@ -163,18 +150,13 @@ git tag v0.16.0 && git push --tags
 
 See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-runs.`,
   }),
-  // The break rule's guard, one poem per half. CommonMark: a line ending in two spaces
-  // is a **hard** break rendering as <br>; a bare newline is **soft** and collapses to
-  // a space under `white-space: normal`. Models write poems both ways, and the height
-  // calculator has been wrong in each direction once.
+  // The break rule's guard, one poem per half — the height calculator has been wrong in each direction once.
   item({ kind: 'user', text: 'now a short poem about releases' }),
   item({
     kind: 'assistant_text',
     streaming: false,
     parentToolUseId: null,
-    // Hard breaks: trailing double spaces, every line renders. Appended
-    // programmatically — a literal trailing space in source is one format-on-save away
-    // from deleting the case this guards.
+    // Appended programmatically: a literal trailing space here is one format-on-save from deleting the case this guards.
     text: [
       '**The Tag That Was Never Pushed**',
       '',
@@ -190,7 +172,6 @@ See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-
     kind: 'assistant_text',
     streaming: false,
     parentToolUseId: null,
-    // Soft breaks: bare newlines, the stanza joins and wraps as prose.
     text: `**The Tag, Rejoined**
 
 It sat in the local dark,
@@ -200,7 +181,6 @@ the old truth, entire.`,
   }),
 ]
 
-/** The unhappy paths — a failure, a notice, and a turn that ended badly. */
 const failure: TranscriptItem[] = [
   item({ kind: 'user', text: 'Run the tests.' }),
   item({
@@ -225,7 +205,6 @@ const failure: TranscriptItem[] = [
   }),
 ]
 
-/** A long, quiet run: enough rows to scroll, and the shape you skim. */
 const long: TranscriptItem[] = Array.from({ length: 40 }, (_, index) =>
   index % 3 === 0
     ? item({
@@ -251,9 +230,7 @@ const long: TranscriptItem[] = Array.from({ length: 40 }, (_, index) =>
       }),
 )
 
-/** 600 rows of varied height — the scale where estimate error becomes visible
- * scrollbar drift. Rendered with a catch-up splice at item 300 (see App.tsx), so the
- * recap jump exercises the re-aim loop across ~300 unmeasured rows. */
+// 600 rows of varied height, with a catch-up splice at item 300 (see App.tsx) — the scale where estimate error becomes visible scrollbar drift.
 const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
   const step = index % 6
   if (step === 0) {
@@ -296,12 +273,7 @@ const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
   return item({ kind: 'turn_result', subtype: 'success', isError: false, durationMs: 30_000 + index * 10, totalCostUsd: 0.05 })
 })
 
-/**
- * A massive, varied session for performance work — every content shape the renderer
- * knows, cycled deterministically over thousands of items (~10× `huge`, with far
- * heavier rows). What `__wdPerf()` sweeps: deliberately bigger than any real session,
- * so a cost that grows with session size shows up here first.
- */
+// ~10× `huge` with far heavier rows: what `__wdPerf()` sweeps, deliberately bigger than any real session.
 const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
   const turn = Math.floor(index / 10)
   switch (index % 10) {
@@ -319,7 +291,6 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
       })
     }
     case 2: {
-      // Stanza text: hard line breaks, the calculator's hardest common case.
       return item({
         kind: 'assistant_text',
         streaming: false,
@@ -333,7 +304,6 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
     }
     case 3:
     case 4: {
-      // Consecutive shell calls — folds into a ToolRunRow.
       return item({
         kind: 'tool_call',
         name: 'Bash',
@@ -425,12 +395,9 @@ The refactor holds. ${'The call sites stay compatible and the tests agree. '.rep
   }
 })
 
-/** Content chosen to break a row-height calculator — long unbroken
- * tokens, CJK, emoji, combining marks, tabs, a wide table, a deep diff. Used by
- * the height audit (`height-audit.ts`); adversarial on purpose. */
+// Adversarial on purpose: long unbroken tokens, CJK, emoji, combining marks, tabs, a wide table, a deep diff — the height audit's input.
 const adversarial: TranscriptItem[] = [
-  // A tool result far bigger than the expanded row's character budget: expanded, this
-  // must clip and offer the rest, which is what keeps "show all N chars" honest.
+  // A result far bigger than the expanded row's budget: it must clip and offer the rest.
   item({
     kind: 'tool_call',
     name: 'Bash',
@@ -566,8 +533,6 @@ short
   }),
 ]
 
-/** An approval for a file edit — the change shown as a diff, without line
- * numbers, because the edit has not happened yet. */
 export const EDIT_APPROVAL: PermissionRequest = {
   id: 'req-1',
   toolUseId: 'tool-9',
@@ -581,7 +546,6 @@ export const EDIT_APPROVAL: PermissionRequest = {
   },
 }
 
-/** A Bash approval — nothing to diff, so the command is the subject. */
 export const BASH_APPROVAL: PermissionRequest = {
   id: 'req-2',
   toolUseId: 'tool-10',
@@ -593,8 +557,6 @@ export const BASH_APPROVAL: PermissionRequest = {
   input: { command: 'rm -rf node_modules && pnpm install' },
 }
 
-/** The question tool exercising everything: a one-of with a preview, a
- * multi-select with descriptions, and the review step behind them. */
 export const QUESTIONS: PermissionRequest = {
   id: 'req-3',
   toolUseId: 'tool-11',
@@ -629,14 +591,6 @@ export const QUESTIONS: PermissionRequest = {
   },
 }
 
-/**
- * Two subagents running at once, their rows interleaved, carrying every edge the block
- * model has to answer: two `Task` calls whose children alternate with each other *and*
- * with the main thread's work, a failed child (which colours its task's collapsed line
- * without fragmenting it), a task still running beside one that settled, and an
- * **orphan child** whose `Task` call is not in the slice — what a recap boundary or a
- * compaction leaves behind, which must stay a visible row.
- */
 const withId = (id: string, draft: ItemDraft): TranscriptItem => ({ ...draft, id }) as TranscriptItem
 
 const subagents: TranscriptItem[] = [
@@ -680,7 +634,6 @@ const subagents: TranscriptItem[] = [
     status: 'settled',
     result: { text: 'docs/GOTCHAS.md\ndocs/ARCHITECTURE.md', isError: false },
   }),
-  // A top-level call that must not fold into either subagent's run.
   item({
     kind: 'tool_call',
     name: 'Bash',
@@ -697,8 +650,6 @@ const subagents: TranscriptItem[] = [
     status: 'settled',
     result: { text: 'export function routes() { /* … */ }', isError: false },
   }),
-  // A failure inside a subagent: colours the collapsed task line, keeps its scrubber
-  // mark, does not break the run around it.
   item({
     kind: 'tool_call',
     name: 'Grep',
@@ -730,13 +681,7 @@ const subagents: TranscriptItem[] = [
   }),
 ]
 
-/** Replayed image parts. The playground supplies no image loader, so every box settles
- * into its *failure* state — deliberate: placeholder, picture and failure are all one
- * box of `IMAGE_BOX_LINES`, so whichever state the audit catches must measure the same.
- *
- * Three shapes on purpose: one image beside prose, several on one call, and an image on
- * a call whose text is also over the collapsed budget — where addresses get renumbered.
- */
+// The playground supplies no image loader, so every box settles into its failure state — deliberate: all three states are one box of `IMAGE_BOX_LINES`.
 const images: TranscriptItem[] = [
   item({ kind: 'user', text: 'Look at the three mockups and tell me which one holds up.' }),
   item({
@@ -781,8 +726,7 @@ const images: TranscriptItem[] = [
     result: {
       text: Array.from({ length: 120 }, (_, i) => ` ✓ packages/ui/test/case ${i + 1} (${i * 2}ms)`).join('\n'),
       isError: false,
-      // A picture after the text budget ran out: stored at index 7, and still addressed
-      // as 7 rather than by where it landed.
+      // A picture after the text budget ran out: stored at index 7 and still addressed as 7, not by where it landed.
       images: [{ partIndex: 7, mediaType: 'image/png', bytes: 12_288, sourceSeq: 51 }],
     },
   }),
@@ -805,7 +749,6 @@ export const FIXTURES: { key: string; label: string; state: TranscriptState }[] 
   { key: 'perf', label: 'perf (4k items)', state: base(perf, 'idle') },
   { key: 'adversarial', label: 'adversarial (spike)', state: base(adversarial, 'idle') },
   { key: 'images', label: 'image refs', state: base(images, 'idle') },
-  // A run with the approval standing — the scrubber pins its mark at the foot.
   {
     key: 'approval',
     label: 'pending approval',

@@ -3,12 +3,6 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { blockNeedsBlank, terminalBlocks } from '../src/components/terminal/items.tsx'
 import { subagentItems } from '../src/components/terminal/blocks.ts'
 
-/**
- * Which rows exist. This is part of what the terminal theme *is* — the
- * virtualizer counts these, and `height.ts` sizes them — so a change here is a
- * change to the transcript, not to its styling.
- */
-
 let seq = 0
 const tool = (name: string, parentToolUseId: string | null = null, id = `t${++seq}`): TranscriptItem => ({
   kind: 'tool_call',
@@ -32,7 +26,6 @@ const user = (body: string, parent?: string): TranscriptItem => ({
   // The brief's shape exactly: the key exists only on a subagent's brief.
   ...(parent !== undefined ? { parentToolUseId: parent } : {}),
 })
-/** A `Task` call with a chosen id, so children can name it. */
 const task = (id: string, input: unknown = {}): TranscriptItem => ({
   kind: 'tool_call',
   id,
@@ -52,8 +45,6 @@ describe('terminalBlocks', () => {
   })
 
   it('breaks a run on anything the model said between two calls', () => {
-    // The sentence between them is the reason the second call happened; a count
-    // spanning it would claim the two were one act.
     const items = [tool('Bash'), text('that failed, trying again'), tool('Bash')]
     expect(shape(terminalBlocks(items))).toEqual(['run(1)', 'assistant_text', 'run(1)'])
   })
@@ -81,8 +72,6 @@ describe('terminalBlocks', () => {
   })
 
   it('reports each block’s index in the whole transcript, not the slice', () => {
-    // The virtualized shell folds each side of the recap boundary separately and
-    // the rows still have to say where they sit, for the catch-up dimming.
     const items = [text('a'), tool('Bash'), tool('Read'), text('b')]
     expect(terminalBlocks(items.slice(1), 1).map((b) => b.index)).toEqual([1, 3])
   })
@@ -109,8 +98,6 @@ describe('terminalBlocks · run indices', () => {
       throw new Error('expected a run block')
     }
     expect(run.indices).toEqual([1, 2])
-    // The virtualized shell folds each side of the recap boundary separately,
-    // so a slice's blocks must still say where they sit in the whole.
     const offset = terminalBlocks(items.slice(1), 1)[0]!
     if (!('run' in offset)) {
       throw new Error('expected a run block')
@@ -119,8 +106,7 @@ describe('terminalBlocks · run indices', () => {
   })
 
   it('skips the absorbed item a run folded across', () => {
-    // The gapped run: two top-level calls separated only by a subagent's step
-    // are adjacent on screen, so `[index, index + len)` cannot describe them.
+    // The gapped run: two top-level calls separated only by a subagent's step are adjacent on screen.
     const items = [task('A'), tool('Bash'), tool('Read', 'A'), tool('Bash'), text('done')]
     const run = terminalBlocks(items)[1]!
     if (!('run' in run)) {
@@ -138,8 +124,6 @@ describe('terminalBlocks · task absorption', () => {
   })
 
   it('absorbs interleaved children of parallel tasks, wherever they fall', () => {
-    // The crux: subagents run in parallel, so their items are NOT contiguous.
-    // A consecutive-run rule would leave B's call standing between A's rows.
     const items = [task('A'), task('B'), tool('Read', 'A'), tool('Grep', 'B'), text('top-level aside'), tool('Bash', 'A')]
     const blocks = terminalBlocks(items)
     expect(shape(blocks)).toEqual(['task(2)', 'task(1)', 'assistant_text'])
@@ -148,8 +132,6 @@ describe('terminalBlocks · task absorption', () => {
   })
 
   it('folds a subagent’s consecutive calls into runs within the block', () => {
-    // Consecutive in the SUBAGENT'S stream: B's interleaved call is another
-    // frame's work and must not break A's run — while A's own sentence must.
     const items = [
       task('A'),
       task('B'),
@@ -164,20 +146,17 @@ describe('terminalBlocks · task absorption', () => {
       throw new Error('expected a task block')
     }
     expect(a.children.map((c) => ('run' in c ? `run(${c.run.length})` : c.item.kind))).toEqual(['run(2)', 'assistant_text', 'run(1)'])
-    // Each child block's index is its first member's GLOBAL transcript index.
     expect(a.children.map((c) => c.index)).toEqual([2, 5, 6])
   })
 
   it('never renders an absorbed item as a top-level row too', () => {
     const items = [task('A'), tool('Read', 'A'), text('after')]
     const blocks = terminalBlocks(items)
-    // Two rows: the task and the text. The child appears only inside the task.
     expect(blocks).toHaveLength(2)
     expect(blocks.map((b) => b.index)).toEqual([0, 2])
   })
 
   it('leaves a childless Task call in the ordinary run fold', () => {
-    // Still spawning, or its children compacted away — a plain tool call.
     expect(shape(terminalBlocks([task('A'), tool('Bash')]))).toEqual(['run(2)'])
   })
 
@@ -187,16 +166,11 @@ describe('terminalBlocks · task absorption', () => {
   })
 
   it('folds two top-level calls separated only by absorbed items', () => {
-    // Once the subagent's step is absorbed into the task row above, the two
-    // calls are adjacent on screen — the count matches what the reader sees.
     const items = [task('A'), tool('Bash'), tool('Read', 'A'), tool('Bash')]
     expect(shape(terminalBlocks(items))).toEqual(['task(1)', 'run(2)'])
   })
 
   it('keeps an orphan child as its own row when its Task call is absent', () => {
-    // A caller's split (the recap boundary) makes exactly this: the call on one
-    // side, later children on the other. New work must not hide inside a
-    // collapsed row above the seam — the run fold's own boundary rule.
     const items = [task('A'), tool('Read', 'A'), tool('Grep', 'A')]
     const split = [...terminalBlocks(items.slice(0, 1), 0), ...terminalBlocks(items.slice(1), 1)]
     expect(shape(split)).toEqual(['run(1)', 'run(2)'])
@@ -230,9 +204,6 @@ describe('terminalBlocks · task absorption', () => {
   })
 
   it('renders a grandchild as its own row rather than dropping it', () => {
-    // No engine nests sidechains today, but an unmapped item must be visible,
-    // never gone: the inner call is absorbed by A, and the inner call's own
-    // child — whose parent is not a top-level call — stays a top-level row.
     const items = [task('A'), tool('Task', 'A', 'B'), tool('Read', 'B')]
     const blocks = terminalBlocks(items)
     expect(shape(blocks)).toEqual(['task(1)', 'run(1)'])
@@ -240,13 +211,6 @@ describe('terminalBlocks · task absorption', () => {
   })
 })
 
-/**
- * The frame membership rule — what a sub-agent takeover shows.
- *
- * Worth its own suite because it is the one rule the takeover *is*: get it
- * wrong in one direction and the frame leaks another agent's work into this
- * one's, in the other and an agent looks like it did nothing.
- */
 describe('subagentItems', () => {
   it('takes everything the agent produced, and nothing else', () => {
     const items = [
@@ -287,13 +251,6 @@ describe('subagentItems', () => {
     expect(subagentItems(items, 'nope')).toEqual([])
   })
 
-  /**
-   * The slice is handed straight to `terminalBlocks` at offset 0. Nothing in it
-   * is top-level, so nothing absorbs — but consecutive calls must still fold,
-   * because `foldsTogether` keys on an *equal* parent rather than on absence of
-   * one. A frame that stopped folding would be a different transcript from the
-   * one the same rows draw when the Task row is expanded inline.
-   */
   it('folds runs inside the frame, and absorbs nothing', () => {
     const items = [task('T1'), user('go', 'T1'), tool('Grep', 'T1'), tool('Read', 'T1'), text('done', 'T1')]
     expect(shape(terminalBlocks(subagentItems(items, 'T1'), 0, true))).toEqual(['user', 'run(2)', 'assistant_text'])

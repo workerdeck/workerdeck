@@ -1,12 +1,3 @@
-/**
- * The height calculator's regression gate — compares the shipped calculator
- * (`src/components/terminal/height.ts`, the `estimateSize` feed) against the real DOM,
- * which no jsdom test can do: the property under test is agreement with a browser's
- * text layout. For every *mounted* virtual row it buckets the error as exact (<0.6px),
- * off by one line, or worse. The virtualizer mounts only viewport plus overscan, so
- * callers audit at several scroll positions and merge (`window.__wdAudit` in App.tsx).
- */
-
 import type { TranscriptState } from '@workerdeck/react'
 import { blockHeight, measureCh, type CellMetrics } from '../src/components/terminal/height.ts'
 import { terminalBlocks, type TerminalBlock } from '../src/components/terminal/items.tsx'
@@ -18,9 +9,7 @@ export type HeightAuditRow = {
   kind: string
   measured: number
   computed: number
-  /** measured − computed, px. */
   delta: number
-  /** False when the calculator flagged the content as unknowable (emoji/CJK). */
   exact: boolean
   text: string
 }
@@ -40,11 +29,6 @@ export type HeightAuditReport = {
   byKind: Record<string, { total: number; exact: number; maxDelta: number }>
 }
 
-/**
- * Which virtual-row slot the recap boundary occupies, or `Infinity` when there is
- * none. Mirrors the splice in `Transcript`: the recap goes in front of the *block*
- * carrying its item, so a folded shell run before the boundary moves it up.
- */
 const recapRowIndex = (blocks: TerminalBlock[], from: number | undefined): number => {
   if (from === undefined) {
     return Infinity
@@ -53,12 +37,7 @@ const recapRowIndex = (blocks: TerminalBlock[], from: number | undefined): numbe
   return at < 0 ? Infinity : at
 }
 
-export const auditHeights = (
-  state: TranscriptState,
-  root: HTMLElement,
-  /** `catchUp.from`, when the transcript was given one — see {@link recapRowIndex}. */
-  catchUpFrom?: number,
-): HeightAuditReport => {
+export const auditHeights = (state: TranscriptState, root: HTMLElement, catchUpFrom?: number): HeightAuditReport => {
   const surface = root.querySelector<HTMLElement>('[data-terminal]')
   if (!surface) {
     throw new Error('no [data-terminal] surface mounted')
@@ -68,15 +47,10 @@ export const auditHeights = (
   const ch = measureCh(surface)
   const blocks = terminalBlocks(state.items, 0, true)
   const wrappers = surface.querySelectorAll<HTMLElement>(
-    // Descendant, not child: a prompt row under `stickyPrompt` sits inside its
-    // sticky lane, one level down.
+    // Descendant, not child: a prompt row under `stickyPrompt` sits inside its sticky lane, one level down.
     '[data-slot="transcript-rows"] [data-index]',
   )
-  // The transcript splices a recap row into the virtual list, so a wrapper's
-  // `data-index` is a *row* index while blocks are indexed by *block*; past the splice
-  // the two differ by one and every row would be audited against its neighbour. The
-  // boundary must be *told*, not found: the recap row is unmounted precisely when you
-  // are reading far enough away for the offset to matter.
+  // Past the recap splice, a wrapper's row `data-index` is one ahead of the block index; the boundary must be told, not found (that row unmounts).
   const recapIndex = recapRowIndex(blocks, catchUpFrom)
 
   const rows: HeightAuditRow[] = []
@@ -85,7 +59,7 @@ export const auditHeights = (
     const index = Number(el.dataset.index)
     if (index === recapIndex) {
       continue
-    } // a boundary, not a transcript block
+    }
     const block = blocks[index > recapIndex ? index - 1 : index]
     if (!block) {
       continue

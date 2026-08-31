@@ -2,13 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
 import { buildMarks, clusterMarks, nearestMember } from '../src/components/agent/scrubber-marks.ts'
 
-/**
- * The proportional rail's mark model (`agent/scrubber-marks.ts`). The walk
- * mirrors the terminal scrubber's — whose two shipped bugs (the unmarked live
- * answer, the empty right lane on a replayed history) were both pure-logic
- * ones a unit test catches — with positions in index space instead of pixels.
- */
-
 let seq = 0
 const user = (text: string): TranscriptItem => ({ kind: 'user', id: `u${++seq}`, text })
 const assistant = (text: string, parentToolUseId: string | null = null): TranscriptItem => ({
@@ -109,16 +102,13 @@ describe('clusterMarks', () => {
   })
 
   it('merges adjacent marks per lane, loudest colour winning', () => {
-    // Three items over 100px: 33px-tall marks one item apart touch, so the
-    // answer's mark and the session error merge — and the error keeps the
-    // cluster.
+    // Three items over 100px: 33px-tall marks one item apart touch, so the answer's mark and the session error merge.
     const items = [user('a'), assistant('b'), errorNotice('boom')]
     const merged = clusterMarks(buildMarks(items), RAIL, items.length)
     const right = merged.filter((c) => c.lane === 'r')
     expect(right).toHaveLength(1)
     expect(right[0]!.kind).toBe('error')
     expect(right[0]!.marks).toHaveLength(2)
-    // The pointer resolves to the nearest member, not the founder.
     expect(nearestMember(right[0]!, right[0]!.y + right[0]!.h)?.kind).toBe('error')
     expect(nearestMember(right[0]!, right[0]!.y)?.kind).toBe('turn')
   })

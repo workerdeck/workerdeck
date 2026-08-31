@@ -1,17 +1,6 @@
-/**
- * Frame-time sweep for the terminal transcript, driven from the playground
- * (`__wdPerf()` in the console, ideally on the `perf` fixture): walks `scrollTop`
- * down and back one step per animation frame, timing every frame plus any long
- * tasks. Rendering cost that grows with session size shows up as a rising p95.
- *
- * Real layout only — this cannot run in jsdom.
- */
-
 export interface PerfReport {
-  /** Virtual rows in the fixture, and the transcript's full pixel height. */
   rows: number
   totalPx: number
-  /** Frames timed across the down-and-up sweep. */
   frames: number
   frameMs: { mean: number; p50: number; p95: number; max: number }
   /** Frames over ~2× the 60Hz budget — visible hitches. */

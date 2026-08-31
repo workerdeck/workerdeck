@@ -1,10 +1,3 @@
-/**
- * The session's readings as one `·`-separated line, the way the CLI's status
- * line writes them. The readings come from the same `lib/status.ts` helpers
- * the styled bar uses — in particular `statusPresentation` owns the rule that
- * a dropped socket outranks the session status. Never re-derive them here.
- */
-
 import type { RateLimitInfo } from '@workerdeck/protocol'
 import type { ConnectionState, TranscriptState } from '@workerdeck/react'
 import { formatCost, formatTokens } from '../../lib/format.ts'
@@ -19,7 +12,6 @@ import {
 } from '../../lib/status.ts'
 import { Ink, Row, type Tone } from './row.tsx'
 
-/** Severity → tone. The 80/95 thresholds are `lib/status.ts`'s, not new ones. */
 const SEVERITY_TONE: Record<StatusSeverity, Tone> = {
   none: 'dim',
   warning: 'yellow',
@@ -29,21 +21,13 @@ const SEVERITY_TONE: Record<StatusSeverity, Tone> = {
 export interface TerminalStatusLineProps {
   className?: string
   state: TranscriptState
-  /** Plan windows to read from, when they should not be the session's own — the
-   * gateway's per-profile state merged over this transcript's. See
-   * {@link StatusBarProps.rateLimits}. Absent = `state.rateLimits`. */
   rateLimits?: Record<string, RateLimitInfo>
-  /** How the client is doing at reaching the gateway. Wins the status slot when
-   * the socket is down — see above. */
   connection?: ConnectionState
-  /** Opens the panel that answers each reading's own question. Omit and the
-   * reading is text rather than something to press. */
   onOpenStatus?: () => void
   onOpenContext?: () => void
   onOpenUsage?: () => void
 }
 
-/** One reading. A button only when it leads somewhere. */
 function Reading({ tone, onPress, label, children }: { tone?: Tone; onPress?: () => void; label?: string; children: React.ReactNode }) {
   if (!onPress) {
     return <Ink tone={tone}>{children}</Ink>
@@ -91,7 +75,6 @@ export function TerminalStatusLine({
     )
   }
 
-  // Cost last of the numbers: the reading you check, never the one you act on.
   if (state.totalCostUsd > 0) {
     parts.push(
       <Ink key="cost" tone="faint">

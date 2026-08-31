@@ -1551,12 +1551,30 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   absolutely positioned overlays one line tall, so `affordances={false}` changes no glyph's
   position. That is what makes "off" the pure article rather than a degraded mode — and the reason
   a new affordance may not be added as anything that occupies space.
+- **`ch` is measured off the live surface, never derived from the font size.** `CellMetrics.ch` is
+  the advance of `0` in px — **7.83px at 13px JetBrains Mono, not 13 × 0.6** — read by `measureCh`
+  from an absolutely positioned probe (absolute so it adds no layout and cannot re-trigger the
+  `ResizeObserver` that called it). Every wrap column count in `height.ts` divides by it, so a
+  derived value is wrong by a fraction of a cell on every row, and the error shows only in a
+  browser.
+- **A tool result's image is a fixed box of whole lines, reserved before the bytes arrive.**
+  `IMAGE_BOX_LINES` (12, ≈240px at an 18px line) is the box in **all three states** — pending wash,
+  loaded (letterboxed), failed — because an image's intrinsic size is unknowable until it is
+  fetched, and a mount-corrected row brings back the growing scrollbar the height calculator exists
+  to kill. Letterboxing is the accepted cost and nothing here may collapse to nothing. `image-box.ts`
+  is its own module so `items.tsx` (which draws the box) and `height.ts` (which predicts it with no
+  DOM) cannot spell it twice; `test/image-box.test.ts` pins the single spelling and
+  `dev/height-audit.ts` owns the geometry.
 - **Verify against the real renderer, not the model.** The playground (`cd packages/ui && pnpm
   dev`, port 5193) is the terminal theme's regression surface — jsdom has no text layout, so
-  only a browser can check the geometry. Console hooks: `__wdAudit` (height audit),
-  `__wdCheckMapping` (item→row mapping), `__wdPerf` (frame-time sweep), `__wdJumpRecap`,
-  `__wdSetFixture`, `__wdSetWidth`, `__wdSetMetrics`, `__wdMd`, `__wdLines`, plus the "audit
-  grid" button. Re-run the audits after any change to row structure — both instrument bugs found
+  only a browser can check the geometry. Console hooks: `__wdAudit` (height audit, mounted rows
+  only — scroll and merge), `__wdCheckMapping` (item→row mapping), `__wdPerf` (frame-time sweep),
+  `__wdJumpRecap`, `__wdRepin`, `__wdSetFixture`, `__wdSetWidth`, `__wdSetMetrics`, `__wdMd`,
+  `__wdLines`, `__wdAttach` (stage N fake attachments), `__wdScrollUp` (escape the bottom lock —
+  the precondition for the two below), `__wdStream` (a row that **grows**, the only thing that
+  fires the virtualizer's size-change correction), `__wdPinTrace` (per-frame gap to the bottom;
+  `final: 0` is pinned) and `__wdReplay` (bursts under the replay hold; a pinned transcript shows
+  one `scrollTop` per burst and never an intermediate value), plus the "audit grid" button. Re-run the audits after any change to row structure — both instrument bugs found
   building the scrubber inflated *coverage* rather than accuracy and would have read as
   calculator bugs.
 
@@ -1689,9 +1707,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   (`ui/src/lib/clipboard.ts`), which falls back to `document.execCommand('copy')` over an
   off-screen textarea: deprecated, universally implemented, and the only thing that works here.
   The textarea must be *off-screen* rather than `display: none`/`visibility: hidden` — a hidden
-  element cannot hold a selection, so the copy would silently do nothing. Every new copy
-  affordance routes through `copyText`; note `CopyAction` in `terminal/affordances.tsx` still
-  calls `navigator.clipboard` directly and so no-ops on LAN HTTP.
+  element cannot hold a selection, so the copy would silently do nothing. Every copy
+  affordance routes through `copyText`, `CopyAction` in `terminal/affordances.tsx` included — it
+  gates its `✓` on the return value, so the tick only claims what actually landed.
 - **`crypto.randomUUID()` is gated on a secure context too, so it is `undefined` on exactly the
   deployment multi-gateway exists for**: a dashboard served over plain HTTP on a Tailscale name.
   (`localhost` counts as secure, which is why it only breaks off the machine.) `newHostId()`

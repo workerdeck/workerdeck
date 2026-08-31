@@ -1,20 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { textLines } from '../src/components/terminal/height.ts'
 
-/**
- * The one genuinely unit-testable piece of the height calculator.
- *
- * Everything around it — does the rendered row come out the pixel height this
- * predicted — is checked in `dev/height-audit.ts` against real browser layout,
- * because jsdom has no text layout and a jsdom test would only check the
- * calculator against its author's assumptions. Line *counting* at a column width
- * is arithmetic, and that is what is pinned here.
- *
- * `exact` is the other half of the contract and is not a confidence score: it is
- * the calculator flagging what it cannot know, so the row self-corrects on
- * mount. A row that claimed `exact` wrongly is the failure mode — it never
- * remeasures.
- */
 describe('textLines', () => {
   it('is one line for anything that fits', () => {
     expect(textLines('hello', 80)).toEqual({ lines: 1, exact: true })
@@ -38,10 +24,7 @@ describe('textLines', () => {
   })
 
   it('hangs preserved spaces past the line end rather than wrapping for them', () => {
-    // CSS Text 3: trailing spaces may overflow without forcing a wrap. The
-    // discriminating case is spaces that push *past* `cols` — a run that merely
-    // fits proves nothing. Getting this wrong adds a phantom line to every row
-    // that happens to end in whitespace.
+    // CSS Text 3: trailing spaces may overflow without forcing a wrap; the discriminating case is spaces that push *past* `cols`.
     expect(textLines(`${'x'.repeat(10)}   `, 10).lines).toBe(1)
     // …and the word after them still starts the next line.
     expect(textLines(`${'x'.repeat(10)}   y`, 10).lines).toBe(2)
@@ -53,8 +36,7 @@ describe('textLines', () => {
   })
 
   it('moves an over-long word to its own line before filling', () => {
-    // 'ab ' then a 20-char token at 10 columns: the token leaves the first line,
-    // then takes two of its own.
+    // 'ab ' then a 20-char token at 10 columns: the token leaves the first line, then takes two of its own.
     expect(textLines(`ab ${'x'.repeat(20)}`, 10).lines).toBe(3)
   })
 

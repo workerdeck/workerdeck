@@ -2,16 +2,8 @@ import { createContext, useContext, useState, type ReactNode } from 'react'
 import { copyText } from '../../lib/clipboard.ts'
 import { cn } from '../../lib/utils.ts'
 
-/**
- * The pointer affordances a real terminal cannot have. The rule that keeps
- * them honest: **each one costs no layout** — a hover fill is a background, an
- * action button an absolutely positioned overlay — so turning them all off
- * (`affordances={false}`) moves no glyph. Both default on.
- */
 export type TerminalAffordances = {
-  /** Fill the row under the pointer, on anything pressable. */
   hover?: boolean
-  /** Reveal a row's actions (copy, and whatever a row adds) on hover or focus. */
   actions?: boolean
 }
 
@@ -23,7 +15,6 @@ export const useAffordances = (): Required<TerminalAffordances> => {
   return useContext(AffordanceContext)
 }
 
-/** Resolve the surface's prop — `false` means none, `true`/absent means all. */
 export const resolveAffordances = (value: TerminalAffordances | boolean | undefined): Required<TerminalAffordances> => {
   if (value === false) {
     return { hover: false, actions: false }
@@ -38,10 +29,6 @@ export function AffordanceProvider({ value, children }: { value: Required<Termin
   return <AffordanceContext.Provider value={value}>{children}</AffordanceContext.Provider>
 }
 
-/**
- * A block that reveals its actions on hover. Wraps rather than decorates: the
- * actions belong to the block, not to whichever row the pointer is over.
- */
 export function WithActions({ actions, children, className }: { actions: ReactNode; children: ReactNode; className?: string }) {
   const { actions: enabled } = useAffordances()
   if (!enabled) {
@@ -55,12 +42,6 @@ export function WithActions({ actions, children, className }: { actions: ReactNo
   )
 }
 
-/**
- * Open a sub-agent's own surface. A row *action*, not the row's press — the
- * press already means expand/collapse. Lives in the hover overlay, so a
- * collapsed Task row is exactly as tall with it as without, which keeps the
- * height book honest.
- */
 export function OpenSubagentAction({ onOpen, label = 'Open sub-agent' }: { onOpen: () => void; label?: string }) {
   return (
     <button
@@ -69,7 +50,6 @@ export function OpenSubagentAction({ onOpen, label = 'Open sub-agent' }: { onOpe
       title={label}
       aria-label={label}
       onClick={(event) => {
-        // The row underneath expands; opening is not expanding.
         event.stopPropagation()
         onOpen()
       }}
@@ -79,7 +59,6 @@ export function OpenSubagentAction({ onOpen, label = 'Open sub-agent' }: { onOpe
   )
 }
 
-/** Copy as a glyph, not an SVG: `✓` replaces `⧉` in place, so the confirmation costs no width. */
 export function CopyAction({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -89,14 +68,7 @@ export function CopyAction({ text, label = 'Copy' }: { text: string; label?: str
       title={label}
       aria-label={label}
       onClick={(event) => {
-        // The row underneath is usually pressable; copying is not expanding.
         event.stopPropagation()
-        // Through `copyText`, never `navigator.clipboard` directly: that object
-        // is absent on the plain-HTTP LAN origin most gateways are reached on,
-        // where the optional chain used to swallow the whole copy — no bytes and
-        // no `✓`, so the button read as broken. The `✓` follows the return value
-        // for the same reason: it may only claim what actually landed. A failure
-        // still says nothing, which beats a transcript that grows an error row.
         void copyText(text).then((ok) => {
           if (!ok) {
             return

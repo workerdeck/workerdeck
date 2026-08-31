@@ -1,19 +1,7 @@
 import type { ModelOption, RateLimitInfo, SessionStatus } from '@workerdeck/protocol'
 
-/**
- * How a session's live readings become a status line — the pure half, so every
- * host spells "Needs approval", "80% is a warning" and "which window is the
- * binding one" the same way.
- *
- * Structurally typed against `SessionVitals` rather than importing it: this
- * file ships from the React-free `@workerdeck/ui/format` entry, and a host
- * drawing the readings outside React must not pull a component graph in.
- */
 export type StatusSeverity = 'none' | 'warning' | 'error'
 
-/** What a status slot shows. `icon` is a VS Code codicon name — the one
- * host-shaped thing left, rather than a second mapping table in the only
- * consumer. */
 export type StatusPresentation = {
   icon: string
   label: string
@@ -22,8 +10,6 @@ export type StatusPresentation = {
 
 export type StatusReadings = {
   status: SessionStatus
-  /** `@workerdeck/react`'s `ConnectionState`, structurally — the link state wins
-   * the slot, so it has to be part of the reading. */
   connection?: 'live' | 'reconnecting' | 'offline'
 }
 
@@ -37,11 +23,6 @@ const STATUS_META: Record<SessionStatus, StatusPresentation> = {
   closed: { icon: 'circle-slash', label: 'Closed', severity: 'none' },
 }
 
-/**
- * The status slot, connection first. A session status held over a dead socket is
- * the last thing we heard, not the current state — so a lost link takes the slot
- * rather than letting "Running" imply a turn is still streaming.
- */
 export const statusPresentation = (vitals: StatusReadings | undefined): StatusPresentation => {
   if (!vitals) {
     return { icon: 'hubot', label: 'Connecting…', severity: 'none' }
@@ -55,7 +36,6 @@ export const statusPresentation = (vitals: StatusReadings | undefined): StatusPr
   return STATUS_META[vitals.status] ?? { icon: 'hubot', label: vitals.status, severity: 'none' }
 }
 
-/** 0–100 → the colour a meter wears. One pair of thresholds for every surface. */
 export const meterSeverity = (pct: number | undefined): StatusSeverity => {
   if (pct === undefined) {
     return 'none'
@@ -69,21 +49,8 @@ export const meterSeverity = (pct: number | undefined): StatusSeverity => {
   return 'none'
 }
 
-/**
- * The three lanes a plan-usage reading can occupy, each independently
- * showable — `tightestWindow`'s single "fullest wins" slot would let a 71%
- * weekly window permanently hide the five-hour reading you watch while
- * working:
- *
- * - `'session'` — the five-hour window.
- * - `'weekly'` — the plain seven-day window, the account-wide ceiling.
- * - `'model'` — the fullest of the model-scoped weekly buckets. Deliberately
- *   not a named model: which models have their own bucket is the plan's
- *   business and changes without notice; the label comes from the key.
- */
 export type UsageLane = 'session' | 'weekly' | 'model'
 
-/** The window a lane points at, or `undefined` when this account has none. */
 export const usageWindow = (
   rateLimits: Record<string, RateLimitInfo> | undefined,
   lane: UsageLane,
@@ -99,15 +66,12 @@ export const usageWindow = (
     const info = rateLimits.seven_day
     return info ? { key: 'seven_day', info } : undefined
   }
-  // Model-scoped: same "fullest wins" rule as the single slot, over the subset.
   const scoped = Object.fromEntries(
     Object.entries(rateLimits).filter(([key]) => key.startsWith('seven_day_') && key !== 'seven_day_oauth_apps'),
   )
   return tightestWindow(scoped)
 }
 
-/** The rate-limit window for a surface with exactly one slot: whichever is
- * fullest. {@link usageWindow} is for one with three. */
 export const tightestWindow = (rateLimits: Record<string, RateLimitInfo> | undefined): { key: string; info: RateLimitInfo } | undefined => {
   const entries = Object.entries(rateLimits ?? {})
   if (entries.length === 0) {
@@ -115,7 +79,6 @@ export const tightestWindow = (rateLimits: Record<string, RateLimitInfo> | undef
   }
   let best: { key: string; info: RateLimitInfo } | undefined
   for (const [key, info] of entries) {
-    // A rejected window outranks any utilization: it is the one actually blocking.
     const rank = info.status === 'rejected' ? Number.POSITIVE_INFINITY : (info.utilization ?? -1)
     const bestRank =
       best === undefined
@@ -130,9 +93,6 @@ export const tightestWindow = (rateLimits: Record<string, RateLimitInfo> | undef
   return best
 }
 
-/** A rate-limit window's key, named for a human. A model-scoped bucket is
- * named for its model alone (`seven_day_fable` → "Fable"): its lane already
- * says weekly. */
 export const windowLabel = (key: string): string => {
   if (key === 'five_hour') {
     return 'Session'
@@ -147,12 +107,6 @@ export const windowLabel = (key: string): string => {
 
 export type ModelReadings = { model?: string; models: readonly ModelOption[] }
 
-/**
- * The catalog row a session is actually running, or `undefined` for a model the
- * list doesn't name. Matched leniently: a session reports the *resolved* id
- * (`claude-sonnet-5`) where the row may be keyed on the alias (`sonnet`), and
- * either can carry a `[1m]` context-window suffix.
- */
 export const currentModel = (vitals: ModelReadings | undefined): ModelOption | undefined => {
   const id = vitals?.model
   if (!id) {
@@ -163,8 +117,6 @@ export const currentModel = (vitals: ModelReadings | undefined): ModelOption | u
   return vitals.models.find((m) => bare(m.value) === wanted || (m.resolvedModel && bare(m.resolvedModel) === wanted))
 }
 
-/** A session's model, named the way the picker names it. Falls back to the raw
- * id, and to "Default" while the session is on the CLI's own pick. */
 export const modelLabel = (vitals: ModelReadings | undefined): string => {
   if (!vitals?.model) {
     return 'Default'
@@ -172,15 +124,10 @@ export const modelLabel = (vitals: ModelReadings | undefined): string => {
   return currentModel(vitals)?.displayName ?? vitals.model
 }
 
-/** Context percentage as its meter severity. Takes only the number it reads,
- * so the compact `ContextReading` and the full `ContextUsage` are coloured by
- * one rule. */
 export const contextSeverity = (usage: { percentage: number } | undefined): StatusSeverity => {
   return meterSeverity(usage?.percentage)
 }
 
-/** {@link meterSeverity} as a text colour class — one copy of the thresholds
- * for every surface that paints the reading. */
 export const meterColorClass = (pct: number | undefined): string => {
   const severity = meterSeverity(pct)
   return severity === 'error' ? 'text-danger' : severity === 'warning' ? 'text-warning' : 'text-fg-3'

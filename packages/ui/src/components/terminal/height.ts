@@ -1,15 +1,3 @@
-/**
- * The terminal theme's row-height calculator: the pixel height the renderer will draw an item
- * at, from cell metrics alone and with no DOM, so the virtualizer's `estimateSize` is exact.
- * Terminal only — nothing here transfers to the cards variant — and `exact: false` marks content
- * whose advance this model cannot know (emoji/CJK come from fallback faces). Two invariants keep
- * it small: **only the collapsed state is ever computed** (expansion is component-local and dies
- * with the row, a decided permanent divergence from iOS rather than a gap to close), and
- * **mutation is object replacement**, which is what lets {@link HeightEpoch} key its cache on
- * item identity and never go stale. `dev/height-audit.ts` is the regression gate; the rest of
- * the story is docs/PACKAGES.md §`packages/ui`.
- */
-
 import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
@@ -18,36 +6,17 @@ import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { runSummary, taskSummary } from './tool-run.ts'
 
-/** The cell everything is measured in. `ch` is the advance of `0` in px —
- * *measured* off the live surface via {@link measureCh}, never derived from the
- * font size (7.83px at 13px JetBrains Mono, not 13 × 0.6). */
 export type CellMetrics = {
-  /** Content-box width of the virtual row wrapper, px. */
   width: number
-  /** Advance of `0`, px. */
   ch: number
-  /** `--term-line`, px. */
   line: number
 }
 
 export type ComputedHeight = {
   px: number
-  /** False when the content contains glyphs or structures whose rendered size
-   * this model cannot know — treat the row as an estimate, corrected the
-   * moment it mounts and measures. */
   exact: boolean
 }
 
-/* ── The epoch ─────────────────────────────────────────────────────────────
- *
- * One cache generation, owned by the transcript shell (`TranscriptRows` holds
- * exactly one, in React state): created from the first real measurement and
- * *replaced wholesale* whenever width, `ch` or line change — a computed height
- * is only meaningful against the metrics it was computed for, so partial
- * invalidation is a bug factory and a new WeakMap is free. Within an epoch the
- * cache keys on item object identity; replace-on-mutation makes that automatic
- * invalidation.
- */
 export type HeightEpoch = CellMetrics & {
   cache: WeakMap<TranscriptItem, ComputedHeight>
 }
@@ -56,15 +25,7 @@ export const createHeightEpoch = (width: number, ch: number, line: number): Heig
   return { width, ch, line, cache: new WeakMap() }
 }
 
-/** A virtual row's computed height under `epoch` — the `estimateSize` feed.
- * The inter-row gap is the *pair's* business (`gapBefore`), not the row's, so
- * it is added by the caller. */
 export const estimateBlockPx = (block: TerminalBlock, epoch: HeightEpoch): number => {
-  // Only item blocks cache. A run's array is rebuilt every render (worthless
-  // key), and a task block must not key on its `task` item: children arrive
-  // without the call object changing, so a height cached against the task
-  // would survive exactly the mutation that changes the summary line. Both are
-  // one `wrapOne` over a short string (~2µs).
   if (!('item' in block)) {
     return blockHeight(block, epoch).px
   }
@@ -77,25 +38,14 @@ export const estimateBlockPx = (block: TerminalBlock, epoch: HeightEpoch): numbe
   return computed.px
 }
 
-/** How many lines of a sub-agent's brief the collapsed row shows — enough to
- * recognise the task without burying the work under its own instructions. */
 export const BRIEF_LINES = 4
 
-/**
- * The collapsed brief row's height — the frame's first row is synthetic and
- * cannot go through {@link estimateBlockPx}. `min(wrapped, BRIEF_LINES)` lines
- * plus the header row; expanding is local state on a mounted (hence measured)
- * row, so only the collapsed height must be right.
- */
 export const briefPx = (text: string, m: CellMetrics): number => {
   const cols = Math.max(1, Math.floor(m.width / m.ch + EPS))
   return (Math.min(textLines(text, cols).lines, BRIEF_LINES) + 1) * m.line
 }
 
-/** Measure the advance of `0` on the live surface. A DOM read — call it from
- * the epoch's measurement pass (an effect / ResizeObserver callback), never
- * from render. The probe is absolutely positioned, so it contributes no layout
- * and cannot re-trigger the observer that called it. */
+// Absolutely positioned so the probe adds no layout and cannot re-trigger the ResizeObserver that called it.
 export const measureCh = (surface: HTMLElement): number => {
   const probe = document.createElement('span')
   probe.textContent = '0'.repeat(200)
@@ -108,21 +58,19 @@ export const measureCh = (surface: HTMLElement): number => {
   return width
 }
 
-/* ── Cell counting ─────────────────────────────────────────────────────────── */
-
 const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' })
 
 const WIDE_RANGES: [number, number][] = [
-  [0x1100, 0x115f], // Hangul Jamo
-  [0x2e80, 0x303e], // CJK radicals, Kangxi, CJK symbols/punctuation
-  [0x3041, 0x33ff], // Hiragana … CJK compatibility
+  [0x1100, 0x115f],
+  [0x2e80, 0x303e],
+  [0x3041, 0x33ff],
   [0x3400, 0x4dbf],
   [0x4e00, 0x9fff],
   [0xa000, 0xa4cf],
-  [0xac00, 0xd7a3], // Hangul syllables
+  [0xac00, 0xd7a3],
   [0xf900, 0xfaff],
   [0xfe30, 0xfe4f],
-  [0xff00, 0xff60], // fullwidth forms
+  [0xff00, 0xff60],
   [0xffe0, 0xffe6],
   [0x20000, 0x3fffd],
 ]
@@ -131,9 +79,6 @@ const isWide = (cp: number): boolean => WIDE_RANGES.some(([lo, hi]) => cp >= lo 
 
 const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
 
-/** One grapheme cluster's advance, in cells. Wide and pictographic clusters are
- * counted as 2 but flagged: they render from a fallback face whose advance is
- * not a whole number of cells, and the flag is what keeps the model honest. */
 const clusterCells = (cluster: string): { w: number; exact: boolean } => {
   if (PICTOGRAPHIC.test(cluster) || cluster.includes('‍') || cluster.includes('️')) {
     return { w: 2, exact: false }
@@ -148,27 +93,17 @@ const clusterCells = (cluster: string): { w: number; exact: boolean } => {
   return { w: 1, exact: true }
 }
 
-/* ── The wrap model ────────────────────────────────────────────────────────── */
-
 type Token = { kind: 'word' | 'space'; w: number; exact: boolean }
 
-/** `tab-size: 2` on the surface. */
+// Must match `tab-size: 2` on the surface.
 const TAB_SIZE = 2
 
-/** Break *after* these when the next character is not a digit. The digit guard
- * keeps `protocol-0.16.0` together; `?` is in the set because Chrome breaks
- * long URLs after it (verified against real break rects). */
+// Break after these unless a digit follows; `?` is here because Chrome breaks long URLs after it (verified against real break rects).
 const BREAK_AFTER = new Set(['-', '–', '—', '?'])
 
-/** Printable ASCII, tab excluded: every character is one cell and one
- * grapheme. Nearly every transcript line — and the segmenter was the
- * calculator's whole CPU bill, so this fast path matters. */
 const PLAIN_ASCII = /^[\x20-\x7e]*$/
 
-/** The ASCII half of {@link tokenize}: same tokens, same break rules ('-' and
- * '?' break unless a digit follows; '–'/'—' are not ASCII), no segmenter and
- * no per-grapheme allocation. Must stay semantically identical to the general
- * path — the height audit runs both, via content that takes each. */
+// Must stay semantically identical to `tokenize`; the height audit runs content that takes each path.
 const tokenizeAscii = (line: string): Token[] => {
   const tokens: Token[] = []
   let wordW = 0
@@ -191,7 +126,7 @@ const tokenizeAscii = (line: string): Token[] => {
       continue
     }
     wordW += 1
-    if (code === 0x2d /* - */ || code === 0x3f /* ? */) {
+    if (code === 0x2d || code === 0x3f) {
       const next = line.charCodeAt(i + 1)
       if (!(next >= 0x30 && next <= 0x39)) {
         flushWord()
@@ -202,12 +137,6 @@ const tokenizeAscii = (line: string): Token[] => {
   return tokens
 }
 
-/**
- * Tokenize one hard line into wrap units. Tabs advance to the next 2-cell stop
- * measured from the hard line's start — position-dependent after a soft wrap in
- * principle, but content with tabs beyond the first wrap point is vanishingly
- * rare and the error is bounded by one tab stop.
- */
 const tokenize = (line: string): Token[] => {
   if (PLAIN_ASCII.test(line)) {
     return tokenizeAscii(line)
@@ -266,7 +195,6 @@ const tokenize = (line: string): Token[] => {
   return tokens
 }
 
-/** Visual lines one hard line occupies at `cols` columns. */
 const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } => {
   if (cols <= 0) {
     return { lines: 1, exact: false }
@@ -278,8 +206,7 @@ const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } 
   for (const token of tokens) {
     exact = exact && token.exact
     if (token.kind === 'space') {
-      // Preserved spaces hang at the line end (CSS Text 3): they may overflow
-      // without forcing a wrap, and the next word starts the next line.
+      // Preserved spaces hang at the line end (CSS Text 3): they overflow without forcing a wrap.
       pos += token.w
       continue
     }
@@ -303,13 +230,6 @@ const wrapOne = (line: string, cols: number): { lines: number; exact: boolean } 
   return { lines, exact }
 }
 
-/**
- * Visual lines of a (possibly multi-hard-line) text at `cols` columns, mirroring `.term-body`
- * (`pre-wrap` + `break-word` in a `minmax(0,1fr)` grid column): greedy fill, preserved spaces
- * hang at the line end, breaks after hyphens/dashes/`?` not followed by a digit and between CJK
- * characters, and an over-wide token takes its own line before breaking per cell — exactly where
- * `break-word` differs from `anywhere`. Pinned by `test/text-lines.test.ts` and the dev audit.
- */
 export const textLines = (text: string, cols: number): { lines: number; exact: boolean } => {
   let lines = 0
   let exact = true
@@ -321,23 +241,14 @@ export const textLines = (text: string, cols: number): { lines: number; exact: b
   return { lines: Math.max(1, lines), exact }
 }
 
-/* ── Rows ──────────────────────────────────────────────────────────────────── */
-
-/** Layout rounds to 1/64px; the epsilon keeps a body width that is exactly
- * N × ch from flooring to N−1. */
+// Layout rounds to 1/64px; the epsilon keeps a body width of exactly N × ch from flooring to N−1.
 const EPS = 1e-4
 
 type Acc = { px: number; exact: boolean }
 
 const add = (a: Acc, b: Acc): Acc => ({ px: a.px + b.px, exact: a.exact && b.exact })
 
-/**
- * One `Row`: `indentCells` of padding (already resolved against the row's own
- * `--term-cell` — a `columns={3} indent={1}` row loses 3ch to the indent *and*
- * 3ch to the gutter, because the indent padding reads the same variable the
- * override sets), `gutterCells` of gutter, the body wrapping in what is left.
- * `extraPx` is non-cell chrome around the row (the nested-run border+padding).
- */
+// `indent` resolves against the row's own `--term-cell`, so `columns={3} indent={1}` loses 3ch to the indent and 3ch to the gutter.
 const rowH = (text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, extraPx = 0 } = {}): Acc => {
   const bodyPx = m.width - extraPx - (indentCells + gutterCells) * m.ch
   const cols = Math.floor(bodyPx / m.ch + EPS)
@@ -345,12 +256,6 @@ const rowH = (text: string, m: CellMetrics, { indentCells = 0, gutterCells = 2, 
   return { px: lines * m.line, exact }
 }
 
-/* ── Markdown ──────────────────────────────────────────────────────────────── */
-
-/** Rendered text of an inline run — markers stripped the way the component map
- * renders them (`**bold**` is 4 chars narrower on screen than in source).
- * Approximate: reference links, raw HTML and nested emphasis edge cases are
- * not modelled. */
 const stripInline = (s: string): string => {
   return s
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -364,27 +269,16 @@ const stripInline = (s: string): string => {
     .replace(/\\([\\`*_{}[\]()#+.!-])/g, '$1')
 }
 
-/**
- * Text blocks carry **rendered lines**, resolved by CommonMark's break rule: a
- * source line ending in two spaces (or a backslash) is a hard break; any other
- * newline is soft and collapses to a space. Both halves are load-bearing —
- * join-always and break-always each mis-estimate real content by dozens of
- * lines (the `markdown` audit fixture carries one poem of each as the guard).
- */
 type MdBlock =
   | { t: 'p'; lines: string[] }
   | { t: 'h'; text: string }
   | { t: 'fence'; code: string }
   | { t: 'list'; items: { lines: string[]; gutter: number; indent: number }[] }
   | { t: 'quote'; paras: string[][] }
-  /** One line per row, unconditionally — see the `table` case in
-   * {@link markdownHeight}. */
   | { t: 'table'; rows: number }
   | { t: 'hr' }
 
-/** Source lines of one paragraph-ish run → the lines the renderer draws: hard
- * breaks (trailing double space or backslash) split, soft newlines join with a
- * space. The break marker itself never renders and is stripped. */
+// CommonMark: a trailing double space or backslash is a hard break; any other newline is soft and joins with a space.
 const hardLines = (source: string[]): string[] => {
   const out: string[] = []
   let current: string[] = []
@@ -402,8 +296,6 @@ const hardLines = (source: string[]): string[] => {
   return out
 }
 
-/** A line-based CommonMark-ish block parser — just enough structure to mirror
- * what Streamdown + the terminal component map emit for transcript content. */
 const parseBlocks = (md: string): MdBlock[] => {
   const lines = md.split('\n')
   const blocks: MdBlock[] = []
@@ -422,7 +314,7 @@ const parseBlocks = (md: string): MdBlock[] => {
         code.push(lines[i]!)
         i += 1
       }
-      i += 1 // closing fence (or EOF, mid-stream)
+      i += 1
       blocks.push({ t: 'fence', code: code.join('\n') })
       continue
     }
@@ -472,9 +364,6 @@ const parseBlocks = (md: string): MdBlock[] => {
     }
     if (listMarker(line)) {
       const items: { lines: string[]; gutter: number; indent: number }[] = []
-      // Marker cells per level, outermost first — a nested item's indent is the
-      // sum of its ancestors' gutters (each nested list sits in its parent li's
-      // body column).
       const gutters: number[] = []
       let listOrdered: boolean | undefined
       while (i < lines.length) {
@@ -486,8 +375,6 @@ const parseBlocks = (md: string): MdBlock[] => {
           }
           break
         }
-        // A different marker type at the top level starts a *new* list — one
-        // more block, one more inter-block margin.
         if (m.depth === 0) {
           if (listOrdered !== undefined && m.ordered !== listOrdered) {
             break
@@ -498,11 +385,8 @@ const parseBlocks = (md: string): MdBlock[] => {
         const indent = gutters.slice(0, m.depth).reduce((a, b) => a + (b ?? 2), 0)
         const source = [m.text]
         i += 1
-        // Lazy continuation lines belong to the item; whether each newline
-        // renders is `hardLines`' call, same as a paragraph's.
         while (i < lines.length && lines[i]!.trim() !== '' && !listMarker(lines[i]!)) {
-          // trimStart only: a trailing double space is the hard-break marker,
-          // and `hardLines` needs to see it.
+          // trimStart only: a trailing double space is the hard-break marker `hardLines` needs to see.
           source.push(lines[i]!.trimStart())
           i += 1
         }
@@ -512,15 +396,12 @@ const parseBlocks = (md: string): MdBlock[] => {
       continue
     }
     if (line.trimStart().startsWith('|')) {
-      // Only the row count: a table lays out at `max-content` and scrolls
-      // rather than compressing, so a row is a line whatever the cells hold.
       let rows = 0
       while (i < lines.length && lines[i]!.trimStart().startsWith('|')) {
         const cells = lines[i]!.trim()
           .replace(/^\||\|$/g, '')
           .split('|')
           .map((cell) => cell.trim())
-        // The `|---|:--:|` delimiter row is structure, not a rendered line.
         if (!cells.every((cell) => /^:?-+:?$/.test(cell))) {
           rows += 1
         }
@@ -529,7 +410,6 @@ const parseBlocks = (md: string): MdBlock[] => {
       blocks.push({ t: 'table', rows: Math.max(1, rows) })
       continue
     }
-    // Paragraph: gather until a blank line or another block opener.
     const para: string[] = [line]
     i += 1
     while (
@@ -550,10 +430,8 @@ const parseBlocks = (md: string): MdBlock[] => {
   return blocks
 }
 
-/** The markdown body's height: blocks, one line between consecutive ones
- * (`.term-md .term-block + .term-block`). Exported for the dev audit only. */
 export const markdownHeight = (md: string, m: CellMetrics, extraPx = 0): Acc => {
-  const bodyPx = m.width - extraPx - 2 * m.ch // the outer Row's gutter
+  const bodyPx = m.width - extraPx - 2 * m.ch
   const cols = Math.floor(bodyPx / m.ch + EPS)
   const blocks = parseBlocks(md)
   let acc: Acc = { px: 0, exact: true }
@@ -615,9 +493,6 @@ export const markdownHeight = (md: string, m: CellMetrics, extraPx = 0): Acc => 
         break
       }
       case 'table': {
-        // One line per row, always: no `max-width`, so a wide table scrolls
-        // inside `.term-table-wrap` and a cell never wraps. See `terminal.css`
-        // §Markdown.
         acc = add(acc, { px: block.rows * m.line, exact: true })
         break
       }
@@ -629,8 +504,6 @@ export const markdownHeight = (md: string, m: CellMetrics, extraPx = 0): Acc => 
   }
   return { px: Math.max(acc.px, m.line), exact: acc.exact }
 }
-
-/* ── Items ─────────────────────────────────────────────────────────────────── */
 
 const diffHeight = (patch: FilePatch, m: CellMetrics, extraPx = 0): Acc => {
   const walk = (hunk: PatchHunk) => {
@@ -666,17 +539,11 @@ const diffHeight = (patch: FilePatch, m: CellMetrics, extraPx = 0): Acc => {
   return acc
 }
 
-/** A collapsed tool row: the header, then the diff (when the call carries a
- * patch) or the shared collapsed preview plus its trailing "there is more" row.
- * No expanded branch — see the module comment's first invariant. */
 const toolRowHeight = (item: ToolCallItem, m: CellMetrics, extraPx: number): Acc => {
   const preview = toolInputPreview(item.input)
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
   let acc = rowH(`${item.name}(${preview})${backend}`, m, { gutterCells: 2, extraPx })
 
-  // Each image part draws the same box in every state — placeholder, picture,
-  // failure — so the height is settled before the first byte is fetched and a
-  // load can never reflow the list (see `image-box.ts`).
   const images = item.result?.images
   if (images?.length) {
     acc = add(acc, { px: images.length * IMAGE_BOX_LINES * m.line, exact: true })
@@ -689,12 +556,8 @@ const toolRowHeight = (item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   if (!text) {
     return acc
   }
-  // The renderer's own budget, not a copy: `collapsedResult` returns both the
-  // lines and the exact trailing label, so this cannot drift from `items.tsx`.
   const { shown, more } = collapsedResult(text.trimEnd().split('\n'), item.result?.totalChars)
   for (const line of shown) {
-    // indent=1 with columns=3 resolves the indent against the row's own
-    // --term-cell: 3ch of padding + 3ch of gutter.
     acc = add(acc, rowH(line || ' ', m, { indentCells: 3, gutterCells: 3, extraPx }))
   }
   if (more) {
@@ -703,12 +566,9 @@ const toolRowHeight = (item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   return acc
 }
 
-/** Rows produced inside a subagent are stepped in behind a rule —
- * `border-l-2` (2px) + `pl-3` (12px) on the wrapper in `agent/Transcript.tsx`. */
+// Nested rows are stepped in behind a rule: `border-l-2` (2px) + `pl-3` (12px) on the wrapper in `agent/Transcript.tsx`.
 const nestedExtraPx = (item: TranscriptItem): number => ('parentToolUseId' in item && item.parentToolUseId != null ? 14 : 0)
 
-/** One transcript item's height, in its default (collapsed, settled-or-not)
- * presentation. */
 export const itemHeight = (item: TranscriptItem, m: CellMetrics): ComputedHeight => {
   const extraPx = nestedExtraPx(item)
   switch (item.kind) {
@@ -755,12 +615,6 @@ export const itemHeight = (item: TranscriptItem, m: CellMetrics): ComputedHeight
   }
 }
 
-/** A virtual row's height: an item, a folded tool run, or a task block —
- * either fold collapsed is its one summary line, built by the same function
- * the row draws (`runSummary` / `taskSummary`), rendered as one standard
- * 2-cell-gutter `Row`. No expanded branch for the task block either: it is
- * always collapsed by default, which is the invariant that keeps every
- * unmounted row's estimate exact. */
 export const blockHeight = (block: TerminalBlock, m: CellMetrics): ComputedHeight => {
   if ('task' in block) {
     return rowH(taskSummary(block.task, taskChildItems(block)), m)
