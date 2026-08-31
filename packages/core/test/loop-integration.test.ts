@@ -1,52 +1,18 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { tool } from 'ai'
-import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
+import { MockLanguageModelV3 } from 'ai/test'
 import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { AiSdkRunner, QuickJsExecutor } from '../src/index.ts'
+import { streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
+import { waitFor } from './helpers/wait.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
   engine = await loadEngine(variant)
 })
-
-const USAGE = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: 5, text: 5, reasoning: undefined },
-  raw: undefined,
-}
-function streamText(t: string) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'text-start' as const, id: 't1' },
-      { type: 'text-delta' as const, id: 't1', delta: t },
-      { type: 'text-end' as const, id: 't1' },
-      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
-function streamCall(toolCallId: string, toolName: string, input: unknown) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'tool-call' as const, toolCallId, toolName, input: JSON.stringify(input) },
-      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
-
-async function waitFor(predicate: () => boolean, ms = 5000): Promise<void> {
-  const deadline = Date.now() + ms
-  while (!predicate()) {
-    if (Date.now() > deadline) {
-      throw new Error('timed out waiting for condition')
-    }
-    await new Promise((r) => setTimeout(r, 5))
-  }
-}
 
 describe('agent loop + sandboxed tool execution', () => {
   it('parks on eval_script, executes it in the sandbox, and completes the turn', async () => {

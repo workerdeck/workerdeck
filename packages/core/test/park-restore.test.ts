@@ -1,43 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { tool } from 'ai'
-import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
+import { MockLanguageModelV3 } from 'ai/test'
 import { z } from 'zod'
 import { createVfs } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { AiSdkRunner, DeferredExecutor, type AiSdkRunnerConfig, type DeferredDispatch, type RunnerSnapshot } from '../src/index.ts'
-
-const USAGE = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: 5, text: 5, reasoning: undefined },
-  raw: undefined,
-}
-
-function streamText(text: string) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'text-start' as const, id: 't1' },
-      { type: 'text-delta' as const, id: 't1', delta: text },
-      { type: 'text-end' as const, id: 't1' },
-      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
-
-function streamCalls(calls: Array<{ id: string; tool: string; input: unknown }>) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      ...calls.map((c) => ({
-        type: 'tool-call' as const,
-        toolCallId: c.id,
-        toolName: c.tool,
-        input: JSON.stringify(c.input),
-      })),
-      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
+import { streamCalls, streamText } from './helpers/ai-sdk-mocks.ts'
+import { waitFor } from './helpers/wait.ts'
 
 // A turn genuinely in flight. The fake stream has to *watch* the signal: one that merely
 // never closes hangs the turn, since the runner's abort cannot cancel an unwired stream.
@@ -62,16 +31,7 @@ function harness(config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'l
   runner.subscribe((e) => events.push(e))
   void runner.start()
   const eventsOf = (type: string) => events.filter((e) => e.type === type)
-  const waitFor = async (predicate: () => boolean, ms = 2000): Promise<void> => {
-    const deadline = Date.now() + ms
-    while (!predicate()) {
-      if (Date.now() > deadline) {
-        throw new Error('timed out waiting for condition')
-      }
-      await new Promise((r) => setTimeout(r, 5))
-    }
-  }
-  return { runner, events, eventsOf, waitFor }
+  return { runner, events, eventsOf }
 }
 
 describe('deferred execution: park and rehydrate', () => {
@@ -96,7 +56,7 @@ describe('deferred execution: park and rehydrate', () => {
     })
 
     h.runner.sendMessage('do both')
-    await h.waitFor(() => h.runner.info().status === 'parked')
+    await waitFor(() => h.runner.info().status === 'parked')
 
     expect(dispatched.map((d) => d.executionId)).toEqual(['call-a', 'call-b'])
     expect(parkedAtSignal).toEqual([2])
@@ -116,7 +76,7 @@ describe('deferred execution: park and rehydrate', () => {
     const executor = new DeferredExecutor({ onDispatch: () => {} })
     const h = harness({ languageModel: model, executor, vfs, prompt: 'crunch it' })
 
-    await h.waitFor(() => h.runner.info().status === 'parked')
+    await waitFor(() => h.runner.info().status === 'parked')
     const snapshot = h.runner.park()!
     expect(snapshot).toBeDefined()
     expect(snapshot.engine).toBe('provider')
@@ -175,7 +135,7 @@ describe('deferred execution: park and rehydrate', () => {
     const executor = new DeferredExecutor({ onDispatch: () => {} })
     const h = harness({ languageModel: model, executor })
     h.runner.sendMessage('go')
-    await h.waitFor(() => h.runner.info().status === 'parked')
+    await waitFor(() => h.runner.info().status === 'parked')
 
     const snapshot = h.runner.park()!
     expect(snapshot.parked).toHaveLength(2)
@@ -207,7 +167,7 @@ describe('deferred execution: park and rehydrate', () => {
     const executor = new DeferredExecutor({ onDispatch: () => {}, timeoutMs: 60_000 })
     const h = harness({ languageModel: model, executor })
     h.runner.sendMessage('go')
-    await h.waitFor(() => h.runner.info().status === 'parked')
+    await waitFor(() => h.runner.info().status === 'parked')
 
     const snapshot = h.runner.park()!
     expect(snapshot.parked[0]!.expiresAt).toBeGreaterThan(Date.now())
@@ -243,7 +203,7 @@ describe('deferred execution: park and rehydrate', () => {
     const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [streamText('hi')] })
     const h = harness({ languageModel: model })
     h.runner.sendMessage('hello')
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
     expect(h.runner.park()).toBeUndefined()
   })
 
@@ -270,7 +230,7 @@ describe('deferred execution: park and rehydrate', () => {
       },
     })
     h.runner.sendMessage('go')
-    await h.waitFor(() => h.eventsOf('execution_dispatched').length === 2)
+    await waitFor(() => h.eventsOf('execution_dispatched').length === 2)
     await new Promise((r) => setTimeout(r, 20))
     expect(h.runner.info().status).toBe('running')
     expect(h.runner.park()).toBeUndefined()
@@ -284,7 +244,7 @@ describe('deferred execution: park and rehydrate', () => {
     const vfs = createVfs({ '/notes.txt': 'keep me' })
     const h = harness({ languageModel: model, vfs })
     h.runner.sendMessage('hello')
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
 
     expect(h.runner.park()).toBeUndefined()
     const snapshot = h.runner.snapshot()!
@@ -297,7 +257,7 @@ describe('deferred execution: park and rehydrate', () => {
     expect(h.eventsOf('status_changed').some((e) => 'status' in e && e.status === 'parked')).toBe(false)
     const before = h.events.length
     h.runner.sendMessage('again')
-    await h.waitFor(() => h.eventsOf('turn_result').length === 2)
+    await waitFor(() => h.eventsOf('turn_result').length === 2)
     expect(h.events.length).toBeGreaterThan(before)
   })
 
@@ -305,7 +265,7 @@ describe('deferred execution: park and rehydrate', () => {
     const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [streamText('hi there')] })
     const h = harness({ languageModel: model })
     h.runner.sendMessage('hello')
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
 
     const snapshot = h.runner.snapshot()!
     expect(h.eventsOf('stream_delta').length).toBeGreaterThan(0)
@@ -329,7 +289,7 @@ describe('deferred execution: park and rehydrate', () => {
       },
     })
     h.runner.sendMessage('go')
-    await h.waitFor(() => h.eventsOf('execution_dispatched').length === 1)
+    await waitFor(() => h.eventsOf('execution_dispatched').length === 1)
     expect(h.runner.snapshot()).toBeUndefined()
   })
 
@@ -346,9 +306,9 @@ describe('deferred execution: park and rehydrate', () => {
     h.runner.sendMessage('write me an essay')
     // Interrupted mid-flight: a turn that already finished leaves the history ending on the
     // assistant, where `#runTurn`'s own guard would cover for a wrongly scheduled restore.
-    await h.waitFor(() => h.eventsOf('stream_delta').length > 0)
+    await waitFor(() => h.eventsOf('stream_delta').length > 0)
     await h.runner.interrupt()
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
     expect(h.eventsOf('turn_result')[0]).toMatchObject({ isError: true })
     expect(h.runner.messages.at(-1)?.role).toBe('user')
 

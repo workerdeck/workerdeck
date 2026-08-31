@@ -1,37 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { tool } from 'ai'
-import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
+import { MockLanguageModelV3 } from 'ai/test'
 import { z } from 'zod'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { AiSdkRunner, type AiSdkRunnerConfig } from '../src/index.ts'
-
-const USAGE = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: 5, text: 5, reasoning: undefined },
-  raw: undefined,
-}
-
-function textResponse(text: string) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'text-start' as const, id: 't1' },
-      ...[...text].map((ch) => ({ type: 'text-delta' as const, id: 't1', delta: ch })),
-      { type: 'text-end' as const, id: 't1' },
-      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
-
-function toolCallResponse(toolCallId: string, toolName: string, input: unknown) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'tool-call' as const, toolCallId, toolName, input: JSON.stringify(input) },
-      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
+import { streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
+import { waitFor } from './helpers/wait.ts'
 
 function makeRunner(config: Partial<AiSdkRunnerConfig> & { languageModel: AiSdkRunnerConfig['languageModel'] }) {
   const runner = new AiSdkRunner({ ...config })
@@ -39,22 +13,13 @@ function makeRunner(config: Partial<AiSdkRunnerConfig> & { languageModel: AiSdkR
   runner.subscribe((e) => events.push(e))
   void runner.start()
   const eventsOf = (type: string) => events.filter((e) => e.type === type)
-  const waitFor = async (predicate: () => boolean, ms = 2000) => {
-    const deadline = Date.now() + ms
-    while (!predicate()) {
-      if (Date.now() > deadline) {
-        throw new Error('timed out waiting for condition')
-      }
-      await new Promise((r) => setTimeout(r, 5))
-    }
-  }
-  return { runner, events, eventsOf, waitFor }
+  return { runner, events, eventsOf }
 }
 
 describe('AiSdkRunner', () => {
   it('runs a plain text turn: user_message, assistant_message, turn_result, idle', async () => {
-    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('hello there') })
-    const { runner, eventsOf, waitFor } = makeRunner({ languageModel: model })
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: streamText('hello there') })
+    const { runner, eventsOf } = makeRunner({ languageModel: model })
 
     runner.sendMessage('hi')
     await waitFor(() => eventsOf('turn_result').length === 1)
@@ -80,7 +45,7 @@ describe('AiSdkRunner', () => {
   it('executes local tools inside the loop and emits tool_use + synthetic tool_result', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [toolCallResponse('call-1', 'lookup', { key: 'k' }), textResponse('found it')],
+      doStream: [streamCall('call-1', 'lookup', { key: 'k' }), streamText('found it')],
     })
     const tools = {
       lookup: tool({
@@ -90,7 +55,7 @@ describe('AiSdkRunner', () => {
     }
     const harness = makeRunner({ languageModel: model, tools })
     harness.runner.sendMessage('look up k')
-    await harness.waitFor(() => harness.eventsOf('turn_result').length === 1)
+    await waitFor(() => harness.eventsOf('turn_result').length === 1)
 
     const assistantEvents = harness.eventsOf('assistant_message')
     const toolUse = assistantEvents
@@ -108,7 +73,8 @@ describe('AiSdkRunner', () => {
   it('streams: token deltas while text is produced, step messages as steps complete', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [toolCallResponse('c1', 'lookup', { key: 'k' }), textResponse('found it')],
+      // perChar: this suite asserts on more than one stream_delta.
+      doStream: [streamCall('c1', 'lookup', { key: 'k' }), streamText('found it', { perChar: true })],
     })
     const tools = {
       lookup: tool({
@@ -118,7 +84,7 @@ describe('AiSdkRunner', () => {
     }
     const h = makeRunner({ languageModel: model, tools })
     h.runner.sendMessage('go')
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
 
     const deltas = h.eventsOf('stream_delta')
     expect(deltas.length).toBeGreaterThan(1)
@@ -141,10 +107,10 @@ describe('AiSdkRunner', () => {
   })
 
   it('emits no stream_delta when includePartialMessages is false', async () => {
-    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('quiet') })
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: streamText('quiet') })
     const h = makeRunner({ languageModel: model, includePartialMessages: false })
     h.runner.sendMessage('go')
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
     expect(h.eventsOf('stream_delta')).toHaveLength(0)
     expect(h.eventsOf('turn_result')[0]).toMatchObject({ result: 'quiet' })
   })
@@ -152,7 +118,7 @@ describe('AiSdkRunner', () => {
   it('parks on an execute-less tool call and resumes via resolveToolCall (message-state replay)', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [toolCallResponse('call-9', 'eval_script', { script: '1+1' }), textResponse('the answer is 2')],
+      doStream: [streamCall('call-9', 'eval_script', { script: '1+1' }), streamText('the answer is 2')],
     })
     const tools = {
       eval_script: tool({ inputSchema: z.object({ script: z.string() }) }),
@@ -160,7 +126,7 @@ describe('AiSdkRunner', () => {
     const h = makeRunner({ languageModel: model, tools })
     h.runner.sendMessage('evaluate 1+1')
 
-    await h.waitFor(() => h.runner.pendingToolCalls.length === 1)
+    await waitFor(() => h.runner.pendingToolCalls.length === 1)
     expect(h.eventsOf('turn_result')).toHaveLength(0)
     expect(h.runner.pendingToolCalls[0]).toMatchObject({ toolCallId: 'call-9', toolName: 'eval_script' })
     expect(h.runner.info().status).toBe('running')
@@ -169,7 +135,7 @@ describe('AiSdkRunner', () => {
     expect(h.runner.resolveToolCall('call-9', { type: 'json', value: { result: 2 } })).toBe(true)
     expect(h.runner.resolveToolCall('call-9', { type: 'json', value: { result: 2 } })).toBe(false)
 
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
     expect(h.eventsOf('turn_result')[0]).toMatchObject({ subtype: 'success', result: 'the answer is 2' })
     expect(h.runner.info().status).toBe('idle')
     const toolMessage = h.runner.messages.find((m) => m.role === 'tool')
@@ -180,20 +146,20 @@ describe('AiSdkRunner', () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [
-        toolCallResponse('call-1', 'eval_script', { script: 'x' }),
-        toolCallResponse('call-2', 'eval_script', { script: 'y' }),
-        textResponse('done'),
+        streamCall('call-1', 'eval_script', { script: 'x' }),
+        streamCall('call-2', 'eval_script', { script: 'y' }),
+        streamText('done'),
       ],
     })
     const tools = { eval_script: tool({ inputSchema: z.object({ script: z.string() }) }) }
     const h = makeRunner({ languageModel: model, tools })
 
     h.runner.sendMessage('go')
-    await h.waitFor(() => h.runner.pendingToolCalls.length === 1)
+    await waitFor(() => h.runner.pendingToolCalls.length === 1)
     h.runner.resolveToolCall('call-1', { type: 'text', value: 'first' })
-    await h.waitFor(() => h.runner.pendingToolCalls.some((c) => c.toolCallId === 'call-2'))
+    await waitFor(() => h.runner.pendingToolCalls.some((c) => c.toolCallId === 'call-2'))
     h.runner.resolveToolCall('call-2', { type: 'text', value: 'second' })
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
 
     expect(h.eventsOf('turn_result')[0]).toMatchObject({
       subtype: 'success',
@@ -205,9 +171,9 @@ describe('AiSdkRunner', () => {
   it('treats an errored local tool execution as settled, never as a park', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [toolCallResponse('c1', 'flaky', {}), textResponse('recovered from the tool failure')],
+      doStream: [streamCall('c1', 'flaky', {}), streamText('recovered from the tool failure')],
     })
-    const { runner, eventsOf, waitFor } = makeRunner({
+    const { runner, eventsOf } = makeRunner({
       languageModel: model,
       tools: {
         flaky: tool({
@@ -232,9 +198,9 @@ describe('AiSdkRunner', () => {
   it('interrupt() rescues a parked turn: parked calls fail, the turn ends, input works again', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [toolCallResponse('c1', 'ask_human', { q: 'ok?' }), textResponse('hello again')],
+      doStream: [streamCall('c1', 'ask_human', { q: 'ok?' }), streamText('hello again')],
     })
-    const { runner, eventsOf, waitFor } = makeRunner({
+    const { runner, eventsOf } = makeRunner({
       languageModel: model,
       tools: { ask_human: tool({ inputSchema: z.object({ q: z.string() }) }) },
     })
@@ -253,9 +219,9 @@ describe('AiSdkRunner', () => {
   it('keeps tool results adjacent to their call when the user typed during the park', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [toolCallResponse('c1', 'ask_human', { q: 'ok?' }), textResponse('done')],
+      doStream: [streamCall('c1', 'ask_human', { q: 'ok?' }), streamText('done')],
     })
-    const { runner, eventsOf, waitFor } = makeRunner({
+    const { runner, eventsOf } = makeRunner({
       languageModel: model,
       tools: { ask_human: tool({ inputSchema: z.object({ q: z.string() }) }) },
     })
@@ -271,14 +237,14 @@ describe('AiSdkRunner', () => {
   })
 
   it('echoes its scope and reports no cwd rather than the gateway’s', () => {
-    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('x') })
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: streamText('x') })
     const scope = { space: 'a', user: 'alice' }
     expect(new AiSdkRunner({ languageModel: model, scope }).info().scope).toEqual(scope)
     expect(new AiSdkRunner({ languageModel: model }).info().cwd).toBe('')
   })
 
   it('rejects unsupported permission modes at construction and via setPermissionMode', async () => {
-    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('x') })
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: streamText('x') })
     expect(() => new AiSdkRunner({ languageModel: model, permissionMode: 'plan' })).toThrow(/not supported/)
     const h = makeRunner({ languageModel: model })
     await expect(h.runner.setPermissionMode('acceptEdits')).rejects.toThrow(/not supported/)
@@ -295,7 +261,7 @@ describe('AiSdkRunner', () => {
     })
     const h = makeRunner({ languageModel: model })
     h.runner.sendMessage('hi')
-    await h.waitFor(() => h.eventsOf('turn_result').length === 1)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
     expect(h.eventsOf('turn_result')[0]).toMatchObject({
       subtype: 'error_during_execution',
       isError: true,
@@ -306,7 +272,7 @@ describe('AiSdkRunner', () => {
   })
 
   it('close() settles the session and refuses further input', async () => {
-    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: textResponse('x') })
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: streamText('x') })
     const h = makeRunner({ languageModel: model })
     h.runner.close('server')
     expect(h.eventsOf('session_closed')).toHaveLength(1)

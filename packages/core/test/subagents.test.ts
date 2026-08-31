@@ -1,66 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { SUBAGENT_HISTORY } from '@workerdeck/protocol'
 import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
-
-// Minimal stand-in for the SDK: emit SDKMessages, capture options + streamed input (the
-// runner.test.ts harness without its control surface).
-function fakeHarness() {
-  const messages: SDKMessage[] = []
-  let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
-  let done = false
-  const captured: { options?: Options; inputs: SDKUserMessage[] } = { inputs: [] }
-
-  const emit = (msg: SDKMessage) => {
-    if (waiter) {
-      const resolve = waiter
-      waiter = null
-      resolve({ value: msg, done: false })
-    } else {
-      messages.push(msg)
-    }
-  }
-  const end = () => {
-    done = true
-    if (waiter) {
-      const resolve = waiter
-      waiter = null
-      resolve({ value: undefined, done: true })
-    }
-  }
-
-  const query = {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next(): Promise<IteratorResult<SDKMessage>> {
-      const buffered = messages.shift()
-      if (buffered !== undefined) {
-        return Promise.resolve({ value: buffered, done: false })
-      }
-      if (done) {
-        return Promise.resolve({ value: undefined, done: true })
-      }
-      return new Promise((resolve) => {
-        waiter = resolve
-      })
-    },
-    interrupt: async () => {},
-    close: end,
-  } as unknown as Query
-
-  const queryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => {
-    captured.options = params.options
-    void (async () => {
-      for await (const input of params.prompt as AsyncIterable<SDKUserMessage>) {
-        captured.inputs.push(input)
-      }
-    })()
-    return query
-  }
-
-  return { emit, end, captured, queryFn }
-}
+import { fakeHarness, tick } from './helpers/claude-harness.ts'
 
 function makeRunner(overrides: Partial<SessionRunnerConfig> = {}) {
   const harness = fakeHarness()
@@ -70,10 +12,6 @@ function makeRunner(overrides: Partial<SessionRunnerConfig> = {}) {
     ...overrides,
   })
   return { harness, runner }
-}
-
-function tick() {
-  return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 let uuidCounter = 0

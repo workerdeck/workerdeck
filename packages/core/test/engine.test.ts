@@ -1,11 +1,12 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
+import { MockLanguageModelV3 } from 'ai/test'
 import { tool } from 'ai'
 import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { QuickJsExecutor, connectMcpTools, createEngineSession, type McpConnection } from '../src/index.ts'
+import { generateText, streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
 import type { ToolExecutionCall } from '../src/executors/tool-executor.ts'
 
 let engine: SandboxEngine
@@ -13,47 +14,11 @@ beforeAll(async () => {
   engine = await loadEngine(variant)
 })
 
-const USAGE = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: 5, text: 5, reasoning: undefined },
-  raw: undefined,
-}
-// Loop legs are streamed (doStream); `generateSay` is the doGenerate form the web_fetch
-// digest pass uses.
-function say(t: string) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'text-start' as const, id: 't1' },
-      { type: 'text-delta' as const, id: 't1', delta: t },
-      { type: 'text-end' as const, id: 't1' },
-      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
-function callTool(id: string, name: string, input: unknown) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'tool-call' as const, toolCallId: id, toolName: name, input: JSON.stringify(input) },
-      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
-function generateSay(t: string) {
-  return {
-    content: [{ type: 'text' as const, text: t }],
-    finishReason: { unified: 'stop' as const, raw: undefined },
-    usage: USAGE,
-    warnings: [],
-  }
-}
-
 describe('createEngineSession', () => {
   it('assembles a session that runs sandboxed tools through the selected executor', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [callTool('c1', 'eval_script', { script: '6 * 7' }), say('42')],
+      doStream: [streamCall('c1', 'eval_script', { script: '6 * 7' }), streamText('42')],
     })
     const selectExecutor = vi.fn(() => new QuickJsExecutor({ engine }))
     const runner = createEngineSession({
@@ -79,7 +44,7 @@ describe('createEngineSession', () => {
   it('grants MCP tools as authoritative and runs them server-side', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [callTool('c1', 'push', { lead: 'acme' }), say('pushed')],
+      doStream: [streamCall('c1', 'push', { lead: 'acme' }), streamText('pushed')],
     })
     const pushed: unknown[] = []
     const runner = createEngineSession({
@@ -105,9 +70,9 @@ describe('createEngineSession', () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [
-        callTool('c1', 'fs_write', { path: '/SUMMARY.md', content: '# Sum' }),
-        callTool('c2', 'deliver_file', { path: '/SUMMARY.md', description: 'the summary' }),
-        say('Delivered.'),
+        streamCall('c1', 'fs_write', { path: '/SUMMARY.md', content: '# Sum' }),
+        streamCall('c2', 'deliver_file', { path: '/SUMMARY.md', description: 'the summary' }),
+        streamText('Delivered.'),
       ],
     })
     const runner = createEngineSession({
@@ -134,8 +99,11 @@ describe('createEngineSession', () => {
   it('runs the web_fetch digest on the session model and bills it into the turn', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [callTool('c1', 'web_fetch', { url: 'http://203.0.113.5/pricing', prompt: 'how much?' }), say('The page says $10/mo.')],
-      doGenerate: [generateSay('It costs $10/mo.')],
+      doStream: [
+        streamCall('c1', 'web_fetch', { url: 'http://203.0.113.5/pricing', prompt: 'how much?' }),
+        streamText('The page says $10/mo.'),
+      ],
+      doGenerate: [generateText('It costs $10/mo.')],
     })
     const fetchImpl = async () =>
       new Response('<h1>Pricing</h1><p>$10/mo</p>', {
@@ -169,9 +137,9 @@ describe('createEngineSession', () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [
-        callTool('c1', 'fs_write', { path: '/a.txt', content: 'hello' }),
-        callTool('c2', 'eval_script', { script: `vfs.read('/a.txt').toUpperCase()` }),
-        say('done'),
+        streamCall('c1', 'fs_write', { path: '/a.txt', content: 'hello' }),
+        streamCall('c2', 'eval_script', { script: `vfs.read('/a.txt').toUpperCase()` }),
+        streamText('done'),
       ],
     })
     const vfs = createVfs()
@@ -207,7 +175,7 @@ describe('createEngineSession grants', () => {
       doStream: async (call) => {
         toolNames = (call.tools ?? []).map((t) => t.name).sort()
         instructions = call.prompt.find((m) => m.role === 'system')?.content
-        return say('ok')
+        return streamText('ok')
       },
     })
     const runner = createEngineSession({
@@ -280,7 +248,7 @@ describe('createEngineSession grants', () => {
 })
 
 describe('createEngineSession host tools and MCP declarations', () => {
-  const model = () => new MockLanguageModelV3({ modelId: 'mock-1', doStream: [say('ok')] })
+  const model = () => new MockLanguageModelV3({ modelId: 'mock-1', doStream: [streamText('ok')] })
   const build = (options: Partial<Parameters<typeof createEngineSession>[0]>) => {
     const m = model()
     return createEngineSession({
@@ -347,7 +315,7 @@ describe('createEngineSession host tools and MCP declarations', () => {
     const dispatched: string[] = []
     const m = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [callTool('c1', 'lookup', { q: 'acme' }), say('done')],
+      doStream: [streamCall('c1', 'lookup', { q: 'acme' }), streamText('done')],
     })
     const runner = createEngineSession({
       config: { cwd: '/tmp', languageModel: m },
@@ -405,7 +373,7 @@ describe('createEngineSession host tools and MCP declarations', () => {
 
 describe('createEngineSession rehydration', () => {
   const build = (options: Partial<Parameters<typeof createEngineSession>[0]>) => {
-    const m = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [say('ok')] })
+    const m = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [streamText('ok')] })
     return createEngineSession({
       config: { cwd: '/tmp', languageModel: m },
       resolveModel: () => m,

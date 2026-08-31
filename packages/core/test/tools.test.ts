@@ -1,42 +1,17 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test'
+import { MockLanguageModelV3 } from 'ai/test'
 import { tool } from 'ai'
 import { z } from 'zod'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, type SandboxEngine } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { AiSdkRunner, QuickJsExecutor, createToolContext, withMcpTools, type ToolExecutionResult, type ToolExecutor } from '../src/index.ts'
+import { streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
 
 let engine: SandboxEngine
 beforeAll(async () => {
   engine = await loadEngine(variant)
 })
-
-const USAGE = {
-  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
-  outputTokens: { total: 5, text: 5, reasoning: undefined },
-  raw: undefined,
-}
-function text(t: string) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'text-start' as const, id: 't1' },
-      { type: 'text-delta' as const, id: 't1', delta: t },
-      { type: 'text-end' as const, id: 't1' },
-      { type: 'finish' as const, finishReason: { unified: 'stop' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
-function call(id: string, name: string, input: unknown) {
-  return {
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start' as const, warnings: [] },
-      { type: 'tool-call' as const, toolCallId: id, toolName: name, input: JSON.stringify(input) },
-      { type: 'finish' as const, finishReason: { unified: 'tool-calls' as const, raw: undefined }, usage: USAGE },
-    ]),
-  }
-}
 
 function stubExecutor(): ToolExecutor {
   return {
@@ -158,14 +133,14 @@ describe('runner-driven tool execution', () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [
-        call('c1', 'download', { url: 'https://acme.example/about', path: '/leads/acme.txt' }),
-        call('c2', 'eval_script', {
+        streamCall('c1', 'download', { url: 'https://acme.example/about', path: '/leads/acme.txt' }),
+        streamCall('c2', 'eval_script', {
           script: `const doc = vfs.read('/leads/acme.txt')
                    const revenue = Number(doc.split('revenue:')[1].trim())
                    revenue >= 100 ? 'qualified' : 'skip'`,
         }),
-        call('c3', 'push_score', { lead: 'acme', score: 'qualified' }),
-        text('Acme is qualified.'),
+        streamCall('c3', 'push_score', { lead: 'acme', score: 'qualified' }),
+        streamText('Acme is qualified.'),
       ],
     })
 
@@ -220,7 +195,7 @@ describe('runner-driven tool execution', () => {
   it('feeds a sandbox failure back as tool output instead of failing the session', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [call('c1', 'eval_script', { script: 'while (true) {}' }), text('That timed out; trying something simpler.')],
+      doStream: [streamCall('c1', 'eval_script', { script: 'while (true) {}' }), streamText('That timed out; trying something simpler.')],
     })
     const context = createToolContext({ executor: new QuickJsExecutor({ engine }), sessionId: 's' })
     const runner = new AiSdkRunner({
@@ -249,7 +224,7 @@ describe('runner-driven tool execution', () => {
   it('leaves calls the executor does not own for the host to answer', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      doStream: [call('c1', 'ask_human', { q: 'ok?' }), text('done')],
+      doStream: [streamCall('c1', 'ask_human', { q: 'ok?' }), streamText('done')],
     })
     const dispatched: string[] = []
     const executor: ToolExecutor = {
