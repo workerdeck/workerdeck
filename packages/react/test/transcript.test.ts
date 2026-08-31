@@ -81,7 +81,6 @@ describe('transcript reducer', () => {
     expect(kinds).toEqual(['user', 'assistant_text', 'tool_call', 'turn_result'])
     const tool = state.items.find((i) => i.kind === 'tool_call')
     expect(tool).toMatchObject({ name: 'Bash', result: { text: 'file.txt', isError: false } })
-    // streamed text was replaced by the final message
     const texts = state.items.filter((i) => i.kind === 'assistant_text')
     expect(texts).toHaveLength(1)
     expect(texts[0]).toMatchObject({ text: 'Sure, running.', streaming: false })
@@ -114,8 +113,6 @@ describe('transcript reducer', () => {
       parentToolUseId: null,
       uuid,
     })
-    // An interrupted turn: deltas, then the error result — never the
-    // assistant_message that normally supersedes the streamed preview.
     const interrupted = run(initialTranscriptState, [
       delta('a long ', 's1'),
       delta('poem', 's2'),
@@ -133,9 +130,6 @@ describe('transcript reducer', () => {
     expect(partial).toMatchObject({ text: 'a long poem', streaming: false })
     expect(partial?.id).not.toBe('streaming')
 
-    // The next turn must not disturb it: its message must not wipe the partial
-    // (the singleton-streaming-item bug), and its deltas must start a fresh
-    // streaming item rather than appending to the finalized one.
     const next = run(interrupted, [
       delta('short', 's3'),
       {
@@ -159,7 +153,6 @@ describe('transcript reducer', () => {
     }
     const first = applyEvent(initialTranscriptState, ev({ type: 'permission_requested', request }))
     expect(first.pendingApprovals).toHaveLength(1)
-    // replay of the same seq is a no-op
     expect(applyEvent(first, { type: 'permission_requested', request, seq: 1, ts: 0 })).toBe(first)
     const resolved = applyEvent(first, ev({ type: 'permission_resolved', requestId: 'req-1', behavior: 'deny', resolvedBy: 'timeout' }))
     expect(resolved.pendingApprovals).toHaveLength(0)
@@ -207,7 +200,6 @@ describe('transcript reducer', () => {
       },
       {
         type: 'assistant_message',
-        // Encrypted thinking: text stripped, signature only.
         message: { role: 'assistant', content: [{ type: 'thinking', thinking: '', signature: 'Eu8E' }] },
         parentToolUseId: null,
         uuid: 'a1',
@@ -243,10 +235,6 @@ describe('transcript reducer', () => {
 
   it('drops streamed thinking that never carries visible text, even past turn_result', () => {
     seq = 0
-    // A `thinking_delta` can arrive with nothing visible in it. Left alone that
-    // built a thinking item with a blank body — a bare `✻` marker and no text —
-    // and `turn_result` then finalized it under a stable id, so it outlived the
-    // turn instead of being superseded.
     const state = run(initialTranscriptState, [
       {
         type: 'stream_delta',
@@ -274,11 +262,6 @@ describe('transcript reducer', () => {
 
   it('still builds a thinking row once a delta carries real text', () => {
     seq = 0
-    // The guard must not swallow a thought whose *first* delta happens to be
-    // blank: the accumulated text is rebuilt from the existing item each time.
-    // The skipped prefix really is dropped — leading whitespace on a thought is
-    // not content, and keeping it would mean carrying blank text forward just to
-    // re-check it on the next delta.
     const state = run(initialTranscriptState, [
       {
         type: 'stream_delta',
@@ -317,7 +300,6 @@ describe('transcript reducer', () => {
   it('dedupes backfilled history against SDK-replayed user messages by uuid', () => {
     seq = 0
     const state = run(initialTranscriptState, [
-      // backfill copy (from getSessionMessages)
       {
         type: 'user_message',
         message: { role: 'user', content: 'earlier prompt' },
@@ -332,7 +314,6 @@ describe('transcript reducer', () => {
         replay: true,
         uuid: 'a-hist-1',
       },
-      // SDK's own replay of the same user message on resume
       {
         type: 'user_message',
         message: { role: 'user', content: 'earlier prompt' },
@@ -388,7 +369,6 @@ describe('transcript reducer', () => {
         parentToolUseId: null,
         uuid: 'cmd-1',
       },
-      // No `<command-name>`: ordinary prose is untouched, angle brackets and all.
       {
         type: 'user_message',
         message: { role: 'user', content: 'compare <a> and <b>' },
@@ -432,8 +412,6 @@ describe('transcript reducer', () => {
         uuid: 'u-only',
       },
     ])
-    // Empty text, but still a row — the photo is the message, and the view
-    // renders the thumbnail without a bubble under it.
     expect(state.items).toEqual([{ kind: 'user', id: 'u-only', text: '', attachments }])
   })
 
@@ -451,7 +429,6 @@ describe('transcript reducer', () => {
     expect(state.commands?.map((c) => c.name)).toEqual(['compact'])
     expect(state.model).toBe('claude-opus-4-8')
 
-    // reset-to-default keeps showing the last known model
     const after = applyEvent(state, ev({ type: 'model_changed', model: undefined }))
     expect(after.model).toBe('claude-opus-4-8')
   })
@@ -473,11 +450,8 @@ describe('transcript reducer', () => {
       },
     ])
     expect(state.skills?.map((s) => s.name)).toEqual(['imagegen', 'pdf-fill'])
-    // The two channels stay separate: a skill is not something the CLI parses
-    // out of a message, and folding it into `commands` would say it is.
     expect(state.commands?.map((c) => c.name)).toEqual(['compact'])
 
-    // Replaced, not merged — a skill deleted on disk has to disappear.
     const after = applyEvent(state, ev({ type: 'skills', skills: [{ name: 'imagegen', enabled: true }] }))
     expect(after.skills?.map((s) => s.name)).toEqual(['imagegen'])
   })
@@ -493,7 +467,6 @@ describe('transcript reducer', () => {
         bytes: 2048,
         toolUseId: 'turn:g1',
       },
-      // The same file announced again (progress item, then completed one).
       {
         type: 'file_produced',
         fileId: 'abc123',
@@ -503,8 +476,6 @@ describe('transcript reducer', () => {
       },
       { type: 'file_produced', fileId: 'def456', path: '/home/me/out/chart.png' },
     ])
-    // Keyed by path, because "here is the savedPath in my tool input — is there
-    // anything to fetch?" is the lookup a tool card does.
     expect(Object.keys(state.producedFiles ?? {})).toEqual(['/home/me/.codex/generated_images/flower.png', '/home/me/out/chart.png'])
     expect(state.producedFiles?.['/home/me/.codex/generated_images/flower.png']).toEqual({
       fileId: 'abc123',
@@ -555,12 +526,10 @@ describe('transcript reducer', () => {
         type: 'rate_limit',
         info: { status: 'allowed', rateLimitType: 'seven_day', utilization: 23, resetsAt: 1_800_500_000 },
       },
-      // a second five_hour update replaces only its own window
       {
         type: 'rate_limit',
         info: { status: 'allowed_warning', rateLimitType: 'five_hour', utilization: 85, resetsAt: 1_800_000_000 },
       },
-      // no window key → ignored rather than stored under a bogus key
       { type: 'rate_limit', info: { status: 'allowed' } },
     ])
     expect(state.contextUsage).toEqual(usage)
@@ -579,8 +548,6 @@ describe('transcript reducer', () => {
       },
     ])
     expect(state.defaultModel).toBe('claude-opus-5[1m]')
-    // A promptless session has no model of its own yet; this is what a status
-    // bar shows in the meantime.
     expect(state.model).toBeUndefined()
   })
 
@@ -628,14 +595,9 @@ describe('transcript reducer', () => {
     expect(before.items.length).toBeGreaterThan(0)
 
     const state = run(before, [{ type: 'conversation_reset', sdkSessionId: 'sdk-2' }])
-    // The conversation is gone…
     expect(state.items).toEqual([])
     expect(state.sdkSessionId).toBe('sdk-2')
-    // …and its context reading with it: 45% of a cleared conversation is a lie,
-    // and the runner re-polls a fresh one.
     expect(state.contextUsage).toBeUndefined()
-    // Session-scoped state survives: model list, commands, cwd, mode, produced
-    // files, rate limits (account-level), cumulative cost.
     expect(state.models).toHaveLength(1)
     expect(state.commands).toHaveLength(1)
     expect(state.cwd).toBe('/tmp/p')
@@ -668,7 +630,6 @@ describe('transcript reducer', () => {
       { type: 'conversation_reset', sdkSessionId: 'sdk-3' },
       { type: 'user_message', message: { role: 'user', content: 'three' }, parentToolUseId: null, uuid: 'u3' },
     ])
-    // Only what came after the second reset remains.
     expect(state.items).toEqual([{ kind: 'user', id: 'u3', text: 'three', attachments: undefined }])
     expect(state.sdkSessionId).toBe('sdk-3')
   })
@@ -688,7 +649,6 @@ describe('transcript reducer', () => {
   it('records the plan the rate-limit windows belong to', () => {
     const state = run(initialTranscriptState, [{ type: 'plan_info', subscriptionType: 'max' }])
     expect(state.subscriptionType).toBe('max')
-    // Absent until it arrives — an API-key session never sends one.
     expect(initialTranscriptState.subscriptionType).toBeUndefined()
   })
 
@@ -705,19 +665,15 @@ describe('transcript reducer', () => {
       lastSeq: 0,
       pendingPermissionCount: 0,
     }
-    // promptless session: no events yet — snapshot fills everything
     const seeded = seedFromSessionInfo(initialTranscriptState, info)
     expect(seeded).toMatchObject({
       status: 'idle',
       model: 'sonnet',
       permissionMode: 'acceptEdits',
       cwd: '/tmp/p',
-      // No event carries the engine — the snapshot is its only source, and
-      // surfaces gate CLI-only affordances on it.
       engine: 'provider',
     })
 
-    // after events have arrived, the event stream stays authoritative
     const live = run(seeded, [
       {
         type: 'system_init',
@@ -750,22 +706,14 @@ describe('transcript reducer', () => {
       lastSeq: 0,
       pendingPermissionCount: 0,
     }
-    // Before any attach there is still a record to render from — the protocol's
-    // default for an absent engine.
     expect(initialTranscriptState.capabilities).toEqual(ENGINE_CAPABILITIES.claude)
 
-    // No wire copy: the engine's static record.
     const seeded = seedFromSessionInfo(initialTranscriptState, info)
     expect(seeded.capabilities).toEqual(ENGINE_CAPABILITIES.codex)
-    // Codex lists its MCP servers but cannot act on one — the pair of axes that
-    // exists precisely so a read-only engine doesn't render dead buttons.
     expect(seeded.capabilities.mcpStatus).toBe(true)
     expect(seeded.capabilities.mcpServerActions).toBe(false)
-    // The snapshot itself is kept whole — nothing else carries profile,
-    // apiKeySource or canBypassPermissions.
     expect(seeded.session).toBe(info)
 
-    // A runner that reports its own record overrides the default.
     const reported = seedFromSessionInfo(initialTranscriptState, {
       ...info,
       capabilities: { ...ENGINE_CAPABILITIES.codex, mcpServerActions: true },
@@ -858,9 +806,6 @@ describe('transcript reducer', () => {
     })
 
     it('carries the file patch onto the call it belongs to', () => {
-      // The line numbers a diff renders come from here and nowhere else: a
-      // client has never seen the file, so anything dropped on this path is a
-      // diff that renders without them.
       seq = 0
       const patch = {
         path: '/repo/a.ts',
@@ -903,10 +848,6 @@ describe('transcript reducer', () => {
     })
   })
 
-  // A subagent streams *concurrently* with the thread that spawned it, and three
-  // parallel Tasks stream three ways at once. Everything here is about keeping
-  // those streams apart; under the old single `streaming` id every one of these
-  // cases welded two agents' output into one row.
   describe('subagents', () => {
     const textDelta = (text: string, parentToolUseId: string | null): SessionEventBody => ({
       type: 'stream_delta',
@@ -962,9 +903,6 @@ describe('transcript reducer', () => {
       expect(texts(state)).toEqual(['Main.', 'Sub.'])
     })
 
-    // The brief is a real, non-synthetic user message. Unstamped it renders as a
-    // `❯` row in the main thread — the one row that must never be wrong about
-    // who said it.
     it('stamps a subagent’s brief with its parent, and leaves a human prompt unstamped', () => {
       seq = 0
       const state = run(initialTranscriptState, [

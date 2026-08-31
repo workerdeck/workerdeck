@@ -2,7 +2,6 @@ import type { SessionHandle } from '@workerdeck/client'
 import type { RunScriptResult, SandboxEngine, SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 
-/** What the host was asked to do and how it went (for UI/telemetry). */
 export type ToolHostExecution = {
   executionId: string
   toolName: string
@@ -20,66 +19,25 @@ export type ToolHostRunner = (request: {
   signal: AbortSignal
 }) => Promise<RunScriptResult>
 
-/**
- * Result a client tool handler returns. Return a plain value and it is sent as
- * JSON; return an object with `error` to fail the call with a reason the agent
- * can adapt to.
- */
 export type ClientToolResult = { value: unknown } | { error: string; reason?: string }
 
-/**
- * Handler for a client-registered tool. Receives the model's validated input
- * and returns a result — or throws, which is treated as a host error.
- */
 export type ClientToolHandler = (
   input: unknown,
   context: { executionId: string; signal: AbortSignal },
 ) => ClientToolResult | Promise<ClientToolResult>
 
 export type ToolCallHostOptions = {
-  /** Tools this client will execute. Anything else is refused, so a server can
-   * never talk this tab into running something it didn't opt into.
-   * Default: `['eval_script']`. */
   tools?: string[]
-  /**
-   * Client-side tool handlers, keyed by tool name: a `tool_call_request` for a name in this map
-   * goes to the handler instead of the sandbox, and the name is added to {@link tools}
-   * automatically. The client half of a client-registered tool — the server declares the schema.
-   * See `docs/PACKAGES.md` §`packages/core`.
-   */
   clientTools?: Record<string, ClientToolHandler>
-  /** Guest wall-clock limit, unless the request asks for less. Default 5000. */
   timeoutMs?: number
-  /** Guest allocator cap, unless the request asks for less. Default 64 MiB. */
   memoryLimitBytes?: number
-  /**
-   * Load the WASM guest engine. Called at most once, on the first bridged call
-   * — nothing is downloaded or parsed until a session actually bridges one.
-   * Defaults to `@workerdeck/sandbox` with the single-file browser build.
-   */
   loadEngine?: () => Promise<SandboxEngine>
-  /**
-   * Run the script. Defaults to executing on this thread, which is fine for the
-   * short, time-boxed evaluations this is built for. Supply your own (a Web
-   * Worker running the same engine) to keep long evaluations off the UI thread
-   * — the guest deadline preempts the interpreter, but only between bytecode
-   * ops on whichever thread it runs on.
-   */
+  // The guest deadline preempts the interpreter only on the thread it runs on; a Web Worker is the way off this one.
   execute?: ToolHostRunner
-  /** Host-gated fetch for the guest. Omitted = the guest has no network at all. */
   fetchText?: (url: string) => Promise<string>
-  /** Observe executions (rendering, logging). */
   onExecution?: (execution: ToolHostExecution) => void
 }
 
-/**
- * Answers server-bridged tool calls by executing them in this browser tab.
- * Framework-free — {@link useToolCallHost} is a thin React wrapper.
- *
- * The point is data locality: documents fetched or held client-side can be
- * evaluated here and never touch the server. The engine loads lazily, so a page
- * that never bridges a call never pays for the WASM guest.
- */
 export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostOptions = {}): { dispose: () => void } => {
   const inFlight = new Map<string, AbortController>()
   let enginePromise: Promise<SandboxEngine> | undefined
@@ -145,7 +103,6 @@ export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostO
 
   const run = async (frame: ToolCallRequestFrame): Promise<void> => {
     const startedAt = Date.now()
-    // Client tool handlers take priority: they are purpose-built for the tool.
     const clientHandler = options.clientTools?.[frame.toolName]
     if (clientHandler) {
       return runClientTool(frame, clientHandler)
@@ -168,8 +125,7 @@ export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostO
     try {
       const sandbox = await import('@workerdeck/sandbox')
       const vfs = sandbox.createVfs(frame.vfsSeed)
-      // Never exceed what the server asked for: it owns the deadline it will
-      // give up at, and answering after that is wasted work.
+      // Never above what the server asked for: it owns the deadline it gives up at.
       const timeoutMs = Math.min(frame.limits?.timeoutMs ?? Number.POSITIVE_INFINITY, options.timeoutMs ?? 5000)
       const memoryLimitBytes = Math.min(
         frame.limits?.memoryLimitBytes ?? Number.POSITIVE_INFINITY,
@@ -190,7 +146,6 @@ export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostO
             })
           })()
 
-      // Cancelled or torn down while we worked: the server is no longer waiting.
       if (disposed || !inFlight.has(frame.executionId)) {
         return
       }
@@ -219,8 +174,6 @@ export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostO
       if (disposed || !inFlight.has(frame.executionId)) {
         return
       }
-      // Engine load failures land here — tell the server so the agent can adapt
-      // instead of waiting out the deadline.
       refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
     } finally {
       inFlight.delete(frame.executionId)
@@ -258,8 +211,6 @@ export const createToolCallHost = (handle: SessionHandle, options: ToolCallHostO
   }
 }
 
-/** The single-file browser build keeps this to one lazy chunk — no separate
- * .wasm fetch, and nothing at all until the first bridged call. */
 const defaultLoadEngine = async (): Promise<SandboxEngine> => {
   const [sandbox, variant] = await Promise.all([import('@workerdeck/sandbox'), import('@jitl/quickjs-singlefile-browser-release-asyncify')])
   return sandbox.loadEngine(variant as never)

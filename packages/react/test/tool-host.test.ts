@@ -4,7 +4,6 @@ import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { RunScriptResult } from '@workerdeck/sandbox'
 import { createToolCallHost, type ToolCallHostOptions } from '../src/lib/tool-host.ts'
 
-/** Drives the framework-free host through a fake handle — no renderer needed. */
 const fakeHandle = () => {
   const listeners = {
     toolCallRequest: [] as Array<(f: ToolCallRequestFrame) => void>,
@@ -75,7 +74,6 @@ describe('tool-call host', () => {
     h.request({ toolName: 'Bash', input: { command: 'rm -rf /' } })
     await vi.waitFor(() => expect(h.errors).toHaveLength(1))
     expect(h.errors[0]).toMatchObject({ reason: 'unsupported_tool' })
-    // The server cannot talk this tab into running something it never opted into.
     expect(execute).not.toHaveBeenCalled()
     cleanup?.()
   })
@@ -142,7 +140,6 @@ describe('tool-call host', () => {
     await vi.waitFor(() => expect(captured).toBeDefined())
     h.cancel('exec-1')
     expect(captured!.aborted).toBe(true)
-    // Nothing is sent back for a call the server already abandoned.
     await new Promise((r) => setTimeout(r, 20))
     expect(h.results).toHaveLength(0)
     expect(h.errors).toHaveLength(0)

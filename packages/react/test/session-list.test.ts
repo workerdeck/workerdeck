@@ -18,13 +18,6 @@ import {
 } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 
-/**
- * The sessions-list view model. It lives in `protocol` because three clients
- * derive their list from it — the VS Code sidebar (whose activity-bar badge
- * counts the *same* rows the list shows), the dashboard, and the iOS mirror — so
- * these are the rules, not one client's preferences.
- */
-
 const info = (over: Partial<SessionInfo> = {}): SessionInfo => {
   return {
     id: 'sess-00000001',
@@ -56,8 +49,6 @@ const config = (over: Partial<ViewConfig> = {}): ViewConfig => ({ ...DEFAULT_VIE
 
 describe('sessionState', () => {
   it('promotes a pending approval over the raw status', () => {
-    // The rollup can still say `running` while a request waits — the thing a
-    // person filters on is "does this need me", not what the engine calls it.
     expect(sessionState(info({ status: 'running', pendingPermissionCount: 1 }))).toBe('attention')
     expect(sessionState(info({ status: 'awaiting_approval' }))).toBe('attention')
   })
@@ -79,8 +70,6 @@ describe('sessionState', () => {
   })
 
   it('reads working while a background sub-agent outlives its turn', () => {
-    // A background agent ends its turn on purpose: status comes to rest at
-    // `idle` while the agent keeps working. The row must not read Idle.
     expect(sessionState(info({ status: 'idle', subagents: [sub('running')] }))).toBe('working')
   })
 
@@ -89,8 +78,6 @@ describe('sessionState', () => {
   })
 
   it('never resurrects a terminal session off a stale running record', () => {
-    // `session_closed` settles every record, so this should be unreachable —
-    // asserted anyway, because a stale record must read ended, never working.
     expect(sessionState(info({ status: 'closed', subagents: [sub('running')] }))).toBe('ended')
     expect(sessionState(info({ status: 'failed', subagents: [sub('running')] }))).toBe('ended')
   })
@@ -119,8 +106,6 @@ describe('filterRows', () => {
     expect(find('pi')).toEqual(['b2'])
     expect(find('codex')).toEqual(['b2'])
     expect(find('a1')).toEqual(['a1'])
-    // An id is matched by prefix only — a hex soup matching mid-string would
-    // surface rows nobody was looking for.
     expect(find('1')).toEqual([])
   })
 
@@ -139,8 +124,6 @@ describe('scope', () => {
   })
 
   it('only lets a real folder scope a loopback gateway', () => {
-    // The whole point: a remote gateway's identical-looking path is another
-    // machine's directory, and matching it would show sessions from elsewhere.
     const scope: WorkspaceScope = { label: 'alpha', roots: [{ path: '/work/alpha' }] }
     expect(inScope(local, scope)).toBe(true)
     expect(inScope(remote, scope)).toBe(false)
@@ -164,8 +147,6 @@ describe('scope', () => {
   })
 
   it('is inert — not merely empty — with no scope at all', () => {
-    // This is what lets `scoped` default to on: with nothing open it hides
-    // nothing, so it is a default rather than a filter someone has to find.
     expect(scopeActive(config(), undefined)).toBe(false)
     expect(filterRows([local, remote], config({ scoped: true })).length).toBe(2)
   })
@@ -178,8 +159,6 @@ describe('groupRows', () => {
   const idle = row({ info: info({ id: 'y', title: 'Apple', lastActivityAt: 9 }) })
 
   it('orders groups by facet rank even when rows sort by name', () => {
-    // Grouping by state and sorting by name must still lead with "Needs
-    // attention" — groups follow the facet's own worst-first order.
     const groups = groupRows([idle, attention], config({ groupBy: 'state', sortBy: 'name' }))
     expect(groups.map((g) => g.key)).toEqual(['attention', 'idle'])
   })
@@ -225,8 +204,6 @@ describe('clearFilters', () => {
   })
 
   it('does not count scope as a facet filter', () => {
-    // An empty list under scope alone wants a different sentence ("nothing in
-    // this folder") from one under filters ("no matches").
     expect(hasFacetFilter(config({ scoped: true }))).toBe(false)
   })
 })
@@ -260,12 +237,8 @@ describe('project facet', () => {
   const nowhere = row({ info: info({ id: 'n1', cwd: '' }) })
 
   it('keys by root per gateway — a name is not a key and a remote twin is not this project', () => {
-    // Two cwds inside one project share the key; the identical root on another
-    // gateway is another machine's directory (the ScopeRoot argument).
     expect(projectKey(declaredUi)).toBe(projectKey(declaredWeb))
     expect(projectKey(declaredUi)).not.toBe(projectKey(remoteTwin))
-    // Undeclared sessions key by their cwd, so grouping works before anyone
-    // has written a .workerdeck.json.
     expect(projectKey(undeclared)).toBe('mac:/work/alpha')
   })
 
@@ -276,32 +249,19 @@ describe('project facet', () => {
   })
 
   it('answers the sub-path inside a project, and nothing at all at its root', () => {
-    // What a row shows *instead of* the name when the list is already grouped by
-    // project: the header has said "WorkerDeck", so the useful fact left is
-    // which part of it.
     expect(projectSubpath(declaredUi)).toBe('packages/ui')
     expect(projectSubpath(declaredWeb)).toBe('packages/web')
-    // At the root there is nothing the header has not said — the slot goes away
-    // rather than repeating a name or drawing a '.'.
     expect(projectSubpath(row({ info: info({ id: 'p3', cwd: '/work/deck', project }) }))).toBeUndefined()
-    // No declared project, no root to subtract.
     expect(projectSubpath(undeclared)).toBeUndefined()
     expect(projectSubpath(nowhere)).toBeUndefined()
   })
 
   it('does not mistake a sibling directory for a child of the project', () => {
-    // The prefix trap: '/work/deck-two' starts with '/work/deck'. A session
-    // there is not inside this project, and claiming 'two' as its sub-path
-    // would be a path that does not exist.
     expect(projectSubpath(row({ info: info({ id: 's1', cwd: '/work/deck-two/pkg', project }) }))).toBeUndefined()
   })
 
   it('offers one filter entry per project, keyed by root and labelled by name', () => {
     const options = projectsOf([declaredUi, declaredWeb, undeclared, remoteTwin, nowhere])
-    // Two cwds of one project collapse to one entry; the remote twin does not,
-    // because it is another machine's directory wearing the same word.
-    // Alphabetical by label, case-insensitively, so the picker reads as a list
-    // of words rather than of roots.
     expect(options).toEqual([
       { key: projectKey(undeclared), label: 'alpha' },
       { key: projectKey(nowhere), label: 'No project' },
@@ -320,8 +280,6 @@ describe('project facet', () => {
     const rows = [declaredUi, undeclared]
     const filtered = filterRows(rows, config({ scoped: false, projects: [projectKey(declaredUi)] }))
     expect(filtered.map((r) => r.info.id)).toEqual(['p1'])
-    // A stored ViewConfig restored from before the field existed: absent and
-    // empty must mean the same thing.
     const legacy = config({ scoped: false })
     delete (legacy as { projects?: string[] }).projects
     expect(filterRows(rows, legacy).length).toBe(2)
@@ -329,7 +287,6 @@ describe('project facet', () => {
   })
 
   it('matches search against the declared project name', () => {
-    // The person knows the repo as "WorkerDeck", not by the folder's basename.
     const found = filterRows([declaredUi, undeclared], config({ scoped: false, search: 'workerdeck' }))
     expect(found.map((r) => r.info.id)).toEqual(['p1'])
   })

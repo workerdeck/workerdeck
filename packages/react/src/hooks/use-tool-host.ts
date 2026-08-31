@@ -3,23 +3,15 @@ import type { SessionHandle } from '@workerdeck/client'
 import { createToolCallHost, type ToolCallHostOptions, type ToolHostExecution } from '../lib/tool-host.ts'
 
 export type UseToolCallHostOptions = ToolCallHostOptions & {
-  /** Turn the host off without unmounting. Default true. */
   enabled?: boolean
-  /** How many recent executions to keep for rendering. Default 50. */
   historyLimit?: number
 }
 
-/**
- * React wrapper around {@link createToolCallHost}: subscribes while mounted and
- * exposes recent executions for rendering. All the logic lives in the
- * framework-free host — this only manages the subscription's lifetime.
- */
 export const useToolCallHost = (
   handle: SessionHandle | undefined,
   options: UseToolCallHostOptions = {},
 ): { executions: ToolHostExecution[] } => {
   const [executions, setExecutions] = useState<ToolHostExecution[]>([])
-  // Read options at call time so re-renders never tear down the subscription.
   const optionsRef = useRef(options)
   optionsRef.current = options
 
@@ -28,11 +20,8 @@ export const useToolCallHost = (
       return
     }
     const host = createToolCallHost(handle, {
-      // Delegate every option through the ref, so a caller passing inline
-      // objects/closures (the common case) doesn't resubscribe each render.
+      // Getters read the ref at call time, so inline objects and closures never resubscribe.
       get tools() {
-        // Merge explicit `tools` with the names from `clientTools` so the host
-        // accepts calls for both sandbox-executed and client-handled tools.
         const base = optionsRef.current.tools
         const client = optionsRef.current.clientTools
         if (!client) {

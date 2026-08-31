@@ -1,17 +1,3 @@
-/**
- * The reducer's half of the image-ref rule, and the second property in this
- * family stated as an **inequality**.
- *
- * The claim: folding a ref'd log differs from folding the full log in
- * `result.images` and **nowhere else**. Not the text (base64 parts never
- * contributed any), not the statuses, not one field of any other item. A log
- * with no pictures in it must fold *exactly* equal — that is what makes this
- * additive at protocol 7 rather than a wire change every client must learn.
- *
- * The reason the text half is worth asserting rather than assuming: the whole
- * measured justification is that these bytes were already being discarded. If
- * the fold moves at all, they were not.
- */
 import { describe, expect, it } from 'vitest'
 import { TOOL_RESULT_HEAD_CHARS, type SessionEvent } from '@workerdeck/protocol'
 import { replaySlice } from '@workerdeck/core'
@@ -70,7 +56,6 @@ describe('image refs — the fold moves in exactly one field', () => {
     const call = refd.items.find((item) => item.kind === 'tool_call')!
     expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/png', bytes: 340_000, sourceSeq: 2 }])
 
-    // Strip the one field that is allowed to move; everything else must match.
     const strip = (state: typeof refd) => ({
       ...state,
       items: state.items.map((item) =>
@@ -105,7 +90,6 @@ describe('image refs composed with truncation', () => {
     const call = foldOf(events, { imageRefs: true, truncateResults: true }).items.find((i) => i.kind === 'tool_call')!
     expect(call.result?.truncated).toBe(true)
     expect(call.result?.text.length).toBe(TOOL_RESULT_HEAD_CHARS)
-    // The picture is still addressable even though the text was cut past it.
     expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/jpeg', bytes: 500_000, sourceSeq: 2 }])
   })
 
@@ -113,9 +97,6 @@ describe('image refs composed with truncation', () => {
     const state = foldOf(events, { imageRefs: true, truncateResults: true })
     const hydrated = hydrateToolResult(state, 'call-1', big)
     const call = hydrated.items.find((i) => i.kind === 'tool_call')!
-    // Truncation markers are gone (a hydrated result is indistinguishable from
-    // one never cut) but the addresses survive, because they answer a different
-    // press and nothing else will re-deliver them.
     expect(call.result?.truncated).toBeUndefined()
     expect(call.result?.text).toBe(big)
     expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/jpeg', bytes: 500_000, sourceSeq: 2 }])

@@ -73,7 +73,6 @@ describe('flattenHostTree', () => {
   })
 
   it('ignores expansion state for directories that are not visible', () => {
-    // /p/src/lib is expanded but its parent is not — it must not leak in.
     expect(shape(flattenHostTree('/p', dirs, new Set(['/p/src/lib'])))).toEqual(['src/', 'docs/', 'README.md'])
   })
 })

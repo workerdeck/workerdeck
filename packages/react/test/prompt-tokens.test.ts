@@ -23,8 +23,6 @@ describe('scanPromptTokens', () => {
   })
 
   it('does not mistake an absolute path for a command', () => {
-    // A command name may not contain a slash, which is what keeps
-    // "/Users/me/notes" out — not where in the message it appears.
     expect(texts('/Users/me/notes is where it lives')).toEqual([])
     expect(texts('/dev:wrapup')).toEqual(['/dev:wrapup'])
   })
@@ -34,8 +32,6 @@ describe('scanPromptTokens', () => {
   })
 
   it('finds a command anywhere, not only at the front', () => {
-    // The CLI runs one only from the front, but styling it mid-message is what
-    // makes a message read the same as it did in the composer.
     expect(texts('then /verify-content 42')).toEqual(['/verify-content'])
   })
 })

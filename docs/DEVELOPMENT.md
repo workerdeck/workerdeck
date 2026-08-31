@@ -11,7 +11,13 @@ count.
 
 pnpm workspace + turbo (`pnpm typecheck|test|build|lint`); typecheck is `tsgo` (TS 7 preview) and
 covers `smoke/` + `examples/` too via `typecheck:extras` (they have tsconfigs but aren't packages,
-so turbo never ran them); lint oxlint (`.oxlintrc.json` — it must keep that exact name or oxlint
+so turbo never ran them — one consequence bites the browser packages: `smoke/tsconfig.json` is
+`lib: ["ES2022"]` with no DOM and `smoke/sdk-client.ts` imports `@workerdeck/react`, which the
+`@workerdeck/source` condition resolves to **source**, so a browser package's `src/` may not name
+`document`, `createImageBitmap` or any other DOM global directly — even though its own tsconfig
+has the DOM lib — and reaches them through `globalThis` with a structural type instead
+(`use-attachments.ts`, `use-profile-usage.ts`). Feature-detection is what the runtime needs
+anyway; the type error is what makes it non-optional); lint oxlint (`.oxlintrc.json` — it must keep that exact name or oxlint
 silently runs on defaults); format oxfmt (`.oxfmtrc.json`, `pnpm format`, format-on-save via the
 `oxc.oxc-vscode` extension — rules and rationale in `docs/CODE-STYLE.md`); `build/` via tsdown
 only on `prepack`/CI. Dev never builds
@@ -67,7 +73,12 @@ before touching versioning or the publish workflow.
 `pnpm test` — core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer
 (`connectFn`) for `CodexRunner`; server: real HTTP+WS integration incl. job routes + webhook
 receiver (codex via the test-only `engines` adapter override); queue: fake runner; react:
-reducer + bridge e2e; **ui: the pure modules only, and deliberately so** — the terminal theme's
+reducer + bridge e2e — it carries **no jsdom and renders nothing**, the same split `ui` makes
+below and for the same reason, so a hook's decisions are extracted into pure modules and pinned
+there instead (`lib/attach-plan.ts`'s `planAttach`/`shouldWriteParting` are the whole of
+`useClaudeSession`'s attach effect as values: seed-or-hold, warm-read gating, `afterSeq`, the
+parting write-back). A test here that wants to render is a decision that has not been extracted
+yet; **ui: the pure modules only, and deliberately so** — the terminal theme's
 *geometry* needs real text layout, which jsdom does not have, so it is gated by
 `dev/height-audit.ts` in a browser instead, while everything that is a string-or-array contract
 (`terminalBlocks`, `runSummary`/`toolFamily`/`foldsTogether`, `collapsedResult`, `buildClusters`,

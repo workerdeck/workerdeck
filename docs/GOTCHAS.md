@@ -1181,7 +1181,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **`image/heic` is not on that list, and it is what an iPhone shoots.** The transcoding is the
   client's job (`AttachmentNormalizer` in the iOS app), not the gateway's — the gateway would have
   to grow an image pipeline to do it, and the client already has the pixels decoded. It also
-  downscales to 1568px, which is roughly what a vision model resizes to anyway.
+  downscales to 1568px, which is roughly what a vision model resizes to anyway. The **browser**
+  composer downscales too, to the same longest edge (`useAttachments`' `prepare`), re-encoding as
+  JPEG at 0.85 — a phone photo is several times that in each direction and costs tokens for detail
+  no model reads. The constant is spelled once per client with nothing shared between them
+  (`MAX_IMAGE_EDGE`, `ComposerAttachments.maxImageEdge`), so tune one and you have broken a pair.
+  GIFs are exempt, because a redraw keeps one frame of an animation, and anything the browser
+  cannot decode (HEIC on most desktops) is uploaded as-is so the gateway answers with its own 415
+  rather than the client inventing one.
 - **The store is memory, for the session's lifetime, exactly like `/files`.** An attachment 404s
   after a restart and a client then renders a placeholder; the *message* is unaffected, because
   the model saw the bytes at send time. Durability here would mean the gateway looking after a

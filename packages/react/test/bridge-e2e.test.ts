@@ -7,12 +7,6 @@ import type { ToolExecutionResult } from '@workerdeck/core'
 import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import { createToolCallHost } from '../src/lib/tool-host.ts'
 
-/**
- * The whole M3 path with nothing faked but the model: a server dispatches a
- * tool call over the wire, the client host executes it in a real QuickJS guest
- * against a VFS seeded from the request, and the result travels back to the
- * server's executor.
- */
 const idleQueryFn = () => {
   const query = {
     [Symbol.asyncIterator]() {
@@ -62,8 +56,6 @@ const start = async (bridgeTimeoutMs?: number) => {
   const session = await client.createSession({ cwd: '/tmp/project' })
   handle = client.attach(session.id)
   await new Promise<void>((resolve) => handle!.on('attached', () => resolve()))
-  // The real browser host, with the engine preloaded (lazy loading is covered
-  // by the unit tests; here we want the guest itself in the path).
   host = createToolCallHost(handle, { loadEngine: getEngine })
   return { sessionId: session.id }
 }
@@ -105,8 +97,6 @@ describe('bridged execution, end to end', () => {
     await vi.waitFor(() => expect(results).toHaveLength(1), { timeout: 15_000 })
     const result = results[0]!.result as { status: string; output: string }
     expect(result.status).toBe('ok')
-    // The tab's own globals (fetch, WebSocket) are NOT reachable from the guest,
-    // even though the host executing it has them.
     expect(JSON.parse(result.output)).toEqual({
       process: 'undefined',
       fetch: 'undefined',

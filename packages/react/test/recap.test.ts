@@ -45,8 +45,6 @@ describe('summarizeSince', () => {
     expect(recapLine(summary)).toBeUndefined()
   })
 
-  // A transcript can shrink — a /clear, or a re-attach after compaction. "You
-  // saw 40, there are 12" means everything is new, not minus-28 of anything.
   it('clamps a boundary past the end to the whole transcript', () => {
     const items = [user('u1'), reply('a1')]
     const summary = summarizeSince({ items }, 40)

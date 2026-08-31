@@ -1,49 +1,22 @@
 import type { TranscriptItem } from './transcript.ts'
 
-/**
- * "What happened while you were away", counted rather than written: a prose
- * recap would spend a turn on a summary nobody asked for, and would be wrong in
- * the case that matters most — a session that failed unattended, where the
- * model is exactly who you shouldn't ask. Framework-free and pure, like the
- * reducer it reads from: both clients render the same recap from the same
- * numbers.
- */
 export type RecapSummary = {
-  /** Completed turns — `turn_result` rows, the engine's own unit of work. */
   turns: number
-  /** Messages the model wrote. Streaming ones count: they are on screen. */
   replies: number
-  /** Tool calls started, and the distinct names, most-used first. */
   tools: number
   toolNames: string[]
-  /** Files the agent handed over (`file_delivered`). */
   files: number
-  /** Failed turns and failed tool calls, together — what you'd want to know
-   * first on coming back. */
   errors: number
-  /** Approvals still waiting. Not a count of what happened, but the reason to
-   * look now rather than later. */
   pending: number
-  /** Any of the above non-zero. A recap of nothing is noise. */
   any: boolean
 }
 
-/** The `TranscriptState` fields a recap reads — structural, so a caller can
- * pass the whole state or just these. */
 export type RecapInput = {
   items: readonly TranscriptItem[]
   pendingApprovals?: readonly unknown[]
 }
 
-/**
- * Summarize the items from `fromIndex` onward — the boundary being the number
- * of items that existed when the session was last looked at.
- *
- * An out-of-range boundary is clamped rather than rejected: a transcript can
- * *shrink* (a `/clear`, a fresh attach after a compaction), and the honest
- * reading of "you last saw 40 items, there are now 12" is "everything here is
- * new", not a negative count.
- */
+// The boundary is clamped, never rejected: a transcript can shrink (a `/clear`, a compaction).
 export const summarizeSince = (state: RecapInput, fromIndex: number): RecapSummary => {
   const start = Math.max(0, Math.min(fromIndex, state.items.length))
   const fresh = state.items.slice(start)
@@ -105,13 +78,6 @@ export const summarizeSince = (state: RecapInput, fromIndex: number): RecapSumma
   }
 }
 
-/**
- * The recap as one line of text, in the order a person reads it: what got done,
- * what it used, what went wrong, what is waiting.
- *
- * Returns `undefined` when there is nothing to say, so a caller can render the
- * row or not on the value alone.
- */
 export const recapLine = (summary: RecapSummary): string | undefined => {
   if (!summary.any) {
     return undefined
@@ -123,8 +89,6 @@ export const recapLine = (summary: RecapSummary): string | undefined => {
     parts.push(plural(summary.replies, 'reply', 'replies'))
   }
   if (summary.tools > 0) {
-    // Three names is enough to recognise what it was doing; beyond that the
-    // count carries more than the list.
     const named = summary.toolNames.slice(0, 3).join(', ')
     const rest = summary.toolNames.length - 3
     parts.push(`${plural(summary.tools, 'tool call')}${named ? ` (${named}${rest > 0 ? `, +${rest}` : ''})` : ''}`)

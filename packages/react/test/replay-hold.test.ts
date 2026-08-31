@@ -5,16 +5,6 @@ import { WorkerDeckClient, type SessionHandle } from '@workerdeck/client'
 import type { AttachedFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { initialReplayTarget } from '../src/hooks/use-session.ts'
 
-/**
- * The replay hold: `useClaudeSession` holds the transcript's paint until the
- * attach replay has landed, using the exact signal the `attached` frame
- * carries — `session.lastSeq` is the seq the replay ends on. The unit tests
- * pin the gate's three rules; the wire test pins the contract those rules rest
- * on (attached precedes every replayed event, and an event with seq ≥ the
- * frame's `lastSeq` always arrives), which is what makes the hold a signal
- * rather than a heuristic.
- */
-
 const frame = (replayingFrom: number, lastSeq: number): AttachedFrame => {
   const session: SessionInfo = {
     id: 's1',
@@ -38,13 +28,9 @@ describe('initialReplayTarget', () => {
 
   it('never holds a reconnect — the reader is already looking at the transcript', () => {
     expect(initialReplayTarget(frame(17, 42))).toBeUndefined()
-    // Even a reconnect with a large backlog: rows append under the pin rather
-    // than blanking a transcript mid-read.
     expect(initialReplayTarget(frame(1, 900))).toBeUndefined()
   })
 })
-
-// -- The wire contract the hold rests on -------------------------------------
 
 const idleQueryFn = () => {
   const query = {
@@ -89,7 +75,6 @@ describe('the attach replay signal, over the wire', () => {
     const client = await start()
     const session = await client.createSession({ cwd: '/tmp/project' })
 
-    // Put content in the log through a first attach.
     const writer = client.attach(session.id)
     handles.push(writer)
     await new Promise<void>((resolve) => writer.on('attached', () => resolve()))
@@ -102,8 +87,6 @@ describe('the attach replay signal, over the wire', () => {
     })
     const settled = await client.getSession(session.id)
 
-    // A fresh attach: the frame order and the target's reachability are the
-    // whole hold. `kinds` records arrival order across both frame types.
     const kinds: Array<'attached' | 'event'> = []
     const events: SessionEvent[] = []
     let attached: AttachedFrame | undefined
@@ -124,16 +107,11 @@ describe('the attach replay signal, over the wire', () => {
 
     expect(kinds[0]).toBe('attached')
     expect(attached!.replayingFrom).toBe(0)
-    // The frame's lastSeq is at least what REST reported before the attach, and
-    // the gate holds for it...
     expect(attached!.session.lastSeq).toBeGreaterThanOrEqual(settled.lastSeq)
     expect(initialReplayTarget(attached!)).toBe(attached!.session.lastSeq)
-    // ...and the replay delivers it: seqs ascend and cross the target, so a
-    // client holding for `state.lastSeq >= target` always reveals.
     const seqs = events.map((e) => e.seq)
     expect([...seqs].sort((a, b) => a - b)).toEqual(seqs)
 
-    // A re-attach from the tail (the reconnect shape): no target, no hold.
     const reattach = client.attach(session.id, { afterSeq: attached!.session.lastSeq })
     handles.push(reattach)
     const refreshed = await new Promise<AttachedFrame>((resolve) => reattach.on('attached', (f: AttachedFrame) => resolve(f)))

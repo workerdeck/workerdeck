@@ -1,15 +1,3 @@
-/**
- * The reducer's half of on-demand tool results, and the one property in this
- * family stated as an **inequality**.
- *
- * `replayRetains`, `replayCoalesceKey` and `snapshotRetains` all claim "no
- * client can tell". Truncation claims the opposite on purpose: the fold differs,
- * and it differs in exactly one place — `result.text` is a prefix, and the three
- * markers that say so are set. Everything else, including every other item and
- * every other field of this one, must be untouched, and hydration must restore
- * exact equality. Anything weaker and a truncated transcript is a different
- * transcript.
- */
 import { describe, expect, it } from 'vitest'
 import { TOOL_RESULT_HEAD_CHARS, type SessionEvent } from '@workerdeck/protocol'
 import { replaySlice } from '@workerdeck/core'
@@ -54,7 +42,6 @@ describe('a truncated replay', () => {
   it('differs from the full fold ONLY in the truncated result', () => {
     expect({ ...cut, items: undefined }).toEqual({ ...whole, items: undefined })
     expect(cut.items.length).toBe(whole.items.length)
-    // The small result in the same message is byte-identical.
     expect(cut.items[1]).toEqual(whole.items[1])
   })
 
@@ -66,14 +53,12 @@ describe('a truncated replay', () => {
     expect(item.result?.text).toBe(big.slice(0, TOOL_RESULT_HEAD_CHARS))
     expect(item.result?.truncated).toBe(true)
     expect(item.result?.totalChars).toBe(big.length)
-    // The seq of the event that carried it — what the press fetches by.
     expect(item.result?.sourceSeq).toBe(2)
     expect(item.status).toBe('settled')
     expect({ ...item, result: undefined }).toEqual({ ...whole.items[0], result: undefined })
   })
 
   it('sets no marker on a result that was never cut', () => {
-    // Byte-identical, which is what keeps iOS's Equatable plan cache honest.
     const item = cut.items[1]
     if (item?.kind !== 'tool_call') {
       throw new Error('expected a tool call')

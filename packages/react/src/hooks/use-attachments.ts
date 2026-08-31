@@ -2,34 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import type { EngineCapabilities, ProfileEngine } from '@workerdeck/protocol'
 
-/**
- * Files staged for the next message.
- *
- * The upload happens as soon as something is picked, not at send time — the
- * message names attachment *ids*, so the bytes must already be the server's
- * before a turn can reference them, and the wait is spent while the user is
- * still typing rather than after they hit send. It also keeps base64 out of the
- * event log entirely, which is the protocol's rule.
- */
 export type StagedAttachment = {
-  /** Local identity, stable across a retry — the React key while uploading. */
   key: string
   name: string
   mediaType: string
   bytes: number
-  /** Object URL for an image thumbnail, revoked when the item goes away. */
   previewUrl?: string
   status: 'uploading' | 'ready' | 'failed'
-  /** The server's id once uploaded — what `send` names. */
   id?: string
-  /** Why the upload failed, verbatim from the gateway (413, 415, …). */
   error?: string
 }
 
-/** The kind vocabulary of {@link EngineCapabilities.attachments}. */
 export type AttachmentKind = 'image' | 'pdf' | 'text'
 
-/** Textual types whose media type doesn't start with `text/` — mirrors core. */
 const TEXTUAL_TYPES = new Set([
   'application/json',
   'application/xml',
@@ -42,16 +27,8 @@ const TEXTUAL_TYPES = new Set([
   'application/sql',
 ])
 
-/** Longest edge an image is downscaled to before upload. Anthropic's own
- * recommendation, and the same number the iOS client uses — a phone photo is
- * several times this in each direction and costs tokens for nothing. */
 const MAX_IMAGE_EDGE = 1568
 
-/**
- * How a media type reaches a model, in the capability record's vocabulary.
- * `undefined` means this build can't classify it — the upload still goes,
- * because the gateway's vocabulary is the authoritative one.
- */
 export const attachmentKind = (mediaType: string): AttachmentKind | undefined => {
   const type = mediaType.split(';')[0]!.trim().toLowerCase()
   if (type.startsWith('image/')) {
@@ -70,44 +47,25 @@ export const attachmentKind = (mediaType: string): AttachmentKind | undefined =>
 }
 
 export type UseAttachmentsOptions = {
-  /** The session's capability record — its `attachments` list decides which
-   * kinds are offered and which are refused locally. */
   capabilities: EngineCapabilities
-  /** Named in a local refusal, so "the codex engine does not take pdf
-   * attachments" says which engine meant it. */
   engine?: ProfileEngine
 }
 
 export type UseAttachmentsResult = {
   items: StagedAttachment[]
-  /** Uploaded ids in staging order — what {@link UseClaudeSessionResult.send} names. */
   readyIds: string[]
-  /** An id that hasn't landed can't be named, so send waits. */
   uploading: boolean
-  /** A refused file must be dealt with before the message goes. */
   hasFailure: boolean
-  /** Accept attribute for a file input, narrowed to what the engine takes. */
   accept: string
-  /** True when the engine takes no attachments at all — hide the affordance
-   * entirely rather than offer one with no meaning. */
   disabled: boolean
   add: (files: Iterable<File>) => void
   retry: (key: string) => void
   remove: (key: string) => void
   clear: () => void
-  /** A local refusal (wrong kind), surfaced once rather than silently dropped. */
   error?: string
   dismissError: () => void
 }
 
-/**
- * Stage, upload and track files for the next message of a session.
- *
- * Refusals happen as early as they can be known: a kind the capability record
- * forswears never reaches the network (the gateway would 415 it), and everything
- * else is the gateway's call — its vocabulary is authoritative, so an unknown
- * media type is uploaded rather than guessed at.
- */
 export const useAttachments = (
   client: WorkerDeckClient,
   sessionId: string | undefined,
@@ -116,10 +74,7 @@ export const useAttachments = (
   const [items, setItems] = useState<StagedAttachment[]>([])
   const [error, setError] = useState<string | undefined>()
   const counter = useRef(0)
-  /** The originals, kept so a failed upload can be retried without re-picking. */
   const fileByKey = useRef(new Map<string, File>())
-  /** Mirrors the live preview URLs so unmount can revoke them all — an unmount
-   * with blobs outstanding is a leak the GC does not clean up. */
   const previewUrls = useRef<string[]>([])
   previewUrls.current = items.flatMap((item) => (item.previewUrl ? [item.previewUrl] : []))
   const accepts = capabilities.attachments
@@ -167,8 +122,7 @@ export const useAttachments = (
       for (const file of files) {
         const mediaType = file.type || 'application/octet-stream'
         const kind = attachmentKind(mediaType)
-        // A kind this build can't classify still goes through: the gateway's
-        // vocabulary is the authoritative one, and it answers with a real reason.
+        // An unclassifiable type still goes: the gateway's vocabulary is the authoritative one.
         if (kind && !accepts.includes(kind)) {
           setError(`The ${engine ?? 'claude'} engine does not take ${kind} attachments.`)
           continue
@@ -253,9 +207,6 @@ export const useAttachments = (
   )
 }
 
-/** What a file input should offer. The full set keeps the open door (anything —
- * the gateway refuses the rest with a clear message); a narrower record narrows
- * the browsing too, so most refusals never happen. */
 const acceptAttribute = (kinds: readonly AttachmentKind[]): string => {
   if (kinds.length === 0) {
     return ''
@@ -270,19 +221,11 @@ const acceptAttribute = (kinds: readonly AttachmentKind[]): string => {
   if (kinds.includes('text')) {
     parts.push('text/*', '.md', '.json', '.yaml', '.yml', '.toml')
   }
+  // All three kinds is no narrowing at all, and an empty accept leaves the picker open.
   return kinds.length === 3 ? '' : parts.join(',')
 }
 
-/**
- * The two browser APIs the downscale needs, reached through `globalThis` and
- * typed structurally.
- *
- * This package compiles without the DOM lib — Node-only consumers (the smoke
- * tsconfig) pull its source in — so naming `document` or `createImageBitmap`
- * directly is a type error there. Feature-detecting them is what the code has to
- * do at runtime anyway: the downscale is an optimisation, and a host that can't
- * do it uploads the original.
- */
+// Reached through globalThis, not named directly: smoke/ typechecks this source with no DOM lib.
 type ImageBitmapLike = { width: number; height: number; close(): void }
 type CanvasLike = {
   width: number
@@ -297,22 +240,13 @@ const imaging = globalThis as unknown as {
   document?: { createElement(tagName: 'canvas'): CanvasLike }
 }
 
-/**
- * The bytes to upload, and the type they are.
- *
- * Oversized images are redrawn to {@link MAX_IMAGE_EDGE} first: a modern phone
- * photo is 4000px on its long edge, which costs tokens for detail no model
- * reads, and often exceeds the gateway's per-file cap outright. Everything else
- * — and anything the browser can't decode — is uploaded as-is, so a failure here
- * is never worse than not trying.
- */
 const prepare = async (file: File): Promise<{ body: Blob; mediaType: string }> => {
   const mediaType = file.type || 'application/octet-stream'
   const { createImageBitmap, document } = imaging
-  // GIFs are excluded because a redraw would keep one frame of an animation.
   if (!createImageBitmap || !document || !mediaType.startsWith('image/')) {
     return { body: file, mediaType }
   }
+  // A redraw of an animation would keep one frame of it.
   if (mediaType === 'image/gif') {
     return { body: file, mediaType }
   }
@@ -337,8 +271,6 @@ const prepare = async (file: File): Promise<{ body: Blob; mediaType: string }> =
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))
     return blob ? { body: blob, mediaType: 'image/jpeg' } : { body: file, mediaType }
   } catch {
-    // A format the browser can't decode (HEIC on most desktops) — let the
-    // gateway answer with its own 415 rather than inventing one here.
     return { body: file, mediaType }
   }
 }

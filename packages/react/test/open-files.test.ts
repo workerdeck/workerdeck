@@ -45,7 +45,6 @@ describe('openFilesReducer', () => {
     const reopened = openFilesReducer(opened, { type: 'open', path: '/p/a.ts' })
     expect(paths(reopened)).toEqual(['/p/a.ts', '/p/b.ts'])
     expect(reopened.activePath).toBe('/p/a.ts')
-    // The crucial part: the tab kept its content rather than going back to 'loading'.
     expect(reopened.files[0]).toMatchObject({ status: 'ready', content: 'contents' })
   })
 
@@ -124,7 +123,6 @@ describe('openFilesReducer', () => {
   })
 })
 
-/** A tab open, read, and edited — the starting point for every save test. */
 const edited = (draft = 'changed') =>
   run([{ type: 'open', path: '/p/a.ts' }, loaded('/p/a.ts', 'original'), { type: 'edit', path: '/p/a.ts', content: draft }])
 
@@ -188,8 +186,6 @@ describe('openFilesReducer — editing', () => {
   })
 
   it('keeps keystrokes that landed while the save was in flight', () => {
-    // Typed 'changed', hit save, kept typing to 'changed more', then the write
-    // of 'changed' came back.
     const state = run(
       [
         { type: 'saveStart', path: '/p/a.ts' },
@@ -220,7 +216,6 @@ describe('openFilesReducer — editing', () => {
       edited(),
     )
     expect(only(state)).toMatchObject({ conflict: true, saving: false })
-    // The edits are still there — a conflict must never eat them.
     expect(only(state).draft).toBe('changed')
   })
 
