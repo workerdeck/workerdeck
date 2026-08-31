@@ -15,31 +15,40 @@ export type HostTreeRow = {
 
 export const flattenHostTree = (root: string, dirs: ReadonlyMap<string, HostDirState>, expanded: ReadonlySet<string>): HostTreeRow[] => {
   const rows: HostTreeRow[] = []
-  const walk = (dir: string, depth: number) => {
-    const state = dirs.get(dir)
-    if (!state) {
-      return
+  const rootState = dirs.get(root)
+  if (!rootState) {
+    return rows
+  }
+  // An explicit stack rather than recursion. Depth is bounded by how many directories the user has
+  // expanded, not by tree size, so this is a small risk — but it is the user's clicks that set the
+  // bound, and an expanded chain deep enough to exhaust the call stack should still just render.
+  const stack: { entries: readonly HostDirEntry[]; index: number; depth: number }[] = [{ entries: rootState.entries, index: 0, depth: 0 }]
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1]
+    const entry = frame.entries[frame.index]
+    if (entry === undefined) {
+      stack.pop()
+      continue
     }
-    for (const entry of state.entries) {
-      if (entry.type !== 'dir') {
-        rows.push({ entry, depth })
-        continue
-      }
-      const isExpanded = expanded.has(entry.path)
-      const childState = dirs.get(entry.path)
-      rows.push({
-        entry,
-        depth,
-        expanded: isExpanded,
-        loading: isExpanded && !childState,
-        truncated: isExpanded ? childState?.truncated : undefined,
-      })
-      if (isExpanded && childState) {
-        walk(entry.path, depth + 1)
-      }
+    frame.index += 1
+    const depth = frame.depth
+    if (entry.type !== 'dir') {
+      rows.push({ entry, depth })
+      continue
+    }
+    const isExpanded = expanded.has(entry.path)
+    const childState = dirs.get(entry.path)
+    rows.push({
+      entry,
+      depth,
+      expanded: isExpanded,
+      loading: isExpanded && !childState,
+      truncated: isExpanded ? childState?.truncated : undefined,
+    })
+    if (isExpanded && childState) {
+      stack.push({ entries: childState.entries, index: 0, depth: depth + 1 })
     }
   }
-  walk(root, 0)
   return rows
 }
 
