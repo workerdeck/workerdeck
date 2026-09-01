@@ -154,31 +154,15 @@ export type HostToSidebar =
 
 export type GatewaysToHost =
   | { kind: 'wd-ready' }
-  | {
-      kind: 'wd-submit-gateway'
-      id?: string
-      name: string
-      baseUrl: string
-      authKey: string
-    }
   | { kind: 'wd-remove-gateway'; hostId: string }
   | {
       kind: 'wd-edit-gateway'
       hostId: string
     }
-  | {
-      kind: 'wd-gateway-form-state'
-      open: boolean
-    }
 
-export type HostToGateways =
-  | { kind: 'wd-gateways'; hosts: WireHost[]; sessionCounts: Record<string, number> }
-  | {
-      kind: 'wd-gateway-form'
-      open: boolean
-      gateway?: { id: string; name: string; baseUrl: string; authKey: string }
-    }
-  | { kind: 'wd-form-result'; ok: boolean; error?: string }
+// Adding and editing a gateway is a native multi-step input on the host side (`new-gateway.ts`),
+// so nothing about a form crosses this bridge.
+export type HostToGateways = { kind: 'wd-gateways'; hosts: WireHost[]; sessionCounts: Record<string, number> }
 
 export type SectionToHost = TransportToHost | { kind: 'wd-ready' }
 

@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
+import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore, isLoopbackHost } from './hosts.ts'
 import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 import { SessionPanelProvider } from './panel.ts'
@@ -66,10 +67,12 @@ export function activate(context: vscode.ExtensionContext): void {
       provider.push()
     }
   }
+  const gatewayFlow: GatewayFlowDeps = { store, refresh: () => model.refresh() }
   const gateways = new GatewaysViewProvider(context.extensionUri, store, {
     state: () => model.sidebarState(),
     refresh: () => model.refresh(),
     setWatching: (watching) => model.setWatching(GatewaysViewProvider.viewId, watching),
+    edit: (hostId) => editGateway(gatewayFlow, hostId),
   })
   model.onDidChange(() => gateways.push())
 
@@ -170,7 +173,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     },
     activeSessionId: () => panel.active?.sessionId,
-    revealGateways: (options) => gateways.reveal(options),
+    revealGateways: (options) => (options.add ? addGateway(gatewayFlow) : gateways.reveal()),
     unread: (rows, waiting) => unread.update(rows, waiting),
     subagents: (running, sessions) => subagents.update(running, sessions),
   })
@@ -239,10 +242,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewId, sidebar, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
-    // Retained: a torn-down add/edit form loses typing, and its auth key can only be re-fetched by asking to edit the gateway again.
-    vscode.window.registerWebviewViewProvider(GatewaysViewProvider.viewId, gateways, {
-      webviewOptions: { retainContextWhenHidden: true },
-    }),
+    vscode.window.registerWebviewViewProvider(GatewaysViewProvider.viewId, gateways),
     ...Object.entries(sections).map(([kind, provider]) =>
       vscode.window.registerWebviewViewProvider(SECTION_VIEWS[kind as SectionKind], provider),
     ),
@@ -254,9 +254,8 @@ export function activate(context: vscode.ExtensionContext): void {
       isCaseSensitive: true,
     }),
 
-    vscode.commands.registerCommand('workerdeck.addGateway', () => gateways.reveal({ add: true })),
+    vscode.commands.registerCommand('workerdeck.addGateway', () => addGateway(gatewayFlow)),
     vscode.commands.registerCommand('workerdeck.showGateways', () => gateways.reveal()),
-    vscode.commands.registerCommand('workerdeck.gatewaysBack', () => gateways.back()),
     vscode.commands.registerCommand('workerdeck.newSession', () => createSession(sessionFlow)),
     vscode.commands.registerCommand('workerdeck.resumeSession', () => resumeSession(sessionFlow)),
     vscode.commands.registerCommand('workerdeck.refreshSessions', () => model.refresh()),

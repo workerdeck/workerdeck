@@ -176,12 +176,6 @@
         "command": "workerdeck.openProjectFolder",
         "title": "Open Session Project Folder",
         "category": "WorkerDeck"
-      },
-      {
-        "command": "workerdeck.gatewaysBack",
-        "title": "Back to Gateways",
-        "category": "WorkerDeck",
-        "icon": "$(arrow-left)"
       }
     ],
     "menus": {
@@ -212,13 +206,8 @@
           "group": "1_workerdeck@1"
         },
         {
-          "command": "workerdeck.gatewaysBack",
-          "when": "view == workerdeck.gateways && workerdeck.gatewayFormOpen",
-          "group": "navigation@0"
-        },
-        {
           "command": "workerdeck.addGateway",
-          "when": "view == workerdeck.gateways && !workerdeck.gatewayFormOpen",
+          "when": "view == workerdeck.gateways",
           "group": "navigation@1"
         }
       ],
@@ -229,10 +218,6 @@
         },
         {
           "command": "workerdeck.hideFilter",
-          "when": "false"
-        },
-        {
-          "command": "workerdeck.gatewaysBack",
           "when": "false"
         }
       ]

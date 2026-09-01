@@ -85,6 +85,19 @@ gateway is a mode every session belongs to, so managing them sits beside the lis
 permanently, with the connected count in the view header's description. There is **no
 implicit localhost gateway**.
 
+Adding and editing one is a **native multi-step input** (`src/new-gateway.ts`: URL → name →
+auth key, prefilled and backed out of with `QuickInputButtons.Back`), not a form the view
+draws over its own list. That is the navigation rule applied to the last place that broke it:
+the form was a screen, so the view needed a `+`/back pair of commands gated on a
+`gatewayFormOpen` context key, a retained webview so typing survived being hidden, and a
+round trip per keystroke's worth of state across the bridge — and the auth key had to be
+*sent to the webview* to prefill an edit, because `SecretStorage` is host-side only. The
+native flow deletes all four: the key never leaves the host, the bridge carries a list and
+two verbs (`wd-edit-gateway`, `wd-remove-gateway`), and the URL is validated by `apiUrl` at
+the step that asks for it. The first gateway's URL arrives prefilled with
+`http://127.0.0.1:8787` and the name is derived from the URL's hostname, so adding this
+machine's gateway is three `enter`s — the same promise session creation makes.
+
 ### Creating a session, the poll & the `+` rule
 
 Creating a session is a native multi-step QuickPick
