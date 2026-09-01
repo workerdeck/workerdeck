@@ -1854,6 +1854,22 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   under the fold, with the content unchanged and no scroll event to notice it by. That class of
   size change the guard structurally cannot cover, hence a `ResizeObserver` of our own on the
   scroller's box, re-pinning **only when already pinned**.
+- **The send re-pin is a held pin, not one `scrollToBottom('instant')` — a trackpad's momentum
+  tail kills the one-shot.** On macOS a scroll-up keeps emitting wheel ticks for over a second
+  after the fingers leave, and `handleWheel` reads any `deltaY < 0` as escape intent — even a
+  -2px tick that moves nothing. One such tick landing after the send unpins in the gap before
+  `scrollToBottom`'s first rAF, whose opening check (`!state.isAtBottom`) then aborts the whole
+  animation: the send visibly does nothing and the reply streams below the fold (measured in the
+  real webview: send left the view 1,662px up, `isAtBottom` false). Hence `repinToBottom`
+  (`use-transcript-jumps.ts`) does four things a bare call does not: clears `escapedFromLock`
+  (`scrollToBottom` never does, and while it is stale-true the near-bottom rule can never re-arm
+  the pin), passes `ignoreEscapes` with a `duration` so the pin outlasts the tail, seeds
+  `state.animation` by hand (the library installs its `ignoreEscapes` record only inside the
+  first rAF — one frame too late for a tick in the send's own task), and presses `scrollTop`
+  synchronously (the same trick as the reveal). Deliberate detach still wins: `stopScroll()` and
+  drag-selection run ahead of the `ignoreEscapes` guard, and the hold expires before a reply's
+  first row can plausibly arrive, so escaping mid-stream is untouched. `test/repin.test.ts` pins
+  the synchronous-state contract.
 - **A new height epoch invalidates every remembered size, the *measurements* included** — they
   were taken at the old width. `virtualizer.measure()` clears the size cache, but a row re-enters
   it only when its ResizeObserver fires, which needs a *size change*: a mounted row whose height
