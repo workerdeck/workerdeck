@@ -1,4 +1,4 @@
-import { useImperativeHandle, useMemo, useRef, useState, type DragEvent, type ReactNode, type Ref } from 'react'
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type DragEvent, type ReactNode, type Ref } from 'react'
 import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 import type { StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
 import { ArrowUp, FileText, Paperclip, RotateCw, Sparkles, Square, TriangleAlert, X } from 'lucide-react'
@@ -6,6 +6,7 @@ import { Button } from '../ui/Button.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
 import { usePromptAreaState } from '../prompt-area/use-prompt-area-state.ts'
+import { plainTextToSegments } from '../prompt-area/prompt-area-engine.ts'
 import { commandTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
 import type { TerminalAffordances } from '../terminal/affordances.tsx'
@@ -37,6 +38,11 @@ export interface ComposerProps {
   fontSize?: number
   lineHeight?: number
   affordances?: TerminalAffordances | boolean
+  /**
+   * Where unsent text is remembered between mounts. The composer is remounted on every session switch, so without
+   * this a half-written prompt dies with the switch. Omit to keep the composer stateless across mounts.
+   */
+  draft?: { initialText: string; save: (text: string) => void; clear: () => void }
   className?: string
   ref?: Ref<ComposerHandle>
 }
@@ -74,12 +80,17 @@ export function Composer({
   fontSize,
   lineHeight,
   affordances,
+  draft,
   className,
   ref,
 }: ComposerProps) {
   const inline = layout === 'inline'
   const terminal = useTranscriptVariant() === 'terminal'
-  const { bind, plainText, isEmpty, clear, focus } = usePromptAreaState()
+  // Read once, on mount: re-seeding mid-session would fight whatever is being typed.
+  const [initialDraft] = useState(() => draft?.initialText ?? '')
+  const { bind, plainText, isEmpty, clear, focus } = usePromptAreaState(
+    initialDraft === '' ? undefined : { initialValue: plainTextToSegments(initialDraft) },
+  )
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -190,6 +201,11 @@ export function Composer({
     return configured.length > 0 ? configured : undefined
   }, [commands, skills, onSearchFiles])
 
+  const saveDraft = draft?.save
+  useEffect(() => {
+    saveDraft?.(plainText)
+  }, [plainText, saveDraft])
+
   const staged = attachments?.items ?? []
   const canSend = !disabled && (!isEmpty || staged.length > 0) && !attachments?.uploading && !attachments?.hasFailure
 
@@ -199,6 +215,7 @@ export function Composer({
     }
     onSend(plainText.trim(), attachments?.readyIds ?? [])
     attachments?.clear()
+    draft?.clear()
     clear()
     focus()
   }

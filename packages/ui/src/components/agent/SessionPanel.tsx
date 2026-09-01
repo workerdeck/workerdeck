@@ -12,6 +12,7 @@ import {
 import {
   useAttachments,
   useClaudeSession,
+  useDraft,
   useHostFileSearch,
   useProfileUsage,
   useToolCallHost,
@@ -354,6 +355,7 @@ export function SessionPanel({
     engine: state.engine,
   })
   const hostFiles = useHostFileSearch(client, state.cwd)
+  const draft = useDraft(client, sessionId)
   // Stable identity: an inline arrow here would bust the Composer's `triggers`
   // memo on every streaming re-render, and with it every prompt-area callback
   // keyed on the triggers.
@@ -654,6 +656,7 @@ export function SessionPanel({
                   commands={capabilities.slashCommands ? commands : undefined}
                   skills={capabilities.skillsList ? state.skills : undefined}
                   attachments={attachments}
+                  draft={draft}
                   onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
                   layout={controlsExternal ? 'inline' : 'stacked'}
                   toolbar={controlsExternal ? undefined : sessionControls}
