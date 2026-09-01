@@ -26,6 +26,31 @@ const PROMPTS = [
 const ATTACHMENT_PREVIEW =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
+// __wdCheckMapping's helpers: build the row list with an optional recap splice, and the linear reference implementation the binary search is checked against.
+function buildRows(items: TranscriptItem[], boundary?: number): TranscriptRow[] {
+  return boundary === undefined
+    ? terminalBlocks(items, 0, true)
+    : [
+        ...terminalBlocks(items.slice(0, boundary), 0, true),
+        { key: 'recap' as const, line: 'check' },
+        ...terminalBlocks(items.slice(boundary), boundary, true),
+      ]
+}
+
+function linear(rows: TranscriptRow[], itemIndex: number): number {
+  let absorbed: number | undefined
+  let best = 0
+  rows.forEach((row, index) => {
+    if ('task' in row && row.childIndices.includes(itemIndex)) {
+      absorbed = index
+    }
+    if ('index' in row && row.index <= itemIndex) {
+      best = index
+    }
+  })
+  return absorbed ?? best
+}
+
 export function App() {
   const [fixture, setFixture] = useState(FIXTURES[0]!.key)
   const [grid, setGrid] = useState(false)
@@ -264,27 +289,6 @@ export function App() {
     w.__wdLines = (text: string, cols: number) => textLines(text, cols)
     // The item→row mapping's regression check: binary search against a linear reference, plus containment, over every fixture × item × splice.
     w.__wdCheckMapping = () => {
-      const buildRows = (items: typeof state.items, boundary?: number): TranscriptRow[] =>
-        boundary === undefined
-          ? terminalBlocks(items, 0, true)
-          : [
-              ...terminalBlocks(items.slice(0, boundary), 0, true),
-              { key: 'recap' as const, line: 'check' },
-              ...terminalBlocks(items.slice(boundary), boundary, true),
-            ]
-      const linear = (rows: TranscriptRow[], itemIndex: number): number => {
-        let absorbed: number | undefined
-        let best = 0
-        rows.forEach((row, index) => {
-          if ('task' in row && row.childIndices.includes(itemIndex)) {
-            absorbed = index
-          }
-          if ('index' in row && row.index <= itemIndex) {
-            best = index
-          }
-        })
-        return absorbed ?? best
-      }
       let cases = 0
       const mismatches: unknown[] = []
       for (const f of FIXTURES) {

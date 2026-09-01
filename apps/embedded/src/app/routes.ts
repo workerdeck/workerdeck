@@ -14,6 +14,10 @@ export type AppRoutesDeps = {
   agentConfig: () => AgentConfigResponse
 }
 
+function currentUser(res: { locals: Record<string, unknown> }): User {
+  return res.locals.user as User
+}
+
 export function createAppRoutes(deps: AppRoutesDeps): Express {
   const app = express()
   app.disable('x-powered-by')
@@ -32,8 +36,6 @@ export function createAppRoutes(deps: AppRoutesDeps): Express {
     res.locals.user = user
     next()
   }
-  const currentUser = (res: { locals: Record<string, unknown> }): User => res.locals.user as User
-
   app.get('/api/users', (_req, res) => {
     res.json({ users: USERS })
   })
