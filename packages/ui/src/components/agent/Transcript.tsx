@@ -77,7 +77,7 @@ export interface TranscriptProps {
   affordances?: TerminalAffordances | boolean
   stickyPrompt?: boolean
   scrubber?: boolean
-  scrubberMarks?: readonly number[]
+  bookmarks?: readonly string[]
   replaying?: boolean
   catchUp?: { from: number; since?: number }
   jumpToRecapRef?: RefObject<(() => void) | null>
@@ -102,7 +102,7 @@ export function Transcript({
   affordances,
   stickyPrompt = false,
   scrubber,
-  scrubberMarks,
+  bookmarks,
   replaying = false,
   catchUp,
   jumpToRecapRef,
@@ -173,7 +173,7 @@ export function Transcript({
                 items={items}
                 pendingApprovals={state.pendingApprovals}
                 scrubber={scrubber}
-                scrubberMarks={frame ? undefined : scrubberMarks}
+                bookmarks={frame ? undefined : bookmarks}
                 affordances={affordances}
                 fileUrl={fileUrl}
                 attachmentUrl={attachmentUrl}

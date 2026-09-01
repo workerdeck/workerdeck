@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { SessionPanel, Toaster, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
+import { SessionPanel, Toaster, skillPrompt, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
 import type { Bridge } from './bridge.ts'
 import { matchPath } from './paths.ts'
 
@@ -11,6 +11,40 @@ type Shown = {
   sessionId: string
   hostName: string
   unseen?: { itemCount: number; since: number }
+}
+
+// Same contract as the dashboard's useBookmarks: item ids per session, persisted client-side.
+// The webview's localStorage is per-extension-origin and survives reloads; losing it costs
+// starred rows only, so every access swallows (webviews can run with storage denied).
+const BOOKMARKS_KEY = 'workerdeck.bookmarks.v1'
+
+function useBookmarks(sessionKey: string) {
+  const [map, setMap] = useState<Record<string, string[]>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(BOOKMARKS_KEY) ?? '{}') as Record<string, string[]>
+    } catch {
+      return {}
+    }
+  })
+  const bookmarks = map[sessionKey] ?? []
+  const toggle = useCallback(
+    (itemId: string) => {
+      setMap((previous) => {
+        const current = previous[sessionKey] ?? []
+        const next = current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]
+        const merged = { ...previous, [sessionKey]: next }
+        if (next.length === 0) {
+          delete merged[sessionKey]
+        }
+        try {
+          localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(merged))
+        } catch {}
+        return merged
+      })
+    },
+    [sessionKey],
+  )
+  return { bookmarks, toggle }
 }
 
 export function App({
@@ -54,6 +88,8 @@ export function App({
           controls.current?.setModel(msg.model)
         } else if (msg.kind === 'wd-set-permission-mode') {
           controls.current?.setPermissionMode(msg.mode)
+        } else if (msg.kind === 'wd-use-skill') {
+          controls.current?.insertComposerText(skillPrompt(msg.skill))
         } else if (msg.kind === 'wd-focus-composer') {
           focusWanted.current = true
           tryFocus()
@@ -150,6 +186,10 @@ export function App({
     }
   }, [])
 
+  // Called unconditionally (hooks rule) — the empty key never accumulates entries because toggle
+  // is only reachable from a mounted panel.
+  const { bookmarks, toggle: toggleBookmark } = useBookmarks(shown ? `${shown.baseUrl}#${shown.sessionId}` : '')
+
   if (!shown || !client) {
     return <div className="flex h-screen items-center justify-center text-sm text-fg-3">Pick a session in the WorkerDeck sidebar.</div>
   }
@@ -166,6 +206,8 @@ export function App({
         affordances={affordances}
         fontSize={fontSize}
         scrubber
+        bookmarks={bookmarks}
+        onToggleBookmark={toggleBookmark}
         openSubagent={openSubagent}
         reveal={reveal}
         stickyPrompt

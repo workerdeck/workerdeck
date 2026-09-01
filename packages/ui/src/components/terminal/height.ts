@@ -4,6 +4,7 @@ import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../..
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
 import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
+import { todoLine, todoPreview } from './todos.ts'
 import { runSummary, taskSummary } from './tool-run.ts'
 
 export type CellMetrics = {
@@ -544,7 +545,8 @@ function diffHeight(patch: FilePatch, m: CellMetrics, extraPx = 0): Acc {
 }
 
 function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc {
-  const preview = toolInputPreview(item.input)
+  const todos = todoPreview(item.name, item.input)
+  const preview = todos ? todos.summary : toolInputPreview(item.input)
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
   let acc = rowH(`${item.name}(${preview})${backend}`, m, { gutterCells: 2, extraPx })
 
@@ -555,6 +557,15 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
 
   if (item.patch) {
     return add(acc, diffHeight(item.patch, m, extraPx))
+  }
+  if (todos) {
+    for (const todo of todos.shown) {
+      acc = add(acc, rowH(todoLine(todo), m, { indentCells: 3, gutterCells: 3, extraPx }))
+    }
+    if (todos.more) {
+      acc = add(acc, rowH(todos.more, m, { indentCells: 3, gutterCells: 3, extraPx }))
+    }
+    return acc
   }
   const text = item.result?.text ?? ''
   if (!text) {

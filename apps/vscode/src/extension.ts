@@ -98,11 +98,15 @@ export function activate(context: vscode.ExtensionContext): void {
   let sidebar: SidebarProvider
   const panel = new SessionPanelProvider(context.extensionUri, store, {
     openPanel: async (p) => {
-      const viewId = p === 'files' || p === 'skills' ? undefined : SECTION_VIEWS[p]
-      if (!viewId) {
+      if (p === 'skills') {
+        await pickSkill(panel, vitals)
         return
       }
-      await vscode.commands.executeCommand(`${viewId}.focus`)
+      if (p === 'files') {
+        await vscode.commands.executeCommand('workerdeck.openProjectFolder')
+        return
+      }
+      await vscode.commands.executeCommand(`${SECTION_VIEWS[p]}.focus`)
     },
     vitals: (v) => {
       // Only a status change nudges the model: the rest of `vitals` moves on every stream delta.
@@ -308,6 +312,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
+    vscode.commands.registerCommand('workerdeck.useSkill', () => pickSkill(panel, vitals)),
+
     vscode.commands.registerCommand('workerdeck.openProjectFolder', async () => {
       const active = panel.active
       if (!active?.cwd) {
@@ -329,6 +335,34 @@ export function activate(context: vscode.ExtensionContext): void {
       })
     }),
   )
+}
+
+// The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts — this QuickPick is its native stand-in.
+async function pickSkill(panel: SessionPanelProvider, vitals: SessionVitals | undefined): Promise<void> {
+  const skills = vitals?.skills
+  if (!skills) {
+    void vscode.window.showInformationMessage('WorkerDeck: skills are listed once the session connects — send a message first.')
+    return
+  }
+  if (skills.length === 0) {
+    void vscode.window.showInformationMessage('WorkerDeck: this session found no skills.')
+    return
+  }
+  const picked = await vscode.window.showQuickPick(
+    skills.map((s) => ({
+      label: s.displayName ?? s.name,
+      description: [s.scope, s.enabled ? undefined : 'disabled'].filter(Boolean).join(' — '),
+      detail: s.shortDescription ?? s.description?.split('\n')[0],
+      skill: s,
+      // A skill the session reported but disabled stays visible and unpickable, like an ungrantable permission mode.
+      alwaysShow: true,
+      disabled: !s.enabled,
+    })),
+    { title: 'WorkerDeck: skills', placeHolder: 'Insert a skill prompt into the composer' },
+  )
+  if (picked && !picked.disabled) {
+    panel.useSkill(picked.skill)
+  }
 }
 
 export function deactivate(): void {}

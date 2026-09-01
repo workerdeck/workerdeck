@@ -426,7 +426,11 @@ export function App() {
             lineHeight={lineHeight}
             affordances={affordances}
             scrubber={scrub}
-            scrubberMarks={fixture === 'huge' ? [30, 210, 480] : undefined}
+            bookmarks={
+              fixture === 'huge'
+                ? [state.items[30]?.id, state.items[210]?.id, state.items[480]?.id].filter((id) => id !== undefined)
+                : undefined
+            }
             replaying={replayHold}
             catchUp={catchUp}
             jumpToRecapRef={jumpRef}

@@ -20,7 +20,8 @@ export interface SessionWorkspaceProps {
   transcriptDensity?: SessionPanelProps['transcriptDensity']
   transcriptFont?: SessionPanelProps['transcriptFont']
   scrubber?: SessionPanelProps['scrubber']
-  scrubberMarks?: SessionPanelProps['scrubberMarks']
+  bookmarks?: SessionPanelProps['bookmarks']
+  onToggleBookmark?: SessionPanelProps['onToggleBookmark']
   stickyPrompt?: SessionPanelProps['stickyPrompt']
   openSubagent?: SessionPanelProps['openSubagent']
   reveal?: SessionPanelProps['reveal']
@@ -51,7 +52,8 @@ export function SessionWorkspace({
   transcriptDensity,
   transcriptFont,
   scrubber,
-  scrubberMarks,
+  bookmarks,
+  onToggleBookmark,
   stickyPrompt,
   openSubagent,
   reveal,
@@ -208,7 +210,8 @@ export function SessionWorkspace({
             transcriptDensity={transcriptDensity}
             transcriptFont={transcriptFont}
             scrubber={scrubber}
-            scrubberMarks={scrubberMarks}
+            bookmarks={bookmarks}
+            onToggleBookmark={onToggleBookmark}
             stickyPrompt={stickyPrompt}
             openSubagent={openSubagent}
             reveal={reveal}

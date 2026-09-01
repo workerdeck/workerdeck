@@ -8,6 +8,7 @@ import {
   type ModelOption,
   type PermissionMode,
   type RateLimitInfo,
+  type SkillInfo,
 } from '@workerdeck/protocol'
 import {
   useAttachments,
@@ -40,7 +41,7 @@ import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
 import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
-import type { TerminalAffordances } from '../terminal/affordances.tsx'
+import { BookmarkProvider, type BookmarkHandle, type TerminalAffordances } from '../terminal/affordances.tsx'
 
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
@@ -98,7 +99,9 @@ export interface SessionPanelProps {
   affordances?: TerminalAffordances | boolean
   terminalMetrics?: TerminalMetrics
   scrubber?: boolean
-  scrubberMarks?: readonly number[]
+  /** Bookmarked transcript item ids — the host owns membership and persistence. */
+  bookmarks?: readonly string[]
+  onToggleBookmark?: (itemId: string) => void
   reveal?: { toolUseId: string; nonce: number }
   openSubagent?: { toolUseId: string; nonce: number }
   onSubagentChange?: (toolUseId: string | undefined) => void
@@ -124,6 +127,7 @@ export type SessionControls = {
   setPermissionMode: (mode: PermissionMode) => void
   interrupt: () => void
   focusComposer: () => void
+  insertComposerText: (text: string) => void
 }
 
 const INTERACTIVE = [
@@ -154,6 +158,7 @@ export type SessionVitals = {
   models: ModelOption[]
   permissionMode: TranscriptState['permissionMode']
   permissionModes: PermissionModeChoice[]
+  skills: SkillInfo[] | undefined
   cwd: TranscriptState['cwd']
   contextUsage: TranscriptState['contextUsage']
   rateLimits: TranscriptState['rateLimits']
@@ -182,7 +187,8 @@ export function SessionPanel({
   affordances,
   terminalMetrics,
   scrubber = false,
-  scrubberMarks,
+  bookmarks,
+  onToggleBookmark,
   reveal,
   openSubagent,
   onSubagentChange,
@@ -309,6 +315,7 @@ export function SessionPanel({
       models,
       permissionMode: state.permissionMode,
       permissionModes,
+      skills: state.skills,
       cwd: state.cwd,
       contextUsage: state.contextUsage,
       rateLimits,
@@ -325,6 +332,7 @@ export function SessionPanel({
     models,
     state.permissionMode,
     permissionModes,
+    state.skills,
     state.cwd,
     state.contextUsage,
     rateLimits,
@@ -342,12 +350,19 @@ export function SessionPanel({
     setPermissionMode: (mode) => setters.current.setPermissionMode(mode),
     interrupt: () => setters.current.interrupt(),
     focusComposer: () => composerRef.current?.focus(),
+    insertComposerText: (text) => composerRef.current?.insertText(text),
   })
   useEffect(() => {
     const handler = onControlsRef.current
     handler?.(controls.current)
     return () => handler?.(undefined)
   }, [sessionId])
+  const bookmarkSet = useMemo(() => new Set(bookmarks ?? []), [bookmarks])
+  const bookmarkHandle = useMemo<BookmarkHandle | undefined>(
+    () => (onToggleBookmark ? { has: (id) => bookmarkSet.has(id), toggle: onToggleBookmark } : undefined),
+    [bookmarkSet, onToggleBookmark],
+  )
+
   const busy = state.status === 'running' || state.status === 'awaiting_approval'
   const ended = state.status === 'failed' || state.status === 'closed'
   const attachments = useAttachments(client, sessionId, {
@@ -557,30 +572,32 @@ export function SessionPanel({
                   lineHeight={effectiveTermLineHeight}
                 />
               ) : null}
-              <Transcript
-                key={subagentId ?? 'session'}
-                state={state}
-                fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-                attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
-                canBrowseFiles={hostFiles.available}
-                hostImage={hostImage}
-                variant={transcriptVariant}
-                density={transcriptDensity}
-                fontSize={effectiveTermFontSize}
-                lineHeight={effectiveTermLineHeight}
-                affordances={affordances}
-                stickyPrompt={stickyPrompt}
-                scrubber={scrubber}
-                scrubberMarks={scrubberMarks}
-                replaying={replaying}
-                catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
-                reveal={returnReveal ?? reveal}
-                frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
-                onOpenSubagent={enterSubagent}
-                emptyState={emptyState}
-                jumpToRecapRef={jumpToRecap}
-                repinRef={repinTranscript}
-              />
+              <BookmarkProvider value={bookmarkHandle}>
+                <Transcript
+                  key={subagentId ?? 'session'}
+                  state={state}
+                  fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+                  attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+                  canBrowseFiles={hostFiles.available}
+                  hostImage={hostImage}
+                  variant={transcriptVariant}
+                  density={transcriptDensity}
+                  fontSize={effectiveTermFontSize}
+                  lineHeight={effectiveTermLineHeight}
+                  affordances={affordances}
+                  stickyPrompt={stickyPrompt}
+                  scrubber={scrubber}
+                  bookmarks={bookmarks}
+                  replaying={replaying}
+                  catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
+                  reveal={returnReveal ?? reveal}
+                  frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
+                  onOpenSubagent={enterSubagent}
+                  emptyState={emptyState}
+                  jumpToRecapRef={jumpToRecap}
+                  repinRef={repinTranscript}
+                />
+              </BookmarkProvider>
               {catchUp && newCount > 0 && !replaying && subagentId === undefined ? (
                 <div className="px-3 pb-1">
                   <div

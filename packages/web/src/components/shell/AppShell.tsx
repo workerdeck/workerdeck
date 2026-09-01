@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { ListChecks, PanelLeftClose, PanelLeftOpen, Plug, Settings, SquareTerminal, UsersRound } from 'lucide-react'
 import { cn } from '@workerdeck/ui'
@@ -10,6 +10,20 @@ import { ProfilesSidebar } from './ProfilesSidebar.tsx'
 import { SessionsSidebar } from './SessionsSidebar.tsx'
 import { ThemeToggle } from './ThemeToggle.tsx'
 import { readPref, writePref } from '@/lib/storage.ts'
+import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
+import { useUnseenTotal } from '@/hooks/useUnseen.ts'
+
+// The tab most likely to hold unread work is a background one, and a background tab shows
+// nothing but its title — so the aggregate unread lives there. Mounted at the shell, not the
+// sessions section, so the poll loop (and the badge) stays live on every section.
+function useTitleBadge() {
+  const { snapshots } = useSessions()
+  const rows = useSessionRows(snapshots)
+  const total = useUnseenTotal(rows)
+  useEffect(() => {
+    document.title = total > 0 ? `(${total}) workerdeck` : 'workerdeck'
+  }, [total])
+}
 
 const NAV = [
   { id: 'sessions', label: 'Sessions', icon: SquareTerminal, path: '/sessions', sidebar: SessionsSidebar },
@@ -21,6 +35,7 @@ const NAV = [
 const COLLAPSED_KEY = 'workerdeck.sidebar-collapsed'
 
 export function AppShell({ children }: { children?: ReactNode }) {
+  useTitleBadge()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   // Longest match wins, so `/gateways` never loses to a prefix of itself.
   const section = [...NAV].sort((a, b) => b.path.length - a.path.length).find((item) => pathname.startsWith(item.path))

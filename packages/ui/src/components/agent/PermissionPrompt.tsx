@@ -5,7 +5,9 @@ import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
 import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
+import { planFromRequest } from '../../lib/plan-request.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
+import { Response } from './Response.tsx'
 
 export interface PermissionPromptProps {
   request: PermissionRequest
@@ -26,6 +28,7 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
     setDenying(false)
   }
 
+  const plan = planFromRequest(request)
   const summary = toolInputPreview(request.input)
   const ToolIcon = toolIcon(request.toolName)
 
@@ -34,36 +37,46 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
       <div className="flex items-start gap-2.5">
         <Hand className="mt-0.5 size-4 shrink-0 text-warning" />
         <div className="min-w-0 flex-1">
-          <div className="text-body-sm font-medium text-fg-1">{request.title ?? request.displayName ?? 'Permission needed'}</div>
+          <div className="text-body-sm font-medium text-fg-1">
+            {plan ? 'Plan ready for review' : (request.title ?? request.displayName ?? 'Permission needed')}
+          </div>
           {request.description ? <div className="mt-0.5 text-label text-fg-3">{request.description}</div> : null}
           {request.decisionReason ? <div className="mt-0.5 text-label text-fg-4">{request.decisionReason}</div> : null}
-          <div className="mt-1.5 flex min-w-0 items-center gap-2">
-            <ToolIcon className="size-3 shrink-0 text-fg-3" />
-            <span className="shrink-0 font-mono text-label font-medium text-fg-2">{request.toolName}</span>
-            {summary ? <span className="min-w-0 truncate font-mono text-label text-fg-4">{summary}</span> : null}
-          </div>
-          <button
-            type="button"
-            className="mt-1 font-mono text-label text-fg-3 underline-offset-2 hover:underline"
-            onClick={() => setShowInput((v) => !v)}
-          >
-            {showInput ? 'Hide' : 'Show'} {request.toolName} input
-          </button>
-          {showInput ? (
-            <pre className="mt-1.5 max-h-48 overflow-auto rounded-md bg-code-bg px-2.5 py-1.5 font-mono text-label whitespace-pre-wrap text-fg-2">
-              {JSON.stringify(request.input, null, 2)}
-            </pre>
-          ) : null}
+          {plan ? (
+            <div className="mt-1.5 max-h-72 overflow-y-auto rounded-md bg-code-bg px-2.5 py-2 text-body-sm text-fg-2">
+              <Response>{plan}</Response>
+            </div>
+          ) : (
+            <>
+              <div className="mt-1.5 flex min-w-0 items-center gap-2">
+                <ToolIcon className="size-3 shrink-0 text-fg-3" />
+                <span className="shrink-0 font-mono text-label font-medium text-fg-2">{request.toolName}</span>
+                {summary ? <span className="min-w-0 truncate font-mono text-label text-fg-4">{summary}</span> : null}
+              </div>
+              <button
+                type="button"
+                className="mt-1 font-mono text-label text-fg-3 underline-offset-2 hover:underline"
+                onClick={() => setShowInput((v) => !v)}
+              >
+                {showInput ? 'Hide' : 'Show'} {request.toolName} input
+              </button>
+              {showInput ? (
+                <pre className="mt-1.5 max-h-48 overflow-auto rounded-md bg-code-bg px-2.5 py-1.5 font-mono text-label whitespace-pre-wrap text-fg-2">
+                  {JSON.stringify(request.input, null, 2)}
+                </pre>
+              ) : null}
+            </>
+          )}
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
           <Button size="sm" onClick={() => onApprove(request.id)}>
-            Allow
+            {plan ? 'Approve plan' : 'Allow'}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setDenying((v) => !v)}>
-            Deny
+            {plan ? 'Keep planning' : 'Deny'}
           </Button>
           <Button size="sm" variant="outline" onClick={() => deny(true)}>
-            Deny &amp; stop
+            {plan ? 'Stop the turn' : 'Deny & stop'}
           </Button>
         </div>
       </div>
@@ -81,14 +94,18 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
                 setDenying(false)
               }
             }}
-            placeholder="Reason (optional) — the agent reads this and can try something else"
+            placeholder={
+              plan
+                ? 'What should change? (optional) — the agent keeps planning and reads this'
+                : 'Reason (optional) — the agent reads this and can try something else'
+            }
             className="h-7 flex-1"
           />
           <Button size="sm" variant="outline" onClick={() => setDenying(false)}>
             Cancel
           </Button>
           <Button size="sm" variant="destructive" onClick={() => deny(false)}>
-            Deny
+            {plan ? 'Keep planning' : 'Deny'}
           </Button>
         </div>
       ) : null}

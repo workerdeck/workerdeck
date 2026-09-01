@@ -3,7 +3,7 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
-import { CopyAction, WithActions } from './affordances.tsx'
+import { BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
@@ -12,6 +12,7 @@ import { collapsedResult } from './result-preview.ts'
 import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
 import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
 import { runFailed, runSummary } from './tool-run.ts'
+import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
@@ -34,26 +35,35 @@ function clipToChars(lines: string[], maxChars: number): string[] {
 
 export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user' }> }) {
   return (
-    <div className="term-user">
-      {item.attachments?.length ? (
-        <Row glyph={PROMPT_GLYPH} glyphTone="dim" tone="dim">
-          {item.attachments.map((attachment) => attachment.name).join(', ')}
-        </Row>
-      ) : null}
-      {item.text
-        ? item.text.split('\n').map((line, index) => (
-            <Row key={index} glyph={index === 0 ? PROMPT_GLYPH : undefined} glyphTone="dim" tone="fg">
-              {line || ' '}
-            </Row>
-          ))
-        : null}
-    </div>
+    <WithActions actions={<BookmarkAction id={item.id} />}>
+      <div className="term-user">
+        {item.attachments?.length ? (
+          <Row glyph={PROMPT_GLYPH} glyphTone="dim" tone="dim">
+            {item.attachments.map((attachment) => attachment.name).join(', ')}
+          </Row>
+        ) : null}
+        {item.text
+          ? item.text.split('\n').map((line, index) => (
+              <Row key={index} glyph={index === 0 ? PROMPT_GLYPH : undefined} glyphTone="dim" tone="fg">
+                {line || ' '}
+              </Row>
+            ))
+          : null}
+      </div>
+    </WithActions>
   )
 }
 
 export function AssistantRow({ item }: { item: Extract<TranscriptItem, { kind: 'assistant_text' }> }) {
   return (
-    <WithActions actions={item.streaming ? null : <CopyAction text={item.text} label="Copy message" />}>
+    <WithActions
+      actions={
+        <>
+          <BookmarkAction id={item.id} />
+          {item.streaming ? null : <CopyAction text={item.text} label="Copy message" />}
+        </>
+      }
+    >
       <Row glyph="●" glyphTone="fg" tone="fg">
         <TerminalMarkdown streaming={item.streaming}>{item.text}</TerminalMarkdown>
       </Row>
@@ -101,16 +111,24 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
 
   const command = (item.input as { command?: unknown } | null)?.command
   const copyable = typeof command === 'string' ? command : text
+  const todos = todoPreview(item.name, item.input)
 
   return (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
-      <WithActions actions={copyable ? <CopyAction text={copyable} label="Copy" /> : null}>
+      <WithActions
+        actions={
+          <>
+            <BookmarkAction id={item.id} />
+            {copyable ? <CopyAction text={copyable} label="Copy" /> : null}
+          </>
+        }
+      >
         <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
           <Row glyph={busy ? pulse : '●'} glyphTone={tone} tone="fg">
             <Ink bold tone="bright">
               {item.name}
             </Ink>
-            <Ink tone="dim">({toolInputPreview(item.input)})</Ink>
+            <Ink tone="dim">({todos ? todos.summary : toolInputPreview(item.input)})</Ink>
             {item.backend && item.backend !== 'server' ? <Ink tone="faint"> · {item.backend}</Ink> : null}
           </Row>
         </Pressable>
@@ -119,6 +137,8 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
         ))}
         {item.patch && !open ? (
           <TerminalDiff patch={item.patch} />
+        ) : todos && !open ? (
+          <TerminalTodos preview={todos} />
         ) : text ? (
           <>
             {preview.map((line, index) => (
@@ -168,6 +188,29 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
         ) : null}
       </WithActions>
     </div>
+  )
+}
+
+const TODO_TONE: Record<TodoStatus, Tone> = {
+  pending: 'dim',
+  in_progress: 'blue',
+  completed: 'faint',
+}
+
+function TerminalTodos({ preview }: { preview: TodoPreview }) {
+  return (
+    <>
+      {preview.shown.map((todo, index) => (
+        <Row key={index} indent={1} columns={3} glyph={index === 0 ? '⎿' : undefined} tone={TODO_TONE[todo.status]}>
+          {todoLine(todo)}
+        </Row>
+      ))}
+      {preview.more ? (
+        <Row indent={1} columns={3} tone="faint">
+          {preview.more}
+        </Row>
+      ) : null}
+    </>
   )
 }
 

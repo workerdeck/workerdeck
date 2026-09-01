@@ -176,6 +176,11 @@
         "command": "workerdeck.openProjectFolder",
         "title": "Open Session Project Folder",
         "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.useSkill",
+        "title": "Use Skill",
+        "category": "WorkerDeck"
       }
     ],
     "menus": {

@@ -47,6 +47,15 @@ and mode are bar items too, opening **QuickPicks** — a `StatusBarItem` has one
 no dropdown, so command → QuickPick is the only shape VS Code offers (and the one its own
 language-mode item uses); the panel's `onControls` setters are what they drive.
 
+The panel's `onOpenPanel` requests all land somewhere native — none are dropped. The four
+section kinds focus their views; **`skills`** opens a QuickPick (also
+`workerdeck.useSkill`) fed from `vitals.skills`, and picking one posts `wd-use-skill` so the
+webview inserts the same `skillPrompt(...)` text web's SkillsDialog would, through the
+controls' `insertComposerText` — a disabled skill stays visible and unpickable, like an
+ungrantable permission mode; **`files`** runs `workerdeck.openProjectFolder`, the existing
+`workerdeck://` mount of the active session's cwd, rather than growing a webview file
+browser.
+
 ### Attach ownership, paths & the remote filesystem
 
 One live attach per session, owned by the panel: sidebar/status
@@ -657,8 +666,9 @@ the web's `terminalMetrics` lesson stated once here.
 Two more mirrors landed with the `sessionState` fix: `SubagentInfo`/`SessionInfo.subagents` had
 **never been mirrored at all**, so the phone was not computing the bucket wrongly — it had no
 field to compute it from, which is the more interesting half of why that bug survived the rule
-being written down. Nothing *renders* sub-agents here yet: the correct bucket, not the
-extension's expandable rows.
+being written down. Sub-agents render now: `SessionSteps.swift` ports the shared step model,
+`SessionListView` draws the expandable step rows, and a step press lands in the takeover
+(`SubagentTakeoverView`) rather than inline expansion — no hover on a thumb.
 A **`Menu` in a toolbar closes when its item is re-identified**, and the sessions list's filter
 dropdown shut itself on every poll because of it — the menu read `model.adapters`, a property
 computed from the session rows, so `@Observable` invalidated it whenever a snapshot was

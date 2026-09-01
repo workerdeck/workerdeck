@@ -42,6 +42,44 @@ export function WithActions({ actions, children, className }: { actions: ReactNo
   )
 }
 
+// Bookmarks are a host concern (which items, where they persist); the transcript only needs
+// membership and a toggle. A missing provider renders no action at all, so embeddings that
+// never wire bookmarks pay nothing — the same contract AffordanceContext has.
+export type BookmarkHandle = {
+  has: (itemId: string) => boolean
+  toggle: (itemId: string) => void
+}
+
+const BookmarkContext = createContext<BookmarkHandle | undefined>(undefined)
+
+export function BookmarkProvider({ value, children }: { value: BookmarkHandle | undefined; children: ReactNode }) {
+  return <BookmarkContext.Provider value={value}>{children}</BookmarkContext.Provider>
+}
+
+export function BookmarkAction({ id }: { id: string }) {
+  const handle = useContext(BookmarkContext)
+  if (!handle) {
+    return null
+  }
+  const active = handle.has(id)
+  const label = active ? 'Remove bookmark' : 'Bookmark'
+  return (
+    <button
+      type="button"
+      className="term-action"
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onClick={(event) => {
+        event.stopPropagation()
+        handle.toggle(id)
+      }}
+    >
+      {active ? '★' : '☆'}
+    </button>
+  )
+}
+
 export function OpenSubagentAction({ onOpen, label = 'Open sub-agent' }: { onOpen: () => void; label?: string }) {
   return (
     <button

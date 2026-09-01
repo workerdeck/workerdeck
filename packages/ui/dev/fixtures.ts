@@ -68,6 +68,38 @@ const run: TranscriptItem[] = [
     parentToolUseId: null,
     status: 'running',
   }),
+  item({
+    kind: 'assistant_text',
+    text: 'Tracking the rollout as a checklist while the probe runs:',
+    streaming: false,
+    parentToolUseId: null,
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'TodoWrite',
+    input: {
+      todos: [
+        { content: 'Audit the current prettier config', status: 'completed', activeForm: 'Auditing the current prettier config' },
+        { content: 'Add the ignore patterns for markdown and JSON', status: 'completed', activeForm: 'Adding the ignore patterns' },
+        {
+          content:
+            'Verify oxlint discovers the root config from a package subdirectory, because that decides whether the per-package lint scripts can stay as they are today',
+          status: 'in_progress',
+          activeForm: 'Verifying oxlint config discovery from a package subdirectory',
+        },
+        { content: 'Wire format-on-save into the workspace settings', status: 'pending', activeForm: 'Wiring format-on-save' },
+        { content: 'Run the formatter across the repo', status: 'pending', activeForm: 'Running the formatter' },
+        { content: 'Re-run the lints', status: 'pending', activeForm: 'Re-running the lints' },
+        { content: 'Spot-check the largest diffs', status: 'pending', activeForm: 'Spot-checking the largest diffs' },
+        { content: 'Update the contributing doc', status: 'pending', activeForm: 'Updating the contributing doc' },
+        { content: 'Announce the switch in the team channel', status: 'pending', activeForm: 'Announcing the switch' },
+        { content: 'Delete the old editorconfig shims', status: 'pending', activeForm: 'Deleting the old editorconfig shims' },
+      ],
+    },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: 'Todos have been modified successfully.', isError: false },
+  }),
 ]
 
 const diff: TranscriptItem[] = [
@@ -259,7 +291,7 @@ const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
       parentToolUseId: null,
       status: 'settled',
       result: {
-        text: Array.from({ length: 1 + (index % 5) }, (_, l) => `line ${l + 1} of the output`).join('\n'),
+        text: Array.from({ length: 1 + (index % 5) }, (unused, l) => `line ${l + 1} of the output`).join('\n'),
         isError: false,
       },
     })
@@ -299,8 +331,8 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
         kind: 'assistant_text',
         streaming: false,
         parentToolUseId: null,
-        text: Array.from({ length: 3 + (turn % 4) }, (_, s) =>
-          Array.from({ length: 4 }, (_, l) =>
+        text: Array.from({ length: 3 + (turn % 4) }, (unused, s) =>
+          Array.from({ length: 4 }, (unused2, l) =>
             `stanza ${s + 1} line ${l + 1} of note ${turn}, ${'holding steady '.repeat(1 + ((s + l) % 3))}`.trim(),
           ).join('\n'),
         ).join('\n\n'),
@@ -315,7 +347,7 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
         parentToolUseId: null,
         status: 'settled',
         result: {
-          text: Array.from({ length: 2 + (index % 6) }, (_, l) => `✓ case ${l + 1} passed (${l * 7}ms)`).join('\n'),
+          text: Array.from({ length: 2 + (index % 6) }, (unused, l) => `✓ case ${l + 1} passed (${l * 7}ms)`).join('\n'),
           isError: false,
         },
       })
@@ -328,7 +360,7 @@ const perf: TranscriptItem[] = Array.from({ length: 4000 }, (_, index) => {
         parentToolUseId: null,
         status: 'settled',
         result: {
-          text: Array.from({ length: 20 + (turn % 30) }, (_, l) => `${l + 1}  export const symbol${l} = build(${l})`).join('\n'),
+          text: Array.from({ length: 20 + (turn % 30) }, (unused, l) => `${l + 1}  export const symbol${l} = build(${l})`).join('\n'),
           isError: false,
         },
       })

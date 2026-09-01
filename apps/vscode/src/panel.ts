@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import type { PermissionMode } from '@workerdeck/protocol'
+import type { PermissionMode, SkillInfo } from '@workerdeck/protocol'
 import type { SessionVitals, SessionSurfacePanel } from '@workerdeck/ui'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
@@ -274,6 +274,10 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
 
   setPermissionMode(mode: PermissionMode): void {
     this.post({ kind: 'wd-set-permission-mode', mode })
+  }
+
+  useSkill(skill: SkillInfo): void {
+    this.post({ kind: 'wd-use-skill', skill })
   }
 
   dispose(): void {

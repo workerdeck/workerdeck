@@ -20,6 +20,7 @@ import { clientFor, useHosts } from '@/lib/hosts.ts'
 import { getFontSize, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
+import { useBookmarks } from '@/hooks/useBookmarks.ts'
 import { nudgeSessions, useSessions } from '@/hooks/useSessions.ts'
 
 // Split in two so the inner view takes a *defined* client: a link can outlive the gateway it named, and hooks cannot
@@ -53,6 +54,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   // session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
   const markSeen = useMarkSeen(hostId, sessionId)
+  const { bookmarks, toggle: toggleBookmark } = useBookmarks(hostId, sessionId)
   // Read once, at mount: re-reading it as the mark moves would walk the catch-up row down the transcript under the reader.
   const [unseen] = useState(() => unseenSince(hostId, sessionId))
   const [density] = useState(getTranscriptDensity)
@@ -127,6 +129,8 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
         })
       }}
       scrubber
+      bookmarks={bookmarks}
+      onToggleBookmark={toggleBookmark}
       stickyPrompt
       statusPlacement="bottom"
       controlsSurface="status"

@@ -111,7 +111,7 @@ export function TranscriptRows({
   items,
   pendingApprovals,
   scrubber,
-  scrubberMarks,
+  bookmarks,
   affordances,
   fileUrl,
   attachmentUrl,
@@ -132,7 +132,7 @@ export function TranscriptRows({
   items: readonly TranscriptItem[]
   pendingApprovals: readonly PermissionRequest[]
   scrubber?: boolean
-  scrubberMarks?: readonly number[]
+  bookmarks?: readonly string[]
   frameParentId?: string
   onOpenSubagent?: (toolUseId: string) => void
   affordances?: TerminalAffordances | boolean
@@ -296,6 +296,16 @@ export function TranscriptRows({
   }, [revealNonce])
 
   const scrubInteractive = resolveAffordances(affordances).hover
+  // Hosts hand bookmarks over as item ids (stable across replays); the mark model positions by
+  // index, so the translation lives here where the items are. Ids not in this transcript (another
+  // frame, a truncated replay) simply draw nothing.
+  const bookmarkIndexes = useMemo(() => {
+    if (!bookmarks?.length) {
+      return []
+    }
+    const indexById = new Map(items.map((item, index) => [item.id, index]))
+    return bookmarks.map((id) => indexById.get(id)).filter((index): index is number => index !== undefined)
+  }, [bookmarks, items])
   const recapIndex = rows.findIndex((row) => row.key === 'recap')
   const recapRow = recapIndex >= 0 ? { rowIndex: recapIndex, label: (rows[recapIndex] as { line: string }).line } : undefined
   useEffect(() => {
@@ -375,7 +385,7 @@ export function TranscriptRows({
                 items={items}
                 pendingApprovals={pendingApprovals}
                 recapRow={recapRow}
-                bookmarks={scrubberMarks ?? []}
+                bookmarks={bookmarkIndexes}
                 frameParentId={frameParentId}
                 rowIndexFor={(itemIndex) => rowIndexForItem(rows, itemIndex)}
                 positionInRow={(itemIndex) => positionInRow(rows, itemIndex)}
@@ -394,7 +404,7 @@ export function TranscriptRows({
                 items={items}
                 pendingApprovals={pendingApprovals}
                 recapItemIndex={recapIndex >= 0 ? boundary : undefined}
-                bookmarks={scrubberMarks}
+                bookmarks={bookmarkIndexes}
                 frameParentId={frameParentId}
                 interactive={scrubInteractive}
                 onJumpToItem={(itemIndex) => jumpToRow(rowIndexForItem(rows, itemIndex), 'start')}

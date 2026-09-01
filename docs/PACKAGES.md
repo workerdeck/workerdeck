@@ -951,8 +951,8 @@ turn). That is the question a reader asks of a rail — "where did I say somethi
 it go wrong" — and it is why the failures were taken *out* of the full-width class they used to
 share: "alarm" is not a lane, and half the failures sitting down the middle while `turnFailed`
 sat in the right lane meant no single column answered the second question. Full width is left
-for what is not a channel at all: a waiting approval pinned at the foot, `scrubberMarks`
-bookmarks, the recap seam. The sub-agent band is drawn from **membership, never the spawning
+for what is not a channel at all: a waiting approval pinned at the foot, `bookmarks`
+(host-persisted item ids, toggled from the row hover actions), the recap seam. The sub-agent band is drawn from **membership, never the spawning
 call's name** (`Task` is the SDK's convention and a background agent arrives as `Agent`; an id
 other items nest under *is* a sub-agent), it is the folded `Task` row's one honest signal on the
 rail — collapsed a tick, expanded the band the sub-agent covers — and a failed dispatch earns
