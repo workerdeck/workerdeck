@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { attachmentKind } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
-import { json, readRawBody } from '../lib/http.ts'
+import { json, readRawBody, untrustedDownloadHeaders } from '../lib/http.ts'
 import type { ServerContext } from '../context.ts'
 
 export async function handleAttachments(
@@ -51,12 +51,7 @@ export async function handleAttachments(
       return
     }
     const bytes = Buffer.from(found.data, 'base64')
-    res.writeHead(200, {
-      'content-type': found.mediaType,
-      'content-length': bytes.length,
-      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(found.name)}`,
-      'x-content-type-options': 'nosniff',
-    })
+    res.writeHead(200, untrustedDownloadHeaders(found.name, found.mediaType, bytes.length))
     res.end(bytes)
     return
   }

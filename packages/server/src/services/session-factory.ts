@@ -8,11 +8,8 @@ import {
 import type { EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { claudeSessionEnv, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
-import type { EngineRunnerContext } from '../options.ts'
-import type { BridgeHub } from './bridge.ts'
-import type { SessionParkManager } from './parking.ts'
+import type { EngineRunnerContext, LateBoundRefs } from '../options.ts'
 import type { ProfileService } from './profiles.ts'
-import type { SessionRegistry } from './registry.ts'
 
 export type SessionFactoryDeps = {
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
@@ -22,11 +19,7 @@ export type SessionFactoryDeps = {
   allowedCwdRoots?: string[]
   disableBypassPermissions?: boolean
   requireApiKey?: boolean
-  refs: {
-    registry?: SessionRegistry
-    parking?: SessionParkManager
-    bridge?: BridgeHub
-  }
+  refs: LateBoundRefs
 }
 
 export type SessionFactory = ReturnType<typeof createSessionFactory>

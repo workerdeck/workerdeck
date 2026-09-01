@@ -1,8 +1,7 @@
 import type { IncomingMessage } from 'node:http'
 import type { JobInfo, SessionInfo } from '@workerdeck/protocol'
 import { readScope, scopeMatches } from '../lib/scope.ts'
-import type { WorkerServerOptions } from '../options.ts'
-import type { SessionRegistry } from './registry.ts'
+import type { LateBoundRefs, WorkerServerOptions } from '../options.ts'
 
 export type AuthContext = {
   ok: boolean
@@ -17,7 +16,7 @@ export type AuthService = ReturnType<typeof createAuthService>
 
 export function createAuthService(deps: {
   options: Pick<WorkerServerOptions, 'authenticate' | 'authorizeSession'>
-  refs: { registry?: SessionRegistry }
+  refs: Pick<LateBoundRefs, 'registry'>
 }) {
   const { options, refs } = deps
 

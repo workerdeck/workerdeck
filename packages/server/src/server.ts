@@ -10,7 +10,7 @@ import type { ServerContext } from './context.ts'
 import { json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { parseSessionRoute } from './lib/parse-route.ts'
-import type { WorkerServer, WorkerServerOptions } from './options.ts'
+import type { LateBoundRefs, WorkerServer, WorkerServerOptions } from './options.ts'
 import { handleExecutionResult } from './routes/executions.ts'
 import { handleHostFiles } from './routes/host-files.ts'
 import { handleJobs } from './routes/jobs.ts'
@@ -74,7 +74,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
   }
 
-  const refs: { registry?: SessionRegistry; parking?: SessionParkManager; bridge?: BridgeHub } = {}
+  const refs: LateBoundRefs = {}
   const factory = createSessionFactory({
     adapterFor,
     profiles,

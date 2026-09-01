@@ -10,6 +10,18 @@ const CONTENT_TYPES: Record<string, string> = {
   svg: 'image/svg+xml; charset=utf-8',
 }
 
+// Headers for serving user-controlled bytes (attachments, produced files, sandbox VFS reads):
+// force download and forbid MIME sniffing so a crafted HTML/SVG payload can never execute in the
+// gateway's origin. Every byte-serving route must use this.
+export function untrustedDownloadHeaders(filename: string, contentType: string, byteLength: number): Record<string, string | number> {
+  return {
+    'content-type': contentType,
+    'content-length': byteLength,
+    'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    'x-content-type-options': 'nosniff',
+  }
+}
+
 export function json(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body)
   res.writeHead(status, {

@@ -178,12 +178,18 @@ function familyRank(option: ModelOption): number {
   return rank === -1 ? FAMILY_ORDER.length : rank
 }
 
-export function friendlyModelName(id: string): string | null {
+// The shared id-parsing prelude: strip the '[variant]' suffix, lowercase, split on '-', drop the 'claude' prefix.
+function modelIdParts(id: string): string[] {
   const withoutVariant = id.split('[')[0] ?? id
   const parts = withoutVariant.toLowerCase().split('-').filter(Boolean)
   if (parts[0] === 'claude') {
     parts.shift()
   }
+  return parts
+}
+
+export function friendlyModelName(id: string): string | null {
+  const parts = modelIdParts(id)
   const family = parts.shift()
   if (!family) {
     return null
@@ -196,12 +202,8 @@ export function friendlyModelName(id: string): string | null {
 }
 
 function modelFamily(id: string): string {
-  const withoutVariant = id.split('[')[0] ?? id
-  const parts = withoutVariant.toLowerCase().split('-')
-  if (parts[0] === 'claude') {
-    parts.shift()
-  }
-  return parts[0] ?? withoutVariant
+  const parts = modelIdParts(id)
+  return parts[0] ?? id
 }
 
 export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {

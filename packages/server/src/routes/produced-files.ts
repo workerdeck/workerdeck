@@ -1,7 +1,7 @@
 import { createReadStream, statSync } from 'node:fs'
 import { basename } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { contentTypeFor, json } from '../lib/http.ts'
+import { contentTypeFor, json, untrustedDownloadHeaders } from '../lib/http.ts'
 import type { ServerContext } from '../context.ts'
 
 export async function handleProducedFiles(
@@ -45,12 +45,7 @@ export async function handleProducedFiles(
     return
   }
   const filename = basename(found.path) || 'file'
-  res.writeHead(200, {
-    'content-type': found.mediaType ?? contentTypeFor(filename),
-    'content-length': stat.size,
-    'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-    'x-content-type-options': 'nosniff',
-  })
+  res.writeHead(200, untrustedDownloadHeaders(filename, found.mediaType ?? contentTypeFor(filename), stat.size))
   await new Promise<void>((done) => {
     const stream = createReadStream(found.path)
     stream.on('error', () => {

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { CreateSessionRequest, ResolvePermissionRequest, UpdateSessionRequest } from '@workerdeck/protocol'
-import { contentTypeFor, json, readJsonBody } from '../lib/http.ts'
+import { contentTypeFor, json, readJsonBody, untrustedDownloadHeaders } from '../lib/http.ts'
 import type { SessionRoute } from '../lib/parse-route.ts'
 import type { AuthContext } from '../services/auth.ts'
 import { isDormant } from '../services/session-store.ts'
@@ -94,12 +94,7 @@ export async function handleSessions(
       return
     }
     const filename = route.filePath.split('/').pop() || 'file'
-    res.writeHead(200, {
-      'content-type': contentTypeFor(filename),
-      'content-length': Buffer.byteLength(content),
-      'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-      'x-content-type-options': 'nosniff',
-    })
+    res.writeHead(200, untrustedDownloadHeaders(filename, contentTypeFor(filename), Buffer.byteLength(content)))
     res.end(content)
     return
   }

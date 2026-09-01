@@ -10,6 +10,9 @@ import {
   type StoredSessionRecord,
 } from './session-store.ts'
 
+// The context handed to parking's onError: which session, and which lifecycle step failed.
+export type ParkErrorContext = { sessionId: string; phase: 'park' | 'remember' | 'resume' }
+
 export type SessionParkOptions = {
   registry: SessionRegistry
   store: SessionStore
@@ -20,7 +23,7 @@ export type SessionParkOptions = {
   expiredGraceMs?: number
   onParking?: (sessionId: string, executionId: string) => boolean
   onResumed?: (sessionId: string, runner: Runner) => void
-  onError?: (error: unknown, context: { sessionId: string; phase: 'park' | 'remember' | 'resume' }) => void
+  onError?: (error: unknown, context: ParkErrorContext) => void
 }
 
 export class SessionParkManager {
