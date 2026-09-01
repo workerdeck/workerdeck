@@ -40,6 +40,14 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
   #pending: { kind: 'wd-open-subagent' | 'wd-reveal-tool-use'; toolUseId: string } | undefined
   #pendingNonce = 0
   #active: ActiveSession | undefined
+  /**
+   * The catch-up boundary, frozen when the session became active.
+   *
+   * It answers "where were you when you opened this?", so it cannot be re-read at push time: making the view
+   * visible marks the session seen, and `show()` awaits the focus command in between. Re-reading afterwards
+   * returned the mark that opening had just moved, which cost the recap seam, the dimming and the jump target.
+   */
+  #activeUnseen: { itemCount: number; since: number } | undefined
   #transports: WebviewTransportHost | undefined
 
   protected readonly bundle = 'main.js'
@@ -101,6 +109,7 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
   async show(active: ActiveSession | undefined, options: { focus?: boolean } = {}): Promise<void> {
     const existed = !!this.view
     this.#active = active
+    this.#activeUnseen = active ? this.#delegate.unseen(active.host.id, active.sessionId) : undefined
     this.#onDidChangeActive.fire(active)
     // Focussing also materializes the view, which is why a first show does it unasked.
     if (active && (options.focus || !existed)) {
@@ -119,6 +128,7 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
       return
     }
     this.#active = active
+    this.#activeUnseen = this.#delegate.unseen(active.host.id, active.sessionId)
     this.#onDidChangeActive.fire(active)
     this.#pushActive()
   }
@@ -145,7 +155,7 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
         baseUrl: base,
         sessionId: active.sessionId,
         hostName: active.host.name,
-        unseen: this.#delegate.unseen(active.host.id, active.sessionId),
+        unseen: this.#activeUnseen,
       },
     })
     if (focus) {
