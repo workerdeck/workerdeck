@@ -1,6 +1,7 @@
 export { initialReplayTarget, REPLAY_HOLD_MAX_MS, staleAttach, useClaudeSession } from './hooks/use-session.ts'
 export type { ConnectionState, UseClaudeSessionOptions, UseClaudeSessionResult } from './hooks/use-session.ts'
 export { clearTranscriptCache } from './lib/transcript-cache.ts'
+export { clearProfileUsageCache } from './lib/profile-usage-cache.ts'
 export { attachmentKind, useAttachments } from './hooks/use-attachments.ts'
 export type { AttachmentKind, StagedAttachment, UseAttachmentsOptions, UseAttachmentsResult } from './hooks/use-attachments.ts'
 export { scanPromptTokens } from './lib/prompt-tokens.ts'
