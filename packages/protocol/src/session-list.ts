@@ -81,6 +81,12 @@ export type SessionRow = {
   adapter: string
   state: SessionState
   info: SessionInfo
+  /**
+   * Messages this client has not read — `unseenCount` against its watermark, so the
+   * unit is prose (`SessionInfo.proseCount`) wherever the gateway reports it. A session
+   * that is only running tools contributes 0: the badge answers "is there something to
+   * read", not "is anything happening", which is what `state` is for.
+   */
   unseen: number
 }
 

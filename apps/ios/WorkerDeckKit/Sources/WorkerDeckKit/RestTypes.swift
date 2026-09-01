@@ -556,6 +556,13 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// `lastSeq` cannot either (it counts every stream delta). Absent on an older
   /// server; fall back to `numTurns` rather than showing nothing.
   public let activityCount: Int?
+  /// Rows of the kind a person is actually waiting to read — protocol's
+  /// `transcriptProse`: assistant prose, a failed turn, an error, a delivered
+  /// file, and nothing a sub-agent said to its parent. **This is the unread
+  /// badge's unit**; `activityCount` stays "has anything happened at all",
+  /// which is what sorting and dormancy read. Absent on a gateway that predates
+  /// the field — fall back to `activityCount` rather than going silent.
+  public let proseCount: Int?
   /// Epoch ms of the most recent emitted event.
   public let lastActivityAt: Double?
   /// Sub-agents this session has running, plus a short tail of settled ones.
@@ -605,7 +612,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
-    numTurns: Int? = nil, activityCount: Int? = nil, lastActivityAt: Double? = nil,
+    numTurns: Int? = nil, activityCount: Int? = nil, proseCount: Int? = nil,
+    lastActivityAt: Double? = nil,
     subagents: [SubagentInfo]? = nil, scope: [String: String]? = nil,
     project: ProjectInfo? = nil, contextUsage: ContextReading? = nil
   ) {
@@ -628,6 +636,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.totalCostUsd = totalCostUsd
     self.numTurns = numTurns
     self.activityCount = activityCount
+    self.proseCount = proseCount
     self.lastActivityAt = lastActivityAt
     self.subagents = subagents
     self.scope = scope

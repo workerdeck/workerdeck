@@ -141,6 +141,7 @@ export class SessionRunner implements Runner {
       createdAt: this.createdAt,
       lastSeq: this.#log.seq,
       activityCount: this.#log.activityCount,
+      proseCount: this.#log.proseCount,
       contextUsage: this.#log.contextUsage,
       pendingPermissionCount: this.#pending.size,
       subagents: this.#subagents.list(),

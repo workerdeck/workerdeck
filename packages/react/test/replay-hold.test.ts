@@ -14,7 +14,7 @@ function frame(replayingFrom: number, lastSeq: number): AttachedFrame {
     lastSeq,
     pendingPermissionCount: 0,
   }
-  return { type: 'attached', protocolVersion: 7, session, replayingFrom }
+  return { type: 'attached', protocolVersion: 1, session, replayingFrom }
 }
 
 describe('initialReplayTarget', () => {

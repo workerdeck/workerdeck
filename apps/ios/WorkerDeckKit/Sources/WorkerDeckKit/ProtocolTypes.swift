@@ -13,7 +13,7 @@ import Foundation
 /// Never decode with a global key-conversion strategy.
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against `AttachedFrame.protocolVersion`.
-  public static let version = 7
+  public static let version = 1
 }
 
 // MARK: - Session lifecycle
@@ -159,7 +159,7 @@ public struct ToolResultBlock: Sendable, Equatable {
   ///
   /// It can only arrive on a socket that asked for it — see
   /// `WorkerClient.attach(truncateResults:)` — which is why it is additive at
-  /// protocol 7 rather than a version bump. Absent means the block is whole.
+  /// additively rather than by a version bump. Absent means the block is whole.
   public let truncated: Bool?
   /// How many characters the untruncated result had. Set iff `truncated`.
   ///

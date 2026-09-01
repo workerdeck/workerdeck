@@ -113,7 +113,7 @@ export class UnreadStatusItem implements vscode.Disposable {
     if (waiting > 0) {
       tip.appendMarkdown(`**${waiting} session${waiting === 1 ? '' : 's'} awaiting approval**\n\n`)
     }
-    tip.appendMarkdown(`${rows} new row${rows === 1 ? '' : 's'} since you last looked\n\n`)
+    tip.appendMarkdown(`${rows} new message${rows === 1 ? '' : 's'} since you last looked\n\n`)
     tip.appendMarkdown('Click to open the Sessions view.')
     this.#item.tooltip = tip
     this.#item.show()

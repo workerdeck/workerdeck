@@ -211,7 +211,7 @@ struct ImageRefTests {
   func attachFlagIsSeparate() throws {
     let client = WorkerClient(baseURL: URL(string: "http://phone.local:8787")!)
     // Off by default and separately from truncation, because this family's
-    // "additive at protocol 7" argument rests on a client that never asked
+    // "additive on this protocol" argument rests on a client that never asked
     // being unable to receive one.
     #expect(
       try client.webSocketURL(sessionId: "s1", afterSeq: 0).absoluteString

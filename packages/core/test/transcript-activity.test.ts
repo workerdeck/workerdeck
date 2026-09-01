@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contextReading, transcriptActivity, transcriptContent, type SessionEventBody } from '@workerdeck/protocol'
+import { contextReading, transcriptActivity, transcriptContent, transcriptProse, type SessionEventBody } from '@workerdeck/protocol'
 
 describe('transcriptActivity', () => {
   const assistant = (content: unknown[]) =>
@@ -114,6 +114,95 @@ describe('transcriptActivity', () => {
         uuid: 'u11',
       } as SessionEventBody),
     ).toBe(1)
+  })
+})
+
+describe('transcriptProse', () => {
+  const assistant = (content: unknown[], parentToolUseId: string | null = null) =>
+    ({
+      type: 'assistant_message',
+      message: { role: 'assistant', content },
+      parentToolUseId,
+      uuid: 'u1',
+    }) as SessionEventBody
+
+  const turnResult = (isError: boolean): SessionEventBody =>
+    ({
+      type: 'turn_result',
+      subtype: isError ? 'error_during_execution' : 'success',
+      isError,
+      durationMs: 1,
+      numTurns: 1,
+      totalCostUsd: 0,
+    }) as SessionEventBody
+
+  it('scores the paragraph and none of the work around it — the whole point of the badge', () => {
+    const message = assistant([
+      { type: 'thinking', thinking: 'hmm' },
+      { type: 'tool_use', id: 't1', name: 'Bash', input: {} },
+      { type: 'tool_use', id: 't2', name: 'Bash', input: {} },
+      { type: 'text', text: 'Done — the build passes.' },
+    ])
+    expect(transcriptActivity(message)).toBe(4)
+    expect(transcriptProse(message)).toBe(1)
+  })
+
+  it('scores a tool-only turn zero, so a tool-looping session shows no badge at all', () => {
+    expect(
+      transcriptProse(
+        assistant([
+          { type: 'tool_use', id: 't1', name: 'Bash', input: {} },
+          { type: 'tool_use', id: 't2', name: 'Read', input: {} },
+        ]),
+      ),
+    ).toBe(0)
+    expect(transcriptProse(assistant([{ type: 'thinking', thinking: 'long and silent' }]))).toBe(0)
+  })
+
+  it('ignores whitespace-only text, in a block and as a string body alike', () => {
+    expect(transcriptProse(assistant([{ type: 'text', text: '   ' }]))).toBe(0)
+    expect(transcriptProse(assistant('plain text' as never))).toBe(1)
+    expect(transcriptProse(assistant('  ' as never))).toBe(0)
+  })
+
+  it('inherits the sub-agent carve-out: prose written to a parent is not addressed to the human', () => {
+    expect(transcriptProse(assistant([{ type: 'text', text: 'Found it.' }], 'toolu_a'))).toBe(0)
+  })
+
+  it('counts a failed turn but not a successful one, which already carried its own prose', () => {
+    expect(transcriptProse(turnResult(true))).toBe(1)
+    expect(transcriptProse(turnResult(false))).toBe(0)
+    expect(transcriptActivity(turnResult(false))).toBe(1)
+  })
+
+  it('counts the other things said to a human, and nothing that is merely work or state', () => {
+    expect(transcriptProse({ type: 'session_error', message: 'boom' })).toBe(1)
+    expect(transcriptProse({ type: 'file_delivered', path: '/tmp/x.png', bytes: 12 })).toBe(1)
+    expect(
+      transcriptProse({
+        type: 'user_message',
+        message: { role: 'user', content: 'hi' },
+        parentToolUseId: null,
+      }),
+    ).toBe(1)
+    expect(
+      transcriptProse({
+        type: 'user_message',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1' }] },
+        parentToolUseId: null,
+        synthetic: true,
+      }),
+    ).toBe(0)
+    expect(
+      transcriptProse({
+        type: 'stream_delta',
+        event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'hel' } },
+        parentToolUseId: null,
+        uuid: 'u2',
+      }),
+    ).toBe(0)
+    expect(transcriptProse({ type: 'status_changed', status: 'running' })).toBe(0)
+    expect(transcriptProse({ type: 'conversation_reset' })).toBe(0)
   })
 })
 

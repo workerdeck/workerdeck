@@ -141,8 +141,7 @@ struct SubagentTakeoverView: View {
     .task(id: SeenKey(revision: vm.revision, attached: vm.session != nil)) {
       guard scenePhase == .active, let info = vm.session else { return }
       unread.mark(
-        host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count,
-        activity: info.activityCount, turns: info.numTurns)
+        host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count, info: info)
     }
   }
 

@@ -41,12 +41,24 @@ final class UnreadModel {
   /// the session view visible and showing it — because that is a fact about the
   /// UI, not about storage.
   @discardableResult
-  func mark(host: UUID, sessionId: String, itemCount: Int?, activity: Int?, turns: Int?) -> Bool {
+  func mark(host: UUID, sessionId: String, itemCount: Int?, activity: Int?, prose: Int?, turns: Int?)
+    -> Bool
+  {
     let moved = marks.mark(
       hostId: host.uuidString, sessionId: sessionId, itemCount: itemCount, activity: activity,
-      turns: turns)
+      prose: prose, turns: turns)
     if moved { revision &+= 1 }
     return moved
+  }
+
+  /// The same, straight off a rollup record — every caller has one, and reading
+  /// the three counters out by hand at four call sites is how one of them came
+  /// to miss a number the badge depends on.
+  @discardableResult
+  func mark(host: UUID, sessionId: String, itemCount: Int?, info: SessionInfo) -> Bool {
+    mark(
+      host: host, sessionId: sessionId, itemCount: itemCount, activity: info.activityCount,
+      prose: info.proseCount, turns: info.numTurns)
   }
 
   /// Rows this phone has not seen, from the rollup alone.

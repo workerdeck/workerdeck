@@ -164,7 +164,8 @@ export function SessionItem({
           )}
           {row.unseen > 0 ? (
             <span
-              title={`${row.unseen} new`}
+              // Prose, not rows: `unseen` counts messages a person has not read (`proseCount`).
+              title={`${row.unseen} new message${row.unseen === 1 ? '' : 's'}`}
               className={cn(
                 'flex h-4 min-w-6 shrink-0 items-center justify-center rounded-full px-2',
                 'text-[0.75rem] leading-none tracking-[-0.005em] tabular-nums',

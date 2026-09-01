@@ -99,4 +99,33 @@ struct WatermarksTests {
   @Test func neverGoesNegativeWhenTheRollupLagsTheMark() {
     #expect(unseenCount(mark: mark, activityCount: 12, turns: nil) == 0)
   }
+
+  // MARK: - unseenCount, prose
+
+  @Test func prefersProseOverRowsSoAToolLoopingSessionBadgesNothing() {
+    let read = Watermark(itemCount: 40, activity: 40, prose: 4, turns: 5, seenAt: 0)
+    // Eight new rows, none of them anything a person is waiting to read.
+    #expect(unseenCount(mark: read, proseCount: 4, activityCount: 48, turns: 6) == 0)
+    #expect(unseenCount(mark: read, proseCount: 5, activityCount: 48, turns: 6) == 1)
+  }
+
+  @Test func readsAPreProseMarkAsCaughtUpRatherThanAWholeUnreadHistory() {
+    #expect(unseenCount(mark: mark, proseCount: 12, activityCount: 40, turns: nil) == 0)
+  }
+
+  @Test func leavesAStoredProseMarkAloneWhenTheCallerHasNothingToSayAboutProse() {
+    let box = StoreBox()
+    let marks = Watermarks(store: box.seam)
+    marks.mark(hostId: "mac", sessionId: "a", activity: 10, prose: 3, now: 1_000)
+    // An older gateway drops out of the rollup: `prose` nil must not read as 0.
+    marks.mark(hostId: "mac", sessionId: "a", activity: 12, now: 200_000)
+    #expect(marks.get(hostId: "mac", sessionId: "a")?.prose == 3)
+  }
+
+  @Test func movesOnProseAloneSoReadingAParagraphClearsTheBadge() {
+    let box = StoreBox()
+    let marks = Watermarks(store: box.seam)
+    marks.mark(hostId: "mac", sessionId: "a", activity: 10, prose: 3, now: 1_000)
+    #expect(marks.mark(hostId: "mac", sessionId: "a", activity: 10, prose: 4, now: 1_500))
+  }
 }

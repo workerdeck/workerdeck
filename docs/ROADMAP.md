@@ -417,6 +417,31 @@ command runs the production build beside dev (`pnpm start:prod`, 8788).
 
 ### On master, unreleased
 
+- **`PROTOCOL_VERSION` collapsed 7 → 1.** A pre-launch reset, not a compatibility event: the
+  counter had climbed through a period when every consumer — dashboard, extension, phone,
+  embeddings — was rebuilt out of this repo, so nothing in the wild spoke an older number and
+  the history it recorded was history nobody could still be running. **It is locked from the
+  public launch on**, when a bump becomes a promise to someone else's build. The mismatch
+  machinery is deliberately unchanged (`use-session.ts` → `SessionPanel`'s banner, iOS's
+  `protocolMismatch`); only the number it compares moved. Anyone running an old gateway against
+  a new client during the reset sees the banner once and clears it by restarting the gateway.
+
+- **The unread badge counts what a person is waiting to read.** `SessionInfo` carries
+  `proseCount` beside `activityCount` — additive, so deliberately **no `PROTOCOL_VERSION`
+  bump**: an older client ignores the field and a newer one falls back from it, and bumping
+  would have shown a version-mismatch banner to every operator whose gateway was merely a
+  release behind. Scored by protocol's new
+  `transcriptProse` — assistant prose, a *failed* turn, an error, a delivered file, and nothing a
+  sub-agent said to its parent. It is the badge's number on all three clients now, which means a
+  session running forty tools badges **nothing** where it used to tick 6, 7, 8 for work nobody
+  had to read. `activityCount` is untouched and still answers "has anything happened at all" for
+  sorting and dormancy; the two questions were one number for too long. `unseenCount` walks prose
+  → rows → turns so an older gateway badges exactly as before, and a watermark stored before the
+  bump reads as *caught up* rather than turning a visited session's whole history unread on the
+  first poll after an upgrade. The badge is correct within one poll of a message completing and
+  cannot flip mid-stream — `transcriptProse(stream_delta)` is 0 on purpose, exactly like
+  `transcriptActivity`'s, and making deltas count is what those zeros exist to prevent.
+
 Held back from a bump on purpose — see `_docs/VERIFICATION-DEBT.md`, which gates it. The full
 ledger lives in `docs/RELEASING.md`; the headline tracks are live-session persistence
 (`parking.persistLive`, `Runner.snapshot()`), sub-agents made visible (`forwardSubagentText`,

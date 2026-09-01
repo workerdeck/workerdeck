@@ -11,7 +11,7 @@ import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
 import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
-import { createWatermarks } from './watermarks.ts'
+import { createWatermarks, unseenCount } from './watermarks.ts'
 
 const SECTION_VIEWS: Record<SectionKind, string> = {
   info: 'workerdeck.sessionInfo',
@@ -48,6 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const moved = watermarks.mark(active.host.id, active.sessionId, {
       itemCount: vitals?.itemCount,
       activity: info?.activityCount,
+      prose: info?.proseCount,
       turns: info?.numTurns,
     })
     if (moved) {
@@ -81,11 +82,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const unseen: Record<string, number> = {}
     for (const [hostId, list] of Object.entries(sessions)) {
       for (const info of list) {
-        const mark = watermarks.get(hostId, info.id)
-        if (!mark) {
-          continue
-        }
-        const fresh = info.activityCount !== undefined ? info.activityCount - mark.activity : (info.numTurns ?? 0) - mark.turns
+        // `unseenCount` owns the prose → rows → turns ladder; a second copy of it here is
+        // how this badge and the dashboard's came to disagree.
+        const fresh = unseenCount(watermarks.get(hostId, info.id), info)
         if (fresh > 0) {
           unseen[`${hostId}:${info.id}`] = fresh
         }

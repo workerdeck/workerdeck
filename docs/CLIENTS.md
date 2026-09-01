@@ -162,6 +162,10 @@ over the sessions the **filter is
 showing** — the webview mirrors its view config to the host (`wd-view-config`, one-way;
 the shared rules moved to `src/view-config.ts` so both sides filter identically), because a
 badge counting rows in hidden sessions sends you looking for something that isn't there.
+What it counts is **prose** — `SessionInfo.proseCount`, protocol's narrower door — so a
+session grinding through forty tool calls shows nothing at all until it says something; the
+host reads it through protocol's `unseenCount` rather than the copy of that arithmetic it used
+to keep, which is how this badge and the dashboard's came to disagree in the first place.
 Two things the move bought: the count no longer needs the Sessions webview to have been
 resolved (`refreshUnread` is gated on **neither `#ready` nor `#view`** — gating on `#ready` is
 how the count came to sit stale until the sidebar was next opened, reading a session in the
@@ -335,12 +339,15 @@ being no native transcript for the editor to own, so it cannot be what the rule 
 
 ### Unread watermarks & the workspace-scope facet
 
-The cards carry it per session — an **unread badge** of transcript rows since that session was last on
+The cards carry it per session — an **unread badge** of messages since that session was last on
 screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
-showing it**, and monotonic so a compaction can't resurrect read rows). Rows, from
-`SessionInfo.activityCount`: turns undercount badly (five tool calls in one turn is one
-turn), `lastSeq` overcounts absurdly (every stream delta). Turns stay the fallback for a
-gateway too old to report it. The panel turns the same mark into catch-up. The window's open
+showing it**, and monotonic so a compaction can't resurrect read rows). Messages, from
+`SessionInfo.proseCount`: the badge answers *is there something to read*, so a
+session grinding through forty tool calls badges nothing until it speaks. `unseenCount` walks
+prose → rows → turns, the two lower rungs being what a gateway without the field can still
+say —
+rows (`activityCount`) because turns undercount badly (five tool calls in one turn is one turn)
+and `lastSeq` overcounts absurdly (every stream delta). The panel turns the same mark into catch-up. The window's open
 folders are a facet too, and the only one **on by default**: `workspaceScope()` turns them
 into scope roots, and a session is inside one only when the *gateway* could be — a `file:`
 folder scopes loopback gateways alone (a remote gateway's identical-looking path is another

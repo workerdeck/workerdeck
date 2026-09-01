@@ -343,7 +343,7 @@ public struct WorkerClient: Sendable {
   ///     away. This is where the bytes actually were: 91% of all tool-result
   ///     payload across 214 sessions, and no client rendered a byte of it. Its
   ///     **own** flag rather than a widening of `truncateResults`, because this
-  ///     family's "additive at protocol 7" argument rests on a client that never
+  ///     family's "additive on this protocol" argument rests on a client that never
   ///     asked being unable to receive one, by construction. Default off under
   ///     the same rule, and unlike truncation it applies to **live** events too:
   ///     the render path is ref-then-fetch, so bytes arriving live would only be

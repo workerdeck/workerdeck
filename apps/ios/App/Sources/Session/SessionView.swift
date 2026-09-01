@@ -223,7 +223,7 @@ struct SessionView: View {
               guard let info = await vm.refreshSessionInfo() else { return }
               unread.mark(
                 host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count,
-                activity: info.activityCount, turns: info.numTurns)
+                info: info)
             }
           }
         }
@@ -480,8 +480,7 @@ struct SessionView: View {
   private func markSeen() {
     guard scenePhase == .active, let info = vm.session else { return }
     unread.mark(
-      host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count,
-      activity: info.activityCount, turns: info.numTurns)
+      host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count, info: info)
   }
 
   /// Leaving (or backgrounding) trues the mark up once — the VS Code panel's
@@ -497,8 +496,7 @@ struct SessionView: View {
     Task { @MainActor in
       guard let info = await vm.refreshSessionInfo() else { return }
       unread.mark(
-        host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count,
-        activity: info.activityCount, turns: info.numTurns)
+        host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count, info: info)
     }
   }
 

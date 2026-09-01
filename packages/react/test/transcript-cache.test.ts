@@ -26,7 +26,7 @@ function info(overrides: Partial<SessionInfo> = {}): SessionInfo {
 }
 
 function frame(replayingFrom: number, session: SessionInfo): AttachedFrame {
-  return { type: 'attached', protocolVersion: 7, session, replayingFrom }
+  return { type: 'attached', protocolVersion: 1, session, replayingFrom }
 }
 
 function held(lastSeq: number, createdAt = 1_000): TranscriptState {

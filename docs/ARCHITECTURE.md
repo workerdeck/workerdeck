@@ -37,6 +37,10 @@ boundary: anything a client needs must be expressible as protocol events and com
   `transcriptActivity(event)` counts the transcript rows an event materializes — the react
   reducer renders by that rule and the runners count `SessionInfo.activityCount` with it, so a
   client can diff "how much happened while I wasn't looking" without attaching.
+  `transcriptProse(event)` is the narrower door beside it (`SessionInfo.proseCount`): output
+  addressed to the human rather than evidence of work, which is what the unread badge counts —
+  "how much happened" and "how much is there to read" are different questions and were one
+  number for too long.
   `src/session-list.ts` and `src/watermarks.ts` are two more such rules, lifted out of the VS
   Code extension when the dashboard needed them: the sessions-list view model (state buckets,
   facets, filter/group/sort, the subset summary, workspace-scope containment) and the unread

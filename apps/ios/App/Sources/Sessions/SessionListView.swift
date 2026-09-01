@@ -809,7 +809,7 @@ struct SessionRowView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Capsule().fill(live ? AnyShapeStyle(.tint) : AnyShapeStyle(ListPalette.badge)))
-            .accessibilityLabel("\(unseen) new rows")
+            .accessibilityLabel("\(unseen) new messages")
         }
         // How full the window is, at a glance and across the whole list — the
         // question you cannot ask from inside a session. Absent draws nothing:

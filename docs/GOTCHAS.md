@@ -66,7 +66,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   deltas and tool results count zero rows and still mutate items). The reset event itself is
   content, so a superseded reset is skipped with the conversation it cleared and the latest one
   always replays — which is what clears a reconnecting client still holding pre-reset rows, and
-  what keeps a pre-reset *client* (protocol 7, no reducer case) correct on its next attach.
+  what keeps a *client* built before the event existed (no reducer case) correct on its next attach.
   (2) `#activityCount` stays **monotonic** across the reset: it is the unread cursor watermarks
   diff against, and winding it back to the fresh row count would leave every stored mark above it
   and that badge silently dead. The client consequence of that monotonicity is the part nobody can
@@ -1447,7 +1447,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   stored array, not the delivered position** — `headOf` drops non-text parts while building a head,
   so the two filters composed renumber a block; that is also why refs are applied *before*
   truncation and why `headOf` now keeps an `image_ref`. And it is its **own flag**, because this
-  family's additive-at-protocol-7 argument rests on "a client that never asked cannot receive one"
+  family's additive-on-this-protocol argument rests on "a client that never asked cannot receive one"
   holding by construction, which a flag whose meaning grew after shipping would destroy. The live
   half is `SubscriberSet` (`core/src/lib/subscribers.ts`), which is also where the answer to "which
   filters reach live events" is now written down once instead of three times.
@@ -1555,6 +1555,31 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   feature, attach cold and watch the network panel; reading the transcript proves nothing.** An
   earlier verification pass concluded the feature was broken on the provider engine on exactly this
   mistake.
+## The unread badge (`proseCount`, watermarks)
+
+- **The badge counts prose, not activity, and the two counters must not be confused.**
+  `SessionInfo.proseCount` (scored by `transcriptProse`) is what `unseenCount` diffs
+  against a watermark; `activityCount` is still every content block and is what sorting, "has
+  anything happened at all" and dormancy read. Repointing either at the other undoes one of the
+  two features. The badge's number is therefore **not** the number of rows that appeared — a
+  session that ran forty tools and said nothing badges **zero**, on purpose.
+- **A watermark written before this shipped has no `prose`, and that absence reads as *caught up*.**
+  The alternative — reading it as 0 — badges every previously-visited session with its entire
+  prose history the first time it polls after an upgrade, which is a client that looks broken on
+  exactly the day it improved. The cost is one missed badge per already-visited session, once.
+  Same rule in the Swift mirror (`Watermarks.swift`) and the same reason.
+- **A caller that knows nothing about prose must pass `undefined`, never 0.** `Watermarks.mark`
+  keeps the previous `prose` when the argument is absent. A gateway without the field reports no
+  `proseCount`, so every mark written against it would otherwise walk a real prose watermark back
+  to 0 and re-badge everything the operator had read. The field is additive on purpose — it must
+  never have cost a `PROTOCOL_VERSION` bump, which would have banner-warned every operator whose
+  gateway was merely older, about nothing.
+- **The badge cannot flip mid-stream, and that is a wire fact.** Unread is derived entirely from
+  the polled REST rollup, `transcriptProse(stream_delta)` is 0 exactly as `transcriptActivity`'s
+  is, and `assistant_message` is emitted per *completed* message. The badge is correct within one
+  poll (≤2s busy) of a message completing. Making deltas count is precisely what those zeros were
+  written to prevent — see the streaming notes above before promising otherwise.
+
 ## Terminal theme (`transcriptVariant: 'terminal'`)
 
 - **The gutter markers are the CLI's, and they are the whole of a row's identity.** `❯` is what

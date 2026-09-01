@@ -26,6 +26,7 @@ export function useUnseen() {
   const unseenFor = useCallback(
     (hostId: string, info: SessionInfo) =>
       unseenCount(watermarks.get(hostId, info.id), {
+        proseCount: info.proseCount,
         activityCount: info.activityCount,
         turns: info.numTurns,
       }),
@@ -43,9 +44,9 @@ export function unseenSince(hostId: string, sessionId: string): { itemCount: num
 
 // A background tab is not being read, and marking it read anyway is how an unread badge quietly stops working.
 export function useMarkSeen(hostId: string, sessionId: string | undefined) {
-  const seen = useRef<{ itemCount?: number; activity?: number; turns?: number }>({})
+  const seen = useRef<{ itemCount?: number; activity?: number; prose?: number; turns?: number }>({})
   return useCallback(
-    (reading: { itemCount?: number; activity?: number; turns?: number }) => {
+    (reading: { itemCount?: number; activity?: number; prose?: number; turns?: number }) => {
       if (!sessionId || document.hidden) {
         return
       }

@@ -23,15 +23,21 @@ public struct Watermark: Codable, Sendable, Equatable {
   /// as `itemCount`, but from the rollup, so it is knowable for a session this
   /// client is not showing.
   public var activity: Int
+  /// Prose rows seen (`SessionInfo.proseCount`) — the badge's unit. Optional
+  /// because a mark stored before prose counting existed cannot say; see
+  /// `unseenCount`, which reads that absence as "caught up" rather than
+  /// badging a whole history the operator has already read.
+  public var prose: Int?
   /// Completed turns seen. The fallback unit for a gateway too old to report
   /// `activityCount`; five tool calls in one turn count as one.
   public var turns: Int
   /// When this was last true (epoch ms).
   public var seenAt: Double
 
-  public init(itemCount: Int, activity: Int, turns: Int, seenAt: Double) {
+  public init(itemCount: Int, activity: Int, prose: Int? = nil, turns: Int, seenAt: Double) {
     self.itemCount = itemCount
     self.activity = activity
+    self.prose = prose
     self.turns = turns
     self.seenAt = seenAt
   }
@@ -95,18 +101,24 @@ public final class Watermarks {
   @discardableResult
   public func mark(
     hostId: String, sessionId: String, itemCount: Int? = nil, activity: Int? = nil,
-    turns: Int? = nil, now: Double = Date().timeIntervalSince1970 * 1000
+    prose: Int? = nil, turns: Int? = nil, now: Double = Date().timeIntervalSince1970 * 1000
   ) -> Bool {
     let id = watermarkKey(hostId: hostId, sessionId: sessionId)
     let previous = cache[id]
+    // A caller with nothing to say about prose (an older gateway reports no
+    // `proseCount`) must not overwrite a real mark with 0, which would re-badge
+    // everything already read.
+    let nextProse = prose.map { max(previous?.prose ?? 0, $0) } ?? previous?.prose
     let next = Watermark(
       itemCount: max(previous?.itemCount ?? 0, itemCount ?? 0),
       activity: max(previous?.activity ?? 0, activity ?? 0),
+      prose: nextProse,
       turns: max(previous?.turns ?? 0, turns ?? 0),
       seenAt: now)
     if let previous,
       previous.itemCount == next.itemCount,
       previous.activity == next.activity,
+      previous.prose == next.prose,
       previous.turns == next.turns,
       // Still worth a write once a minute so "last here" stays honest without
       // hammering storage on every streamed row.
@@ -139,21 +151,40 @@ public final class Watermarks {
 
 /// Rows this client has not seen, from the rollup alone.
 ///
-/// `activityCount` is the unit that makes an honest badge: turns undercount
-/// badly (five tool calls in one turn is one turn) and a stream sequence
-/// overcounts absurdly (every delta). Turns stay the fallback for a gateway too
-/// old to report it.
+/// The unit is the best one the pair can agree on: **prose** the human has not
+/// read (`proseCount`, scored by protocol's `transcriptProse`), else rows, else
+/// turns. Prose is what the badge is *for* — a session that tool-loops for a
+/// minute is working, not talking, and a count that ticks 6, 7, 8 through it is
+/// noise. Rows stay the rung below for a gateway too old to report prose (turns
+/// undercount badly — five tool calls in one turn is one turn — and a stream
+/// sequence overcounts absurdly).
 ///
 /// A session never visited returns 0 — "never opened" is not "unread", and a
 /// badge that counted every session's whole history on first launch would be
 /// noise on the one day it should be quiet.
-public func unseenCount(mark: Watermark?, activityCount: Int?, turns: Int?) -> Int {
+public func unseenCount(mark: Watermark?, proseCount: Int?, activityCount: Int?, turns: Int?)
+  -> Int
+{
   guard let mark else { return 0 }
+  if let proseCount {
+    // `mark.prose` absent = a mark written before prose counting. Reading it as
+    // "caught up" costs one missed badge on a session already visited; reading
+    // it as 0 would badge every such session with its whole history.
+    return max(0, proseCount - (mark.prose ?? proseCount))
+  }
   if let activityCount { return max(0, activityCount - mark.activity) }
   return max(0, (turns ?? 0) - mark.turns)
 }
 
+/// The pre-prose spelling, kept so a caller with only the two older numbers
+/// still reads the same ladder.
+public func unseenCount(mark: Watermark?, activityCount: Int?, turns: Int?) -> Int {
+  unseenCount(mark: mark, proseCount: nil, activityCount: activityCount, turns: turns)
+}
+
 /// The same arithmetic straight off a rollup record.
 public func unseenCount(mark: Watermark?, info: SessionInfo) -> Int {
-  unseenCount(mark: mark, activityCount: info.activityCount, turns: info.numTurns)
+  unseenCount(
+    mark: mark, proseCount: info.proseCount, activityCount: info.activityCount,
+    turns: info.numTurns)
 }

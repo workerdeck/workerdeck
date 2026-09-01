@@ -10,10 +10,30 @@ stamped with a monotonic `seq`, plus a small command set (`SessionCommand`); cli
 WebSocket, optionally replaying from a known `seq`, and drive the session with commands. API
 message content is modelled structurally (`ApiMessage`) so a client can render a transcript without
 the Agent SDK. Dependency-free, browser-safe, depends
-on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`. It also owns the
+on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`, which is **1**:
+it was collapsed from 7 before the public launch, the counter having been climbing through a
+period when every consumer was rebuilt from this repo anyway and nothing in the wild spoke an
+older one. **From the public launch it is locked** — after that a bump is a real promise to
+someone else's build, and the version-mismatch banner (`use-session.ts`, `SessionPanel`, iOS's
+`protocolMismatch`) is what makes it visible. The banner logic is untouched by the reset; only
+the number it compares moved. The lesson the reset paid for: an *additive* field never earns a
+bump (see `proseCount`, `contextUsage`, `project`, 0.18.0's sub-agents) — bumping for one warns
+every operator whose gateway is merely a release behind, about nothing. It also owns the
 few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
 the row-count rule the react reducer renders by and the runners count with
-(`SessionInfo.activityCount`) — change one, change both. A **subagent's own messages score
+(`SessionInfo.activityCount`) — change one, change both. `transcriptProse(event)` is the
+**narrower** door beside it, and the one the unread badge counts through
+(`SessionInfo.proseCount`): assistant `text` blocks, a *failed* `turn_result`, a
+`session_error`, a `file_delivered` — output addressed to the human, not evidence of work.
+`thinking` and `tool_use` score zero there, which is the whole point: a session that tool-loops
+for a minute was ticking a badge 6, 7, 8 with nothing yet said. A successful `turn_result`
+scores zero too — it already carried its own prose, and counting both double-counts every
+answer. The two numbers are **not interchangeable**: `activityCount` stays "has anything
+happened at all", which is what sorting and dormancy read; `proseCount` is "is there something
+to read". Purely additive — an optional field an older client ignores and a newer one falls
+back from — so deliberately **no `PROTOCOL_VERSION` bump**, the 0.18.0 precedent. `unseenCount`
+walks prose → rows → turns so a gateway without the field badges exactly as it did before, and reads a watermark with no `prose` as *caught up* — the alternative badges
+every previously-visited session with its entire history the first time it polls. A **subagent's own messages score
 zero** (any event carrying a `parentToolUseId`): they render *inside* the `Task` call that
 spawned them, which is itself a counted row, and one Task can outnumber everything a person
 typed that day — a badge is a promise about what is on screen. It is deliberately not the
@@ -548,7 +568,7 @@ one to reach for: `truncateResults` was designed against a projected 68% cut and
 bytes actually are: across 214 local sessions **91% of all tool-result payload is base64 no
 client renders** (489 MB against 44 MB of text, two thirds of it `Read` looking at a PNG), and
 one session's attach fell from 4,550 KB to 771 KB with no image in it. It is its own flag rather
-than a widening of `truncateResults` because "additive at protocol 7" then rests on a client that
+than a widening of `truncateResults` because "additive on this protocol" then rests on a client that
 never asked being unable to receive one *by construction*, not by release archaeology.
 `buildWsUrl` took an optional third parameter rather than becoming an options object, so every
 existing implementation still typechecks — and a custom one that ignores it merely gets a full

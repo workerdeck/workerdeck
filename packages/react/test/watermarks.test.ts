@@ -83,4 +83,36 @@ describe('unseenCount', () => {
   it('never goes negative when the rollup lags the mark', () => {
     expect(unseenCount(mark, { activityCount: 12 })).toBe(0)
   })
+
+  it('prefers prose over rows: a tool-looping session badges nothing', () => {
+    const read: Watermark = { itemCount: 40, activity: 40, prose: 4, turns: 5, seenAt: 0 }
+    // Eight new rows, none of them anything a person is waiting to read.
+    expect(unseenCount(read, { proseCount: 4, activityCount: 48, turns: 6 })).toBe(0)
+    expect(unseenCount(read, { proseCount: 5, activityCount: 48, turns: 6 })).toBe(1)
+  })
+
+  it('reads a mark written before prose counting as caught up, not as a whole unread history', () => {
+    // `prose` absent, `proseCount` present: the session was visited, so 40 rows of it are not news.
+    expect(unseenCount(mark, { proseCount: 12, activityCount: 40 })).toBe(0)
+  })
+
+  it('badges exactly as before against a gateway too old to report prose', () => {
+    expect(unseenCount(mark, { activityCount: 48, turns: 6 })).toBe(8)
+  })
+})
+
+describe('Watermarks.mark, prose', () => {
+  it('leaves a stored prose mark alone when the caller has nothing to say about prose', () => {
+    const marks = new Watermarks(store().seam)
+    marks.mark('mac', 'a', { activity: 10, prose: 3 }, 1_000)
+    // An older gateway drops out of the rollup: `prose` undefined must not read as 0.
+    marks.mark('mac', 'a', { activity: 12 }, 200_000)
+    expect(marks.get('mac', 'a')).toMatchObject({ activity: 12, prose: 3 })
+  })
+
+  it('moves on prose alone, so reading a paragraph clears the badge', () => {
+    const marks = new Watermarks(store().seam)
+    marks.mark('mac', 'a', { activity: 10, prose: 3 }, 1_000)
+    expect(marks.mark('mac', 'a', { activity: 10, prose: 4 }, 1_500)).toBe(true)
+  })
 })

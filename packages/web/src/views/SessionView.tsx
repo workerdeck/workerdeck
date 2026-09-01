@@ -90,8 +90,8 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
     if (!polled || !visible) {
       return
     }
-    markSeen({ activity: polled.activityCount, turns: polled.numTurns })
-  }, [polled?.activityCount, polled?.numTurns, visible, markSeen])
+    markSeen({ activity: polled.activityCount, prose: polled.proseCount, turns: polled.numTurns })
+  }, [polled?.activityCount, polled?.proseCount, polled?.numTurns, visible, markSeen])
 
   const close = async () => {
     try {
