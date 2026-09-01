@@ -897,3 +897,55 @@ describe('createWorkerServer', () => {
     }
   })
 })
+
+describe('shutdown', () => {
+  it('closes while a session socket is still attached', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startServer(harness)
+
+    const ws = await attachSessionSocket(base, wsBase)
+
+    // `wss` is `noServer`, so nothing in the close path used to reach an upgraded session socket and
+    // `server.close()`'s callback never fired: any attached dashboard tab hung Ctrl+C forever.
+    const server = running!
+    running = undefined
+    await expect(withTimeout(server.close(), 2000)).resolves.toBeUndefined()
+    expect(ws.readyState).not.toBe(WebSocket.OPEN)
+  })
+
+  it('is idempotent, so a second signal does not hang or throw', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startServer(harness)
+    const ws = await attachSessionSocket(base, wsBase)
+
+    const server = running!
+    running = undefined
+    const first = server.close()
+    const second = server.close()
+    await expect(withTimeout(Promise.all([first, second]), 2000)).resolves.toBeDefined()
+    await expect(withTimeout(server.close(), 2000)).resolves.toBeUndefined()
+  })
+})
+
+/** A session with a live, fully attached client socket — the shape that used to hang `close()`. */
+async function attachSessionSocket(base: string, wsBase: string): Promise<WebSocket> {
+  const createRes = await fetch(`${base}/sessions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ cwd: '/tmp/project', prompt: 'hello' }),
+  })
+  const { session } = (await createRes.json()) as { session: SessionInfo }
+  const ws = new WebSocket(`${wsBase}/sessions/${session.id}/ws`)
+  await frameCollector(ws).waitFor((f) => f.type === 'attached')
+  return ws
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms)
+      timer.unref()
+    }),
+  ])
+}

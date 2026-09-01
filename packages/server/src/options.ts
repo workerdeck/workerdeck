@@ -86,6 +86,26 @@ export type QueueServerOptions = {
   onEvent?: (event: JobEvent) => void
 }
 
+/** A point-in-time answer to "is it safe to stop yet?", as reported while draining. */
+export type DrainReport = {
+  /** Sessions mid-turn. These resolve on their own, so the drain waits for them. */
+  working: string[]
+  /**
+   * Sessions blocked on a human — a pending approval. The drain names these but never waits for them: nothing about
+   * shutting down will answer the prompt, so waiting is a hang with better manners.
+   */
+  awaitingHuman: string[]
+  /** True when the deadline passed with work still running. */
+  timedOut: boolean
+}
+
+export type DrainOptions = {
+  /** Overall budget. The drain gives up and reports rather than blocking shutdown forever. */
+  timeoutMs?: number
+  pollMs?: number
+  onProgress?: (report: DrainReport) => void
+}
+
 export type WorkerServer = {
   server: Server
   registry: SessionRegistry
@@ -93,5 +113,10 @@ export type WorkerServer = {
   bridge: BridgeHub
   parking: SessionParkManager
   listen: (port: number, host?: string) => Promise<{ port: number }>
+  /**
+   * Let running turns finish before `close()`. A courtesy, never a correctness requirement: records are written
+   * continuously, so a hard stop already loses nothing. Refuses new sessions for as long as it runs.
+   */
+  drain: (options?: DrainOptions) => Promise<DrainReport>
   close: () => Promise<void>
 }

@@ -16,6 +16,8 @@ export type Instance = {
   url: string
   port: number
   closed: Promise<void>
+  /** Let running turns finish before `close()`. See `WorkerServer.drain`. */
+  drain: WorkerServer['drain']
   close: () => Promise<void>
 }
 
@@ -270,6 +272,7 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     url,
     port,
     closed,
+    drain: (drainOptions) => server.drain(drainOptions),
     close: async () => {
       await server.close()
       // The session table's writes are queued rather than awaited by the request that caused them, so a last-moment

@@ -893,6 +893,25 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     the *only* thing separating "this session is over" from "this process is over" is that
     `parking.close()` runs first. Drop that guard and a graceful restart forgets precisely the
     sessions it was preserving — which is how this was found.
+  - **`close()` must close the session sockets, not just the queue ones.** `wss` is a `noServer`
+    instance, so `wss.close()` neither closes nor terminates its clients — it flips state and
+    waits for `clients` to empty — and `server.closeAllConnections()` does not reach *upgraded*
+    sockets. So a single attached dashboard tab kept `server.close()`'s callback from ever firing
+    and Ctrl+C hung forever, looking intermittent because it is clean with nothing attached. The
+    close path sends a close frame to every `wss.clients` entry and force-terminates the
+    stragglers on a short timer. **`close()` is also idempotent by contract now**: it returns the
+    first promise. A second Ctrl+C used to work only because `http.Server.close()` on an
+    already-closed server invokes its callback immediately with an `ERR_SERVER_NOT_RUNNING` the
+    code discards — luck that evaporates the moment the first close stops being re-entrant. The
+    CLI has a real second-signal path instead.
+  - **The drain never waits on `awaiting_approval`.** `server.drain()` lets running turns reach
+    idle before `close()`, but a session blocked on a human will not resolve on its own, so it is
+    *named* in the report and left behind — waiting is a hang with better manners. It sorts
+    sessions with protocol's `sessionState`, the same vocabulary the session list and `workerdeck
+    guard` use; a second spelling of the busy set inside the shutdown path is the failure mode
+    here. And it stays a courtesy, never a correctness requirement: records are written
+    continuously, so a hard stop already loses nothing. Do not let "we drain now" become a reason
+    to write less continuously.
   - **Waking one re-runs `buildRunnerConfig`.** `env` is on `EPHEMERAL_CONFIG_KEYS` and never
     reaches disk, so a claude profile's `CLAUDE_CONFIG_DIR` pin must be re-derived from the
     profile rather than read back. Handing the stored config to the engine as-is would strand a

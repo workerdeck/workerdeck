@@ -4,13 +4,20 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import { getEngineAdapter } from '@workerdeck/core'
 import type { EngineAdapter } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
-import { PROTOCOL_VERSION, type CreateSessionRequest, type JobEvent, type ProfileEngine, type QueueServerFrame } from '@workerdeck/protocol'
+import {
+  PROTOCOL_VERSION,
+  sessionState,
+  type CreateSessionRequest,
+  type JobEvent,
+  type ProfileEngine,
+  type QueueServerFrame,
+} from '@workerdeck/protocol'
 import type { SessionRunnerConfig } from '@workerdeck/core'
 import type { ServerContext } from './context.ts'
 import { json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { parseSessionRoute } from './lib/parse-route.ts'
-import type { LateBoundRefs, WorkerServer, WorkerServerOptions } from './options.ts'
+import type { DrainReport, LateBoundRefs, WorkerServer, WorkerServerOptions } from './options.ts'
 import { handleExecutionResult } from './routes/executions.ts'
 import { handleHostFiles } from './routes/host-files.ts'
 import { handleJobs } from './routes/jobs.ts'
@@ -41,6 +48,34 @@ export type {
   WorkerServer,
   WorkerServerOptions,
 } from './options.ts'
+
+/** How long a client gets to acknowledge the shutdown close frame before its socket is torn down. */
+const SOCKET_CLOSE_GRACE_MS = 250
+
+/**
+ * Split live sessions into "will finish by itself" and "needs a person".
+ *
+ * `sessionState` is the vocabulary the dashboard, the session list and `workerdeck guard` already sort by, and it
+ * draws exactly the line a drain needs: `working` covers starting/running and running subagents, while `attention`
+ * covers a pending approval. Re-spelling that set here is how the two definitions would drift apart.
+ */
+function surveyDrain(registry: SessionRegistry): DrainReport {
+  const working: string[] = []
+  const awaitingHuman: string[] = []
+  for (const info of registry.list()) {
+    const state = sessionState(info)
+    if (state === 'working') {
+      working.push(info.id)
+    } else if (state === 'attention') {
+      awaitingHuman.push(info.id)
+    }
+  }
+  return { working, awaitingHuman, timedOut: false }
+}
+
+function sameDrain(a: DrainReport, b: DrainReport): boolean {
+  return a.working.join() === b.working.join() && a.awaitingHuman.join() === b.awaitingHuman.join()
+}
 
 export function createWorkerServer(options: WorkerServerOptions = {}): WorkerServer {
   if (!options.authenticate && !options.allowUnauthenticated) {
@@ -155,6 +190,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const auth = createAuthService({ options, refs })
 
   const wss = new WebSocketServer({ noServer: true })
+  let closing: Promise<void> | undefined
+  let draining = false
 
   const queueSockets = new Set<WebSocket>()
   const sendQueueFrame = (ws: WebSocket, frame: QueueServerFrame): void => {
@@ -317,6 +354,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       json(res, 404, { error: 'not found' })
       return
     }
+    // Starting a turn we have already promised to stop waiting for would make the drain unable to converge.
+    // Existing sessions stay fully controllable — including approvals, which is how an operator unblocks one.
+    if (draining && req.method === 'POST' && route.id === undefined) {
+      json(res, 503, { error: 'server is shutting down' })
+      return
+    }
     const authCtx = await auth.authenticate(req)
     if (!authCtx.ok) {
       json(res, 401, { error: 'unauthorized' })
@@ -413,18 +456,58 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         })
       })
     },
-    close: () =>
-      new Promise((resolve) => {
+    drain: async (drainOptions = {}) => {
+      const { timeoutMs = 30_000, pollMs = 250, onProgress } = drainOptions
+      draining = true
+      const deadline = Date.now() + timeoutMs
+      let report = surveyDrain(registry)
+      onProgress?.(report)
+      while (report.working.length > 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, pollMs))
+        const next = surveyDrain(registry)
+        // Only speak when something actually changed: a shutdown that reports on its own progress should be
+        // readable, not a per-tick redraw of the same two lines.
+        if (!sameDrain(next, report)) {
+          onProgress?.(next)
+        }
+        report = next
+      }
+      report = { ...surveyDrain(registry), timedOut: false }
+      report.timedOut = report.working.length > 0
+      onProgress?.(report)
+      return report
+    },
+    close: () => {
+      // Idempotent by contract, not by luck: a second SIGINT re-enters here, and `http.Server.close()` on an
+      // already-closed server only fires its callback because we ignore the ERR_SERVER_NOT_RUNNING it passes.
+      // Returning the first promise makes the second call a no-op we can reason about.
+      closing ??= new Promise((resolve) => {
         queue?.close()
+        // Ordering is load-bearing: parking's `#closed` guard must be set before the registry closes runners with
+        // reason 'server', or shutdown discards every dormant record. See docs/GOTCHAS.md.
         parking.close()
         registry.closeAll()
-        for (const ws of queueSockets) {
-          ws.close()
+        // `wss` is `noServer`, so `wss.close()` neither closes nor terminates clients — it waits for `clients` to
+        // empty — and `server.closeAllConnections()` does not reach upgraded sockets. Any attached session socket
+        // therefore keeps `server.close()`'s callback from ever firing. Send close frames, then force what lingers.
+        for (const ws of wss.clients) {
+          ws.close(1001, 'server shutting down')
         }
         queueSockets.clear()
+        const force = setTimeout(() => {
+          for (const ws of wss.clients) {
+            ws.terminate()
+          }
+        }, SOCKET_CLOSE_GRACE_MS)
+        force.unref()
         wss.close()
-        server.close(() => resolve())
+        server.close(() => {
+          clearTimeout(force)
+          resolve()
+        })
         server.closeAllConnections()
-      }),
+      })
+      return closing
+    },
   }
 }
