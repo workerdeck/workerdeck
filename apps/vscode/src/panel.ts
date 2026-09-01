@@ -93,7 +93,11 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
 
   protected override resetForReload(): void {
     this.#transports?.dispose()
-    this.#transports = new WebviewTransportHost(this.#store, (msg) => this.post(msg), (text) => this.#tapFrame(text))
+    this.#transports = new WebviewTransportHost(
+      this.#store,
+      (msg) => this.post(msg),
+      (text) => this.#tapFrame(text),
+    )
   }
 
   protected override intercept(msg: PanelToHost): Promise<boolean> | boolean {
