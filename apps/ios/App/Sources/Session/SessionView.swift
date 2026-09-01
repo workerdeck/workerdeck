@@ -277,11 +277,10 @@ struct SessionView: View {
           ContextSheet(usage: vm.state.contextUsage)
         case .usage:
           UsageSheet(
-            rateLimits: vm.rateLimitWindows,
+            windows: vm.usageWindows,
             subscriptionType: vm.state.subscriptionType,
             engine: vm.engine,
-            totalCostUsd: vm.state.totalCostUsd,
-            updatedAt: vm.rateLimitsUpdatedAt)
+            totalCostUsd: vm.state.totalCostUsd)
         case .info:
           SessionInfoSheet(state: vm.state, session: vm.session, fileAccess: vm.fileAccess)
         case .files:

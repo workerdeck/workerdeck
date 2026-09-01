@@ -233,6 +233,12 @@ public struct TranscriptState: Sendable, Equatable {
   /// Latest rate-limit snapshot per window ('five_hour', 'seven_day', ...).
   /// Absent for API-key sessions — render nothing, not 0%.
   public var rateLimits: [String: RateLimitInfo]?
+  /// The `ts` of the newest `rate_limit` event, whatever its window — **one**
+  /// clock for the whole map, which is why `mergeUsage` never compares it
+  /// against the profile tracker's per-window stamps. Event time, never receipt
+  /// time: a replay delivers yesterday's reading in milliseconds, and dating it
+  /// "now" would claim a freshness the reading does not have.
+  public var rateLimitsUpdatedAt: Double?
   /// claude.ai plan the rate-limit windows belong to ('pro', 'max', ...), from
   /// `plan_info`. Absent for API-key sessions, like the windows themselves.
   public var subscriptionType: String?
@@ -248,7 +254,8 @@ public struct TranscriptState: Sendable, Equatable {
     skills: [SkillInfo]? = nil, producedFiles: [String: ProducedFile]? = nil,
     defaultModel: String? = nil,
     permissionMode: PermissionMode? = nil, contextUsage: ContextUsage? = nil,
-    rateLimits: [String: RateLimitInfo]? = nil, subscriptionType: String? = nil,
+    rateLimits: [String: RateLimitInfo]? = nil, rateLimitsUpdatedAt: Double? = nil,
+    subscriptionType: String? = nil,
     items: [TranscriptItem] = [],
     pendingApprovals: [PermissionRequest] = [], totalCostUsd: Double = 0, lastSeq: Int = 0
   ) {
@@ -266,6 +273,7 @@ public struct TranscriptState: Sendable, Equatable {
     self.permissionMode = permissionMode
     self.contextUsage = contextUsage
     self.rateLimits = rateLimits
+    self.rateLimitsUpdatedAt = rateLimitsUpdatedAt
     self.subscriptionType = subscriptionType
     self.items = items
     self.pendingApprovals = pendingApprovals
@@ -460,6 +468,15 @@ public func hydrateToolResult(
   return next
 }
 
+/// The session's own windows in reading order — the merge fold with no profile
+/// side. What a caller holding no gateway account state renders. (Mirrors the
+/// react reducer's `rateLimitWindows`.)
+public func rateLimitWindows(_ state: TranscriptState) -> [UsageWindowRow] {
+  orderUsageWindows(
+    mergeUsage(
+      SessionUsage(rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt), nil))
+}
+
 public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> TranscriptState {
   guard event.seq > state.lastSeq else { return state }
   var next = state
@@ -507,6 +524,8 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     var limits = next.rateLimits ?? [:]
     limits[key] = info
     next.rateLimits = limits
+    // The event's own ts, so a replayed reading keeps its real age.
+    next.rateLimitsUpdatedAt = event.ts
 
   case .planInfo(let subscriptionType):
     next.subscriptionType = subscriptionType

@@ -75,10 +75,12 @@ final class TranscriptViewModel {
   /// Stage timings for the attach in flight — see `AttachProfile`. Measurement
   /// scaffolding for `_docs/improvements/ios-session-load-time.md`.
   private var profile: AttachProfile?
-  /// When a rate-limit window last arrived. Local receipt time, not the event's
-  /// `ts`: what the usage sheet's freshness line answers is "how stale is what
-  /// I'm looking at", and replayed events would date that to the session's start.
-  private(set) var rateLimitsUpdatedAt: Date?
+  /// The gateway's per-account usage for this session's profile, polled while
+  /// the session is on screen. The profile tracker folds in every session's
+  /// `rate_limit` events, so this session's own reading can be hours stale the
+  /// moment another session burns the window — see `usageWindows`.
+  private(set) var profileUsage: ProfileUsage?
+  @ObservationIgnored private var usagePollTask: Task<Void, Never>?
   /// What "default" actually resolved to for this session, captured from
   /// `system_init` — which the CLI sends once, before any `set_model` of ours can
   /// have moved it. This is the only way to *name* the default: nothing asks the
@@ -222,6 +224,8 @@ final class TranscriptViewModel {
   func detach() {
     handle?.detach()
     handle = nil
+    usagePollTask?.cancel()
+    usagePollTask = nil
     connection = .reconnecting
     endReplayHold()
   }
@@ -317,6 +321,7 @@ final class TranscriptViewModel {
       session = frame.session
       state = seedFromSessionInfo(state, frame.session)
       loadCatalogModels(for: frame.session.profile)
+      startUsagePoll(profile: frame.session.profile)
       armReplayHold(frame)
     case .event(let sessionEvent):
       let reduceStart = ProcessInfo.processInfo.systemUptime
@@ -344,7 +349,6 @@ final class TranscriptViewModel {
         seqIndex.note(seq: sessionEvent.seq, itemsBefore: before, itemsAfter: state.items.count)
         revision &+= 1
       }
-      if case .rateLimit = sessionEvent.body { rateLimitsUpdatedAt = Date() }
       if case .systemInit(let info) = sessionEvent.body, initModel == nil {
         initModel = info.model
         defaultPermissionMode = info.permissionMode
@@ -379,6 +383,38 @@ final class TranscriptViewModel {
       guard let self else { return }
       guard let response = try? await self.client.listProfiles() else { return }
       self.catalogModels = response.profiles.first { $0.name == profileName }?.models ?? []
+    }
+  }
+
+  /// Poll the gateway's per-account usage for this session's profile, on the
+  /// same 60s cadence as the dashboard.
+  ///
+  /// Seeded from the process-wide cache first: this model is created per
+  /// session, so without the seed a session switch would render the incoming
+  /// session's own replayed numbers for a whole round trip. Gated on
+  /// `capabilities.rateLimits` — an engine with no plan windows has nothing to
+  /// ask for.
+  private func startUsagePoll(profile: String?) {
+    guard usagePollTask == nil, let profile, capabilities.rateLimits else { return }
+    if let cached = ProfileUsageCache.read(client: client, profile: profile) {
+      profileUsage = cached
+    }
+    usagePollTask = Task { @MainActor [weak self, client] in
+      while !Task.isCancelled {
+        do {
+          let response = try await client.listProfiles()
+          if Task.isCancelled { return }
+          let next = response.profiles.first { $0.name == profile }?.usage
+          ProfileUsageCache.write(client: client, profile: profile, usage: next)
+          self?.profileUsage = next
+        } catch {
+          // A server predating profiles 404s; stop asking rather than asking
+          // it again every minute. Anything else (a blip, a dead socket's
+          // sibling) keeps the cadence — the next tick may succeed.
+          if (error as? WorkerClientError)?.statusCode == 404 { return }
+        }
+        try? await Task.sleep(for: .seconds(60))
+      }
     }
   }
 
@@ -428,31 +464,26 @@ final class TranscriptViewModel {
       })
   }
 
-  /// The status bar's usage rings, in reading order: the session window, the
-  /// weekly window, then whichever per-model weekly windows this session reports.
+  /// The status bar's usage rings: the first three of `usageWindows`, so the
+  /// two named rings always mean the same thing.
   ///
-  /// Discovered rather than hardcoded — the SDK's set of windows is an open union
-  /// and has grown before — but ordered, so the first two rings always mean the
-  /// same thing. Three is the cap: it is what a subscription session reports today
-  /// and what fits a phone-width bar beside the model and permission chips. A
-  /// session reporting none of them (an API-key session, or one before its first
-  /// turn) gets no rings at all, and the bar shows cost instead.
-  var hudRateLimits: [(key: String, info: RateLimitInfo)] {
-    let windows = rateLimitWindows
-    let named = ["five_hour", "seven_day"].compactMap { key in
-      windows.first { $0.key == key }
-    }
-    let perModel = windows.filter { $0.key.hasPrefix("seven_day_") }
-    return Array((named + perModel).prefix(3))
-  }
+  /// Three is the cap: it is what a subscription reports today and what fits a
+  /// phone-width bar beside the model and permission chips. An account
+  /// reporting none of them (an API-key profile, or a session before its first
+  /// turn with no tracker state) gets no rings at all, and the bar shows cost
+  /// instead.
+  var hudRateLimits: [UsageWindowRow] { Array(usageWindows.prefix(3)) }
 
-  var rateLimitWindows: [(key: String, info: RateLimitInfo)] {
-    // A window with no utilization is unknown, not zero — drop it entirely
-    // rather than draw an empty bar that reads as "plenty left".
-    (state.rateLimits ?? [:])
-      .filter { $0.value.utilization != nil }
-      .sorted { $0.key < $1.key }
-      .map { (key: $0.key, info: $0.value) }
+  /// Merged account + session windows in reading order — the protocol's
+  /// `orderUsageWindows(mergeUsage(...))`, the same fold the dashboard and the
+  /// VS Code panel render. The profile side wins every window it holds; the
+  /// transcript's own reading fills in only where the gateway holds nothing (a
+  /// restarted tracker, a profile-less session).
+  var usageWindows: [UsageWindowRow] {
+    orderUsageWindows(
+      mergeUsage(
+        SessionUsage(rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt),
+        profileUsage))
   }
 
   // MARK: - Commands

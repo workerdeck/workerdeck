@@ -60,8 +60,9 @@ struct SessionStatusBar: View {
   let pendingCount: Int
   let connection: ConnectionState
   let contextUsage: ContextUsage?
-  /// Ordered slots from `TranscriptViewModel.hudRateLimits`.
-  let rateLimits: [(key: String, info: RateLimitInfo)]
+  /// Ordered slots from `TranscriptViewModel.hudRateLimits` — account usage
+  /// merged over the session's own reading.
+  let rateLimits: [UsageWindowRow]
   /// Cumulative session cost, shown in place of the rings when no window reports.
   let totalCostUsd: Double
   let model: String?
@@ -280,7 +281,7 @@ private struct ChipLabel: View {
 /// window*. The order is still fixed (session, weekly, per-model), and the full
 /// names, percentages and reset countdowns are in the usage sheet.
 struct UsageRings: View {
-  let windows: [(key: String, info: RateLimitInfo)]
+  let windows: [UsageWindowRow]
 
   var body: some View {
     HStack(spacing: 4) {

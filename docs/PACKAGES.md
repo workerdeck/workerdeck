@@ -206,8 +206,10 @@ transcript holds. The session half is coverage, not correctness — an in-memory
 after a restart, and a session with no profile has no account state at all.
 `orderUsageWindows` is the ordering-and-drop-the-unknown rule beside it, because the panel
 renders windows off a merged transcript and the dashboard's profile page renders them off
-`ProfileInfo.usage` with no session in sight. Tests in `packages/react/test/usage.test.ts`;
-**no Swift mirror yet** — the phone still renders its session's own reading.
+`ProfileInfo.usage` with no session in sight. Tests in `packages/react/test/usage.test.ts`,
+mirrored in `WorkerDeckKit/Tests/WorkerDeckKitTests/UsageTests.swift` — including the case that
+pins profile-wins-unconditionally, which is the one a well-meaning "make it compare timestamps"
+change breaks.
 `isJobRun` is the third of these rules and the one a client gets wrong silently. A job run is an
 ordinary registry session in every respect — `JobQueue`'s claim path creates it and stamps
 `meta.jobId` (nothing else in the tree may ever write that key), and `JobInfo.sessionId` points

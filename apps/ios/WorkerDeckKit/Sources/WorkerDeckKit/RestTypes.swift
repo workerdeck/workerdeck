@@ -257,6 +257,30 @@ public struct ProfileSessionDefaults: Codable, Sendable, Equatable {
   }
 }
 
+/// One rate-limit window as the gateway's per-profile tracker serves it —
+/// mirror of the protocol's `ProfileUsageWindow`.
+public struct ProfileUsageWindow: Codable, Sendable, Equatable {
+  public let info: RateLimitInfo
+  /// Epoch ms of the `rate_limit` event this reading came from. Per window —
+  /// unlike the transcript's one clock for its whole map, which is why
+  /// `mergeUsage` never compares the two.
+  public let updatedAt: Double
+  /// The tracker watched `resetsAt` pass with nothing reported since, and is
+  /// serving an inferred 0% dated by the original reading. Advisory styling
+  /// only: a renderer says so ("window reset · nothing reported since") and
+  /// never does inference of its own.
+  public let inferredReset: Bool?
+
+  public init(info: RateLimitInfo, updatedAt: Double, inferredReset: Bool? = nil) {
+    self.info = info
+    self.updatedAt = updatedAt
+    self.inferredReset = inferredReset
+  }
+}
+
+/// Account-level plan usage keyed by window ('five_hour', 'seven_day', ...).
+public typealias ProfileUsage = [String: ProfileUsageWindow]
+
 public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   /// Unique name, used as CreateSessionRequest.profile.
   public let name: String
@@ -284,6 +308,10 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   public let available: Bool?
   /// Response-only: one operator-actionable line when `available == false`.
   public let unavailableReason: String?
+  /// Response-only: the gateway's per-account usage tracker, folded from every
+  /// session's `rate_limit` events on this profile — never behind what one
+  /// transcript holds. Render through `mergeUsage`, not instead of it.
+  public let usage: ProfileUsage?
   /// Response-only: store-backed and editable through the API.
   public let managed: Bool?
 
@@ -304,7 +332,7 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     defaults: ProfileDefaults? = nil, session: ProfileSessionDefaults? = nil,
     models: [ModelOption]? = nil, defaultModel: String? = nil,
     capabilities: EngineCapabilities? = nil, available: Bool? = nil,
-    unavailableReason: String? = nil, managed: Bool? = nil
+    unavailableReason: String? = nil, usage: ProfileUsage? = nil, managed: Bool? = nil
   ) {
     self.name = name
     self.engine = engine
@@ -319,6 +347,7 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     self.capabilities = capabilities
     self.available = available
     self.unavailableReason = unavailableReason
+    self.usage = usage
     self.managed = managed
   }
 }

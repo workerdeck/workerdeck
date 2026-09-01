@@ -13,30 +13,28 @@ import SwiftUI
 /// a reset time and a percentage and never a duration; a window whose key doesn't
 /// say gets no marker rather than a guessed one.
 struct UsageSheet: View {
-  /// Ordered windows from `TranscriptViewModel.rateLimitWindows`.
-  let rateLimits: [(key: String, info: RateLimitInfo)]
+  /// Ordered windows from `TranscriptViewModel.usageWindows` — account usage
+  /// merged over the session's own reading, each carrying its own freshness.
+  let windows: [UsageWindowRow]
   /// claude.ai plan behind the windows ('max', 'pro', …), when the session has one.
   let subscriptionType: String?
   let engine: ProfileEngine
   let totalCostUsd: Double
-  /// When the app last received a window update — the poll is per turn, so a
-  /// stale reading is normal and worth saying out loud.
-  let updatedAt: Date?
 
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
     NavigationStack {
       Group {
-        if rateLimits.isEmpty {
+        if windows.isEmpty {
           ContentUnavailableView {
             Label("No plan limits", systemImage: "gauge")
           } description: {
             VStack(spacing: 10) {
               Text(
                 engine == .claude
-                  ? "This session reports no plan windows — API-key sessions have none, and a "
-                    + "subscription session reports them once a turn has run."
+                  ? "No plan windows reported — API-key profiles have none, and a subscription "
+                    + "account reports them once any of its sessions has run a turn."
                   : "Plan windows are a claude.ai subscription thing; this session runs on a "
                     + "provider engine.")
               Text("This session has cost \(Fmt.cost(totalCostUsd)).")
@@ -65,23 +63,15 @@ struct UsageSheet: View {
         // finest resolution either of them prints.
         TimelineView(.periodic(from: .now, by: 60)) { context in
           VStack(spacing: 14) {
-            ForEach(Array(rateLimits.enumerated()), id: \.element.key) { index, window in
+            ForEach(Array(windows.enumerated()), id: \.element.key) { index, window in
               if index > 0 { Divider() }
-              UsageWindowRow(key: window.key, info: window.info, now: context.date)
+              UsageWindowCard(window: window, now: context.date)
             }
           }
           .padding(.vertical, 4)
         }
       } header: {
         planHeader
-      } footer: {
-        if let updatedAt {
-          // Rendered off the same clock as the rows, so it ages while the sheet
-          // is open instead of freezing at "just now".
-          TimelineView(.periodic(from: .now, by: 60)) { context in
-            Text("Updated \(Fmt.agoPrecise(updatedAt, now: context.date))")
-          }
-        }
       }
 
       Section("This session") {
@@ -125,10 +115,11 @@ struct UsageSheet: View {
   }
 }
 
-/// One window: name, used share, bar with pace marker, reset countdown.
-private struct UsageWindowRow: View {
-  let key: String
-  let info: RateLimitInfo
+/// One window: name, used share, bar with pace marker, reset countdown, and its
+/// own freshness — the stamps are per window now that account and session
+/// readings mix, so one footer date would be wrong for somebody's row.
+private struct UsageWindowCard: View {
+  let window: UsageWindowRow
   /// Passed in rather than read here so every row in the card agrees on "now".
   let now: Date
 
@@ -150,6 +141,16 @@ private struct UsageWindowRow: View {
         if info.isUsingOverage == true {
           Text("overage").foregroundStyle(.orange)
         }
+        if window.inferredReset {
+          // The tracker watched the reset pass with nothing reported since —
+          // stated, never inferred here, and it displaces the "ago" line
+          // because the stamp is the reading this 0% replaced.
+          Text("window reset · nothing reported since")
+        } else if window.updatedAt > 0 {
+          // Event time, not receipt time: a replayed reading keeps its age. A
+          // zero stamp is a transcript with no clock — say nothing.
+          Text(Fmt.agoPrecise(Date(timeIntervalSince1970: window.updatedAt / 1000), now: now))
+        }
       }
       .font(.caption)
       .foregroundStyle(.secondary)
@@ -158,6 +159,8 @@ private struct UsageWindowRow: View {
     .accessibilityLabel(accessibilityLabel)
   }
 
+  private var key: String { window.key }
+  private var info: RateLimitInfo { window.info }
   private var utilization: Double { info.utilization ?? 0 }
 
   /// Share of the window already elapsed — where usage *would* be if it were
@@ -176,6 +179,12 @@ private struct UsageWindowRow: View {
     if let pace { parts.append("\(Fmt.percent(pace * 100)) of the window elapsed") }
     if let resetsAt = info.resetsAt, let text = Fmt.resets(epochSeconds: resetsAt, now: now) {
       parts.append(text)
+    }
+    if window.inferredReset {
+      parts.append("window reset, nothing reported since")
+    } else if window.updatedAt > 0 {
+      parts.append(
+        "updated " + Fmt.agoPrecise(Date(timeIntervalSince1970: window.updatedAt / 1000), now: now))
     }
     return parts.joined(separator: ", ")
   }

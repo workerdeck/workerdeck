@@ -627,30 +627,32 @@ struct UIPreviewHarness: View {
     switch variant {
     case .usage:
       UsageSheet(
-        rateLimits: [
-          (
+        windows: [
+          UsageWindowRow(
             key: "five_hour",
             info: RateLimitInfo(
               status: "allowed", rateLimitType: "five_hour", utilization: 6,
-              resetsAt: Date().timeIntervalSince1970 + 2 * 3600 + 57 * 60)
-          ),
-          (
+              resetsAt: Date().timeIntervalSince1970 + 2 * 3600 + 57 * 60),
+            updatedAt: (Date().timeIntervalSince1970 - 8) * 1000),
+          UsageWindowRow(
             key: "seven_day",
             info: RateLimitInfo(
               status: "allowed", rateLimitType: "seven_day", utilization: 17,
-              resetsAt: Date().timeIntervalSince1970 + 4 * 86_400 + 3 * 3600)
-          ),
-          (
+              resetsAt: Date().timeIntervalSince1970 + 4 * 86_400 + 3 * 3600),
+            updatedAt: (Date().timeIntervalSince1970 - 42 * 60) * 1000),
+          // The tracker's inferred 0% after a reset it watched pass — dated by
+          // the reading it replaced, and the row must say so rather than "ago".
+          UsageWindowRow(
             key: "seven_day_fable",
             info: RateLimitInfo(
-              status: "allowed", rateLimitType: "seven_day_fable", utilization: 92,
-              resetsAt: Date().timeIntervalSince1970 + 4 * 86_400 + 3 * 3600)
-          ),
+              status: "allowed", rateLimitType: "seven_day_fable", utilization: 0,
+              resetsAt: Date().timeIntervalSince1970 + 4 * 86_400 + 3 * 3600),
+            updatedAt: (Date().timeIntervalSince1970 - 3 * 3600) * 1000,
+            inferredReset: true),
         ],
         subscriptionType: "max",
         engine: .claude,
-        totalCostUsd: 1.2345,
-        updatedAt: Date().addingTimeInterval(-8))
+        totalCostUsd: 1.2345)
     case .context:
       ContextSheet(
         usage: ContextUsage(
@@ -670,9 +672,11 @@ struct UIPreviewHarness: View {
           contextUsage: ContextUsage(
             categories: [], totalTokens: 57_000, maxTokens: 200_000, percentage: 28.5),
           rateLimits: [
-            (key: "five_hour", info: RateLimitInfo(status: "allowed", utilization: 6)),
-            (key: "seven_day", info: RateLimitInfo(status: "allowed", utilization: 17)),
-            (key: "seven_day_fable", info: RateLimitInfo(status: "allowed", utilization: 92)),
+            UsageWindowRow(key: "five_hour", info: RateLimitInfo(status: "allowed", utilization: 6)),
+            UsageWindowRow(
+              key: "seven_day", info: RateLimitInfo(status: "allowed", utilization: 17)),
+            UsageWindowRow(
+              key: "seven_day_fable", info: RateLimitInfo(status: "allowed", utilization: 92)),
           ],
           totalCostUsd: 1.23,
           model: "claude-opus-5[1m]",

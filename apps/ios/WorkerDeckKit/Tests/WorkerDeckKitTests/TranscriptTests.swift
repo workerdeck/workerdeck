@@ -377,6 +377,38 @@ struct TranscriptTests {
     #expect(state.lastSeq == 4)
   }
 
+  /// The event's own `ts`, never receipt time: a replay delivers yesterday's
+  /// reading in milliseconds, and a receipt-time stamp would date it "just now"
+  /// — exactly the staleness the freshness line exists to expose.
+  @Test func rateLimitStampsTheEventsOwnTime() {
+    var state = applyEvent(
+      .initial,
+      SessionEvent(
+        seq: 1, ts: 111,
+        body: .rateLimit(
+          RateLimitInfo(status: "allowed", rateLimitType: "five_hour", utilization: 20))))
+    #expect(state.rateLimitsUpdatedAt == 111)
+    // A reading naming no window changes nothing — the stamp included.
+    state = applyEvent(
+      state, SessionEvent(seq: 2, ts: 222, body: .rateLimit(RateLimitInfo(status: "allowed"))))
+    #expect(state.rateLimitsUpdatedAt == 111)
+  }
+
+  /// The session-only fold callers with no gateway account state render:
+  /// windows in reading order, each dated by the map's one clock.
+  @Test func rateLimitWindowsFoldsTheSessionReadingAlone() {
+    let state = applyEvent(
+      .initial,
+      SessionEvent(
+        seq: 1, ts: 111,
+        body: .rateLimit(
+          RateLimitInfo(status: "allowed", rateLimitType: "five_hour", utilization: 20))))
+    let rows = rateLimitWindows(state)
+    #expect(rows.map(\.key) == ["five_hour"])
+    #expect(rows.first?.updatedAt == 111)
+    #expect(rows.first?.inferredReset == false)
+  }
+
   @Test func modelChangedWithNilKeepsTheLastKnownModel() {
     let state = reduce([
       event(
