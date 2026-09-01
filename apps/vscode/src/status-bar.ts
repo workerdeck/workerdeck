@@ -3,6 +3,7 @@ import type { ContextUsage, RateLimitInfo } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
 import {
   currentModel,
+  formatAgoPrecise,
   formatCost,
   formatCountdown,
   formatTokens,
@@ -54,7 +55,7 @@ function contextTooltip(usage: ContextUsage): vscode.MarkdownString {
   return md
 }
 
-function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number): vscode.MarkdownString {
+function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number, updatedAt: number | undefined): vscode.MarkdownString {
   const md = new vscode.MarkdownString()
   md.appendMarkdown('**Plan usage**\n\n')
   for (const [key, info] of Object.entries(rateLimits)) {
@@ -69,6 +70,11 @@ function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number): v
       md.appendMarkdown(' · using overage')
     }
     md.appendMarkdown('\n')
+  }
+  // A reading is only as good as its age: a session that last ran days ago replays its last `rate_limit` on attach,
+  // and without this line that stale number is indistinguishable from a live one.
+  if (updatedAt !== undefined) {
+    md.appendMarkdown(`\nreported ${formatAgoPrecise(updatedAt, now)}`)
   }
   return md
 }
@@ -262,7 +268,7 @@ export class SessionStatusBar implements vscode.Disposable {
       const reading = pct !== undefined ? `${pct.toFixed(0)}%` : '—'
       item.text = `$(pulse) ${windowLabel(window.key)} ${reading}`
       item.backgroundColor = severityBackground(window.info.status === 'rejected' ? 'error' : meterSeverity(pct))
-      item.tooltip = usageTooltip(rateLimits ?? {}, now)
+      item.tooltip = usageTooltip(rateLimits ?? {}, now, vitals?.rateLimitsUpdatedAt)
       item.show()
       anyUsage = true
     }

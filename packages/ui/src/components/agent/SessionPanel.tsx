@@ -156,6 +156,12 @@ export type SessionVitals = {
   cwd: TranscriptState['cwd']
   contextUsage: TranscriptState['contextUsage']
   rateLimits: TranscriptState['rateLimits']
+  /**
+   * When the newest window in `rateLimits` was reported, as event time — not receive time. External chrome (the
+   * VS Code status bar, iOS) cannot otherwise tell a live reading from one a days-old session just replayed.
+   * Absent means unknown, which is not the same as fresh.
+   */
+  rateLimitsUpdatedAt: number | undefined
   itemCount: number
   totalCostUsd: number
 }
@@ -305,6 +311,7 @@ export function SessionPanel({
       cwd: state.cwd,
       contextUsage: state.contextUsage,
       rateLimits,
+      rateLimitsUpdatedAt: usageUpdatedAt,
       itemCount: state.items.length,
       totalCostUsd: state.totalCostUsd,
     })
@@ -320,6 +327,7 @@ export function SessionPanel({
     state.cwd,
     state.contextUsage,
     rateLimits,
+    usageUpdatedAt,
     state.items.length,
     state.totalCostUsd,
   ])
