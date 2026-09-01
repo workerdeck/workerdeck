@@ -13,7 +13,11 @@ Vite for the webview, both from `@workerdeck/source`), importing `client`/`react
 `WebSocketImpl` are postMessage shims, executed on the extension-host side with Node fetch /
 `ws` plus the gateway's `Authorization: Bearer` header — keys stay in `SecretStorage`, the
 webview CSP has no external `connect-src`, and the bridge refuses URLs not belonging to a
-registered gateway. It runs the panel with `transcriptVariant: 'terminal'`, `focusComposerOnClick` (dead-space
+registered gateway.
+
+### The panel: terminal variant at the editor's cell
+
+It runs the panel with `transcriptVariant: 'terminal'`, `focusComposerOnClick` (dead-space
 clicks land in the input; controls and drag-selections keep their meaning) and **at the
 editor's own cell**: `terminalMetrics` is resolved host-side from `editor.fontSize` /
 `editor.lineHeight` (the same three readings VS Code makes of the latter — 0 automatic, <8 a
@@ -28,8 +32,11 @@ that is monospace by construction; `workerdeck.fontFamily` survives for the `car
 where the *sans* token is what the transcript reads in, and is stamped on `<html>` by
 `webviewHtml` because it must be right on the first paint. The **panel alone** opts in — the
 sidebar and section views are workbench UI and follow `--vscode-font-family`, which is the
-webview baseline `styles.css` sets. The
-window status bar is the panel's bar, and each of its badges is its own boolean
+webview baseline `styles.css` sets.
+
+### The status bar
+
+The window status bar is the panel's bar, and each of its badges is its own boolean
 setting (`workerdeck.statusBar.*`), read per render so a change is just a re-render — usage is
 three of them now (`sessionUsage`/`weeklyUsage` on, `modelUsage` off, over protocol's lanes),
 and a lane with no window hides rather than showing a dash. A running session colours its
@@ -39,6 +46,9 @@ both are alarm colours for a session that is merely working. Model
 and mode are bar items too, opening **QuickPicks** — a `StatusBarItem` has one command and
 no dropdown, so command → QuickPick is the only shape VS Code offers (and the one its own
 language-mode item uses); the panel's `onControls` setters are what they drive.
+
+### Attach ownership, paths & the remote filesystem
+
 One live attach per session, owned by the panel: sidebar/status
 bar/notifications read REST rollups (`pendingPermissionCount`) or tap frames already flowing
 through the bridge — never a second attach. A Cmd/Ctrl-clicked path in the transcript goes
@@ -51,21 +61,33 @@ it with `\` builds a path neither side has seen. Remote gateways mount as a `wor
 FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename —
 no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
 by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole
-Remote SSH story. **No webview in this extension draws its own header, and no view has
+Remote SSH story.
+
+### The navigation rule
+
+**No webview in this extension draws its own header, and no view has
 screens.** That is the navigation rule, and it is what the sidebar was rebuilt around: a
 pushed screen left the native title still reading SESSIONS over a form, its `+` still
 navigating sideways with no history, and a back chevron the extension had drawn itself.
 So chrome is VS Code's — `view.title` plus title actions gated on a `setContext` key (a
 stateful title button doesn't exist, so an open/closed toggle is *two* commands with
 opposite `when` clauses) — and everything that used to be a screen is either its own view
-or a native QuickPick. The Sessions view lists every gateway's sessions at once — gateway
+or a native QuickPick.
+
+### The Sessions and Gateways views
+
+The Sessions view lists every gateway's sessions at once — gateway
 is a facet (filter/group/sort) beside adapter and state, not the frame — with search and
 the facet dropdowns behind the title bar's **filter toggle** (`$(filter)`/`$(filter-filled)`;
 the *host* owns that boolean, since the key lives where commands do, and closing the bar
 never clears the filters). **Gateways are their own collapsible view**, not a screen: a
 gateway is a mode every session belongs to, so managing them sits beside the list
 permanently, with the connected count in the view header's description. There is **no
-implicit localhost gateway**. Creating a session is a native multi-step QuickPick
+implicit localhost gateway**.
+
+### Creating a session, the poll & the `+` rule
+
+Creating a session is a native multi-step QuickPick
 (`src/new-session.ts`: adapter → folder → model, each step skipped when it
 has nothing to ask and backed out of with `QuickInputButtons.Back`), which is what let the
 list become a list and nothing else. Every step arrives **pre-answered**, so the flow is
@@ -91,6 +113,9 @@ it is enabled, because it is the one surface that must be live with nothing open
 in a view title is the *only* way to create: no body ever grows a
 second button for it, so an empty state points at the `+` in words and keeps its button
 for what the header can't do (clear a filter, widen a scope).
+
+### View layout: the two sidebars
+
 **There is no activity-bar container.** The views are split across the two sidebars by
 default: **Sessions** into **Explorer**, beside the file tree (it is a workspace-level list,
 and it is where the `+` lives), and the other five into a **`secondarySidebar` container
@@ -114,6 +139,9 @@ these views needs **View: Reset View Locations** before a new default is visible
 is only a default: any view drags to either sidebar or the panel, and `contextualTitle` is
 what names the container it lands in (VS Code otherwise auto-assigns the *source*
 container's title, which is how six views dragged out of Explorer all came up "Explorer").
+
+### The unread and subagent status items
+
 Unread therefore had to leave the container: a `view.badge` aggregates onto its
 **container's** icon, which is now Explorer's, next to a user's files. It is a **window
 status-bar item** (`UnreadStatusItem`, `workerdeck.statusBar.unread`), the same count summed
@@ -134,6 +162,9 @@ spending real money on six parallel agents — counted in the same pass over the
 rows, hidden entirely at zero, and coloured on the **foreground** (`charts.blue`) because VS Code
 ignores every background but the two alarm ones. Either badge keeps the poll watcher alive:
 gating it on `unread` alone left someone who turned unread off watching a frozen count.
+
+### The session card (`SessionItem`)
+
 The list is drawn as **inset rounded cards** (the Figma sidebar design) — and the card itself is
 now `packages/ui`'s **`SessionItem`**, which is why `SessionCard.tsx` is ~95 lines of props where
 it used to be ~380 of hand-kept markup. The card was born here (the dashboard had no sub-agent
@@ -192,6 +223,9 @@ of "don't add any colors". Both lines also share **one 16px icon gutter** (`Sess
 `Gutter`), because the two glyphs are different sizes: as plain flex children each line's text
 started at `icon + gap` and two pixels is invisible as a measurement and obvious as a
 misalignment.
+
+### Overflow menu, rename & theme colours
+
 What is left extension-shaped after the card moved out is exactly **two** things, and they are the
 two `SessionItem` takes as props. First, **the overflow is a native menu**: the two hover actions
 became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which posts
@@ -211,6 +245,9 @@ The colours are not this file's business either: `styles.css` repoints `--row-ho
 without a `--vscode-*` variable being named in the component. The disclosure
 reads `1/6` rather than `1 of 6 agents`, the words having truncated the folder name away to say
 what three characters say, with the sentence kept for the tooltip and the screen reader.
+
+### Dev harness & CSP
+
 The webview build has **no dev server**: `localResourceRoots` means every asset must be a real
 file on disk, so the dev loop is `vite build --watch` plus `src/dev-reload.ts` re-rendering the
 views in place. Vite's dep optimizer therefore never runs here, and none of its traps are
@@ -226,6 +263,9 @@ because every state worth checking is otherwise rare or expensive to produce on 
 fidelity risk is that it hand-supplies the `--vscode-*` variables, so a token it
 forgets looks fine there and wrong in the editor; and `.vscodeignore` allows `dist/` only, so
 none of it ships.
+
+### Sub-agents: expansion and the panel frame
+
 A session row **expands** to its sub-agents (`SessionInfo.subagents`) — `sessionSteps`,
 `StepToggle` and `StepRow`, which live in **`packages/ui`** (`SessionSteps.tsx`) rather than in
 this webview, that being exactly why the dashboard had none of them; a session's sub-agents are a
@@ -265,6 +305,9 @@ multi-gateway case this window exists to make legible. The webview clears its re
 `wd-show-session` handler, because a request left standing across a session switch would frame one
 session's `Task`
 id against another's items.
+
+### The ruling the navigation rule needed
+
 **This is the one place the no-header/no-screens rule needed a ruling rather than an application.**
 That rule was written about the sidebar and section views, where pushed screens broke VS Code's
 native titles, `+` placement and back affordances, and the cure was to hand chrome back to the
@@ -273,6 +316,9 @@ title, builds no navigation stack, and its strip is a line on the transcript's o
 category as an expanded `Task` row, taken to the whole scroller, with one boolean way back. The
 strict reading ("never swap what a webview shows") has no implementable alternative here, there
 being no native transcript for the editor to own, so it cannot be what the rule means.
+
+### Unread watermarks & the workspace-scope facet
+
 The cards carry it per session — an **unread badge** of transcript rows since that session was last on
 screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
 showing it**, and monotonic so a compaction can't resurrect read rows). Rows, from
@@ -290,6 +336,9 @@ a dot on the funnel and a separate scope line, which between them never said how
 were missing; with the controls now behind a toggle it is the only thing standing between a
 scoped-by-default list and "my sessions are gone". A scoped-empty list still offers "show
 all folders" rather than the generic clear-filters dead end.
+
+### Resume & dev reload
+
 **Resume** is the same QuickPick rails as create (`workerdeck.resumeSession`), diverging only
 at the last step: `listSdkSessions` for the chosen directory *and profile* — the engine store
 is per-engine, so another profile's ids mean nothing here — gated on the capability record's
