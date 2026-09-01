@@ -346,6 +346,13 @@ export function SessionPanel({
     engine: state.engine,
   })
   const hostFiles = useHostFileSearch(client, state.cwd)
+  // Stable identity: an inline arrow here would bust the Composer's `triggers`
+  // memo on every streaming re-render, and with it every prompt-area callback
+  // keyed on the triggers.
+  const searchComposerFiles = useCallback(
+    (query: string, options: { signal: AbortSignal }) => hostFiles.search(query, { ...options, limit: 8 }),
+    [hostFiles.search],
+  )
   const windows = useMemo(() => orderUsageWindows(usage), [usage])
   const hostImage = useHostImage(client, sessionId, state.producedFiles)
   const resultImages = useToolResultImages(client, sessionId)
@@ -639,7 +646,7 @@ export function SessionPanel({
                   commands={capabilities.slashCommands ? commands : undefined}
                   skills={capabilities.skillsList ? state.skills : undefined}
                   attachments={attachments}
-                  onSearchFiles={hostFiles.available ? (query, options) => hostFiles.search(query, { ...options, limit: 8 }) : undefined}
+                  onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
                   layout={controlsExternal ? 'inline' : 'stacked'}
                   toolbar={controlsExternal ? undefined : sessionControls}
                   fontSize={effectiveTermFontSize}

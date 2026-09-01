@@ -710,6 +710,16 @@ export function segmentsEqual(a: Segment[], b: Segment[]): boolean {
 }
 
 /**
+ * Content equality regardless of how text is chunked into segments: adjacent
+ * text segments are merged (and empty ones dropped) on both sides before
+ * comparing, so a DOM read split by decorations or per-`<br>` newlines equals
+ * the merged model that rendered it.
+ */
+export function segmentsContentEqual(a: Segment[], b: Segment[]): boolean {
+  return segmentsEqual(mergeAdjacentTextSegments(a), mergeAdjacentTextSegments(b))
+}
+
+/**
  * Merges adjacent text segments into single text segments.
  * Also removes empty text segments.
  */

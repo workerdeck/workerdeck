@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import type { Segment, ChipSegment, TriggerConfig } from './types.ts'
 import { resolveTriggersInSegments } from './prompt-area-engine.ts'
 import { normalizeEditorDOM, safeJsonStringify, getSelectionRange } from './dom-helpers.ts'
@@ -429,18 +429,36 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
     [readSegmentsFromDOM, onChange, renderSegmentsToDOM, onUndo, onRedo],
   )
 
-  return {
-    handlePaste,
-    handleCopy,
-    handleCut,
-    handleDrop,
-    handleDragOver,
-    handleCompositionStart,
-    handleCompositionEnd,
-    handleBlur,
-    handleKeyDownForUndoRedo,
-    pushUndo,
-    resetUndoHistory,
-    isComposing,
-  }
+  // Memoized so the container is only as unstable as its members: the parent
+  // hook keys handleInput and the imperative handle on this object, and a fresh
+  // literal per render would re-create both on every render.
+  return useMemo(
+    () => ({
+      handlePaste,
+      handleCopy,
+      handleCut,
+      handleDrop,
+      handleDragOver,
+      handleCompositionStart,
+      handleCompositionEnd,
+      handleBlur,
+      handleKeyDownForUndoRedo,
+      pushUndo,
+      resetUndoHistory,
+      isComposing,
+    }),
+    [
+      handlePaste,
+      handleCopy,
+      handleCut,
+      handleDrop,
+      handleDragOver,
+      handleCompositionStart,
+      handleCompositionEnd,
+      handleBlur,
+      handleKeyDownForUndoRedo,
+      pushUndo,
+      resetUndoHistory,
+    ],
+  )
 }

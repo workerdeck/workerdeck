@@ -1,12 +1,13 @@
 'use client'
 
 import { cn } from '../../lib/utils.ts'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Segment, TriggerConfig, ActiveTrigger, TriggerSuggestion, ChipSegment, PromptAreaHandle } from './types.ts'
 import {
   detectActiveTrigger,
   segmentsToPlainText,
   plainTextToSegments,
+  segmentsContentEqual,
   segmentsEqual,
   resolveChip,
   resolveText,
@@ -28,15 +29,7 @@ import {
   decorateEditor,
   safeJsonStringify,
 } from './dom-helpers.ts'
-import {
-  saveCursorPosition,
-  restoreCursorPosition,
-  getCursorOffset,
-  setCursorAtOffset,
-  createRangeAtOffset,
-  getSelectionOffsets,
-  setSelectionAtOffsets,
-} from './cursor-helpers.ts'
+import { getCursorOffset, setCursorAtOffset, createRangeAtOffset, getSelectionOffsets, setSelectionAtOffsets } from './cursor-helpers.ts'
 import { usePromptAreaEvents } from './use-prompt-area-events.ts'
 import { usePromptAreaKeydown } from './use-prompt-area-keydown.ts'
 import { useChipEditing } from './use-chip-editing.ts'
@@ -94,10 +87,15 @@ type UsePromptAreaReturn = {
 /** Debounce interval for grouping typed characters into a single undo snapshot */
 const UNDO_DEBOUNCE_MS = 300
 
+// Shared default so an omitted `triggers` prop keeps a stable identity across
+// renders — a fresh [] would re-create renderSegmentsToDOM (and everything
+// keyed on it) on every parent render.
+const NO_TRIGGERS: TriggerConfig[] = []
+
 export function usePromptArea({
   value,
   onChange,
-  triggers = [],
+  triggers = NO_TRIGGERS,
   disabled = false,
   onSubmit,
   onEscape,
@@ -197,7 +195,11 @@ export function usePromptArea({
 
       isSyncing.current = true
 
-      const savedCursor = saveCursorPosition(editor)
+      // Save the caret as a plain-text offset, not a {nodeIndex, offset} pair:
+      // the rebuild plus decorateEditor re-chunk the child nodes, so a node
+      // index recorded against the old tree lands in the wrong node and its
+      // clamped offset silently moves the caret.
+      const savedCursorOffset = getCursorOffset(editor)
 
       // Clear DOM safely (no innerHTML assignment)
       while (editor.firstChild) {
@@ -251,8 +253,8 @@ export function usePromptArea({
       // Decorate URLs, markdown formatting, and list bullets in text nodes
       decorateEditor(editor, markdownEnabled)
 
-      if (savedCursor) {
-        restoreCursorPosition(editor, savedCursor)
+      if (savedCursorOffset !== null) {
+        setCursorAtOffset(editor, savedCursorOffset)
       }
 
       lastRenderedValue.current = segments
@@ -394,7 +396,15 @@ export function usePromptArea({
 
   // Sync value prop -> DOM on external changes
 
-  useEffect(() => {
+  // Layout effect, not passive: a passive copy of this effect can still be
+  // queued when the next keystroke's input event arrives, and React flushes
+  // pending passive effects before rendering that keystroke's onChange. The
+  // stale flush would compare an older render's `value` against the
+  // lastRenderedValue that handleInput just advanced, read its own echo lag as
+  // an external change, and rewrite the editor to pre-keystroke content —
+  // leaving the caret behind the character once the echo re-rendered it.
+  // Inside the commit, `value` can never be older than lastRenderedValue.
+  useLayoutEffect(() => {
     if (isSyncing.current) {
       return
     }
@@ -412,13 +422,24 @@ export function usePromptArea({
       }
     }
 
+    // A rebuild churns the caret and the decorations, so skip it when the
+    // editor already shows exactly this content — e.g. a consumer echoed our
+    // onChange back re-chunked, or the DOM is split by decorations. Adopt the
+    // value so the equality guard above short-circuits from here on.
+    if (segmentsContentEqual(readSegmentsFromDOM(), value)) {
+      lastRenderedValue.current = value
+      return
+    }
+
     renderSegmentsToDOM(value)
-  }, [value, renderSegmentsToDOM, markdownEnabled, normalizeBullets, onChange])
+  }, [value, readSegmentsFromDOM, renderSegmentsToDOM, markdownEnabled, normalizeBullets, onChange])
 
   // Re-render when markdown mode changes to apply/strip decorations
   // Also convert bullet characters: • ↔ - in text segments
+  // Layout for the same reason as the value sync above: a queued passive copy
+  // could flush mid-typing and render a stale `value`.
   const prevMarkdown = useRef(markdownEnabled)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (prevMarkdown.current === markdownEnabled) {
       return
     }
