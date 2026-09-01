@@ -167,6 +167,15 @@
      start its text on the same column as a marked one. */
   white-space: pre;
   user-select: none;
+  /* The gutter is decorative (`aria-hidden`) and it is the leading edge of every
+     row, which is where a reader naturally starts dragging to select a line. A
+     drag that *begins* on an unselectable node starts no selection at all, so
+     without this the most natural way to select transcript text did nothing.
+     Letting the press fall through to the row keeps `user-select: none` doing
+     its real job — keeping the glyph out of the copied text — without owning
+     the pointer. The row below is still pressable from here, since the press
+     handler lives on the ancestor. */
+  pointer-events: none;
   color: var(--term-dim);
 }
 
