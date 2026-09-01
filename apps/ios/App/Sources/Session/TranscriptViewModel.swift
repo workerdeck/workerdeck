@@ -530,6 +530,11 @@ final class TranscriptViewModel {
 
   func interrupt() { handle?.interrupt() }
 
+  /// Start a fresh conversation in the same session — the reducer empties the
+  /// transcript when the echoed `conversation_reset` lands, so nothing is
+  /// cleared locally.
+  func clearContext() { handle?.clearContext() }
+
   func approve(_ requestId: String, updatedInput: [String: JSONValue]? = nil) {
     handle?.approve(requestId: requestId, updatedInput: updatedInput)
   }

@@ -39,6 +39,10 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   public let mcpServerActions: Bool
   public let sessionMcpServers: Bool
   public let slashCommands: Bool
+  /// The `clear_context` session command is honored — offer the "Clear
+  /// context" verb. Absent (an older gateway) reads as false: hidden, never a
+  /// button the server would ignore.
+  public let clearContext: Bool
   /// `skills` events can occur. False: hide the skills panel entirely rather
   /// than showing an empty one. Orthogonal to `slashCommands` — codex has
   /// skills and no commands; claude has commands and no listable skills.
@@ -62,7 +66,8 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     defaultPermissionMode: PermissionMode, resume: Bool, resumeBackfill: Bool,
     listSessions: Bool, contextUsage: Bool, rateLimits: Bool, mcpStatus: Bool,
     mcpServerActions: Bool = false,
-    sessionMcpServers: Bool, slashCommands: Bool, skillsList: Bool = false,
+    sessionMcpServers: Bool, slashCommands: Bool, clearContext: Bool = false,
+    skillsList: Bool = false,
     settingSources: Bool, budgets: Bool,
     attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool,
     hostCwd: Bool? = nil, streaming: String
@@ -79,6 +84,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     self.mcpServerActions = mcpServerActions
     self.sessionMcpServers = sessionMcpServers
     self.slashCommands = slashCommands
+    self.clearContext = clearContext
     self.skillsList = skillsList
     self.settingSources = settingSources
     self.budgets = budgets
@@ -110,6 +116,10 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     mcpServerActions = try c.decodeIfPresent(Bool.self, forKey: .mcpServerActions) ?? false
     sessionMcpServers = try c.decode(Bool.self, forKey: .sessionMcpServers)
     slashCommands = try c.decode(Bool.self, forKey: .slashCommands)
+    // decodeIfPresent for the same reason as `skillsList` below: the key is
+    // optional on the wire, and absent must read as "no clear verb", not as a
+    // failed decode.
+    clearContext = try c.decodeIfPresent(Bool.self, forKey: .clearContext) ?? false
     // decodeIfPresent, unlike its siblings: a protocol-6 gateway's record has
     // no such key, and "the server is older" must read as "no skills panel",
     // not as a failed decode of the whole session.
@@ -137,7 +147,8 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     resume: true, resumeBackfill: true, listSessions: true,
     contextUsage: true, rateLimits: true, mcpStatus: true, mcpServerActions: true,
     sessionMcpServers: true,
-    slashCommands: true, skillsList: false, settingSources: true, budgets: true,
+    slashCommands: true, clearContext: true, skillsList: false, settingSources: true,
+    budgets: true,
     attachments: ["image", "pdf", "text"],
     reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
     vfs: false, streaming: "token"
@@ -168,7 +179,8 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     sessionMcpServers: false,
     // No command-listing RPC exists on the app-server surface at all; but
     // `skills/list` does, and `skills/changed` says when to re-read it.
-    slashCommands: false, skillsList: true, settingSources: false, budgets: false,
+    slashCommands: false, clearContext: true, skillsList: true, settingSources: false,
+    budgets: false,
     attachments: ["image", "text"],
     reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
     vfs: false, streaming: "token"
@@ -182,7 +194,8 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     // from, so this engine can always answer — but never act on a connection.
     contextUsage: false, rateLimits: false, mcpStatus: true, mcpServerActions: false,
     sessionMcpServers: false,
-    slashCommands: false, skillsList: false, settingSources: false, budgets: false,
+    slashCommands: false, clearContext: true, skillsList: false, settingSources: false,
+    budgets: false,
     attachments: ["image", "pdf", "text"], vfs: true, streaming: "token"
   ),
 ]

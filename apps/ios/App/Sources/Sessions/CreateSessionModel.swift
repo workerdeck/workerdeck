@@ -24,6 +24,12 @@ final class CreateSessionModel {
   var maxBudgetUsd: String = ""
   var resume: String
   var forkSession = false
+  /// The stored session the resume picker chose, kept only so `buildRequest`
+  /// can carry its title — a resumed session is otherwise titleless, because
+  /// the derived fallback reads a first prompt that a resume never sends.
+  /// Ignored the moment the id field stops matching it (a hand-edited id must
+  /// not inherit another thread's title).
+  private var pickedStored: SdkSessionSummary?
   /// '' = the engine's default. Only sent when the capability record offers it.
   var reasoningEffort: String = ""
 
@@ -152,6 +158,26 @@ final class CreateSessionModel {
     }
   }
 
+  /// Stored sessions this form could resume, scoped the way the other clients
+  /// scope their pickers: to the directory in the cwd field (blank lists the
+  /// whole store) and to the chosen profile, so the server lists that engine's
+  /// store rather than claude's.
+  func loadResumeCandidates() async throws -> [SdkSessionSummary] {
+    let dir = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
+    return try await client.listSdkSessions(
+      dir: dir.isEmpty ? nil : dir, limit: 20,
+      profile: profilesUnavailable ? nil : profileName)
+  }
+
+  /// Adopt a picked stored session: id into the resume field, and its recorded
+  /// directory into cwd — the thread lives there, and resuming it under another
+  /// root is a deliberate act (the field stays editable), not a default.
+  func adoptStoredSession(_ summary: SdkSessionSummary) {
+    resume = summary.sessionId
+    if let dir = summary.cwd, !dir.isEmpty { cwd = dir }
+    pickedStored = summary
+  }
+
   /// Create the session. Returns nil (and sets `errorMessage`) on failure.
   func submit() async -> SessionInfo? {
     isSubmitting = true
@@ -176,6 +202,15 @@ final class CreateSessionModel {
     let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedResume = resume.trimmingCharacters(in: .whitespacesAndNewlines)
     let capabilities = self.capabilities
+    let isResume = capabilities.resume && !trimmedResume.isEmpty
+    let storedTitle: String? = {
+      guard isResume, let picked = pickedStored, picked.sessionId == trimmedResume else {
+        return nil
+      }
+      let title = (picked.customTitle ?? picked.summary)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      return title.isEmpty ? nil : title
+    }()
 
     return CreateSessionRequest(
       cwd: cwd.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -193,10 +228,11 @@ final class CreateSessionModel {
         ? Int(maxTurns.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
       maxBudgetUsd: capabilities.budgets
         ? Double(maxBudgetUsd.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
-      resume: capabilities.resume && !trimmedResume.isEmpty ? trimmedResume : nil,
+      resume: isResume ? trimmedResume : nil,
       forkSession: engine == .claude && !trimmedResume.isEmpty && forkSession ? true : nil,
       reasoningEffort: !reasoningEffort.isEmpty && effortOptions.contains(reasoningEffort)
         ? reasoningEffort : nil,
-      includePartialMessages: includePartialMessages)
+      includePartialMessages: includePartialMessages,
+      meta: storedTitle.map { ["title": .string($0)] })
   }
 }

@@ -1092,6 +1092,9 @@ public enum SessionCommand: Sendable, Equatable {
     requestId: String, behavior: PermissionBehavior,
     updatedInput: [String: JSONValue]? = nil, message: String? = nil, interrupt: Bool? = nil)
   case interrupt
+  /// Start a fresh conversation in the same session — the old one stays
+  /// resumable. The server answers with a `conversation_reset` event.
+  case clearContext
   case setPermissionMode(PermissionMode)
   /// nil model = back to the server default.
   case setModel(String?)
@@ -1122,6 +1125,8 @@ extension SessionCommand: Encodable {
       try container.encodeIfPresent(interrupt, forKey: .interrupt)
     case .interrupt:
       try container.encode("interrupt", forKey: .type)
+    case .clearContext:
+      try container.encode("clear_context", forKey: .type)
     case .setPermissionMode(let mode):
       try container.encode("set_permission_mode", forKey: .type)
       try container.encode(mode, forKey: .mode)

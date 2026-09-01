@@ -9,7 +9,7 @@ struct CreateSessionView: View {
 
   /// The form's modal pickers, one at a time.
   private enum Sheet: String, Identifiable {
-    case folder, model, mode
+    case folder, model, mode, resumeSession
     var id: String { rawValue }
   }
 
@@ -138,10 +138,26 @@ struct CreateSessionView: View {
             }
           }
           if model.capabilities.resume {
-            TextField("Resume session id", text: $model.resume)
-              .textInputAutocapitalization(.never)
-              .autocorrectionDisabled()
-              .font(.caption.monospaced())
+            HStack(spacing: 8) {
+              TextField("Resume session id", text: $model.resume)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.caption.monospaced())
+              // Typing a stored id on a phone is as bad as typing a path, and
+              // the same answer applies: the picker lists what the server's
+              // disk holds, the field stays authoritative, so an id from
+              // anywhere else can still be pasted.
+              if model.capabilities.listSessions {
+                Button {
+                  sheet = .resumeSession
+                } label: {
+                  Image(systemName: "clock.arrow.circlepath")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .accessibilityLabel("Browse stored sessions")
+              }
+            }
             if model.engine == .claude {
               Toggle("Fork instead of continue", isOn: $model.forkSession)
                 .disabled(model.resume.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -178,6 +194,8 @@ struct CreateSessionView: View {
           current: model.model.isEmpty ? nil : model.model,
           defaultModel: model.defaultModel,
           onSelect: { model.model = $0 ?? "" })
+      case .resumeSession:
+        StoredSessionPickerView(model: model)
       case .mode:
         ModePickerSheet(
           modes: model.availableModes,
@@ -195,6 +213,76 @@ struct CreateSessionView: View {
       // Arriving from Resume: the advanced section holds the pre-filled ids, so
       // open it rather than hide what the user is about to act on.
       if !model.resume.isEmpty { showAdvanced = true }
+    }
+  }
+}
+
+/// Pick a stored SDK session to resume — the rows the sessions list's Resume
+/// tab draws, but scoped to this form: the cwd field's directory (blank lists
+/// the whole store) and the chosen profile's engine store. Picking one fills
+/// the id field (and adopts the thread's directory); both stay editable.
+private struct StoredSessionPickerView: View {
+  let model: CreateSessionModel
+
+  @Environment(\.dismiss) private var dismiss
+  @State private var summaries: [SdkSessionSummary]?
+  @State private var errorText: String?
+
+  var body: some View {
+    NavigationStack {
+      Group {
+        if let errorText {
+          ContentUnavailableView {
+            Label("Couldn't list sessions", systemImage: "exclamationmark.triangle")
+          } description: {
+            Text(errorText)
+          } actions: {
+            Button("Try again") { Task { await load() } }
+          }
+        } else if let summaries {
+          if summaries.isEmpty {
+            ContentUnavailableView {
+              Label("Nothing to resume", systemImage: "clock.arrow.circlepath")
+            } description: {
+              Text(
+                model.cwd.trimmingCharacters(in: .whitespaces).isEmpty
+                  ? "No stored sessions on this server."
+                  : "No stored sessions for this directory. Clear the working directory to list every stored session.")
+            }
+          } else {
+            List(summaries) { summary in
+              Button {
+                model.adoptStoredSession(summary)
+                dismiss()
+              } label: {
+                SdkSessionRowView(summary: summary)
+              }
+              .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+          }
+        } else {
+          ProgressView()
+        }
+      }
+      .navigationTitle("Resume session")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { dismiss() }
+        }
+      }
+    }
+    .task { await load() }
+  }
+
+  private func load() async {
+    errorText = nil
+    summaries = nil
+    do {
+      summaries = try await model.loadResumeCandidates()
+    } catch {
+      errorText = SessionListModel.describe(error)
     }
   }
 }

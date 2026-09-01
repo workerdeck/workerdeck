@@ -47,6 +47,7 @@ struct SessionView: View {
   /// a bag of booleans would let two open at once.
   @State private var sheet: Sheet?
   @State private var showCloseConfirmation = false
+  @State private var showClearConfirmation = false
   /// Lives as long as the view: both halves of it arrive late and independently —
   /// the command list with `capabilities`, the file scope with the cwd — and a
   /// model rebuilt under the composer would drop the draft's suggestion state.
@@ -353,6 +354,16 @@ struct SessionView: View {
         Button("Cancel", role: .cancel) {}
       } message: {
         Text("The run is terminated on the server.")
+      }
+      .confirmationDialog(
+        "Clear the conversation?", isPresented: $showClearConfirmation, titleVisibility: .visible
+      ) {
+        Button("Clear context") { vm.clearContext() }
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        // Not destructive-red, and the copy says why: the old conversation is
+        // not deleted — it stays resumable, same wording as the other clients.
+        Text("The session keeps running and starts a fresh conversation. The old one stays resumable.")
       }
       // The sub-agent takeover: a push, not a cover, so the way back is the
       // navigation bar everyone already knows. Deliberately **not a second
@@ -864,6 +875,13 @@ struct SessionView: View {
           Button("Skills", systemImage: "sparkles") { sheet = .skills }
         }
         Divider()
+        // Same gate the web sidebar and the VS Code menu use: the session's
+        // capability record, never the engine name.
+        if vm.capabilities.clearContext {
+          Button("Clear context", systemImage: "eraser") {
+            showClearConfirmation = true
+          }
+        }
         Button("Close session", systemImage: "xmark.circle", role: .destructive) {
           showCloseConfirmation = true
         }

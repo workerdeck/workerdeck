@@ -1049,7 +1049,10 @@ struct SessionStatusIcon: View {
   }
 }
 
-private struct SdkSessionRowView: View {
+/// One stored SDK session: title, directory, branch, age. Internal rather than
+/// private because the create form's resume picker draws the same rows — a
+/// stored session should look the same wherever it is offered.
+struct SdkSessionRowView: View {
   let summary: SdkSessionSummary
 
   var body: some View {

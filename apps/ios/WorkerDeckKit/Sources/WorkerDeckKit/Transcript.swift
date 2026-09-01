@@ -213,8 +213,9 @@ public struct TranscriptState: Sendable, Equatable {
   /// Slash commands the CLI accepts (from the `capabilities` event).
   public var commands: [SlashCommandInfo]?
   /// Skills the engine can reach (from the `skills` event), replaced whole each
-  /// time. Absent until the engine has enumerated them — which for codex is on
-  /// its first turn, since listing needs a live child. Gate the affordance on
+  /// time. Absent until the engine has enumerated them — codex probes the list
+  /// over a scratch connection at start, so it usually lands before the first
+  /// turn, but the probe is async and can fail. Gate the affordance on
   /// this being non-nil, not on `skillsList` alone: the flag says the engine
   /// *can* answer, this says it *has*. Not commands — see `SkillInfo`.
   public var skills: [SkillInfo]?

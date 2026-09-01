@@ -239,6 +239,13 @@ public final class SessionHandle {
     enqueue(.interrupt)
   }
 
+  /// Start a fresh conversation in the same session. The old one is not
+  /// deleted — it stays resumable — and the server echoes a
+  /// `conversation_reset` event, which is what empties the transcript.
+  public func clearContext() {
+    enqueue(.clearContext)
+  }
+
   public func setPermissionMode(_ mode: PermissionMode) {
     enqueue(.setPermissionMode(mode))
   }

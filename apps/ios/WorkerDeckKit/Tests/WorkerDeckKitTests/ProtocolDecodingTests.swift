@@ -249,6 +249,13 @@ struct ProtocolDecodingTests {
     #expect(object["updatedInput"] == nil)
   }
 
+  @Test func encodesClearContextCommand() throws {
+    let data = try JSONEncoder().encode(SessionCommand.clearContext)
+    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(object["type"] as? String == "clear_context")
+    #expect(object.count == 1)
+  }
+
   @Test func encodesCreateSessionRequestOmittingNils() throws {
     let request = CreateSessionRequest(cwd: "/tmp/project", permissionMode: .plan)
     let data = try JSONEncoder().encode(request)

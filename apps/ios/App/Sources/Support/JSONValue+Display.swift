@@ -110,15 +110,4 @@ enum ToolIcon {
     }
   }
 
-  /// Does this call *change* something on the host?
-  ///
-  /// Only used for colour, and only in `lines`: skimming a finished run, "what
-  /// did it edit" is the question you come back to, so a settled write earns the
-  /// one green marker in the column. Mirrors the web's `isMutatingTool`.
-  static func isMutating(_ toolName: String) -> Bool {
-    switch toolName {
-    case "Write", "Edit", "MultiEdit", "NotebookEdit", "CodexFileChange": return true
-    default: return false
-    }
-  }
 }
