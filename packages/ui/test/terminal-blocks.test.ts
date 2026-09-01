@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import { blockNeedsBlank, terminalBlocks } from '../src/components/terminal/items.tsx'
+import { blockNeedsBlank, terminalBlocks } from '../src/components/terminal/blocks.ts'
 import { subagentItems } from '../src/components/terminal/blocks.ts'
 
 let seq = 0

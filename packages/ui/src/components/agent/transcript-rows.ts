@@ -1,5 +1,5 @@
 import type { TranscriptItem } from '@workerdeck/react'
-import { needsBlank, type TerminalBlock } from '../terminal/items.tsx'
+import { needsBlank, type TerminalBlock } from '../terminal/blocks.ts'
 
 const absorbedCache = new WeakMap<readonly TranscriptRow[], Map<number, number>>()
 const positionCache = new WeakMap<readonly TranscriptRow[], Map<number, RowPosition>>()

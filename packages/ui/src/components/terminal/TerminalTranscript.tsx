@@ -3,21 +3,8 @@ import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import type { TerminalAffordances } from './affordances.tsx'
 import { OpenSubagentAction, WithActions } from './affordances.tsx'
-import {
-  AssistantRow,
-  FileRow,
-  NoticeRow,
-  ToolRunRow,
-  ThinkingRow,
-  ToolRow,
-  TurnResultRow,
-  UserRow,
-  WorkingRow,
-  blockNeedsBlank,
-  taskChildItems,
-  terminalBlocks,
-  type TaskBlock,
-} from './items.tsx'
+import { AssistantRow, FileRow, NoticeRow, ToolRunRow, ThinkingRow, ToolRow, TurnResultRow, UserRow, WorkingRow } from './items.tsx'
+import { blockNeedsBlank, taskChildItems, terminalBlocks, type TaskBlock } from './blocks.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
 import { taskBrief, taskBusy, taskFailed, taskSummary } from './tool-run.ts'

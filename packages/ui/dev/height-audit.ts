@@ -1,6 +1,6 @@
 import type { TranscriptState } from '@workerdeck/react'
 import { blockHeight, measureCh, type CellMetrics } from '../src/components/terminal/height.ts'
-import { terminalBlocks, type TerminalBlock } from '../src/components/terminal/items.tsx'
+import { terminalBlocks, type TerminalBlock } from '../src/components/terminal/blocks.ts'
 
 function round(n: number): number {
   return Math.round(n * 100) / 100

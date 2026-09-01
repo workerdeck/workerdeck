@@ -15,21 +15,6 @@ import { runFailed, runSummary } from './tool-run.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
-export {
-  blockNeedsBlank,
-  isRunCall,
-  needsBlank,
-  parentOf,
-  taskChildItems,
-  terminalBlocks,
-  type ItemBlock,
-  type LeafBlock,
-  type RunBlock,
-  type TaskBlock,
-  type TerminalBlock,
-  type ToolCallItem,
-} from './blocks.ts'
-
 export const PROMPT_GLYPH = '❯'
 
 export const RESULT_PREVIEW_CHARS = 2000
