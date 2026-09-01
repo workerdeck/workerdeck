@@ -79,10 +79,13 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
   }
 
   protected override wire(view: vscode.WebviewView): void {
-    this.#transports?.dispose()
-    const post = (msg: HostToPanel) => void view.webview.postMessage(msg)
-    this.#transports = new WebviewTransportHost(this.#store, post, (text) => this.#tapFrame(text))
+    this.resetForReload()
     view.onDidChangeVisibility(() => this.#delegate.visibilityChanged())
+  }
+
+  protected override resetForReload(): void {
+    this.#transports?.dispose()
+    this.#transports = new WebviewTransportHost(this.#store, (msg) => this.post(msg), (text) => this.#tapFrame(text))
   }
 
   protected override intercept(msg: PanelToHost): Promise<boolean> | boolean {

@@ -352,6 +352,19 @@ same name; it is reached by double-clicking the title, everything else the card 
 in the `⋯` QuickPick. `src/dev-reload.ts` is development-mode only: a webview rebuild
 re-renders the webviews in place, an extension-host rebuild reloads the window (VS Code
 cannot swap extension code in a live host).
+
+**A webview reload replaces the document but not the `WebviewView`**, so neither
+`resolveWebviewView` nor `onDidDispose` runs — anything keyed to the *document* has to be torn
+down in `WebviewHost.resetForReload()`, which the reloader calls before swapping the HTML.
+Transports are the case that bites, and it is worth understanding once: `webview/bridge.ts`
+allocates socket ids from a module-scope counter starting at 1, and the host routes purely on
+that id. Sockets that outlived a reload therefore answered to ids the fresh document had since
+handed to *other* sessions, and one session's transcript rows were delivered into another's —
+nothing on the wire carries a session id, so no layer downstream could catch it. Note the
+teardown must also *latch* silence (`WebviewTransportHost` drops posts once disposed): a socket
+close is asynchronous, so its `close` event lands after `dispose()` returns and would otherwise
+be posted into the new document. Per-view listeners still belong in `wire`, which must not be
+re-run on reload or they double-register.
 ## `apps/embedded`
 
 **the reference embedding**, and the thing to read before designing another

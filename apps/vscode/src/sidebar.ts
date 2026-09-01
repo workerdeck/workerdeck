@@ -60,11 +60,14 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
   }
 
   protected override wire(view: vscode.WebviewView): void {
-    this.#transports?.dispose()
-    const post = (msg: HostToSidebar) => void view.webview.postMessage(msg)
-    this.#transports = new WebviewTransportHost(this.#store, post)
+    this.resetForReload()
     view.onDidChangeVisibility(() => this.#model.setWatching(SidebarProvider.viewId, view.visible))
     this.#model.setWatching(SidebarProvider.viewId, view.visible)
+  }
+
+  protected override resetForReload(): void {
+    this.#transports?.dispose()
+    this.#transports = new WebviewTransportHost(this.#store, (msg) => this.post(msg))
   }
 
   protected override intercept(msg: SidebarToHost): Promise<boolean> | boolean {

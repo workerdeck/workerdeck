@@ -59,6 +59,15 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
   /** Cleanup when VS Code disposes the view (the view/ready reset has already happened). */
   protected onViewDisposed(): void {}
 
+  /**
+   * Drop anything keyed to the *document* rather than the view, because `reloadWebview` replaces the document while
+   * VS Code keeps the `WebviewView` alive — so neither `resolveWebviewView` nor `onDidDispose` runs. Transports are
+   * the case that bites: their sockets are keyed by an id the document allocates from 1, so a surviving socket
+   * answers to an id the fresh document has since handed to something else. Per-view listeners belong in `wire`,
+   * which must NOT be re-run here — it would double-register them.
+   */
+  protected resetForReload(): void {}
+
   protected get view(): vscode.WebviewView | undefined {
     return this.#view
   }
@@ -112,6 +121,7 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
       return
     }
     this.#ready = false
+    this.resetForReload()
     view.webview.html = webviewHtml(view.webview, this.#dist(), this.bundle, this.rootAttrs(), ++this.#htmlVersion, this.htmlOptions())
   }
 }

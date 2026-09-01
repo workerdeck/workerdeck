@@ -9,11 +9,24 @@ export class WebviewTransportHost {
   readonly #onFrame: ((text: string) => void) | undefined
   readonly #sockets = new Map<number, InstanceType<typeof NodeWebSocket>>()
   readonly #aborts = new Map<number, AbortController>()
+  #disposed = false
 
   constructor(store: HostStore, post: (msg: TransportToWebview) => void, onFrame?: (text: string) => void) {
     this.#store = store
     this.#post = post
     this.#onFrame = onFrame
+  }
+
+  /**
+   * Socket ids are allocated by the webview document and restart at 1 with each one, so a message from a torn-down
+   * transport would be indistinguishable from live traffic on the document that replaced it. Closing a socket is
+   * asynchronous — its `close` event lands after `dispose()` returns — so silence has to be latched, not assumed.
+   */
+  #send(msg: TransportToWebview): void {
+    if (this.#disposed) {
+      return
+    }
+    this.#post(msg)
   }
 
   async handle(msg: WebviewToHost): Promise<boolean> {
@@ -61,7 +74,7 @@ export class WebviewTransportHost {
   async #handleFetch(msg: Extract<TransportToHost, { kind: 'wd-fetch' }>): Promise<void> {
     const gateway = await this.#gatewayFor(msg.url)
     if (!gateway) {
-      this.#post({ kind: 'wd-fetch-result', id: msg.id, ok: false, error: 'not a registered gateway' })
+      this.#send({ kind: 'wd-fetch-result', id: msg.id, ok: false, error: 'not a registered gateway' })
       return
     }
     const abort = new AbortController()
@@ -74,7 +87,7 @@ export class WebviewTransportHost {
         signal: abort.signal,
       })
       const body = Buffer.from(await res.arrayBuffer())
-      this.#post({
+      this.#send({
         kind: 'wd-fetch-result',
         id: msg.id,
         ok: true,
@@ -84,7 +97,7 @@ export class WebviewTransportHost {
         bodyB64: body.toString('base64'),
       })
     } catch (err) {
-      this.#post({
+      this.#send({
         kind: 'wd-fetch-result',
         id: msg.id,
         ok: false,
@@ -98,28 +111,29 @@ export class WebviewTransportHost {
   async #handleWsOpen(id: number, url: string): Promise<void> {
     const gateway = await this.#gatewayFor(url)
     if (!gateway) {
-      this.#post({ kind: 'wd-ws-event', id, event: 'error', message: 'not a registered gateway' })
-      this.#post({ kind: 'wd-ws-event', id, event: 'close', code: 4403, reason: 'refused' })
+      this.#send({ kind: 'wd-ws-event', id, event: 'error', message: 'not a registered gateway' })
+      this.#send({ kind: 'wd-ws-event', id, event: 'close', code: 4403, reason: 'refused' })
       return
     }
     const socket = new NodeWebSocket(url, { headers: gateway.headers })
     this.#sockets.set(id, socket)
-    socket.on('open', () => this.#post({ kind: 'wd-ws-event', id, event: 'open' }))
+    socket.on('open', () => this.#send({ kind: 'wd-ws-event', id, event: 'open' }))
     socket.on('message', (data) => {
       const text = typeof data === 'string' ? data : data.toString()
       this.#onFrame?.(text)
-      this.#post({ kind: 'wd-ws-event', id, event: 'message', data: text })
+      this.#send({ kind: 'wd-ws-event', id, event: 'message', data: text })
     })
     socket.on('close', (code, reason) => {
       this.#sockets.delete(id)
-      this.#post({ kind: 'wd-ws-event', id, event: 'close', code, reason: reason.toString() })
+      this.#send({ kind: 'wd-ws-event', id, event: 'close', code, reason: reason.toString() })
     })
     socket.on('error', (err) => {
-      this.#post({ kind: 'wd-ws-event', id, event: 'error', message: err.message })
+      this.#send({ kind: 'wd-ws-event', id, event: 'error', message: err.message })
     })
   }
 
   dispose(): void {
+    this.#disposed = true
     for (const socket of this.#sockets.values()) {
       socket.close()
     }

@@ -33,10 +33,13 @@ export class SectionViewProvider extends WebviewHost<SectionToHost, HostToSectio
     return { 'data-view': this.#kind }
   }
 
-  protected override wire(view: vscode.WebviewView): void {
+  protected override wire(_view: vscode.WebviewView): void {
+    this.resetForReload()
+  }
+
+  protected override resetForReload(): void {
     this.#transports?.dispose()
-    const post = (msg: HostToSection) => void view.webview.postMessage(msg)
-    this.#transports = new WebviewTransportHost(this.#store, post)
+    this.#transports = new WebviewTransportHost(this.#store, (msg) => this.post(msg))
   }
 
   protected override afterResolve(): void {
