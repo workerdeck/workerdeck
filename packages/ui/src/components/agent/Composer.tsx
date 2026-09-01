@@ -331,6 +331,7 @@ export function Composer({
                 <PromptArea
                   {...bind}
                   triggers={triggers}
+                  markdown={false}
                   normalizeBullets={false}
                   onSubmit={submit}
                   disabled={disabled}
@@ -376,6 +377,7 @@ export function Composer({
             <PromptArea
               {...bind}
               triggers={triggers}
+              markdown={false}
               normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
@@ -393,6 +395,7 @@ export function Composer({
             <PromptArea
               {...bind}
               triggers={triggers}
+              markdown={false}
               normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
