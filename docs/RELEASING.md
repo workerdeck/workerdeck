@@ -436,6 +436,40 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   existing `PermissionPrompt` UI renders automatically. StatusBar baseline fix (§3):
   `self-center` on icon-only slots. Protocol stays **7**.
 
+  **1.0.0** — **the launch.** Taken as a major deliberately: the version that ships publicly is
+  the version whose promises start being kept, and calling it 0.24.0 would have spent the protocol
+  reset below without getting the commitment it was made for.
+
+  `PROTOCOL_VERSION` collapses **7 → 1**. The number had been counting breaking changes made before
+  anyone was on the other end of the wire, and this was the last moment that was free. **It is
+  locked from here on**: every breaking change to the wire now costs a bump and a mismatch banner,
+  and every breaking change to the published API now costs a major. Old iOS builds mismatch until
+  redeployed; nothing else is affected. `PROVIDER_PERMISSION_MODES` is removed in the same breath —
+  the last of the free breakage.
+
+  The bulk of it is **the client-parity matrix, closed on all four clients**. Web and VS Code
+  first: the TodoWrite checklist renderer, `ExitPlanMode` approve/reject in both `PermissionPrompt`
+  variants, bookmarks (the `scrubberMarks` seam redesigned around stable item **ids** and finally
+  given a store and an affordance), a native skills QuickPick and files routing in the extension,
+  and a title unread badge on the dashboard. Then the same four on the phone
+  (`TerminalTodos`, `PlanRequest`, a `BookmarkStore` behind a long-press context menu, and image
+  paste through a `UITextView` subclass) — `docs/CLIENTS.md` carries the divergences, of which the
+  load-bearing one is that iOS plans a checklist on the condition it *draws* it, because there the
+  plan is the height rather than an estimate of it. Unread is counted by **prose** now, not by
+  events. Plus the VS Code gateway editor as native multi-step inputs, and iOS clear-context and a
+  stored-session resume picker.
+
+  Two composer bugs worth naming as classes, both long-standing: the "rich-text paste" complaint
+  was never about paste — it was the input-event decoration pass collapsing `*bold*` **while you
+  typed**, so the composer is plain-text only now (`markdown={false}`); and the send re-pin lost to
+  a trackpad's momentum tail, fixed escape-proof in `5eaff6a`. Eight more bugfixes around
+  transcript leakage across webview reloads, unsent-draft survival, stale profile usage, and
+  Ctrl+C hanging the server.
+
+  Under all of it, **39 refactor commits**: the repo adopted oxfmt and a custom `wd` oxlint plugin,
+  burned a 160-warning comment backlog to 1, and split the largest test suites along their
+  contracts. Config must be `.oxlintrc.json`; `oxfmt-ignore` is never the answer.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
