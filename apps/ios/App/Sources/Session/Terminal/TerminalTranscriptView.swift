@@ -42,12 +42,23 @@ struct TerminalTranscriptView: View {
   /// everything the rail consumes — the items, the rows, the book — is the
   /// frame's own here (`model.items`), so inside a takeover it marks that
   /// agent's narration steps and failures, which is what makes a long run
-  /// navigable. Host **bookmarks** are the one rail input that would be
-  /// full-transcript space and must stay out of a frame whenever this client
-  /// grows them; today it passes none anywhere. What stays is everything that
-  /// makes a long stream readable — the fold, the height book, the follow pin,
-  /// the expansion presses.
+  /// navigable. Host **bookmarks** ride in unchanged, and can only because they
+  /// are item *ids*: each resolves against the frame's own items or is absent
+  /// from them and draws nothing (`ScrubberInput.bookmarks`) — the
+  /// full-transcript index space that once had to stay out of frames no longer
+  /// exists on this seam. What stays is everything that makes a long stream
+  /// readable — the fold, the height book, the follow pin, the expansion
+  /// presses.
   var frame: String? = nil
+  /// Bookmarked transcript item ids — membership and persistence are the
+  /// host's (`SessionView` over `BookmarkModel`), exactly the web
+  /// `SessionPanel`'s `bookmarks` seam. Ids, so the same set is valid at the
+  /// top level and inside a takeover frame.
+  var bookmarks: [String] = []
+  /// Toggle a bookmark by item id, from the row's long-press menu. Absent —
+  /// the preview harness — the menu offers no bookmark action at all, the
+  /// web's missing-`BookmarkProvider` contract.
+  var onToggleBookmark: ((String) -> Void)? = nil
   /// Raise the sub-agent takeover from a `Task` row's press. Absent, the press
   /// falls back to the inline toggle (see `TerminalTranscriptModel.press`) —
   /// and it is deliberately absent inside a frame, as on the web: no takeover
@@ -121,6 +132,24 @@ struct TerminalTranscriptView: View {
                     // `onOpenSubagent={frame ? undefined : onOpenSubagent}`.
                     openSubagent: frame == nil ? onOpenSubagent : nil)
                 })
+            },
+            // Which item the long-press addresses is the kit's rule
+            // (`TranscriptRow.bookmarkItemId` — the row's own head item), and
+            // the active state is read here, at present time, from the same
+            // `bookmarks` value the rail below draws: one source, so the menu
+            // can never say "Bookmark" about a row wearing the mark.
+            menuForRow: { index in
+              guard index >= 0, index < model.rows.count else { return nil }
+              let row = model.rows[index]
+              let bookmark: TerminalRowMenu.Bookmark? = onToggleBookmark.flatMap { toggle in
+                row.bookmarkItemId.map { id in
+                  TerminalRowMenu.Bookmark(
+                    active: bookmarks.contains(id), toggle: { toggle(id) })
+                }
+              }
+              let copyText = row.copyText
+              guard bookmark != nil || copyText != nil else { return nil }
+              return TerminalRowMenu(bookmark: bookmark, copyText: copyText)
             }
           )
           // The prompt of the turn being read, held at the top. An overlay for
@@ -143,8 +172,9 @@ struct TerminalTranscriptView: View {
           // because rail space and content space are the same fraction.
           // In a frame too: the rail rides the frame's OWN items and fold
           // (`model.items` is the frame's list there), so it marks the
-          // sub-agent's steps and failures at the frame's own offsets. Only
-          // host bookmarks would have to stay out — see `frame`'s doc.
+          // sub-agent's steps and failures at the frame's own offsets. Host
+          // bookmarks ride in as ids and resolve against those items or not at
+          // all — see `frame`'s doc.
           .overlay(alignment: .trailing) {
             TerminalScrubberView(
               input: ScrubberInput(
@@ -152,7 +182,8 @@ struct TerminalTranscriptView: View {
                 // the parameter is the whole conversation, and the rail must
                 // describe the same items the fold did.
                 items: model.items, rows: model.rows, book: model.book,
-                pendingApprovals: pendingApprovals, viewportHeight: scroll.viewportHeight,
+                pendingApprovals: pendingApprovals, bookmarks: bookmarks,
+                viewportHeight: scroll.viewportHeight,
                 // What is open decides which failures the rail marks: a call
                 // folded inside a collapsed run is not on screen as a failure,
                 // and the same call is red on its own line once it is.

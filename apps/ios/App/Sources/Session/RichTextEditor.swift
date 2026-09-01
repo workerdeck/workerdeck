@@ -24,6 +24,13 @@ struct RichTextEditor: UIViewRepresentable {
   /// Text *and* caret, together, on every edit — deriving the caret from a
   /// separate `onChange` would race the text it belongs to.
   var onEdit: (String, NSRange) -> Void = { _, _ in }
+  /// A paste carrying a picture. Returns **true** when it was taken as an
+  /// attachment, which is also the instruction to drop the paste: a clipboard
+  /// copied from a browser holds the image *and* its alt text, and inserting
+  /// both would stage a photo and type a caption nobody asked for. The web
+  /// client's rule, ported — `use-prompt-area-events.ts` returns the moment it
+  /// finds an image, before it looks at a single text flavour.
+  var onImagePaste: () -> Bool = { false }
 
   /// The reader's typeface preference, the same one the transcript above reads.
   /// A `UITextView` is outside SwiftUI's font environment entirely, so unlike
@@ -53,8 +60,13 @@ struct RichTextEditor: UIViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeUIView(context: Context) -> UITextView {
-    let view = UITextView()
+    let view = DraftTextView()
     view.delegate = context.coordinator
+    // Through the coordinator rather than capturing `self`: this struct is
+    // rebuilt every render and the view outlives each copy, so a captured
+    // `onImagePaste` would be calling into a composer several states old.
+    let coordinator = context.coordinator
+    view.onImagePaste = { coordinator.parent.onImagePaste() }
     view.backgroundColor = .clear
     view.isScrollEnabled = false
     view.textContainerInset = DraftStyle.containerInset
@@ -170,6 +182,31 @@ struct RichTextEditor: UIViewRepresentable {
       guard parent.isFocused else { return }
       parent.isFocused = false
     }
+  }
+}
+
+/// The composer's text view, subclassed for one reason: a pasted picture.
+///
+/// `UITextViewDelegate` has no paste hook — `shouldChangeTextIn` sees the text a
+/// paste produced, never the pasteboard it came from, and by then the image is
+/// already gone. `paste(_:)` is the only place the clipboard is still whole.
+final class DraftTextView: UITextView {
+  /// Returns true when the paste was consumed as an attachment.
+  var onImagePaste: (() -> Bool)?
+
+  override func paste(_ sender: Any?) {
+    if onImagePaste?() == true { return }
+    super.paste(sender)
+  }
+
+  /// Without this an image-only clipboard has no Paste item at all: a
+  /// `UITextView` offers Paste when the pasteboard holds *text*, and a
+  /// screenshot holds none. The check is `hasImages`, which is a detection
+  /// query and does not raise the system's paste prompt — the prompt belongs on
+  /// the tap, not on the menu appearing.
+  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+    if action == #selector(paste(_:)), UIPasteboard.general.hasImages { return true }
+    return super.canPerformAction(action, withSender: sender)
   }
 }
 

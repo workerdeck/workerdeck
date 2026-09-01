@@ -29,6 +29,7 @@ struct SubagentTakeoverView: View {
   @Environment(PushCoordinator.self) private var push
   @Environment(UnreadModel.self) private var unread
   @Environment(AppSettings.self) private var settings
+  @Environment(BookmarkModel.self) private var bookmarks
 
   /// The frame's own scroll — fresh per open, so the takeover lands pinned to
   /// its own bottom: the live tail of a running agent, and the final report of
@@ -105,9 +106,16 @@ struct SubagentTakeoverView: View {
         // at the rail's foot, which is where this screen's own footer shows the
         // prompt — the same pairing the session screen has, and the web passes
         // `state.pendingApprovals` into a frame's rows for the same reason.
+        // The same bookmark set the session screen passes, and it can be the
+        // same only because the seam is item ids: inside the frame each id
+        // resolves against the frame's own items or draws nothing, and a mark
+        // set here is the same mark the top-level rail shows on the Task row
+        // that absorbed it. Same session, same store, same key.
         TerminalTranscriptView(
           items: vm.state.items, pendingApprovals: vm.state.pendingApprovals,
-          revision: vm.revision, scroll: scroll, frame: taskId)
+          revision: vm.revision, scroll: scroll, frame: taskId,
+          bookmarks: bookmarks.bookmarks(host: hostId, sessionId: vm.sessionId),
+          onToggleBookmark: { bookmarks.toggle(host: hostId, sessionId: vm.sessionId, itemId: $0) })
       } else {
         // The cards renderer folds nothing, so the frame is the filtered items
         // handed to it directly — the same membership, the plainer surface.

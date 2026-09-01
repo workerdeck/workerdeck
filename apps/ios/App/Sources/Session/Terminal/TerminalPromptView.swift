@@ -228,6 +228,15 @@ private struct PromptButton: View {
 /// codex an approval is an *escalation after a sandbox refusal*, and the runner
 /// has already written the sentence that says so — composing "wants to use
 /// {tool}" here would overwrite it with something less true.
+///
+/// **A plan wears the same three outcomes and different words.** `ExitPlanMode`
+/// comes up this channel, but the subject is prose to be *read* rather than a
+/// call to be waved through, so the subject line gives way to the plan drawn as
+/// markdown and the three answers become approve / keep planning / stop. The
+/// plan is rendered in the transcript's own markdown vocabulary
+/// (`TerminalPromptMarkdown`), not a second one: a reader who has spent the
+/// session reading this theme's headings and lists should not have to learn a
+/// different set for the one screen where the reading matters most.
 struct TerminalPermissionPromptView: View {
   let request: PermissionRequest
   let maxBodyHeight: CGFloat
@@ -243,7 +252,12 @@ struct TerminalPermissionPromptView: View {
         PromptRow(glyph: TermGlyph.notice, tone: .yellow) {
           PromptText(text: heading, tone: .bright, weight: .semibold)
         }
-        if let subject, !subject.isEmpty {
+        if let plan {
+          // No subject line above it: for a plan the "subject" is the plan, and
+          // a one-line summary of it in front of the whole thing is noise.
+          Spacer().frame(height: 4)
+          TerminalPromptMarkdown(text: plan)
+        } else if let subject, !subject.isEmpty {
           PromptRow { PromptText(text: subject, tone: .dim) }
         }
         if let description = request.description, !description.isEmpty {
@@ -253,18 +267,29 @@ struct TerminalPermissionPromptView: View {
           PromptRow { PromptText(text: why, tone: .faint) }
         }
         Spacer().frame(height: 8)
-        PromptRow { PromptText(text: request.title ?? "Do you want to proceed?") }
+        PromptRow {
+          PromptText(
+            text: plan != nil
+              ? "Would you like to proceed with this plan?"
+              : (request.title ?? "Do you want to proceed?"))
+        }
         PromptChoice(
-          index: 0, label: "Yes", selected: false, multi: false, action: onAllow)
+          index: 0, label: plan != nil ? "Approve plan" : "Yes", selected: false, multi: false,
+          action: onAllow)
         PromptChoice(
-          index: 1, label: "No, and tell the agent what to do differently",
+          index: 1,
+          label: plan != nil
+            ? "Keep planning — tell it what to change"
+            : "No, and tell the agent what to do differently",
           selected: denying, multi: false
         ) {
           denying.toggle()
         }
         if denying {
           PromptRow {
-            TextField("Reason (optional)", text: $reason, axis: .vertical)
+            TextField(
+              plan != nil ? "What should change? (optional)" : "Reason (optional)", text: $reason,
+              axis: .vertical)
               .textFieldStyle(.plain)
               .font(Font(typography.uiFont))
               .foregroundStyle(TerminalPalette.color(.fg))
@@ -280,7 +305,7 @@ struct TerminalPermissionPromptView: View {
     } actions: {
       PromptActions {
         if denying {
-          PromptButton(title: "Deny", tone: .yellow, prominent: true) {
+          PromptButton(title: plan != nil ? "Keep planning" : "Deny", tone: .yellow, prominent: true) {
             let message = reason.trimmingCharacters(in: .whitespacesAndNewlines)
             onDeny(message.isEmpty ? nil : message, false)
             reason = ""
@@ -288,10 +313,14 @@ struct TerminalPermissionPromptView: View {
           }
           PromptButton(title: "Cancel", tone: .dim) { denying = false }
         } else {
-          PromptButton(title: "Allow", tone: .green, prominent: true, action: onAllow)
-          PromptButton(title: "Deny", tone: .yellow) { denying = true }
+          PromptButton(
+            title: plan != nil ? "Approve plan" : "Allow", tone: .green, prominent: true,
+            action: onAllow)
+          PromptButton(title: plan != nil ? "Keep planning" : "Deny", tone: .yellow) { denying = true }
           Spacer(minLength: 0)
-          PromptButton(title: "Deny & stop", tone: .red) { onDeny(nil, true) }
+          PromptButton(title: plan != nil ? "Stop the turn" : "Deny & stop", tone: .red) {
+            onDeny(nil, true)
+          }
         }
       }
     }
@@ -299,8 +328,13 @@ struct TerminalPermissionPromptView: View {
 
   private var typography: TerminalTypography { .session }
 
+  /// The plan's markdown when this approval is one — `PlanRequest` is the single
+  /// predicate both prompt renderers branch on.
+  private var plan: String? { PlanRequest.plan(from: request) }
+
   private var heading: String {
-    request.displayName ?? request.title ?? "Permission needed"
+    if plan != nil { return "Plan ready for review" }
+    return request.displayName ?? request.title ?? "Permission needed"
   }
 
   /// What the approval is *about*. For a Bash call that is the command itself,
@@ -308,6 +342,104 @@ struct TerminalPermissionPromptView: View {
   /// this is the string the old view clipped at two lines.
   private var subject: String? {
     request.input.toolInputSubject(toolName: request.toolName)
+  }
+}
+
+// MARK: - Prompt markdown
+
+/// Markdown inside a prompt, in the transcript's own vocabulary.
+///
+/// This is not `MarkdownText` (the Cards renderer) and it is not the planner
+/// either. The Cards renderer scales headings and draws code in a chrome box,
+/// both of which are wrong here — this theme has **one line height and one
+/// face**, and a heading is marked by weight because a bigger glyph would sit
+/// off the grid every other line is on. The planner has the right vocabulary but
+/// the wrong shape: it returns wrapped `TermLine`s for the height book, and a
+/// prompt is ordinary SwiftUI that sizes itself and scrolls.
+///
+/// So the rules are copied from `TerminalPlanner.planBlocks` deliberately and
+/// the *wrapping* is not: heading → bright and bold, quote → dim and indented,
+/// code → dim on the output band, list markers `-` / `1.` in the gutter, and a
+/// thematic break is a blank line. The one thing that must not diverge is what a
+/// reader learns to recognise; nothing here feeds a height claim, so nothing
+/// here has to agree with a measurement.
+private struct TerminalPromptMarkdown: View {
+  let text: String
+
+  private var typography: TerminalTypography { .session }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ForEach(Array(MarkdownBlocks.parse(text).enumerated()), id: \.offset) { _, block in
+        blockView(block)
+      }
+    }
+  }
+
+  /// One block. Split out of `body` because a `switch` over six cases inside a
+  /// `ForEach` inside a `VStack` is one expression the type checker gives up on.
+  @ViewBuilder
+  private func blockView(_ block: MarkdownBlock) -> some View {
+    switch block {
+    case .prose(let prose):
+      PromptRow { inline(prose, tone: .fg) }
+    case .heading(_, let heading):
+      // Weight, never size — see the type doc.
+      PromptRow { inline(heading, tone: .bright, weight: .semibold) }
+    case .blockquote(let quote):
+      PromptRow { inline(quote, tone: .dim).padding(.leading, typography.cell * 2) }
+    case .thematicBreak:
+      Spacer().frame(height: typography.line)
+    case .list(let items):
+      listView(items)
+    case .code(_, let source, _):
+      codeView(source)
+    }
+  }
+
+  private func listView(_ items: [MarkdownListItem]) -> some View {
+    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+      HStack(alignment: .top, spacing: 0) {
+        Text(item.ordinal.map { "\($0)." } ?? "-")
+          .font(Font(typography.uiFont))
+          .foregroundStyle(TerminalPalette.color(.faint))
+          .frame(
+            width: typography.cell * CGFloat(item.ordinal != nil ? 3 : 2), alignment: .leading)
+        inline(item.text, tone: .fg)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      // Capped for the reason the Cards list caps it: the parser reports what
+      // the text said, and a phone column cannot afford six real indents.
+      .padding(.leading, CGFloat(min(item.depth, 4)) * typography.cell * 2)
+    }
+  }
+
+  /// Sideways rather than wrapped: wrapped code is unreadable, and a nested
+  /// *vertical* scroll would fight the prompt body's own.
+  private func codeView(_ source: String) -> some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      Text(source)
+        .font(Font(typography.uiFont))
+        .foregroundStyle(TerminalPalette.color(.dim))
+        .lineSpacing(typography.lineSpacing)
+        .textSelection(.enabled)
+        .padding(.horizontal, typography.cell)
+        .padding(.vertical, typography.linePadding)
+    }
+    .background(TerminalPalette.band(.output))
+    .padding(.leading, typography.cell * 2)
+  }
+
+  private func inline(_ source: String, tone: TermTone, weight: Font.Weight = .regular)
+    -> some View
+  {
+    Text(MarkdownInline.attributed(source))
+      .font(Font(typography.uiFont).weight(weight))
+      .foregroundStyle(TerminalPalette.color(tone))
+      .lineSpacing(typography.lineSpacing)
+      .fixedSize(horizontal: false, vertical: true)
+      .multilineTextAlignment(.leading)
+      .textSelection(.enabled)
   }
 }
 

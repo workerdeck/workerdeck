@@ -16,6 +16,9 @@ struct WorkerDeckApp: App {
   /// Reader preferences (transcript variant and density) — one for the process,
   /// because how a transcript should read is a property of the reader.
   @State private var settings = AppSettings()
+  /// The reader's bookmarks — one map for every gateway, the session screen
+  /// toggles into it and the rail draws from it.
+  @State private var bookmarks = BookmarkModel()
 
   init() {
     // Debug-only, and silent unless InjectionNext is set up — see HotReload.swift.
@@ -34,6 +37,7 @@ struct WorkerDeckApp: App {
           .environment(hosts)
           .environment(unread)
           .environment(settings)
+          .environment(bookmarks)
           .environment(delegate.push)
           // The delegate is built by UIKit before any of this exists, so the two
           // are introduced here rather than at either one's construction.

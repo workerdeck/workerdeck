@@ -248,6 +248,70 @@ struct TerminalRowsTests {
       cache: cache)
     #expect(narrow.totalHeight > wide.totalHeight)
   }
+
+  // MARK: - The long-press menu
+
+  @Test("a row bookmarks its own head item — the id it is keyed by")
+  func bookmarkAddressesTheRowHead() {
+    let rows = TerminalRows.build(items: [
+      text("intro"),                        // an item row is its item
+      .toolCall(call("a")),                 // ┐ run of two — the row is
+      .toolCall(call("b")),                 // ┘ `run:a`, so it bookmarks "a"
+      .toolCall(call("T", "Task")),         // task row bookmarks the spawn
+      .toolCall(call("c1", parent: "T")),   // absorbed — no row of its own
+    ])
+    #expect(rows.count == 3)
+    #expect(rows[0].bookmarkItemId == "intro")
+    #expect(rows[1].bookmarkItemId == "a")
+    #expect(rows[2].bookmarkItemId == "T")
+  }
+
+  @Test("the synthetic rows bookmark nothing")
+  func syntheticRowsBookmarkNothing() {
+    // The seam and the brief stand for no item; a bookmark on either would be
+    // an id no transcript holds, which every client would silently drop — the
+    // menu must not offer a mark that can never be found again.
+    let seamed = TerminalRows.build(
+      items: [text("a"), text("b")], recapAt: 1, recapLabel: "1 new")
+    #expect(seamed[1].bookmarkItemId == nil)
+    let brief = TranscriptRow.brief(id: "T", text: "explore the repo")
+    #expect(brief.bookmarkItemId == nil)
+    // Copy still works on the brief: the instruction is real text.
+    #expect(brief.copyText == "explore the repo")
+    #expect(seamed[1].copyText == nil)
+  }
+
+  @Test("copy takes the source, not the drawn lines")
+  func copyTakesTheSource() {
+    let bash = ToolCallItem(
+      id: "sh", name: "Bash", input: .object(["command": .string("pnpm test")]),
+      status: .settled, result: ToolCallResult(text: "434 tests passed", isError: false))
+    let read = ToolCallItem(
+      id: "rd", name: "Read", input: .object(["file_path": .string("/a")]),
+      status: .settled, result: ToolCallResult(text: "740 lines", isError: false))
+    let silent = ToolCallItem(id: "mu", name: "Kill", input: .object([:]), status: .settled)
+    // A run of one is drawn as the call, so it copies as the call — the command
+    // outranks the result, exactly the web `ToolRow`'s `copyable`.
+    #expect(TerminalRows.build(items: [.toolCall(bash)])[0].copyText == "pnpm test")
+    #expect(TerminalRows.build(items: [.toolCall(read)])[0].copyText == "740 lines")
+    // No command, no result: nothing to offer, and the menu says so by omission.
+    #expect(TerminalRows.build(items: [.toolCall(silent)])[0].copyText == nil)
+    // A run of many is a count over other rows' content — copying an invented
+    // concatenation would be worse than offering nothing.
+    #expect(TerminalRows.build(items: [.toolCall(bash), .toolCall(read)])[0].copyText == nil)
+  }
+
+  @Test("a streaming answer offers no copy — the text in hand is a moment, not the message")
+  func streamingAnswerHasNoCopy() {
+    let streaming = TerminalRows.build(items: [
+      .assistantText(id: "s", text: "half a", streaming: true, parentToolUseId: nil)
+    ])
+    let settled = TerminalRows.build(items: [text("s", "the whole answer")])
+    #expect(streaming[0].copyText == nil)
+    #expect(settled[0].copyText == "the whole answer")
+    // Bookmarking it is fine either way: the id is already stable.
+    #expect(streaming[0].bookmarkItemId == "s")
+  }
 }
 
 /// The rendering rules that are not the web client's.

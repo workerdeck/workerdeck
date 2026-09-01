@@ -408,6 +408,34 @@ private struct PromptsPreview: View {
       ]))
   }
 
+  /// The one approval whose subject is prose. Worth a fixture of its own
+  /// because every part of the card changes shape for it — heading, body and
+  /// all three verbs — and because the plan's markdown is the only place this
+  /// theme's block vocabulary is drawn outside the transcript.
+  private static var planRequest: PermissionRequest {
+    request(
+      id: "plan", tool: "ExitPlanMode", title: "Claude is ready to code",
+      input: .object([
+        "plan": .string(
+          """
+          ## What I'd change
+
+          The composer collapses `*bold*` while you type because the decoration
+          pass runs on every input event.
+
+          1. Pass `markdown={false}` at all three `Composer → PromptArea` sites
+          2. Keep URL tinting — it never rewrites the text
+          3. Pin the behaviour with a paste test
+
+          ```ts
+          <PromptArea markdown={false} />
+          ```
+
+          > This does not touch the rich-text *paste* path.
+          """)
+      ]))
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
@@ -422,6 +450,12 @@ private struct PromptsPreview: View {
         TerminalPermissionPromptView(
           request: Self.permissionRequest,
           maxBodyHeight: 200,
+          onAllow: {}, onDeny: { _, _ in })
+
+        caption("Plan — approve / keep planning, markdown body capped at 300")
+        TerminalPermissionPromptView(
+          request: Self.planRequest,
+          maxBodyHeight: 300,
           onAllow: {}, onDeny: { _, _ in })
       }
       .padding(.vertical, 16)

@@ -214,9 +214,19 @@ public struct ScrubberInput {
   public var rows: TerminalRows
   public var book: TerminalHeightBook
   public var pendingApprovals: [PermissionRequest]
-  /// Paint only — there is no store and no set affordance, the way the web
-  /// client leaves it.
-  public var bookmarks: [Int]
+  /// Bookmarked transcript item **ids** — the reader's own annotations, set by
+  /// the row's long-press menu and kept by the host (the app's `BookmarkModel`
+  /// over the kit's `Bookmarks`), the same seam the web passes as
+  /// `SessionPanelProps.bookmarks`. Ids rather than indices because an index is
+  /// an artifact of one replay's coalescing and an id survives it; the id →
+  /// index translation happens in `scrubberMarks`, where the items are — the
+  /// port of web `TranscriptRows.tsx`'s `bookmarkIndexes`. An id not in `items`
+  /// simply draws nothing, and that is what lets **one set ride every rail**:
+  /// inside a takeover frame the same bookmarks resolve against the frame's own
+  /// items or stay off it, with no full-transcript index space to get wrong —
+  /// the hazard that kept the index-addressed version of this field out of
+  /// frames entirely.
+  public var bookmarks: [String]
   public var recap: ScrubberRecap?
   public var viewportHeight: CGFloat
   /// What is open, because **what the rail marks depends on it** — see
@@ -238,7 +248,7 @@ public struct ScrubberInput {
 
   public init(
     items: [TranscriptItem], rows: TerminalRows, book: TerminalHeightBook,
-    pendingApprovals: [PermissionRequest] = [], bookmarks: [Int] = [],
+    pendingApprovals: [PermissionRequest] = [], bookmarks: [String] = [],
     recap: ScrubberRecap? = nil, viewportHeight: CGFloat,
     // **No default.** The book is built with an expansion too, and a caller who
     // passed it there and omitted it here would get a rail quietly describing a
@@ -469,9 +479,22 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
   // A history that ends mid-segment still has an answer in it.
   closeSegment()
 
-  for index in input.bookmarks where index >= 0 && index < input.items.count {
-    marks.append(
-      ScrubberMark(kind: .bookmark, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
+  // Hosts hand bookmarks over as item ids (stable across replays); the mark
+  // model positions by index, so the translation lives here, where the items
+  // are — mirroring web `TranscriptRows.tsx`. An id this transcript does not
+  // hold (a frame that doesn't contain it, a truncated replay) simply draws
+  // nothing. Each resolved index still goes through `rowIndex(forItem:)` like
+  // every other mark: the id names an *item*, and which row shows an item is a
+  // membership question no arithmetic can answer.
+  if !input.bookmarks.isEmpty {
+    var indexById: [String: Int] = [:]
+    for (index, item) in input.items.enumerated() { indexById[item.id] = index }
+    for id in input.bookmarks {
+      guard let index = indexById[id] else { continue }
+      marks.append(
+        ScrubberMark(
+          kind: .bookmark, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
+    }
   }
   if let recap = input.recap {
     marks.append(ScrubberMark(kind: .recap, itemIndex: -1, rowIndex: recap.rowIndex))

@@ -363,7 +363,12 @@ public enum TerminalPlanner {
     let wash = inOpen || open
     let press: TermPress? = expandable ? .toggle(openKey) : nil
 
-    var header = "\(call.name)(\(TermFmt.toolInputPreview(call.input)))"
+    // `TodoWrite`'s parenthetical counts the checklist instead of echoing its
+    // input: the input is the whole list, and "3/7 done" is what the reader
+    // wants from a row they are not going to open.
+    let todos = TerminalTodos.preview(name: call.name, input: call.input)
+    let inputPreview = todos?.summary ?? TermFmt.toolInputPreview(call.input)
+    var header = "\(call.name)(\(inputPreview))"
     if let backend = call.backend, backend != "server" { header += " · \(backend)" }
 
     var lines = wrapBody(
@@ -391,6 +396,27 @@ public enum TerminalPlanner {
     // reader did. Opening the row is how you reach the text underneath.
     if let patch = call.patch, !open {
       lines += planDiff(patch, metrics: metrics, nested: nested, press: press, inOpen: wash)
+      return lines
+    }
+
+    // The checklist stands in for the result preview, and only while collapsed —
+    // opening the row is how you reach the prose underneath, exactly as a diff
+    // gives way. Unlike the web client this is planned on the *same* condition
+    // it is drawn on: here the plan is the height, so a checklist counted while
+    // open would be a frame around lines nobody paints.
+    if let todos, !open {
+      for (offset, todo) in todos.shown.enumerated() {
+        lines += wrapBody(
+          TerminalTodos.line(todo), metrics: metrics,
+          gutter: offset == 0 ? TermGlyph.output : "", gutterTone: .dim,
+          tone: TerminalTodos.tone(todo.status), columns: 3, indent: 1, band: .output,
+          nested: nested, press: press, inOpen: wash)
+      }
+      if let more = todos.more {
+        lines += wrapBody(
+          more, metrics: metrics, gutter: "", tone: .faint, columns: 3, indent: 1, band: .output,
+          nested: nested, press: press, inOpen: wash)
+      }
       return lines
     }
 

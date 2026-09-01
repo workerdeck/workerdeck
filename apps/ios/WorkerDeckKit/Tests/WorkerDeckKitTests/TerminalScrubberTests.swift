@@ -40,7 +40,7 @@ struct TerminalScrubberTests {
   private let metrics = TerminalMetrics(cell: 8, line: 18, width: 8 * 60, fontSize: 13)
 
   private func input(
-    _ items: [TranscriptItem], approvals: [PermissionRequest] = [], bookmarks: [Int] = [],
+    _ items: [TranscriptItem], approvals: [PermissionRequest] = [], bookmarks: [String] = [],
     recap: ScrubberRecap? = nil, viewport: CGFloat = 400,
     expansion: TerminalExpansion = TerminalExpansion(),
     frameParentId: String? = nil, frameTask: ToolCallItem? = nil
@@ -215,10 +215,55 @@ struct TerminalScrubberTests {
     #expect(approval.marks.isEmpty)
   }
 
-  @Test("a bookmark pointing outside the transcript is dropped")
-  func bookmarksAreBounded() {
-    let clusters = buildScrubberClusters(input([say("a")], bookmarks: [0, 9]), railH: 300)
+  @Test("a bookmark id this transcript does not hold draws nothing")
+  func bookmarksResolveById() {
+    // Ids, not indices — the seam's whole point. A mark from another frame's
+    // items (or a truncated replay) is not an error, it is simply not here.
+    let clusters = buildScrubberClusters(
+      input([say("a")], bookmarks: ["a", "someone-elses-row"]), railH: 300)
     #expect(kinds(clusters).filter { $0 == .bookmark }.count == 1)
+  }
+
+  @Test("a bookmark on a run member marks the run's row, by membership")
+  func bookmarkOnRunMemberMarksTheRunRow() {
+    // The id names the *last* member, whose row no index arithmetic can find:
+    // the run's row starts two items earlier.
+    let items = [user("u"), call("a"), call("b"), call("c"), say("answer")]
+    let scrub = input(items, bookmarks: ["c"])
+    let mark = buildScrubberClusters(scrub, railH: 300)
+      .flatMap { $0.marks }.map(\.mark).first { $0.kind == .bookmark }
+    #expect(mark?.itemIndex == 3)
+    #expect(mark?.rowIndex == 1)
+    #expect(mark?.rowIndex == scrub.rows.rowIndex(forItem: 3))
+  }
+
+  @Test("a bookmark on a task's absorbed child marks the Task row that swallowed it")
+  func bookmarkOnAbsorbedChildMarksTheTaskRow() {
+    let items: [TranscriptItem] = [
+      user("u"),                // 0 → row 0
+      call("T", "Task"),        // 1 → row 1, the fold's anchor
+      call("c1", parent: "T"),  // 2 absorbed into row 1
+      say("answer"),            // 3 → row 2
+    ]
+    let scrub = input(items, bookmarks: ["c1"])
+    let mark = buildScrubberClusters(scrub, railH: 300)
+      .flatMap { $0.marks }.map(\.mark).first { $0.kind == .bookmark }
+    #expect(mark?.itemIndex == 2)
+    #expect(mark?.rowIndex == 1)
+  }
+
+  @Test("one bookmark set rides a frame's rail: its own items resolve, the host's stay out")
+  func bookmarksInsideAFrameResolveAgainstItsOwnItems() {
+    // What made index-addressed bookmarks impossible to pass into a takeover:
+    // index 2 means different items in the two spaces. Ids dissolve it — the
+    // same set goes to both rails, and inside the frame each id either names a
+    // frame item at the frame's own offsets or names nothing.
+    let frameItems = [say("s1", parent: "T"), call("c1", parent: "T", result: "ok")]
+    let scrub = input(frameItems, bookmarks: ["c1", "top-level-prompt"], frameParentId: "T")
+    let bookmarks = buildScrubberClusters(scrub, railH: 300)
+      .flatMap { $0.marks }.map(\.mark).filter { $0.kind == .bookmark }
+    #expect(bookmarks.count == 1)
+    #expect(bookmarks.first?.itemIndex == 1)
   }
 
   @Test("the recap seam is marked from its row, never from an item")

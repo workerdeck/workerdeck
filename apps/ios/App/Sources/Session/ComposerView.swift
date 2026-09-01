@@ -1,5 +1,7 @@
 import WorkerDeckKit
 import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
 
 /// The prompt input, in whichever shape the transcript above it is wearing.
 ///
@@ -207,9 +209,51 @@ struct ComposerView: View {
         selection: $selection,
         isFocused: $isFocused,
         isEnabled: isEnabled,
-        onEdit: onEdit)
+        onEdit: onEdit,
+        onImagePaste: pasteImage)
     }
   }
+
+  /// Take a picture off the clipboard and stage it. Returns whether it did —
+  /// see `RichTextEditor.onImagePaste` for why the answer suppresses the paste.
+  ///
+  /// **Raw bytes first, the decoded image only as a fallback.** A screenshot is
+  /// PNG and the API takes PNG, so routing it through `UIPasteboard.image`
+  /// would decode and re-encode it to JPEG for nothing — a lossy round trip
+  /// that makes text in a screenshot, which is most of what gets pasted into an
+  /// agent, measurably worse to read. `AttachmentNormalizer.file` keeps the
+  /// exact bytes when the format and size already suit, and falls back to the
+  /// same transcode everything else gets.
+  private func pasteImage() -> Bool {
+    guard canAddMedia, isEnabled else { return false }
+    let board = UIPasteboard.general
+    guard board.hasImages else { return false }
+    for (type, mediaType) in Self.pasteboardImageTypes {
+      guard let data = board.data(forPasteboardType: type.identifier) else { continue }
+      let ext = type.preferredFilenameExtension ?? "img"
+      guard let picked = AttachmentNormalizer.file(
+        data: data, name: "pasted.\(ext)", mediaType: mediaType)
+      else { continue }
+      attachments.add(picked)
+      return true
+    }
+    // A clipboard whose image is in some format we did not name — or was put
+    // there as a live `UIImage` by another app — still pastes; it just costs a
+    // transcode.
+    guard let image = board.image,
+      let picked = AttachmentNormalizer.image(image, name: "pasted.jpg", mediaType: nil)
+    else { return false }
+    attachments.add(picked)
+    return true
+  }
+
+  /// The formats worth taking verbatim, in the order a clipboard usually offers
+  /// them. Exactly `AttachmentNormalizer.acceptedImageTypes` — anything outside
+  /// this set would be transcoded by the normalizer anyway, so asking the
+  /// pasteboard for it buys nothing.
+  private static let pasteboardImageTypes: [(UTType, String)] = [
+    (.png, "image/png"), (.jpeg, "image/jpeg"), (.gif, "image/gif"), (.webP, "image/webp"),
+  ]
 
   /// Attach on the left; dismiss and send on the right. There is deliberately no
   /// dictate button — iOS puts a microphone on the keyboard itself, right where a

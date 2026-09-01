@@ -27,6 +27,7 @@ struct SessionView: View {
   @Environment(PushCoordinator.self) private var push
   @Environment(UnreadModel.self) private var unread
   @Environment(AppSettings.self) private var settings
+  @Environment(BookmarkModel.self) private var bookmarks
 
   /// The gateway this session belongs to — the watermark key's first half.
   private let hostId: UUID
@@ -155,6 +156,10 @@ struct SessionView: View {
           TerminalTranscriptView(
             items: vm.state.items, pendingApprovals: vm.state.pendingApprovals,
             revision: vm.revision, scroll: transcriptScroll, focusItem: focusTarget,
+            // Read in the body, so a toggle from the row menu re-derives this
+            // view and the rail draws the mark the same pass the menu set it.
+            bookmarks: bookmarks.bookmarks(host: hostId, sessionId: vm.sessionId),
+            onToggleBookmark: { bookmarks.toggle(host: hostId, sessionId: vm.sessionId, itemId: $0) },
             onOpenSubagent: { openSubagent($0) })
         } else {
           TranscriptListView(items: vm.state.items, revision: vm.revision)

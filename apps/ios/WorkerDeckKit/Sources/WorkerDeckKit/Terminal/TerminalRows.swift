@@ -227,3 +227,92 @@ extension TerminalRows {
     return found
   }
 }
+
+// MARK: - The long-press menu
+
+extension TranscriptRow {
+  /// The item a long-press on this row bookmarks: **the row's own head item** —
+  /// the same item the row is keyed by (`run:<id>` / `task:<id>`), sorted at
+  /// (`starts`) and spaced as. The two synthetic rows (the catch-up seam, the
+  /// takeover's brief) stand for no item and bookmark nothing.
+  ///
+  /// The row, not the touched line, and the alternative is worth recording. The
+  /// web bookmarks the exact item because its ☆ sits on that item's own DOM
+  /// row; here a folded row is one cell over many items, and although the cell
+  /// resolves a *line* from the touch, a line cannot be attributed back to an
+  /// item: `TermLine` deliberately erases where a line came from (the renderer
+  /// "is handed lines and nothing else"), and its `press` is a verb, not an
+  /// address — nil on exactly the rows most worth marking, since prose carries
+  /// no press at all. Re-deriving the attribution outside the planner would be
+  /// a second answer to "what did this row draw", the drift this renderer
+  /// exists to refuse; teaching the plan per-line identity would buy precision
+  /// the rail cannot show (collapsed, every member's mark rounds onto the same
+  /// row). So the row is the unit of address — as it already is for the tap,
+  /// which presses the whole block from any of its lines — and a run of many
+  /// bookmarks the call its row is named for.
+  public var bookmarkItemId: String? {
+    switch self {
+    case .block(let block):
+      switch block {
+      case .item(let leaf): return leaf.item.id
+      case .run(let leaf): return leaf.run.first?.id
+      case .task(let leaf): return leaf.task.id
+      }
+    case .recap, .brief:
+      return nil
+    }
+  }
+
+  /// What the menu's Copy puts on the clipboard: the row's *source*, never its
+  /// drawn lines — the raw markdown of an answer, the command a tool ran, the
+  /// prompt as it was typed. The body is already one selectable text run, so
+  /// copying what is visible needs no menu; what the menu buys is the text the
+  /// theme does not draw verbatim. The tool-call rule is the web `ToolRow`'s
+  /// (`items.tsx`): the command when the input has one, else the result text,
+  /// else nothing. A run summary and a task header are counts over other rows'
+  /// content, so they offer nothing rather than inventing a concatenation —
+  /// with the run-of-one exception the planner already draws: that row *is* the
+  /// call, so it copies as the call.
+  public var copyText: String? {
+    switch self {
+    case .brief(_, let text):
+      return text
+    case .recap:
+      return nil
+    case .block(let block):
+      switch block {
+      case .item(let leaf): return itemCopyText(leaf.item)
+      case .run(let leaf): return leaf.run.count == 1 ? leaf.run.first.flatMap(callCopyText) : nil
+      case .task: return nil
+      }
+    }
+  }
+}
+
+private func itemCopyText(_ item: TranscriptItem) -> String? {
+  switch item {
+  case .user(_, let text, _, _):
+    return text.isEmpty ? nil : text
+  case .assistantText(_, let text, let streaming, _):
+    // Not while streaming — the web hides its copy action there too: the text
+    // in hand is a moment of the message, not the message.
+    return streaming || text.isEmpty ? nil : text
+  case .thinking(_, let text, _):
+    return text.isEmpty ? nil : text
+  case .toolCall(let call):
+    return callCopyText(call)
+  case .turnResult:
+    // The done-line is decoration nobody typed; there is no source to copy.
+    return nil
+  case .notice(_, _, let text):
+    return text.isEmpty ? nil : text
+  case .fileDelivered(_, let path, _, _):
+    return path
+  }
+}
+
+private func callCopyText(_ call: ToolCallItem) -> String? {
+  if let command = call.input["command"]?.stringValue { return command }
+  let text = call.result?.text ?? ""
+  return text.isEmpty ? nil : text
+}

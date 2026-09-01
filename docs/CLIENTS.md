@@ -507,6 +507,21 @@ and the bands (0.04/0.05), because a transcript is mostly pressable and at band 
 second row would be washed and the rows carrying real meaning would stop standing out. If it ever
 reads as noise the next move is to mark **fewer rows, not to lighten it further** — the honest
 alternative is marking only blocks that fold something and leaving a plain tool call bare.
+The same absent hover is why a **long-press opens a context menu** on a row (the collection view's
+own `contextMenuConfigurationForItemsAt`, not a per-cell interaction, so UIKit installs one
+recognizer per surface and coordinates it with the scroll instead of leaving a hand-added one to
+win that fight alone). It carries what the web puts in its hover overlay: the bookmark toggle and
+**Copy**, which had no home here at all. Two rules keep it honest. It addresses **the row's own
+head item**, never the touched line — `TermLine` deliberately erases where a line came from, and
+its `press` is a verb rather than an address (nil on exactly the prose rows most worth marking),
+so per-line attribution would be a second answer to "what did this row draw", which is the drift
+this renderer exists to refuse; a folded run therefore bookmarks the call its row is named for.
+And Copy takes the row's **source** — an answer's raw markdown, a call's command — never its drawn
+lines, since the body is already one selectable run and copying what is *visible* needs no menu.
+A standing text selection refuses the menu, the same deference `handleTap` pays it. The
+selection-long-press against the menu-long-press is the one interplay that still wants a device
+check: the simulator's synthetic input drives neither recognizer, which is provable rather than
+suspected — under it the ordinary tap does not register either.
 Hit targets are the standing tension: a one-line block is `metrics.line` tall, ~19pt at the
 phone's 12pt cell against Apple's 44pt, and the grid forbids the obvious fix (a row is a whole
 number of lines, and a taller row is a different transcript). What is there is free — `handleTap`
@@ -557,8 +572,13 @@ focus — because every one of them is keyed to a *full-transcript* index. **The
 riding the frame's own items and fold with the kit's `ScrubberInput.frameParentId` deciding what
 "top level" means (web `scrubber.tsx`, same rule: without it a frame's rail mounted, banded, and
 marked nothing), and inside a frame every narration step marks on its own where the conversation
-gets one mark per segment; only host bookmarks — full-transcript indices — would have to stay
-out, and this client passes none anywhere yet. The
+gets one mark per segment. Host **bookmarks** ride in unchanged, and can only because they are
+addressed by **item id**: the seam was indices when this paragraph first said they would have to
+stay out, and an index means nothing at a level it was not taken at. An id is level-independent,
+so both screens pass the *same* set and inside a frame each id resolves against the frame's own
+items or draws nothing — the web `TranscriptRows.tsx` rule exactly. A bookmark set on a frame's
+child therefore shows at the frame's own offsets there, and on the `Task` row that absorbed it at
+top level. The
 composer goes and **the approvals stay** (`ApprovalPromptHost`, shared with the session screen), for
 the reason `docs/PACKAGES.md` records: a sub-agent's tool calls raise session-level permission
 requests, so hiding them deadlocks the agent you are watching. Entry from the transcript is
@@ -613,6 +633,26 @@ model to land on). A task used to draw inert here on the argument that there was
 it; there always was, and the equivalent bug on the web was the opposite mistake — framing a
 task's id, which selects no items and drew an **empty agent view**. Both kinds are one row shape
 (`SessionStepRow`) with two route payloads, never a variant branch inside the row.
+
+Three parity ports share one shape worth stating once: **the phone reuses the kit's rule and
+supplies its own drawing.** `TerminalTodos` (the `TodoWrite` checklist) and `PlanRequest` (is this
+approval a plan?) are ports of `todos.ts` and `plan-request.ts`, and each is the *single* predicate
+both of this client's renderers branch on, so the cards prompt and the terminal prompt can never
+disagree about what a plan is. The checklist diverges from the web in one place, and the divergence
+is the height model: the web counts todo rows whether or not the row is open, because its heights
+are the scrubber's estimate, while here the plan **is** the height, so a checklist counted while
+open would be a frame around lines nobody paints — it is therefore planned on exactly the condition
+it is drawn on, the way a diff already was. A plan's markdown needs a third renderer
+(`TerminalPromptMarkdown`): the Cards one scales headings, which this grid cannot afford, and the
+planner has the right vocabulary but returns wrapped lines for a height book that a self-sizing
+prompt does not have — so the *rules* are copied from `planBlocks` (weight, never size) and the
+wrapping deliberately is not. **Image paste** needs a `UITextView` subclass for a reason no amount
+of delegate work escapes: `shouldChangeTextIn` sees the text a paste produced and never the
+pasteboard it came from, so `paste(_:)` is the only place the clipboard is still whole. It takes
+the web's rule that the first image wins and short-circuits the text paste, and adds one the web
+has no say in — raw clipboard bytes over `UIPasteboard.image`, because a screenshot is PNG and the
+API takes PNG, and decoding to re-encode as JPEG would be a lossy round trip on the single thing
+people paste into an agent most.
 
 **The phone draws no list selection**, deliberately: the dashboard paints a card blue and moves
 the blue down to a step when a sub-agent is framed, but that needs list and panel on screen

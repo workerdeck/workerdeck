@@ -133,6 +133,33 @@ final class TranscriptCollectionView: UICollectionView {
 
 private let transcriptRowReuseIdentifier = "term-row"
 
+/// What a long-press on a row offers — the phone's shape for the web's hover
+/// actions (`affordances.tsx`), which a thumb cannot reach. One menu with the
+/// deliberate moves in it: the bookmark toggle (the `☆`/`★` the web puts on the
+/// row's overlay) and Copy, which otherwise has no home on this renderer beyond
+/// hand-selecting the text. The tap stays the expand press, untouched.
+///
+/// Resolved **when the menu is about to present, never at configure time**: a
+/// bookmark toggle reconfigures no cell (nothing about its lines changed), so a
+/// payload captured at configure would still say "Bookmark" about a row just
+/// starred.
+struct TerminalRowMenu {
+  struct Bookmark {
+    /// Is the row's item bookmarked now — which of the two labels the action
+    /// wears, the web `BookmarkAction`'s `active`.
+    var active: Bool
+    var toggle: () -> Void
+  }
+
+  /// Nil when the row addresses no item (the recap seam) or the host wired no
+  /// store — the web's missing-`BookmarkProvider` contract: no action at all,
+  /// never a dead one.
+  var bookmark: Bookmark?
+  /// Nil when the row has no source worth copying; the menu then omits Copy
+  /// rather than copying an invention — see `TranscriptRow.copyText`.
+  var copyText: String?
+}
+
 // MARK: - Representable
 
 /// The virtualized terminal transcript: a `UICollectionView` under
@@ -182,6 +209,11 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   /// (or the metrics) changed — parent state that should redraw a row must be
   /// *in* the row.
   var configureRow: (TerminalRowCell, Int) -> Void
+  /// The long-press menu for the row at this index, asked as the menu is about
+  /// to present (see ``TerminalRowMenu``). Nil — the default, and the sticky
+  /// prompt's case by construction, since that copy of a row rides outside any
+  /// collection view — presents nothing.
+  var menuForRow: ((Int) -> TerminalRowMenu?)? = nil
 
   func makeCoordinator() -> Coordinator {
     Coordinator(configureRow: configureRow)
@@ -223,6 +255,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   func updateUIView(_ uiView: TranscriptCollectionView, context: Context) {
     let coordinator = context.coordinator
     coordinator.configureRow = configureRow
+    coordinator.menuForRow = menuForRow
     coordinator.attach(model: scroll)
     if uiView.showsVerticalScrollIndicator != showsScrollIndicator {
       uiView.showsVerticalScrollIndicator = showsScrollIndicator
@@ -271,6 +304,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     TranscriptScrollDriver
   {
     var configureRow: (TerminalRowCell, Int) -> Void
+    var menuForRow: ((Int) -> TerminalRowMenu?)?
     weak var collectionView: TranscriptCollectionView?
     weak var layout: TranscriptLayout?
     private(set) var model: TranscriptScrollModel?
@@ -669,6 +703,48 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       forItemAt indexPath: IndexPath
     ) {
       (cell as? TerminalRowCell)?.cancelImageLoads()
+    }
+
+    /// The row's long-press menu — through the collection view's own context
+    /// menu machinery rather than a per-cell `UIContextMenuInteraction`, so
+    /// UIKit installs one recognizer per surface and coordinates it with the
+    /// scroll, which is exactly the fight a hand-added recognizer would have
+    /// to win by itself (the tap already needed simultaneous recognition just
+    /// to fire once). What it cannot be coordinated with by machinery is the
+    /// text view's selection long-press, so a standing selection wins here the
+    /// way it wins the tap — and, as the README says of every gesture on this
+    /// surface, the finger-level interplay ships as a device check.
+    func collectionView(
+      _ collectionView: UICollectionView,
+      contextMenuConfigurationForItemsAt indexPaths: [IndexPath],
+      point: CGPoint
+    ) -> UIContextMenuConfiguration? {
+      guard indexPaths.count == 1, let indexPath = indexPaths.first else { return nil }
+      if let cell = collectionView.cellForItem(at: indexPath) as? TerminalRowCell,
+        cell.hasStandingSelection
+      { return nil }
+      guard let menu = menuForRow?(indexPath.item),
+        menu.bookmark != nil || menu.copyText != nil
+      else { return nil }
+      return UIContextMenuConfiguration(actionProvider: { _ in
+        var actions: [UIAction] = []
+        if let bookmark = menu.bookmark {
+          // The web's labels verbatim, so the affordance reads the same across
+          // clients; the star is its `☆`/`★` in the platform's vocabulary.
+          actions.append(
+            UIAction(
+              title: bookmark.active ? "Remove bookmark" : "Bookmark",
+              image: UIImage(systemName: bookmark.active ? "star.slash" : "star")
+            ) { _ in bookmark.toggle() })
+        }
+        if let copyText = menu.copyText {
+          actions.append(
+            UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in
+              UIPasteboard.general.string = copyText
+            })
+        }
+        return UIMenu(children: actions)
+      })
     }
 
     // MARK: UIScrollViewDelegate

@@ -68,6 +68,13 @@ final class TerminalRowCell: UICollectionViewCell {
     set { body.isSelectable = newValue }
   }
 
+  /// Is a text selection standing in this row right now? Read by the context
+  /// menu's gate the way `handleTap` reads it: a selection owns the gesture —
+  /// its grabbers and its own edit menu are what a reader who selected text is
+  /// reaching for, and a second menu lifting the row out from under them would
+  /// fight both.
+  var hasStandingSelection: Bool { body.selectedRange.length > 0 }
+
   override init(frame: CGRect) {
     super.init(frame: frame)
     contentView.addSubview(backdrop)
