@@ -458,7 +458,7 @@ push or a pop. Two things that used to hang off `onDisappear` ride the claim tra
 *mid-session*, and the approval shown inside the takeover would otherwise ring the phone about
 itself. There is never a second attach and never a second reducer.
 The frame itself is the web's rule, ported: membership is the kit's `subagentItems`, and the
-component owns the same three gates `Transcript.tsx` owns — recap, sticky prompt, and deep-link
+component owns the same three gates the web transcript (`Transcript.tsx`/`TranscriptRows.tsx`) owns — recap, sticky prompt, and deep-link
 focus — because every one of them is keyed to a *full-transcript* index. **The scrubber stays**,
 riding the frame's own items and fold with the kit's `ScrubberInput.frameParentId` deciding what
 "top level" means (web `scrubber.tsx`, same rule: without it a frame's rail mounted, banded, and

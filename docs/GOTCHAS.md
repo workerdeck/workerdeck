@@ -1793,7 +1793,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **The transcript is virtualized, and two things want to write `scrollTop`.**
   `use-stick-to-bottom`'s follow spring owns *staying at the bottom*; `@tanstack/react-virtual`
   wants to *correct* the offset whenever a row measures differently from its estimate. They are
-  split by regime in `Transcript.tsx`: **pinned, corrections are suppressed outright** — being at
+  split by regime in `TranscriptRows.tsx` (the rows lane `Transcript.tsx` composes): **pinned, corrections are suppressed outright** — being at
   the bottom is the whole scroll position, and a correction that moves the viewport up is read by
   the follow logic as a user scrolling away, which silently breaks the lock mid-stream. Escaped,
   the virtualizer corrects so the scrollback holds still under the reader.
