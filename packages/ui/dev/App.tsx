@@ -23,6 +23,15 @@ const PROMPTS = [
   { key: 'ask', label: 'questions' },
 ] as const
 
+// Slash commands for the composer so the playground can exercise the trigger dropdown
+// (keydown branch 2, selection, auto-resolve) without a gateway.
+const DEV_COMMANDS = [
+  { name: 'compact', description: 'Compact the conversation' },
+  { name: 'clear', description: 'Clear context' },
+  { name: 'review', description: 'Review the working diff', argumentHint: '[path]' },
+  { name: 'model', description: 'Switch model' },
+]
+
 const ATTACHMENT_PREVIEW =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
@@ -427,6 +436,7 @@ export function App() {
           <TranscriptVariantProvider value="terminal">
             <Composer
               attachments={stagedAttachments}
+              commands={DEV_COMMANDS}
               onSend={(text) => {
                 repinRef.current?.()
                 setAnswered(`sent: ${text}`)
