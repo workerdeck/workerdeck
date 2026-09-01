@@ -4,7 +4,6 @@ import {
   PROTOCOL_VERSION,
   mergeUsage,
   orderUsageWindows,
-  subagentLabel,
   usageInfos,
   type ModelOption,
   type PermissionMode,
@@ -35,7 +34,7 @@ import { ModelSelect } from './ModelSelect.tsx'
 import { PermissionModeSelect, permissionModeChoices, type PermissionModeChoice } from './PermissionModeSelect.tsx'
 import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { SubagentStrip } from './SubagentStrip.tsx'
-import { subagentItems, type ToolCallItem } from '../terminal/blocks.ts'
+import { useSubagentFrame } from './use-subagent-frame.ts'
 import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
 import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
@@ -203,8 +202,6 @@ export function SessionPanel({
   const controlsExternal = controlsSurface === 'external' || controlsInStatus
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined)
   const [panel, setPanel] = useState<Panel | undefined>()
-  const [subagentId, setSubagentId] = useState<string | undefined>(undefined)
-  const [returnReveal, setReturnReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const {
     state,
     connection,
@@ -223,64 +220,15 @@ export function SessionPanel({
     loadFullResult,
   } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError, cacheTranscript })
   useEffect(() => setProtocolError(undefined), [sessionId])
-  useEffect(() => {
-    setSubagentId(undefined)
-    setReturnReveal(undefined)
-  }, [sessionId])
-
-  const leaveSubagent = useCallback(() => {
-    setSubagentId((current) => {
-      if (current !== undefined) {
-        setReturnReveal({ toolUseId: current, nonce: Date.now() })
-      }
-      return undefined
-    })
-  }, [])
-
-  const openSubagentNonce = openSubagent?.nonce
-  const openSubagentId = openSubagent?.toolUseId
-  useEffect(() => {
-    if (openSubagentId === undefined) {
-      leaveSubagent()
-    } else {
-      setSubagentId(openSubagentId)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openSubagentNonce])
-
-  const revealNonce = reveal?.nonce
-  useEffect(() => {
-    if (revealNonce === undefined) {
-      return
-    }
-    setSubagentId(undefined)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealNonce])
-
-  useEffect(() => {
-    if (subagentId === undefined) {
-      return
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) {
-        return
-      }
-      leaveSubagent()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [subagentId, leaveSubagent])
-
-  const onSubagentChangeRef = useRef(onSubagentChange)
-  onSubagentChangeRef.current = onSubagentChange
-  const reportedSubagentId = useRef<string | undefined>(undefined)
-  useEffect(() => {
-    if (reportedSubagentId.current === subagentId) {
-      return
-    }
-    reportedSubagentId.current = subagentId
-    onSubagentChangeRef.current?.(subagentId)
-  }, [subagentId])
+  const {
+    subagentId,
+    enterSubagent,
+    leaveSubagent,
+    returnReveal,
+    frameItems: subagentFrameItems,
+    task: subagentTask,
+    fallbackLabel: subagentFallbackLabel,
+  } = useSubagentFrame({ sessionId, items: state.items, session: state.session, reveal, openSubagent, onSubagentChange })
 
   const [caughtUp, setCaughtUp] = useState(false)
   useEffect(() => {
@@ -319,21 +267,6 @@ export function SessionPanel({
   )
   const terminal = transcriptVariant === 'terminal'
 
-  const subagentFrameItems = useMemo(
-    () => (subagentId === undefined ? [] : subagentItems(state.items, subagentId)),
-    [state.items, subagentId],
-  )
-  const subagentTask = useMemo(
-    () =>
-      subagentId === undefined
-        ? undefined
-        : state.items.find((item): item is ToolCallItem => item.kind === 'tool_call' && item.id === subagentId),
-    [state.items, subagentId],
-  )
-  const subagentFallbackLabel = useMemo(() => {
-    const record = state.session?.subagents?.find((sub) => sub.toolUseId === subagentId)
-    return record ? subagentLabel(record) : 'Sub-agent'
-  }, [state.session, subagentId])
   const capabilities = state.capabilities
 
   const { usage: profileUsage } = useProfileUsage(client, state.session?.profile, {
@@ -626,7 +559,7 @@ export function SessionPanel({
                 catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
                 reveal={returnReveal ?? reveal}
                 frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
-                onOpenSubagent={setSubagentId}
+                onOpenSubagent={enterSubagent}
                 emptyState={emptyState}
                 jumpToRecapRef={jumpToRecap}
                 repinRef={repinTranscript}
