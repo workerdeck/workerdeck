@@ -283,9 +283,12 @@ survives untouched for other callers. A **task** takes the other road: `wd-selec
 **`wd-reveal-tool-use`** → `SessionPanel.reveal`, which stays on the conversation and travels to the
 row where that work was started and finished. A sibling field and a separate arm, not a flag,
 because the two go to different panel APIs — and conflating them is exactly how a task came to be
-framed as an agent, selecting no items and drawing an **empty agent view**. The two request queues
-in `panel.ts` clear each other, so at most one is ever pending and the flush order in `#pushActive`
-is a non-question. Neither focuses the composer: both are requests to *read*.
+framed as an agent, selecting no items and drawing an **empty agent view**. `panel.ts` holds them
+in a single `#pending` slot — one kind at a time, so asking for either withdraws the other and the
+mutual exclusion is structural rather than two queues clearing each other — flushed from
+`#pushActive` with one strictly-increasing nonce (per-kind values never repeat, which is what keeps
+"asking twice means twice" true webview-side). Neither focuses the composer: both are requests to
+*read*.
 The panel reports back what it actually has framed — `SessionPanel`'s `onSubagentChange` →
 **`wd-subagent-open`** → `SessionsModel.setSelectedSubagent` → `SidebarState.selected
 .subagentToolUseId` → the card's `activeStepKey`, which draws the **secondary selection**: the

@@ -6,7 +6,7 @@ import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost } from './bridge-protocol.ts'
 import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, runningSubagents, type ViewConfig } from './view-config.ts'
-import { webviewHtml } from './webview-html.ts'
+import { WebviewHost } from './webview-host.ts'
 import { ProjectIconCache } from './project-icons.ts'
 
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
@@ -23,21 +23,19 @@ export type SidebarDelegate = {
   subagents: (running: number, sessions: number) => void
 }
 
-export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Disposable {
+export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> implements vscode.Disposable {
   static readonly viewId = 'workerdeck.sessions'
 
-  readonly #extensionUri: vscode.Uri
   readonly #store: HostStore
   readonly #model: SessionsModel
   readonly #delegate: SidebarDelegate
-  #view: vscode.WebviewView | undefined
-  #ready = false
-  #htmlVersion = 0
   #transports: WebviewTransportHost | undefined
   #filterOpen = false
   readonly #context: vscode.ExtensionContext
   #viewConfig: ViewConfig
   readonly #icons: ProjectIconCache
+
+  protected readonly bundle = 'sidebar.js'
 
   constructor(
     context: vscode.ExtensionContext,
@@ -46,12 +44,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     model: SessionsModel,
     delegate: SidebarDelegate,
   ) {
+    super(extensionUri)
     this.#context = context
-    this.#extensionUri = extensionUri
     this.#store = store
     this.#model = model
     this.#delegate = delegate
-    this.#icons = new ProjectIconCache(store, () => this.#post({ kind: 'wd-project-icons', icons: this.#icons.entries() }))
+    this.#icons = new ProjectIconCache(store, () => this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() }))
     this.#viewConfig = {
       ...DEFAULT_VIEW_CONFIG,
       ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
@@ -61,45 +59,38 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     model.onDidChange(() => this.#pushState())
   }
 
-  resolveWebviewView(view: vscode.WebviewView): void {
-    this.#view = view
-    this.#ready = false
+  protected override wire(view: vscode.WebviewView): void {
     this.#transports?.dispose()
     const post = (msg: HostToSidebar) => void view.webview.postMessage(msg)
     this.#transports = new WebviewTransportHost(this.#store, post)
-    const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
-    view.webview.html = webviewHtml(view.webview, dist, 'sidebar.js')
-    view.webview.onDidReceiveMessage((msg: SidebarToHost) => void this.#onMessage(msg))
     view.onDidChangeVisibility(() => this.#model.setWatching(SidebarProvider.viewId, view.visible))
     this.#model.setWatching(SidebarProvider.viewId, view.visible)
-    view.onDidDispose(() => {
-      this.#view = undefined
-      this.#ready = false
-      this.#transports?.dispose()
-      this.#model.setWatching(SidebarProvider.viewId, false)
-    })
+  }
+
+  protected override intercept(msg: SidebarToHost): Promise<boolean> | boolean {
+    return this.#transports?.handle(msg) ?? false
+  }
+
+  protected override onViewDisposed(): void {
+    this.#transports?.dispose()
+    this.#model.setWatching(SidebarProvider.viewId, false)
   }
 
   setFilterOpen(open: boolean): void {
     this.#filterOpen = open
     void this.#context.globalState.update(FILTER_OPEN_KEY, open)
     void vscode.commands.executeCommand('setContext', FILTER_CONTEXT_KEY, open)
-    this.#post({ kind: 'wd-filter-open', open })
+    this.post({ kind: 'wd-filter-open', open })
   }
 
   toggleFilter(): void {
     this.setFilterOpen(!this.#filterOpen)
   }
 
-  #post(msg: HostToSidebar): void {
-    void this.#view?.webview.postMessage(msg)
-  }
-
   #pushState(): void {
-    if (this.#view && this.#ready) {
+    if (this.view && this.ready) {
       const state = this.#model.sidebarState()
-      this.#post({ kind: 'wd-sidebar-state', state })
+      this.post({ kind: 'wd-sidebar-state', state })
       this.#icons.ensure(state.sessions)
     }
     this.refreshUnread()
@@ -123,20 +114,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     this.#delegate.subagents(running, sessions)
   }
 
-  async #onMessage(msg: SidebarToHost): Promise<void> {
-    if (await this.#transports?.handle(msg)) {
-      return
-    }
+  protected override onReady(): void {
+    // Whole, not incremental: a webview VS Code rebuilt has no map to merge into.
+    this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() })
+    this.#pushState()
+    // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
+    this.post({ kind: 'wd-filter-open', open: this.#filterOpen })
+  }
+
+  protected override async onMessage(msg: SidebarToHost): Promise<void> {
     switch (msg.kind) {
-      case 'wd-ready': {
-        this.#ready = true
-        // Whole, not incremental: a webview VS Code rebuilt has no map to merge into.
-        this.#post({ kind: 'wd-project-icons', icons: this.#icons.entries() })
-        this.#pushState()
-        // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
-        this.#post({ kind: 'wd-filter-open', open: this.#filterOpen })
-        return
-      }
       case 'wd-reveal-gateways': {
         await this.#delegate.revealGateways({ add: msg.add })
         return
@@ -285,16 +272,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider, vscode.Dispo
     }
     await this.#delegate.clearPanelIfActive(sessionId)
     await this.#model.refresh()
-  }
-
-  reloadWebview(): void {
-    const view = this.#view
-    if (!view) {
-      return
-    }
-    this.#ready = false
-    const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.html = webviewHtml(view.webview, dist, 'sidebar.js', {}, ++this.#htmlVersion)
   }
 
   dispose(): void {

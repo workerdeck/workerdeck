@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import { randomUUID } from 'node:crypto'
 import type { GatewaysToHost, HostToGateways, SidebarState } from './bridge-protocol.ts'
 import { apiUrl, type HostStore } from './hosts.ts'
-import { webviewHtml } from './webview-html.ts'
+import { WebviewHost } from './webview-host.ts'
 
 export type GatewaysFeed = {
   state: () => SidebarState
@@ -10,47 +10,42 @@ export type GatewaysFeed = {
   setWatching: (watching: boolean) => void
 }
 
-export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
+export class GatewaysViewProvider extends WebviewHost<GatewaysToHost, HostToGateways> implements vscode.Disposable {
   static readonly viewId = 'workerdeck.gateways'
   static readonly formContextKey = 'workerdeck.gatewayFormOpen'
 
-  readonly #extensionUri: vscode.Uri
   readonly #store: HostStore
   readonly #feed: GatewaysFeed
-  #view: vscode.WebviewView | undefined
-  #ready = false
-  #htmlVersion = 0
   #pendingForm: Extract<HostToGateways, { kind: 'wd-gateway-form' }> | undefined
 
+  protected readonly bundle = 'gateways.js'
+
   constructor(extensionUri: vscode.Uri, store: HostStore, feed: GatewaysFeed) {
-    this.#extensionUri = extensionUri
+    super(extensionUri)
     this.#store = store
     this.#feed = feed
   }
 
-  resolveWebviewView(view: vscode.WebviewView): void {
-    this.#view = view
-    this.#ready = false
-    const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
-    view.webview.html = webviewHtml(view.webview, dist, 'gateways.js')
-    view.webview.onDidReceiveMessage((msg: GatewaysToHost) => void this.#onMessage(msg))
+  protected override wire(view: vscode.WebviewView): void {
     view.onDidChangeVisibility(() => this.#feed.setWatching(view.visible))
     this.#feed.setWatching(view.visible)
+  }
+
+  protected override afterResolve(): void {
     this.push()
-    view.onDidDispose(() => {
-      this.#view = undefined
-      this.#ready = false
-      this.#feed.setWatching(false)
-      // The key is global: a disposed view must not leave a back chevron gated on.
-      this.#setFormOpen(false)
-    })
+  }
+
+  protected override onViewDisposed(): void {
+    this.#feed.setWatching(false)
+    // The key is global: a disposed view must not leave a back chevron gated on.
+    this.#setFormOpen(false)
   }
 
   #setFormOpen(open: boolean, name?: string): void {
     // `undefined` restores the manifest's name.
-    if (this.#view) {
-      this.#view.title = open ? (name ? `Edit ${name}` : 'Add gateway') : undefined
+    const view = this.view
+    if (view) {
+      view.title = open ? (name ? `Edit ${name}` : 'Add gateway') : undefined
     }
     void vscode.commands.executeCommand('setContext', GatewaysViewProvider.formContextKey, open)
   }
@@ -58,25 +53,22 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
   back(): void {
     this.#pendingForm = undefined
     this.#setFormOpen(false)
-    this.#post({ kind: 'wd-gateway-form', open: false })
-  }
-
-  #post(msg: HostToGateways): void {
-    void this.#view?.webview.postMessage(msg)
+    this.post({ kind: 'wd-gateway-form', open: false })
   }
 
   push(): void {
-    if (!this.#view) {
+    const view = this.view
+    if (!view) {
       return
     }
     const state = this.#feed.state()
     const connected = state.hosts.filter((h) => h.probe === 'connected').length
-    this.#view.description =
+    view.description =
       state.hosts.length === 0 ? 'none' : connected === state.hosts.length ? String(connected) : `${connected}/${state.hosts.length}`
-    if (!this.#ready) {
+    if (!this.ready) {
       return
     }
-    this.#post({
+    this.post({
       kind: 'wd-gateways',
       hosts: state.hosts,
       sessionCounts: Object.fromEntries(state.hosts.map((h) => [h.id, (state.sessions[h.id] ?? []).length])),
@@ -93,21 +85,20 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   #flushForm(): void {
-    if (!this.#pendingForm || !this.#ready) {
+    if (!this.#pendingForm || !this.ready) {
       return
     }
-    this.#post(this.#pendingForm)
+    this.post(this.#pendingForm)
     this.#pendingForm = undefined
   }
 
-  async #onMessage(msg: GatewaysToHost): Promise<void> {
+  protected override onReady(): void {
+    this.push()
+    this.#flushForm()
+  }
+
+  protected override async onMessage(msg: GatewaysToHost): Promise<void> {
     switch (msg.kind) {
-      case 'wd-ready': {
-        this.#ready = true
-        this.push()
-        this.#flushForm()
-        return
-      }
       case 'wd-submit-gateway': {
         return this.#submit(msg)
       }
@@ -143,16 +134,16 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
 
   async #submit(msg: Extract<GatewaysToHost, { kind: 'wd-submit-gateway' }>): Promise<void> {
     if (!apiUrl({ baseUrl: msg.baseUrl })) {
-      this.#post({ kind: 'wd-form-result', ok: false, error: 'not a valid gateway URL' })
+      this.post({ kind: 'wd-form-result', ok: false, error: 'not a valid gateway URL' })
       return
     }
     if (!msg.name.trim()) {
-      this.#post({ kind: 'wd-form-result', ok: false, error: 'name is required' })
+      this.post({ kind: 'wd-form-result', ok: false, error: 'name is required' })
       return
     }
     const id = msg.id || randomUUID()
     await this.#store.save({ id, name: msg.name.trim(), baseUrl: msg.baseUrl.trim() }, msg.authKey.trim() || undefined)
-    this.#post({ kind: 'wd-form-result', ok: true })
+    this.post({ kind: 'wd-form-result', ok: true })
     await this.#feed.refresh()
   }
 
@@ -169,16 +160,6 @@ export class GatewaysViewProvider implements vscode.WebviewViewProvider, vscode.
     if (confirmed === 'Remove') {
       await this.#store.remove(hostId)
     }
-  }
-
-  reloadWebview(): void {
-    const view = this.#view
-    if (!view) {
-      return
-    }
-    this.#ready = false
-    const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.html = webviewHtml(view.webview, dist, 'gateways.js', {}, ++this.#htmlVersion)
   }
 
   dispose(): void {}

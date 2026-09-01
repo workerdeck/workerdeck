@@ -5,7 +5,8 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import { panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant, webviewHtml } from './webview-html.ts'
+import { panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant } from './webview-html.ts'
+import { WebviewHost } from './webview-host.ts'
 import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
 export type ActiveSession = {
@@ -22,28 +23,29 @@ export type PanelDelegate = {
   visibilityChanged: () => void
 }
 
-export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.Disposable {
+export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> implements vscode.Disposable {
   static readonly viewId = 'workerdeck.sessionPanel'
 
-  readonly #extensionUri: vscode.Uri
   readonly #store: HostStore
   readonly #delegate: PanelDelegate
   readonly #onDidChangeActive = new vscode.EventEmitter<ActiveSession | undefined>()
   readonly onDidChangeActive = this.#onDidChangeActive.event
 
-  #view: vscode.WebviewView | undefined
-  #ready = false
-  #htmlVersion = 0
   #focusPending = false
-  #subagentPending: string | undefined
-  #subagentNonce = 0
-  #revealPending: string | undefined
-  #revealNonce = 0
+  // The single read-request slot: `openSubagent` and `reveal` go to different panel APIs
+  // but at most one can ever be pending — asking for either withdraws the other. One slot
+  // makes that mutual exclusion structural. The shared nonce is strictly increasing, so a
+  // repeated ask of the same kind still reads as new on the webview side ("asking twice
+  // means twice": `openSubagent`/`reveal` land in props).
+  #pending: { kind: 'wd-open-subagent' | 'wd-reveal-tool-use'; toolUseId: string } | undefined
+  #pendingNonce = 0
   #active: ActiveSession | undefined
   #transports: WebviewTransportHost | undefined
 
+  protected readonly bundle = 'main.js'
+
   constructor(extensionUri: vscode.Uri, store: HostStore, delegate: PanelDelegate) {
-    this.#extensionUri = extensionUri
+    super(extensionUri)
     this.#store = store
     this.#delegate = delegate
   }
@@ -53,14 +55,14 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   get visible(): boolean {
-    return this.#view?.visible ?? false
+    return this.view?.visible ?? false
   }
 
   isShowing(hostId: string, sessionId: string): boolean {
     return this.#active?.sessionId === sessionId && this.#active.host.id === hostId
   }
 
-  #rootAttrs(): Record<string, string> {
+  protected override rootAttrs(): Record<string, string> {
     const cell = terminalMetrics()
     return {
       'data-density': transcriptDensity(),
@@ -72,30 +74,29 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     }
   }
 
-  resolveWebviewView(view: vscode.WebviewView): void {
-    this.#view = view
-    this.#ready = false
+  protected override htmlOptions(): { font?: boolean } {
+    return { font: true }
+  }
+
+  protected override wire(view: vscode.WebviewView): void {
     this.#transports?.dispose()
     const post = (msg: HostToPanel) => void view.webview.postMessage(msg)
     this.#transports = new WebviewTransportHost(this.#store, post, (text) => this.#tapFrame(text))
-    const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.options = { enableScripts: true, localResourceRoots: [dist] }
-    view.webview.html = webviewHtml(view.webview, dist, 'main.js', this.#rootAttrs(), 0, {
-      font: true,
-    })
-    view.webview.onDidReceiveMessage((msg: PanelToHost) => void this.#onMessage(msg))
     view.onDidChangeVisibility(() => this.#delegate.visibilityChanged())
-    view.onDidDispose(() => {
-      this.#view = undefined
-      this.#ready = false
-      this.#transports?.dispose()
-      // A disposed panel is not showing anything: nothing counts as read from here on.
-      this.#delegate.visibilityChanged()
-    })
+  }
+
+  protected override intercept(msg: PanelToHost): Promise<boolean> | boolean {
+    return this.#transports?.handle(msg) ?? false
+  }
+
+  protected override onViewDisposed(): void {
+    this.#transports?.dispose()
+    // A disposed panel is not showing anything: nothing counts as read from here on.
+    this.#delegate.visibilityChanged()
   }
 
   async show(active: ActiveSession | undefined, options: { focus?: boolean } = {}): Promise<void> {
-    const existed = !!this.#view
+    const existed = !!this.view
     this.#active = active
     this.#onDidChangeActive.fire(active)
     // Focussing also materializes the view, which is why a first show does it unasked.
@@ -120,12 +121,12 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
   }
 
   #pushActive(): void {
-    if (!this.#view || !this.#ready) {
+    if (!this.view || !this.ready) {
       return
     }
     const active = this.#active
     if (!active) {
-      this.#post({ kind: 'wd-show-session', session: undefined })
+      this.post({ kind: 'wd-show-session', session: undefined })
       return
     }
     // After the session, never before: a composer about to be replaced must not take the caret.
@@ -135,7 +136,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     if (!base) {
       return
     }
-    this.#post({
+    this.post({
       kind: 'wd-show-session',
       session: {
         baseUrl: base,
@@ -145,65 +146,41 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
       },
     })
     if (focus) {
-      this.#post({ kind: 'wd-focus-composer' })
+      this.post({ kind: 'wd-focus-composer' })
     }
-    this.#flushSubagent()
-    this.#flushReveal()
+    this.#flushPending()
   }
 
   openSubagent(toolUseId: string): void {
-    this.#subagentPending = toolUseId
-    this.#revealPending = undefined
-    this.#flushSubagent()
+    this.#pending = { kind: 'wd-open-subagent', toolUseId }
+    this.#flushPending()
   }
 
   reveal(toolUseId: string): void {
-    this.#revealPending = toolUseId
-    this.#subagentPending = undefined
-    this.#flushReveal()
+    this.#pending = { kind: 'wd-reveal-tool-use', toolUseId }
+    this.#flushPending()
   }
 
-  #flushReveal(): void {
-    if (!this.#view || !this.#ready) {
+  #flushPending(): void {
+    if (!this.view || !this.ready) {
       return
     }
-    const toolUseId = this.#revealPending
-    if (!toolUseId) {
+    const pending = this.#pending
+    if (!pending) {
       return
     }
-    this.#revealPending = undefined
-    this.#post({ kind: 'wd-reveal-tool-use', toolUseId, nonce: ++this.#revealNonce })
+    this.#pending = undefined
+    this.post({ kind: pending.kind, toolUseId: pending.toolUseId, nonce: ++this.#pendingNonce })
   }
 
-  #flushSubagent(): void {
-    if (!this.#view || !this.#ready) {
-      return
-    }
-    const toolUseId = this.#subagentPending
-    if (!toolUseId) {
-      return
-    }
-    this.#subagentPending = undefined
-    // The nonce is what makes asking twice mean twice: `openSubagent` is a prop.
-    this.#post({ kind: 'wd-open-subagent', toolUseId, nonce: ++this.#subagentNonce })
+  protected override onReady(): void {
+    // Safe ahead of the flushes below: a queued frame is re-posted straight after.
+    this.#delegate.subagent(undefined)
+    this.#pushActive()
   }
 
-  #post(msg: HostToPanel): void {
-    void this.#view?.webview.postMessage(msg)
-  }
-
-  async #onMessage(msg: PanelToHost): Promise<void> {
-    if (await this.#transports?.handle(msg)) {
-      return
-    }
+  protected override async onMessage(msg: PanelToHost): Promise<void> {
     switch (msg.kind) {
-      case 'wd-ready': {
-        this.#ready = true
-        // Safe ahead of the flushes below: a queued frame is re-posted straight after.
-        this.#delegate.subagent(undefined)
-        this.#pushActive()
-        return
-      }
       case 'wd-open-path': {
         return openTranscriptPath(this.#active, msg.path, msg.line)
       }
@@ -230,7 +207,7 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
     if (!active) {
       return
     }
-    if (this.#view?.visible) {
+    if (this.view?.visible) {
       return
     }
     let frame: {
@@ -275,21 +252,11 @@ export class SessionPanelProvider implements vscode.WebviewViewProvider, vscode.
 
   // Inert until the panel has been opened at least once: with no webview there is no attach to command.
   setModel(model?: string): void {
-    this.#post({ kind: 'wd-set-model', model })
+    this.post({ kind: 'wd-set-model', model })
   }
 
   setPermissionMode(mode: PermissionMode): void {
-    this.#post({ kind: 'wd-set-permission-mode', mode })
-  }
-
-  reloadWebview(): void {
-    const view = this.#view
-    if (!view) {
-      return
-    }
-    this.#ready = false
-    const dist = vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
-    view.webview.html = webviewHtml(view.webview, dist, 'main.js', this.#rootAttrs(), ++this.#htmlVersion, { font: true })
+    this.post({ kind: 'wd-set-permission-mode', mode })
   }
 
   dispose(): void {
