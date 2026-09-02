@@ -136,4 +136,16 @@ struct UsageTests {
       ProfileInfo.self, from: Data(#"{"name":"personal"}"#.utf8))
     #expect(profile.usage == nil)
   }
+
+  // The ring/number ramp, not the bar ramp: 80 and 95 are the turns, and the
+  // boundaries are inclusive.
+  @Test func meterSeverityTurnsAt80And95() {
+    #expect(meterSeverity(nil) == .none)
+    #expect(meterSeverity(0) == .none)
+    #expect(meterSeverity(79.9) == .none)
+    #expect(meterSeverity(80) == .warning)
+    #expect(meterSeverity(94.9) == .warning)
+    #expect(meterSeverity(95) == .error)
+    #expect(meterSeverity(100) == .error)
+  }
 }

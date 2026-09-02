@@ -558,9 +558,10 @@ model to land on, so a deep link there opens at the tail as it always has; delib
 terminal theme being the default. And a **`seq` older than retention** lands on the top of what
 remains, which is the closest the transcript can get, untested against a real retention cut.
 The **row itself** mirrors the dashboard's (`packages/ui`'s `SessionBrowser`) rather than
-inventing a phone shape: two lines, not three — a state *glyph*, title, unread badge, age and
-context ring on top; the engine's mark then one truncating run of model · project · gateway ·
-profile · cost underneath, in that order. **State leads both lines**, in a 14pt cell the engine
+inventing a phone shape: two lines, not three — a state *glyph*, title, unread badge and the
+context ring on top; the engine's mark, one truncating run of model · project · gateway ·
+profile · cost, then the age and the step disclosure underneath, in that order. **State leads both
+lines**, in a 14pt cell the engine
 mark lands in underneath — it used to trail, and a trailing glyph has no fixed x, so a list of
 thirty gave the eye nothing to run down. The mark itself needed two new pieces the app had
 neither of: `engineMark` ported into the kit (`EngineMark.swift`, tested at its edges, because a
@@ -570,7 +571,35 @@ catalog from the very table the web draws inline by `apps/ios/scripts/gen-engine
 template images so `VendorPalette` (the `--vendor-*` hex pairs, ported the way `TerminalPalette`
 ports `terminal.css`) tints them. An unrecognised engine draws **nothing at all** rather than the
 web's placeholder dot: a dot earns its keep in a sidebar where two text columns share a gutter,
-and is a smudge in front of a phone row. **The sub-agent takeover** is a real navigation push (`navigationDestination(item:)`), and the
+and is a smudge in front of a phone row.
+`SessionItem.tsx` is the reference and this row owes it parity — it is a hand-mirror of the one
+drawing the product otherwise has (see `docs/PACKAGES.md` §`packages/ui`), so every rule it does
+not carry is drift. `UIPREVIEW=sessions` (`SessionsPreview`) is the phone's copy of the
+`Sessions/SessionItem` `TheList` story, same sessions in the same order, so the two can be put
+side by side; `SessionCardView` exists so that preview can draw the composition the list ships
+rather than the row alone.
+Four rules were off and are now ported. The **step disclosure sits on line two**, where the
+dashboard puts it, not centred on the row's trailing edge as a third column — but it is still a
+**sibling** of the `NavigationLink`, never a child, because a hand-rolled button inside a link is a
+coin toss under a thumb. The two are reconciled by separating frame from drawing: the sibling takes
+the row's full height (a 15pt line is not a thumb target) and bottom-aligns its glyphs. Being a
+sibling narrows the link, so line one's badge and ring would stop at the disclosure's *left* edge
+where the design has them flush with its right one; line one therefore overhangs by exactly the
+width the sibling measured (`DisclosureWidthKey`), which is zero on every row with no disclosure.
+The **context ring reads off the ring ramp**, not the bar ramp: the web draws two off one
+percentage and they turn in different places, so `meterSeverity` (80/95, neutral below) is now in
+the kit and tested there, `ringTint` maps it, and `usageTint` (70/90, accent below) stays what a
+*bar* fills with. A ring that was accent-blue from 1% to 79% had spent the accent saying nothing.
+The **working spinner is tinted** (`text-info`) rather than left at the system's grey, and
+**parked is neutral** rather than purple — the dashboard spends no hue on a state that wants
+nothing. And a **running step draws a spinner**, the marker its own card already uses for the same
+fact, where it drew a static `circle.dotted`.
+Three divergences are deliberate. The web's `···` row actions are **hover-revealed**, and a phone
+has no hover: rename/close stay on the swipe actions and the context menu rather than becoming a
+third visible affordance. The age stays `4m` against the web's `4m ago` (`Fmt.ago` is the app's
+one elapsed spelling). And there is **no selected-card fill** — the phone pushes where the sidebar
+selects, so there is no standing selection to draw and no `activeStepKey` to weaken it to grey.
+**The sub-agent takeover** is a real navigation push (`navigationDestination(item:)`), and the
 one thing that shaped it is a SwiftUI fact worth stating on its own: **a push cancels the covered
 view's `.task`**. Measured with a probe app on the simulator (iOS 26.5) — `onDisappear` fires at
 the start of the push and the covered `.task` is cancelled ~0.5 s later, at the *end* of the

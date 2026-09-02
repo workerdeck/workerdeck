@@ -83,3 +83,26 @@ public func usageInfos(_ usage: ProfileUsage?) -> [String: RateLimitInfo]? {
   guard let usage else { return nil }
   return usage.mapValues(\.info)
 }
+
+/// How alarming a meter's reading is — the port of `meterSeverity` in
+/// `packages/ui/src/lib/status.ts`.
+///
+/// The web draws two ramps off one percentage and they are deliberately not the
+/// same: a **bar** reads as alarming later than a **number or a ring** does, so
+/// the fill turns at 70/90 (`meterTintClass`, iOS `usageTint`) while everything
+/// that reads as a value turns at 80/95. The session card's context ring is the
+/// second kind, and drawing it off the bar ramp is how the phone came to show
+/// blue-then-orange where the sidebar showed grey-then-amber for the same
+/// session.
+public enum MeterSeverity: String, Sendable, Equatable {
+  case none
+  case warning
+  case error
+}
+
+public func meterSeverity(_ percentage: Double?) -> MeterSeverity {
+  guard let percentage else { return .none }
+  if percentage >= 95 { return .error }
+  if percentage >= 80 { return .warning }
+  return .none
+}

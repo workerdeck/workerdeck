@@ -262,35 +262,17 @@ struct SessionListView: View {
         Section {
           ForEach(group.rows) { row in
             if let route = sessionRoute(for: row) {
-              // The disclosure sits OUTSIDE the link, and that placement is the
-              // whole answer to why this row once drew a count and nothing
-              // else: a hand-rolled button *inside* a `NavigationLink` is the
-              // coin toss under a thumb, because the link takes the row's tap.
-              // Two siblings have two frames.
-              //
-              // It is the **count itself**, on the trailing edge, the way the
-              // frame draws it — not a chevron in a reserved left gutter. The
-              // gutter version put a 26pt column in front of every row in the
-              // list, including the many with no agents at all, to hold a
-              // control most of them never showed; and it asked the reader to
-              // find the disclosure somewhere other than on the thing being
-              // disclosed. The count was already the reading, so it is now also
-              // the control, and the chevron rides with it saying which way it
-              // will go.
-              HStack(spacing: 0) {
-                NavigationLink(value: route) {
-                  SessionRowView(
-                    session: row.info,
-                    // Grouped by gateway, the section header already names it.
-                    hostName: showsHostNames(model) && model.config.groupBy != .gateway
-                      ? row.hostName : nil,
-                    unseen: row.unseen,
-                    projectImage: projectImage(for: row, model: model),
-                    // Grouped by project, the section header already names it.
-                    showsProject: model.config.groupBy != .project)
-                }
-                stepToggle(for: row)
-              }
+              SessionCardView(
+                row: row,
+                route: route,
+                // Grouped by gateway, the section header already names it.
+                hostName: showsHostNames(model) && model.config.groupBy != .gateway
+                  ? row.hostName : nil,
+                projectImage: projectImage(for: row, model: model),
+                // Grouped by project, the section header already names it.
+                showsProject: model.config.groupBy != .project,
+                expanded: expandedAgents.contains(row.info.id),
+                onToggle: { toggleAgents(row) })
               // Two different actions wearing one gesture. Closing a *live*
               // session terminates a run someone may be relying on, so it asks
               // first; removing an already-closed one only drops a finished
@@ -397,57 +379,11 @@ struct SessionListView: View {
 
   // MARK: - Step lines
 
-  /// The disclosure for a session's steps: the **count itself**, on the row's
-  /// trailing edge — the frame's `ListDropdown`, and a sibling of the
-  /// `NavigationLink` rather than a child of it (see the row for why).
-  ///
-  /// Chevron then count, and the count is the reading it always was: `2/3`
-  /// while some are still going, a bare total once they have settled. Live, it
-  /// wears the accent — on this row that means "an agent is running", which is
-  /// the one thing about a settled-looking row that is worth interrupting for.
-  ///
-  /// **Drawn only when there is something to disclose.** The old left-gutter
-  /// twisty reserved its column on every row in the list so the titles would
-  /// line up; a trailing control has nothing to line up with, so a session with
-  /// no agents simply has no disclosure and the row runs full width. That is
-  /// the reserved 26pt column back, on every row that never had an agent.
-  ///
-  /// The target is padded well past the glyphs: this is a two-line row and the
-  /// button takes its full height, which is what turns a 12pt chevron into a
-  /// real thumb target without a `contentShape` on an invisible gutter.
-  @ViewBuilder
-  private func stepToggle(for row: SessionRow) -> some View {
-    let steps = sessionSteps(row.info)
-    if !steps.isEmpty {
-      let open = expandedAgents.contains(row.info.id)
-      let running = runningSteps(steps)
-      Button {
-        if open {
-          expandedAgents.remove(row.info.id)
-        } else {
-          expandedAgents.insert(row.info.id)
-        }
-      } label: {
-        HStack(spacing: 2) {
-          Image(systemName: open ? "chevron.down" : "chevron.right")
-            .font(.caption2.weight(.semibold))
-          Text(stepCountLabel(running: running, total: steps.count))
-            .font(.caption)
-            .monospacedDigit()
-        }
-        .foregroundStyle(running > 0 ? Color.accentColor : .secondary)
-        .padding(.leading, 10)
-        .padding(.trailing, 4)
-        .frame(maxHeight: .infinity)
-        .contentShape(Rectangle())
-      }
-      // `.plain` because a bordered button inside a list row draws a second
-      // surface, and because the default style would tint the chevron with the
-      // accent colour on a row where the accent has a meaning of its own.
-      .buttonStyle(.plain)
-      .accessibilityLabel(
-        (open ? "Hide " : "Show ")
-          + stepCountWords(running: running, total: steps.count))
+  private func toggleAgents(_ row: SessionRow) {
+    if expandedAgents.contains(row.info.id) {
+      expandedAgents.remove(row.info.id)
+    } else {
+      expandedAgents.insert(row.info.id)
     }
   }
 
@@ -744,6 +680,105 @@ private struct FilterMenu: View, Equatable {
   }
 }
 
+/// One session card: the two-line row and, when there is something to disclose,
+/// the step count that opens it.
+///
+/// Internal, and a view rather than a method on the list, so `UIPREVIEW=sessions`
+/// can draw the composition the list actually ships — the disclosure's placement
+/// is the thing that needed looking at, and a preview of the row alone cannot
+/// show it.
+struct SessionCardView: View {
+  let row: SessionRow
+  var route: SessionRoute?
+  var hostName: String?
+  var projectImage: UIImage?
+  var showsProject: Bool = true
+  var expanded: Bool = false
+  var onToggle: () -> Void = {}
+
+  @State private var toggleWidth: CGFloat = 0
+
+  var body: some View {
+    HStack(alignment: .bottom, spacing: 0) {
+      Group {
+        if let route {
+          NavigationLink(value: route) { content }
+        } else {
+          content
+        }
+      }
+      toggle
+    }
+    .onPreferenceChange(DisclosureWidthKey.self) { toggleWidth = $0 }
+  }
+
+  private var content: some View {
+    SessionRowView(
+      session: row.info, hostName: hostName, unseen: row.unseen,
+      projectImage: projectImage, showsProject: showsProject,
+      // The disclosure is a *sibling*, so it narrows the link — and line one's
+      // badge and ring then stop at the disclosure's left edge where the design
+      // has them flush with its right one. Line one overhangs by exactly the
+      // width the sibling took; the disclosure is on line two, so there is
+      // nothing there to collide with.
+      lineOneOverhang: toggleWidth)
+  }
+
+  // The disclosure is a sibling of the link, never a child: a hand-rolled button
+  // inside a `NavigationLink` is a coin toss under a thumb, because the link
+  // takes the row's tap.
+  //
+  // Its glyphs sit on **line two**, where the dashboard puts them, but its
+  // *frame* is the row's full height — a sibling has to have a frame of its own,
+  // and one 15pt line tall is not a thumb target. So the two are separated:
+  // `maxHeight: .infinity` takes the target, `alignment: .bottom` puts the
+  // reading back where the design has it, and the 3pt clears `SessionRowView`'s
+  // own vertical padding so the count sits on the identity line rather than
+  // under it.
+  @ViewBuilder
+  private var toggle: some View {
+    let steps = sessionSteps(row.info)
+    if !steps.isEmpty {
+      let running = runningSteps(steps)
+      Button(action: onToggle) {
+        HStack(spacing: 2) {
+          Image(systemName: expanded ? "chevron.down" : "chevron.right")
+            .font(.caption2.weight(.semibold))
+          Text(stepCountLabel(running: running, total: steps.count))
+            .font(.caption)
+            .monospacedDigit()
+        }
+        .foregroundStyle(running > 0 ? Color.accentColor : .secondary)
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
+        .padding(.bottom, 3)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .contentShape(Rectangle())
+        .background {
+          GeometryReader { geo in
+            Color.clear.preference(key: DisclosureWidthKey.self, value: geo.size.width)
+          }
+        }
+      }
+      // `.plain` because a bordered button inside a list row draws a second
+      // surface, and because the default style would tint the chevron with the
+      // accent colour on a row where the accent has a meaning of its own.
+      .buttonStyle(.plain)
+      .accessibilityLabel(
+        (expanded ? "Hide " : "Show ")
+          + stepCountWords(running: running, total: steps.count))
+    }
+  }
+}
+
+private struct DisclosureWidthKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
+  }
+}
+
 /// One live session. Title falls back to the working directory's leaf, which is
 /// what the session is "about" before the agent has said anything.
 /// Internal rather than private so `UIPreviewHarness` can render it against
@@ -773,6 +808,10 @@ struct SessionRowView: View {
   /// at the project root has nothing to add and the slot disappears. The rule
   /// `hostName` follows one facet over.
   var showsProject: Bool = true
+  /// How far line one may reach past this view's own trailing edge, so the
+  /// unread badge and the ring end flush with the disclosure that displaced
+  /// them. See `SessionCardView`; zero everywhere there is no disclosure.
+  var lineOneOverhang: CGFloat = 0
 
   /// Two lines, in the order the dashboard's row uses
   /// (`packages/ui`'s `SessionBrowser`): what you scan the list by on top, what
@@ -823,6 +862,7 @@ struct SessionRowView: View {
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         }
       }
+      .padding(.trailing, -lineOneOverhang)
       // Line two: one truncating run, in one order, so the list reads the same
       // on a phone as it does in a sidebar. A `Text` concatenation rather than
       // an `HStack` of pieces, and that is the point: the parts have a priority
@@ -1010,8 +1050,11 @@ struct SessionStatusIcon: View {
         .foregroundStyle(.orange)
         .symbolEffect(.pulse)
     } else if state == .working {
+      // `text-info`, not the system's grey: working is the state the eye is
+      // scanning for, and an untinted spinner is the quietest thing on the row.
       ProgressView()
         .controlSize(.mini)
+        .tint(.blue)
     } else {
       Image(systemName: symbol)
         .foregroundStyle(tint)
@@ -1027,10 +1070,11 @@ struct SessionStatusIcon: View {
     }
   }
 
+  // Parked is neutral, not purple: the dashboard spends no hue on it, and a
+  // colour here says a parked session wants something when it wants nothing.
   private var tint: Color {
     switch status {
     case .failed: return .red
-    case .parked: return .purple
     default: return .secondary
     }
   }
@@ -1153,7 +1197,10 @@ struct SessionStepRow: View {
       Image(systemName: "circle.fill").font(.system(size: 5))
     } else {
       switch step.state {
-      case .running: Image(systemName: "circle.dotted")
+      // A spinner, the same marker the card's own status glyph uses for the same
+      // fact. `circle.dotted` was static, so the one row that was still moving
+      // was the only one that did not move.
+      case .running: ProgressView().controlSize(.mini).tint(body_)
       case .failed: Image(systemName: "exclamationmark.circle")
       case .pending: Image(systemName: "pause.circle")
       case .done: Image(systemName: "checkmark")

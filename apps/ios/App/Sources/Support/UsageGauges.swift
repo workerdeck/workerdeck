@@ -74,7 +74,7 @@ struct ContextRing: View {
   var body: some View {
     RadialGauge(
       fraction: percentage / 100,
-      tint: usageTint(percentage),
+      tint: ringTint(percentage),
       label: showsLabel ? "\(min(99, max(0, Int(percentage.rounded()))))" : nil,
       diameter: diameter,
       lineWidth: lineWidth)
@@ -83,12 +83,24 @@ struct ContextRing: View {
   }
 }
 
-/// The one severity ramp for every meter in the app, over a 0–100 percentage.
+/// A **bar's** fill, over a 0–100 percentage — the web's `meterTintClass`.
 func usageTint(_ percentage: Double) -> Color {
   switch percentage {
   case ..<70: return .accentColor
   case ..<90: return .orange
   default: return .red
+  }
+}
+
+/// A **ring's** stroke — the web's `meterColorClass` over the kit's
+/// `meterSeverity`, which turns later than a bar and is neutral below the first
+/// turn. The session card's ring is a reading, and a reading that is blue from
+/// 1% to 79% has spent the accent saying nothing.
+func ringTint(_ percentage: Double) -> Color {
+  switch meterSeverity(percentage) {
+  case .error: return .red
+  case .warning: return .orange
+  case .none: return .secondary
   }
 }
 

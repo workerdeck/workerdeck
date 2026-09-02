@@ -36,9 +36,104 @@ enum UIPreview: String {
   case subagent
   case steps
   case projects
+  case sessions
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
+  }
+}
+
+/// The live list itself — the card, its disclosure, and the step rows that hang
+/// under an open one.
+///
+/// The phone's answer to the dashboard's `Sessions/SessionItem` `TheList` story,
+/// and it exists for the same reason: the row's difficulty is what the pieces do
+/// to each other in a column of them, which no single-row preview can show. Same
+/// six sessions, same order, so the two can be put side by side.
+private struct SessionsPreview: View {
+  private static func row(
+    id: String, title: String, status: SessionStatus = .running, unseen: Int = 0,
+    engine: ProfileEngine = .claude, model: String = "claude-opus-5", profile: String? = nil,
+    cost: Double? = nil, context: Double? = nil, pending: Int = 0,
+    subagents: [SubagentInfo]? = nil, hostName: String = "mini"
+  ) -> SessionRow {
+    let info = SessionInfo(
+      id: id, status: status, cwd: "/Users/you/projects/workerdeck", profile: profile,
+      engine: engine, model: model, createdAt: 0, lastSeq: 0, pendingPermissionCount: pending,
+      title: title, totalCostUsd: cost,
+      lastActivityAt: Date().timeIntervalSince1970 * 1000 - 4 * 60 * 1000,
+      subagents: subagents,
+      project: ProjectInfo(
+        name: "WorkerDeck", root: "/Users/you/projects/workerdeck", icon: .glyph(name: "layers")),
+      contextUsage: context.map {
+        ContextReading(totalTokens: Int($0 * 2_000), maxTokens: 200_000, percentage: $0)
+      })
+    return SessionRow(
+      hostId: "h1", hostName: hostName, local: true, adapter: engine.rawValue,
+      state: sessionState(info), info: info, unseen: unseen)
+  }
+
+  private static var agents: [SubagentInfo] {
+    [
+      SubagentInfo(
+        toolUseId: "a", agentType: "Explore", description: "Fix base-url and re-run",
+        status: .done, startedAt: 0, toolCount: 4),
+      SubagentInfo(
+        toolUseId: "b", agentType: "Explore", description: "Fix base-url and re-run",
+        status: .running, startedAt: 0, toolCount: 7),
+      SubagentInfo(
+        toolUseId: "c", agentType: "fable", description: "Fix base-url and re-run",
+        status: .done, startedAt: 0, toolCount: 0),
+    ]
+  }
+
+  private struct Item: Identifiable {
+    let row: SessionRow
+    let open: Bool
+    var id: String { row.id }
+  }
+
+  private var items: [Item] {
+    [
+      Item(row: Self.row(id: "1", title: "Session 1 Title", unseen: 5, context: 34, subagents: Self.agents), open: true),
+      Item(row: Self.row(id: "2", title: "Session 2 Title", status: .idle, unseen: 3, context: 62), open: false),
+      Item(row: Self.row(id: "3", title: "Session 3 Title", unseen: 5, context: 34, subagents: Self.agents), open: false),
+      Item(
+        row: Self.row(
+          id: "4", title: "Rework the transcript reducer so replay holds across reconnects",
+          unseen: 3, profile: "staging", cost: 12.4, context: 88, subagents: Self.agents),
+        open: false),
+      Item(
+        row: Self.row(
+          id: "5", title: "Session 6 Title", status: .awaitingApproval, unseen: 12, context: 12,
+          pending: 1),
+        open: false),
+      Item(
+        row: Self.row(
+          id: "6", title: "Codex parity sweep", engine: .codex, model: "gpt-5-codex",
+          context: 41),
+        open: false),
+    ]
+  }
+
+  var body: some View {
+    NavigationStack {
+      List {
+        ForEach(items) { item in
+          SessionCardView(
+            row: item.row, hostName: item.row.hostName, expanded: item.open, onToggle: {})
+          if item.open {
+            ForEach(sessionSteps(item.row.info)) { step in
+              SessionStepRow(step: step)
+                .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
+            }
+          }
+        }
+      }
+      .listStyle(.plain)
+      .navigationTitle("Sessions")
+      .navigationBarTitleDisplayMode(.inline)
+    }
   }
 }
 
@@ -159,12 +254,12 @@ private struct ProjectsPreview: View {
           id: "9", title: "Room to work", cwd: "/Users/you/projects/workerdeck",
           project: wd, context: 34, cost: 0.42)),
       Case(
-        caption: "context ring: filling up (past 70)",
+        caption: "context ring: filling up (past 80, where a ring turns — a bar turns at 70)",
         session: Self.session(
           id: "10", title: "Getting long", cwd: "/Users/you/projects/workerdeck",
-          project: wd, status: .running, context: 78, cost: 3.10)),
+          project: wd, status: .running, context: 84, cost: 3.10)),
       Case(
-        caption: "context ring: nearly out (past 90), and waiting on a person",
+        caption: "context ring: nearly out (past 95), and waiting on a person",
         session: Self.session(
           id: "11", title: "Almost full", cwd: "/Users/you/projects/workerdeck",
           project: wd, status: .awaitingApproval, pending: 2, context: 96, cost: 12.80)),
@@ -774,6 +869,9 @@ struct UIPreviewHarness: View {
       // tick, green for the kind and red for the failure that outranks it, and
       // a zero tool count drawing nothing at all.
       StepsPreview()
+
+    case .sessions:
+      SessionsPreview()
 
     case .projects:
       // Every shape line two can take, because each one is a different rule and
