@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/embedded-example",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Reference implementation of an embedded WorkerDeck: a wiki SPA whose right-hand sidebar drives sandboxed agent sessions, served with the gateway from one origin.",

@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/queue",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
   "description": "Job queue over the WorkerDeck session runner: remote services schedule one-shot runs; the queue executes them as sessions with bounded concurrency and token budgets, delivering progress and completion via webhooks. Pluggable adapter interface (in-memory bundled; redis/bullmq/pubsub adapters can implement the same contract).",
   "license": "MIT",
