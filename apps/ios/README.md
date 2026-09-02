@@ -633,7 +633,9 @@ needs to be seen as a column, not as five separate screenshots.
 `steps` renders the step rows that hang under a session card — every state and both kinds at
 once, which the real list will never show you. It is this app's answer to the dashboard's
 selection stories, and its fixture is deliberately out of dispatch order so the agents-above-tasks
-sort has something to prove. The footer states the expected reading, top to bottom.
+sort has something to prove. The footer states the expected reading, top to bottom. Its rows are
+the real `NavigationLink`s and its destination prints the route, so it is also where the UI test
+presses one step of each kind and checks that an agent frames and a task reveals.
 
 `terminal` renders the terminal transcript over a fixture built to exercise the row model rather
 than to look plausible — a folded run, two `Task`s whose children interleave, a diff carrying the

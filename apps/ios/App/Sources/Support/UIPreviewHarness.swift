@@ -76,11 +76,9 @@ private struct SessionsPreview: View {
   }
 
   private static func route(for row: SessionRow, step: Step? = nil) -> SessionRoute {
-    switch step?.kind {
-    case .agent: .session(hostId: hostId, sessionId: row.info.id, subagent: step?.key)
-    case .task: .session(hostId: hostId, sessionId: row.info.id, reveal: step?.key)
-    case nil: .session(hostId: hostId, sessionId: row.info.id)
-    }
+    // The app's own rule, called rather than restated — see `SessionRoute.step`.
+    guard let step else { return .session(hostId: hostId, sessionId: row.info.id) }
+    return .step(hostId: hostId, sessionId: row.info.id, step: step)
   }
 
   private static var agents: [SubagentInfo] {
@@ -352,26 +350,43 @@ private struct StepsPreview: View {
       ])
   }
 
+  private static let hostId = UUID()
+
   var body: some View {
     let steps = sessionSteps(Self.session)
-    List {
-      Section {
-        ForEach(steps) { step in
-          SessionStepRow(step: step)
+    // Inside a stack, and each row is the `NavigationLink` the list gives it —
+    // a bare `SessionStepRow` is a *simpler* composition than the app ships, and
+    // where a press goes is half of what these rows are for. The destination
+    // prints the route, so "the press landed on this step" and "the press opened
+    // the session at the tail" stop looking alike.
+    NavigationStack {
+      List {
+        Section {
+          ForEach(steps) { step in
+            NavigationLink(
+              value: SessionRoute.step(hostId: Self.hostId, sessionId: "s1", step: step)
+            ) {
+              SessionStepRow(step: step)
+            }
             .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
+          }
+        } header: {
+          Text(
+            "\(stepCountWords(running: runningSteps(steps), total: steps.count)) · agents first"
+          )
+        } footer: {
+          Text(
+            """
+            Expected, top to bottom: Explore (green, spinner, 7) · Plan (RED, alarm, 2) · \
+            general-purpose (green, tick, no count) — then the tasks, grey: a neutral DOT for \
+            the settled one, a spinner for the running one, a RED alarm for the failed one. \
+            No task shows a checkmark, and no row's own marker is an arrow — the trailing \
+            chevron is the list's, and every row here is pressable.
+            """)
         }
-      } header: {
-        Text(
-          "\(stepCountWords(running: runningSteps(steps), total: steps.count)) · agents first"
-        )
-      } footer: {
-        Text(
-          """
-          Expected, top to bottom: Explore (green, spinner, 7) · Plan (RED, alarm, 2) · \
-          general-purpose (green, tick, no count) — then the tasks, grey: a neutral DOT for \
-          the settled one, a spinner for the running one, a RED alarm for the failed one. \
-          No task shows a checkmark and no task shows an arrow.
-          """)
+      }
+      .navigationDestination(for: SessionRoute.self) { route in
+        Text(String(describing: route)).font(.caption.monospaced()).padding()
       }
     }
   }

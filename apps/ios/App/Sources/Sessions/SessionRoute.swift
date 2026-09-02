@@ -1,4 +1,5 @@
 import Foundation
+import WorkerDeckKit
 
 /// Everything reachable from the session list's navigation stack.
 ///
@@ -26,6 +27,17 @@ enum SessionRoute: Hashable {
     hostId: UUID, sessionId: String, seq: Int? = nil, subagent: String? = nil,
     reveal: String? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
+
+  // Where a step line under a session row goes. Here rather than at the list,
+  // because the preview harness routes its own copy of the same rows: with the
+  // rule spelled twice, a test driving the preview proves only that the preview
+  // agrees with itself.
+  static func step(hostId: UUID, sessionId: String, step: Step) -> SessionRoute {
+    switch step.kind {
+    case .agent: .session(hostId: hostId, sessionId: sessionId, subagent: step.key)
+    case .task: .session(hostId: hostId, sessionId: sessionId, reveal: step.key)
+    }
+  }
 }
 
 /// Pre-fill for the create form. Carries only what a caller can know up front —

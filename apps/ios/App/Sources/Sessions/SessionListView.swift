@@ -427,10 +427,8 @@ struct SessionListView: View {
   @ViewBuilder
   private func stepRows(for row: SessionRow) -> some View {
     ForEach(sessionSteps(row.info)) { step in
-      let route = UUID(uuidString: row.hostId).map { host in
-        step.kind == .agent
-          ? SessionRoute.session(hostId: host, sessionId: row.info.id, subagent: step.key)
-          : SessionRoute.session(hostId: host, sessionId: row.info.id, reveal: step.key)
+      let route = UUID(uuidString: row.hostId).map {
+        SessionRoute.step(hostId: $0, sessionId: row.info.id, step: step)
       }
       Group {
         if let route {
