@@ -102,6 +102,15 @@ attaches to a session that already exists: **run it before calling any new repla
 It keeps text and non-text parts apart, which is the measurement `truncateResults` shipped
 without, and `--capture <file>` dumps every frame as JSONL so a control session can be diffed
 byte-for-byte across a rule change.
+**iOS is invisible to pnpm** and has two test surfaces of its own, both outside `pnpm test`:
+`swift test` in `apps/ios/WorkerDeckKit` for everything pure (the protocol mirror, the reducer, the
+terminal theme's arithmetic), and an **XCUITest target** for the handful of claims only a real
+touch can settle. The second is new and corrects a belief this repo held for months — that the app
+target could not be tested, because idb's synthetic input never lands. That was idb-specific:
+XCUITest drives the app through `testmanagerd` and works. So a hit-testing claim ("these two
+controls in one list row take separate taps") is now a test rather than an argument, which is
+exactly the kind of thing that had been shipping on a screenshot. `docs/CLIENTS.md` §`apps/ios` has
+the command and the xcodegen scheme gotcha that comes with adding a second target.
 **Anything touching the APNs payload, the device route or the app's tap handling needs
 `pnpm smoke:push`** — it costs no tokens, but it is the only way to raise a notification without
 waiting for a session to decide to, and a tap is the only gate the delegate's main-thread contract
