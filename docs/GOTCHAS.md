@@ -376,8 +376,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     because **auto-compaction keeps resetting it** — which is how "I just kept going naturally"
     happens. Since 2026-09-02 that summarisation is **drawn**: `contextCompaction` maps to a
     `context_compacted` event and a boundary row, so a ring that drops for no user-caused reason
-    now has a marker saying why. Remaining work (the ring's own treatment, and a tooltip explaining
-    the 272K price tier) is in `_docs/features/codex-compaction-invisible.md`.
+    now has a marker saying why. Since 2026-09-02 the 272K tier is also **explained in the product**,
+    from `packages/ui/src/lib/context-note.ts` — see `docs/PACKAGES.md` §`packages/ui`, and keep
+    that copy in sync with this section, caveat included. Remaining work (the ring's own visual
+    treatment) is in `_docs/features/codex-compaction-invisible.md`.
   - **Never hardcode a window in our catalog to "correct" this.** A table in this repo that
     disagrees with the binary is the exact failure mode the engine catalogs exist to avoid — and
     here it would also be wrong for every operator who had set the override.

@@ -1,18 +1,21 @@
-import type { ContextUsage } from '@workerdeck/protocol'
+import type { ContextUsage, ProfileEngine } from '@workerdeck/protocol'
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatTokens } from '../../lib/format.ts'
 import { cssColor } from '../../lib/css.ts'
+import { contextNote } from '../../lib/context-note.ts'
 import { meterTintClass } from '../../lib/status.ts'
 
 export interface ContextDialogProps {
   usage?: ContextUsage
+  engine?: ProfileEngine
   open: boolean
   onOpenChange: (open: boolean) => void
   className?: string
 }
 
-export function ContextDialog({ usage, open, onOpenChange, className }: ContextDialogProps) {
+export function ContextDialog({ usage, engine, open, onOpenChange, className }: ContextDialogProps) {
+  const note = contextNote(engine)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={className}>
@@ -72,6 +75,18 @@ export function ContextDialog({ usage, open, onOpenChange, className }: ContextD
               ) : null}
             </>
           )}
+          {note ? (
+            <div className="mt-5 border-t border-border pt-4">
+              <h3 className="text-label font-medium text-fg-3">Why this window is 272K</h3>
+              <p className="mt-2 text-body-sm text-fg-2">{note.summary}</p>
+              {note.detail.map((line) => (
+                <p key={line} className="mt-2 text-body-sm text-fg-3">
+                  {line}
+                </p>
+              ))}
+              <p className="mt-2 text-body-sm text-warning">{note.caveat}</p>
+            </div>
+          ) : null}
         </DialogBody>
       </DialogContent>
     </Dialog>

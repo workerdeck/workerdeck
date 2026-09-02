@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { ConnectionState, TranscriptState } from '@workerdeck/react'
-import type { ContextUsage, RateLimitInfo } from '@workerdeck/protocol'
+import type { ContextUsage, ProfileEngine, RateLimitInfo } from '@workerdeck/protocol'
 import { RefreshCw, WifiOff } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { ProgressRing } from '../ui/ProgressRing.tsx'
@@ -8,6 +8,7 @@ import { Spinner } from '../ui/Spinner.tsx'
 import { Tip } from '../ui/Tooltip.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatCountdown, formatTokens } from '../../lib/format.ts'
+import { contextNote } from '../../lib/context-note.ts'
 import { meterColorClass } from '../../lib/status.ts'
 import { cssColor } from '../../lib/css.ts'
 import { STATUS_META } from './status.ts'
@@ -37,11 +38,12 @@ function useNow(intervalMs = 30_000): number {
   return now
 }
 
-function ContextMeter({ usage }: { usage: ContextUsage }) {
+function ContextMeter({ usage, engine }: { usage: ContextUsage; engine: ProfileEngine | undefined }) {
+  const note = contextNote(engine)
   return (
     <Tip
       content={
-        <div className="flex min-w-44 flex-col gap-1 py-0.5">
+        <div className="flex max-w-64 min-w-44 flex-col gap-1 py-0.5">
           {usage.categories.map((c) => (
             <div key={c.name} className="flex items-center gap-2">
               <span className="size-2 shrink-0 rounded-full bg-fg-4" style={cssColor(c.color) ? { backgroundColor: c.color } : undefined} />
@@ -55,6 +57,12 @@ function ContextMeter({ usage }: { usage: ContextUsage }) {
               {formatTokens(usage.totalTokens)} / {formatTokens(usage.maxTokens)} ({usage.percentage.toFixed(0)}%)
             </span>
           </div>
+          {note ? (
+            <div className="mt-0.5 flex flex-col gap-1 border-t border-border pt-1 text-fg-3">
+              <span>{note.summary}</span>
+              <span>{note.hint}</span>
+            </div>
+          ) : null}
         </div>
       }
     >
@@ -166,7 +174,7 @@ export function StatusBar({
       </Slot>
       {state.capabilities.contextUsage && state.contextUsage ? (
         <Slot onClick={onOpenContext} hint="Context breakdown">
-          <ContextMeter usage={state.contextUsage} />
+          <ContextMeter usage={state.contextUsage} engine={state.engine} />
         </Slot>
       ) : null}
       {session || weekly ? (

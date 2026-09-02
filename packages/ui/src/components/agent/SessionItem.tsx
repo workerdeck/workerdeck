@@ -175,7 +175,7 @@ export function SessionItem({
               {row.unseen}
             </span>
           ) : null}
-          <ContextRing usage={info.contextUsage} size={16} className="p-0.5" />
+          <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
         </div>
 
         <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">

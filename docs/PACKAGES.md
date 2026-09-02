@@ -1162,6 +1162,21 @@ answered only the first, so a weekly window at 71% permanently hid a five-hour o
 models get their own bucket is the plan's business),
 and the lenient `[1m]`-stripping `currentModel`/`modelLabel` — typed structurally against
 `SessionVitals` rather than importing it, so the React-free entry stays React-free.
+
+`lib/context-note.ts` is **the one place the ~258k surprise is explained**, and it is engine-gated:
+`contextNote(engine)` returns copy only for `'codex'`, and reads an absent engine as `'claude'` the
+way the rest of the tree does. Three surfaces render it and no more — `ContextRing`'s tooltip and
+`StatusBar`'s context `Tip` get the short `summary` + `hint`, `ContextDialog` gets the full
+`detail` + `caveat` — because the goal is that an operator who wonders "why 258k?" can find out,
+not that the sentence appears five times; the terminal `StatusLine` is deliberately not one of
+them (its strings are its heights, and its context reading already opens the dialog). The copy is
+the operator-facing spelling of `docs/GOTCHAS.md` §codex — the 272K price tier, the
+`model_context_window` override, the 872000/828400 clamp, the 2x/1.5x billing above 272K, and the
+openai/codex #16068 caveat that pins the phrasing to "raise it and watch for compaction failing".
+Keep the two in sync, and note the red line the copy states out loud: **WorkerDeck never writes
+that setting.** `ContextRing` keeps a plain `title` when there is no note, so the common case does
+not mount a tooltip.
+
 `SessionItem` is **the session card, and the only drawing of it in the product**. The dashboard's
 `SessionBrowser` and the VS Code sidebar both render it; before it existed they rendered two
 hand-kept copies that agreed on the model (`SessionRow`, `sessionSteps`, `sessionState`) and

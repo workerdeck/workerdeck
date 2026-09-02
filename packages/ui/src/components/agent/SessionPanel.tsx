@@ -693,6 +693,7 @@ export function SessionPanel({
                   />
                   <ContextDialog
                     usage={state.contextUsage}
+                    engine={state.engine ?? 'claude'}
                     open={panel === 'context'}
                     onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
                   />

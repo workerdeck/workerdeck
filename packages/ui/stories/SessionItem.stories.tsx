@@ -155,7 +155,13 @@ export const Crowded: Story = {
 
 export const Codex: Story = {
   args: {
-    row: makeRow({ id: '8', title: 'Codex parity sweep', engine: 'codex', model: 'gpt-5-codex' } as never),
+    row: makeRow({
+      id: '8',
+      title: 'Codex parity sweep',
+      engine: 'codex',
+      model: 'gpt-5-codex',
+      contextUsage: { percentage: 41, totalTokens: 105_944, maxTokens: 258_400 },
+    } as never),
   },
 }
 
