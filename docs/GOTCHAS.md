@@ -378,8 +378,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     `context_compacted` event and a boundary row, so a ring that drops for no user-caused reason
     now has a marker saying why. Since 2026-09-02 the 272K tier is also **explained in the product**,
     from `packages/ui/src/lib/context-note.ts` — see `docs/PACKAGES.md` §`packages/ui`, and keep
-    that copy in sync with this section, caveat included. Remaining work (the ring's own visual
-    treatment) is in `_docs/features/codex-compaction-invisible.md`.
+    that copy in sync with this section, caveat included. **The ring itself carries no mark, and
+    that is a decision, not an omission**: a ring answers "how full now", not "what happened when",
+    and the transcript row is the only surface with room to say what happened. It is also 11–16px
+    at every call site and already colour-coded by occupancy, so a second channel on it would read
+    as noise. Revisit only if a marker-less drop is observed reading as a bug.
   - **Never hardcode a window in our catalog to "correct" this.** A table in this repo that
     disagrees with the binary is the exact failure mode the engine catalogs exist to avoid — and
     here it would also be wrong for every operator who had set the override.
