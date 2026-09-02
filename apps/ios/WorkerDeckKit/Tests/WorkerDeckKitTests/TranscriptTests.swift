@@ -496,6 +496,31 @@ struct TranscriptTests {
     #expect(again.items == [.user(id: "u3", text: "three")])
   }
 
+  @Test func contextCompactedAppendsABoundaryAndLeavesTheReadingAlone() {
+    let usage = ContextUsage(
+      categories: [], totalTokens: 90_000, maxTokens: 200_000, percentage: 45)
+    let seeded = reduce([
+      user(1, uuid: "u1", [.text("hi")]),
+      assistant(2, [.text("hello")]),
+      event(3, .contextUsage(usage)),
+    ])
+
+    let state = reduce(
+      [event(4, .contextCompacted(uuid: "c1", parentToolUseId: nil))], from: seeded)
+    #expect(state.items.count == seeded.items.count + 1)
+    #expect(state.items.last == .compaction(id: "c1", parentToolUseId: nil))
+    #expect(state.contextUsage == usage)
+
+    // Upserts on id, like every other item, and carries a sub-agent's parent.
+    let nested = reduce(
+      [
+        event(5, .contextCompacted(uuid: "c1", parentToolUseId: nil)),
+        event(6, .contextCompacted(uuid: "c2", parentToolUseId: "task-1")),
+      ], from: state)
+    #expect(nested.items.filter { $0.kind == .compaction }.count == 2)
+    #expect(parentToolUseId(of: nested.items[nested.items.count - 1]) == "task-1")
+  }
+
   @Test func statusAndCapabilitiesTrackTheirEvents() {
     let state = reduce([
       event(1, .statusChanged(status: .awaitingApproval, detail: "waiting")),

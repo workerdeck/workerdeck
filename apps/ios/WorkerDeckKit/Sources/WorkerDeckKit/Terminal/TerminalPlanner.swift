@@ -324,6 +324,11 @@ public enum TerminalPlanner {
         gutterTone: level == .error ? .red : .yellow, tone: level == .error ? .red : .dim,
         inOpen: inOpen)
 
+    case .compaction:
+      return wrapBody(
+        TermFmt.compaction, metrics: metrics, gutter: TermGlyph.compaction, gutterTone: .yellow,
+        tone: .faint, nested: nested, inOpen: inOpen)
+
     case .fileDelivered(_, let path, let bytes, let description):
       var body = "\(path) · \(TermFmt.bytes(bytes))"
       if let description, !description.isEmpty { body += " · \(description)" }

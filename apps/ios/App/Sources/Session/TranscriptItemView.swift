@@ -40,6 +40,8 @@ struct TranscriptItemView: View {
       NoticeRow(level: level, text: text)
     case .fileDelivered(_, let path, let bytes, let description):
       FileDeliveredCard(path: path, bytes: bytes, description: description)
+    case .compaction:
+      CompactionRow()
     }
   }
 }
@@ -186,6 +188,17 @@ private struct NoticeRow: View {
       .foregroundStyle(level == .error ? Color.red : Color.secondary)
       .multilineTextAlignment(.center)
       .textSelection(.enabled)
+      .frame(maxWidth: .infinity, alignment: .center)
+      .padding(.vertical, 2)
+  }
+}
+
+private struct CompactionRow: View {
+  var body: some View {
+    Text(TermFmt.compaction)
+      .font(.caption2)
+      .foregroundStyle(.secondary)
+      .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, alignment: .center)
       .padding(.vertical, 2)
   }

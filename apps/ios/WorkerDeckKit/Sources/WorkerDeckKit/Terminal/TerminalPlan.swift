@@ -212,6 +212,7 @@ public enum TermGlyph {
   public static let thinking = "✻"
   public static let notice = "!"
   public static let file = "⤓"
+  public static let compaction = "≡"
   /// The catch-up seam.
   public static let recap = "※"
   /// Between two diff hunks.

@@ -139,6 +139,27 @@ struct TerminalRowsTests {
     #expect(TerminalPlanner.plan(rows[0], metrics: metrics).count == 1)
   }
 
+  @Test("a compaction is an ordinary item row, not a synthetic seam")
+  func compactionRow() {
+    let rows = TerminalRows.build(items: [
+      text("a"), .compaction(id: "c1", parentToolUseId: nil), text("b"),
+    ])
+    #expect(rows.count == 3)
+    #expect(rows.rowIndex(forItem: 1) == 1)
+    // Unlike the recap seam it stands for a real item, so it is addressable.
+    #expect(rows[1].bookmarkItemId == "c1")
+
+    let lines = TerminalPlanner.plan(rows[1], metrics: metrics)
+    #expect(lines.first?.gutter == TermGlyph.compaction)
+    #expect(lines.map(\.text).joined(separator: " ").contains("context compacted"))
+
+    // A sub-agent's compaction nests inside that agent's frame.
+    let nested = TerminalPlanner.plan(
+      item: .compaction(id: "c2", parentToolUseId: "T1"), metrics: metrics,
+      expansion: TerminalExpansion(), inOpen: false)
+    #expect(nested.allSatisfy { $0.nested })
+  }
+
   @Test("a blank line above a row is part of that row's height")
   func gapRidesTheRow() {
     // A standalone blank would be a row of its own and every index below it

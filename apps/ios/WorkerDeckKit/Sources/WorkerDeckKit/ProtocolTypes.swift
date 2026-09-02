@@ -934,6 +934,10 @@ public enum SessionEventBody: Sendable, Equatable {
   /// `sdkSessionId` is the fresh conversation's engine session id, when the
   /// engine reported one — the follow-up `system_init` stays authoritative.
   case conversationReset(sdkSessionId: String?)
+  /// The engine summarised earlier turns to fit the context window. Not a
+  /// reset: the transcript keeps everything, and the engine reports the
+  /// post-compaction occupancy itself.
+  case contextCompacted(uuid: String, parentToolUseId: String?)
   case assistantMessage(AssistantMessageEvent)
   case userMessage(UserMessageEvent)
   case streamDelta(StreamDeltaEvent)
@@ -981,7 +985,7 @@ extension SessionEvent: Decodable {
     case executionId, toolName, backend, deferred, expiresAt, output, logs, durationMs
     case reason, error, path, bytes, description, payload
     case skills, fileId, mediaType, toolUseId
-    case sdkSessionId
+    case sdkSessionId, uuid, parentToolUseId
   }
 
   public init(from decoder: Decoder) throws {
@@ -1026,6 +1030,10 @@ extension SessionEvent: Decodable {
       case "conversation_reset":
         body = .conversationReset(
           sdkSessionId: try container.decodeIfPresent(String.self, forKey: .sdkSessionId))
+      case "context_compacted":
+        body = .contextCompacted(
+          uuid: try container.decode(String.self, forKey: .uuid),
+          parentToolUseId: try container.decodeIfPresent(String.self, forKey: .parentToolUseId))
       case "assistant_message":
         body = .assistantMessage(try AssistantMessageEvent(from: decoder))
       case "user_message":

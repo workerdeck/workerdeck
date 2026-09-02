@@ -11,6 +11,10 @@ import Foundation
 /// what the row draws, and what the row draws must match the web client or the
 /// two transcripts disagree about the same session.
 public enum TermFmt {
+  /// `COMPACTION_TEXT` (`packages/ui/src/lib/format.ts`), copied because there
+  /// is no module the two sides can share. `TerminalTextTests` pins it.
+  public static let compaction = "context compacted · earlier turns summarised to fit the window"
+
   /// `formatCost` — `nil`/NaN reads "—" rather than "$0.00", because "we do not
   /// know" and "it was free" are different facts.
   public static func cost(_ usd: Double?) -> String {

@@ -237,6 +237,25 @@ struct ProtocolDecodingTests {
     #expect(subscriptionType == "max")
   }
 
+  @Test func decodesContextCompacted() throws {
+    let event = try decodeEvent(
+      #"{"type":"context_compacted","uuid":"c1","seq":13,"ts":1}"#)
+    guard case .contextCompacted(let uuid, let parentToolUseId) = event.body else {
+      Issue.record("expected context_compacted, got \(event.body)")
+      return
+    }
+    #expect(uuid == "c1")
+    #expect(parentToolUseId == nil)
+
+    let nested = try decodeEvent(
+      #"{"type":"context_compacted","uuid":"c2","parentToolUseId":"task-1","seq":14,"ts":1}"#)
+    guard case .contextCompacted(_, let parent) = nested.body else {
+      Issue.record("expected context_compacted, got \(nested.body)")
+      return
+    }
+    #expect(parent == "task-1")
+  }
+
   @Test func encodesPermissionDecisionCommand() throws {
     let command = SessionCommand.permissionDecision(
       requestId: "r1", behavior: .deny, message: "no", interrupt: true)

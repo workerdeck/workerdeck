@@ -28,6 +28,14 @@ struct TerminalTextTests {
     #expect(toolFamily("Read") == "read")
   }
 
+  // MARK: - Pinned strings
+
+  @Test("the compaction line matches COMPACTION_TEXT verbatim")
+  func compactionText() {
+    #expect(
+      TermFmt.compaction == "context compacted · earlier turns summarised to fit the window")
+  }
+
   // MARK: - Run summaries
 
   @Test("an all-shell run reads as shell commands")

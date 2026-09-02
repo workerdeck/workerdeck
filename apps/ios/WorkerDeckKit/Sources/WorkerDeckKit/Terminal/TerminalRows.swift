@@ -308,6 +308,9 @@ private func itemCopyText(_ item: TranscriptItem) -> String? {
     return text.isEmpty ? nil : text
   case .fileDelivered(_, let path, _, _):
     return path
+  case .compaction:
+    // Drawn verbatim and nobody typed it, like the done-line above.
+    return nil
   }
 }
 

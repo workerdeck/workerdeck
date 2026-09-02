@@ -19,6 +19,7 @@ public enum TranscriptItemKind: String, Sendable, Equatable {
   case turnResult
   case notice
   case fileDelivered
+  case compaction
 }
 
 /// Lifecycle of a tool call.
@@ -171,6 +172,9 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
   /// card; the file is served by GET /sessions/:id/files/<path> while the session
   /// lives.
   case fileDelivered(id: String, path: String, bytes: Int, description: String?)
+  /// The engine summarised earlier turns to fit the window (`context_compacted`).
+  /// A boundary, not a reset — everything before it is still here.
+  case compaction(id: String, parentToolUseId: String?)
 
   public var id: String {
     switch self {
@@ -181,6 +185,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
     case .turnResult(let id, _, _, _, _, _): return id
     case .notice(let id, _, _): return id
     case .fileDelivered(let id, _, _, _): return id
+    case .compaction(let id, _): return id
     }
   }
 
@@ -193,6 +198,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
     case .turnResult: return .turnResult
     case .notice: return .notice
     case .fileDelivered: return .fileDelivered
+    case .compaction: return .compaction
     }
   }
 }
@@ -542,6 +548,11 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     next.items = []
     next.contextUsage = nil
     if let sdkSessionId { next.sdkSessionId = sdkSessionId }
+
+  case .contextCompacted(let uuid, let parentToolUseId):
+    // Appends where the reset above empties, and leaves `contextUsage` alone:
+    // the engine reports post-compaction occupancy itself.
+    next.items = upsert(next.items, .compaction(id: uuid, parentToolUseId: parentToolUseId))
 
   case .userMessage(let payload):
     var items = next.items
