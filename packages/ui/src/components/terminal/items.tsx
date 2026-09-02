@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { TranscriptItem } from '@workerdeck/react'
-import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
+import { COMPACTION_TEXT, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
@@ -275,6 +275,19 @@ export function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 
         </Row>
       ))}
     </div>
+  )
+}
+
+/**
+ * One row, deliberately. A rule with a centred label reads better and costs the height book a
+ * second measurement for a row that carries no content — and the point here is only that the
+ * boundary is *visible*, so the ring dropping 90% → 15% stops reading as a bug.
+ */
+export function CompactionRow() {
+  return (
+    <Row glyph="≡" glyphTone="yellow" tone="faint">
+      {COMPACTION_TEXT}
+    </Row>
   )
 }
 

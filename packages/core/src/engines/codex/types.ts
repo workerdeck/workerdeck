@@ -88,6 +88,17 @@ export type AppServerCollabAgentToolCallItem = {
 }
 export type AppServerUserMessageItem = { id: string; type: 'userMessage'; content?: unknown }
 // Deliberately not a union member: an index signature would defeat discriminant narrowing.
+/**
+ * `{id, type}` and nothing else — checked against 0.151.0's generated schema, where
+ * `ContextCompactionThreadItem` requires exactly those two keys. There is no summary, no token
+ * count and no before/after to draw, so the row can only be a marker at a point in the transcript.
+ *
+ * The paired `thread/compacted` notification (`ContextCompactedNotification`) is documented in the
+ * same schema as *"Deprecated: Use `ContextCompaction` item type instead"*, so this is the one
+ * signal to read and the notification is deliberately left unhandled.
+ */
+export type AppServerContextCompactionItem = { id: string; type: 'contextCompaction' }
+
 export type AppServerUnknownItem = { id: string; type: string; [key: string]: unknown }
 
 export type AppServerItem =
@@ -102,6 +113,7 @@ export type AppServerItem =
   | AppServerUserMessageItem
   | AppServerSubAgentActivityItem
   | AppServerCollabAgentToolCallItem
+  | AppServerContextCompactionItem
 
 export type AppServerTurn = {
   id: string

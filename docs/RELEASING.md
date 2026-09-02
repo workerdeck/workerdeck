@@ -499,6 +499,52 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   follows Anthropic's dashes-for-dots convention (`claude-opus-4-8`, `claude-sonnet-4-6`) and
   nothing more.
 
+  **1.2.0** — **compaction stopped being invisible.** A **minor**, additive throughout, protocol
+  stays **1**. Codex auto-compacts silently, and until now WorkerDeck rendered nothing when it did:
+  `contextCompaction` fell to the `sdk_event` channel no UI draws, so the conversation kept going,
+  the model quietly stopped being able to see the top of it, and the transcript said nothing had
+  happened — while the context ring dropped for a reason the user did not cause and could not read.
+
+  The wire half is **`context_compacted`**, engine-neutral on purpose so the Claude engine can join
+  without a second row for the same thing. It is deliberately *not* a `conversation_reset`, and the
+  distinction is the whole design: a reset empties and its replay rule skips strictly below it,
+  which would throw away exactly the history a compaction preserves. So it appends rather than
+  empties, takes no reset seq, and leaves `contextUsage` alone — the engine reports post-compaction
+  occupancy itself and a guess here would put a number on the ring no `context_usage` event ever
+  said. It scores 0 in both `transcriptActivity` and `transcriptProse`: engine housekeeping is not
+  news and must not badge a session nobody needs to open. The rule now lives in
+  `docs/PACKAGES.md` §protocol.
+
+  **Additive, so no `PROTOCOL_VERSION` bump** — and that was checked against the strictest reader
+  rather than assumed. iOS's hand-written mirror decodes an unknown event `type` to `.unknown`
+  (and degrades a known type whose payload does not decode the same way), so a new variant costs
+  an older client nothing. That check is what made a new event affordable at all now that 1 is
+  locked.
+
+  Two schema facts shaped the row. `ContextCompactionThreadItem` is `{id, type}` and **nothing
+  else**, so there is no summary, count or before/after to draw and the row can only be a marker;
+  and the paired `thread/compacted` notification is documented as *"Deprecated: use the
+  ContextCompaction item type instead"*, so the item is the one signal to read and the
+  notification stays unhandled. A sub-agent's compaction carries `parentToolUseId` and nests under
+  its Task. The canary drops `contextCompaction` from its unmapped list — **7 of 19** on 0.151.0.
+
+  Two spellings, one string: a single grid row in the terminal theme and a rule-with-label in
+  cards, both drawing `COMPACTION_TEXT` from `lib/format.ts`, which is where it lives because
+  `height.ts` must measure exactly what the renderer draws and cannot import a `.tsx` without
+  pulling React into a module the tests require to stay pure. A test asserts neither file carries a
+  literal copy. Verified in the playground: the height audit reports the row **exact**, delta 0.
+
+  What is **not** done: **iOS draws nothing yet.** `WorkerDeckKit` hand-mirrors protocol, so the
+  phone needs the event case, the item kind and the row before it is at parity — it degrades to
+  `.unknown` safely in the meantime. And the ring's own treatment after a compaction, plus the
+  272K-price-tier tooltip, are still open in `_docs/features/codex-compaction-invisible.md`.
+
+  Cut alongside a docs cleanup: **`docs/ROADMAP.md` was deleted.** It had drifted to claiming
+  0.16.0 and protocol 7 while carrying 500 lines of shipped narrative. Its two live parts were
+  harvested first — the non-goals (with the scoped-embedding-is-not-multi-tenant-SaaS distinction)
+  into `CONTRIBUTING.md` §Out of scope, which is where a contributor looks, and the open design
+  questions into `_docs/`. README's stale "`PROTOCOL_VERSION` … is at 7" is corrected to 1.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

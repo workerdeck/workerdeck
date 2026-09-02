@@ -1,7 +1,7 @@
 import type { MessageAttachment } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
-import { formatCost, formatDuration, formatRelativeTime } from '../../lib/format.ts'
+import { COMPACTION_TEXT, formatCost, formatDuration, formatRelativeTime } from '../../lib/format.ts'
 import { FileCard } from './FileCard.tsx'
 import { Message, MessageContent } from './Message.tsx'
 import { PromptTokenText } from './PromptTokenText.tsx'
@@ -99,6 +99,9 @@ export function TranscriptItemView({
     case 'notice': {
       return <NoticeRow item={item} />
     }
+    case 'compaction': {
+      return <CompactionRow />
+    }
     case 'file_delivered': {
       return <FileCard item={item} href={fileUrl?.(item.path)} />
     }
@@ -106,6 +109,21 @@ export function TranscriptItemView({
       return null
     }
   }
+}
+
+/**
+ * The cards spelling of a compaction boundary — a rule with the label through it, the same shape
+ * `RecapRow` uses below, because both are boundaries rather than messages. The terminal spelling is
+ * `terminal/items.tsx`'s `CompactionRow`, one grid row, and the two share `COMPACTION_TEXT`.
+ */
+function CompactionRow() {
+  return (
+    <div data-slot="compaction" className="flex items-center gap-2 py-1">
+      <div className="h-px flex-1 bg-border" />
+      <span className="font-mono text-label text-fg-3">≡ {COMPACTION_TEXT}</span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  )
 }
 
 export function RecapRow({ line, since, terminal }: { line: string; since?: number; terminal?: boolean }) {

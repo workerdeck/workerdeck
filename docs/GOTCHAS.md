@@ -374,10 +374,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     prints `Token usage: total=…` (thread-cumulative) *beside* a `% context left` readout
     (occupancy). A long session passes 800k cumulative without occupancy ever leaving the window,
     because **auto-compaction keeps resetting it** — which is how "I just kept going naturally"
-    happens. Note what that implies for us: codex's `contextCompaction` is one of the ThreadItem
-    variants we do **not** map, so on a WorkerDeck surface that summarisation is completely
-    invisible and the ring simply drops for no stated reason. Brief:
-    `_docs/features/codex-compaction-invisible.md`.
+    happens. Since 2026-09-02 that summarisation is **drawn**: `contextCompaction` maps to a
+    `context_compacted` event and a boundary row, so a ring that drops for no user-caused reason
+    now has a marker saying why. Remaining work (the ring's own treatment, and a tooltip explaining
+    the 272K price tier) is in `_docs/features/codex-compaction-invisible.md`.
   - **Never hardcode a window in our catalog to "correct" this.** A table in this repo that
     disagrees with the binary is the exact failure mode the engine catalogs exist to avoid — and
     here it would also be wrong for every operator who had set the override.
@@ -493,10 +493,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   **`pnpm smoke:codex --canary` now pins that union**, and it exists because "we noticed" was not
   a strategy: the alarm fails on a variant that is *new* since 0.146.0 and warns on one that is
   merely unmapped, and it is free (a local dump out of the binary we ship, no network or auth). It
-  currently reports **9 of 18 unmapped** — including `collabAgentToolCall` and `subAgentActivity`,
-  i.e. codex's entire multi-agent surface, which has been arriving invisibly ever since we
-  upgraded. So the standing claim to be careful with is not "codex has no sub-agents" but "we have
-  never mapped them"; the brief is `_docs/features/codex-multi-agent.md`.
+  reports **7 of 19 unmapped** on 0.151.0 — `hookPrompt`, `functionCallOutput`, `plan`,
+  `dynamicToolCall`, `sleep`, `enteredReviewMode`, `exitedReviewMode`. Mapping every variant is not
+  the goal; knowing about each one is, which is why the KNOWN set carries a note per variant
+  deliberately left alone. Two that were on that list have since been taken: codex's multi-agent
+  surface (`collabAgentToolCall` / `subAgentActivity`) in 2026-08-21, and `contextCompaction` in
+  2026-09-02.
 - **A generated image is a host path, never bytes.** `imageGeneration.savedPath` is absolute on
   the host — by default under `$CODEX_HOME/generated_images/`, or in the workspace when the model
   was told the asset belongs to the project. The runner puts it in the tool card's *input* (a

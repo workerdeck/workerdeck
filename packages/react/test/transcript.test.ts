@@ -553,6 +553,24 @@ describe('transcript reducer', () => {
     expect(state.model).toBeUndefined()
   })
 
+  it('context_compacted appends a boundary and keeps the history a reset would have discarded', () => {
+    seq = 0
+    const before = run(initialTranscriptState, [
+      { type: 'user_message', message: { role: 'user', content: 'a long conversation' }, parentToolUseId: null, uuid: 'u1' },
+      { type: 'context_usage', usage: { totalTokens: 240_000, maxTokens: 258_400, percentage: 93, categories: [] } },
+    ])
+    const state = run(before, [{ type: 'context_compacted', uuid: 'c1' }])
+
+    expect(state.items.map((i) => i.kind)).toEqual(['user', 'compaction'])
+    // The two are opposites, and confusing them would throw away exactly what compaction preserves.
+    expect(state.items[0]).toMatchObject({ kind: 'user' })
+    // The engine reports post-compaction occupancy itself; the reducer must not blank or guess it.
+    expect(state.contextUsage?.percentage).toBe(93)
+
+    // Idempotent under replay: the same event twice is the same row, not two boundaries.
+    expect(run(state, [{ type: 'context_compacted', uuid: 'c1' }]).items).toHaveLength(2)
+  })
+
   it('conversation_reset empties the transcript and keeps session-scoped state', () => {
     seq = 0
     const before = run(initialTranscriptState, [

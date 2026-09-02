@@ -1,6 +1,6 @@
 import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
-import { formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
+import { COMPACTION_TEXT, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
 import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
@@ -621,6 +621,11 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
     }
     case 'notice': {
       return rowH(item.text, m, { extraPx })
+    }
+    // Measured against the exported constant, not a copy of the sentence: the two must not drift,
+    // and a mismatch here is a scrubber that points a few pixels off for the rest of the session.
+    case 'compaction': {
+      return rowH(COMPACTION_TEXT, m, { extraPx })
     }
     case 'file_delivered': {
       const text = `${item.path} · ${formatBytes(item.bytes)}` + (item.description ? ` · ${item.description}` : '')

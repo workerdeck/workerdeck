@@ -195,6 +195,18 @@ with its existing unknown-command error rather than doing something surprising. 
 engines each reach the same state by a different route — claude sends the `/clear` its CLI
 already lists, codex starts a fresh thread, the provider drops an in-process message array — and
 that is exactly why the capability record names the *power* and not the mechanism.
+**`context_compacted` is deliberately not any of this.** An engine that summarises its history in
+place — codex auto-compacts, and Claude may join it — emits `context_compacted`, which is a
+*marker* in the transcript and nothing more. It does **not** take a reset seq, because the reset's
+replay rule (skip strictly below) would throw away exactly the history compaction preserved; it
+does not clear `contextUsage`, because the engine reports the post-compaction occupancy itself and
+a guess here would put a number on the ring no `context_usage` event ever said; and it scores 0 in
+both `transcriptActivity` and `transcriptProse`, because engine housekeeping is not news and must
+not badge a session nobody needs to open. Additive, so **no `PROTOCOL_VERSION` bump** — verified
+against the strictest reader, iOS's hand-written mirror, which degrades an unknown event type to
+`.unknown` rather than failing the stream. One event for every engine, so no client draws the same
+row twice.
+
 **And any engine that can emit `conversation_reset` must track its seq and pass it to
 `subscribe`** (`#resetSeq` → `replaySlice`'s rule 2). This was Claude's alone for exactly as long
 as Claude's was the only engine that could produce the event, and codex and the provider shipped
