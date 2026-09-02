@@ -132,7 +132,13 @@ private struct SessionsPreview: View {
           SessionCardView(
             row: item.row, onOpen: { path.append(Self.route(for: item.row)) },
             hostName: item.row.hostName, expanded: open.contains(item.id),
-            onToggle: { toggle(item.id) })
+            onToggle: { toggle(item.id) },
+            // The app's own actions, spelled out rather than left empty: the
+            // menu is part of what this harness exists to check.
+            menu: {
+              Button { } label: { Label("Rename", systemImage: "pencil") }
+              Button(role: .destructive) { } label: { Label("Close", systemImage: "xmark.circle") }
+            })
           if open.contains(item.id) {
             ForEach(sessionSteps(item.row.info)) { step in
               NavigationLink(value: Self.route(for: item.row, step: step)) {

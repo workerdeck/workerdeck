@@ -272,7 +272,8 @@ struct SessionListView: View {
                 // Grouped by project, the section header already names it.
                 showsProject: model.config.groupBy != .project,
                 expanded: expandedAgents.contains(row.info.id),
-                onToggle: { toggleAgents(row) })
+                onToggle: { toggleAgents(row) },
+                menu: { rowActions(for: row, model: model) })
               // Two different actions wearing one gesture. Closing a *live*
               // session terminates a run someone may be relying on, so it asks
               // first; removing an already-closed one only drops a finished
@@ -301,14 +302,7 @@ struct SessionListView: View {
                 }
                 .tint(.accentColor)
               }
-              .contextMenu {
-                Button {
-                  renameText = row.info.title ?? ""
-                  pendingRename = row
-                } label: {
-                  Label("Rename", systemImage: "pencil")
-                }
-              }
+              .contextMenu { rowActions(for: row, model: model) }
               if expandedAgents.contains(row.info.id) {
                 stepRows(for: row)
               }
@@ -324,6 +318,31 @@ struct SessionListView: View {
     .listStyle(.plain)
     .searchable(text: $model.config.search, placement: .navigationBarDrawer(displayMode: .automatic))
     .refreshable { await model.refresh() }
+  }
+
+  // Every non-navigating thing a row can do, in one builder, because the row
+  // offers three ways in and they must not drift apart: the card's persistent
+  // `···`, a long press, and (for the destructive half) a trailing swipe. Close
+  // and Remove are the same gesture wearing two meanings — see the swipe.
+  @ViewBuilder
+  private func rowActions(for row: SessionRow, model: SessionListModel) -> some View {
+    Button {
+      renameText = row.info.title ?? ""
+      pendingRename = row
+    } label: {
+      Label("Rename", systemImage: "pencil")
+    }
+    if row.info.status == .closed {
+      Button(role: .destructive) {
+        Task { await model.close(row) }
+      } label: {
+        Label("Remove", systemImage: "trash")
+      }
+    } else {
+      Button(role: .destructive) { pendingClose = row } label: {
+        Label("Close", systemImage: "xmark.circle")
+      }
+    }
   }
 
   /// A gateway name on each card earns its space only when there is more than
@@ -687,7 +706,7 @@ private struct FilterMenu: View, Equatable {
 /// can draw the composition the list actually ships — the disclosure's placement
 /// is the thing that needed looking at, and a preview of the row alone cannot
 /// show it.
-struct SessionCardView: View {
+struct SessionCardView<MenuContent: View>: View {
   let row: SessionRow
   let onOpen: () -> Void
   var hostName: String?
@@ -695,6 +714,11 @@ struct SessionCardView: View {
   var showsProject: Bool = true
   var expanded: Bool = false
   var onToggle: () -> Void = {}
+  // Required, and required deliberately: a card that can be built without a menu
+  // is a card a preview can draw *simpler* than the app ships it, which is how
+  // the missing chevron got past a green screenshot. Callers with nothing to
+  // offer pass `EmptyView()` and say so.
+  @ViewBuilder var menu: () -> MenuContent
 
   var body: some View {
     Button(action: onOpen) {
@@ -704,7 +728,32 @@ struct SessionCardView: View {
         // A list-row button paints its label in the accent colour; the title must stay primary.
         .foregroundStyle(.primary)
     }
-    .overlay(alignment: .bottomTrailing) { toggle }
+    .overlay(alignment: .bottomTrailing) {
+      HStack(spacing: 0) {
+        toggle
+        overflow
+      }
+    }
+  }
+
+  // Persistent, not revealed: the dashboard hides the same actions behind hover
+  // and a phone has no hover, so the frame's always-there spelling is the mobile
+  // treatment rather than a difference to reconcile away. It duplicates the
+  // swipes on purpose — a swipe is only found by someone who already guessed.
+  private var overflow: some View {
+    Menu {
+      menu()
+    } label: {
+      SessionOverflowGlyph()
+        .padding(.bottom, SessionRowView.verticalPadding)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .contentShape(Rectangle())
+    }
+    // A `Menu` paints its label in the accent colour, and on this row the accent
+    // is a *state* — a running step count wears it. An always-present control
+    // wearing the same blue reads as something happening on every row.
+    .tint(Color.secondary)
+    .accessibilityLabel("Session actions")
   }
 
   @ViewBuilder
@@ -726,6 +775,20 @@ struct SessionCardView: View {
         (expanded ? "Hide " : "Show ")
           + stepCountWords(running: running, total: steps.count))
     }
+  }
+}
+
+// The overflow affordance, drawn identically whether it is the live control
+// (`SessionCardView`) or the hidden placeholder that reserves its width in the
+// row. One view for both, because the two drifting apart is the whole failure
+// mode: the run would truncate against a slot of the wrong size.
+struct SessionOverflowGlyph: View {
+  var body: some View {
+    Image(systemName: "ellipsis")
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary)
+      .padding(.leading, 12)
+      .padding(.trailing, 2)
   }
 }
 
@@ -883,6 +946,10 @@ struct SessionRowView: View {
           StepDisclosure(expanded: expanded, running: runningSteps(steps), total: steps.count)
             .hidden()
         }
+        // Same trick for the overflow control the card overlays: reserved here,
+        // never measured there, so the identity run truncates before it reaches
+        // it instead of sliding underneath.
+        SessionOverflowGlyph().hidden()
       }
     }
     .padding(.vertical, Self.verticalPadding)

@@ -612,9 +612,18 @@ The **working spinner is tinted** (`text-info`) rather than left at the system's
 **parked is neutral** rather than purple — the dashboard spends no hue on a state that wants
 nothing. And a **running step draws a spinner**, the marker its own card already uses for the same
 fact, where it drew a static `circle.dotted`.
-Three divergences are deliberate. The web's `···` row actions are **hover-revealed**, and a phone
-has no hover: rename/close stay on the swipe actions and the context menu rather than becoming a
-third visible affordance. The age stays `4m` against the web's `4m ago` (`Fmt.ago` is the app's
+The **`···` is drawn, and drawn persistently** — which is a divergence from the dashboard and *not*
+one from the frame. The web reveals the same actions on hover; a phone has no hover, so the
+alternative to always-there is invisible, and the swipe and the long press are both only found by
+someone who already guessed they were there. It rides the trailing edge of line two beside the
+disclosure, by the same hidden-copy trick, and its menu comes from **one builder**
+(`rowActions(for:model:)`) shared with the long-press menu so the two cannot drift; the trailing
+swipe still spells Close/Remove for itself because a swipe button is a different drawing. The
+`Menu` is `.tint(Color.secondary)`: a menu paints its label in the accent, and on this row the
+accent is a *state* — a running step count wears it. It is pressed by `WorkerDeckAppUITests`,
+asserting both halves (a menu came up **and** the list is still on screen), because a press that
+misses it opens the session and looks like a working app in a screenshot.
+Two other divergences are deliberate. The age stays `4m` against the web's `4m ago` (`Fmt.ago` is the app's
 one elapsed spelling). And there is **no selected-card fill** — the phone pushes where the sidebar
 selects, so there is no standing selection to draw and no `activeStepKey` to weaken it to grey.
 **The sub-agent takeover** is a real navigation push (`navigationDestination(item:)`), and the

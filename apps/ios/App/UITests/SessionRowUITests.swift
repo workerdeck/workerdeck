@@ -23,4 +23,24 @@ final class SessionRowUITests: XCTestCase {
     let pushed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'sessionId: \"2\"'")).firstMatch
     XCTAssertTrue(pushed.waitForExistence(timeout: 5), "the row did not push its session")
   }
+
+  // The overflow control's whole failure mode is silent: a press that misses it
+  // opens the session instead, and a screenshot of the pushed screen looks like
+  // a screenshot of a working app. So the claim is both halves — the menu came
+  // up AND the list is still what we are looking at.
+  @MainActor
+  func testOverflowOpensAMenuInsteadOfTheSession() throws {
+    let app = XCUIApplication()
+    app.launchEnvironment["UIPREVIEW"] = "sessions"
+    app.launch()
+
+    let overflow = app.descendants(matching: .any).matching(identifier: "Session actions")
+    XCTAssertTrue(overflow.firstMatch.waitForExistence(timeout: 8))
+    XCTAssertEqual(overflow.count, 6, "every card carries the affordance, hover or no hover")
+
+    overflow.firstMatch.tap()
+    XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: 3), "no menu came up")
+    XCTAssertTrue(app.buttons["Close"].exists)
+    XCTAssertTrue(app.navigationBars["Sessions"].exists, "the overflow pushed the row")
+  }
 }
