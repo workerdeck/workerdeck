@@ -176,7 +176,13 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     session view re-fetches once on disappear and marks a final time, so rows produced after the
     last snapshot don't come back as unread. Renaming is a leading swipe or a context menu →
     `PATCH /sessions/:id`, a gateway edit rather than a local override, so the name reaches the
-    dashboard and the extension too (and an empty one restores the derived title).
+    dashboard and the extension too (and an empty one restores the derived title), and it is one
+    of the three ways into the same actions — the card's `···`, a long press, a swipe — all built
+    from one builder on the list. The **drawing** is a file per unit beside those two:
+    `SessionCardView` (with the disclosure and the overflow glyph), `SessionRowView`,
+    `SessionStatusIcon`, `SessionStepRow`, `SdkSessionRowView`, `SessionFilterMenu`. They were one
+    1,240-line file until 2026-09-02, which is where two bugs in one day came from; the view is
+    now what owns the stack, the poll and the actions, and nothing else.
 
     **The steps under a row** — the session's sub-agents, and one day the CLI's own task
     checklist — come from the kit's `sessionSteps` (`SessionSteps.swift`), the port of
