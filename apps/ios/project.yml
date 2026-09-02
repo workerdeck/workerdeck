@@ -133,3 +133,31 @@ targets:
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
         SWIFT_EMIT_LOC_STRINGS: YES
+  WorkerDeckAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/UITests
+    dependencies:
+      - target: WorkerDeckApp
+    settings:
+      base:
+        TEST_TARGET_NAME: WorkerDeckApp
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: bi.atomic.workerdeck.ios.uitests
+        SWIFT_VERSION: "6.0"
+
+# Declaring any scheme switches off XcodeGen's per-target ones, so the app's own is spelled out to keep `-scheme WorkerDeckApp` working.
+schemes:
+  WorkerDeckApp:
+    build:
+      targets:
+        WorkerDeckApp: all
+        WorkerDeckAppUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - WorkerDeckAppUITests

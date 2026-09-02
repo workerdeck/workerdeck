@@ -264,7 +264,7 @@ struct SessionListView: View {
             if let route = sessionRoute(for: row) {
               SessionCardView(
                 row: row,
-                route: route,
+                onOpen: { path.append(route) },
                 // Grouped by gateway, the section header already names it.
                 hostName: showsHostNames(model) && model.config.groupBy != .gateway
                   ? row.hostName : nil,
@@ -689,76 +689,34 @@ private struct FilterMenu: View, Equatable {
 /// show it.
 struct SessionCardView: View {
   let row: SessionRow
-  var route: SessionRoute?
+  let onOpen: () -> Void
   var hostName: String?
   var projectImage: UIImage?
   var showsProject: Bool = true
   var expanded: Bool = false
   var onToggle: () -> Void = {}
 
-  @State private var toggleWidth: CGFloat = 0
-
   var body: some View {
-    HStack(alignment: .bottom, spacing: 0) {
-      Group {
-        if let route {
-          NavigationLink(value: route) { content }
-        } else {
-          content
-        }
-      }
-      toggle
+    Button(action: onOpen) {
+      SessionRowView(
+        session: row.info, hostName: hostName, unseen: row.unseen,
+        projectImage: projectImage, showsProject: showsProject, expanded: expanded)
+        // A list-row button paints its label in the accent colour; the title must stay primary.
+        .foregroundStyle(.primary)
     }
-    .onPreferenceChange(DisclosureWidthKey.self) { toggleWidth = $0 }
+    .overlay(alignment: .bottomTrailing) { toggle }
   }
 
-  private var content: some View {
-    SessionRowView(
-      session: row.info, hostName: hostName, unseen: row.unseen,
-      projectImage: projectImage, showsProject: showsProject,
-      // The disclosure is a *sibling*, so it narrows the link — and line one's
-      // badge and ring then stop at the disclosure's left edge where the design
-      // has them flush with its right one. Line one overhangs by exactly the
-      // width the sibling took; the disclosure is on line two, so there is
-      // nothing there to collide with.
-      lineOneOverhang: toggleWidth)
-  }
-
-  // The disclosure is a sibling of the link, never a child: a hand-rolled button
-  // inside a `NavigationLink` is a coin toss under a thumb, because the link
-  // takes the row's tap.
-  //
-  // Its glyphs sit on **line two**, where the dashboard puts them, but its
-  // *frame* is the row's full height — a sibling has to have a frame of its own,
-  // and one 15pt line tall is not a thumb target. So the two are separated:
-  // `maxHeight: .infinity` takes the target, `alignment: .bottom` puts the
-  // reading back where the design has it, and the 3pt clears `SessionRowView`'s
-  // own vertical padding so the count sits on the identity line rather than
-  // under it.
   @ViewBuilder
   private var toggle: some View {
     let steps = sessionSteps(row.info)
     if !steps.isEmpty {
       let running = runningSteps(steps)
       Button(action: onToggle) {
-        HStack(spacing: 2) {
-          Image(systemName: expanded ? "chevron.down" : "chevron.right")
-            .font(.caption2.weight(.semibold))
-          Text(stepCountLabel(running: running, total: steps.count))
-            .font(.caption)
-            .monospacedDigit()
-        }
-        .foregroundStyle(running > 0 ? Color.accentColor : .secondary)
-        .padding(.leading, 10)
-        .padding(.trailing, 4)
-        .padding(.bottom, 3)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .contentShape(Rectangle())
-        .background {
-          GeometryReader { geo in
-            Color.clear.preference(key: DisclosureWidthKey.self, value: geo.size.width)
-          }
-        }
+        StepDisclosure(expanded: expanded, running: running, total: steps.count)
+          .padding(.bottom, SessionRowView.verticalPadding)
+          .frame(maxHeight: .infinity, alignment: .bottom)
+          .contentShape(Rectangle())
       }
       // `.plain` because a bordered button inside a list row draws a second
       // surface, and because the default style would tint the chevron with the
@@ -771,11 +729,21 @@ struct SessionCardView: View {
   }
 }
 
-private struct DisclosureWidthKey: PreferenceKey {
-  static let defaultValue: CGFloat = 0
+struct StepDisclosure: View {
+  let expanded: Bool
+  let running: Int
+  let total: Int
 
-  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-    value = max(value, nextValue())
+  var body: some View {
+    HStack(spacing: 2) {
+      Image(systemName: expanded ? "chevron.down" : "chevron.right")
+        .font(.caption2.weight(.semibold))
+      Text(stepCountLabel(running: running, total: total))
+        .font(.caption)
+        .monospacedDigit()
+    }
+    .foregroundStyle(running > 0 ? Color.accentColor : .secondary)
+    .padding(.leading, 10)
   }
 }
 
@@ -808,10 +776,9 @@ struct SessionRowView: View {
   /// at the project root has nothing to add and the slot disappears. The rule
   /// `hostName` follows one facet over.
   var showsProject: Bool = true
-  /// How far line one may reach past this view's own trailing edge, so the
-  /// unread badge and the ring end flush with the disclosure that displaced
-  /// them. See `SessionCardView`; zero everywhere there is no disclosure.
-  var lineOneOverhang: CGFloat = 0
+  var expanded: Bool = false
+
+  static let verticalPadding: CGFloat = 3
 
   /// Two lines, in the order the dashboard's row uses
   /// (`packages/ui`'s `SessionBrowser`): what you scan the list by on top, what
@@ -862,7 +829,6 @@ struct SessionRowView: View {
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         }
       }
-      .padding(.trailing, -lineOneOverhang)
       // Line two: one truncating run, in one order, so the list reads the same
       // on a phone as it does in a sidebar. A `Text` concatenation rather than
       // an `HStack` of pieces, and that is the point: the parts have a priority
@@ -910,14 +876,16 @@ struct SessionRowView: View {
             .lineLimit(1)
             .layoutPriority(1)
         }
-        // The step count is NOT here. It is the disclosure, and it lives on the
-        // trailing edge as a sibling of this row's link — see `stepToggle`. A
-        // reading and a control saying the same number twice, a few points
-        // apart, is two answers to one question.
         Spacer(minLength: 6)
+        let steps = sessionSteps(session)
+        if !steps.isEmpty {
+          // `.hidden()` keeps the layout: the disclosure `SessionCardView` overlays as a button is this same view, so its width is reserved here and never measured.
+          StepDisclosure(expanded: expanded, running: runningSteps(steps), total: steps.count)
+            .hidden()
+        }
       }
     }
-    .padding(.vertical, 3)
+    .padding(.vertical, Self.verticalPadding)
   }
 
   private var title: String {

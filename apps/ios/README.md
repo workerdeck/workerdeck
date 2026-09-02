@@ -508,6 +508,9 @@ cd apps/ios && xcodegen generate && open WorkerDeckApp.xcodeproj
 # or headless:
 xcodebuild -project WorkerDeckApp.xcodeproj -scheme WorkerDeckApp \
   -destination 'platform=iOS Simulator,name=iPhone 17' build
+# The session row's tap contract (disclosure toggles, row pushes), pressed for real by XCUITest:
+xcodebuild test -project WorkerDeckApp.xcodeproj -scheme WorkerDeckApp \
+  -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:WorkerDeckAppUITests
 ```
 
 The app target needs Xcode's **iOS platform** installed (`xcodebuild -downloadPlatform iOS`, or

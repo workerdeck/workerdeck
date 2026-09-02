@@ -539,8 +539,10 @@ And Copy takes the row's **source** — an answer's raw markdown, a call's comma
 lines, since the body is already one selectable run and copying what is *visible* needs no menu.
 A standing text selection refuses the menu, the same deference `handleTap` pays it. The
 selection-long-press against the menu-long-press is the one interplay that still wants a device
-check: the simulator's synthetic input drives neither recognizer, which is provable rather than
-suspected — under it the ordinary tap does not register either.
+check: idb's synthetic input drives neither recognizer — under it the ordinary tap does not
+register either — but **XCUITest's input does reach this app** (`WorkerDeckAppUITests`, driven
+through testmanagerd, is what proves the session row's tap contract), so that is the tool for the
+next such check before a phone.
 Hit targets are the standing tension: a one-line block is `metrics.line` tall, ~19pt at the
 phone's 12pt cell against Apple's 44pt, and the grid forbids the obvious fix (a row is a whole
 number of lines, and a taller row is a different transcript). What is there is free — `handleTap`
@@ -577,15 +579,31 @@ drawing the product otherwise has (see `docs/PACKAGES.md` §`packages/ui`), so e
 not carry is drift. `UIPREVIEW=sessions` (`SessionsPreview`) is the phone's copy of the
 `Sessions/SessionItem` `TheList` story, same sessions in the same order, so the two can be put
 side by side; `SessionCardView` exists so that preview can draw the composition the list ships
-rather than the row alone.
+rather than the row alone — and its `onOpen` is **required** for that reason. The first version of
+this row shipped a collision the preview could not show: `route` was optional, the preview passed
+none, so the card drew bare while the app wrapped it in a `NavigationLink` whose platform chevron
+landed under the badge and ring. A preview that omits what the list passes is a preview of a
+different composition; the card now has no optional that lets that happen twice.
 Four rules were off and are now ported. The **step disclosure sits on line two**, where the
-dashboard puts it, not centred on the row's trailing edge as a third column — but it is still a
-**sibling** of the `NavigationLink`, never a child, because a hand-rolled button inside a link is a
-coin toss under a thumb. The two are reconciled by separating frame from drawing: the sibling takes
-the row's full height (a 15pt line is not a thumb target) and bottom-aligns its glyphs. Being a
-sibling narrows the link, so line one's badge and ring would stop at the disclosure's *left* edge
-where the design has them flush with its right one; line one therefore overhangs by exactly the
-width the sibling measured (`DisclosureWidthKey`), which is zero on every row with no disclosure.
+dashboard puts it, not centred on the row's trailing edge as a third column. The Figma frame
+(`SessionLists`, node `17-1156`) settles the trailing edge outright: **no per-row chevron** —
+line one ends with the ring, line two with the `ListDropdown`, and only the sub-items carry an
+arrow. So the row is a `Button` that appends its route to the stack's path (the push notification
+and create paths already navigate that way), not a `NavigationLink`: a link draws the chevron the
+design has no room for, and `navigationLinkIndicatorVisibility(.hidden)` — annotated iOS 17 via
+`@_alwaysEmitIntoClient` — is a **no-op on the iOS 18 runtime** (measured on the 18.5 simulator;
+only 26 honours it), so the modifier could not carry a 17.0 deployment target. A list-row button
+paints its label in the accent, which the card overrides to `.primary`; every other colour on the
+row is explicit already. The disclosure stays **outside** the row's button — a hand-rolled button
+inside the row's tap target is a coin toss under a thumb — as an `.overlay(alignment:
+.bottomTrailing)` sibling in z-order, full row height for the thumb and bottom-aligned for the
+eye. It is laid out by **the same view drawn twice**: `StepDisclosure` sits `.hidden()` at the end
+of line two, reserving exactly its own width in the line's flow, and the overlaid button draws the
+visible copy on top of it. Nothing is measured, so nothing can drift; the earlier
+`DisclosureWidthKey` overhang measured the sibling and reached line one over a chevron it never
+knew about. The two targets are **pressed, not asserted**: `WorkerDeckAppUITests` runs the
+`UIPREVIEW=sessions` fixture and checks that the disclosure toggles without pushing and the row
+pushes (`xcodebuild test … -only-testing:WorkerDeckAppUITests`, in `apps/ios/README.md`).
 The **context ring reads off the ring ramp**, not the bar ramp: the web draws two off one
 percentage and they turn in different places, so `meterSeverity` (80/95, neutral below) is now in
 the kit and tested there, `ringTint` maps it, and `usageTint` (70/90, accent below) stays what a
@@ -658,9 +676,9 @@ the frame's `ListDropdown`, drawn where the frame draws it. It reads `2/3` while
 running and a bare total once they have settled (the two spellings `StepToggle` picks between),
 and it wears the accent while anything is live.
 
-It is a **sibling of the `NavigationLink`, never a child**, and that part is not negotiable: a
-hand-rolled button inside a link is a coin toss under a thumb, because the link takes the row's
-tap. The row used to draw the count alone for exactly that reason — right about *nesting*, and
+It is a **sibling of the row's button, never a child**, and that part is not negotiable: a
+hand-rolled button inside the row's tap target is a coin toss under a thumb, because the row takes
+the tap. The row used to draw the count alone for exactly that reason — right about *nesting*, and
 answered by not nesting rather than by refusing the disclosure, because "which agent" is a
 question the list can answer and the alternative is opening the session to find out.
 

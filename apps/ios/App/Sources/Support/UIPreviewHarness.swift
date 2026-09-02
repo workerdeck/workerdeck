@@ -51,6 +51,8 @@ enum UIPreview: String {
 /// to each other in a column of them, which no single-row preview can show. Same
 /// six sessions, same order, so the two can be put side by side.
 private struct SessionsPreview: View {
+  private static let hostId = UUID()
+
   private static func row(
     id: String, title: String, status: SessionStatus = .running, unseen: Int = 0,
     engine: ProfileEngine = .claude, model: String = "claude-opus-5", profile: String? = nil,
@@ -69,8 +71,16 @@ private struct SessionsPreview: View {
         ContextReading(totalTokens: Int($0 * 2_000), maxTokens: 200_000, percentage: $0)
       })
     return SessionRow(
-      hostId: "h1", hostName: hostName, local: true, adapter: engine.rawValue,
+      hostId: hostId.uuidString, hostName: hostName, local: true, adapter: engine.rawValue,
       state: sessionState(info), info: info, unseen: unseen)
+  }
+
+  private static func route(for row: SessionRow, step: Step? = nil) -> SessionRoute {
+    switch step?.kind {
+    case .agent: .session(hostId: hostId, sessionId: row.info.id, subagent: step?.key)
+    case .task: .session(hostId: hostId, sessionId: row.info.id, reveal: step?.key)
+    case nil: .session(hostId: hostId, sessionId: row.info.id)
+    }
   }
 
   private static var agents: [SubagentInfo] {
@@ -89,43 +99,46 @@ private struct SessionsPreview: View {
 
   private struct Item: Identifiable {
     let row: SessionRow
-    let open: Bool
-    var id: String { row.id }
+    var id: String { row.info.id }
   }
 
   private var items: [Item] {
     [
-      Item(row: Self.row(id: "1", title: "Session 1 Title", unseen: 5, context: 34, subagents: Self.agents), open: true),
-      Item(row: Self.row(id: "2", title: "Session 2 Title", status: .idle, unseen: 3, context: 62), open: false),
-      Item(row: Self.row(id: "3", title: "Session 3 Title", unseen: 5, context: 34, subagents: Self.agents), open: false),
+      Item(row: Self.row(id: "1", title: "Session 1 Title", unseen: 5, context: 34, subagents: Self.agents)),
+      Item(row: Self.row(id: "2", title: "Session 2 Title", status: .idle, unseen: 3, context: 62)),
+      Item(row: Self.row(id: "3", title: "Session 3 Title", unseen: 5, context: 34, subagents: Self.agents)),
       Item(
         row: Self.row(
           id: "4", title: "Rework the transcript reducer so replay holds across reconnects",
-          unseen: 3, profile: "staging", cost: 12.4, context: 88, subagents: Self.agents),
-        open: false),
+          unseen: 3, profile: "staging", cost: 12.4, context: 88, subagents: Self.agents)),
       Item(
         row: Self.row(
           id: "5", title: "Session 6 Title", status: .awaitingApproval, unseen: 12, context: 12,
-          pending: 1),
-        open: false),
+          pending: 1)),
       Item(
         row: Self.row(
           id: "6", title: "Codex parity sweep", engine: .codex, model: "gpt-5-codex",
-          context: 41),
-        open: false),
+          context: 41)),
     ]
   }
 
+  @State private var open: Set<String> = ["1"]
+  @State private var path: [SessionRoute] = []
+
   var body: some View {
-    NavigationStack {
+    NavigationStack(path: $path) {
       List {
         ForEach(items) { item in
           SessionCardView(
-            row: item.row, hostName: item.row.hostName, expanded: item.open, onToggle: {})
-          if item.open {
+            row: item.row, onOpen: { path.append(Self.route(for: item.row)) },
+            hostName: item.row.hostName, expanded: open.contains(item.id),
+            onToggle: { toggle(item.id) })
+          if open.contains(item.id) {
             ForEach(sessionSteps(item.row.info)) { step in
-              SessionStepRow(step: step)
-                .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
+              NavigationLink(value: Self.route(for: item.row, step: step)) {
+                SessionStepRow(step: step)
+              }
+              .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
             }
           }
         }
@@ -133,6 +146,17 @@ private struct SessionsPreview: View {
       .listStyle(.plain)
       .navigationTitle("Sessions")
       .navigationBarTitleDisplayMode(.inline)
+      .navigationDestination(for: SessionRoute.self) { route in
+        Text(String(describing: route)).font(.caption.monospaced()).padding()
+      }
+    }
+  }
+
+  private func toggle(_ id: String) {
+    if open.contains(id) {
+      open.remove(id)
+    } else {
+      open.insert(id)
     }
   }
 }
