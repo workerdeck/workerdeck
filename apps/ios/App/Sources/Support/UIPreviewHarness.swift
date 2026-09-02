@@ -617,8 +617,8 @@ struct UIPreviewHarness: View {
       value: "opus[1m]", resolvedModel: "claude-opus-5[1m]", displayName: "Opus (1M context)",
       description: "Opus 5 with 1M context · Best for everyday, complex tasks", primary: true),
     ModelOption(
-      value: "claude-fable-5[1m]", resolvedModel: "claude-fable-5", displayName: "Fable",
-      description: "Fable 5 · Most capable for your hardest and longest-running tasks",
+      value: "claude-fable-5-1[1m]", resolvedModel: "claude-fable-5-1", displayName: "Fable",
+      description: "Fable 5.1 · Most capable for your hardest and longest-running tasks",
       primary: true),
     ModelOption(
       value: "sonnet", resolvedModel: "claude-sonnet-5", displayName: "Sonnet",
@@ -629,6 +629,9 @@ struct UIPreviewHarness: View {
     ModelOption(
       value: "claude-opus-4-8", resolvedModel: "claude-opus-4-8", displayName: "Opus 4.8",
       description: "The previous Opus", primary: false),
+    ModelOption(
+      value: "claude-fable-5[1m]", resolvedModel: "claude-fable-5", displayName: "Fable 5",
+      description: "The previous Fable", primary: false),
   ]
 
   static let mcpServers: [McpServerStatusInfo] = [

@@ -4,7 +4,7 @@ import { readPref, writePref } from './storage.ts'
 // Kept in sync by hand with the Claude Code CLI's model picker, and the fallback for a profile-less server only.
 export const MODEL_OPTIONS: ModelOption[] = [
   { value: 'default', displayName: 'Default (recommended)', description: "The CLI's configured default model" },
-  { value: 'fable', displayName: 'Fable', description: 'Fable 5 · Most capable for your hardest and longest-running tasks' },
+  { value: 'fable', displayName: 'Fable', description: 'Fable 5.1 · Most capable for your hardest and longest-running tasks' },
   { value: 'opus', displayName: 'Opus', description: 'Opus 5 with 1M context · Best for everyday, complex tasks' },
   { value: 'sonnet', displayName: 'Sonnet', description: 'Sonnet 5 · Efficient for routine tasks' },
   { value: 'haiku', displayName: 'Haiku', description: 'Haiku 4.5 · Fastest for quick answers' },

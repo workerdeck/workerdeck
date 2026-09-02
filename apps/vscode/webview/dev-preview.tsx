@@ -72,7 +72,7 @@ const rows = [
     id: '2',
     title: 'Theme design rework',
     status: 'idle',
-    model: 'claude-fable-5',
+    model: 'claude-fable-5-1',
     cwd: '/x/silktree',
     project: { name: 'Silktree', root: '/x/silktree', icon: { type: 'glyph', name: 'tree-pine' } },
     lastActivityAt: Date.now() - 2_700_000,

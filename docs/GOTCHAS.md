@@ -41,7 +41,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - The model list is **only ever current models** — the older versions Claude Code's own picker
   files under "more models" are in neither `supportedModels()` nor `initializationResult()`
   (checked directly against the SDK). Which model names you get is a function of the pinned SDK
-  version, nothing else: 0.3.217 reported Opus 4.8, 0.3.221 reports Opus 5.
+  version, nothing else: 0.3.217 reported Opus 4.8, 0.3.221 reports Opus 5, 0.3.258 renamed the
+  Fable row to Fable 5.1 (`claude-fable-5-1[1m]` → `claude-fable-5-1`) and dropped Fable 5 from
+  `supportedModels()` entirely — it lives under the CLI's "more models" now, so the only place it
+  still exists for us is the static catalog. That is the concrete case the two-truths rule below
+  is about, and it is why taking a new SDK release is the *only* way a new model reaches us: the
+  version is pinned early in `pnpm-workspace.yaml`'s `minimumReleaseAgeExclude` for exactly this.
 - **Two model-list truths coexist; keep both.** The live `capabilities` event is the in-session
   truth for the model *switcher* (and the only carrier of slash commands, and of what the
   profile's default resolves to). The static catalog (`core/src/engines/*/catalog.ts`, served on
@@ -728,9 +733,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   never sends one — had no model switcher at all, and could not be switched for its whole life.
   The catalog on `ProfileInfo.models` is the fallback that fixes it.
 - **A catalog row's `value` is an alias; a session reports a resolved id.** Rows read `opus[1m]`,
-  `sonnet`, `claude-fable-5[1m]`; a running session reports `claude-opus-5[1m]`. Match through
+  `sonnet`, `claude-fable-5-1[1m]`; a running session reports `claude-opus-5[1m]`. Match through
   `ModelOption.resolvedModel` (authoritative when present, *including when it disagrees* — two
-  rows of one family differ only there), then fall back to the family token for a server too old
+  rows of one family differ only there) — note two live Fable rows now differ *only* by resolved
+  id (`claude-fable-5-1` beside `claude-fable-5`), so this is no longer hypothetical — then fall
+  back to the family token for a server too old
   to send it. Comparing `value` alone is why a chip reads `claude-opus-5[1m]` instead of "Opus 5";
   the rule is written once per client (`ModelSelect.optionMatches`, Swift `ModelOption.matches`)
   and the two must stay identical.

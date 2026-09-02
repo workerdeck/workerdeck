@@ -18,7 +18,7 @@ const PROVIDERS: Record<string, ProviderSetup> = {
   anthropic: {
     env: 'ANTHROPIC_API_KEY',
     model: 'claude-sonnet-5',
-    models: ['claude-fable-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5-20251001'],
+    models: ['claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5-20251001'],
     load: () => import('@ai-sdk/anthropic').then((m) => m.anthropic),
   },
   openai: {

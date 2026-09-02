@@ -94,8 +94,8 @@ describe('model catalogs', () => {
     }
   })
 
-  // The raw `supportedModels()` extraction the claude catalog was authored from (2026-08-05,
-  // SDK 0.3.221), replayed through the live shaping rules.
+  // The raw `supportedModels()` extraction the claude catalog was authored from (2026-09-02,
+  // SDK 0.3.258), replayed through the live shaping rules.
   const RAW_CLAUDE: SdkModelInfo[] = [
     {
       value: 'default',
@@ -112,10 +112,10 @@ describe('model catalogs', () => {
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
-      value: 'claude-fable-5[1m]',
-      resolvedModel: 'claude-fable-5',
+      value: 'claude-fable-5-1[1m]',
+      resolvedModel: 'claude-fable-5-1',
       displayName: 'Fable',
-      description: 'Fable 5 · Most capable for your hardest and longest-running tasks',
+      description: 'Fable 5.1 · Most capable for your hardest and longest-running tasks',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
@@ -142,7 +142,7 @@ describe('model catalogs', () => {
 
   it('claude catalog marks exactly one primary row per family', () => {
     const primaries = CLAUDE_CATALOG.models.filter((m) => m.primary)
-    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
+    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
   })
 
   it('codex catalog drops the internal auto-review row and keeps efforts open', () => {

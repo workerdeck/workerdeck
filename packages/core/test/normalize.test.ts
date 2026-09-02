@@ -14,7 +14,7 @@ describe('modelOptionsFromSdk', () => {
       resolvedModel: 'claude-opus-5[1m]',
       displayName: 'Opus (1M context)',
     },
-    { value: 'claude-fable-5[1m]', resolvedModel: 'claude-fable-5', displayName: 'Fable' },
+    { value: 'claude-fable-5-1[1m]', resolvedModel: 'claude-fable-5-1', displayName: 'Fable' },
     { value: 'sonnet', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet' },
     { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku' },
   ]
@@ -24,18 +24,19 @@ describe('modelOptionsFromSdk', () => {
   })
 
   it('names each row with its version, in capability order', () => {
-    expect(modelOptionsFromSdk(reported).map((m) => m.displayName)).toEqual(['Fable 5', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
+    expect(modelOptionsFromSdk(reported).map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
   })
 
   it('marks the newest of each family primary and files older versions behind it', () => {
     const withOlder = [
       ...reported,
+      { value: 'claude-fable-5[1m]', resolvedModel: 'claude-fable-5', displayName: 'Fable 5' },
       { value: 'claude-opus-4-8', resolvedModel: 'claude-opus-4-8', displayName: 'Opus 4.8' },
       { value: 'claude-sonnet-4-6', resolvedModel: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6' },
     ]
     const options = modelOptionsFromSdk(withOlder)
-    expect(options.filter((m) => m.primary).map((m) => m.displayName)).toEqual(['Fable 5', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
-    expect(options.filter((m) => !m.primary).map((m) => m.displayName)).toEqual(['Opus 4.8', 'Sonnet 4.6'])
+    expect(options.filter((m) => m.primary).map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
+    expect(options.filter((m) => !m.primary).map((m) => m.displayName)).toEqual(['Fable 5', 'Opus 4.8', 'Sonnet 4.6'])
   })
 
   it("keeps the CLI's name when a derived one would be ambiguous", () => {
