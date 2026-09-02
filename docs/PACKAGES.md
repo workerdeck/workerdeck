@@ -497,7 +497,10 @@ parked session is covered too; transport-agnostic on purpose (no push credential
 subscribes in it depends on exactly that: re-registering the same runner (`prepare()` lists it,
 then the caller registers what it returned) does not re-fire, while a *different* object under a
 known id — the rebuild of a parked or dormant session — is a new runner and does, so a rebuilt
-session is covered once and only once,
+session is covered once and only once. `registry.observe()` is the same hook for a caller that
+only has the built server (the CLI's keep-awake, an embedding host), and differs in one way that
+is the point: it **replays what is already registered**, so a listener attached after `listen()`
+cannot miss a session. It runs beside the constructor option, never replacing it,
 **session scope** — `CreateSessionRequest.scope`, opaque string tags assigned at create,
 immutable after, echoed on `SessionInfo`, and the only intra-deployment scoping primitive there
 is. The split is the design: WorkerDeck stores and *enforces* the tags, the embedder's
@@ -1553,7 +1556,22 @@ runs keyless; off loopback the CLI *generates* a key rather than serving open (p
 serves unauthenticated — `insecureHosts` entries double as accepted Host headers. The
 resolve/materialize seam has an assert that must stay: see `docs/GOTCHAS.md`. The web
 dashboard is a real runtime dep on `@workerdeck/web` — `resolveWebRoot()` is just its exported
-`dashboardDir` — so there is one dashboard, versioned in lockstep, not a vendored copy. Also
+`dashboardDir` — so there is one dashboard, versioned in lockstep, not a vendored copy.
+Also **holds the machine awake** while a session is waiting on it (`keep-awake.ts`,
+`--no-keep-awake` / `keepAwake: false`), because a laptop sleeping mid-turn drops the socket and
+burns the turn. CLI-only by design: a standalone gateway owns the machine's session, an
+embedding host does not and must not have its power policy changed by a library it imported —
+so there is no protocol and no server option, only `SessionRegistry.observe()` to watch
+registrations from outside the constructor. The predicate is the same set `guard` calls busy
+(`starting`, `running`, `awaiting_approval`) and is **recomputed from the registry, never
+refcounted**: a count has to be decremented on every exit a session can take — closed, failed,
+parked, evicted, drained — and one missed path pins the machine awake until the gateway stops.
+A 60s sweep is insurance on that recompute, not the mechanism. Per-platform it is one child
+process (`caffeinate -i -w <pid>` on macOS — never `-d`, keeping the screen lit was not what was
+asked for; `systemd-inhibit --what=idle:sleep --mode=block` on Linux), and both tie the child's
+life to *this* pid rather than to a kill we might not get to make, so a **SIGKILLed gateway
+releases within seconds instead of pinning the machine until reboot**. A missing binary is not
+an error: the gateway starts and runs normally on a box with neither. Also
 hosts `workerdeck guard` — *policy*, not a server route, and the enumeration of what a restart
 costs: an in-flight turn dies with the process (the CLI subprocess and the provider request both
 go), a pending permission request dies with it, and a running job is left claimed. Two more

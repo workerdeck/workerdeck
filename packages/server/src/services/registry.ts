@@ -8,9 +8,20 @@ export type SessionRegistryOptions = {
 export class SessionRegistry {
   #sessions = new Map<string, Runner>()
   #options: SessionRegistryOptions
+  #observers = new Set<(runner: Runner) => void>()
 
   constructor(options: SessionRegistryOptions = {}) {
     this.#options = options
+  }
+
+  // `onRegister` for a caller that only has the built server — an embedding host, or the CLI. Replays what is already
+  // registered so a late observer cannot miss a session, which is the whole difference from reading the option.
+  observe(listener: (runner: Runner) => void): () => void {
+    this.#observers.add(listener)
+    for (const runner of this.#sessions.values()) {
+      listener(runner)
+    }
+    return () => void this.#observers.delete(listener)
   }
 
   create(config: SessionRunnerConfig): Runner {
@@ -32,6 +43,9 @@ export class SessionRegistry {
     this.#sessions.set(runner.id, runner)
     if (existing !== runner) {
       this.#options.onRegister?.(runner)
+      for (const listener of this.#observers) {
+        listener(runner)
+      }
     }
     return runner
   }

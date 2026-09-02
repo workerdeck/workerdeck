@@ -9,7 +9,12 @@ import { createAuthSessionStore } from '../auth/auth-sessions.ts'
 import { createCliAuth, type CliAuth } from '../auth/auth.ts'
 import { hostnameOf, isLoopbackHostname, type ResolvedConfig } from '../config.ts'
 import { renderLoginPage } from '../auth/login-page.ts'
+import { createWakeLock, driveWakeLock, sessionsNeedTheMachine } from './keep-awake.ts'
 import { looksLikeAsset, resolveWithinRoot, sendHtml, serveFile } from './static.ts'
+
+// The backstop, not the mechanism: the lock is driven by session transitions, and this only has to catch a release
+// that no event announced. Long, because holding a laptop awake for one extra minute is the cheap failure.
+const WAKE_SWEEP_MS = 60_000
 
 export type Instance = {
   server: WorkerServer
@@ -218,6 +223,22 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
       : (req) => (hostAllowed(req) ? auth.authenticate(req) : null),
   })
 
+  const wake = config.keepAwake
+    ? createWakeLock({
+        onUnavailable: (reason) => {
+          if (!options.quiet) {
+            process.stderr.write(`[workerdeck] not holding the machine awake: ${reason}\n`)
+          }
+        },
+      })
+    : undefined
+  let sweep: ReturnType<typeof setInterval> | undefined
+  if (wake) {
+    driveWakeLock(server.registry, wake)
+    sweep = setInterval(() => wake.set(sessionsNeedTheMachine(server.registry.list())), WAKE_SWEEP_MS)
+    sweep.unref()
+  }
+
   const { port } = await server.listen(config.port, config.host)
   const displayHost = config.host === '0.0.0.0' || config.host === '::' ? 'localhost' : config.host
   const url = `http://${displayHost.includes(':') ? `[${displayHost}]` : displayHost}:${port}`
@@ -249,6 +270,9 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     if (!config.web) {
       line('  dashboard: off — bare gateway, /v1 and /auth only')
     }
+    if (!config.keepAwake) {
+      line('  keep-awake: off — this machine may sleep mid-turn')
+    }
     if (config.corsOrigins.length) {
       line(`  cors: ${config.corsOrigins.join(', ')} may call /v1 (still key-gated)`)
     }
@@ -274,6 +298,10 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     closed,
     drain: (drainOptions) => server.drain(drainOptions),
     close: async () => {
+      if (sweep) {
+        clearInterval(sweep)
+      }
+      wake?.release()
       await server.close()
       // The session table's writes are queued rather than awaited by the request that caused them, so a last-moment
       // login is lost unless the queue drains here.

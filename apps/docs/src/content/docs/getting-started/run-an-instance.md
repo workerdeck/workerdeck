@@ -112,6 +112,7 @@ your home directory.
 | `--allowed-origin <o>` / `--allowed-host <name>` (repeatable) | — | loopback names only |
 | `--insecure-host <name>` (repeatable) | — | none (config: `insecureHosts`) |
 | `--no-parking-store` | — | durable parking on |
+| `--no-keep-awake` | — | machine held awake while a session waits (config: `keepAwake`) |
 | `--no-web` | — | dashboard served (config: `web`) |
 | `--config <path>` | — | `./workerdeck.config.mjs` |
 | `--insecure`, `--open`, `--help`, `--version` | | |
@@ -153,6 +154,24 @@ answer exactly as before, everything else returns 404, and the dashboard build i
 looked for. Worth doing when this gateway is only ever reached from the VS Code extension, the
 iOS app, or a dashboard served somewhere else — a UI nobody opens is still surface. The banner
 says `dashboard: off` so the URL it prints doesn't read as a broken install.
+
+## Sleeping mid-turn
+
+A laptop that idles to sleep while a turn is running drops the socket and burns the turn, so the
+CLI holds the machine awake for as long as a session is waiting on it — a turn in flight, or a
+session blocked on a permission prompt you are coming back to. It releases the moment nothing is:
+idle, parked and closed sessions hold nothing, and a gateway left running overnight will not pin
+the machine.
+
+Only idle sleep is blocked; the display is never kept on, and closing the lid still sleeps.
+Under the hood it is `caffeinate -i` on macOS and `systemd-inhibit --what=idle:sleep` on Linux,
+each tied to the gateway's own pid, so even `kill -9` releases within seconds. Elsewhere — or
+where neither tool exists — it does nothing and says so once. `--no-keep-awake`
+(or `keepAwake: false`) turns it off.
+
+This is the CLI's job, not the server's: a standalone gateway owns the machine's session, while
+a host embedding `@workerdeck/server` owns its own power policy and should not have it changed
+by a library it imported.
 
 ## Restarting safely
 

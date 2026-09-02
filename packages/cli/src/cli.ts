@@ -56,6 +56,12 @@ Options
                             dashboard served elsewhere (repeatable, exact origin, no
                             wildcard; config: corsOrigins). Refused without auth. The
                             key is still required — this only permits the call.
+      --no-keep-awake       don't hold the machine awake while a session is waiting
+                            on it (config: keepAwake: false). By default a turn in
+                            flight, or a session blocked on an approval, blocks idle
+                            sleep — a laptop sleeping mid-turn drops the socket and
+                            burns the turn. The screen is never kept on, and the
+                            lock releases the moment nothing is waiting.
       --no-web              don't serve the web dashboard (config: web: false).
                             /v1 and the auth routes are unchanged; everything else
                             404s. For a gateway reached only from the VS Code

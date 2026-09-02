@@ -21,6 +21,9 @@ export type WorkerDeckConfig = WorkerServerOptions & {
   insecureHosts?: string[]
   webRoot?: string
   web?: boolean
+  // Hold the machine awake while a session is waiting on it. CLI-only by design: an embedding host owns its own
+  // power policy and must not have it changed by a library it imported.
+  keepAwake?: boolean
   // Refused unless auth is on: CORS on an open gateway lets any allowlisted page drive it with no credential.
   corsOrigins?: string[]
   apns?: ApnsConfig
@@ -43,6 +46,7 @@ export type CliFlags = {
   parking?: boolean
   insecure?: boolean
   web?: boolean
+  keepAwake?: boolean
   corsOrigins: string[]
   open?: boolean
   help?: boolean
@@ -178,6 +182,10 @@ export function parseArgs(argv: string[]): CliFlags {
         flags.web = false
         break
       }
+      case '--no-keep-awake': {
+        flags.keepAwake = false
+        break
+      }
       case '--cors-origin': {
         flags.corsOrigins.push(next(i, arg))
         i++
@@ -253,6 +261,7 @@ export type ResolvedConfig = {
   allowedHosts: Set<string> | null
   webRoot?: string
   web: boolean
+  keepAwake: boolean
   corsOrigins: string[]
   apns?: ApnsConfig
   open: boolean
@@ -361,6 +370,7 @@ export function resolveInstanceConfig(
       ])
 
   const web = flags.web ?? loaded.options.web ?? true
+  const keepAwake = flags.keepAwake ?? loaded.options.keepAwake ?? true
 
   const corsOrigins = flags.corsOrigins.length ? flags.corsOrigins : (loaded.options.corsOrigins ?? [])
   for (const origin of corsOrigins) {
@@ -391,6 +401,7 @@ export function resolveInstanceConfig(
     insecureHosts: _ih,
     webRoot: _w,
     web: _web,
+    keepAwake: _ka,
     corsOrigins: _cors,
     apns: _ap,
     ...serverOptions
@@ -423,6 +434,7 @@ export function resolveInstanceConfig(
     allowedHosts,
     webRoot: loaded.options.webRoot,
     web,
+    keepAwake,
     corsOrigins,
     apns: resolveApns(loaded),
     open: flags.open ?? false,
