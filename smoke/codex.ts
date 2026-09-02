@@ -306,11 +306,15 @@ async function threadItemUnionCanary(): Promise<void> {
   if (!codexBin) {
     return
   }
-  // Every variant present in 0.146.0. Adding to this list is the deliberate act of saying "we looked at this one".
+  // Every variant present in 0.151.0. Adding to this list is the deliberate act of saying "we looked at this one".
   const KNOWN = new Set([
     'userMessage',
     'hookPrompt',
     'agentMessage',
+    // 0.151.0. Output-only — `{id, name, namespace?, output}` with no arguments, and the union carries no paired
+    // `functionCall` arm, so there is nothing to draw a call from. Considered and left unmapped, as `dynamicToolCall`
+    // is: a call that renders as output alone would read as a result attached to nothing.
+    'functionCallOutput',
     'plan',
     'reasoning',
     'commandExecution',
@@ -367,7 +371,7 @@ async function threadItemUnionCanary(): Promise<void> {
     if (added.length > 0) {
       fail(
         'ThreadItem union',
-        `NEW variant(s) since 0.146.0: ${added.join(', ')} — each is currently invisible in the ` +
+        `NEW variant(s) since 0.151.0: ${added.join(', ')} — each is currently invisible in the ` +
           'transcript (an sdk_event that draws nothing). Map it in `engines/codex/types.ts` + ' +
           "`#itemCompleted`, or add it to this canary's KNOWN set to say it was considered",
       )

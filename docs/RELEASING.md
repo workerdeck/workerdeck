@@ -470,6 +470,35 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   burned a 160-warning comment backlog to 1, and split the largest test suites along their
   contracts. Config must be `.oxlintrc.json`; `oxfmt-ignore` is never the answer.
 
+  **1.1.0** — **the model rows caught up.** A **minor**, additive throughout, protocol stays **1**.
+  Claude Code 2.1.258 / agent SDK 0.3.258 renamed the primary Fable row — `supportedModels()` now
+  reports `claude-fable-5-1[1m]` → `claude-fable-5-1`, "Fable 5.1 · Most capable for your hardest
+  and longest-running tasks", and drops Fable 5 entirely (it lives under the CLI's "more models"
+  now) — so the catalog was re-read live from the pinned SDK rather than inferred: the wire id is
+  not guessable from the display name, and a wrong one fails as a *silently unselectable picker row*
+  rather than an error. The two-truths split did the work it exists for: the capabilities event
+  carries only current models, so Fable 5 leaves the live list while the static catalog keeps it as
+  a non-primary row beside Opus 4.8 and Sonnet 4.6 and the cold-start create form still offers it.
+  Two live Fable rows now differ **only** by `resolvedModel`, which makes "match through
+  `resolvedModel`, never value" load-bearing rather than hypothetical (`docs/GOTCHAS.md` says so
+  where the rule lives). `friendlyModel` needed no change on either the TS or the Swift side —
+  Haiku 4.5 had already covered the multi-segment version shape.
+
+  Cut with a **full dependency sweep, majors included**, which moved `@openai/codex` to **0.151.0**.
+  The codex catalog's documented extraction was re-run against that binary and the embedded model
+  table is **byte-identical**, so only the provenance stamp moved. The free canary earned its keep
+  on the same bump: `ThreadItem` gained a **`functionCallOutput`** variant. Considered and
+  deliberately left unmapped — it is output-only (`{id, name, namespace?, output}`, no arguments)
+  and the union carries no paired `functionCall` arm, so there is nothing to draw a call from and a
+  mapped one would read as a result attached to nothing. It joins `dynamicToolCall` in the KNOWN set,
+  which is the standing shape of that decision: mapping every variant is not the goal, knowing about
+  each one is.
+
+  What is **not** verified: `claude-fable-5-1` on the direct-API path
+  (`examples/provider-server.ts` is not the CLI) has never been run against a live key — the id
+  follows Anthropic's dashes-for-dots convention (`claude-opus-4-8`, `claude-sonnet-4-6`) and
+  nothing more.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
