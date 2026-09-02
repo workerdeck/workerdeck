@@ -19,15 +19,12 @@ describe('the compaction boundary', () => {
   it('measures exactly one line, and stays exact', () => {
     const h = itemHeight(compaction(), m)
     expect(h.px).toBe(m.line)
-    // Not `exact: false` — an unmeasured row makes the scrubber point a few pixels off for the
-    // rest of the session, which is the failure the height book exists to prevent.
     expect(h.exact).toBe(true)
   })
 
   it('is measured against the string it draws, never a copy of it', () => {
     const items = readFileSync(new URL('../src/components/terminal/items.tsx', import.meta.url), 'utf8')
     const height = readFileSync(new URL('../src/components/terminal/height.ts', import.meta.url), 'utf8')
-    // Both sides import the one constant. A literal in either file is the drift this guards.
     expect(items).toContain('COMPACTION_TEXT')
     expect(height).toContain('rowH(COMPACTION_TEXT, m, { extraPx })')
     expect(items).not.toContain(`'${COMPACTION_TEXT}'`)

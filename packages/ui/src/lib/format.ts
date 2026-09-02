@@ -1,11 +1,4 @@
-/**
- * The whole payload of a `compaction` row. The wire event carries no summary because codex's
- * `contextCompaction` item carries none, so the sentence *is* the content.
- *
- * It lives here, in a pure module, because the renderer (`terminal/items.tsx`) and the height book
- * (`terminal/height.ts`) must measure and draw the same string — height.ts cannot import the
- * `.tsx` without pulling React into a module the tests require to stay pure.
- */
+// Here rather than beside the row: height.ts must measure the string items.tsx draws, and cannot import a .tsx.
 export const COMPACTION_TEXT = 'context compacted · earlier turns summarised to fit the window'
 
 export function formatCost(usd: number | undefined): string {

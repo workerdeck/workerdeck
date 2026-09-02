@@ -72,12 +72,6 @@ export type TranscriptItem =
       errors?: string[]
     }
   | { kind: 'notice'; id: string; level: 'info' | 'error'; text: string }
-  /**
-   * The engine summarised the conversation in place to fit its context window. A boundary, not a
-   * message: nothing above it is retracted (that is `conversation_reset`, which empties `items`),
-   * and it carries no text of its own because the wire event carries none — codex's
-   * `contextCompaction` item is `{id, type}` and nothing more.
-   */
   | { kind: 'compaction'; id: string; parentToolUseId: string | null }
   | { kind: 'file_delivered'; id: string; path: string; bytes: number; description?: string }
 
@@ -335,9 +329,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       }
     }
 
-    // Deliberately unlike the reset above: it appends rather than empties. `contextUsage` is left
-    // alone too — the engine reports the post-compaction occupancy itself, and guessing here would
-    // put a number on the ring that no `context_usage` event ever said.
+    // Appends where the reset above empties, and leaves `contextUsage` alone: the engine reports post-compaction occupancy itself.
     case 'context_compacted': {
       return {
         ...base,

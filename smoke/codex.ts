@@ -345,8 +345,6 @@ async function threadItemUnionCanary(): Promise<void> {
     'userMessage',
     'subAgentActivity',
     'collabAgentToolCall',
-    // Mapped 2026-09-02 to a `context_compacted` event. The item is `{id, type}` and nothing more,
-    // so the row is a marker; the deprecated `thread/compacted` notification stays unhandled.
     'contextCompaction',
   ])
 

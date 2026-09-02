@@ -3,9 +3,6 @@ import { transcriptActivity, transcriptContent, transcriptProse } from '@workerd
 import { CodexRunner } from '../src/engines/codex/runner.ts'
 import { THREAD_RESULT, USAGE_A, collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
 
-// The `contextCompaction` item is `{id, type}` and nothing more — checked against 0.151.0's
-// generated schema. Before it was mapped it fell through to `sdk_event`, which no client renders,
-// so a compaction was a silent hole in the transcript.
 function compactionItem(id = 'compact-1') {
   return { id, type: 'contextCompaction' }
 }
@@ -25,7 +22,6 @@ describe('CodexRunner context compaction', () => {
     const compactions = ofType(events, 'context_compacted')
     expect(compactions).toHaveLength(1)
     expect(compactions[0]!.parentToolUseId).toBeNull()
-    // The whole point: it must not land on the channel nothing draws.
     expect(ofType(events, 'sdk_event').filter((e) => e.payload.type === 'codex.contextCompaction')).toHaveLength(0)
   })
 
@@ -48,12 +44,9 @@ describe('CodexRunner context compaction', () => {
     const events = collect(runner)
     await runner.start()
 
-    // No reset was emitted, the session id did not move, and the reading the engine reported after
-    // compacting stands — the runner must not invent a post-compaction occupancy of its own.
     expect(ofType(events, 'conversation_reset')).toHaveLength(0)
     expect(runner.info().sdkSessionId).toBe('thread-1')
     expect(runner.info().contextUsage).toBeDefined()
-    // The message that preceded the compaction is still in the stream.
     expect(ofType(events, 'assistant_message')).toHaveLength(1)
   })
 
@@ -80,8 +73,6 @@ describe('CodexRunner context compaction', () => {
   it('is a transcript row that scores no unread — it is not addressed to the human', () => {
     const body = { type: 'context_compacted', uuid: 'x' } as const
     expect(transcriptContent(body)).toBe(true)
-    // A compaction is the engine housekeeping, not news. Counting it would put a badge on a
-    // session nobody needs to open, and tick the dormancy/sort measure for the same non-event.
     expect(transcriptActivity(body)).toBe(0)
     expect(transcriptProse(body)).toBe(0)
   })

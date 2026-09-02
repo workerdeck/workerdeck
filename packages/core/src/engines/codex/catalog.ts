@@ -29,8 +29,7 @@ import type { ModelCatalog } from '../adapter.ts'
  */
 export const CODEX_CATALOG: ModelCatalog = {
   provenance:
-    'embedded model presets of @openai/codex@0.151.0 (darwin-arm64 binary), ' +
-    're-extracted 2026-09-02 and unchanged since 0.149.0',
+    'embedded model presets of @openai/codex@0.151.0 (darwin-arm64 binary), ' + 're-extracted 2026-09-02 and unchanged since 0.149.0',
   models: [
     {
       value: 'gpt-5.6-sol',

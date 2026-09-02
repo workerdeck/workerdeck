@@ -111,11 +111,6 @@ export function TranscriptItemView({
   }
 }
 
-/**
- * The cards spelling of a compaction boundary — a rule with the label through it, the same shape
- * `RecapRow` uses below, because both are boundaries rather than messages. The terminal spelling is
- * `terminal/items.tsx`'s `CompactionRow`, one grid row, and the two share `COMPACTION_TEXT`.
- */
 function CompactionRow() {
   return (
     <div data-slot="compaction" className="flex items-center gap-2 py-1">

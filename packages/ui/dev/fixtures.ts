@@ -230,8 +230,6 @@ const failure: TranscriptItem[] = [
       isError: true,
     },
   }),
-  // The boundary drawn when an engine summarises its history in place. It has no text of its own —
-  // the row's whole content is `COMPACTION_TEXT` — so the fixture is just the item.
   item({ kind: 'compaction', parentToolUseId: null }),
   item({ kind: 'notice', level: 'error', text: 'Session ended: the runner exited with code 1' }),
   item({

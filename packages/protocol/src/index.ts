@@ -214,25 +214,9 @@ export type SessionEventBody =
       type: 'conversation_reset'
       sdkSessionId?: string
     }
-  /**
-   * The engine summarised the conversation to fit its context window, in place, mid-session.
-   *
-   * **Not a `conversation_reset`.** A reset empties the history and its replay rule skips
-   * everything below it; a compaction *preserves* the history it summarised, so applying the
-   * reset's rule here would throw away exactly what compaction kept. It is a marker at a point
-   * in the transcript, and nothing before it is retracted.
-   *
-   * It is also the missing half of the context ring: occupancy drops sharply for a reason the
-   * user did not cause, and a ring that falls from 90% to 15% with no marker reads as a bug.
-   *
-   * Engine-neutral by design — codex auto-compacts today and the Claude engine may emit this
-   * later; a second event type would make every client draw the same row twice.
-   */
   | {
       type: 'context_compacted'
-      /** Stable transcript id — the row is addressable by bookmarks and the scrubber like any other. */
       uuid: string
-      /** Set when a sub-agent's own context was compacted, so the row nests where its work does. */
       parentToolUseId?: string | null
     }
   | {

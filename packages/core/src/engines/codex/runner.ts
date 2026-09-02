@@ -1761,9 +1761,6 @@ export class CodexRunner implements Runner {
       this.#emitToolUse(id, 'CodexImageView', { path: item.path }, agent)
       this.#emitToolResult(id, item.path, false, undefined, agent?.toolUseId ?? null)
     },
-    // Codex auto-compacts silently. Before this arm the item fell through to `sdk_event`, which no
-    // client renders — so the conversation kept going, the model quietly stopped being able to see
-    // the top of it, and the transcript said nothing had happened.
     contextCompaction: (_item, _active, id, agent) => {
       this.#emit({ type: 'context_compacted', uuid: id, parentToolUseId: agent?.toolUseId ?? null })
     },

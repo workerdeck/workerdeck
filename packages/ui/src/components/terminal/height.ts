@@ -622,8 +622,6 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
     case 'notice': {
       return rowH(item.text, m, { extraPx })
     }
-    // Measured against the exported constant, not a copy of the sentence: the two must not drift,
-    // and a mismatch here is a scrubber that points a few pixels off for the rest of the session.
     case 'compaction': {
       return rowH(COMPACTION_TEXT, m, { extraPx })
     }

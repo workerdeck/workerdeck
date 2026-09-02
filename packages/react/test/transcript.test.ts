@@ -562,12 +562,8 @@ describe('transcript reducer', () => {
     const state = run(before, [{ type: 'context_compacted', uuid: 'c1' }])
 
     expect(state.items.map((i) => i.kind)).toEqual(['user', 'compaction'])
-    // The two are opposites, and confusing them would throw away exactly what compaction preserves.
     expect(state.items[0]).toMatchObject({ kind: 'user' })
-    // The engine reports post-compaction occupancy itself; the reducer must not blank or guess it.
     expect(state.contextUsage?.percentage).toBe(93)
-
-    // Idempotent under replay: the same event twice is the same row, not two boundaries.
     expect(run(state, [{ type: 'context_compacted', uuid: 'c1' }]).items).toHaveLength(2)
   })
 
