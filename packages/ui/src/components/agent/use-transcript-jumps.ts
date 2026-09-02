@@ -7,19 +7,17 @@ import { gapBefore, type TranscriptRow } from './transcript-rows.ts'
 const AIM_PASSES = 4
 const AIM_SETTLE_MS = 50
 
-/** How long a send's re-pin outlasts the click — long enough to eat a trackpad's momentum tail. */
+// How long a send's re-pin outlasts the click — long enough to eat a trackpad's momentum tail.
 export const REPIN_HOLD_MS = 750
 
 type RepinTarget = Pick<ReturnType<typeof useStickToBottomContext>, 'scrollToBottom' | 'state'>
 
-/**
- * The send re-pin: a held, escape-proof pin, not one `scrollToBottom('instant')` — a trackpad's
- * trailing momentum tick reads as escape intent and aborts the one-shot before its first frame
- * (GOTCHAS "The send re-pin is a held pin"). Every line is load-bearing: clear the stale escape
- * flag, hold through the momentum tail, seed the `ignoreEscapes` record the library only
- * installs one rAF too late, and press the first scroll synchronously. Deliberate detach
- * (`stopScroll`, drag-selection) still wins immediately.
- */
+// The send re-pin: a held, escape-proof pin, not one `scrollToBottom('instant')` — a trackpad's
+// trailing momentum tick reads as escape intent and aborts the one-shot before its first frame
+// (GOTCHAS "The send re-pin is a held pin"). Every line is load-bearing: clear the stale escape
+// flag, hold through the momentum tail, seed the `ignoreEscapes` record the library only
+// installs one rAF too late, and press the first scroll synchronously. Deliberate detach
+// (`stopScroll`, drag-selection) still wins immediately.
 export function repinToBottom(stick: RepinTarget): void {
   const { state } = stick
   state.escapedFromLock = false

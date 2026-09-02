@@ -610,12 +610,10 @@ export type SessionInfo = {
   totalCostUsd?: number
   numTurns?: number
   activityCount?: number
-  /**
-   * Rows of the kind a person is actually waiting to read — see `transcriptProse`.
-   * Absent from a gateway that predates it — additive, so no `PROTOCOL_VERSION` bump —
-   * which is why every reader falls back to `activityCount`. This is the badge's number; `activityCount` stays the "has
-   * anything happened at all" measure that sorting and dormancy read.
-   */
+  // Rows of the kind a person is actually waiting to read — see `transcriptProse`.
+  // Absent from a gateway that predates it — additive, so no `PROTOCOL_VERSION` bump —
+  // which is why every reader falls back to `activityCount`. This is the badge's number; `activityCount` stays the "has
+  // anything happened at all" measure that sorting and dormancy read.
   proseCount?: number
   lastActivityAt?: number
   contextUsage?: ContextReading
@@ -658,26 +656,7 @@ export function transcriptActivity(body: SessionEventBody): number {
   }
 }
 
-/**
- * The unread badge's unit: output **addressed to the human**, not evidence of work.
- *
- * `transcriptActivity` counts a tool call and a paragraph alike, which is honest as
- * "how much has happened" and wrong as "how much is there to read" — a session that
- * tool-loops for a minute ticks 6, 7, 8 with nothing said yet. This scores the same
- * events through a narrower door:
- *
- * - assistant `text` blocks only — `thinking` is not addressed to anyone and `tool_use`
- *   is the noise being filtered out;
- * - the **sub-agent carve-out is inherited** (`parentToolUseId != null` scores 0): prose a
- *   sub-agent wrote to its parent is not addressed to the human either;
- * - a `turn_result` counts only when it **failed**, an interrupt or an error being a thing
- *   the human is owed; a successful turn already carried its own prose and would otherwise
- *   double-count every answer;
- * - `session_error` and `file_delivered` count — both are output, not work;
- * - `stream_delta` scores 0, exactly as in `transcriptActivity`. The badge is therefore
- *   correct within one poll of a message *completing*, never mid-stream, which is the
- *   deliberate price of leaving the streaming path alone.
- */
+// The narrower door beside transcriptActivity: output addressed to the human, not evidence of work.
 export function transcriptProse(body: SessionEventBody): number {
   if ('parentToolUseId' in body && body.parentToolUseId != null) {
     return 0

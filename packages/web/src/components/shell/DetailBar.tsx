@@ -42,7 +42,7 @@ export function DetailBody({ children }: { children: ReactNode }) {
   )
 }
 
-/** One label/value line inside a {@link DetailBody} — the detail pages' only row shape. */
+// One label/value line inside a {@link DetailBody} — the detail pages' only row shape.
 export function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">

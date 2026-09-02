@@ -28,7 +28,7 @@ export class EventLog {
     return this.#activityCount
   }
 
-  /** The unread badge's unit — see `transcriptProse`. Folded here so a restored log recomputes it. */
+  // The unread badge's unit — see `transcriptProse`. Folded here so a restored log recomputes it.
   get proseCount(): number {
     return this.#proseCount
   }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { clearDrafts, draftKey, readDraft, writeDraft } from '../src/lib/draft-store.ts'
 
-/** The package is typechecked with no DOM lib, so the store reaches storage through globalThis. */
+// The package is typechecked with no DOM lib, so the store reaches storage through globalThis.
 function installStorage(): Map<string, string> {
   const backing = new Map<string, string>()
   ;(globalThis as { localStorage?: unknown }).localStorage = {

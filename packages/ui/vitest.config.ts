@@ -1,10 +1,8 @@
 import { defineConfig } from 'vitest/config'
 
-/**
- * `ui` tests the pure modules only — no jsdom, no @testing-library, no render. Geometry needs
- * real text layout and is gated by `dev/height-audit.ts` in a browser instead, so a test here
- * that wanted a DOM is a test that belongs in the playground audit. See docs/DEVELOPMENT.md.
- */
+// `ui` tests the pure modules only — no jsdom, no @testing-library, no render. Geometry needs
+// real text layout and is gated by `dev/height-audit.ts` in a browser instead, so a test here
+// that wanted a DOM is a test that belongs in the playground audit. See docs/DEVELOPMENT.md.
 export default defineConfig({
   resolve: {
     conditions: ['@workerdeck/source'],

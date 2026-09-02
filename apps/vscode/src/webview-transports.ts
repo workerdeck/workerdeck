@@ -17,11 +17,9 @@ export class WebviewTransportHost {
     this.#onFrame = onFrame
   }
 
-  /**
-   * Socket ids are allocated by the webview document and restart at 1 with each one, so a message from a torn-down
-   * transport would be indistinguishable from live traffic on the document that replaced it. Closing a socket is
-   * asynchronous — its `close` event lands after `dispose()` returns — so silence has to be latched, not assumed.
-   */
+  // Socket ids are allocated by the webview document and restart at 1 with each one, so a message from a torn-down
+  // transport would be indistinguishable from live traffic on the document that replaced it. Closing a socket is
+  // asynchronous — its `close` event lands after `dispose()` returns — so silence has to be latched, not assumed.
   #send(msg: TransportToWebview): void {
     if (this.#disposed) {
       return

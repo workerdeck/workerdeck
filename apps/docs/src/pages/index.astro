@@ -13,14 +13,12 @@ const repo = 'https://github.com/workerdeck/workerdeck'
 // Resolved at build time so the hero badge can never drift from what's published.
 const version = cliPkg.version
 
-/**
- * The three clients, above the one server.
- *
- * Laid out as cards over a base layer rather than as four peers, because that is
- * the actual shape: the gateway owns the sessions and each client is a view onto
- * the same ones. Anyone landing here should be able to see in one glance that
- * their phone and their editor are looking at the same session.
- */
+// The three clients, above the one server.
+//
+// Laid out as cards over a base layer rather than as four peers, because that is
+// the actual shape: the gateway owns the sessions and each client is a view onto
+// the same ones. Anyone landing here should be able to see in one glance that
+// their phone and their editor are looking at the same session.
 const surfaces = [
   {
     title: 'Web dashboard',

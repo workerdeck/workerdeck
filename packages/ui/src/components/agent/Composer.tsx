@@ -38,10 +38,8 @@ export interface ComposerProps {
   fontSize?: number
   lineHeight?: number
   affordances?: TerminalAffordances | boolean
-  /**
-   * Where unsent text is remembered between mounts. The composer is remounted on every session switch, so without
-   * this a half-written prompt dies with the switch. Omit to keep the composer stateless across mounts.
-   */
+  // Where unsent text is remembered between mounts. The composer is remounted on every session switch, so without
+  // this a half-written prompt dies with the switch. Omit to keep the composer stateless across mounts.
   draft?: { initialText: string; save: (text: string) => void; clear: () => void }
   className?: string
   ref?: Ref<ComposerHandle>

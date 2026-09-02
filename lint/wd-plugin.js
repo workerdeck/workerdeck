@@ -70,12 +70,13 @@ const noJsdoc = {
           if (comment.type !== 'Block' || !comment.value.startsWith('*')) {
             continue
           }
-          if (/@type\b/.test(comment.value)) {
+          if (/@(type|deprecated)\b/.test(comment.value)) {
             continue
           }
           context.report({
             loc: comment.loc,
-            message: 'Use //, not /** */ (docs/CODE-STYLE.md § Comments). A JSDoc block invites prose; if the sentence reads naturally in a design doc, it belongs in docs/.',
+            message:
+              'Use //, not /** */ (docs/CODE-STYLE.md § Comments). A JSDoc block invites prose; if the sentence reads naturally in a design doc, it belongs in docs/.',
           })
         }
       },

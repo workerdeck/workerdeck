@@ -2,7 +2,7 @@
 // survive a browser that throws on access (Safari private mode, storage disabled by policy).
 // These four functions are the only place that try/catch is written.
 
-/** The stored string, or undefined if absent — or if storage itself is unavailable. */
+// The stored string, or undefined if absent — or if storage itself is unavailable.
 export function readPref(key: string): string | undefined {
   try {
     return localStorage.getItem(key) ?? undefined
@@ -11,7 +11,7 @@ export function readPref(key: string): string | undefined {
   }
 }
 
-/** Write a preference; `undefined` removes it. Never throws. */
+// Write a preference; `undefined` removes it. Never throws.
 export function writePref(key: string, value: string | undefined): void {
   try {
     if (value === undefined) {
@@ -22,11 +22,9 @@ export function writePref(key: string, value: string | undefined): void {
   } catch {}
 }
 
-/**
- * A stored JSON value, or `fallback` when it is absent or unparseable. Callers state the
- * shape they expect — usually a partial they then merge over their own defaults, since
- * nothing validates what a previous version (or a hand edit) left behind.
- */
+// A stored JSON value, or `fallback` when it is absent or unparseable. Callers state the
+// shape they expect — usually a partial they then merge over their own defaults, since
+// nothing validates what a previous version (or a hand edit) left behind.
 export function readJson<T>(key: string, fallback: T): T {
   const raw = readPref(key)
   if (raw === undefined) {

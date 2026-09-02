@@ -20,11 +20,9 @@ const PROVIDERS: Record<ProviderName, { env: string; defaultModel: string; load:
   },
 }
 
-/**
- * Resolve `[provider] [model-id]` from a smoke's argv tail, then load the provider factory.
- * Exits with the usage message rather than returning: a live smoke with no key has nothing to
- * do, and `script` names the pnpm script so the hint stays correct per caller.
- */
+// Resolve `[provider] [model-id]` from a smoke's argv tail, then load the provider factory.
+// Exits with the usage message rather than returning: a live smoke with no key has nothing to
+// do, and `script` names the pnpm script so the hint stays correct per caller.
 export async function resolveProvider(
   args: string[],
   script: string,
@@ -45,7 +43,7 @@ export async function resolveProvider(
   return { providerName, modelId, apiKeyEnv: provider.env, factory }
 }
 
-/** Quote a block of provider output so it reads as transcript rather than as log lines. */
+// Quote a block of provider output so it reads as transcript rather than as log lines.
 export function indent(text: string): string {
   return text
     .split('\n')

@@ -40,13 +40,11 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
   #pending: { kind: 'wd-open-subagent' | 'wd-reveal-tool-use'; toolUseId: string } | undefined
   #pendingNonce = 0
   #active: ActiveSession | undefined
-  /**
-   * The catch-up boundary, frozen when the session became active.
-   *
-   * It answers "where were you when you opened this?", so it cannot be re-read at push time: making the view
-   * visible marks the session seen, and `show()` awaits the focus command in between. Re-reading afterwards
-   * returned the mark that opening had just moved, which cost the recap seam, the dimming and the jump target.
-   */
+  // The catch-up boundary, frozen when the session became active.
+  //
+  // It answers "where were you when you opened this?", so it cannot be re-read at push time: making the view
+  // visible marks the session seen, and `show()` awaits the focus command in between. Re-reading afterwards
+  // returned the mark that opening had just moved, which cost the recap seam, the dimming and the jump target.
   #activeUnseen: { itemCount: number; since: number } | undefined
   #transports: WebviewTransportHost | undefined
 

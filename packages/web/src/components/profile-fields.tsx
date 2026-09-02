@@ -6,7 +6,7 @@ import type { SessionCapability } from '@workerdeck/protocol'
 
 export const CAPABILITIES: SessionCapability[] = ['web_search', 'download', 'web_fetch', 'deliver_file']
 
-/** A comma-separated field ("a, b, c") as a list, with blanks dropped. */
+// A comma-separated field ("a, b, c") as a list, with blanks dropped.
 export function commaList(value: string): string[] {
   return value
     .split(',')

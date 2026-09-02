@@ -14,6 +14,7 @@
     "publish:all": "pnpm publish -r --access public",
     "test": "turbo run test",
     "lint": "oxlint",
+    "lint:changed": "node scripts/lint-changed.mjs",
     "clean": "turbo run clean",
     "deploy:guard": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register packages/cli/src/cli.ts guard",
     "cli": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register packages/cli/src/cli.ts",

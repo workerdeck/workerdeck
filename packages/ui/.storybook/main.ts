@@ -1,12 +1,10 @@
 import type { StorybookConfig } from '@storybook/react-vite'
 import { defaultClientConditions } from 'vite'
 
-/**
- * The component catalog — component states in both themes, as opposed to `dev/`,
- * which measures one running terminal surface against the grid.
- *
- * Nothing here is published — `package.json`'s `files` is `build` + `src`.
- */
+// The component catalog — component states in both themes, as opposed to `dev/`,
+// which measures one running terminal surface against the grid.
+//
+// Nothing here is published — `package.json`'s `files` is `build` + `src`.
 const config: StorybookConfig = {
   stories: ['../stories/**/*.stories.@(ts|tsx)'],
   framework: { name: '@storybook/react-vite', options: {} },

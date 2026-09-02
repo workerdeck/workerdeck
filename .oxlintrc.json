@@ -20,7 +20,7 @@
     ],
     "wd/module-func-style": "error",
     "wd/no-stacked-jsdoc": "error",
-    "wd/no-jsdoc": "warn",
+    "wd/no-jsdoc": "error",
     "wd/max-comment-lines": "warn"
   },
   "overrides": [

@@ -4,7 +4,7 @@ import type { SessionInfo, SessionStatus } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { fakeRunner, listenOn } from './helpers.ts'
 
-/** A runner whose reported status the test drives, so a drain can be watched converging. */
+// A runner whose reported status the test drives, so a drain can be watched converging.
 function steerableRunner(id: string, config: SessionRunnerConfig, status: SessionStatus) {
   const inner = fakeRunner(id, config)
   let current = status

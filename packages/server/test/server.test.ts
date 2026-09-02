@@ -927,7 +927,7 @@ describe('shutdown', () => {
   })
 })
 
-/** A session with a live, fully attached client socket — the shape that used to hang `close()`. */
+// A session with a live, fully attached client socket — the shape that used to hang `close()`.
 async function attachSessionSocket(base: string, wsBase: string): Promise<WebSocket> {
   const createRes = await fetch(`${base}/sessions`, {
     method: 'POST',

@@ -1,7 +1,5 @@
-/**
- * Poll until `predicate` holds. The runner suites are event-driven with no completion
- * promise to await, so every one of them needs this; three of them used to define it.
- */
+// Poll until `predicate` holds. The runner suites are event-driven with no completion
+// promise to await, so every one of them needs this; three of them used to define it.
 export async function waitFor(predicate: () => boolean, ms = 2000): Promise<void> {
   const deadline = Date.now() + ms
   while (!predicate()) {

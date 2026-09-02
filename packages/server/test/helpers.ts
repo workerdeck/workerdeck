@@ -7,10 +7,8 @@ import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
 import type { ServerFrame, SessionInfo } from '@workerdeck/protocol'
 import type { WorkerServer } from '../src/index.ts'
 
-/**
- * Controllable stand-in for the Claude Agent SDK. `models` makes the fake query answer
- * `supportedModels`, which is what makes a runner emit `capabilities`.
- */
+// Controllable stand-in for the Claude Agent SDK. `models` makes the fake query answer
+// `supportedModels`, which is what makes a runner emit `capabilities`.
 export function fakeHarness(models?: Array<Record<string, unknown>>) {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -75,7 +73,7 @@ export function fakeHarness(models?: Array<Record<string, unknown>>) {
   return { emit, end, captured, interrupt, setModel, queryFn }
 }
 
-/** A query that never yields — for suites where the claude sessions are only ever built. */
+// A query that never yields — for suites where the claude sessions are only ever built.
 export function idleQuery(): Query {
   return {
     [Symbol.asyncIterator]() {
@@ -88,7 +86,7 @@ export function idleQuery(): Query {
   } as unknown as Query
 }
 
-/** The `queryFn` form of {@link idleQuery}. */
+// The `queryFn` form of {@link idleQuery}.
 export function idleHarness() {
   const query = idleQuery()
   return (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => {
@@ -97,10 +95,8 @@ export function idleHarness() {
   }
 }
 
-/**
- * Buffer every frame a socket receives and let a test await the first one that matches.
- * Matching against already-buffered frames is the point: attach races the assertion.
- */
+// Buffer every frame a socket receives and let a test await the first one that matches.
+// Matching against already-buffered frames is the point: attach races the assertion.
 export function frameCollector(ws: WebSocket) {
   const frames: ServerFrame[] = []
   const waiters: Array<{ match: (f: ServerFrame) => boolean; resolve: (f: ServerFrame) => void }> = []
@@ -133,10 +129,8 @@ export function frameCollector(ws: WebSocket) {
   return { frames, waitFor }
 }
 
-/**
- * A Runner that does nothing but echo its config back through `info()` — scope and title
- * included, which is exactly what `buildRunner` and the scope suites assert on.
- */
+// A Runner that does nothing but echo its config back through `info()` — scope and title
+// included, which is exactly what `buildRunner` and the scope suites assert on.
 export function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   let title: string | undefined
   return {
@@ -169,7 +163,7 @@ export function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   }
 }
 
-/** Bind a server to an ephemeral loopback port and hand back both API roots. */
+// Bind a server to an ephemeral loopback port and hand back both API roots.
 export async function listenOn(server: WorkerServer): Promise<{ base: string; wsBase: string }> {
   const { port } = await server.listen(0, '127.0.0.1')
   return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }

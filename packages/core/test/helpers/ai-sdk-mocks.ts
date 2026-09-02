@@ -3,18 +3,16 @@
 // to carry their own copy under five different names.
 import { convertArrayToReadableStream } from 'ai/test'
 
-/** The one usage record every mocked turn reports. Assertions elsewhere depend on these numbers. */
+// The one usage record every mocked turn reports. Assertions elsewhere depend on these numbers.
 export const USAGE = {
   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
   outputTokens: { total: 5, text: 5, reasoning: undefined },
   raw: undefined,
 }
 
-/**
- * A finished text turn. `perChar` splits the text into one delta per character, which is
- * how the streaming suites get more than one `stream_delta` to assert on; the default
- * single delta keeps the other suites' event logs readable.
- */
+// A finished text turn. `perChar` splits the text into one delta per character, which is
+// how the streaming suites get more than one `stream_delta` to assert on; the default
+// single delta keeps the other suites' event logs readable.
 export function streamText(text: string, { perChar = false }: { perChar?: boolean } = {}) {
   const deltas = perChar ? [...text] : [text]
   return {
@@ -28,12 +26,12 @@ export function streamText(text: string, { perChar = false }: { perChar?: boolea
   }
 }
 
-/** A turn that ends in one tool call. */
+// A turn that ends in one tool call.
 export function streamCall(toolCallId: string, toolName: string, input: unknown) {
   return streamCalls([{ id: toolCallId, tool: toolName, input }])
 }
 
-/** A turn that ends in a batch of tool calls — the parking suites depend on multi-call turns. */
+// A turn that ends in a batch of tool calls — the parking suites depend on multi-call turns.
 export function streamCalls(calls: Array<{ id: string; tool: string; input: unknown }>) {
   return {
     stream: convertArrayToReadableStream([
@@ -49,7 +47,7 @@ export function streamCalls(calls: Array<{ id: string; tool: string; input: unkn
   }
 }
 
-/** The doGenerate form of a text reply — the web_fetch digest pass is generate, not stream. */
+// The doGenerate form of a text reply — the web_fetch digest pass is generate, not stream.
 export function generateText(text: string) {
   return {
     content: [{ type: 'text' as const, text }],

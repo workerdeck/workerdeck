@@ -49,16 +49,14 @@ export type {
   WorkerServerOptions,
 } from './options.ts'
 
-/** How long a client gets to acknowledge the shutdown close frame before its socket is torn down. */
+// How long a client gets to acknowledge the shutdown close frame before its socket is torn down.
 const SOCKET_CLOSE_GRACE_MS = 250
 
-/**
- * Split live sessions into "will finish by itself" and "needs a person".
- *
- * `sessionState` is the vocabulary the dashboard, the session list and `workerdeck guard` already sort by, and it
- * draws exactly the line a drain needs: `working` covers starting/running and running subagents, while `attention`
- * covers a pending approval. Re-spelling that set here is how the two definitions would drift apart.
- */
+// Split live sessions into "will finish by itself" and "needs a person".
+//
+// `sessionState` is the vocabulary the dashboard, the session list and `workerdeck guard` already sort by, and it
+// draws exactly the line a drain needs: `working` covers starting/running and running subagents, while `attention`
+// covers a pending approval. Re-spelling that set here is how the two definitions would drift apart.
 function surveyDrain(registry: SessionRegistry): DrainReport {
   const working: string[] = []
   const awaitingHuman: string[] = []

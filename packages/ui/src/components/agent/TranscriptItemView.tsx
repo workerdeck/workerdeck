@@ -48,7 +48,7 @@ function NoticeRow({ item }: { item: Extract<TranscriptItem, { kind: 'notice' }>
   )
 }
 
-/** The item-view switch: one transcript item, drawn for the active variant. */
+// The item-view switch: one transcript item, drawn for the active variant.
 export function TranscriptItemView({
   item,
   fileUrl,

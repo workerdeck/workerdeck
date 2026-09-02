@@ -23,7 +23,7 @@ const OUT = join(pkgRoot, 'build/scoped.css')
 
 /* ── Selector rewriting ───────────────────────────────────────────────── */
 
-/** Nodes of the first compound (everything before the first combinator). */
+// Nodes of the first compound (everything before the first combinator).
 function splitFirstCompound(selector) {
   const first = []
   let rest = null
@@ -43,7 +43,7 @@ function stringify(nodes) {
   return nodes.map((n) => String(n)).join('')
 }
 
-/** `[data-theme='x']` (exactly, alone in its compound) → the theme value. */
+// `[data-theme='x']` (exactly, alone in its compound) → the theme value.
 function themeAttrValue(compound) {
   if (compound.length !== 1) {
     return null
@@ -55,14 +55,12 @@ function themeAttrValue(compound) {
   return node.value?.replace(/^['"]|['"]$/g, '') ?? null
 }
 
-/**
- * A whole-selector `[data-theme='X']` token block. The rewritten forms keep the
- * original cascade: the light block precedes the dark block in source, both at
- * equal specificity, so with no attribute the panel is light, and the dark
- * ancestor form wins its tie against the light base by source order. Self-pins
- * (`.wd-root[data-theme]`) carry one extra attribute of specificity so a panel
- * pinned light under a dark document stays light.
- */
+// A whole-selector `[data-theme='X']` token block. The rewritten forms keep the
+// original cascade: the light block precedes the dark block in source, both at
+// equal specificity, so with no attribute the panel is light, and the dark
+// ancestor form wins its tie against the light base by source order. Self-pins
+// (`.wd-root[data-theme]`) carry one extra attribute of specificity so a panel
+// pinned light under a dark document stays light.
 function mapThemeTokenBlock(value) {
   if (value === 'dark') {
     return [`${SCOPE}:where([data-theme='dark'], [data-theme='dark'] *)`, `${SCOPE} [data-theme='dark']`]

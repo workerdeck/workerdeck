@@ -16,7 +16,7 @@ export type Instance = {
   url: string
   port: number
   closed: Promise<void>
-  /** Let running turns finish before `close()`. See `WorkerServer.drain`. */
+  // Let running turns finish before `close()`. See `WorkerServer.drain`.
   drain: WorkerServer['drain']
   close: () => Promise<void>
 }

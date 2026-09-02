@@ -3,21 +3,19 @@ import { subagentLabel, type SessionInfo } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { subagentItems, type ToolCallItem } from '../terminal/blocks.ts'
 
-/**
- * The sub-agent frame machine: which agent frame is on screen, how it is entered (a host
- * `openSubagent` request or a Task row in the transcript), how it is left (Escape, the strip's
- * Back, or the host withdrawing), and what the transcript reveals on the way out. The frame
- * round-trips through the host's URL — the anti-loop rules live in GOTCHAS ("The sub-agent
- * frame round-trips through the URL"); here they mean: entry keys on the nonce alone, and the
- * report is deduped through a ref, so an echo of our own report is inert on arrival.
- */
+// The sub-agent frame machine: which agent frame is on screen, how it is entered (a host
+// `openSubagent` request or a Task row in the transcript), how it is left (Escape, the strip's
+// Back, or the host withdrawing), and what the transcript reveals on the way out. The frame
+// round-trips through the host's URL — the anti-loop rules live in GOTCHAS ("The sub-agent
+// frame round-trips through the URL"); here they mean: entry keys on the nonce alone, and the
+// report is deduped through a ref, so an echo of our own report is inert on arrival.
 export function useSubagentFrame(options: {
   sessionId: string | undefined
   items: TranscriptItem[]
   session: SessionInfo | undefined
-  /** Host request to reveal a transcript row; entering a frame must not eat a pending one. */
+  // Host request to reveal a transcript row; entering a frame must not eat a pending one.
   reveal?: { toolUseId: string; nonce: number }
-  /** Host request to enter a frame; `toolUseId: undefined` withdraws it (Back/Forward). */
+  // Host request to enter a frame; `toolUseId: undefined` withdraws it (Back/Forward).
   openSubagent?: { toolUseId: string; nonce: number }
   onSubagentChange?: (toolUseId: string | undefined) => void
 }) {

@@ -1,9 +1,7 @@
 export type Listener<T> = (payload: T) => void
 
-/**
- * The handles' listener registry. A throwing listener must never stop the ones queued behind it:
- * these fire from a socket callback, where an escaping error would take the connection with it.
- */
+// The handles' listener registry. A throwing listener must never stop the ones queued behind it:
+// these fire from a socket callback, where an escaping error would take the connection with it.
 export class Emitter<Events> {
   #listeners = new Map<keyof Events, Set<Listener<never>>>()
 
@@ -30,7 +28,7 @@ export class Emitter<Events> {
   }
 }
 
-/** 500ms doubling from a zero-based attempt count, capped at 10s. */
+// 500ms doubling from a zero-based attempt count, capped at 10s.
 export function reconnectDelay(retries: number): number {
   return Math.min(500 * 2 ** retries, 10_000)
 }

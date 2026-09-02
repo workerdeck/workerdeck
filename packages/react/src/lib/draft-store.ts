@@ -1,19 +1,17 @@
 import type { WorkerDeckClient } from '@workerdeck/client'
 
-/**
- * Unsent composer text, kept per session on the client that typed it.
- *
- * A draft is not session state: it never reaches the gateway and never syncs between clients. Two people looking at
- * one session are each mid-sentence in their own way, and a half-written prompt is not something either of them
- * asked to publish.
- *
- * It is persisted rather than merely held in memory because the two ways drafts got lost are different failures. A
- * session switch remounts the composer, which a module-scope map alone would survive; a Vite HMR reload or a VS Code
- * `dev:host` webview re-render replaces the whole document, which it would not.
- */
+// Unsent composer text, kept per session on the client that typed it.
+//
+// A draft is not session state: it never reaches the gateway and never syncs between clients. Two people looking at
+// one session are each mid-sentence in their own way, and a half-written prompt is not something either of them
+// asked to publish.
+//
+// It is persisted rather than merely held in memory because the two ways drafts got lost are different failures. A
+// session switch remounts the composer, which a module-scope map alone would survive; a Vite HMR reload or a VS Code
+// `dev:host` webview re-render replaces the whole document, which it would not.
 const KEY = 'workerdeck.drafts.v1'
 
-/** Drafts are a convenience, so the store stays small and drops the least recently touched first. */
+// Drafts are a convenience, so the store stays small and drops the least recently touched first.
 const MAX_DRAFTS = 20
 
 type Draft = { text: string; savedAt: number }

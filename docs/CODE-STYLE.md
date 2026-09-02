@@ -38,9 +38,10 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
     would throw the type away, so they stay arrow consts.
   - `wd/no-stacked-jsdoc` — two `/** */` blocks on one declaration is always a mistake: one of
     them documents the wrong symbol or went stale.
-  - `wd/no-jsdoc` (warn, becoming error once the backlog is swept) — bans `/** */` outside the
-    vendored `prompt-area` and `@type` tags. Exact where `max-comment-lines` is approximate: a
-    JSDoc block is the form the rule names, so there is no threshold to sit just under.
+  - `wd/no-jsdoc` (error) — bans `/** */` outside the vendored `prompt-area`. Exact where
+    `max-comment-lines` is approximate: a JSDoc block is the form the rule names, so there is no
+    threshold to sit just under. `@type` and `@deprecated` are exempt because those tags are read
+    by TypeScript itself — converting them to `//` would throw semantics away, not just prose.
   - `wd/max-comment-lines` (warn) — a **smoke alarm only**, and a weak one: see § Comments below
     for the actual rule, which no line-count check can express. Vendored code
     (`packages/ui/src/components/prompt-area`) is exempt because most of those blocks are the upstream library's
@@ -87,15 +88,18 @@ story — strictly worse than either alone. Line count cannot express this rule;
 The reference result is `packages/protocol/src/index.ts`: 2,144 lines and 1,199 comment lines
 became 923 lines and **zero** comments, with no change to a single token of code.
 
-**The tree has drifted since, and will mislead you.** That file no longer has zero comments, and
-`wd/no-jsdoc` reports ~97 blocks repo-wide outside the vendored `prompt-area`. So **neighbouring
-code is not evidence of the convention** — this file is. That is exactly how the rule was broken on
-2026-09-02: the compaction work matched the JSDoc it found beside the symbols it was extending and
-added 8 more blocks, all of them narrative already written into `docs/` in the same change.
+**The tree drifted after that sweep, and neighbouring code is not evidence of the convention** —
+this file is. That is exactly how the rule was broken on 2026-09-02: the compaction work matched
+the JSDoc it found beside the symbols it was extending and added 8 more blocks, all of them
+narrative already written into `docs/` in the same change. 97 blocks had accumulated repo-wide.
 
-`wd/no-jsdoc` is a **warning until that backlog is swept**, then it becomes an error. Do not read
-its severity as optional; it is exact (any `/** */` outside `prompt-area` and `@type` tags), and
-unlike `max-comment-lines` it has no threshold to game.
+They were converted to `//` the same day and `wd/no-jsdoc` is now an **error**, so the *form* can
+no longer drift. **The prose those blocks carry is a separate, unfinished job**: converting a
+JSDoc block to `//` keeps every word, and many of the 48 multi-line ones are still narrative that
+would read naturally in a design doc — which is the actual test. Deleting them wholesale was
+refused deliberately, because most carry real invariants and the rule above says a comment that
+carries critical information must reach `docs/` before it is removed, not instead of it.
+`wd/max-comment-lines` is what still watches that backlog.
 
 ### Structure and naming
 

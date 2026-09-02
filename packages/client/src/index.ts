@@ -305,7 +305,7 @@ export class WorkerDeckClient {
     return new this.#WebSocketImpl(url)
   }
 
-  /** The byte-serving routes' shared failure arm: `#call` owns the same rule for JSON routes. */
+  // The byte-serving routes' shared failure arm: `#call` owns the same rule for JSON routes.
   async #callRaw(url: string, init: NonNullable<Parameters<typeof fetch>[1]>, failure: string): Promise<Response> {
     const res = await this.#fetch(url, init)
     if (!res.ok) {

@@ -11,7 +11,7 @@ export type HarnessCapabilities = {
   usage?: Record<string, unknown>
 }
 
-/** Pass `capabilities` to also implement supportedModels/supportedCommands/usage. */
+// Pass `capabilities` to also implement supportedModels/supportedCommands/usage.
 export function fakeHarness(capabilities?: HarnessCapabilities) {
   const messages: SDKMessage[] = []
   let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
@@ -86,7 +86,7 @@ export function fakeHarness(capabilities?: HarnessCapabilities) {
   return { emit, end, captured, interrupt, setPermissionMode, setModel, queryFn }
 }
 
-/** Let the runner's queued microtasks and its message pump drain. */
+// Let the runner's queued microtasks and its message pump drain.
 export function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }

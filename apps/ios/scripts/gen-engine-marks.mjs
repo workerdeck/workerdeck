@@ -1,12 +1,10 @@
 #!/usr/bin/env node
-/**
- * Regenerate the engine-mark imagesets from `packages/ui`'s `EngineIcon.tsx` — generated so the
- * two can never drift, checked in because Xcode compiles the catalog with no node in that build,
- * and written as *template* images so `VendorPalette` tints them. See `docs/CLIENTS.md`
- * §`apps/ios`.
- *
- * Run: `node apps/ios/scripts/gen-engine-marks.mjs` (from the repo root).
- */
+// Regenerate the engine-mark imagesets from `packages/ui`'s `EngineIcon.tsx` — generated so the
+// two can never drift, checked in because Xcode compiles the catalog with no node in that build,
+// and written as *template* images so `VendorPalette` tints them. See `docs/CLIENTS.md`
+// §`apps/ios`.
+//
+// Run: `node apps/ios/scripts/gen-engine-marks.mjs` (from the repo root).
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'

@@ -34,7 +34,7 @@ export async function buildNav(): Promise<NavGroup[]> {
   })).filter((g) => g.items.length > 0)
 }
 
-/** Flat ordered list for prev/next pagination. */
+// Flat ordered list for prev/next pagination.
 export async function flatNav(): Promise<NavItem[]> {
   const groups = await buildNav()
   return groups.flatMap((g) => g.items)

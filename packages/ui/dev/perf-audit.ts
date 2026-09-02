@@ -3,7 +3,7 @@ export interface PerfReport {
   totalPx: number
   frames: number
   frameMs: { mean: number; p50: number; p95: number; max: number }
-  /** Frames over ~2× the 60Hz budget — visible hitches. */
+  // Frames over ~2× the 60Hz budget — visible hitches.
   dropped: number
   longTasks: { count: number; totalMs: number; maxMs: number }
   sweepMs: number

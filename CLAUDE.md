@@ -59,9 +59,10 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
   not a defect count — public exports have no in-repo caller.
 - `pnpm typecheck|test|build|lint|format`. In-package imports use explicit `.ts` extensions. Dev never
   builds. Releases go through **pnpm only**. Details in `docs/DEVELOPMENT.md`.
-- **Read `pnpm lint`'s warnings; never grep it for `error`.** The comment rules report as warnings
-  by design (a line count cannot express them), so an error-only filter reports clean while they
-  are firing.
+- **Read `pnpm lint`'s warnings; never grep it for `error`.** `wd/max-comment-lines` reports as a
+  warning by design, so an error-only filter reports clean while it fires. `pnpm lint:changed`
+  escalates the two comment rules to failures on changed files only, and a `PostToolUse` hook
+  (`.claude/settings.json`) runs it after every edit.
 - **Never `git push --tags`** — push the one tag by name. A local-only tag from an old cycle will
   publish itself and move every `latest` backwards; `docs/RELEASING.md` has the incident.
 - Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path,

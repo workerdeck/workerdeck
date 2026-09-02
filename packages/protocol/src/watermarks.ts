@@ -1,11 +1,9 @@
 export type Watermark = {
   itemCount: number
   activity: number
-  /**
-   * Prose rows read (`SessionInfo.proseCount`). Optional because a mark stored before
-   * prose counting existed cannot say — see `unseenCount`, which reads that absence as
-   * "caught up" rather than badging a whole history the operator has already seen.
-   */
+  // Prose rows read (`SessionInfo.proseCount`). Optional because a mark stored before
+  // prose counting existed cannot say — see `unseenCount`, which reads that absence as
+  // "caught up" rather than badging a whole history the operator has already seen.
   prose?: number
   turns: number
   seenAt: number
@@ -93,11 +91,9 @@ export class Watermarks {
   }
 }
 
-/**
- * The badge's number, in the best unit the pair can agree on: prose the human has not
- * read, else rows, else turns. The ladder is what keeps an older gateway (no `proseCount`
- * on the wire) badging exactly as it did before rather than going silent.
- */
+// The badge's number, in the best unit the pair can agree on: prose the human has not
+// read, else rows, else turns. The ladder is what keeps an older gateway (no `proseCount`
+// on the wire) badging exactly as it did before rather than going silent.
 export function unseenCount(mark: Watermark | undefined, info: { proseCount?: number; activityCount?: number; turns?: number }): number {
   if (!mark) {
     return 0

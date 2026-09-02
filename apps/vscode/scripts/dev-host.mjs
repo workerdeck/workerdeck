@@ -1,13 +1,11 @@
 #!/usr/bin/env node
-/**
- * The terminal dev loop: build once, open an Extension Development Host on this extension, and
- * keep rebuilding into `dist/` while it runs — `src/dev-reload.ts` picks the rebuild up.
- *
- *   node scripts/dev-host.mjs [folder-to-open]   # defaults to the repo root
- *
- * `pnpm install:local` is a different thing: it packages a .vsix into the editor you are reading
- * this in, and needs a manual "Developer: Reload Window".
- */
+// The terminal dev loop: build once, open an Extension Development Host on this extension, and
+// keep rebuilding into `dist/` while it runs — `src/dev-reload.ts` picks the rebuild up.
+//
+//   node scripts/dev-host.mjs [folder-to-open]   # defaults to the repo root
+//
+// `pnpm install:local` is a different thing: it packages a .vsix into the editor you are reading
+// this in, and needs a manual "Developer: Reload Window".
 import { spawn, spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'

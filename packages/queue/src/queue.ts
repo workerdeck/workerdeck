@@ -381,12 +381,10 @@ export class JobQueue {
     job.unsubscribe = runner.subscribe((event) => void this.#handleEvent(job, event))
   }
 
-  /**
-   * How a run that never produced a `turn_result` is written down. There is no authoritative
-   * usage for such a run, so it reports the tokens counted from the message stream, no cost
-   * and no turns. `turn_result` is the one path that does NOT come through here — it has real
-   * numbers — which is exactly the distinction five inline copies of this used to hide.
-   */
+  // How a run that never produced a `turn_result` is written down. There is no authoritative
+  // usage for such a run, so it reports the tokens counted from the message stream, no cost
+  // and no turns. `turn_result` is the one path that does NOT come through here — it has real
+  // numbers — which is exactly the distinction five inline copies of this used to hide.
   #abortPatch(job: RunningJob, error: string): Partial<JobInfo> {
     return {
       usage: { tokens: job.estimatedTokens, totalCostUsd: 0, numTurns: 0 },

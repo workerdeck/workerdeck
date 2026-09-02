@@ -567,8 +567,22 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   versions stay on the registry forever. Check `git tag` against `git ls-remote --tags origin`
   before any release: a local tag the remote has never seen is a loaded gun.
 - catalogs: when `@openai/codex` moves, refresh `packages/core/src/engines/codex/catalog.ts` —
-  the model table is extracted from the JSON embedded in the *platform binary*, and the file's
-  header comment carries the brace-matching `node -e` script verbatim. The **two-hop resolve is
+  the model table is extracted from the JSON embedded in the *platform binary*. The extraction
+  script lived in that file's header comment until 2026-09-02 and lives here now, which is where a
+  release procedure belongs:
+
+      node -e 'const d=require("fs").readFileSync(process.argv[1]);
+        const s=d.indexOf(`{\n  "models": [`);
+        let i=s,n=0; do{n+=(d[i]===123)-(d[i]===125);i++}while(n);
+        const c=JSON.parse(d.slice(s,i));
+        for(const m of c.models) console.log(m.slug, m.display_name,
+          m.visibility, m.supported_reasoning_levels.map(l=>l.effort).join(","))'\
+        "$(node -p 'const{createRequire}=require("module");
+          const w=require.resolve("@openai/codex/package.json");
+          createRequire(w).resolve("@openai/codex-darwin-arm64/package.json")
+            .replace("package.json","vendor/aarch64-apple-darwin/bin/codex")')"
+
+  The **two-hop resolve is
   not optional**: under pnpm's strict layout `@openai/codex-<platform>` resolves only from
   `@openai/codex`'s own location, never the repo root (the same two hops
   `resolveBundledCodexExecutable` makes). Mapping rules when diffing: drop the internal

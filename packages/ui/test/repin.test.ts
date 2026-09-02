@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { StickToBottomState } from 'use-stick-to-bottom'
 import { REPIN_HOLD_MS, repinToBottom } from '../src/components/agent/use-transcript-jumps.ts'
 
-/**
- * The send re-pin's contract against `use-stick-to-bottom`. The scenario that broke the
- * previous fix (`scrollToBottom('instant')` alone): the user scrolls up, sends, and one
- * trailing momentum wheel tick lands in the same task as the send — one frame before the
- * library installs its own animation record. The library's `handleWheel` escape guard reads
- * `!state.animation?.ignoreEscapes`, so everything below is about what the state looks like
- * *synchronously after* the repin call, not after a frame.
- */
+// The send re-pin's contract against `use-stick-to-bottom`. The scenario that broke the
+// previous fix (`scrollToBottom('instant')` alone): the user scrolls up, sends, and one
+// trailing momentum wheel tick lands in the same task as the send — one frame before the
+// library installs its own animation record. The library's `handleWheel` escape guard reads
+// `!state.animation?.ignoreEscapes`, so everything below is about what the state looks like
+// *synchronously after* the repin call, not after a frame.
 
 function fakeStick(overrides: Partial<StickToBottomState> = {}) {
   const scrollWrites: number[] = []

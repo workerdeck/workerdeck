@@ -99,7 +99,7 @@ export interface SessionPanelProps {
   affordances?: TerminalAffordances | boolean
   terminalMetrics?: TerminalMetrics
   scrubber?: boolean
-  /** Bookmarked transcript item ids — the host owns membership and persistence. */
+  // Bookmarked transcript item ids — the host owns membership and persistence.
   bookmarks?: readonly string[]
   onToggleBookmark?: (itemId: string) => void
   reveal?: { toolUseId: string; nonce: number }
@@ -162,11 +162,9 @@ export type SessionVitals = {
   cwd: TranscriptState['cwd']
   contextUsage: TranscriptState['contextUsage']
   rateLimits: TranscriptState['rateLimits']
-  /**
-   * When the newest window in `rateLimits` was reported, as event time — not receive time. External chrome (the
-   * VS Code status bar, iOS) cannot otherwise tell a live reading from one a days-old session just replayed.
-   * Absent means unknown, which is not the same as fresh.
-   */
+  // When the newest window in `rateLimits` was reported, as event time — not receive time. External chrome (the
+  // VS Code status bar, iOS) cannot otherwise tell a live reading from one a days-old session just replayed.
+  // Absent means unknown, which is not the same as fresh.
   rateLimitsUpdatedAt: number | undefined
   itemCount: number
   totalCostUsd: number
