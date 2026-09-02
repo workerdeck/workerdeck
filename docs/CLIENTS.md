@@ -15,6 +15,14 @@ Vite for the webview, both from `@workerdeck/source`), importing `client`/`react
 webview CSP has no external `connect-src`, and the bridge refuses URLs not belonging to a
 registered gateway.
 
+**`@types/vscode` is pinned with a tilde to the `engines.vscode` floor (`~1.106.0`), and a
+dependency sweep must not carrot it up.** The types version *is* the API surface you compile
+against, so types newer than the declared floor let a call to an API that does not exist in the
+oldest VS Code we claim to support typecheck cleanly and then throw at runtime, on exactly the
+users who cannot see the failure in review. `^` is wrong here for a subtle reason: `@types/vscode`
+spells the VS Code version in its *minor*, so `^1.106.0` happily resolves to 1.134 and silently
+buys the whole newer surface. Raise the two together or not at all.
+
 ### The panel: terminal variant at the editor's cell
 
 It runs the panel with `transcriptVariant: 'terminal'`, `focusComposerOnClick` (dead-space
@@ -463,6 +471,11 @@ branch in a reference app is a branch a reader must hold that teaches nothing ab
 The one thing still deferred upstream is an express-free
 `mcpTransport` mount; express stays here purely as a mounting mechanism for `/mcp` and the
 static SPA.
+- **`zod` stays on 3.x here while the rest of the monorepo is on 4.x — that is a pin, not a
+  straggler.** `@silkweave/core` peer-requires `zod ^3.25.0`, and this is the only package that
+  depends on silkweave. Nothing in `apps/embedded` imports `zod` directly, so the version reads
+  like dead weight a dependency sweep should bump; bumping it breaks the peer instead. Revisit
+  only when silkweave itself moves to zod 4.
 - **Every prefix the app server owns must be listed in `vite.config.ts`'s dev proxy, and a missing
   one does not fail loudly.** Vite answers the SPA's `index.html` with a **200**, so the caller gets
   HTML where it expected JSON and the feature quietly never loads. This happened for real when the

@@ -27,18 +27,18 @@
     "@workerdeck/core": "workspace:*",
     "@workerdeck/protocol": "workspace:*",
     "@workerdeck/queue": "workspace:*",
-    "ws": "^8.18.0"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.221",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.258",
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.16.1",
+    "@types/node": "^26.4.0",
+    "@types/ws": "^8.18.1",
     "@workerdeck/sandbox": "workspace:*",
-    "@swc-node/register": "^1.11.1",
-    "@swc/core": "^1.15.41",
-    "@types/node": "^22.10.0",
-    "@types/ws": "^8.5.13",
     "rimraf": "^6.1.3",
-    "tsdown": "^0.21.10",
-    "vitest": "^3.2.0"
+    "tsdown": "^0.22.14",
+    "vitest": "^4.1.11"
   },
   "author": "Tobias Strebitzer",
   "repository": {

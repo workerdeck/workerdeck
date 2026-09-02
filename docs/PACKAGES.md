@@ -397,6 +397,25 @@ when the call ends, and reachable from the guest only through the by-value bridg
 `write` / `list` over the `__host_vfs_*` host functions). The tab-side tool host builds one per
 bridged call, which is the reason it must stay a plain path→content map: a node-flavored fs
 emulation drags `node:buffer` in with it, and that package must run unpolyfilled.
+
+**QuickJS is held at `^0.31.0` on purpose — 0.32.0 is broken for us, and the caret hides it.**
+`quickjs-emscripten-core` and the two `@jitl/quickjs-*-asyncify` variants move as one set (0.32.0
+added a `freeHostRef` C→JS callback to the shared module-callbacks ABI). 0.32.0 fires that
+callback from the guest GC finalizers that run *inside* `JS_FreeRuntime`, and routes it through a
+module-level map keyed by runtime pointer — so the runtime disposer must free the runtime *before*
+deregistering its callbacks. Upstream swapped the order in the **sync** variant and left the
+**asyncify** variant deregistering first; both variants we ship are asyncify, so every script
+execution throws `QuickJSRuntime(rt = …) not found when trying to free HostRef(id = -2147483648)`
+out of `dispose()`. (That id is not corruption: `HostRefMap.nextId` starts at `INT32_MIN`, so it is
+simply the first host function the runtime registered.) Our disposal order in `run-script.ts` is
+already the correct one, and there is no safe workaround: catching the throw aborts
+`JS_FreeRuntime` mid-flight and leaks WASM heap on a per-execution runtime, and it masks real
+results — it turned an intended `timeout` into a `dispatch_error`. Upstream fixed it in
+`4ccfbf5af6` (#256), **unreleased** as of 0.32.0. Re-attempt the bump only on a release that
+contains that commit; it should then need no changes here. Note `^0.31.0` already refuses 0.32.0
+on its own (caret pins the minor on `0.x`), so only an explicit `pnpm update -L` can walk into
+this — which is exactly how it was found.
+
 ## `packages/queue`
 
 `JobQueue` + `QueueAdapter` (in-memory bundled; `claimNext` must stay atomic

@@ -2,6 +2,15 @@
   // Tests import the .tsx modules they cover (`items.tsx` owns `terminalBlocks`),
   // so this has to carry the same jsx setting the main config does — it extends
   // it for exactly that reason rather than restating anything.
+  //
+  // Node types are named here, not inherited: the main config compiles `src` with
+  // `types: []` on purpose, so a Node-only API sneaking into the browser layer is a
+  // type error. Tests read fixture files off disk (`node:fs`), so they opt back in —
+  // the same split `packages/react` makes, and for the same reason. Vitest 3 leaked
+  // the node types ambiently and hid the gap; vitest 4 does not.
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
   "include": ["test/**/*.ts"]
 }

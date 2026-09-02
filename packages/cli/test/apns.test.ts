@@ -62,7 +62,11 @@ async function startFakeApns(
 ): Promise<{ server: Http2Server; hosts: Record<ApnsEnvironment, string>; seen: Recorded[] }> {
   const seen: Recorded[] = []
   const server = createServer()
-  server.on('stream', (stream, headers) => {
+  // `stream` is annotated because @types/node (26.x) builds `Http2Server`'s event map with
+  // `Pick<Http2SessionEventMap, 'stream'>` — the *generic* session map, whose stream is a bare
+  // `Http2Stream` — instead of `ServerHttp2SessionEventMap`, whose stream is the
+  // `ServerHttp2Stream` a server actually emits. Node's runtime is right; the types are not.
+  server.on('stream', (stream: ServerHttp2Stream, headers) => {
     // Closing a server stream with an RST code errors the server's own stream object too, taking the test process down.
     stream.on('error', () => {})
     const chunks: Buffer[] = []
