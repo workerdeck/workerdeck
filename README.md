@@ -249,7 +249,7 @@ physical phone from a live gateway for the first time on 2026-08-20 — registra
 tapped notification opening the session it names are all confirmed; the lock-screen Approve/Deny
 action still is not. That first real pass immediately found two bugs (every tap aborted the app on
 a main-thread assert, and a dial could fail silently), so treat push as newly proven rather than
-settled. Expect the protocol to keep evolving: `PROTOCOL_VERSION` guards breaking
-changes and is at 7. See the [roadmap](docs/ROADMAP.md) for what's next.
+settled. `PROTOCOL_VERSION` guards breaking changes and is at **1** — reset at the 1.0.0 launch
+and locked since, so every breaking wire change now costs a bump and a mismatch banner.
 
 MIT © Tobias Strebitzer

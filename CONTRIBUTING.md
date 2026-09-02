@@ -103,7 +103,14 @@ Policy enforcement lives in configuration (`requireApiKey`, the one-time subscri
 
 Settled non-goals — please don't open PRs re-litigating them: serverless hosting (the SDK spawns a
 long-running subprocess with filesystem state), multi-tenant SaaS, and claude.ai authentication.
-See the [roadmap](docs/ROADMAP.md) for what *is* wanted next.
+
+**Scoped embedding is not multi-tenant SaaS**, and the distinction is worth stating rather than
+leaving to inference. `CreateSessionRequest.scope` plus `authorizeSession` let a gateway embedded
+in one app keep its end users out of each other's sessions — one gateway, one trust domain, one
+operator, with sessions belonging to something narrower than the gateway. What stays a non-goal is
+mutually-distrusting customers sharing infrastructure: the host's own edge is the authorization
+boundary, and scope is defense in depth behind it. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §Embedding.
 
 ## Security
 

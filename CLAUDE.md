@@ -19,8 +19,8 @@ doc for whatever you are about to touch:
   condition), and what each package's tests actually cover.
 - `docs/CODE-STYLE.md` — the code style rules and what enforces each (oxfmt, oxlint, convention).
 - `docs/RELEASING.md` — the wrapup checklist, the publish flow, and the release ledger.
-- `docs/ROADMAP.md` — shipped / next / open questions. Non-goals (don't relitigate): serverless
-  hosting, multi-tenant SaaS, claude.ai auth.
+- `CONTRIBUTING.md` §Out of scope — non-goals (don't relitigate): serverless hosting, multi-tenant
+  SaaS, claude.ai auth. There is no roadmap doc; what's next lives in `_docs/`.
 
 ## Package map
 

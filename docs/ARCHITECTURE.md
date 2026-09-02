@@ -2,8 +2,8 @@
 
 How WorkerDeck is put together: ten packages, four apps (iOS, VS Code, the docs site, and
 `apps/embedded` — the reference embedding), one dependency rule. Scope guards behind this shape:
-no serverless hosting, no multi-tenant SaaS, no claude.ai auth. For what's deliberately not built
-yet, see the [roadmap](./ROADMAP.md).
+no serverless hosting, no multi-tenant SaaS, no claude.ai auth — see
+[CONTRIBUTING.md](../CONTRIBUTING.md) §Out of scope for why those are settled.
 
 ## The dependency rule
 
