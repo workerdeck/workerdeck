@@ -20,6 +20,7 @@
     ],
     "wd/module-func-style": "error",
     "wd/no-stacked-jsdoc": "error",
+    "wd/no-jsdoc": "warn",
     "wd/max-comment-lines": "warn"
   },
   "overrides": [
@@ -46,7 +47,8 @@
     {
       "files": ["packages/ui/src/components/prompt-area/**"],
       "rules": {
-        "wd/max-comment-lines": "off"
+        "wd/max-comment-lines": "off",
+        "wd/no-jsdoc": "off"
       }
     }
   ],

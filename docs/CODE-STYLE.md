@@ -38,6 +38,9 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
     would throw the type away, so they stay arrow consts.
   - `wd/no-stacked-jsdoc` — two `/** */` blocks on one declaration is always a mistake: one of
     them documents the wrong symbol or went stale.
+  - `wd/no-jsdoc` (warn, becoming error once the backlog is swept) — bans `/** */` outside the
+    vendored `prompt-area` and `@type` tags. Exact where `max-comment-lines` is approximate: a
+    JSDoc block is the form the rule names, so there is no threshold to sit just under.
   - `wd/max-comment-lines` (warn) — a **smoke alarm only**, and a weak one: see § Comments below
     for the actual rule, which no line-count check can express. Vendored code
     (`packages/ui/src/components/prompt-area`) is exempt because most of those blocks are the upstream library's
@@ -83,6 +86,16 @@ story — strictly worse than either alone. Line count cannot express this rule;
 
 The reference result is `packages/protocol/src/index.ts`: 2,144 lines and 1,199 comment lines
 became 923 lines and **zero** comments, with no change to a single token of code.
+
+**The tree has drifted since, and will mislead you.** That file no longer has zero comments, and
+`wd/no-jsdoc` reports ~97 blocks repo-wide outside the vendored `prompt-area`. So **neighbouring
+code is not evidence of the convention** — this file is. That is exactly how the rule was broken on
+2026-09-02: the compaction work matched the JSDoc it found beside the symbols it was extending and
+added 8 more blocks, all of them narrative already written into `docs/` in the same change.
+
+`wd/no-jsdoc` is a **warning until that backlog is swept**, then it becomes an error. Do not read
+its severity as optional; it is exact (any `/** */` outside `prompt-area` and `@type` tags), and
+unlike `max-comment-lines` it has no threshold to game.
 
 ### Structure and naming
 

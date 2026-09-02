@@ -18,6 +18,10 @@ doc for whatever you are about to touch:
 - `docs/DEVELOPMENT.md` — tooling (pnpm/turbo/tsgo/oxlint/oxfmt, the `@workerdeck/source`
   condition), and what each package's tests actually cover.
 - `docs/CODE-STYLE.md` — the code style rules and what enforces each (oxfmt, oxlint, convention).
+  **Read it before writing code, every time, not only when style is the topic** — the rest of this
+  list is per-topic; this one applies to every edit. Its § Comments is the rule most often broken
+  by pattern-matching on neighbouring code, because the tree still carries pre-rule drift:
+  **avoid comments entirely, and prefer `//` over `/**`.**
 - `docs/RELEASING.md` — the wrapup checklist, the publish flow, and the release ledger.
 - `CONTRIBUTING.md` §Out of scope — non-goals (don't relitigate): serverless hosting, multi-tenant
   SaaS, claude.ai auth. There is no roadmap doc; what's next lives in `_docs/`.
@@ -55,6 +59,11 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
   not a defect count — public exports have no in-repo caller.
 - `pnpm typecheck|test|build|lint|format`. In-package imports use explicit `.ts` extensions. Dev never
   builds. Releases go through **pnpm only**. Details in `docs/DEVELOPMENT.md`.
+- **Read `pnpm lint`'s warnings; never grep it for `error`.** The comment rules report as warnings
+  by design (a line count cannot express them), so an error-only filter reports clean while they
+  are firing.
+- **Never `git push --tags`** — push the one tag by name. A local-only tag from an old cycle will
+  publish itself and move every `latest` backwards; `docs/RELEASING.md` has the incident.
 - Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path,
   CLI-control-request and codex process-contract changes need one. See `docs/DEVELOPMENT.md`.
 - Docs conventions: `docs/` and `_docs/` are `UPPER-CASE-DASH.md`. `_docs/` is **gitignored**, so

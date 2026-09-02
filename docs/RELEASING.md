@@ -4,7 +4,11 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
 
 ## Wrapup Config
 
-- check: `pnpm lint` + `pnpm typecheck`
+- check: `pnpm lint` + `pnpm typecheck`. **Read the warnings — do not grep for `error`.**
+  `wd(max-comment-lines)` is a warning by design (`docs/CODE-STYLE.md` § Comments says why a line
+  count cannot express the rule), so a run that greps for errors reports clean while the one check
+  that watches comment prose is firing. It fired on 2026-09-02 and was filtered out; the prose
+  shipped and needed a follow-up commit to strip.
 - test: `pnpm test`
 - push: yes — branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
@@ -551,6 +555,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   with `packages/*/package.json`, and skipping versions already on the registry — a half-failed
   run is safe to re-run, and a prerelease tag goes out under `next`. Manual fallback is `pnpm
   publish:all`. Gatekeeper audit first. MIT (ui ships `src/` — allowlisted in gatekeeper.json).
+
+  **Never `git push --tags`. Push the one tag by name:** `git push origin master && git push origin
+  v<x.y.z>`. On 2026-09-02 a `--tags` push sent a **local-only `v0.10.0`** that had been created
+  during the 0.10.0 cycle and never pushed. The publish workflow's guards did not catch it and
+  could not: at that tag the tree's `package.json` really does say 0.10.0, so the tag agreed with
+  the versions, and 0.10.0 had never reached the registry, so the skip-what-exists rule had nothing
+  to skip. It published 0.10.0 to nine packages and **moved every `latest` dist-tag backwards** —
+  `npm i workerdeck` served a weeks-old build on protocol 7. Recovery is
+  `npm dist-tag add <pkg>@<current> latest` per package (npm forbids unpublishing); the bad
+  versions stay on the registry forever. Check `git tag` against `git ls-remote --tags origin`
+  before any release: a local tag the remote has never seen is a loaded gun.
 - catalogs: when `@openai/codex` moves, refresh `packages/core/src/engines/codex/catalog.ts` —
   the model table is extracted from the JSON embedded in the *platform binary*, and the file's
   header comment carries the brace-matching `node -e` script verbatim. The **two-hop resolve is
