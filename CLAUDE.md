@@ -32,7 +32,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 
 | Package | What it is |
 | --- | --- |
-| `packages/protocol` | Wire types **and the few rules both sides must agree on** (`transcriptActivity`, `transcriptProse`, `transcriptContent`, `replayCoalesceKey`, `snapshotRetains`, `replayRetains`, result truncation, image refs; the sessions-list, unread and usage view models). Dependency-free, browser-safe. Breaking → bump `PROTOCOL_VERSION` (currently **1**: reset just before 1.0.0, and **locked as of that launch** — every breaking change now costs a bump and a mismatch banner). |
+| `packages/protocol` | Wire types **and the few rules both sides must agree on** (`transcriptActivity`, `transcriptProse`, `transcriptContent`, `replayCoalesceKey`, `snapshotRetains`, `replayRetains`, result truncation, image refs, tool titles; the sessions-list, unread and usage view models). Dependency-free, browser-safe. Breaking → bump `PROTOCOL_VERSION` (currently **1**: reset just before 1.0.0, and **locked as of that launch** — every breaking change now costs a bump and a mismatch banner). |
 | `packages/core` | The engines, shipped as adapters: `SessionRunner` (Claude SDK), `CodexRunner` (codex app-server), `AiSdkRunner` (provider). No transport. |
 | `packages/sandbox` | Untrusted-code boundary: QuickJS-NG WASM guest, map VFS, by-value host bridge. Leaf. |
 | `packages/queue` | `JobQueue` + `QueueAdapter`. `claimNext` must stay atomic. |

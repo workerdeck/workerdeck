@@ -1421,6 +1421,37 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this, because
   "Disable" on a server list otherwise reads as an edit to config.
 
+## Tool titles (the `tool_titles` event)
+
+- **A transcript row's label is a resolution, not a field.** `TranscriptItem` carries the wire
+  name only; the title is looked up at render time through `toolTitle(name, state.toolTitles)`.
+  Baking a title onto the item would put display text inside the identity the terminal variant
+  folds runs by (`foldsTogether`, `runSummary`, `replayCoalesceKey`), and every one of those keys
+  must stay the wire name.
+- **The event carries only what a client cannot derive.** Host-declared titles
+  (`HostToolDefinition.title`) and MCP-declared ones. Capability tools (`fs_write`, `eval_script`,
+  `web_fetch`, …) and the synthetic Codex names resolve client-side from `BUILTIN_TOOL_TITLES`, so
+  they cost no bytes and work in replay. It is deliberately **not** in `replayCoalesceKey`: the
+  reducer merges each event into what it already holds, and coalescing would keep only the last —
+  a disagreement between live and replayed state the moment a session has two producers. The
+  event is small and emitted once per producer, so there is nothing to win by collapsing it.
+- **An engine's own tool names are deliberately untitled.** `Bash`, `Read`, `Task` are the CLI's
+  published vocabulary; users read them, our own docs name them, and retitling them would rename
+  the thing rather than explain it. The table covers names we or the sandbox invented.
+- **Never derive a title from the wire name.** `atomic__AppContext` → "App Context" is worse than
+  the wire name, because it looks authored. No title means the wire name renders, unchanged.
+- **A title is untrusted display text.** It arrives from a remote MCP server, so
+  `sanitizeToolTitle` flattens it to one line, drops control characters, clamps it, and refuses a
+  title that only restates the name. It is a *label*, never an identifier: the permission prompt
+  keeps its own SDK-supplied `title`/`displayName`, and the wire name stays reachable in the
+  transcript (in the card's details, and as a faint suffix once a terminal row is expanded).
+- **Only the provider engine recovers MCP titles reliably.** `@ai-sdk/mcp`'s `tools()` builds the
+  AI SDK `ToolSet` and drops everything MCP-specific with it, so `connectMcpTools` also calls
+  `listTools()` and joins by name — which is where the annotation hints come from too, so an
+  embedder no longer needs its own `tools/list` loopback to recover `readOnlyHint`. The Agent
+  SDK's `McpServerStatus` tool type stops at the three hints and has no title at all, so the
+  claude engine probes for one and reports it only when the CLI happens to forward it.
+
 ## Attach replay (the hold, the cache, the five filters)
 
 - **Only a fresh attach (`replayingFrom === 0`) yields a hold target, and the reconnect's
@@ -1769,6 +1800,28 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   touches from an agent shell, and the app target has no test host, so every tap/press/selection
   rule above is verified by a human thumb or not at all. Budget for that rather than discovering it
   at the end of a gesture change.
+## Catch-up mode (`midTurnSend`)
+
+- **The behaviour being toggled is the CLI's, not ours.** A message sent while a turn is running
+  is folded into that turn by Claude Code itself — there is no Agent SDK option for it, and
+  `sendMessage` puts the text straight into the streaming input. So the *only* way to turn
+  catch-up off is for the client to hold the message and send it once the turn ends, which is
+  exactly what `useHeldSends` does. Nothing about the preference travels on the wire: no protocol
+  field, no command, no runner change.
+- **The other two engines never fold in the first place.** Codex and the provider engine queue a
+  mid-turn message to the next turn already. The setting is honest there — holding changes
+  nothing they would not have done — which is why it stays a client preference rather than an
+  engine capability.
+- **A held message is invisible until it is sent**, because the transcript's `user_message` comes
+  from the runner's echo. `HeldSendsBar` is the whole feedback: the count, the newest text, and a
+  "Send now". Without it a held message reads as a dropped one.
+- **The hold releases on `!busy`, and never applies to an ended session.** An interrupt therefore
+  flushes the queue, which is the right reading of "interrupt, then say the next thing"; a failed
+  or closed session sends immediately rather than queueing into a session that will never drain.
+- Each client owns the preference and its storage: web `workerdeck.mid-turn-send` in
+  localStorage, VS Code `workerdeck.catchUpMode` (a boolean, reloading the webview on change),
+  iOS its own app setting. The panel only ever sees `midTurnSend: 'fold' | 'hold'`.
+
 ## Web dashboard
 
 - **Overriding a colour token lower in the tree needs its *alias* too.** `theme.css` has two

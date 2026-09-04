@@ -292,6 +292,15 @@ server default" while the reducer *keeps* the last known model — the last even
 fold. And `system_init`, pure replace for the reducer but read **first-occurrence-only** by the
 server's `watchAuthSource` to decide an auth policy, with parking treating each as a resume point.
 
+`toolTitle`/`sanitizeToolTitle`/`BUILTIN_TOOL_TITLES` are the newest of the shared-rule family and
+the only one about *display text*: what a tool-call row is called. Titles reach a client two ways —
+declared ones ride the `tool_titles` event (host tool definitions and MCP servers, the two a client
+cannot know about), and the rest resolve out of the built-in table. Resolution is
+declared → built-in → the wire name, and the last step is a floor, never a transform: a title is
+never derived from the name. It lives here rather than in `ui` because iOS mirrors this package by
+hand and two clients must not disagree about what a tool is called; the full rule set, and why
+`Bash` is deliberately absent from the table, is in `docs/GOTCHAS.md` § Tool titles.
+
 `isAgentRecord`/`subagentLabel` are the sessions list's other half of the sub-agent rule. The
 tracker opens a record for every spawner call *and* for any nested event whose parent it never saw,
 so `SessionInfo.subagents` holds two different things wearing one shape: one carries a
@@ -1125,7 +1134,15 @@ a host's sidebars and dialogs cannot pick it up. It too is **`cards` only**: the
 theme is monospace by construction and takes its face from `--cw-font-mono` (which the VS Code
 webview repoints at the editor font, unconditionally, for exactly that reason). Clients that
 offer density and font as settings must say they are Cards-only or hide them — the dashboard
-hides them, the extension documents them. The working marker is
+hides them, the extension documents them.
+
+`midTurnSend` is the one panel prop that changes *behaviour* rather than drawing: `'hold'` keeps
+a message typed mid-turn in `useHeldSends`' queue and sends it when the turn ends, `'fold'` (the
+default) sends it straight through for the engine to fold in. It stays a client preference —
+there is no engine option to toggle — so every client owns its own storage and the panel only
+reads the resolved value. `docs/GOTCHAS.md` § Catch-up mode has the rule.
+
+The working marker is
 the **brand mark's own pulse** (`pulse.tsx`: `⋄ ◇ ◈ ◆` at 150ms = the 0.6s clock in
 `icon-loading.svg`), shared by the transcript's working row and each running tool row's gutter
 glyph so they beat together; it rests on `◆` under `prefers-reduced-motion`, free because the

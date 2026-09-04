@@ -549,6 +549,58 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   into `CONTRIBUTING.md` §Out of scope, which is where a contributor looks, and the open design
   questions into `_docs/`. README's stale "`PROTOCOL_VERSION` … is at 7" is corrected to 1.
 
+  **1.3.0** — **a tool call says what it is doing.** A **minor**, additive throughout, protocol
+  stays **1**. A transcript row drew the wire name and a JSON blob (`atomic__AppContext`
+  `{"spaceId":"…"}`), which is an identifier where the reader wanted a sentence. Now
+  `packages/protocol/src/tool-titles.ts` owns one shared rule — `BUILTIN_TOOL_TITLES`,
+  `toolTitle(name, titles?)`, `sanitizeToolTitle` — and both transcript variants draw the
+  resolved title with the wire name kept reachable. Titles reach a client two ways: declared ones
+  ride a new `tool_titles` event (host tool definitions via `HostToolDefinition.title`, and each
+  MCP server's own titles), and capability/synthetic names resolve client-side from the table, so
+  they cost no bytes and survive replay. The rule lives in `protocol` and not `ui` because iOS
+  mirrors that package by hand and two clients must not disagree about what a tool is called.
+
+  Four decisions worth the ledger. **Resolution happens at render time**, not as a field on the
+  transcript item — the wire name is the identity the terminal variant folds runs by
+  (`foldsTogether`, `runSummary`), and a title inside it would move what a row *draws* without
+  moving the row. **`tool_titles` is deliberately not in `replayCoalesceKey`**: the reducer
+  merges, coalescing keeps only the last map, and the two would disagree the moment a session has
+  two producers. **An engine's own tool names stay untitled** — `Bash`, `Read`, `Task` are Claude
+  Code's published vocabulary, which users read and our own docs name; the table covers only names
+  we or the sandbox invented, and per engine the result is still uniform. And **a title is
+  untrusted display text**: it arrives from a remote MCP server, so it is flattened to one line,
+  stripped of control characters, clamped by *code point* (a UTF-16 clamp splits a surrogate pair,
+  and the client mirroring this rule counts graphemes), and dropped when it only restates the name.
+  It is a label and never an identifier — the permission prompt keeps its own SDK-supplied title.
+
+  The provider-engine half turned out to be one call, not a workaround: `@ai-sdk/mcp`'s `tools()`
+  builds the AI SDK `ToolSet` and drops everything MCP-specific with it, but `client.listTools()`
+  sits right beside it and returns the spec's `title`, the `annotations.title` **and** the
+  `readOnlyHint`/`destructiveHint`/`openWorldHint` trio — so `connectMcpTools` joins the two by
+  name and an embedder no longer needs its own `tools/list` loopback to decide what to
+  auto-approve. The claude engine cannot match that: the Agent SDK's `McpServerStatus` tool type
+  models no title at all, so it probes for one and reports it only when the CLI forwards it.
+
+  Riding along: **catch-up mode is now a setting** on all three clients. It is the *CLI's*
+  behaviour — a message typed mid-turn is folded into the running turn, with no Agent SDK option
+  to turn it off — so "off" could only ever be a client-side hold, which is what `useHeldSends`
+  and `SessionPanel`'s `midTurnSend: 'fold' | 'hold'` do. Nothing about it travels on the wire.
+  A held message is not in the transcript yet (the `user_message` is the runner's echo), so
+  `HeldSendsBar` above the composer is its only trace and is not optional. The hold releases on
+  `!busy` — an interrupt therefore flushes, which is the right reading of "interrupt, then say the
+  next thing" — and never applies to an ended session. Stored per client: `workerdeck.mid-turn-send`
+  in the dashboard, `workerdeck.catchUpMode` in the extension, `AppSettings.catchUpMode` on iOS.
+
+  **iOS is at parity in the same cut**, both features, with one deliberate divergence recorded in
+  `apps/ios/README.md`: Swift resolves the title onto the item in the reducer rather than at draw
+  time, because `TerminalPlanCache` keys on the row value and a title held beside the items would
+  change what a row draws without invalidating its cached height. Kit tests 453 → 467.
+
+  What is **not** done: the held-sends hook has no unit test on the web side (`ui` tests are
+  pure-module, no jsdom, so a hook needs the playground); codex MCP titles are out of scope; and
+  iOS drops a held message if the socket is detached at flush time — pre-existing `handle?.send`
+  semantics, newly reachable now that a send can be deferred, and wanting a device check.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
