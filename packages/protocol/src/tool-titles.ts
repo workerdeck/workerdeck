@@ -29,8 +29,9 @@ export function sanitizeToolTitle(title: string | undefined, name?: string): str
   if (typeof title !== 'string') {
     return undefined
   }
-  const flat = title
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+  const flat = [...title]
+    .map((char) => (char < ' ' || char === '\u007f' ? ' ' : char))
+    .join('')
     .replace(/\s+/g, ' ')
     .trim()
   if (flat === '' || flat === name) {
