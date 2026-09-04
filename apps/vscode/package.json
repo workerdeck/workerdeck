@@ -1,7 +1,7 @@
 {
   "name": "workerdeck-vscode",
   "displayName": "WorkerDeck",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Watch, steer, and approve WorkerDeck agent sessions from VS Code: sessions in the bottom panel, gateways in the sidebar, remote projects as a virtual workspace.",
   "publisher": "workerdeck",
   "private": true,
@@ -292,6 +292,11 @@
           ],
           "default": "comfortable",
           "description": "Vertical spacing between messages in the WorkerDeck agent panel's Cards style. The Terminal style has one line height by definition and ignores this."
+        },
+        "workerdeck.catchUpMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deliver a message you type while a turn is running into that running turn, the way the Claude Code CLI does. Turn this off to hold it until the turn ends and send it as its own turn."
         },
         "workerdeck.fontSize": {
           "type": "number",

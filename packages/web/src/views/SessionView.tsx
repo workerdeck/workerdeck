@@ -17,7 +17,7 @@ import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { Trash2 } from 'lucide-react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
-import { getFontSize, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
+import { getFontSize, getMidTurnSend, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { useBookmarks } from '@/hooks/useBookmarks.ts'
@@ -60,6 +60,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
+  const [midTurnSend] = useState(getMidTurnSend)
   const [panelFontSize] = useState(getFontSize)
   // Read once: the workspace owns the live value, and re-seeding mid-session would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
@@ -112,6 +113,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       transcriptVariant={variant}
       transcriptDensity={density}
       transcriptFont={font}
+      midTurnSend={midTurnSend}
       fontSize={panelFontSize}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
       reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}

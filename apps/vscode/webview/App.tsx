@@ -51,6 +51,7 @@ export function App({
   bridge,
   density,
   variant,
+  midTurnSend,
   terminalMetrics,
   affordances,
   fontSize,
@@ -58,6 +59,7 @@ export function App({
   bridge: Bridge
   density: 'comfortable' | 'compact'
   variant: 'terminal' | 'cards'
+  midTurnSend: 'fold' | 'hold'
   terminalMetrics: TerminalMetrics
   affordances: boolean
   fontSize?: number
@@ -212,6 +214,7 @@ export function App({
         reveal={reveal}
         stickyPrompt
         transcriptDensity={density}
+        midTurnSend={midTurnSend}
         panelSurface="external"
         controlsSurface="external"
         focusComposerOnClick

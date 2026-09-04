@@ -176,6 +176,10 @@ lose by forgetting a second mount isn't one.
 - **`transcriptDensity` and `transcriptFont` reach `cards` only.** A terminal has one line height
   and is monospace by construction. Under `terminal` both are inert rather than broken — a host
   offering them as settings should say so, or hide them (the dashboard hides them).
+- **`midTurnSend: 'hold'` is a client-side hold, not an engine setting.** There is no option that
+  stops Claude Code folding a mid-turn message into the running turn, so `'hold'` queues the
+  message in the panel and sends it once the turn ends (an interrupt counts). A held message is
+  not in the transcript yet — `HeldSendsBar` is its only trace — so do not hide it.
 - **`scrubber` and `stickyPrompt` reach `terminal` only**, and by construction rather than policy.
   Both rest on the theme's premise — one line height and one cell make a row's height computable —
   and under `cards` the flags are inert.

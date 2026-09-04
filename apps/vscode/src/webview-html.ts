@@ -15,6 +15,10 @@ export function transcriptVariant(): 'terminal' | 'cards' {
   return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
 }
 
+export function catchUpMode(): boolean {
+  return vscode.workspace.getConfiguration('workerdeck').get<boolean>('catchUpMode') !== false
+}
+
 export function panelFontSize(): number {
   const wd = vscode.workspace.getConfiguration('workerdeck')
   const editor = vscode.workspace.getConfiguration('editor')

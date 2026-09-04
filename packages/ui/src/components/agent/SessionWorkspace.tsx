@@ -19,6 +19,7 @@ export interface SessionWorkspaceProps {
   transcriptVariant?: SessionPanelProps['transcriptVariant']
   transcriptDensity?: SessionPanelProps['transcriptDensity']
   transcriptFont?: SessionPanelProps['transcriptFont']
+  midTurnSend?: SessionPanelProps['midTurnSend']
   scrubber?: SessionPanelProps['scrubber']
   bookmarks?: SessionPanelProps['bookmarks']
   onToggleBookmark?: SessionPanelProps['onToggleBookmark']
@@ -51,6 +52,7 @@ export function SessionWorkspace({
   transcriptVariant,
   transcriptDensity,
   transcriptFont,
+  midTurnSend,
   scrubber,
   bookmarks,
   onToggleBookmark,
@@ -209,6 +211,7 @@ export function SessionWorkspace({
             transcriptVariant={transcriptVariant}
             transcriptDensity={transcriptDensity}
             transcriptFont={transcriptFont}
+            midTurnSend={midTurnSend}
             scrubber={scrubber}
             bookmarks={bookmarks}
             onToggleBookmark={onToggleBookmark}

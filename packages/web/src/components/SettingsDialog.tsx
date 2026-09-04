@@ -14,13 +14,16 @@ import {
 import { ThemeToggle } from './shell/ThemeToggle.tsx'
 import {
   getFontSize,
+  getMidTurnSend,
   getTranscriptDensity,
   getTranscriptFont,
   getTranscriptVariant,
   setFontSize,
+  setMidTurnSend,
   setTranscriptDensity,
   setTranscriptFont,
   setTranscriptVariant,
+  type MidTurnSend,
   type TranscriptDensity,
   type TranscriptFont,
   type TranscriptVariant,
@@ -148,6 +151,23 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   </div>
                 </>
               ) : null}
+            </Section>
+            <Section title="Messages">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-body-sm text-fg-2">
+                  Catch-up mode
+                  <span className="block text-label text-fg-4">Send a message typed mid-turn into the running turn.</span>
+                </span>
+                <PrefSelect<MidTurnSend>
+                  label="Catch-up mode"
+                  options={[
+                    { value: 'fold', label: 'On' },
+                    { value: 'hold', label: 'Off' },
+                  ]}
+                  read={getMidTurnSend}
+                  write={setMidTurnSend}
+                />
+              </div>
             </Section>
           </div>
         </DialogBody>

@@ -41,6 +41,16 @@ struct SettingsView: View {
       } footer: {
         Text(explanation)
       }
+
+      Section {
+        Toggle("Catch-up mode", isOn: $settings.catchUpMode)
+      } header: {
+        Text("Messages")
+      } footer: {
+        Text(
+          "Send a message you type while a turn is running into that running turn. Off holds it until the turn ends."
+        )
+      }
     }
     .navigationTitle("Settings")
     .navigationBarTitleDisplayMode(.inline)

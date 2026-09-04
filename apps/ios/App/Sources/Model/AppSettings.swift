@@ -106,11 +106,20 @@ final class AppSettings {
     didSet { defaults.set(transcriptFont.rawValue, forKey: Self.fontKey) }
   }
 
+  /// Catch-up mode: whether a message typed mid-turn is sent into the running
+  /// turn (the engine folds it in) or held until the turn ends. On by default,
+  /// matching every other client — the engine's own behaviour is the one nobody
+  /// had to ask for.
+  var catchUpMode: Bool {
+    didSet { defaults.set(catchUpMode, forKey: Self.catchUpKey) }
+  }
+
   private let defaults: UserDefaults
 
   private static let variantKey = "bi.atomic.workerdeck.ios.transcriptVariant"
   private static let densityKey = "bi.atomic.workerdeck.ios.transcriptDensity"
   private static let fontKey = "bi.atomic.workerdeck.ios.transcriptFont"
+  private static let catchUpKey = "bi.atomic.workerdeck.ios.catchUpMode"
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
@@ -129,6 +138,7 @@ final class AppSettings {
       ?? .comfortable
     transcriptFont =
       defaults.string(forKey: Self.fontKey).flatMap(TranscriptFont.init(rawValue:)) ?? .regular
+    catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true
   }
 }
 

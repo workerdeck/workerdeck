@@ -221,6 +221,7 @@ export function activate(context: vscode.ExtensionContext): void {
         e.affectsConfiguration('workerdeck.fontFamily') ||
         e.affectsConfiguration('workerdeck.transcriptDensity') ||
         e.affectsConfiguration('workerdeck.transcriptVariant') ||
+        e.affectsConfiguration('workerdeck.catchUpMode') ||
         e.affectsConfiguration('workerdeck.terminal') ||
         e.affectsConfiguration('editor.fontSize') ||
         e.affectsConfiguration('editor.lineHeight')

@@ -5,7 +5,7 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl, isLoopbackHost } from './hosts.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import { panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant } from './webview-html.ts'
+import { catchUpMode, panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant } from './webview-html.ts'
 import { WebviewHost } from './webview-host.ts'
 import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
@@ -77,6 +77,7 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
       'data-font-size': String(cell.fontSize),
       'data-line-height': String(cell.lineHeight),
       'data-affordances': terminalAffordances() ? 'on' : 'off',
+      'data-catch-up': catchUpMode() ? 'on' : 'off',
     }
   }
 

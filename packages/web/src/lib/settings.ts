@@ -64,3 +64,15 @@ export function getFontSize(): number | undefined {
 export function setFontSize(size: number | undefined): void {
   writePref(FONT_SIZE_KEY, size === undefined ? undefined : String(Math.round(size)))
 }
+
+export type MidTurnSend = 'fold' | 'hold'
+
+const MID_TURN_KEY = 'workerdeck.mid-turn-send'
+
+export function getMidTurnSend(): MidTurnSend {
+  return readPref(MID_TURN_KEY) === 'hold' ? 'hold' : 'fold'
+}
+
+export function setMidTurnSend(mode: MidTurnSend): void {
+  writePref(MID_TURN_KEY, mode)
+}

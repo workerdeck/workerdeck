@@ -22,6 +22,11 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     cookie machinery the web dashboard uses.
   - `Transcript.swift` — pure transcript reducer, a 1:1 port of
     `packages/react/src/lib/transcript.ts`. Keep the two in sync when transcript semantics change.
+    One deliberate divergence: a tool call's human-readable title (`tool_titles`, see
+    `ToolTitles.swift`) is resolved onto the `ToolCallItem` as it is reduced — and re-resolved when
+    a later event names it — where the web client resolves it at draw time from a context. The
+    terminal renderer's plan cache keys on the row, so a title that changed what a row draws
+    without changing the row would leave a cached height that is wrong.
   - `ReplayHold.swift` — opening a session without watching its history stream past. The end of
     the replay is **stated**, not detected: the `attached` frame arrives before the replayed
     events and names the seq they end on. What the backstop decides is only *when to give up*,
@@ -150,6 +155,14 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     Swift's is not, so both the row and the group sort carry an explicit insertion-index
     tiebreak; and `ViewConfig` decodes leniently over its defaults, the Swift spelling of the
     webview's spread.
+  - `HeldSends.swift` — catch-up mode's off switch, ported from the web `ui` package's
+    `useHeldSends`. Catch-up is the *engine's* behaviour — a message that arrives mid-turn is
+    folded into the running turn — so the only way to turn it off is to hold the message on the
+    client, and nothing about the preference (`AppSettings.catchUpMode`, on by default) travels on
+    the wire. The queue is pure and every mutation returns what to send now, so the ordering rules
+    are testable where a view model's would not be; `TranscriptViewModel` owns the instance,
+    flushes it when the session stops being running/awaiting-approval, and draws `HeldSendsBar`
+    above the composer while anything is in it.
   - `PromptToken.swift` — the `@file` and `/command` rules in one place: which words are tokens,
     which are being typed, which are finished, and how one is replaced. Here for the same reason
     as `MarkdownBlocks` — pure string logic whose interesting cases are all edges — and shared, so

@@ -106,6 +106,7 @@ Independent seams, each defaulting to the batteries-included behavior:
 | `affordances` | Terminal theme only: the hover fill and the hover-revealed copy — the things a real terminal cannot do. `false` for none; each costs no layout, so off is the pure article rather than a degraded mode. |
 | `transcriptDensity` | `'comfortable'` (a blank line between rows, what the Claude Code CLI leaves) or `'compact'`. **`cards` only** — a terminal has one line height, which is the premise. |
 | `transcriptFont` | `'sans'` or `'mono'` — one attribute on the panel root repointing the font token for that subtree only, so a monospace agent view cannot leak into your sidebars and dialogs. **`cards` only**: the terminal theme is monospace by construction. |
+| `midTurnSend` | `'fold'` (the default) sends a message typed mid-turn straight through, and the engine folds it into the running turn — the Claude Code CLI's catch-up behaviour. `'hold'` queues it in the panel and sends it once the turn ends. There is no engine option for this, so it is a client preference: you own the storage, the panel reads the resolved value, and nothing about it travels on the wire. |
 | `toolHost` | Options for the panel's own browser tool host, or `false` for none — the escape hatch for a host that wants to run the bridge itself. |
 
 `SessionVitals` carries `connection` precisely so an external bar can obey the panel's own rule: a

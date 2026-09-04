@@ -9,7 +9,7 @@ import { JOB_STATUS_META } from '@/components/shell/JobsSidebar.tsx'
 import { client } from '@/lib/client.ts'
 import { primaryHost } from '@/lib/hosts.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
-import { getFontSize, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
+import { getFontSize, getMidTurnSend, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { useJobs } from '@/hooks/useJobs.ts'
 import { useSessions } from '@/hooks/useSessions.ts'
 
@@ -44,6 +44,7 @@ export function JobView() {
   const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
+  const [midTurnSend] = useState(getMidTurnSend)
   const [panelFontSize] = useState(getFontSize)
   // Read once: re-seeding mid-view would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
@@ -80,6 +81,7 @@ export function JobView() {
       transcriptVariant={variant}
       transcriptDensity={density}
       transcriptFont={font}
+      midTurnSend={midTurnSend}
       fontSize={panelFontSize}
       scrubber
       stickyPrompt

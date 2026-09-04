@@ -74,6 +74,8 @@ export { Response, type ResponseProps } from './components/agent/Response.tsx'
 export { Reasoning, type ReasoningProps } from './components/agent/Reasoning.tsx'
 export { Loader } from './components/agent/Loader.tsx'
 export { ToolCallCard, type ToolCallCardProps, type ToolCallItem } from './components/agent/ToolCallCard.tsx'
+export { ToolTitleProvider, useToolTitle } from './components/agent/tool-titles.tsx'
+export { HeldSendsBar, useHeldSends, type HeldSend, type HeldSends } from './components/agent/held-sends.tsx'
 export { FileCard, type FileCardProps, type FileDeliveredItem } from './components/agent/FileCard.tsx'
 export { PermissionPrompt, type PermissionPromptProps } from './components/agent/PermissionPrompt.tsx'
 export {
