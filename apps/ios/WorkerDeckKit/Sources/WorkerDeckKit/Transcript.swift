@@ -112,6 +112,12 @@ public struct ToolCallItem: Sendable, Equatable, Identifiable {
   /// The `tool_use` block id; also the executionId for calls the model made.
   public var id: String
   public var name: String
+  /// The declared, human-readable label for `name`, resolved when the call was
+  /// reduced and re-resolved when a later `tool_titles` event names it. Resolved
+  /// here rather than at draw time because the terminal renderer's plan cache
+  /// keys on the row: a title that lived beside the items would change what a
+  /// row draws without changing the row, and the cached height would be wrong.
+  public var title: String?
   public var input: JSONValue
   /// Set when the call was made inside a subagent (Task tool).
   public var parentToolUseId: String?
@@ -128,12 +134,14 @@ public struct ToolCallItem: Sendable, Equatable, Identifiable {
   public var patch: FilePatch?
 
   public init(
-    id: String, name: String, input: JSONValue, parentToolUseId: String? = nil,
+    id: String, name: String, title: String? = nil, input: JSONValue,
+    parentToolUseId: String? = nil,
     status: ToolCallStatus, result: ToolCallResult? = nil, executionId: String? = nil,
     backend: ToolExecutionBackend? = nil, logs: [String]? = nil, patch: FilePatch? = nil
   ) {
     self.id = id
     self.name = name
+    self.title = title
     self.input = input
     self.parentToolUseId = parentToolUseId
     self.status = status
@@ -225,6 +233,10 @@ public struct TranscriptState: Sendable, Equatable {
   /// this being non-nil, not on `skillsList` alone: the flag says the engine
   /// *can* answer, this says it *has*. Not commands — see `SkillInfo`.
   public var skills: [SkillInfo]?
+  /// Titles declared for tool wire names (from `tool_titles`), merged as they
+  /// arrive. Only what a client cannot derive — `ToolTitles.title(for:titles:)`
+  /// folds the built-in table in on top of this.
+  public var toolTitles: [String: String]?
   /// Files the engine wrote on the host (from `file_produced`), keyed by the
   /// absolute path it reported. A tool card holding a `savedPath` looks itself
   /// up here to turn that path into a fetchable id.
@@ -258,7 +270,8 @@ public struct TranscriptState: Sendable, Equatable {
     status: SessionStatus = .starting, statusDetail: String? = nil, model: String? = nil,
     cwd: String? = nil, sdkSessionId: String? = nil, engine: ProfileEngine? = nil,
     models: [ModelOption]? = nil, commands: [SlashCommandInfo]? = nil,
-    skills: [SkillInfo]? = nil, producedFiles: [String: ProducedFile]? = nil,
+    skills: [SkillInfo]? = nil, toolTitles: [String: String]? = nil,
+    producedFiles: [String: ProducedFile]? = nil,
     defaultModel: String? = nil,
     permissionMode: PermissionMode? = nil, contextUsage: ContextUsage? = nil,
     rateLimits: [String: RateLimitInfo]? = nil, rateLimitsUpdatedAt: Double? = nil,
@@ -275,6 +288,7 @@ public struct TranscriptState: Sendable, Equatable {
     self.models = models
     self.commands = commands
     self.skills = skills
+    self.toolTitles = toolTitles
     self.producedFiles = producedFiles
     self.defaultModel = defaultModel
     self.permissionMode = permissionMode
@@ -510,6 +524,18 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     // so a skill deleted on disk has to be able to disappear from the list.
     next.skills = skills
 
+  case .toolTitles(let titles):
+    // Merged, never replaced: each producer answers for its own names. Calls
+    // already on screen are re-titled, because a title can land after the tool
+    // it names has run.
+    let merged = (next.toolTitles ?? [:]).merging(titles) { _, new in new }
+    next.toolTitles = merged
+    next.items = next.items.map { item in
+      guard case .toolCall(var call) = item else { return item }
+      call.title = ToolTitles.title(for: call.name, titles: merged)
+      return .toolCall(call)
+    }
+
   case .fileProduced(let file):
     // Keyed by PATH, because the lookup a card does is "here is the savedPath
     // in my tool input — is there anything to fetch?".
@@ -636,7 +662,8 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
           items,
           .toolCall(
             ToolCallItem(
-              id: toolUseId, name: name, input: input,
+              id: toolUseId, name: name,
+              title: ToolTitles.title(for: name, titles: next.toolTitles), input: input,
               parentToolUseId: payload.parentToolUseId, status: .running)))
       default:
         break

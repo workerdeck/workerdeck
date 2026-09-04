@@ -240,6 +240,7 @@ function ServerView({
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-hover"
                 >
                   <span className="min-w-0 flex-1 truncate font-mono text-label text-fg-1">{t.name}</span>
+                  {t.title ? <span className="min-w-0 shrink truncate text-label text-fg-4">{t.title}</span> : null}
                   <ChevronRight className="size-3.5 shrink-0 text-fg-4" />
                 </button>
               </li>
@@ -255,6 +256,7 @@ function ToolView({ tool }: { tool: McpServerToolInfo }) {
   const annotations = tool.annotations
   return (
     <div className="flex flex-col gap-3">
+      {tool.title ? <p className="text-body-sm font-medium text-fg-1">{tool.title}</p> : null}
       {tool.description ? (
         <p className="text-body-sm whitespace-pre-wrap text-fg-2">{tool.description}</p>
       ) : (

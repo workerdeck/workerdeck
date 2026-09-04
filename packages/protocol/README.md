@@ -55,7 +55,8 @@ server reports it in the `attached` (and `queue_attached`) frame so clients can 
 
 **Events (server → client)** — `system_init`, `status_changed`, `capabilities`, `model_changed`,
 `permission_mode_changed`, `context_usage`, `rate_limit`, `assistant_message`, `user_message`,
-`stream_delta`, `turn_result`, `permission_requested`, `permission_resolved`,
+`stream_delta`, `turn_result`, `tool_titles` (human-readable labels for tool calls the client
+cannot name on its own), `permission_requested`, `permission_resolved`,
 `execution_dispatched` / `execution_result` / `execution_failed` (tool-execution lifecycle,
 correlated by `executionId`), `file_delivered`, `sdk_event` (forward-compatible passthrough for
 unmodeled SDK messages), `session_error`, `session_closed`.

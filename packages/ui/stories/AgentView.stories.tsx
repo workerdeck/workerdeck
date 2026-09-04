@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
+import { ToolTitleProvider } from '../src/components/agent/tool-titles.tsx'
 import {
   TranscriptDensityProvider,
   TranscriptVariantProvider,
@@ -104,6 +105,16 @@ interface SessionEvent {
     result: {
       content: `export class SessionRegistry {\n  #sessions = new Map<string, ManagedSession>()\n\n  async create(opts: CreateOptions): Promise<SessionInfo> {\n    const id = randomUUID()\n    const runner = await createRunner(opts)\n    this.#sessions.set(id, { runner, info: { id, ...opts } })\n    return this.#sessions.get(id)!.info\n  }\n}`,
     },
+  } as unknown as TranscriptItem)
+
+  items.push({
+    kind: 'tool_call',
+    id: 'tc2',
+    name: 'atomic__CampaignsList',
+    parentToolUseId: null,
+    input: { spaceId: 'sp_9f2', limit: 20 },
+    status: 'settled',
+    result: { content: 'Returned 12 campaigns.' },
   } as unknown as TranscriptItem)
 
   items.push({
@@ -216,6 +227,7 @@ const state: TranscriptState = {
   status: 'idle',
   capabilities: ENGINE_CAPABILITIES.claude,
   items: richItems(),
+  toolTitles: { atomic__CampaignsList: 'Listing campaigns' },
   pendingApprovals: [],
   totalCostUsd: 0.127,
   lastSeq: 40,
@@ -235,21 +247,23 @@ function AgentViewShell({
   return (
     <TranscriptVariantProvider value={variant}>
       <TranscriptDensityProvider value={density}>
-        <div
-          data-slot="session-panel"
-          data-theme="dark"
-          style={
-            {
-              height: '100vh',
-              display: 'flex',
-              flexDirection: 'column',
-              background: 'var(--bg)',
-              ...(fontSize ? { '--wd-font-size': `${fontSize}px` } : {}),
-            } as React.CSSProperties
-          }
-        >
-          {children}
-        </div>
+        <ToolTitleProvider value={state.toolTitles}>
+          <div
+            data-slot="session-panel"
+            data-theme="dark"
+            style={
+              {
+                height: '100vh',
+                display: 'flex',
+                flexDirection: 'column',
+                background: 'var(--bg)',
+                ...(fontSize ? { '--wd-font-size': `${fontSize}px` } : {}),
+              } as React.CSSProperties
+            }
+          >
+            {children}
+          </div>
+        </ToolTitleProvider>
       </TranscriptDensityProvider>
     </TranscriptVariantProvider>
   )

@@ -93,6 +93,9 @@ export type TranscriptState = {
   models?: ModelOption[]
   commands?: SlashCommandInfo[]
   skills?: SkillInfo[]
+  // Only what the client cannot derive: host- and MCP-declared titles. `toolTitle()` folds the
+  // built-in table in on top of this.
+  toolTitles?: Record<string, string>
   // Keyed by the absolute path the runner reported: a tool card looks up the `savedPath` in its input and resolves it via `client.producedFileUrl`.
   producedFiles?: Record<string, ProducedFileRef>
 
@@ -276,6 +279,10 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
 
     case 'skills': {
       return { ...base, skills: event.skills }
+    }
+
+    case 'tool_titles': {
+      return { ...base, toolTitles: { ...base.toolTitles, ...event.titles } }
     }
 
     case 'file_produced': {

@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
 import { useToolResultFetcher } from './tool-result-fetch.tsx'
+import { useToolTitle } from './tool-titles.tsx'
 import { useToolResultImageSrc } from './tool-result-image.tsx'
 import { IMAGE_UNAVAILABLE, imagePlaceholder } from '../terminal/image-box.ts'
 
@@ -110,6 +111,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   const badge = STATE_BADGE[status]
   const isError = status === 'failed' || item.result?.isError === true
   const Icon = toolIcon(item.name)
+  const title = useToolTitle(item.name)
 
   const resultText = item.result?.text ?? ''
   const clipped = !fullResult && resultText.length > RESULT_PREVIEW_CHARS
@@ -119,6 +121,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
 
   const details = open ? (
     <div className="flex flex-col gap-2 border-t border-border p-2.5">
+      {title ? <p className="font-mono text-label text-fg-4">{item.name}</p> : null}
       <PlainPayload code={JSON.stringify(item.input, null, 2)} language="json" label="Parameters" />
       {item.logs?.length ? <PlainPayload code={item.logs.join('\n')} label="Logs" /> : null}
       {item.result !== undefined ? (
@@ -177,7 +180,9 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
         )}
       >
         <Icon className="size-3.5 shrink-0 text-fg-3" />
-        <span className="shrink-0 font-mono text-body-sm font-medium text-fg-1">{item.name}</span>
+        <span className={cn('shrink-0 text-body-sm font-medium text-fg-1', title === undefined && 'font-mono')} title={item.name}>
+          {title ?? item.name}
+        </span>
         {item.backend && item.backend !== 'server' ? (
           <Badge variant="neutral" className="shrink-0">
             {item.backend}

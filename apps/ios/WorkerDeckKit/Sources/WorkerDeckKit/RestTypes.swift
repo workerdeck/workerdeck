@@ -774,6 +774,10 @@ public struct SessionFileInfo: Decodable, Sendable, Equatable, Identifiable {
 /// to call it.
 public struct McpServerToolInfo: Decodable, Sendable, Equatable, Identifiable {
   public let name: String
+  /// What the server calls this tool for a human, where it declares one. Already
+  /// sanitized by the gateway — shown beside the name, never instead of it: the
+  /// name is what a permission rule has to spell.
+  public let title: String?
   public let description: String?
   public let annotations: Annotations?
   /// The tool's JSON Schema, where the engine reports one — **engine-dependent,
@@ -785,10 +789,11 @@ public struct McpServerToolInfo: Decodable, Sendable, Equatable, Identifiable {
   public var id: String { name }
 
   public init(
-    name: String, description: String? = nil, annotations: Annotations? = nil,
-    inputSchema: JSONValue? = nil
+    name: String, title: String? = nil, description: String? = nil,
+    annotations: Annotations? = nil, inputSchema: JSONValue? = nil
   ) {
     self.name = name
+    self.title = title
     self.description = description
     self.annotations = annotations
     self.inputSchema = inputSchema

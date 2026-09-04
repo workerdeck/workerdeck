@@ -373,7 +373,11 @@ public enum TerminalPlanner {
     // wants from a row they are not going to open.
     let todos = TerminalTodos.preview(name: call.name, input: call.input)
     let inputPreview = todos?.summary ?? TermFmt.toolInputPreview(call.input)
-    var header = "\(call.name)(\(inputPreview))"
+    // The title leads and the wire name follows it open, mirroring the web
+    // terminal row: the label is what the reader is looking for, the name is
+    // what a permission rule or an `allowedTools` entry has to spell.
+    var header = "\(call.title ?? call.name)(\(inputPreview))"
+    if call.title != nil, open { header += " · \(call.name)" }
     if let backend = call.backend, backend != "server" { header += " · \(backend)" }
 
     var lines = wrapBody(

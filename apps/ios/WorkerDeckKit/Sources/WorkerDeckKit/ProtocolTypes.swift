@@ -918,6 +918,10 @@ public enum SessionEventBody: Sendable, Equatable {
   /// The skills this engine can reach, replaced whole each time. Only engines
   /// whose record sets `skillsList` ever send it.
   case skills([SkillInfo])
+  /// Human-readable titles for tool wire names, merged into whatever is already
+  /// known rather than replacing it: each producer (MCP servers, the sandbox's
+  /// capability set) answers for its own names only.
+  case toolTitles([String: String])
   /// The engine wrote a host file and handed over its path — the
   /// host-filesystem sibling of `fileDelivered`.
   case fileProduced(ProducedFile)
@@ -984,7 +988,7 @@ extension SessionEvent: Decodable {
     case requestId, behavior, resolvedBy, message, request
     case executionId, toolName, backend, deferred, expiresAt, output, logs, durationMs
     case reason, error, path, bytes, description, payload
-    case skills, fileId, mediaType, toolUseId
+    case skills, titles, fileId, mediaType, toolUseId
     case sdkSessionId, uuid, parentToolUseId
   }
 
@@ -1008,6 +1012,8 @@ extension SessionEvent: Decodable {
           defaultModel: try container.decodeIfPresent(String.self, forKey: .defaultModel))
       case "skills":
         body = .skills(try container.decode([SkillInfo].self, forKey: .skills))
+      case "tool_titles":
+        body = .toolTitles(try container.decode([String: String].self, forKey: .titles))
       case "file_produced":
         body = .fileProduced(
           ProducedFile(

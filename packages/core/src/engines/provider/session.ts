@@ -1,8 +1,16 @@
 import type { LanguageModel, ToolSet } from 'ai'
+import { sanitizeToolTitle } from '@workerdeck/protocol'
 import type { McpServerConfigWire, McpServerStatusInfo, McpServerToolInfo, ProfileInfo, SessionCapability } from '@workerdeck/protocol'
 import { createVfs } from '@workerdeck/sandbox'
 import { AiSdkRunner, type AiSdkRunnerConfig } from './runner.ts'
-import { createToolContext, withHostTools, withMcpTools, type HostToolDefinition, type ToolContextOptions } from './tools.ts'
+import {
+  createToolContext,
+  withHostTools,
+  withMcpTools,
+  type HostToolDefinition,
+  type ToolContextOptions,
+  type ToolDefinition,
+} from './tools.ts'
 import type { ToolExecutionCall, ToolExecutionProfile, ToolExecutor } from '../../executors/tool-executor.ts'
 import { createWebFetch, type WebFetchFn, type WebFetchOptions } from './web-fetch.ts'
 
@@ -104,6 +112,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
       vfs,
       executor,
       executableTools: context.sandboxedToolNames,
+      toolTitles: collectToolTitles(context.definitions, options.mcp?.servers),
       executionBackend: typeof options.backend === 'function' ? undefined : (options.backend ?? 'server'),
       executionLimits: options.executionLimits,
       shouldApprove: options.shouldApprove,
@@ -118,6 +127,27 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     options.id,
   )
   return runner
+}
+
+// Titles the client cannot derive on its own: what the host declared, and what each MCP server
+// calls its own tools. Built-in capability names are resolved client-side, so they stay out.
+function collectToolTitles(definitions: ToolDefinition[], servers: McpServerStatusInfo[] | undefined): Record<string, string> | undefined {
+  const titles: Record<string, string> = {}
+  for (const definition of definitions) {
+    const title = sanitizeToolTitle(definition.title, definition.name)
+    if (title) {
+      titles[definition.name] = title
+    }
+  }
+  for (const server of servers ?? []) {
+    for (const tool of server.tools ?? []) {
+      const title = sanitizeToolTitle(tool.title, tool.name)
+      if (title) {
+        titles[`${server.name}__${tool.name}`] = title
+      }
+    }
+  }
+  return Object.keys(titles).length > 0 ? titles : undefined
 }
 
 function requireDeclaredServers(
@@ -196,6 +226,9 @@ export async function connectMcpTools(
       })
       clients.push(client as unknown as { close: () => Promise<void> })
       const connected = await client.tools()
+      // `tools()` builds the AI SDK ToolSet and drops everything MCP-specific with it; the raw
+      // listing is the only place titles and the annotation hints survive.
+      const listed = await listToolRecords(client)
       for (const [toolName, mcpTool] of Object.entries(connected)) {
         tools[`${name}__${toolName}`] = mcpTool as ToolSet[string]
       }
@@ -204,7 +237,7 @@ export async function connectMcpTools(
         status: 'connected',
         ...identity,
         // Unnamespaced: this is the server's own view of itself, and `<server>__` is routing.
-        tools: Object.entries(connected).map(([toolName, mcpTool]) => toToolInfo(toolName, mcpTool)),
+        tools: Object.entries(connected).map(([toolName, mcpTool]) => toToolInfo(toolName, mcpTool, listed.get(toolName))),
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -228,16 +261,39 @@ function describeServer(server: McpServerConfigWire): Pick<McpServerStatusInfo, 
   return { transport: 'stdio', command: server.command, args: server.args }
 }
 
+type McpToolRecord = {
+  name: string
+  title?: string
+  annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean }
+}
+
+async function listToolRecords(client: { listTools?: () => Promise<unknown> }): Promise<Map<string, McpToolRecord>> {
+  const records = new Map<string, McpToolRecord>()
+  if (typeof client.listTools !== 'function') {
+    return records
+  }
+  try {
+    const listed = (await client.listTools()) as { tools?: McpToolRecord[] }
+    for (const record of listed.tools ?? []) {
+      records.set(record.name, record)
+    }
+  } catch {}
+  return records
+}
+
 // A zod `inputSchema` carries no JSON Schema document; only a `jsonSchema()` wrapper does, so
 // that is the only case parameters are reported.
-function toToolInfo(name: string, mcpTool: unknown): McpServerToolInfo {
+function toToolInfo(name: string, mcpTool: unknown, record?: McpToolRecord): McpServerToolInfo {
   const { description, inputSchema } = (mcpTool ?? {}) as {
     description?: unknown
     inputSchema?: { jsonSchema?: unknown }
   }
+  const hints = record?.annotations
   return {
     name,
+    title: sanitizeToolTitle(record?.title ?? hints?.title, name),
     description: typeof description === 'string' ? description : undefined,
+    annotations: hints ? { readOnly: hints.readOnlyHint, destructive: hints.destructiveHint, openWorld: hints.openWorldHint } : undefined,
     inputSchema: inputSchema?.jsonSchema,
   }
 }

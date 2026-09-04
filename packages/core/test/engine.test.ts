@@ -307,6 +307,37 @@ describe('createEngineSession host tools and MCP declarations', () => {
     expect((await runner.mcpServers())?.map((s) => s.name)).toEqual(['wiki'])
   })
 
+  it('publishes the titles a client cannot derive: what the host declared and what MCP reported', async () => {
+    const runner = build({
+      tools: {
+        knowledge_upload: {
+          trust: 'authoritative',
+          title: 'Uploading knowledge',
+          tool: tool({ inputSchema: z.object({}), execute: async () => ({ ok: true }) }),
+        },
+      },
+      mcp: {
+        tools: {},
+        servers: [{ name: 'atomic', status: 'connected', tools: [{ name: 'AppContext', title: 'Reading the current page' }] }],
+        close: async () => {},
+      },
+    })
+    const events: SessionEvent[] = []
+    runner.subscribe((e) => events.push(e))
+    void runner.start()
+    expect(events.find((e) => e.type === 'tool_titles')).toMatchObject({
+      titles: { knowledge_upload: 'Uploading knowledge', atomic__AppContext: 'Reading the current page' },
+    })
+  })
+
+  it('says nothing about tools it has no title for, rather than inventing one', async () => {
+    const events: SessionEvent[] = []
+    const runner = build({})
+    runner.subscribe((e) => events.push(e))
+    void runner.start()
+    expect(events.some((e) => e.type === 'tool_titles')).toBe(false)
+  })
+
   it('answers with an empty list, not a 501, when no MCP was wired at all', async () => {
     expect(await build({}).mcpServers()).toEqual([])
   })

@@ -286,6 +286,11 @@ private struct McpToolsView: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(tool.name)
             .font(.body.monospaced())
+          if let title = tool.title, !title.isEmpty {
+            Text(title)
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
           if let description = tool.description, !description.isEmpty {
             Text(description)
               .font(.caption)
@@ -305,6 +310,7 @@ private struct McpToolsView: View {
     guard !trimmed.isEmpty else { return tools }
     return tools.filter {
       $0.name.lowercased().contains(trimmed)
+        || ($0.title ?? "").lowercased().contains(trimmed)
         || ($0.description ?? "").lowercased().contains(trimmed)
     }
   }
@@ -320,6 +326,9 @@ private struct McpToolDetailView: View {
     List {
       Section {
         LabeledContent("Tool name", value: tool.name)
+        if let title = tool.title, !title.isEmpty {
+          LabeledContent("Title", value: title)
+        }
         LabeledContent("Full name", value: "mcp__\(serverName)__\(tool.name)")
         LabeledContent("Server", value: serverName)
       }

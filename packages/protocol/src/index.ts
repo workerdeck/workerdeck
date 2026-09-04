@@ -197,6 +197,7 @@ export type SessionEventBody =
       defaultModel?: string
     }
   | { type: 'skills'; skills: SkillInfo[] }
+  | { type: 'tool_titles'; titles: Record<string, string> }
   | {
       type: 'file_produced'
       fileId: string
@@ -522,6 +523,7 @@ export type McpServerConfigWire =
 
 export type McpServerToolInfo = {
   name: string
+  title?: string
   description?: string
   annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean }
   inputSchema?: unknown
@@ -959,5 +961,6 @@ export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
 
 export * from './session-list.ts'
+export * from './tool-titles.ts'
 export * from './usage.ts'
 export * from './watermarks.ts'

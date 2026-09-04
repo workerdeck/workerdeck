@@ -402,6 +402,7 @@ export class SessionRunner implements Runner {
       this.#turnOverWhileBlocked = false
       this.#setStatus('running')
       void this.#fetchCapabilities()
+      void this.#fetchToolTitles()
       void this.#fetchContextUsage()
       void this.#fetchRateLimits()
       void this.#fetchEngineTitle()
@@ -444,6 +445,26 @@ export class SessionRunner implements Runner {
         void this.#fetchRateLimits()
         void this.#fetchEngineTitle()
       }
+    }
+  }
+
+  // Best-effort: the SDK's status type stops short of the MCP title, so a server that sets one
+  // is reported only when the CLI happens to forward it.
+  async #fetchToolTitles(): Promise<void> {
+    const servers = await this.mcpServers().catch(() => undefined)
+    if (this.#closed || !servers) {
+      return
+    }
+    const titles: Record<string, string> = {}
+    for (const server of servers) {
+      for (const tool of server.tools ?? []) {
+        if (tool.title) {
+          titles[`mcp__${server.name}__${tool.name}`] = tool.title
+        }
+      }
+    }
+    if (Object.keys(titles).length > 0) {
+      this.#emit({ type: 'tool_titles', titles })
     }
   }
 

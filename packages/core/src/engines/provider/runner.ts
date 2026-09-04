@@ -36,6 +36,7 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   vfs?: SandboxVfs
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
   executionBackend?: ToolExecutionBackend
+  toolTitles?: Record<string, string>
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
   approvalTimeoutMs?: number
   resolveModel?: (modelId: string | undefined) => LanguageModel
@@ -200,6 +201,7 @@ export class AiSdkRunner implements Runner {
       return this.#turnChain
     }
     this.#started = true
+    this.#emitToolTitles()
     if (this.#config.restore) {
       return this.#turnChain
     }
@@ -954,6 +956,13 @@ export class AiSdkRunner implements Runner {
     this.#status = status
     this.#statusDetail = detail
     this.#emit({ type: 'status_changed', status, detail })
+  }
+
+  #emitToolTitles(): void {
+    const titles = this.#config.toolTitles
+    if (titles && Object.keys(titles).length > 0) {
+      this.#emit({ type: 'tool_titles', titles })
+    }
   }
 
   #emit(body: SessionEventBody): void {

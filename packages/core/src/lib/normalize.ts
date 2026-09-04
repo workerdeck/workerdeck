@@ -1,4 +1,5 @@
 import type { McpServerStatus, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { sanitizeToolTitle } from '@workerdeck/protocol'
 import type { ApiMessage, ContentBlock, McpServerStatusInfo, ModelOption, SessionEventBody, TextBlock } from '@workerdeck/protocol'
 import { filePatchFromToolResult } from './patch.ts'
 
@@ -116,11 +117,18 @@ export function mcpStatusInfo(status: McpServerStatus): McpServerStatusInfo {
     command: config?.command,
     args: config?.args,
     url: config?.url,
-    tools: status.tools?.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      annotations: tool.annotations,
-    })),
+    tools: status.tools?.map((tool) => {
+      // The SDK's own type stops at the three hints, but the CLI forwards the server's tool
+      // record whole, so a spec `title` is worth probing for and never worth relying on.
+      const probe = tool as { title?: unknown; annotations?: { title?: unknown } }
+      const title = probe.title ?? probe.annotations?.title
+      return {
+        name: tool.name,
+        title: sanitizeToolTitle(typeof title === 'string' ? title : undefined, tool.name),
+        description: tool.description,
+        annotations: tool.annotations,
+      }
+    }),
   }
 }
 

@@ -70,7 +70,7 @@ struct ToolCallCard: View {
         .frame(width: 16)
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 6) {
-          Text(call.name)
+          Text(call.title ?? call.name)
             .font(.caption.weight(.semibold))
           if let backend = call.backend, backend != "server" {
             Text(backend)
@@ -114,6 +114,13 @@ struct ToolCallCard: View {
   @ViewBuilder
   private var detail: some View {
     VStack(alignment: .leading, spacing: 8) {
+      // The wire name, once a title has taken its place in the header: it is
+      // what a permission rule has to spell, so it stays reachable.
+      if call.title != nil {
+        Text(call.name)
+          .font(.caption.monospaced())
+          .foregroundStyle(.secondary)
+      }
       MonospacedBlock(title: "Input", text: call.input.prettyJSON, isError: false)
 
       if let result = call.result, !result.text.isEmpty {

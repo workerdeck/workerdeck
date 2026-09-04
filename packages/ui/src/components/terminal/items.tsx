@@ -10,6 +10,7 @@ import { Pressable, useRevealOnOpen } from './press.tsx'
 import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, imagePlaceholder } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
+import { useToolTitle } from '../agent/tool-titles.tsx'
 import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
 import { runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
@@ -112,6 +113,7 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
   const command = (item.input as { command?: unknown } | null)?.command
   const copyable = typeof command === 'string' ? command : text
   const todos = todoPreview(item.name, item.input)
+  const title = useToolTitle(item.name)
 
   return (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
@@ -124,11 +126,12 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
         }
       >
         <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
-          <Row glyph={busy ? pulse : '●'} glyphTone={tone} tone="fg">
+          <Row glyph={busy ? pulse : '●'} glyphTone={tone} tone="fg" title={title ? item.name : undefined}>
             <Ink bold tone="bright">
-              {item.name}
+              {title ?? item.name}
             </Ink>
             <Ink tone="dim">({todos ? todos.summary : toolInputPreview(item.input)})</Ink>
+            {title && open ? <Ink tone="faint"> · {item.name}</Ink> : null}
             {item.backend && item.backend !== 'server' ? <Ink tone="faint"> · {item.backend}</Ink> : null}
           </Row>
         </Pressable>

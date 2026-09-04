@@ -10,6 +10,7 @@ export type ToolDefinition = {
   name: string
   trust: ToolTrust
   tool: Tool
+  title?: string
 }
 
 export type ToolContextOptions = {
@@ -203,6 +204,9 @@ export function withMcpTools(context: ToolContext, mcpTools: ToolSet): ToolConte
 export type HostToolDefinition = {
   tool: Tool
   trust: ToolTrust
+  // A present-participle phrase naming the action ('Uploading knowledge'), not a sentence: the
+  // transcript draws it as the tool call's label beside a Running/Done badge.
+  title?: string
 }
 
 export function withHostTools(context: ToolContext, hostTools: Record<string, HostToolDefinition>, kind = 'host tool'): ToolContext {
@@ -213,7 +217,7 @@ export function withHostTools(context: ToolContext, hostTools: Record<string, Ho
   const definitions = [...context.definitions]
   const tools: ToolSet = { ...context.tools }
   const sandboxedToolNames = [...context.sandboxedToolNames]
-  for (const [name, { tool: hostTool, trust }] of entries) {
+  for (const [name, { tool: hostTool, trust, title }] of entries) {
     if (name in tools) {
       // A collision would let a host tool shadow `eval_script`, or an MCP name promote untrusted
       // execution to authoritative.
@@ -232,7 +236,7 @@ export function withHostTools(context: ToolContext, hostTools: Record<string, Ho
           'ever answer its calls and the turn would stall.',
       )
     }
-    definitions.push({ name, trust, tool: hostTool })
+    definitions.push({ name, trust, tool: hostTool, title })
     tools[name] = hostTool
     if (trust === 'sandboxed') {
       sandboxedToolNames.push(name)
