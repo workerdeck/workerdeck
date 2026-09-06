@@ -12,6 +12,7 @@ struct ModelNameTests {
     #expect(friendlyModel("claude-opus-5[1m]") == "Opus 5")
     #expect(friendlyModel("claude-haiku-4-5-20251001") == "Haiku 4.5")
     #expect(friendlyModel("gpt-5.6-luna") == "GPT-5.6 Luna")
+    #expect(friendlyModel("gpt-6-astra") == "GPT-6 Astra")
     #expect(friendlyModel("gemini-2.5-pro") == "Gemini 2.5 Pro")
     #expect(friendlyModel("o3-mini") == "o3 Mini")
   }

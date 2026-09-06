@@ -601,6 +601,21 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   iOS drops a held message if the socket is detached at flush time — pre-existing `handle?.send`
   semantics, newly reachable now that a send can be deferred, and wanting a device check.
 
+  **1.4.0** — **GPT-6 Astra, and the codex catalog re-extracted.** A **minor**, protocol stays
+  **1**. `@openai/codex` pinned `~0.151.0` → `~0.153.4` (root, `cli`, `core`'s devDep; the
+  `~0.149.0` peer range still covers it) and `CODEX_CATALOG` refreshed by the documented
+  extraction against that binary rather than by hand: `gpt-6-astra` ("GPT-6 Astra", efforts
+  `low`…`ultra`) leads the picker, and `gpt-5.4` / `gpt-5.4-mini` are gone. The removals are the
+  interesting half — the binary flipped both to `visibility: "hide"`, and this cycle is what
+  settled that **hidden means dropped, not demoted**: the old rule said `primary` mirrors
+  `visibility`, which would have kept a retired model (mini's `upgrade` block has a `retirement_at`
+  already in the past) and admitted the two new `gpt-daybreak-*` cyber-security rows into "more
+  models". The rule is restated above. The operator's `~/.codex/models_cache.json` — the *fetched*
+  list, client 0.153.0 — was used as the cross-check and agreed, going further still: it has no
+  `gpt-5.4` row at all. No client code changed, because none was needed — `friendlyModel` already
+  renders `gpt-6-astra` as "GPT-6 Astra" in both TS and Swift (the Swift documented-examples test
+  now pins it), which is the whole point of a derived display name.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
@@ -637,11 +652,20 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   The **two-hop resolve is
   not optional**: under pnpm's strict layout `@openai/codex-<platform>` resolves only from
   `@openai/codex`'s own location, never the repo root (the same two hops
-  `resolveBundledCodexExecutable` makes). Mapping rules when diffing: drop the internal
-  `codex-auto-review` row, `primary` mirrors the binary's `visibility` field, `reasoningEfforts`
-  carries `supported_reasoning_levels` verbatim (it includes `max`/`ultra` beyond the SDK union —
-  trust the binary, keep the strings open). Restate `provenance` with the binary version and the
-  extraction date.
+  `resolveBundledCodexExecutable` makes). Mapping rules when diffing: **`visibility: "hide"` does
+  not ship at all** — not as a non-primary row, which is what the rule said until 0.153.4 made the
+  difference matter. A hidden row is one OpenAI has taken out of its own picker, and 0.153.4 hides
+  three kinds at once: the internal `codex-auto-review`, the retired (`gpt-5.4`, `gpt-5.4-mini` —
+  the latter carries an `upgrade` block with a past `retirement_at`) and the specialised
+  (`gpt-daybreak-blue/red-latest`, cyber-security variants, one of them explicitly
+  cyber-permissive). Shipping any of them under "more models" offers a model the backend may no
+  longer serve, or one no coding picker should suggest. Every `list` row ships, and ships
+  `primary`. `reasoningEfforts` carries `supported_reasoning_levels` verbatim (it includes
+  `max`/`ultra` beyond the SDK union — trust the binary, keep the strings open). Restate
+  `provenance` with the binary version and the extraction date. Cross-check the result against
+  `~/.codex/models_cache.json` if the operator has one — it is the *fetched* list the backend
+  actually offers, and where the two disagree the binary is the older truth (at 0.153.4 the fetch
+  had already dropped `gpt-5.4` outright and reworded Sol and 5.5).
   The **claude** catalog refreshes differently, and its procedure lives here rather than in the
   file: run `supportedModels()` on a throwaway SDK query (no tokens spent) and re-apply
   `modelOptionsFromSdk`'s shaping from `core/src/lib/normalize.ts`. `engine-capabilities.test.ts`

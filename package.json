@@ -40,7 +40,7 @@
     "@ai-sdk/moonshotai": "^3.0.43",
     "@ai-sdk/openai": "^4.0.53",
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
-    "@openai/codex": "~0.151.0",
+    "@openai/codex": "~0.153.4",
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.1",
     "@types/node": "^26.4.0",

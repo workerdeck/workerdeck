@@ -121,7 +121,7 @@ describe('codex engine over the gateway', () => {
     const base = `http://127.0.0.1:${port}/v1`
 
     const profiles = (await (await fetch(`${base}/profiles`)).json()) as { profiles: ProfileInfo[] }
-    expect(profiles.profiles[0]!.models?.[0]?.value).toBe('gpt-5.6-sol')
+    expect(profiles.profiles[0]!.models?.[0]?.value).toBe('gpt-6-astra')
     expect(profiles.profiles[0]!.models?.[0]?.reasoningEfforts).toContain('ultra')
     expect(profiles.profiles[0]!.capabilities?.interactiveApprovals).toBe(true)
     expect(profiles.profiles[0]!.capabilities?.streaming).toBe('token')

@@ -2,9 +2,16 @@ import type { ModelCatalog } from '../adapter.ts'
 
 // The binary's embedded model table is the truth about reasoning efforts, not the SDK's stale `ModelReasoningEffort` union.
 export const CODEX_CATALOG: ModelCatalog = {
-  provenance:
-    'embedded model presets of @openai/codex@0.151.0 (darwin-arm64 binary), ' + 're-extracted 2026-09-02 and unchanged since 0.149.0',
+  provenance: 'embedded model presets of @openai/codex@0.153.4 (darwin-arm64 binary), re-extracted 2026-09-06',
   models: [
+    {
+      value: 'gpt-6-astra',
+      resolvedModel: 'gpt-6-astra',
+      displayName: 'GPT-6 Astra',
+      description: 'Our most capable model for complex, demanding work.',
+      primary: true,
+      reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    },
     {
       value: 'gpt-5.6-sol',
       resolvedModel: 'gpt-5.6-sol',
@@ -35,20 +42,6 @@ export const CODEX_CATALOG: ModelCatalog = {
       displayName: 'GPT-5.5',
       description: 'Frontier model for complex coding, research, and real-world work.',
       primary: true,
-      reasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
-    },
-    {
-      value: 'gpt-5.4',
-      resolvedModel: 'gpt-5.4',
-      displayName: 'GPT-5.4',
-      description: 'Strong model for everyday coding.',
-      reasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
-    },
-    {
-      value: 'gpt-5.4-mini',
-      resolvedModel: 'gpt-5.4-mini',
-      displayName: 'GPT-5.4 Mini',
-      description: 'Small, fast, and cost-efficient model for simpler coding tasks.',
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
     },
     {
