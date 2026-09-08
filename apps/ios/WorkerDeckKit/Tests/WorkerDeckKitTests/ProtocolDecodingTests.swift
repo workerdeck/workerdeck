@@ -130,6 +130,42 @@ struct ProtocolDecodingTests {
     #expect(file.bytes == 2048)
   }
 
+  @Test func decodesAChecklistEvent() throws {
+    let event = try decodeEvent(
+      #"""
+      {"type":"checklist","seq":9,"ts":1722300000000,"items":[
+        {"text":"read","status":"completed"},{"text":"write","status":"in_progress"}]}
+      """#)
+    #expect(
+      event.body
+        == .checklist([
+          ChecklistItem(text: "read", status: .completed),
+          ChecklistItem(text: "write", status: .inProgress),
+        ]))
+  }
+
+  @Test func decodesASessionCarryingAChecklist() throws {
+    let json = #"""
+      {"id":"s1","status":"idle","cwd":"/work","createdAt":1,"lastSeq":2,
+       "pendingPermissionCount":0,
+       "checklist":[{"text":"ship","status":"pending"}]}
+      """#
+    let info = try JSONDecoder().decode(SessionInfo.self, from: Data(json.utf8))
+    #expect(info.checklist == [ChecklistItem(text: "ship", status: .pending)])
+  }
+
+  /// A gateway that predates the field says nothing, which must read as "no
+  /// checklist" rather than as a row that failed to decode.
+  @Test func anOlderRecordWithoutAChecklistStillDecodes() throws {
+    let json = #"""
+      {"id":"s1","status":"idle","cwd":"/work","createdAt":1,"lastSeq":2,
+       "pendingPermissionCount":0}
+      """#
+    let info = try JSONDecoder().decode(SessionInfo.self, from: Data(json.utf8))
+    #expect(info.checklist == nil)
+    #expect(sessionTasks(info).isEmpty)
+  }
+
   /// A protocol-6 gateway sends no `skillsList` — that must read as "no skills
   /// panel", not as a session whose whole capability record failed to decode.
   @Test func anOlderRecordWithoutSkillsListStillDecodes() throws {

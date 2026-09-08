@@ -22,7 +22,6 @@ export interface SessionItemProps {
   onExpandedChange?: (expanded: boolean) => void
   onSelect?: () => void
   onSelectSubagent?: (toolUseId: string) => void
-  onRevealStep?: (toolUseId: string) => void
   onRename?: (title: string) => void
   renameOn?: 'doubleClick' | 'external'
   editing?: boolean
@@ -42,7 +41,6 @@ export function SessionItem({
   onExpandedChange,
   onSelect,
   onSelectSubagent,
-  onRevealStep,
   onRename,
   renameOn = 'doubleClick',
   editing,
@@ -95,13 +93,8 @@ export function SessionItem({
   for (const extra of extras) {
     parts.push(<span key={extra}>{extra}</span>)
   }
-  const steps = sessionSteps(info, (toolUseId, kind) => {
-    if (kind === 'agent') {
-      return onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.()
-    }
-    return onRevealStep ? onRevealStep(toolUseId) : onSelect?.()
-  })
-  const holdsOpenAgent = steps.some((s) => s.kind === 'agent' && s.key === activeStepKey)
+  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.()))
+  const holdsOpenAgent = steps.some((s) => s.key === activeStepKey)
 
   return (
     <div

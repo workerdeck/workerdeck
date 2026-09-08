@@ -57,14 +57,6 @@ export function SessionsSidebar() {
       search: { subagent: toolUseId, sn: ++subagentNonce.current },
     })
 
-  const revealNonce = useRef(0)
-  const revealStep = (row: SessionRow, toolUseId: string) =>
-    void navigate({
-      to: '/sessions/$hostId/$sessionId',
-      params: { hostId: row.hostId, sessionId: row.info.id },
-      search: { reveal: toolUseId, rn: ++revealNonce.current },
-    })
-
   const rename = (row: SessionRow, title: string) => {
     void clientFor(row.hostId)
       ?.updateSession(row.info.id, { title: title || null })
@@ -138,7 +130,6 @@ export function SessionsSidebar() {
             activeSubagentId={activeSubagentId}
             onSelect={open}
             onSelectSubagent={openSubagent}
-            onRevealStep={revealStep}
             onRename={rename}
             onClearContext={(row) => {
               const client = clientFor(row.hostId)

@@ -24,6 +24,7 @@ import {
   type SessionStatus,
 } from '@workerdeck/protocol'
 import { type AttachmentInput, attachmentContentBlocks, attachmentRef } from '../../lib/attachments.ts'
+import { checklistFromBody, sameChecklist } from '../../lib/checklist.ts'
 import { InputQueue } from '../../lib/input-queue.ts'
 import {
   type UsageRateLimits,
@@ -145,6 +146,7 @@ export class SessionRunner implements Runner {
       contextUsage: this.#log.contextUsage,
       pendingPermissionCount: this.#pending.size,
       subagents: this.#subagents.list(),
+      checklist: this.#log.checklist,
       meta: this.#config.meta,
       scope: this.#config.scope,
       title: sessionTitle(this.#config, this.#engineTitle),
@@ -679,10 +681,16 @@ export class SessionRunner implements Runner {
     this.#emit({ type: 'status_changed', status, detail })
   }
 
+  // The checklist emit must follow the fan-out: emitting from inside `observe` appends seq n+1 and
+  // delivers it before seq n, and every reducer's `seq <= lastSeq` dedupe then drops the message.
   #emit(body: SessionEventBody): void {
     const event = this.#log.append(body)
     this.#subagents.observe(body, event.ts)
     this.#subscribers.emit(event)
+    const items = checklistFromBody(body)
+    if (items && !sameChecklist(this.#log.checklist, items)) {
+      this.#emit({ type: 'checklist', items })
+    }
   }
 }
 

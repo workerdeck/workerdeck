@@ -1,5 +1,5 @@
 import type * as vscode from 'vscode'
-import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, sessionTasks, taskCountLabel, taskSummary } from '@workerdeck/protocol'
 import type { HostStore } from './hosts.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSection, SectionToHost, SidebarState } from './bridge-protocol.ts'
@@ -7,11 +7,12 @@ import type { SessionVitals } from '@workerdeck/ui'
 import { formatCost } from '@workerdeck/ui/format'
 import { WebviewHost } from './webview-host.ts'
 
-export type SectionKind = 'info' | 'context' | 'usage' | 'mcp'
+export type SectionKind = 'info' | 'context' | 'usage' | 'mcp' | 'tasks'
 
 export type SectionFeed = {
   state: () => SidebarState
   vitals: () => SessionVitals | undefined
+  tasksShowCompleted: () => boolean
 }
 
 export class SectionViewProvider extends WebviewHost<SectionToHost, HostToSection> implements vscode.Disposable {
@@ -77,6 +78,10 @@ export class SectionViewProvider extends WebviewHost<SectionToHost, HostToSectio
       kind: 'wd-vitals',
       vitals: this.#feed.vitals(),
     })
+    this.post({
+      kind: 'wd-tasks-show-completed',
+      showCompleted: this.#feed.tasksShowCompleted(),
+    })
   }
 
   dispose(): void {
@@ -102,6 +107,9 @@ function headerDescription(kind: SectionKind, state: SidebarState, vitals: Sessi
   }
   if (kind === 'usage' && info.totalCostUsd !== undefined) {
     return formatCost(info.totalCostUsd)
+  }
+  if (kind === 'tasks') {
+    return taskCountLabel(taskSummary(vitals?.tasks ?? sessionTasks(info)))
   }
   return undefined
 }

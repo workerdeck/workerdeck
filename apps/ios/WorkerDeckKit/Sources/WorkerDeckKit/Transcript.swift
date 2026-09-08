@@ -233,6 +233,8 @@ public struct TranscriptState: Sendable, Equatable {
   /// this being non-nil, not on `skillsList` alone: the flag says the engine
   /// *can* answer, this says it *has*. Not commands — see `SkillInfo`.
   public var skills: [SkillInfo]?
+  /// The engine's task checklist. Live where ``session`` is frozen at attach.
+  public var checklist: [ChecklistItem]?
   /// Titles declared for tool wire names (from `tool_titles`), merged as they
   /// arrive. Only what a client cannot derive — `ToolTitles.title(for:titles:)`
   /// folds the built-in table in on top of this.
@@ -270,7 +272,8 @@ public struct TranscriptState: Sendable, Equatable {
     status: SessionStatus = .starting, statusDetail: String? = nil, model: String? = nil,
     cwd: String? = nil, sdkSessionId: String? = nil, engine: ProfileEngine? = nil,
     models: [ModelOption]? = nil, commands: [SlashCommandInfo]? = nil,
-    skills: [SkillInfo]? = nil, toolTitles: [String: String]? = nil,
+    skills: [SkillInfo]? = nil, checklist: [ChecklistItem]? = nil,
+    toolTitles: [String: String]? = nil,
     producedFiles: [String: ProducedFile]? = nil,
     defaultModel: String? = nil,
     permissionMode: PermissionMode? = nil, contextUsage: ContextUsage? = nil,
@@ -288,6 +291,7 @@ public struct TranscriptState: Sendable, Equatable {
     self.models = models
     self.commands = commands
     self.skills = skills
+    self.checklist = checklist
     self.toolTitles = toolTitles
     self.producedFiles = producedFiles
     self.defaultModel = defaultModel
@@ -524,6 +528,10 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     // so a skill deleted on disk has to be able to disappear from the list.
     next.skills = skills
 
+  case .checklist(let items):
+    // Replaced whole, and an empty list is the engine clearing it.
+    next.checklist = items.isEmpty ? nil : items
+
   case .toolTitles(let titles):
     // Merged, never replaced: each producer answers for its own names. Calls
     // already on screen are re-titled, because a title can land after the tool
@@ -566,13 +574,14 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   case .conversationReset(let sdkSessionId):
     // Same session, fresh conversation (/clear, plan-mode exit). Only
     // conversation-scoped state resets: the items, the context reading (the
-    // runner re-polls a fresh one), and the engine session id when the event
-    // names the new one. Session-scoped state survives — models/commands/
+    // runner re-polls a fresh one), the checklist, and the engine session id
+    // when the event names the new one. Session-scoped state survives — models/commands/
     // skills, produced files, rate limits and plan, cwd, model, permission
     // mode, cumulative cost — and so do pending approvals: the runner still
     // holds them. (Mirrors the react reducer's conversation_reset case.)
     next.items = []
     next.contextUsage = nil
+    next.checklist = nil
     if let sdkSessionId { next.sdkSessionId = sdkSessionId }
 
   case .contextCompacted(let uuid, let parentToolUseId):

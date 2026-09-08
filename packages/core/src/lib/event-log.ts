@@ -2,6 +2,7 @@ import {
   contextReading,
   transcriptActivity,
   transcriptProse,
+  type ChecklistItem,
   type ContextReading,
   type SessionEvent,
   type SessionEventBody,
@@ -13,6 +14,7 @@ export class EventLog {
   #activityCount = 0
   #proseCount = 0
   #contextUsage: ContextReading | undefined
+  #checklist: ChecklistItem[] | undefined
   #resetSeq = 0
   #lastActivityAt: number | undefined
 
@@ -35,6 +37,10 @@ export class EventLog {
 
   get contextUsage(): ContextReading | undefined {
     return this.#contextUsage
+  }
+
+  get checklist(): ChecklistItem[] | undefined {
+    return this.#checklist
   }
 
   get resetSeq(): number {
@@ -63,6 +69,7 @@ export class EventLog {
     this.#activityCount = 0
     this.#proseCount = 0
     this.#contextUsage = undefined
+    this.#checklist = undefined
     this.#resetSeq = 0
     for (const event of this.#events) {
       this.#fold(event)
@@ -74,9 +81,13 @@ export class EventLog {
     this.#activityCount += transcriptActivity(event)
     this.#proseCount += transcriptProse(event)
     this.#contextUsage = contextReading(event) ?? this.#contextUsage
+    if (event.type === 'checklist') {
+      this.#checklist = event.items.length > 0 ? event.items : undefined
+    }
     if (event.type === 'conversation_reset') {
       this.#resetSeq = event.seq
       this.#contextUsage = undefined
+      this.#checklist = undefined
     }
   }
 }

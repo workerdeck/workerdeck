@@ -33,10 +33,7 @@ enum SessionRoute: Hashable {
   // rule spelled twice, a test driving the preview proves only that the preview
   // agrees with itself.
   static func step(hostId: UUID, sessionId: String, step: Step) -> SessionRoute {
-    switch step.kind {
-    case .agent: .session(hostId: hostId, sessionId: sessionId, subagent: step.key)
-    case .task: .session(hostId: hostId, sessionId: sessionId, reveal: step.key)
-    }
+    .session(hostId: hostId, sessionId: sessionId, subagent: step.key)
   }
 }
 

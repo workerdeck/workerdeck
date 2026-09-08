@@ -7,7 +7,7 @@ import { SectionApp, type SectionKind } from './SectionApp.tsx'
 
 syncVsCodeTheme()
 // Both push kinds replay: a section view expanded long after selection must not render empty until the next poll.
-const bridge = new Bridge(['wd-sidebar-state', 'wd-vitals'])
+const bridge = new Bridge(['wd-sidebar-state', 'wd-vitals', 'wd-tasks-show-completed'])
 
 const root = document.getElementById('root')
 if (!root) {

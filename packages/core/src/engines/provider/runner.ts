@@ -187,6 +187,7 @@ export class AiSdkRunner implements Runner {
       activityCount: this.#log.activityCount,
       proseCount: this.#log.proseCount,
       contextUsage: this.#log.contextUsage,
+      checklist: this.#log.checklist,
       pendingPermissionCount: this.#pendingApprovals.size,
       meta: this.#config.meta,
       scope: this.#config.scope,

@@ -117,6 +117,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       fontSize={panelFontSize}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
       reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}
+      subagents={polled?.subagents}
       // Three rules keep this report → URL → panel round-trip from looping: no-op on match, `sn` rides through
       // unchanged, and `replace` rather than push.
       onSubagentChange={(toolUseId) => {

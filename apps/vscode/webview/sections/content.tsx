@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
+import { sessionTasks } from '@workerdeck/protocol'
 import type { ContextUsage, McpServerStatusInfo, RateLimitInfo, SessionInfo } from '@workerdeck/protocol'
 import { rateLimitWindows, type TranscriptState } from '@workerdeck/react'
-import { Badge, Button, Spinner, UsageMeters, cn } from '@workerdeck/ui'
+import type { SessionVitals } from '@workerdeck/ui'
+import { Badge, Button, Spinner, TaskList, UsageMeters, cn } from '@workerdeck/ui'
 import { formatTokens } from '@workerdeck/ui/format'
 import { RefreshCw } from 'lucide-react'
 
@@ -67,6 +69,20 @@ export function UsageSection({ rateLimits }: { rateLimits: Record<string, RateLi
   }
   // No `now` prop: mounted for as long as its section is expanded, it ticks its own clock.
   return <UsageMeters windows={windows} className="gap-4" />
+}
+
+// The toggle is a title-bar command on the host, so the list renders it read-only and reports nothing back.
+export function TasksSection({
+  info,
+  vitals,
+  showCompleted,
+}: {
+  info: SessionInfo
+  vitals: SessionVitals | undefined
+  showCompleted: boolean
+}) {
+  const tasks = vitals?.tasks ?? sessionTasks(info)
+  return <TaskList tasks={tasks} showCompleted={showCompleted} />
 }
 
 export function McpSection({ client, sessionId }: { client: WorkerDeckClient | undefined; sessionId: string }) {

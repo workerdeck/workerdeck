@@ -31,22 +31,19 @@ describe('isAgentRecord', () => {
 })
 
 describe('sessionSteps', () => {
-  it('tells the caller which kind was pressed', () => {
+  it('reports the pressed agent to the caller', () => {
     const info = {
-      subagents: [sub({ toolUseId: 'a', agentType: 'Explore' }), sub({ toolUseId: 'b', description: 'check the deploy' })],
+      subagents: [sub({ toolUseId: 'a', agentType: 'Explore' }), sub({ toolUseId: 'b', agentType: 'fable' })],
     } as unknown as SessionInfo
-    const pressed: Array<[string, string]> = []
-    const steps = sessionSteps(info, (toolUseId, kind) => pressed.push([toolUseId, kind]))
+    const pressed: string[] = []
+    const steps = sessionSteps(info, (toolUseId) => pressed.push(toolUseId))
     for (const step of steps) {
       step.onSelect()
     }
-    expect(pressed).toEqual([
-      ['a', 'agent'],
-      ['b', 'task'],
-    ])
+    expect(pressed).toEqual(['a', 'b'])
   })
 
-  it('sorts agents above tasks without reordering either group', () => {
+  it('leaves untyped records out entirely — they are tasks, and tasks are not steps', () => {
     const info = {
       subagents: [
         sub({ toolUseId: 't1', description: 'first task' }),
@@ -56,10 +53,10 @@ describe('sessionSteps', () => {
       ],
     } as unknown as SessionInfo
     const steps = sessionSteps(info, () => {})
-    expect(steps.map((s) => s.key)).toEqual(['a1', 'a2', 't1', 't2'])
+    expect(steps.map((s) => s.key)).toEqual(['a1', 'a2'])
   })
 
-  it('splits agents from tasks, keeping the labels protocol spells', () => {
+  it('keeps the labels protocol spells', () => {
     const info = {
       subagents: [
         sub({ toolUseId: 'a', agentType: 'Explore', description: 'find the auth check' }),
@@ -67,7 +64,11 @@ describe('sessionSteps', () => {
       ],
     } as unknown as SessionInfo
     const steps = sessionSteps(info, () => {})
-    expect(steps.map((s) => s.kind)).toEqual(['agent', 'task'])
-    expect(steps.map((s) => s.label)).toEqual(['Explore · find the auth check', 'check the deploy'])
+    expect(steps.map((s) => s.label)).toEqual(['Explore · find the auth check'])
+  })
+
+  it('has no steps at all when every record is untyped', () => {
+    const info = { subagents: [sub({ toolUseId: 't1', description: 'a task' })] } as unknown as SessionInfo
+    expect(sessionSteps(info, () => {})).toEqual([])
   })
 })

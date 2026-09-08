@@ -194,14 +194,6 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                       subagentToolUseId,
                     })
                   }
-                  onRevealStep={(revealToolUseId) =>
-                    bridge.post({
-                      kind: 'wd-select-session',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      revealToolUseId,
-                    })
-                  }
                   onRename={(title) =>
                     bridge.post({
                       kind: 'wd-rename-session',

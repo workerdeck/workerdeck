@@ -1421,6 +1421,64 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the running CLI; nothing is written to a `.mcp.json`. The iOS screen's footer says this, because
   "Disable" on a server list otherwise reads as an edit to config.
 
+## Checklist (the `checklist` event, `SessionInfo.checklist`)
+
+- **`checklist` is the engine's list; `tasks` is the product concept, and they are deliberately
+  different words.** The field carries only what the engine itself wrote (Claude's `TodoWrite`,
+  codex's `turn/plan/updated`). What the clients draw is `sessionTasks(info)` — that list *unified
+  with* the untyped `Task` spawns `isAgentRecord` rejects. Naming the field `tasks` would have made
+  `info.tasks !== sessionTasks(info)` a sentence someone writes by accident within a month; the
+  pairing is the same one `subagents`/`sessionSteps` already uses.
+- **It is a fold of the event log, not a tracker.** `EventLog` folds it beside `activityCount`,
+  `proseCount` and `contextUsage`, and all three runners' `info()` read `this.#log.checklist`. One
+  truth, two carriers: the event serves the attached transcript, the `SessionInfo` field serves the
+  polled list surfaces. That also makes restore free — but `restore()` must reset `#checklist`
+  along with the other four counters before re-folding, which is the one line easy to miss.
+- **The emit must follow the subscriber fan-out, never come from inside `SubagentTracker.observe`.**
+  An emit from the observer appends seq n+1 and delivers it *before* seq n reaches subscribers, and
+  every reducer's `seq <= lastSeq` dedupe then silently drops the `assistant_message` that carried
+  the tool call. A core test pins that the `checklist` event's seq is strictly greater than the
+  message that produced it. Recursion is one level: `checklistFromBody` of a `checklist` body is
+  `undefined`.
+- **Changed-only emission is compared against the log's own fold, not a private fingerprint.** A
+  `TodoWrite` that rewrites an unchanged list is the common case and emits nothing; and because the
+  comparison reads the fold, a `/clear` automatically re-arms emission for an identical post-reset
+  list. A fingerprint field would have had to be reset by hand in the same place.
+- **A well-formed empty `todos: []` is a clear; only malformed input is `undefined`.** That split is
+  the one behaviour change `parseTodoWriteInput` made when it moved out of `ui`'s `todos.ts` into
+  protocol, and it is why `todoPreview` grew its own empty-list guard — the renderer still wants the
+  generic tool preview for an empty list, but core needs to be able to hear "the plan is gone".
+- **Nothing sweeps it at a turn boundary.** The list is the engine's own statement and survives
+  `turn_result` and `status_changed(idle)`; the next write wins. Downgrading `in_progress` at turn
+  end would fabricate a state the engine never reported, and `sessionState` does not read the
+  checklist, so a standing list cannot make a session look busy. A completed plan left standing is a
+  truthful record, which is what the hide-completed toggle is for.
+- **`conversation_reset` clears it, with no explicit empty event** — the `contextUsage` pattern.
+  Both reducers clear on the same arm, so replay ordering is correct without one.
+- **`replayCoalesceKey` is the constant `'checklist'`,** because every write is the whole list and
+  last-write-wins *is* the fold. `transcriptActivity`/`transcriptProse` are 0 (engine housekeeping
+  must never move the unread badge) and `transcriptContent` is false (it is state, so it replays
+  across a `/clear` and the reset arm is what clears it).
+- **Only the root thread's list counts.** A nested `assistant_message` (`parentToolUseId != null`)
+  is a sub-agent's own checklist and is ignored. On codex the equivalent guard was *missing*:
+  `turn/plan/updated` was not in `THREAD_SCOPED_NOTIFICATIONS`, so a sub-agent thread's plan was
+  published as the root's. It was harmless only because the old `codex.todo_list` `sdk_event` had
+  zero consumers repo-wide — which is why that event was replaced rather than kept beside the new
+  one.
+- **A codex session that wakes from dormancy reports no checklist until its next plan update.**
+  Thread history carries no plan notifications to rebuild from: the app-server's `plan` ThreadItem
+  is proposed-plan *prose*, not the step list, and `TurnPlanUpdatedNotification` is a notification
+  only. Claude rebuilds from its resume backfill, which runs through `#emit` like anything else.
+- **The parked record's copy is a snapshot, and that is the same guarantee `subagents` has.** It
+  rides `ParkedSessionRecord.info`, rewritten on `system_init`, every non-park `status_changed` and
+  `conversation_reset`, so it lags at most one turn and only serves once the runner is gone. It is a
+  fold and must never be copied into `config`/`meta`.
+- **`SessionInfo` alone cannot serve an attached session's status bar.** `packages/react` seeds
+  `state.session` at attach and never re-seeds it, and iOS has no poll behind an open session — so
+  the checklist half of the Tasks surface reads `state.checklist` (live, from the event) while the
+  spawn half reads whatever `subagents` snapshot the host can supply. The web passes its polled
+  record down as `SessionPanel`'s `subagents` prop for exactly that reason.
+
 ## Tool titles (the `tool_titles` event)
 
 - **A transcript row's label is a resolution, not a field.** `TranscriptItem` carries the wire

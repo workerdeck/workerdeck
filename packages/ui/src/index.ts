@@ -99,6 +99,8 @@ export {
 export { StatusBar, type StatusBarProps } from './components/agent/StatusBar.tsx'
 export { ContextDialog, type ContextDialogProps } from './components/agent/ContextDialog.tsx'
 export { UsageDialog, type UsageDialogProps } from './components/agent/UsageDialog.tsx'
+export { TaskList, type TaskListProps } from './components/agent/TaskList.tsx'
+export { TasksDialog, type TasksDialogProps } from './components/agent/TasksDialog.tsx'
 export { UsageMeters, useMinuteClock } from './components/agent/UsageMeters.tsx'
 export { SessionInfoDialog, type SessionInfoDialogProps } from './components/agent/SessionInfoDialog.tsx'
 export { McpDialog, type McpDialogProps } from './components/agent/McpDialog.tsx'

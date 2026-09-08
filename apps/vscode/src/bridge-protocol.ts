@@ -171,6 +171,7 @@ export type HostToSection =
   | TransportToWebview
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | { kind: 'wd-vitals'; vitals?: SessionVitals }
+  | { kind: 'wd-tasks-show-completed'; showCompleted: boolean }
 
 export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost
 export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways

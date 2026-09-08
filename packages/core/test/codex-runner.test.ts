@@ -249,11 +249,14 @@ describe('CodexRunner: turns, streaming and item mapping', () => {
 
     const sdkTypes = ofType(events, 'sdk_event').map((e) => e.payload.type)
     expect(sdkTypes).toContain('codex.exoticNovelty')
-    expect(sdkTypes).toContain('codex.todo_list')
-    const plan = ofType(events, 'sdk_event').find((e) => e.payload.type === 'codex.todo_list')!
-    expect(plan.payload.items).toEqual([
-      { text: 'read', completed: true },
-      { text: 'write', completed: false },
+    expect(sdkTypes).not.toContain('codex.todo_list')
+    expect(ofType(events, 'checklist')[0]?.items).toEqual([
+      { text: 'read', status: 'completed' },
+      { text: 'write', status: 'in_progress' },
+    ])
+    expect(runner.info().checklist).toEqual([
+      { text: 'read', status: 'completed' },
+      { text: 'write', status: 'in_progress' },
     ])
 
     expect(ofType(events, 'turn_result')[0]).toMatchObject({

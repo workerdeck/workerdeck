@@ -35,7 +35,6 @@ export interface SessionBrowserProps {
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
-  onRevealStep?: (row: SessionRow, toolUseId: string) => void
   emptyState?: React.ReactNode
   showControls?: boolean
   projectIcons?: Record<string, string>
@@ -58,7 +57,6 @@ export function SessionBrowser({
   onRename,
   onClearContext,
   onSelectSubagent,
-  onRevealStep,
   emptyState,
   showControls = true,
   projectIcons,
@@ -217,7 +215,6 @@ export function SessionBrowser({
                   onRename={onRename}
                   onClearContext={onClearContext}
                   onSelectSubagent={onSelectSubagent}
-                  onRevealStep={onRevealStep}
                 />
               ))}
             </div>
@@ -245,7 +242,6 @@ interface SessionRowItemProps {
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
-  onRevealStep?: (row: SessionRow, toolUseId: string) => void
 }
 
 function SessionRowItem({
@@ -260,7 +256,6 @@ function SessionRowItem({
   onRename,
   onClearContext,
   onSelectSubagent,
-  onRevealStep,
 }: SessionRowItemProps) {
   const { info } = row
   const [editing, setEditing] = useState(false)
@@ -275,7 +270,6 @@ function SessionRowItem({
       projectIcons={projectIcons}
       onSelect={() => onSelect?.(row)}
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
-      onRevealStep={onRevealStep ? (id) => onRevealStep(row, id) : undefined}
       onRename={onRename ? (title) => onRename(row, title) : undefined}
       renameOn="external"
       editing={editing}

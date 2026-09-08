@@ -198,6 +198,7 @@ export type SessionEventBody =
     }
   | { type: 'skills'; skills: SkillInfo[] }
   | { type: 'tool_titles'; titles: Record<string, string> }
+  | { type: 'checklist'; items: ChecklistItem[] }
   | {
       type: 'file_produced'
       fileId: string
@@ -583,6 +584,13 @@ export type SubagentInfo = {
 
 export const SUBAGENT_HISTORY = 8
 
+// Widening this union costs a PROTOCOL_VERSION bump: Swift decodes it strictly.
+export type ChecklistStatus = 'pending' | 'in_progress' | 'completed'
+
+export type ChecklistItem = { text: string; status: ChecklistStatus }
+
+export const CHECKLIST_TEXT_MAX = 200
+
 export type ProjectIcon = { type: 'glyph'; name: string } | { type: 'image'; mediaType: 'image/png' | 'image/svg+xml'; hash: string }
 
 export type ProjectInfo = {
@@ -607,6 +615,7 @@ export type SessionInfo = {
   lastSeq: number
   pendingPermissionCount: number
   subagents?: SubagentInfo[]
+  checklist?: ChecklistItem[]
   meta?: Record<string, unknown>
   title?: string
   totalCostUsd?: number
@@ -719,6 +728,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     }
     case 'status_changed': {
       return 'status_changed'
+    }
+    case 'checklist': {
+      return 'checklist'
     }
     case 'sdk_event': {
       return body.payload.type === 'system' && body.payload.subtype === 'status' ? 'sdk_event:system:status' : undefined
@@ -960,6 +972,7 @@ export type GetJobResponse = { job: JobInfo }
 export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
 
+export * from './checklist.ts'
 export * from './session-list.ts'
 export * from './tool-titles.ts'
 export * from './usage.ts'

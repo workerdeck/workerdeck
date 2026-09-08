@@ -624,6 +624,26 @@ describe('transcript reducer', () => {
     expect(state.totalCostUsd).toBe(0.5)
   })
 
+  it('holds the checklist the engine last wrote, and drops it on a reset', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      { type: 'checklist', items: [{ text: 'read', status: 'completed' }] },
+      {
+        type: 'checklist',
+        items: [
+          { text: 'read', status: 'completed' },
+          { text: 'write', status: 'in_progress' },
+        ],
+      },
+    ])
+    expect(state.checklist).toEqual([
+      { text: 'read', status: 'completed' },
+      { text: 'write', status: 'in_progress' },
+    ])
+    expect(run(state, [{ type: 'checklist', items: [] }]).checklist).toBeUndefined()
+    expect(run(state, [{ type: 'conversation_reset' }]).checklist).toBeUndefined()
+  })
+
   it('conversation_reset without a new id keeps the known one, and resets stack', () => {
     seq = 0
     const state = run(initialTranscriptState, [

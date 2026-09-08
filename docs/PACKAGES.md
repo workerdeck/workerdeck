@@ -305,10 +305,19 @@ hand and two clients must not disagree about what a tool is called; the full rul
 tracker opens a record for every spawner call *and* for any nested event whose parent it never saw,
 so `SessionInfo.subagents` holds two different things wearing one shape: one carries a
 `subagent_type` — a delegated agent with an identity (`Explore`) whose own work deserves a surface
-— and the other carries only a description, with no agent behind it to open. A row that offered a
-screen and then showed an empty frame would be worse than a row that offered nothing, so
-`isAgentRecord` decides what is pressable and what wears the sub-agent colour, in protocol rather
-than per client, because two surfaces must not disagree about either.
+— and the other carries only a description, with no agent behind it to open. `isAgentRecord` is
+what divides them, in protocol rather than per client, because three surfaces must not disagree:
+`sessionSteps` keeps the agents (the card's disclosure), `sessionTasks` takes the rest.
+
+`checklist.ts` is the **task** half. `SessionInfo.checklist` carries the engine's own list and only
+that; `sessionTasks(info)` is the derivation that unifies it with the untyped spawns into the rows
+every client draws, and the two names are kept apart deliberately — `info.tasks !== sessionTasks(info)`
+is the bug the pairing exists to prevent, the same way `subagents` and `sessionSteps` are already
+kept apart. `parseTodoWriteInput` lives here rather than in `ui` because core produces the field and
+every renderer reads it: one whole-or-nothing rule, one `activeForm`-only-when-in-progress rule.
+`ChecklistStatus` is a closed union that Swift decodes strictly, so widening it is the one change
+here that would cost a `PROTOCOL_VERSION` bump. Lifecycle, and why a codex wake reports none, is in
+`docs/GOTCHAS.md` § Checklist.
 
 `projectKey`'s cwd fallback is what makes grouping by project useful *before* anyone has written a
 `.workerdeck.json`: undeclared sessions group by their own folder, declared ones by their root, and
@@ -1340,28 +1349,24 @@ cost: a stack of hairlines across every open card turned the list into a ledger,
 answer a pointer. A step that lights on `--row-active` and fills when it is the one on screen says
 *list* more plainly than a line between two of them.
 
-**Every step is pressable, and what a press means is what tells the two kinds apart.** Pressing an
-**agent** hands the panel over to that agent's own work, so an agent can be the selected thing and
-`StepRow`'s `active` gives it `--row-selected`. Pressing a **task** selects the *session* and
-travels to that task's marker inside it — a task is a reference to a place in a transcript, not a
-thing with a screen, so it can be followed but never held, and `active` is guarded on `kind` here
-rather than trusted from the caller: a host handing back a task's key is describing where it
-navigated, not what it selected.
+**Steps are sub-agents, and every step is pressable.** Pressing one hands the panel over to that
+agent's own work, so an agent can be the selected thing and `StepRow`'s `active` gives it
+`--row-selected`. Dispatch order — the only order these records carry that means anything —
+survives the filter untouched.
 
-Those are **two seams, not one**, and the split is load-bearing: `sessionSteps`' callback is handed
-the **kind** alongside the id, and `SessionItem` routes an agent to `onSelectSubagent` and a task to
-`onRevealStep`. One callback for both is how a task came to be opened as though it were an agent —
-`subagentItems` matched nothing under a tool-use id with no agent behind it, so the panel drew an
-**empty agent view**. Both fall back to plainly opening the session, which is all a host that can do
-neither has to offer and is still better than a destination that renders empty. `sessionSteps` also
-puts **agents above tasks**, stable within each group: the rows you can open become a block at the
-top and the markers a tail you can skip, while dispatch order — the only order these records carry
-that means anything — survives inside each partition. That guard is a reversal of the older rule that a task was inert
-markup ("a disabled-looking button still announces itself as one") — correct about the markup,
-wrong about the premise, since there was always somewhere to go and the row merely swallowed the
-click on its way there. `onSelectSubagent` is **optional**, and its absence is not a missing
-feature: a sub-agent has no screen of its own, so a host that cannot scroll a transcript to a
-`Task` row has nothing more to offer than opening the session, which is what the fallback does.
+The card used to draw **tasks here too**, and that is what this section is a record of. Both kinds
+shared one disclosure and one badge, so `7/9` could not say whether the 7 were sub-agents or tasks;
+it needed two seams (`onSelectSubagent` for an agent, `onRevealStep` for a task) because framing a
+task's tool-use id matched nothing under `subagentItems` and drew an **empty agent view**. The fix
+was not a third affordance but a **scope**: the card is a list surface and keeps the list question,
+and tasks moved to the selected session's own Tasks surface, where `sessionTasks` unifies them with
+the engine's checklist. `Step.kind`, `Step.State.pending` and `onRevealStep` went with them — a
+`ui` major, taken rather than leaving a prop accepted and ignored. The **reveal chain itself
+survives** and only changed producer: the web's `?reveal=`/`rn`, the extension's
+`wd-reveal-tool-use`, and iOS's `SessionRoute.session(…, reveal:)` are now driven from inside the
+Tasks surface. `onSelectSubagent` is **optional**, and its absence is not a missing feature: a host
+that cannot frame an agent has nothing more to offer than opening the session, which is what the
+fallback does.
 It draws **projects** the way the extension's
 cards do, and to the same rules: `projectLabel` in the cwd-basename slot (falling back to exactly
 that basename, so an undeclared project is byte-identical to what shipped), the icon inline

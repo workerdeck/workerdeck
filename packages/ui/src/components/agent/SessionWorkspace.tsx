@@ -26,6 +26,7 @@ export interface SessionWorkspaceProps {
   stickyPrompt?: SessionPanelProps['stickyPrompt']
   openSubagent?: SessionPanelProps['openSubagent']
   reveal?: SessionPanelProps['reveal']
+  subagents?: SessionPanelProps['subagents']
   onSubagentChange?: SessionPanelProps['onSubagentChange']
   statusPlacement?: SessionPanelProps['statusPlacement']
   controlsSurface?: SessionPanelProps['controlsSurface']
@@ -59,6 +60,7 @@ export function SessionWorkspace({
   stickyPrompt,
   openSubagent,
   reveal,
+  subagents,
   onSubagentChange,
   statusPlacement,
   controlsSurface,
@@ -218,6 +220,7 @@ export function SessionWorkspace({
             stickyPrompt={stickyPrompt}
             openSubagent={openSubagent}
             reveal={reveal}
+            subagents={subagents}
             onSubagentChange={onSubagentChange}
             controlsSurface={controlsSurface}
             fontSize={fontSize}

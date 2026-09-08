@@ -44,31 +44,26 @@ final class SessionRowUITests: XCTestCase {
     XCTAssertTrue(app.navigationBars["Sessions"].exists, "the overflow pushed the row")
   }
 
-  // The two kinds of step go to two destinations, and getting it wrong is
-  // invisible from the outside: a task routed as a sub-agent frames an id that
-  // selects nothing (the web's 0.21.0 bug), and a task that loses its `reveal`
-  // opens the transcript at the tail, which looks exactly like a press that
-  // never landed. So this presses one of each and reads the route back.
+  // A step frames its agent, and an untyped record is not a step at all — it is
+  // a task, and tasks live in the session's own sheet. Both halves are invisible
+  // from the outside: an id that frames nothing selects no items (the web's
+  // 0.21.0 bug), and a task still drawn here would push a route to a screen
+  // that has nothing to show.
   @MainActor
-  func testStepKindsPressToDifferentDestinations() throws {
+  func testStepsAreAgentsAndPressToTheirFrame() throws {
     let app = XCUIApplication()
     app.launchEnvironment["UIPREVIEW"] = "steps"
     app.launch()
+
+    XCTAssertFalse(
+      app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'rewrite the height budget'")).firstMatch
+        .waitForExistence(timeout: 3),
+      "an untyped record must not draw as a step")
 
     let agent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Explore'")).firstMatch
     XCTAssertTrue(agent.waitForExistence(timeout: 8))
     agent.tap()
     let framed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'subagent: Optional(\"a1\")'")).firstMatch
-    XCTAssertTrue(framed.waitForExistence(timeout: 5), "the agent step did not frame its agent")
-    app.navigationBars.buttons.firstMatch.tap()
-
-    let task = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'rewrite the height budget'")).firstMatch
-    XCTAssertTrue(task.waitForExistence(timeout: 5))
-    task.tap()
-    let revealed = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'reveal: Optional(\"t1\")'")).firstMatch
-    XCTAssertTrue(revealed.waitForExistence(timeout: 5), "the task step did not travel to its row")
-    XCTAssertFalse(
-      app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'subagent: Optional'")).firstMatch.exists,
-      "a task must not be framed as an agent")
+    XCTAssertTrue(framed.waitForExistence(timeout: 5), "the step did not frame its agent")
   }
 }

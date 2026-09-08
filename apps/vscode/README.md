@@ -119,9 +119,9 @@ pretends otherwise):
   above it dimmed, and a bar offering `jump` or `dismiss`. Sending a message dismisses it too.
 - **WorkerDeck views** — management and switching, split across both sidebars and with no
   activity-bar container of its own. **Sessions** sits in **Explorer** beside the file tree;
-  the other five sit in a **`secondarySidebar` container titled "WorkerDeck"**, one tab
-  stacked vertically: Usage → Context → MCP Servers → Session Info → Gateways. The four detail
-  views are `when`-gated on `workerdeck.hasSession` — they are *about the session you have
+  the other six sit in a **`secondarySidebar` container titled "WorkerDeck"**, one tab
+  stacked vertically: Usage → Context → MCP Servers → Tasks → Session Info → Gateways. The five
+  detail views are `when`-gated on `workerdeck.hasSession` — they are *about the session you have
   open*, Outline and Timeline's shape — so they do not exist at all with no session on screen.
   The secondary-sidebar contribution point is why `engines.vscode` is `^1.106.0` (finalized
   there; the schema is `additionalProperties: false`, so an older build drops the key and the
@@ -170,15 +170,16 @@ pretends otherwise):
   picking one continues that engine session instead of starting a fresh one. There is no implicit localhost gateway: an
   unconfigured install shows an empty list with an add affordance rather than a phantom
   entry that is usually unreachable. The scoped surfaces —
-  **Session Info / Context / Usage / MCP Servers** — are each their **own VS Code view**
+  **Session Info / Context / Usage / MCP Servers / Tasks** — are each their **own VS Code view**
   (one shared bundle, the provider stamps which section a view is), so collapse, reorder,
-  and drag-to-anywhere are native. All four are **always present** and start collapsed
-  (`visibility: "collapsed"`): views that came and went on `when` clauses changed the
-  sidebar's shape under the pointer every time a session was selected. A view can't be
-  disabled or collapsed through the API, so an inert one says so the two ways that exist —
-  the header's description (`no session`, `not reported`) and an empty state in its body.
-  Context and Usage render from vitals the panel relays — the
-  panel holds the one live attach; no sidebar surface ever attaches. Everything on this side
+  and drag-to-anywhere are native. All five are `when`-gated on `workerdeck.hasSession`, and
+  Session Info starts collapsed. A view can't be disabled or collapsed through the API, so an
+  inert one says so the two ways that exist — the header's description (`no session`,
+  `not reported`, and the task count) and an empty state in its body.
+  Context, Usage and Tasks render from vitals the panel relays — the
+  panel holds the one live attach; no sidebar surface ever attaches. Tasks carries a
+  **Show/Hide Completed** title-bar toggle, persisted in `globalState` and mirrored to a context
+  key the way the session filter's is. Everything on this side
   renders in **VS Code's UI font** (`--vscode-font-family`) — it is workbench UI, and the
   panel's monospace setting deliberately does not reach it.
 

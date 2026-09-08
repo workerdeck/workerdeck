@@ -1,5 +1,6 @@
 import { ENGINE_CAPABILITIES, mergeUsage, orderUsageWindows } from '@workerdeck/protocol'
 import type {
+  ChecklistItem,
   ContentBlock,
   ContextUsage,
   EngineCapabilities,
@@ -93,6 +94,7 @@ export type TranscriptState = {
   models?: ModelOption[]
   commands?: SlashCommandInfo[]
   skills?: SkillInfo[]
+  checklist?: ChecklistItem[]
   // Only what the client cannot derive: host- and MCP-declared titles. `toolTitle()` folds the
   // built-in table in on top of this.
   toolTitles?: Record<string, string>
@@ -281,6 +283,10 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       return { ...base, skills: event.skills }
     }
 
+    case 'checklist': {
+      return { ...base, checklist: event.items.length > 0 ? event.items : undefined }
+    }
+
     case 'tool_titles': {
       return { ...base, toolTitles: { ...base.toolTitles, ...event.titles } }
     }
@@ -332,6 +338,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         ...base,
         items: [],
         contextUsage: undefined,
+        checklist: undefined,
         sdkSessionId: event.sdkSessionId ?? base.sdkSessionId,
       }
     }

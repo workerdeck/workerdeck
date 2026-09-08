@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { ConnectionState, TranscriptState } from '@workerdeck/react'
-import type { ContextUsage, ProfileEngine, RateLimitInfo } from '@workerdeck/protocol'
+import type { ContextUsage, ProfileEngine, RateLimitInfo, SessionTask } from '@workerdeck/protocol'
+import { taskCountLabel, taskSummary } from '@workerdeck/protocol'
 import { RefreshCw, WifiOff } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { ProgressRing } from '../ui/ProgressRing.tsx'
@@ -23,6 +24,8 @@ export interface StatusBarProps {
   onOpenStatus?: () => void
   onOpenContext?: () => void
   onOpenUsage?: () => void
+  tasks?: readonly SessionTask[]
+  onOpenTasks?: () => void
   controls?: ReactNode
   actions?: ReactNode
   placement?: 'top' | 'bottom'
@@ -134,6 +137,8 @@ export function StatusBar({
   onOpenStatus,
   onOpenContext,
   onOpenUsage,
+  tasks,
+  onOpenTasks,
   controls,
   actions,
   placement = 'top',
@@ -146,6 +151,7 @@ export function StatusBar({
   const weekly = windows?.seven_day
   const link: ConnectionState = connection ?? (connected === false ? 'reconnecting' : 'live')
   const terminal = useTranscriptVariant() === 'terminal'
+  const taskCount = tasks && tasks.length > 0 ? taskSummary(tasks) : undefined
   return (
     <div
       data-slot="status-bar"
@@ -182,6 +188,13 @@ export function StatusBar({
           <span className="inline-flex items-baseline gap-2">
             {session ? <RateLimitMeter label="Session" info={session} now={now} /> : null}
             {weekly ? <RateLimitMeter label="Weekly" info={weekly} now={now} /> : null}
+          </span>
+        </Slot>
+      ) : null}
+      {taskCount ? (
+        <Slot onClick={onOpenTasks} hint="Tasks">
+          <span className="text-label text-fg-3">
+            <span className={cn('tabular-nums', taskCount.running > 0 ? 'text-info' : undefined)}>{taskCountLabel(taskCount)}</span> tasks
           </span>
         </Slot>
       ) : null}

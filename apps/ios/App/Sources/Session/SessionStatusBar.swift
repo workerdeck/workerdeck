@@ -78,6 +78,9 @@ struct SessionStatusBar: View {
   let onOpenContext: () -> Void
   let onOpenUsage: () -> Void
   let onOpenInfo: () -> Void
+  /// The selected session's tasks — the checklist and its untyped spawns.
+  let tasks: [SessionTask]
+  let onOpenTasks: () -> Void
 
   var body: some View {
     HStack(spacing: 8) {
@@ -85,6 +88,7 @@ struct SessionStatusBar: View {
       modelChip
       permissionChip
       Spacer(minLength: 4)
+      taskChip
       usageCluster
     }
     .padding(.horizontal, 12)
@@ -172,6 +176,24 @@ struct SessionStatusBar: View {
   }
 
   // MARK: - Usage
+
+  /// The task count, and nothing at all when there are none: an empty reading
+  /// beside the gauges would be one more thing to parse on a crowded line.
+  @ViewBuilder private var taskChip: some View {
+    let count = taskSummary(tasks)
+    if let label = taskCountLabel(count) {
+      Button(action: onOpenTasks) {
+        Text(label)
+          .font(.caption2.monospacedDigit())
+          .foregroundStyle(count.running > 0 ? Color.accentColor : Color.secondary)
+          .padding(.vertical, 3)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("\(count.done) of \(count.total) tasks done")
+      .accessibilityHint("Opens the task list")
+    }
+  }
 
   /// Context and rate limits, each its own tap target.
   ///

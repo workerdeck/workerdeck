@@ -21,6 +21,7 @@ import {
 import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
 import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
@@ -98,7 +99,7 @@ const GRANULAR_NEVER = {
     skill_approval: false,
   },
 }
-const THREAD_SCOPED_NOTIFICATIONS = new Set(['turn/started', 'turn/completed', 'thread/tokenUsage/updated'])
+const THREAD_SCOPED_NOTIFICATIONS = new Set(['turn/started', 'turn/completed', 'thread/tokenUsage/updated', 'turn/plan/updated'])
 
 const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
   default: GRANULAR_ASK,
@@ -631,6 +632,7 @@ export class CodexRunner implements Runner {
       numTurns: this.#numTurns || undefined,
       lastActivityAt: this.#log.lastActivityAt,
       subagents: this.#agents.list(),
+      checklist: this.#log.checklist,
     }
   }
 
@@ -1472,22 +1474,13 @@ export class CodexRunner implements Runner {
       this.#emitRateLimits((params as { rateLimits?: AppServerRateLimits })?.rateLimits)
     },
     'turn/plan/updated': (params) => {
-      const active = this.#activeTurn
-      if (!active) {
+      if (!this.#activeTurn) {
         return
       }
-      const plan = (params as AppServerPlanUpdate)?.plan
-      if (!Array.isArray(plan)) {
-        return
+      const items = checklistFromPlan((params as AppServerPlanUpdate)?.plan)
+      if (items && !sameChecklist(this.#log.checklist, items)) {
+        this.#emit({ type: 'checklist', items })
       }
-      this.#emit({
-        type: 'sdk_event',
-        payload: {
-          type: 'codex.todo_list',
-          id: `${active.nonce}:plan`,
-          items: plan.map((step) => ({ text: step.step, completed: step.status === 'completed' })),
-        },
-      })
     },
     'serverRequest/resolved': (params) => {
       const requestId = (params as { requestId?: string | number })?.requestId

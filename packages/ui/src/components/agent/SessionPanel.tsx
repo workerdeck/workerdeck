@@ -4,11 +4,14 @@ import {
   PROTOCOL_VERSION,
   mergeUsage,
   orderUsageWindows,
+  sessionTasks,
   usageInfos,
   type ModelOption,
   type PermissionMode,
   type RateLimitInfo,
+  type SessionTask,
   type SkillInfo,
+  type SubagentInfo,
 } from '@workerdeck/protocol'
 import {
   useAttachments,
@@ -29,6 +32,7 @@ import { Button } from '../ui/Button.tsx'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu.tsx'
 import { Composer, skillPrompt, type ComposerHandle } from './Composer.tsx'
 import { ContextDialog } from './ContextDialog.tsx'
+import { TasksDialog } from './TasksDialog.tsx'
 import { HostFilesDialog } from './HostFilesDialog.tsx'
 import { McpDialog } from './McpDialog.tsx'
 import { SkillsDialog } from './SkillsDialog.tsx'
@@ -107,6 +111,8 @@ export interface SessionPanelProps {
   reveal?: { toolUseId: string; nonce: number }
   openSubagent?: { toolUseId: string; nonce: number }
   onSubagentChange?: (toolUseId: string | undefined) => void
+  // The attach frame's `state.session` never refreshes, so a host that polls the sessions list passes the live records here.
+  subagents?: SubagentInfo[]
   stickyPrompt?: boolean
   transcriptDensity?: TranscriptDensity
   transcriptFont?: TranscriptFont
@@ -151,7 +157,7 @@ const INTERACTIVE = [
   '[role="tab"]',
 ].join(',')
 
-export type SessionSurfacePanel = 'info' | 'context' | 'usage' | 'mcp' | 'files' | 'skills'
+export type SessionSurfacePanel = 'info' | 'context' | 'usage' | 'mcp' | 'files' | 'skills' | 'tasks'
 type Panel = SessionSurfacePanel
 
 export type SessionVitals = {
@@ -166,6 +172,7 @@ export type SessionVitals = {
   skills: SkillInfo[] | undefined
   cwd: TranscriptState['cwd']
   contextUsage: TranscriptState['contextUsage']
+  tasks: SessionTask[]
   rateLimits: TranscriptState['rateLimits']
   // When the newest window in `rateLimits` was reported, as event time — not receive time. External chrome (the
   // VS Code status bar, iOS) cannot otherwise tell a live reading from one a days-old session just replayed.
@@ -194,6 +201,7 @@ export function SessionPanel({
   bookmarks,
   onToggleBookmark,
   reveal,
+  subagents,
   openSubagent,
   onSubagentChange,
   stickyPrompt = false,
@@ -219,6 +227,8 @@ export function SessionPanel({
   const controlsExternal = controlsSurface === 'external' || controlsInStatus
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined)
   const [panel, setPanel] = useState<Panel | undefined>()
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false)
+  const [taskReveal, setTaskReveal] = useState<{ toolUseId: string; nonce: number } | undefined>()
   const {
     state,
     connection,
@@ -302,6 +312,11 @@ export function SessionPanel({
     return stamps.length > 0 ? Math.max(...stamps) : undefined
   }, [usage])
 
+  const tasks = useMemo(
+    () => sessionTasks({ checklist: state.checklist, subagents: subagents ?? state.session?.subagents }),
+    [state.checklist, subagents, state.session?.subagents],
+  )
+
   const onVitalsRef = useRef(onVitals)
   onVitalsRef.current = onVitals
   const vitalsModel = effectiveModel ?? state.model
@@ -322,6 +337,7 @@ export function SessionPanel({
       skills: state.skills,
       cwd: state.cwd,
       contextUsage: state.contextUsage,
+      tasks,
       rateLimits,
       rateLimitsUpdatedAt: usageUpdatedAt,
       itemCount: state.items.length,
@@ -339,6 +355,7 @@ export function SessionPanel({
     state.skills,
     state.cwd,
     state.contextUsage,
+    tasks,
     rateLimits,
     usageUpdatedAt,
     state.items.length,
@@ -497,6 +514,8 @@ export function SessionPanel({
       onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
       onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
       onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
+      tasks={tasks}
+      onOpenTasks={external && !onOpenPanel ? undefined : () => openPanel('tasks')}
       actions={headerTakesActions ? undefined : menu}
     />
   )
@@ -597,7 +616,7 @@ export function SessionPanel({
                     bookmarks={bookmarks}
                     replaying={replaying}
                     catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
-                    reveal={returnReveal ?? reveal}
+                    reveal={taskReveal ?? returnReveal ?? reveal}
                     frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
                     onOpenSubagent={enterSubagent}
                     emptyState={emptyState}
@@ -724,6 +743,18 @@ export function SessionPanel({
                       canManageServers={capabilities.mcpServerActions}
                       open={panel === 'mcp'}
                       onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
+                    />
+                    <TasksDialog
+                      tasks={tasks}
+                      showCompleted={showCompletedTasks}
+                      onShowCompletedChange={setShowCompletedTasks}
+                      onSelectTask={(task) => {
+                        if (task.toolUseId) {
+                          setTaskReveal({ toolUseId: task.toolUseId, nonce: Date.now() })
+                        }
+                      }}
+                      open={panel === 'tasks'}
+                      onOpenChange={(next) => setPanel(next ? 'tasks' : undefined)}
                     />
                     <SkillsDialog
                       skills={state.skills}

@@ -148,9 +148,9 @@ for what the header can't do (clear a filter, widen a scope).
 
 **There is no activity-bar container.** The views are split across the two sidebars by
 default: **Sessions** into **Explorer**, beside the file tree (it is a workspace-level list,
-and it is where the `+` lives), and the other five into a **`secondarySidebar` container
-titled "WorkerDeck"** — one tab, stacked vertically, Usage → Context → MCP Servers →
-Session Info → Gateways. The four detail views are `when`-gated on `workerdeck.hasSession`:
+and it is where the `+` lives), and the other six into a **`secondarySidebar` container
+titled "WorkerDeck"** — one tab, stacked vertically, Usage → Context → MCP Servers → Tasks →
+Session Info → Gateways. The five detail views are `when`-gated on `workerdeck.hasSession`:
 they are *about the thing you have open*, which is Outline and Timeline's shape. That gating
 reverses the earlier "views must not appear and disappear under the pointer" rule on
 purpose; Sessions and Gateways stay ungated, which is what keeps both containers' shape
@@ -159,7 +159,7 @@ section with nothing to say says it the only two ways that exist — the header'
 `description` (`no session`, `not reported`, `not supported`) and an empty state in the body.
 `viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
 it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
-`additionalProperties: false`, so on an older build the key is dropped and the five views do
+`additionalProperties: false`, so on an older build the key is dropped and the six views do
 not exist at all. That floor is the whole cost of the layout, and it is what would keep the
 extension off a Cursor/VSCodium built on an older base. Two things a contributed location
 cannot do: it cannot order a view against a *built-in* one (extension views append after
@@ -305,7 +305,8 @@ A session row **expands** to its sub-agents (`SessionInfo.subagents`) — `sessi
 this webview, that being exactly why the dashboard had none of them; a session's sub-agents are a
 protocol fact and a disclosure over them is a list affordance, so neither is extension-specific.
 The disclosure sits on the *second* line, since the first line's left edge belongs to the name you scan by, doubling as the
-count (`2 of 3 agents`, because "how many are still going" is the live question); expansion is
+count (`2 of 3 agents`, and it counts **sub-agents only** now, which is what makes the number
+answerable — it used to include tasks, so `7/9` could not say which was which); expansion is
 row-local React state and unpersisted, and could not be a native twisty regardless, every view
 here being a webview. Pressing a child selects the session and **hands the panel over to that agent's own work**
 (`wd-select-session`'s `subagentToolUseId` → `wd-open-subagent` → `SessionPanel.openSubagent`),
@@ -317,7 +318,10 @@ survives untouched for other callers. A **task** takes the other road: `wd-selec
 **`wd-reveal-tool-use`** → `SessionPanel.reveal`, which stays on the conversation and travels to the
 row where that work was started and finished. A sibling field and a separate arm, not a flag,
 because the two go to different panel APIs — and conflating them is exactly how a task came to be
-framed as an agent, selecting no items and drawing an **empty agent view**. `panel.ts` holds them
+framed as an agent, selecting no items and drawing an **empty agent view**. Tasks no longer draw
+under the card at all (they are in the **Tasks** view, `sessionTasks`), so the reveal road's
+producer moved rather than its plumbing: the chain below is unchanged and now driven from that
+view. `panel.ts` holds them
 in a single `#pending` slot — one kind at a time, so asking for either withdraws the other and the
 mutual exclusion is structural rather than two queues clearing each other — flushed from
 `#pushActive` with one strictly-increasing nonce (per-kind values never repeat, which is what keeps
@@ -699,18 +703,24 @@ with no agents simply has no disclosure and its row runs full width. Expanded, e
 full-width row**, which is a real thumb target where a line inside a two-line row is not, and it
 pushes `SessionRoute.session(…, subagent:)` — the session with that agent already framed, the
 phone's spelling of the dashboard's `?subagent=`. The rows come from the kit's `sessionSteps`
-(`SessionSteps.swift`, the port of `packages/ui`'s `SessionSteps.tsx`): **agents sort above
-tasks**, and `isAgentRecord` decides the *destination* rather than whether there is one. Every
-step presses; an agent pushes its takeover, a task pushes `SessionRoute.session(…, reveal:)` —
-the session, landed on that tool call's own row (`toolCallItemIndex` → the same focus request a
-tapped notification rides, and so **terminal-renderer only**, since the cards renderer has no row
-model to land on). A task used to draw inert here on the argument that there was nowhere to send
-it; there always was, and the equivalent bug on the web was the opposite mistake — framing a
-task's id, which selects no items and drew an **empty agent view**. Both kinds are one row shape
-(`SessionStepRow`) with two route payloads, never a variant branch inside the row.
+(`SessionSteps.swift`, the port of `packages/ui`'s `SessionSteps.tsx`) and are **sub-agents only**:
+`isAgentRecord` decides membership, `SessionRoute.step` has one destination, and every step pushes
+its takeover.
+
+Tasks are the thing that is *not* here, and the omission is the design. They used to share this
+disclosure, which made one badge answer two questions and answer neither — so they moved to the
+session's own **`TasksSheet`**, opened from the count on `SessionStatusBar` (a chip, because the app
+has no popovers: every status-line item is a case on `SessionView.Sheet` and a `.sheet(item:)`).
+Its rows come from `sessionTasks` (`Checklist.swift`), unifying the engine's checklist with the
+untyped spawns. `SessionRoute.session(…, reveal:)` survives and only changed caller: from inside the
+sheet the session is already open, so a spawn sets `focusTarget` directly (`toolCallItemIndex` → the
+same focus request a tapped notification rides, and so **terminal-renderer only**, since the cards
+renderer has no row model to land on — the sheet passes `onReveal: nil` there rather than drawing a
+press that cannot land).
 
 Three parity ports share one shape worth stating once: **the phone reuses the kit's rule and
-supplies its own drawing.** `TerminalTodos` (the `TodoWrite` checklist) and `PlanRequest` (is this
+supplies its own drawing.** `TerminalTodos` (the `TodoWrite` checklist as the transcript draws it — the
+*wire* checklist is now `ChecklistItem` and reaches the phone as a field) and `PlanRequest` (is this
 approval a plan?) are ports of `todos.ts` and `plan-request.ts`, and each is the *single* predicate
 both of this client's renderers branch on, so the cards prompt and the terminal prompt can never
 disagree about what a plan is. The checklist diverges from the web in one place, and the divergence

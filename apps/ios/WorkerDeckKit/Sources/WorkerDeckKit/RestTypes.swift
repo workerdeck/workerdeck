@@ -589,6 +589,11 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// wrong for a *background* agent — see `sessionState` in `SessionList.swift`
   /// — and it could not be right without this field to count.
   public let subagents: [SubagentInfo]?
+  /// The engine's own task checklist — Claude's `TodoWrite`, codex's plan.
+  /// Absent and empty mean the same thing. A codex session that woke from
+  /// dormancy reports none until its next plan update: thread history carries
+  /// no plan notifications to rebuild from.
+  public let checklist: [ChecklistItem]?
   /// Opaque tags naming what this session belongs to. Assigned at create,
   /// immutable, and enforced by the gateway — a client only ever echoes them.
   public let scope: [String: String]?
@@ -627,7 +632,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
     numTurns: Int? = nil, activityCount: Int? = nil, proseCount: Int? = nil,
     lastActivityAt: Double? = nil,
-    subagents: [SubagentInfo]? = nil, scope: [String: String]? = nil,
+    subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
+    scope: [String: String]? = nil,
     project: ProjectInfo? = nil, contextUsage: ContextReading? = nil
   ) {
     self.id = id
@@ -652,6 +658,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.proseCount = proseCount
     self.lastActivityAt = lastActivityAt
     self.subagents = subagents
+    self.checklist = checklist
     self.scope = scope
     self.project = project
     self.contextUsage = contextUsage

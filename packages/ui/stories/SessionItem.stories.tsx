@@ -107,11 +107,6 @@ function SelectionPlayground(args: React.ComponentProps<typeof SessionItem>) {
           setAgentKey(toolUseId)
           setLog(`select session + open agent ${toolUseId}`)
         }}
-        onRevealStep={(toolUseId) => {
-          setSelected(true)
-          setAgentKey(undefined)
-          setLog(`select session + scroll to task ${toolUseId}`)
-        }}
       />
       <p className="px-1 text-micro text-fg-4">
         host received: <span className="text-fg-2">{log}</span>

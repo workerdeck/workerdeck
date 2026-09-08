@@ -140,7 +140,6 @@ createRoot(document.getElementById('root')!).render(
           activeSubagentId={i === 0 ? 'a' : undefined}
           onSelect={() => {}}
           onSelectSubagent={() => {}}
-          onRevealStep={() => {}}
           onRename={() => {}}
           onMenu={() => {}}
         />

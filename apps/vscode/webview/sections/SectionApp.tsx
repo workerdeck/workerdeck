@@ -4,14 +4,15 @@ import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
 import type { SessionVitals } from '@workerdeck/ui'
 import type { SidebarState } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
-import { ContextSection, InfoSection, McpSection, UsageSection } from './content.tsx'
+import { ContextSection, InfoSection, McpSection, TasksSection, UsageSection } from './content.tsx'
 
-export type SectionKind = 'info' | 'context' | 'usage' | 'mcp'
+export type SectionKind = 'info' | 'context' | 'usage' | 'mcp' | 'tasks'
 
 // The manifest's `when` clauses hide a view with no session or no capability, so the fallbacks here only cover the races in between.
 export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
   const [vitals, setVitals] = useState<SessionVitals | undefined>(undefined)
+  const [showCompleted, setShowCompleted] = useState(false)
 
   useEffect(
     () =>
@@ -20,6 +21,8 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
           setState(msg.state)
         } else if (msg.kind === 'wd-vitals') {
           setVitals(msg.vitals)
+        } else if (msg.kind === 'wd-tasks-show-completed') {
+          setShowCompleted(msg.showCompleted)
         }
       }),
     [bridge],
@@ -73,6 +76,13 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
       return (
         <Pad>
           <UsageSection rateLimits={vitals?.rateLimits} />
+        </Pad>
+      )
+    }
+    case 'tasks': {
+      return (
+        <Pad>
+          <TasksSection info={info} vitals={vitals} showCompleted={showCompleted} />
         </Pad>
       )
     }

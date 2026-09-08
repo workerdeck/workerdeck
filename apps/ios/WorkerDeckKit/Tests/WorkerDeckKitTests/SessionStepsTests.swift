@@ -6,11 +6,10 @@ import Testing
 /// The steps under a session row — the port of
 /// `packages/ui/test/session-steps.test.ts`.
 ///
-/// These are the rules that caught the equivalent web bug and are worth having
-/// here first: **agents sort above tasks**, and **the kind is what routes a
-/// press**. The phone's list re-derived both inline and got both wrong — raw
-/// dispatch order, and a `failed` agent drawing a checkmark because the only
-/// branch was on `running`.
+/// Steps are sub-agents only: an untyped record is a task, and tasks live in
+/// the selected session's own surface. The phone's list re-derived this inline
+/// and got it wrong — a `failed` agent drew a checkmark because the only branch
+/// was on `running`.
 @Suite("SessionSteps")
 struct SessionStepsTests {
   private func info(subagents: [SubagentInfo]?) -> SessionInfo {
@@ -39,27 +38,22 @@ struct SessionStepsTests {
 
   // MARK: - Order
 
-  /// The rule the phone's inline version did not have. Interleaved in dispatch
-  /// order the openable rows scatter through a list of markers; grouped, they
-  /// are a block at the top.
-  @Test("agents sort above tasks")
-  func agentsFirst() {
+  @Test("untyped records are not steps")
+  func tasksAreNotSteps() {
     let steps = sessionSteps(
       info(subagents: [task("t1"), agent("a1"), task("t2"), agent("a2")]))
-    #expect(steps.map(\.key) == ["a1", "a2", "t1", "t2"])
-    #expect(steps.map(\.kind) == [.agent, .agent, .task, .task])
+    #expect(steps.map(\.key) == ["a1", "a2"])
   }
 
-  /// Stable **within** each group, deliberately: dispatch order is the only
-  /// order these records have that means anything, so the partition must never
-  /// reorder inside a partition.
-  @Test("dispatch order survives inside each group")
-  func stableWithinGroup() {
+  /// Dispatch order is the only order these records have that means anything,
+  /// so the filter must never reorder what it keeps.
+  @Test("dispatch order survives the filter")
+  func stableOrder() {
     let steps = sessionSteps(
       info(subagents: [
         agent("a1"), task("t1"), agent("a2"), task("t2"), agent("a3"), task("t3"),
       ]))
-    #expect(steps.map(\.key) == ["a1", "a2", "a3", "t1", "t2", "t3"])
+    #expect(steps.map(\.key) == ["a1", "a2", "a3"])
   }
 
   @Test("no sub-agents is no steps, and nil is not a crash")
@@ -68,13 +62,10 @@ struct SessionStepsTests {
     #expect(sessionSteps(info(subagents: [])).isEmpty)
   }
 
-  // MARK: - Kind
+  // MARK: - Membership
 
-  /// The kind is what routes the press: an agent opens its own frame, a task
-  /// opens the session and travels to that call's row. Framing a task's id
-  /// selects no items, which is exactly the empty agent view the web shipped.
-  @Test("the kind is isAgentRecord, nothing else")
-  func kindFollowsAgentRecord() {
+  @Test("membership is isAgentRecord, nothing else")
+  func membershipFollowsAgentRecord() {
     let steps = sessionSteps(
       info(subagents: [
         agent("a1"),
@@ -84,9 +75,7 @@ struct SessionStepsTests {
           toolCount: 0),
         task("t1"),
       ]))
-    #expect(steps.first { $0.key == "a1" }?.kind == .agent)
-    #expect(steps.first { $0.key == "a2" }?.kind == .task)
-    #expect(steps.first { $0.key == "t1" }?.kind == .task)
+    #expect(steps.map(\.key) == ["a1"])
   }
 
   // MARK: - State
@@ -110,7 +99,7 @@ struct SessionStepsTests {
     let steps = sessionSteps(
       info(subagents: [
         agent("a1", status: .running), agent("a2", status: .failed),
-        task("t1", status: .running), task("t2"),
+        agent("a3", status: .running), agent("a4"),
       ]))
     #expect(runningSteps(steps) == 2)
     #expect(runningSteps([]) == 0)
@@ -133,13 +122,8 @@ struct SessionStepsTests {
   @Test("the label is the shared one")
   func label() {
     let steps = sessionSteps(
-      info(subagents: [
-        agent("a1"), agent("a2", description: nil), task("t1"),
-        SubagentInfo(
-          toolUseId: "t2", agentType: nil, description: nil, status: .done, startedAt: 1,
-          toolCount: 0),
-      ]))
-    #expect(steps.map(\.label) == ["Explore · find the auth check", "Explore", "rewrite the loader", "Sub-agent"])
+      info(subagents: [agent("a1"), agent("a2", description: nil), task("t1")]))
+    #expect(steps.map(\.label) == ["Explore · find the auth check", "Explore"])
   }
 
   /// The two spellings of one count. The phone had a hand-rolled copy of this

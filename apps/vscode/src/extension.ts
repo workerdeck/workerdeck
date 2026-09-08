@@ -18,9 +18,12 @@ const SECTION_VIEWS: Record<SectionKind, string> = {
   context: 'workerdeck.context',
   usage: 'workerdeck.usage',
   mcp: 'workerdeck.mcp',
+  tasks: 'workerdeck.tasks',
 }
 
 const HAS_SESSION_KEY = 'workerdeck.hasSession'
+const TASKS_SHOW_COMPLETED_KEY = 'workerdeck.tasksShowCompleted.v1'
+const TASKS_SHOW_COMPLETED_CONTEXT_KEY = 'workerdeck.tasksShowCompleted'
 
 const UNREAD_WATCHER = 'workerdeck.statusBar.unread'
 
@@ -56,9 +59,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
+  let tasksShowCompleted = context.globalState.get<boolean>(TASKS_SHOW_COMPLETED_KEY) ?? false
   const feed = {
     state: () => model.sidebarState(),
     vitals: () => vitals,
+    tasksShowCompleted: () => tasksShowCompleted,
   }
   const sections = Object.fromEntries(
     (Object.keys(SECTION_VIEWS) as SectionKind[]).map((kind) => [kind, new SectionViewProvider(context.extensionUri, store, kind, feed)]),
@@ -192,6 +197,14 @@ export function activate(context: vscode.ExtensionContext): void {
   model.onDidChange(() => pushStatusBar())
   pushStatusBar()
 
+  const setTasksShowCompleted = (showCompleted: boolean) => {
+    tasksShowCompleted = showCompleted
+    void context.globalState.update(TASKS_SHOW_COMPLETED_KEY, showCompleted)
+    void vscode.commands.executeCommand('setContext', TASKS_SHOW_COMPLETED_CONTEXT_KEY, showCompleted)
+    pushSections()
+  }
+  setTasksShowCompleted(tasksShowCompleted)
+
   const syncHasSession = (has: boolean) => void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, has)
   panel.onDidChangeActive((active) => syncHasSession(active !== undefined))
   syncHasSession(panel.active !== undefined)
@@ -267,6 +280,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('workerdeck.showFilter', () => sidebar.setFilterOpen(true)),
     vscode.commands.registerCommand('workerdeck.hideFilter', () => sidebar.setFilterOpen(false)),
     vscode.commands.registerCommand('workerdeck.toggleFilter', () => sidebar.toggleFilter()),
+
+    vscode.commands.registerCommand('workerdeck.showCompletedTasks', () => setTasksShowCompleted(true)),
+    vscode.commands.registerCommand('workerdeck.hideCompletedTasks', () => setTasksShowCompleted(false)),
 
     vscode.commands.registerCommand('workerdeck.selectModel', async () => {
       const models = vitals?.models ?? []

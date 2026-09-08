@@ -11,7 +11,6 @@ export function SessionCard({
   activeSubagentId,
   onSelect,
   onSelectSubagent,
-  onRevealStep,
   onRename,
   onMenu,
 }: {
@@ -23,7 +22,6 @@ export function SessionCard({
   activeSubagentId?: string
   onSelect: () => void
   onSelectSubagent: (toolUseId: string) => void
-  onRevealStep: (toolUseId: string) => void
   onRename: (title: string) => void
   onMenu: () => void
 }) {
@@ -37,7 +35,6 @@ export function SessionCard({
       projectIcons={projectIcons}
       onSelect={onSelect}
       onSelectSubagent={onSelectSubagent}
-      onRevealStep={onRevealStep}
       onRename={onRename}
       actions={<CardMenu onOpen={onMenu} />}
     />

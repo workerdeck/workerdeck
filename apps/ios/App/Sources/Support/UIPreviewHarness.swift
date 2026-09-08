@@ -371,17 +371,15 @@ private struct StepsPreview: View {
             .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
           }
         } header: {
-          Text(
-            "\(stepCountWords(running: runningSteps(steps), total: steps.count)) · agents first"
-          )
+          Text("\(stepCountWords(running: runningSteps(steps), total: steps.count)) · agents only")
         } footer: {
           Text(
             """
             Expected, top to bottom: Explore (green, spinner, 7) · Plan (RED, alarm, 2) · \
-            general-purpose (green, tick, no count) — then the tasks, grey: a neutral DOT for \
-            the settled one, a spinner for the running one, a RED alarm for the failed one. \
-            No task shows a checkmark, and no row's own marker is an arrow — the trailing \
-            chevron is the list's, and every row here is pressable.
+            general-purpose (green, tick, no count). The three untyped records in the fixture \
+            draw nothing at all — they are tasks, and tasks live in the session's own Tasks \
+            sheet. No row's own marker is an arrow: the trailing chevron is the list's, and \
+            every row here pushes its agent.
             """)
         }
       }
@@ -608,6 +606,22 @@ private struct PromptsPreview: View {
 }
 
 struct UIPreviewHarness: View {
+  private static var checklist: [ChecklistItem] {
+    [
+      ChecklistItem(text: "Read the runner", status: .completed),
+      ChecklistItem(text: "Rewriting the fold", status: .inProgress),
+      ChecklistItem(text: "Update the docs", status: .pending),
+    ]
+  }
+
+  private static var tasks: [SubagentInfo] {
+    [
+      SubagentInfo(
+        toolUseId: "t1", description: "Fix release build", status: .running, startedAt: 0,
+        toolCount: 2)
+    ]
+  }
+
   let variant: UIPreview
   /// Editing a fixture and watching it land is the whole point of this screen.
   @HotReloaded private var hot
@@ -865,7 +879,9 @@ struct UIPreviewHarness: View {
           onOpenMode: {},
           onOpenContext: {},
           onOpenUsage: {},
-          onOpenInfo: {})
+          onOpenInfo: {},
+          tasks: sessionTasks(checklist: Self.checklist, subagents: Self.tasks),
+          onOpenTasks: {})
           .padding(.horizontal, 12)
         Spacer()
       }

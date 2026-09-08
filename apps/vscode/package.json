@@ -88,6 +88,14 @@
           "when": "workerdeck.hasSession"
         },
         {
+          "id": "workerdeck.tasks",
+          "type": "webview",
+          "name": "Tasks",
+          "contextualTitle": "WorkerDeck",
+          "icon": "media/sidebar.svg",
+          "when": "workerdeck.hasSession"
+        },
+        {
           "id": "workerdeck.sessionInfo",
           "type": "webview",
           "name": "Session Info",
@@ -181,10 +189,32 @@
         "command": "workerdeck.useSkill",
         "title": "Use Skill",
         "category": "WorkerDeck"
+      },
+      {
+        "command": "workerdeck.showCompletedTasks",
+        "title": "Show Completed Tasks",
+        "category": "WorkerDeck",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "workerdeck.hideCompletedTasks",
+        "title": "Hide Completed Tasks",
+        "category": "WorkerDeck",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "workerdeck.showCompletedTasks",
+          "when": "view == workerdeck.tasks && !workerdeck.tasksShowCompleted",
+          "group": "navigation@1"
+        },
+        {
+          "command": "workerdeck.hideCompletedTasks",
+          "when": "view == workerdeck.tasks && workerdeck.tasksShowCompleted",
+          "group": "navigation@1"
+        },
         {
           "command": "workerdeck.newSession",
           "when": "view == workerdeck.sessions",

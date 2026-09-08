@@ -1,50 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { textLines } from '../src/components/terminal/height.ts'
-import { parseTodos, todoLine, todoPreview } from '../src/components/terminal/todos.ts'
+import { todoLine, todoPreview } from '../src/components/terminal/todos.ts'
 
 function todo(status: 'pending' | 'in_progress' | 'completed', content: string, activeForm?: string) {
   return activeForm === undefined ? { content, status } : { content, status, activeForm }
 }
-
-describe('parseTodos', () => {
-  it('accepts a well-formed list and keeps its order', () => {
-    const todos = parseTodos({ todos: [todo('completed', 'a'), todo('in_progress', 'b'), todo('pending', 'c')] })
-    expect(todos).toEqual([
-      { status: 'completed', text: 'a' },
-      { status: 'in_progress', text: 'b' },
-      { status: 'pending', text: 'c' },
-    ])
-  })
-
-  it('prefers activeForm for the in-progress entry only', () => {
-    const todos = parseTodos({
-      todos: [todo('in_progress', 'Fix the bug', 'Fixing the bug'), todo('completed', 'Read the file', 'Reading the file')],
-    })
-    expect(todos?.map((entry) => entry.text)).toEqual(['Fixing the bug', 'Read the file'])
-  })
-
-  it('falls back to content when activeForm is blank or missing', () => {
-    expect(parseTodos({ todos: [todo('in_progress', 'Fix the bug', '  ')] })?.[0]?.text).toBe('Fix the bug')
-    expect(parseTodos({ todos: [todo('in_progress', 'Fix the bug')] })?.[0]?.text).toBe('Fix the bug')
-  })
-
-  it('rejects anything that is not a non-empty todos array', () => {
-    expect(parseTodos(undefined)).toBeUndefined()
-    expect(parseTodos(null)).toBeUndefined()
-    expect(parseTodos('todos')).toBeUndefined()
-    expect(parseTodos({})).toBeUndefined()
-    expect(parseTodos({ todos: 'soon' })).toBeUndefined()
-    expect(parseTodos({ todos: [] })).toBeUndefined()
-  })
-
-  it('rejects the whole list when one entry is malformed', () => {
-    expect(parseTodos({ todos: [todo('pending', 'ok'), 'partial'] })).toBeUndefined()
-    expect(parseTodos({ todos: [todo('pending', 'ok'), { content: 'no status' }] })).toBeUndefined()
-    expect(parseTodos({ todos: [todo('pending', 'ok'), { content: '', status: 'pending' }] })).toBeUndefined()
-    expect(parseTodos({ todos: [todo('pending', 'ok'), { content: 7, status: 'pending' }] })).toBeUndefined()
-    expect(parseTodos({ todos: [{ content: 'ok', status: 'paused' }] })).toBeUndefined()
-  })
-})
 
 describe('todoPreview', () => {
   it('answers only TodoWrite', () => {
