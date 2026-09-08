@@ -616,6 +616,45 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   renders `gpt-6-astra` as "GPT-6 Astra" in both TS and Swift (the Swift documented-examples test
   now pins it), which is the whole point of a derived display name.
 
+  **2.0.0** — **tasks left the session card.** The first **major** since the 1.0.0 launch, and the
+  reason is one package: `@workerdeck/ui` removed `Step.kind`, `Step.State.pending` and
+  `SessionItem`/`SessionBrowser`'s `onRevealStep`, and changed `sessionSteps`' callback signature.
+  Versions are aligned, so nine packages that break nothing take the number too — that is the
+  standing cost of alignment, not a claim about their APIs. **Protocol stays 1**: everything on the
+  wire here is additive (`SessionInfo.checklist`, a `checklist` event), so no mismatch banner.
+
+  The card's disclosure drew sub-agents and tasks in one list under one badge, so `7/9` could not
+  say which was which. The fix is a **scope**, not a third affordance: the card is a list surface
+  and keeps the list question ("which sub-agents are running"), and tasks moved to the selected
+  session — a `workerdeck.tasks` VS Code view with a Show/Hide Completed title-bar command, a
+  status-bar count and dialog on the dashboard, a status-line chip and `TasksSheet` on iOS.
+
+  "Tasks" also became the thing the word means: the engine's own checklist **unified with** the
+  `Task` spawns that carry no agent type. The checklist had never reached the wire at all — it was
+  parsed per-render in the terminal transcript and nowhere else. It is now a **fold of the event
+  log** beside `activityCount`/`proseCount`/`contextUsage`, so all three runners read it from
+  `info()` and a restore recomputes it for free; `parseTodoWriteInput` moved from `ui`'s `todos.ts`
+  into `protocol` so core and every renderer share one whole-or-nothing rule, and
+  `SessionInfo.checklist` + `sessionTasks(info)` are named apart deliberately —
+  `info.tasks !== sessionTasks(info)` is the sentence the pairing exists to prevent.
+
+  Two things worth remembering as classes. **The emit must follow the subscriber fan-out**: from
+  inside `SubagentTracker.observe` it appends seq n+1 and delivers it before seq n, and every
+  reducer's `seq <= lastSeq` dedupe then silently drops the message that carried the tool call — a
+  core test pins the ordering. And codex's `turn/plan/updated` was **missing from
+  `THREAD_SCOPED_NOTIFICATIONS`**, so a sub-agent thread's plan was published as the root's; it was
+  harmless only because the old `codex.todo_list` `sdk_event` had zero consumers repo-wide, which is
+  why that event was replaced rather than kept beside the new one. A codex session woken from
+  dormancy reports no checklist until its next plan update — thread history carries no plan
+  notifications to rebuild from — and that, with the full lifecycle table, is the new
+  `docs/GOTCHAS.md` § Checklist.
+
+  One seam was added that the plan had not foreseen: `packages/react` seeds `state.session` at
+  attach and never re-seeds, so the spawn half of the task list would have been frozen in an
+  attached session. `SessionPanel` gained an optional `subagents` prop and the dashboard passes its
+  polled record down; the checklist half is live off the event, the spawn half is only as fresh as
+  the host's poll, and the asymmetry is documented rather than hidden.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
