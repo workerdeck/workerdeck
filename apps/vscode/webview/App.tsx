@@ -51,7 +51,7 @@ export function App({
   bridge,
   density,
   variant,
-  midTurnSend,
+  catchUp,
   terminalMetrics,
   affordances,
   fontSize,
@@ -59,7 +59,7 @@ export function App({
   bridge: Bridge
   density: 'comfortable' | 'compact'
   variant: 'terminal' | 'cards'
-  midTurnSend: 'fold' | 'hold'
+  catchUp: boolean
   terminalMetrics: TerminalMetrics
   affordances: boolean
   fontSize?: number
@@ -214,11 +214,10 @@ export function App({
         reveal={reveal}
         stickyPrompt
         transcriptDensity={density}
-        midTurnSend={midTurnSend}
         panelSurface="external"
         controlsSurface="external"
         focusComposerOnClick
-        unseen={shown.unseen}
+        unseen={catchUp ? shown.unseen : undefined}
         onControls={(c) => {
           controls.current = c
           tryFocus()

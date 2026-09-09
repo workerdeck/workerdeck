@@ -117,6 +117,8 @@ pretends otherwise):
   the boundary counting what happened (turns, tool calls and their names, files, errors,
   approvals waiting — counted from the transcript, never written by the model), everything
   above it dimmed, and a bar offering `jump` or `dismiss`. Sending a message dismisses it too.
+  All of that is `workerdeck.catchUpMode`, on by default — off for a reader who hops between
+  sessions constantly and reads the marker as noise.
 - **WorkerDeck views** — management and switching, split across both sidebars and with no
   activity-bar container of its own. **Sessions** sits in **Explorer** beside the file tree;
   the other six sit in a **`secondarySidebar` container titled "WorkerDeck"**, one tab

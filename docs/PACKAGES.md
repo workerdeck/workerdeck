@@ -1145,11 +1145,10 @@ webview repoints at the editor font, unconditionally, for exactly that reason). 
 offer density and font as settings must say they are Cards-only or hide them — the dashboard
 hides them, the extension documents them.
 
-`midTurnSend` is the one panel prop that changes *behaviour* rather than drawing: `'hold'` keeps
-a message typed mid-turn in `useHeldSends`' queue and sends it when the turn ends, `'fold'` (the
-default) sends it straight through for the engine to fold in. It stays a client preference —
-there is no engine option to toggle — so every client owns its own storage and the panel only
-reads the resolved value. `docs/GOTCHAS.md` § Catch-up mode has the rule.
+`unseen` is how a host turns catch-up mode on: pass the watermark and the panel draws the
+boundary, the faded rows above it and the "N new rows since you were last here" bar; pass
+`undefined` and there is none. The panel holds no preference of its own, so every client owns its
+own storage. `docs/GOTCHAS.md` § Catch-up mode has the rule.
 
 The working marker is
 the **brand mark's own pulse** (`pulse.tsx`: `⋄ ◇ ◈ ◆` at 150ms = the 0.6s clock in

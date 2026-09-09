@@ -155,14 +155,6 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     Swift's is not, so both the row and the group sort carry an explicit insertion-index
     tiebreak; and `ViewConfig` decodes leniently over its defaults, the Swift spelling of the
     webview's spread.
-  - `HeldSends.swift` — catch-up mode's off switch, ported from the web `ui` package's
-    `useHeldSends`. Catch-up is the *engine's* behaviour — a message that arrives mid-turn is
-    folded into the running turn — so the only way to turn it off is to hold the message on the
-    client, and nothing about the preference (`AppSettings.catchUpMode`, on by default) travels on
-    the wire. The queue is pure and every mutation returns what to send now, so the ordering rules
-    are testable where a view model's would not be; `TranscriptViewModel` owns the instance,
-    flushes it when the session stops being running/awaiting-approval, and draws `HeldSendsBar`
-    above the composer while anything is in it.
   - `PromptToken.swift` — the `@file` and `/command` rules in one place: which words are tokens,
     which are being typed, which are finished, and how one is replaced. Here for the same reason
     as `MarkdownBlocks` — pure string logic whose interesting cases are all edges — and shared, so

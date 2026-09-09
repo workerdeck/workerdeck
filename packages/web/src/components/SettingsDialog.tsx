@@ -14,16 +14,16 @@ import {
 import { ThemeToggle } from './shell/ThemeToggle.tsx'
 import {
   getFontSize,
-  getMidTurnSend,
+  getCatchUp,
   getTranscriptDensity,
   getTranscriptFont,
   getTranscriptVariant,
   setFontSize,
-  setMidTurnSend,
+  setCatchUp,
   setTranscriptDensity,
   setTranscriptFont,
   setTranscriptVariant,
-  type MidTurnSend,
+  type CatchUp,
   type TranscriptDensity,
   type TranscriptFont,
   type TranscriptVariant,
@@ -152,20 +152,22 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </>
               ) : null}
             </Section>
-            <Section title="Messages">
+            <Section title="Sessions">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-body-sm text-fg-2">
                   Catch-up mode
-                  <span className="block text-label text-fg-4">Send a message typed mid-turn into the running turn.</span>
+                  <span className="block text-label text-fg-4">
+                    Mark what arrived since you last read a session, with a bar that counts the new rows and jumps to them.
+                  </span>
                 </span>
-                <PrefSelect<MidTurnSend>
+                <PrefSelect<CatchUp>
                   label="Catch-up mode"
                   options={[
-                    { value: 'fold', label: 'On' },
-                    { value: 'hold', label: 'Off' },
+                    { value: 'on', label: 'On' },
+                    { value: 'off', label: 'Off' },
                   ]}
-                  read={getMidTurnSend}
-                  write={setMidTurnSend}
+                  read={getCatchUp}
+                  write={setCatchUp}
                 />
               </div>
             </Section>

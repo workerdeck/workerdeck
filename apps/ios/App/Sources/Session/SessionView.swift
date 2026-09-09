@@ -558,11 +558,6 @@ struct SessionView: View {
         // own hairline, so a gutter would make it a card again.
         statusBar
       }
-      if let summary = vm.heldSends.summary {
-        HeldSendsBar(summary: summary) { vm.flushHeldSends() }
-          .padding(.horizontal, docked ? gutter : 0)
-          .padding(.bottom, docked ? 8 : 0)
-      }
       ComposerView(
         text: $draft,
         selection: $selection,
@@ -695,7 +690,7 @@ struct SessionView: View {
       sheet = .mcp
       return
     }
-    vm.send(draft, attachmentIds: attachments.readyIds, hold: !settings.catchUpMode)
+    vm.send(draft, attachmentIds: attachments.readyIds)
     // The bytes are the server's now, and the echoed event carries the
     // references — so the staging area empties rather than being re-sent.
     attachments.clear()

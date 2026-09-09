@@ -88,11 +88,6 @@ final class TranscriptViewModel {
   /// Nil until init, which for a promptless session is until the first message.
   private(set) var initModel: String?
   private(set) var defaultPermissionMode: PermissionMode?
-  /// Messages typed while a turn was running, with catch-up mode off — see
-  /// `HeldSends.swift`. Observed, because the bar above the composer is drawn
-  /// from it.
-  private(set) var heldSends = HeldSendQueue()
-
   /// What the session's default resolves to. `capabilities` knows it before the
   /// first turn (the CLI's own `default` row says what it points at); the model
   /// reported at `system_init` is the same answer arriving later, and is the
@@ -315,7 +310,6 @@ final class TranscriptViewModel {
     replayBuffer = nil
     state = buffer
     revision &+= 1
-    flushHeldSendsIfIdle()
   }
 
   private func apply(_ event: SessionHandle.Event) {
@@ -353,8 +347,7 @@ final class TranscriptViewModel {
         state = applyEvent(state, sessionEvent)
         seqIndex.note(seq: sessionEvent.seq, itemsBefore: before, itemsAfter: state.items.count)
         revision &+= 1
-        flushHeldSendsIfIdle()
-      }
+          }
       if case .systemInit(let info) = sessionEvent.body, initModel == nil {
         initModel = info.model
         defaultPermissionMode = info.permissionMode
@@ -496,38 +489,15 @@ final class TranscriptViewModel {
 
   /// Send a turn. `attachmentIds` come from the composer's staging area, which
   /// uploaded them as they were picked — a message may be attachments alone.
+  /// A message typed mid-turn goes straight out and the engine folds it into
+  /// the running turn.
   ///
-  /// `hold` is catch-up mode turned off (`AppSettings.catchUpMode`): with it
-  /// set, a message typed mid-turn queues here instead of being folded into the
-  /// running turn by the engine. The attachments ride along either way — they
-  /// are already the server's, and the ids are what a send names.
-  func send(_ text: String, attachmentIds: [String] = [], hold: Bool = false) {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty || !attachmentIds.isEmpty else { return }
-    deliver(
-      heldSends.submit(
-        HeldSend(text: trimmed, attachmentIds: attachmentIds), hold: hold, busy: midTurnBusy))
-  }
-
-  /// "Send now" on the held-sends bar.
-  func flushHeldSends() { deliver(heldSends.flush()) }
-
-  /// Whether a turn is in flight for the purposes of the hold — the web
-  /// client's rule exactly (`SessionPanel`'s `busy && !ended`), which is
-  /// narrower than `SessionStatus.isBusy`: `starting` is a session coming up,
-  /// not a turn to fold a message into.
-  private var midTurnBusy: Bool {
-    state.status == .running || state.status == .awaitingApproval
-  }
-
-  private func flushHeldSendsIfIdle() { deliver(heldSends.sessionBusy(midTurnBusy)) }
-
   /// Nothing is appended locally: the server echoes a `user_message` event and
   /// the reducer owns the transcript. Optimistic rows would duplicate.
-  private func deliver(_ messages: [HeldSend]) {
-    for message in messages {
-      handle?.send(message.text, attachmentIds: message.attachmentIds)
-    }
+  func send(_ text: String, attachmentIds: [String] = []) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty || !attachmentIds.isEmpty else { return }
+    handle?.send(trimmed, attachmentIds: attachmentIds)
   }
 
   /// Upload one file for the next message; the returned id is what `send` names.

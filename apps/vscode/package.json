@@ -326,7 +326,7 @@
         "workerdeck.catchUpMode": {
           "type": "boolean",
           "default": true,
-          "description": "Deliver a message you type while a turn is running into that running turn, the way the Claude Code CLI does. Turn this off to hold it until the turn ends and send it as its own turn."
+          "description": "When you reopen a session, mark where you left off with a bar counting the rows that arrived since, and fade what you already read. Turn this off if you switch between sessions constantly and the marker is just noise."
         },
         "workerdeck.fontSize": {
           "type": "number",

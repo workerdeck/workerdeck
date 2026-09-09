@@ -655,6 +655,33 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   polled record down; the checklist half is live off the event, the spawn half is only as fresh as
   the host's poll, and the asymmetry is documented rather than hidden.
 
+  **3.0.0** — **catch-up mode means the catch-up bar.** A **major**, and again for one package:
+  `@workerdeck/ui` dropped `SessionPanel`/`SessionWorkspace`'s `midTurnSend` prop and the whole
+  `held-sends.tsx` export set (`useHeldSends`, `HeldSendsBar`, `HeldSend`, `HeldSends`). Versions
+  are aligned, so the other nine take the number without an API change of their own. **Protocol
+  stays 1** — none of this was ever on the wire.
+
+  The setting shipped in 0.18.0 under the right name against the wrong feature. "Catch-up mode"
+  read as the CLI behaviour it is named after — a message typed mid-turn folded into the running
+  turn — so "off" could only be a client-side hold, and the hold is what got built. Nobody wants
+  that off: folding mid-turn is the point of a remote control. What is genuinely a preference is
+  the *recap* — the boundary row, the faded already-read rows above it, and the "N new rows since
+  you were last here — jump / dismiss" bar. It earns its keep for a reader who lets a session run
+  unattended and comes back; for a reader hopping between sessions every few seconds it is pure
+  noise. So the setting kept its name and changed what it gates, and the hold was deleted rather
+  than left behind a prop nobody would set.
+
+  The panel holds no preference of its own: catch-up is `unseen`, and off is `unseen={undefined}`.
+  That was already the seam, which is why the `ui` side of this is a deletion and nothing else.
+  Web stores `workerdeck.catch-up` (the old `workerdeck.mid-turn-send` key is simply abandoned —
+  one stale localStorage entry, no migration worth writing), VS Code keeps `workerdeck.catchUpMode`
+  with the same name and default and a rewritten description. The **watermark itself keeps
+  advancing either way**, so turning catch-up off costs nothing on the sessions-list unread badge —
+  the two read the same mark for different jobs. iOS lost its toggle outright: `HeldSends.swift`,
+  `HeldSendsBar.swift` and their tests are gone, and the phone has no recap seam yet, so keeping
+  the switch would have shipped an inert one. `TerminalRows`' `recapAt`/`recapLabel` machinery is
+  still there, unwired — the iOS half of this is the obvious next cycle.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

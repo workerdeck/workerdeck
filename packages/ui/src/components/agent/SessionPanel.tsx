@@ -50,7 +50,6 @@ import { BookmarkProvider, type BookmarkHandle, type TerminalAffordances } from 
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
-import { HeldSendsBar, useHeldSends } from './held-sends.tsx'
 import { ToolResultFetchProvider } from './tool-result-fetch.tsx'
 import { ToolTitleProvider } from './tool-titles.tsx'
 import { ToolResultImageProvider, useToolResultImages } from './tool-result-image.tsx'
@@ -116,9 +115,6 @@ export interface SessionPanelProps {
   stickyPrompt?: boolean
   transcriptDensity?: TranscriptDensity
   transcriptFont?: TranscriptFont
-  // 'fold' sends a mid-turn message straight through, and the engine folds it into the running
-  // turn (catch-up mode). 'hold' keeps it here until the turn ends.
-  midTurnSend?: 'fold' | 'hold'
   controlsSurface?: 'internal' | 'external' | 'status'
   onControls?: (controls: SessionControls | undefined) => void
   focusComposerOnClick?: boolean
@@ -194,7 +190,6 @@ export function SessionPanel({
   transcriptVariant = 'cards',
   transcriptDensity = 'comfortable',
   transcriptFont = 'sans',
-  midTurnSend = 'fold',
   affordances,
   terminalMetrics,
   scrubber = false,
@@ -416,8 +411,6 @@ export function SessionPanel({
     return [{ name: 'model', description: 'Switch the model for this session', argumentHint: '<model>' }, ...state.commands]
   }, [state.commands])
 
-  const heldSends = useHeldSends({ hold: midTurnSend === 'hold', busy: busy && !ended, send })
-
   const handleSend = (text: string, attachmentIds: string[]) => {
     if (attachmentIds.length === 0) {
       const modelCommand = /^\/model\s+(\S+)$/.exec(text)
@@ -432,7 +425,7 @@ export function SessionPanel({
     }
     setCaughtUp(true)
     repinTranscript.current?.()
-    heldSends.submit(text, attachmentIds)
+    send(text, attachmentIds)
   }
 
   const actionsMenu = (
@@ -691,7 +684,6 @@ export function SessionPanel({
                 ) : null}
                 {readOnly || subagentId !== undefined ? null : (
                   <>
-                    <HeldSendsBar held={heldSends.held} onSendNow={heldSends.flush} />
                     <Composer
                       ref={composerRef}
                       onSend={handleSend}

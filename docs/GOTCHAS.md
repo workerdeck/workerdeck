@@ -1858,27 +1858,22 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   touches from an agent shell, and the app target has no test host, so every tap/press/selection
   rule above is verified by a human thumb or not at all. Budget for that rather than discovering it
   at the end of a gesture change.
-## Catch-up mode (`midTurnSend`)
 
-- **The behaviour being toggled is the CLI's, not ours.** A message sent while a turn is running
-  is folded into that turn by Claude Code itself — there is no Agent SDK option for it, and
-  `sendMessage` puts the text straight into the streaming input. So the *only* way to turn
-  catch-up off is for the client to hold the message and send it once the turn ends, which is
-  exactly what `useHeldSends` does. Nothing about the preference travels on the wire: no protocol
-  field, no command, no runner change.
-- **The other two engines never fold in the first place.** Codex and the provider engine queue a
-  mid-turn message to the next turn already. The setting is honest there — holding changes
-  nothing they would not have done — which is why it stays a client preference rather than an
-  engine capability.
-- **A held message is invisible until it is sent**, because the transcript's `user_message` comes
-  from the runner's echo. `HeldSendsBar` is the whole feedback: the count, the newest text, and a
-  "Send now". Without it a held message reads as a dropped one.
-- **The hold releases on `!busy`, and never applies to an ended session.** An interrupt therefore
-  flushes the queue, which is the right reading of "interrupt, then say the next thing"; a failed
-  or closed session sends immediately rather than queueing into a session that will never drain.
-- Each client owns the preference and its storage: web `workerdeck.mid-turn-send` in
-  localStorage, VS Code `workerdeck.catchUpMode` (a boolean, reloading the webview on change),
-  iOS its own app setting. The panel only ever sees `midTurnSend: 'fold' | 'hold'`.
+## Catch-up mode (the `unseen` boundary)
+
+- **The setting gates the recap, not the send.** A message typed mid-turn always goes straight
+  through for the engine to fold into the running turn — that is the CLI's behaviour, there is no
+  Agent SDK option for it, and no client offers to hold it. Catch-up mode is the *reading* aid:
+  the boundary row, the faded rows above it, and the "N new rows since you were last here — jump /
+  dismiss" bar. A reader who lets a session run unattended wants it; a reader who hops between
+  sessions every few seconds finds it noise, which is the whole reason it is a setting.
+- **The panel has no preference of its own — it reads `unseen`.** Off is `unseen={undefined}`, and
+  the client decides. `SessionPanel` freezes the mark it was mounted with (`catchUpMark`), so
+  turning the setting off only takes effect for sessions opened after.
+- Each client owns the storage: web `workerdeck.catch-up` in localStorage (the watermark itself
+  stays in `workerdeck.watermarks.v1` and keeps advancing either way, so the sessions-list unread
+  badge is unaffected), VS Code `workerdeck.catchUpMode` (a boolean, reloading the webview on
+  change). iOS has no recap seam yet and therefore no setting.
 
 ## Web dashboard
 

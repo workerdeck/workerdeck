@@ -65,14 +65,14 @@ export function setFontSize(size: number | undefined): void {
   writePref(FONT_SIZE_KEY, size === undefined ? undefined : String(Math.round(size)))
 }
 
-export type MidTurnSend = 'fold' | 'hold'
+export type CatchUp = 'on' | 'off'
 
-const MID_TURN_KEY = 'workerdeck.mid-turn-send'
+const CATCH_UP_KEY = 'workerdeck.catch-up'
 
-export function getMidTurnSend(): MidTurnSend {
-  return readPref(MID_TURN_KEY) === 'hold' ? 'hold' : 'fold'
+export function getCatchUp(): CatchUp {
+  return readPref(CATCH_UP_KEY) === 'off' ? 'off' : 'on'
 }
 
-export function setMidTurnSend(mode: MidTurnSend): void {
-  writePref(MID_TURN_KEY, mode)
+export function setCatchUp(mode: CatchUp): void {
+  writePref(CATCH_UP_KEY, mode)
 }

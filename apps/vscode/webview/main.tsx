@@ -20,7 +20,7 @@ const terminalMetrics = {
   lineHeight: Number(root.dataset.lineHeight) || undefined,
 }
 const affordances = root.dataset.affordances !== 'off'
-const midTurnSend = root.dataset.catchUp === 'off' ? 'hold' : 'fold'
+const catchUp = root.dataset.catchUp !== 'off'
 const panelFontSize = Number(root.dataset.panelFontSize) || undefined
 
 createRoot(root).render(
@@ -29,7 +29,7 @@ createRoot(root).render(
       bridge={bridge}
       density={density}
       variant={variant}
-      midTurnSend={midTurnSend}
+      catchUp={catchUp}
       terminalMetrics={terminalMetrics}
       affordances={affordances}
       fontSize={panelFontSize}
