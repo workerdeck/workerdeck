@@ -655,11 +655,14 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   polled record down; the checklist half is live off the event, the spawn half is only as fresh as
   the host's poll, and the asymmetry is documented rather than hidden.
 
-  **3.0.0** — **catch-up mode means the catch-up bar.** A **major**, and again for one package:
-  `@workerdeck/ui` dropped `SessionPanel`/`SessionWorkspace`'s `midTurnSend` prop and the whole
-  `held-sends.tsx` export set (`useHeldSends`, `HeldSendsBar`, `HeldSend`, `HeldSends`). Versions
-  are aligned, so the other nine take the number without an API change of their own. **Protocol
-  stays 1** — none of this was ever on the wire.
+  **2.1.0** — **catch-up mode means the catch-up bar.** Cut as a **minor** by the maintainer's
+  call, and the exception is worth stating rather than hiding: `@workerdeck/ui` dropped
+  `SessionPanel`/`SessionWorkspace`'s `midTurnSend` prop and the whole `held-sends.tsx` export set
+  (`useHeldSends`, `HeldSendsBar`, `HeldSend`, `HeldSends`), which the standing 1.0.0 rule would
+  price as a major. The judgement is that the removed surface is a nine-day-old toggle nobody
+  outside this repo wired — a dropped optional prop is inert at a call site, and the three exports
+  had no consumer — so a major would have spent the number on nothing. **Protocol stays 1**; none
+  of this was ever on the wire. Do not read it as a softening of the rule.
 
   The setting shipped in 0.18.0 under the right name against the wrong feature. "Catch-up mode"
   read as the CLI behaviour it is named after — a message typed mid-turn folded into the running
