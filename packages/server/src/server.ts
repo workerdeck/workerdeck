@@ -115,6 +115,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     createEngineRunner: options.createEngineRunner,
     allowedCwdRoots: options.allowedCwdRoots,
     disableBypassPermissions: options.disableBypassPermissions,
+    approvalTimeoutMs: options.approvalTimeoutMs,
     requireApiKey: options.requireApiKey,
     refs,
   })

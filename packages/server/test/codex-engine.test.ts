@@ -402,6 +402,38 @@ describe('codex engine over the gateway', () => {
     expect(providerConfig?.questionBehavior).toBeUndefined()
   })
 
+  it("hands the gateway's approvalTimeoutMs to every engine as a default the session may override", async () => {
+    let codexConfig: SessionRunnerConfig | undefined
+    let providerConfig: SessionRunnerConfig | undefined
+    const { adapter } = fakeCodexAdapter({ onCreate: (config) => (codexConfig = config) })
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      approvalTimeoutMs: 45_000,
+      profiles: [codexProfile(), { name: 'kimi', engine: 'provider', provider: { id: 'moonshotai', model: 'kimi-k3' } }],
+      engines: { codex: adapter },
+      createEngineRunner: ({ config }) => {
+        providerConfig = config as SessionRunnerConfig
+        throw new Error('assembled far enough — the default is already on the config')
+      },
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    await fetch(`http://127.0.0.1:${port}/v1/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/p', profile: 'codex', approvalTimeoutMs: null }),
+    })
+    expect(codexConfig?.defaultApprovalTimeoutMs).toBe(45_000)
+    expect(codexConfig?.approvalTimeoutMs).toBeNull()
+
+    await fetch(`http://127.0.0.1:${port}/v1/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: '/tmp/p', profile: 'kimi' }),
+    })
+    expect(providerConfig?.defaultApprovalTimeoutMs).toBe(45_000)
+  })
+
   it('validates codexHome like configDir, and refuses undeliverable instructions', () => {
     expect(() =>
       createWorkerServer({

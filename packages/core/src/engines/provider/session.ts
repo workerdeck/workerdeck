@@ -32,7 +32,7 @@ export type EngineSessionOptions = {
   instructions?: string
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
-  approvalTimeoutMs?: number
+  approvalTimeoutMs?: number | null
   seedVfs?: Record<string, string>
   id?: string
 }
@@ -116,7 +116,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
       executionBackend: typeof options.backend === 'function' ? undefined : (options.backend ?? 'server'),
       executionLimits: options.executionLimits,
       shouldApprove: options.shouldApprove,
-      approvalTimeoutMs: options.approvalTimeoutMs,
+      defaultApprovalTimeoutMs: options.approvalTimeoutMs,
       reportMcpServers: options.mcp
         ? () =>
             Promise.resolve(

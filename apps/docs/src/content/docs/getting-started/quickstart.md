@@ -45,7 +45,7 @@ In the dashboard:
 3. Pick a permission mode, and watch the live transcript.
 
 Tool calls not covered by the permission mode surface as approve/deny cards; the tool blocks
-until you decide (deny-on-timeout after 5 minutes by default). Closed or restarted-away sessions
+until you decide, for as long as that takes (`--approval-timeout` sets a deadline). Closed or restarted-away sessions
 can be resumed from the SDK's on-disk store ("Resume a previous session") — the server backfills
 the prior transcript as replay events.
 

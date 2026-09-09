@@ -26,9 +26,11 @@ Resolution emits `permission_resolved` with `resolvedBy: 'client' | 'timeout' | 
 
 Two rules to know:
 
-- **Deny-on-timeout.** Unresolved requests are denied after 5 minutes by default. Configurable
-  server-wide (`defaultApprovalTimeoutMs` on the runner config) and per session
-  (`approvalTimeoutMs` on `CreateSessionRequest`).
+- **No deadline by default.** An unresolved request — a permission card or an AskUserQuestion —
+  waits as long as the session lives. Give it a deadline gateway-wide with `approvalTimeoutMs` on
+  `createWorkerServer` (CLI: `--approval-timeout 5m`), after which it is denied with
+  `resolvedBy: 'timeout'`. A session overrides it per request with `approvalTimeoutMs` on
+  `CreateSessionRequest`; `null` (or `0`) there means "never expire" even when the gateway sets one.
 - **Allowing must echo the tool input.** The SDK's `PermissionResult` requires `updatedInput` to
   be a record on allow — the runner echoes the original input back for an unmodified allow. A
   client may instead pass a modified `updatedInput` to run the tool with edited arguments.

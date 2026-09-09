@@ -18,6 +18,7 @@ export type SessionFactoryDeps = {
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
   allowedCwdRoots?: string[]
   disableBypassPermissions?: boolean
+  approvalTimeoutMs?: number | null
   requireApiKey?: boolean
   refs: LateBoundRefs
 }
@@ -137,18 +138,25 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   const withScope = (config: SessionRunnerConfig, scope: Record<string, string> | undefined): SessionRunnerConfig =>
     scope === undefined ? config : { ...config, scope }
 
+  // The gateway's default reaches every engine through the config, so a runner rebuilt from a parked
+  // record gets the same deadline policy as the one it replaces.
+  const withApprovalDefault = (config: SessionRunnerConfig): SessionRunnerConfig =>
+    deps.approvalTimeoutMs === undefined ? config : { ...config, defaultApprovalTimeoutMs: deps.approvalTimeoutMs }
+
   const buildRunnerConfig = (req: CreateSessionRequest): SessionRunnerConfig => {
     const profile = req.profile !== undefined ? profiles.get(req.profile) : undefined
     if (!profile) {
-      return withScope(deps.hostBuildRunnerConfig(req), req.scope)
+      return withApprovalDefault(withScope(deps.hostBuildRunnerConfig(req), req.scope))
     }
-    const config = withScope(
-      deps.hostBuildRunnerConfig({
-        ...req,
-        model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
-        permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
-      }),
-      req.scope,
+    const config = withApprovalDefault(
+      withScope(
+        deps.hostBuildRunnerConfig({
+          ...req,
+          model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
+          permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
+        }),
+        req.scope,
+      ),
     )
     if (engineOf(profile) !== 'claude') {
       return config

@@ -19,6 +19,7 @@ import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
 import type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, SessionEventListener } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
+import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
@@ -38,7 +39,7 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   executionBackend?: ToolExecutionBackend
   toolTitles?: Record<string, string>
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
-  approvalTimeoutMs?: number
+  defaultApprovalTimeoutMs?: number | null
   resolveModel?: (modelId: string | undefined) => LanguageModel
   reportMcpServers?: () => Promise<McpServerStatusInfo[] | undefined>
   onClose?: () => void | Promise<void>
@@ -96,7 +97,7 @@ export class AiSdkRunner implements Runner {
     {
       request: PermissionRequest
       toolCallId: string
-      timer: ReturnType<typeof setTimeout>
+      timer?: ReturnType<typeof setTimeout>
     }
   >()
 
@@ -551,7 +552,7 @@ export class AiSdkRunner implements Runner {
           continue
         }
         const requestId = randomUUID()
-        const timeoutMs = this.#config.approvalTimeoutMs ?? 120_000
+        const timeoutMs = resolveApprovalTimeoutMs(this.#config.approvalTimeoutMs, this.#config.defaultApprovalTimeoutMs)
         const request: PermissionRequest = {
           id: requestId,
           toolName: call.toolName,
@@ -559,17 +560,20 @@ export class AiSdkRunner implements Runner {
           toolUseId: call.toolCallId,
           title: `Agent wants to run ${call.toolName}`,
           displayName: call.toolName,
-          expiresAt: Date.now() + timeoutMs,
+          expiresAt: timeoutMs === undefined ? undefined : Date.now() + timeoutMs,
         }
-        const timer = setTimeout(() => {
-          if (!this.#pendingApprovals.has(requestId)) {
-            return
-          }
-          this.resolvePermission(requestId, {
-            behavior: 'deny',
-            message: 'Approval timed out',
-          })
-        }, timeoutMs)
+        const timer =
+          timeoutMs === undefined
+            ? undefined
+            : setTimeout(() => {
+                if (!this.#pendingApprovals.has(requestId)) {
+                  return
+                }
+                this.resolvePermission(requestId, {
+                  behavior: 'deny',
+                  message: 'Approval timed out',
+                })
+              }, timeoutMs)
         this.#pendingApprovals.set(requestId, { request, toolCallId: call.toolCallId, timer })
         this.#emit({ type: 'permission_requested', request })
         anyAwaiting = true

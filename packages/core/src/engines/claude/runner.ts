@@ -37,6 +37,7 @@ import {
   toApiMessage,
 } from '../../lib/normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
@@ -53,7 +54,7 @@ export type SessionRunnerConfig = CreateSessionRequest & {
   env?: Record<string, string | undefined>
   pathToClaudeCodeExecutable?: string
   extraOptions?: Partial<Options>
-  defaultApprovalTimeoutMs?: number
+  defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
   historyFn?: HistoryFn
   sessionInfoFn?: SessionInfoFn
@@ -62,10 +63,8 @@ export type SessionRunnerConfig = CreateSessionRequest & {
 type PendingApproval = {
   request: PermissionRequest
   resolve: (result: PermissionResult) => void
-  timer: ReturnType<typeof setTimeout>
+  timer?: ReturnType<typeof setTimeout>
 }
-
-const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
 
 export class SessionRunner implements Runner {
   readonly id: string
@@ -571,7 +570,7 @@ export class SessionRunner implements Runner {
 
   #canUseTool: CanUseTool = (toolName, input, options) => {
     const id = randomUUID()
-    const timeoutMs = this.#config.approvalTimeoutMs ?? this.#config.defaultApprovalTimeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS
+    const timeoutMs = resolveApprovalTimeoutMs(this.#config.approvalTimeoutMs, this.#config.defaultApprovalTimeoutMs)
     const request: PermissionRequest = {
       id,
       toolName,
@@ -582,7 +581,7 @@ export class SessionRunner implements Runner {
       description: options.description,
       decisionReason: options.decisionReason,
       agentId: options.agentID,
-      expiresAt: Date.now() + timeoutMs,
+      expiresAt: timeoutMs === undefined ? undefined : Date.now() + timeoutMs,
     }
     const questionBehavior = this.#config.questionBehavior ?? 'ask'
     if (toolName === 'AskUserQuestion' && questionBehavior !== 'ask') {
@@ -590,12 +589,15 @@ export class SessionRunner implements Runner {
       return Promise.resolve(this.#resolveQuestionByPolicy(request, questionBehavior))
     }
     return new Promise<PermissionResult>((resolve) => {
-      const timer = setTimeout(() => {
-        const pending = this.#pending.get(id)
-        if (pending) {
-          this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
-        }
-      }, timeoutMs)
+      const timer =
+        timeoutMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              const pending = this.#pending.get(id)
+              if (pending) {
+                this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
+              }
+            }, timeoutMs)
       this.#pending.set(id, { request, resolve, timer })
       options.signal.addEventListener('abort', () => {
         const pending = this.#pending.get(id)

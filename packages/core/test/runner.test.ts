@@ -162,8 +162,44 @@ describe('SessionRunner', () => {
     })
   })
 
-  it('denies on timeout by default', async () => {
-    const { harness, runner, events } = makeRunner({ approvalTimeoutMs: 20 })
+  it('leaves an approval pending forever when no timeout is configured', async () => {
+    const { harness, runner, events } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+
+    let settled = false
+    void harness.captured.options!.canUseTool!(
+      'Write',
+      { file_path: '/tmp/x' },
+      { signal: new AbortController().signal, requestId: 'creq-1', toolUseID: 'tool-2' },
+    ).then(() => {
+      settled = true
+    })
+    await tick()
+    expect(runner.pendingApprovals[0]!.expiresAt).toBeUndefined()
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(settled).toBe(false)
+    expect(events.find((e) => e.type === 'permission_resolved')).toBeUndefined()
+  })
+
+  it("a session's approvalTimeoutMs of null opts out of the gateway default", async () => {
+    const { harness, runner } = makeRunner({ approvalTimeoutMs: null, defaultApprovalTimeoutMs: 20 })
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+
+    void harness.captured.options!.canUseTool!(
+      'Write',
+      { file_path: '/tmp/x' },
+      { signal: new AbortController().signal, requestId: 'creq-1', toolUseID: 'tool-2' },
+    )
+    await tick()
+    expect(runner.pendingApprovals[0]!.expiresAt).toBeUndefined()
+  })
+
+  it("denies on timeout, on the gateway's default when the session names none", async () => {
+    const { harness, runner, events } = makeRunner({ defaultApprovalTimeoutMs: 20 })
     void runner.start()
     harness.emit(initMessage)
     await tick()

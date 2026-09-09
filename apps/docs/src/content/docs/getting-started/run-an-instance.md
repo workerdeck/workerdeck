@@ -111,6 +111,7 @@ your home directory.
 | `--trust-proxy` | — | off |
 | `--allowed-origin <o>` / `--allowed-host <name>` (repeatable) | — | loopback names only |
 | `--insecure-host <name>` (repeatable) | — | none (config: `insecureHosts`) |
+| `--approval-timeout <d>` | — | `none` — prompts and questions never expire (config: `approvalTimeoutMs`) |
 | `--no-parking-store` | — | durable parking on |
 | `--no-keep-awake` | — | machine held awake while a session waits (config: `keepAwake`) |
 | `--no-web` | — | dashboard served (config: `web`) |

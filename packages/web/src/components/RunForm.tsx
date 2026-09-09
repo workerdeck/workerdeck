@@ -1,8 +1,9 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import type { CreateSessionRequest, PermissionMode, SessionInfo } from '@workerdeck/protocol'
+import type { CreateSessionRequest, PermissionMode, QuestionBehavior, SessionInfo } from '@workerdeck/protocol'
 import {
   Input,
   PermissionModeSelect,
+  QUESTION_BEHAVIORS,
   Select,
   SelectContent,
   SelectItem,
@@ -47,6 +48,12 @@ const MODE_FALLBACK: Record<DefaultsKind, PermissionMode> = {
   job: 'acceptEdits',
 }
 
+// A job has nobody to ask, so it answers itself; a session has a watcher, so it asks.
+const QUESTIONS_FALLBACK: Record<DefaultsKind, QuestionBehavior> = {
+  session: 'ask',
+  job: 'auto',
+}
+
 export type RunForm = ReturnType<typeof useRunForm>
 
 export function useRunForm(kind: DefaultsKind) {
@@ -56,6 +63,7 @@ export function useRunForm(kind: DefaultsKind) {
   const [model, setModel] = useState('')
   const [modeChoice, setModeChoice] = useState<PermissionMode | undefined>(undefined)
   const [effort, setEffort] = useState('')
+  const [questions, setQuestions] = useState<QuestionBehavior>(QUESTIONS_FALLBACK[kind])
   const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
   const mode = modeChoice ?? selected?.defaults?.permissionMode ?? MODE_FALLBACK[kind]
   const engine = engineFormOptions(selected, mode, model)
@@ -72,6 +80,7 @@ export function useRunForm(kind: DefaultsKind) {
     resume: options.resume,
     // Only a value the current model offers: a sticky choice from another profile must not 400.
     reasoningEffort: effort && engine.reasoningEfforts.includes(effort) ? effort : undefined,
+    questionBehavior: engine.capabilities.interactiveApprovals ? questions : undefined,
     ...(engine.capabilities.settingSources
       ? {
           settingSources: ['user' as const, 'project' as const],
@@ -93,6 +102,8 @@ export function useRunForm(kind: DefaultsKind) {
     setModel,
     effort,
     setEffort,
+    questions,
+    setQuestions,
     profiles,
     profile,
     selectProfile,
@@ -100,6 +111,33 @@ export function useRunForm(kind: DefaultsKind) {
     sessionFields,
     rememberCwd,
   }
+}
+
+export function QuestionsField({ form }: { form: RunForm }) {
+  if (!form.engine.capabilities.interactiveApprovals) {
+    return null
+  }
+  return (
+    <label className="flex min-w-0 flex-col gap-1">
+      <span className="text-label font-medium text-fg-3">Questions</span>
+      <Select
+        items={QUESTION_BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
+        value={form.questions}
+        onValueChange={(value) => form.setQuestions(value as QuestionBehavior)}
+      >
+        <SelectTrigger className="min-w-36">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {QUESTION_BEHAVIORS.map((b) => (
+            <SelectItem key={b.value} value={b.value}>
+              <SelectItemText>{`${b.label} — ${b.description}`}</SelectItemText>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </label>
+  )
 }
 
 export interface RunFormFieldsProps {

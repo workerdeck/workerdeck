@@ -53,6 +53,15 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--port', '99999'])).toThrow(ConfigError)
   })
 
+  it('parses --approval-timeout as a duration, with none for a prompt that never expires', () => {
+    expect(parseArgs(['--approval-timeout', '300000']).approvalTimeoutMs).toBe(300_000)
+    expect(parseArgs(['--approval-timeout', '30s']).approvalTimeoutMs).toBe(30_000)
+    expect(parseArgs(['--approval-timeout', '5m']).approvalTimeoutMs).toBe(300_000)
+    expect(parseArgs(['--approval-timeout', 'none']).approvalTimeoutMs).toBeNull()
+    expect(parseArgs(['--approval-timeout', '0']).approvalTimeoutMs).toBeNull()
+    expect(() => parseArgs(['--approval-timeout', 'soon'])).toThrow(ConfigError)
+  })
+
   it('treats a missing value as an error, not as the next flag', () => {
     expect(() => parseArgs(['--auth-key', '--port', '9000'])).toThrow(/requires a value/)
   })
@@ -64,6 +73,11 @@ describe('resolveInstanceConfig', () => {
     expect(config.port).toBe(8787)
     expect(config.host).toBe('127.0.0.1')
     expect(config.authKey).toBeUndefined()
+  })
+
+  it('leaves approvalTimeoutMs unset unless asked, and carries the flag into the server options', () => {
+    expect(resolveInstanceConfig(parseArgs([]), noConfig, {}).options.approvalTimeoutMs).toBeUndefined()
+    expect(resolveInstanceConfig(parseArgs(['--approval-timeout', '5m']), noConfig, {}).options.approvalTimeoutMs).toBe(300_000)
   })
 
   it('lets flags beat env', () => {

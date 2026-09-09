@@ -1448,7 +1448,9 @@ owns the state and builds the shared `CreateSessionRequest` half, `RunFormFields
 with `extras`/`actions` slots). They had been two copies that already drifted; the one
 difference that is real — an interactive session pre-authorizes `bypassPermissions` because
 the operator is present, an unattended job makes it an opt-in — survives as a parameter rather
-than being flattened away. The layout is **four sections and a dialog**: every nav entry
+than being flattened away. `questionBehavior` is the other parameterized difference: both forms
+render `QuestionsField`, defaulting to `ask` for a session (someone is watching) and `auto` for a
+job (nobody is). The layout is **four sections and a dialog**: every nav entry
 (Sessions, Gateways, Jobs, Profiles) is a *list on the left, detail beside it* pair, so each
 names its own sidebar in `AppShell`'s `NAV` rather than mounting one from a route —
 navigating within a section must not replace the list you picked from, which is the whole

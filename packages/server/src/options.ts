@@ -38,6 +38,10 @@ export type WorkerServerOptions = {
   cors?: { origins: string[] }
   maxBodyBytes?: number
   disableBypassPermissions?: boolean
+  // How long a permission prompt or an AskUserQuestion may sit unanswered before the engine denies it.
+  // Omitted or null: never — a prompt waits for a human for as long as the session lives. A session may
+  // override it per request with CreateSessionRequest.approvalTimeoutMs.
+  approvalTimeoutMs?: number | null
   requireApiKey?: boolean
   checkCredentials?: boolean | { probe?: ClaudeAuthProbe; timeoutMs?: number }
   requireAvailableProfile?: boolean

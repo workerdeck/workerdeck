@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { QuestionBehavior, QueueStats } from '@workerdeck/protocol'
+import type { QueueStats } from '@workerdeck/protocol'
 import {
   Badge,
   Button,
@@ -10,20 +10,13 @@ import {
   Empty,
   EmptyKey,
   Input,
-  QUESTION_BEHAVIORS,
   ProgressRing,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemText,
-  SelectTrigger,
-  SelectValue,
   Spinner,
   formatTokens,
   toast,
 } from '@workerdeck/ui'
 import { CalendarClock, ListChecks, Plus } from 'lucide-react'
-import { RunFormFields, useRunForm } from '@/components/RunForm.tsx'
+import { QuestionsField, RunFormFields, useRunForm } from '@/components/RunForm.tsx'
 import { client } from '@/lib/client.ts'
 import { primaryHost } from '@/lib/hosts.ts'
 import { useJobs } from '@/hooks/useJobs.ts'
@@ -76,7 +69,6 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
   const { snapshots } = useSessions()
   const sessions = snapshots.find((snap) => snap.host.id === primaryHost()?.id)?.sessions ?? []
   const form = useRunForm('job')
-  const [questions, setQuestions] = useState<QuestionBehavior>('auto')
   const [allowBypass, setAllowBypass] = useState(false)
   const [maxTokens, setMaxTokens] = useState('')
   const [attempts, setAttempts] = useState('')
@@ -110,7 +102,6 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
           }),
           // Required here, unlike a session's: the prompt is the whole job.
           prompt: form.prompt.trim(),
-          questionBehavior: engine.capabilities.interactiveApprovals ? questions : undefined,
         },
         maxTokens: tokens,
         attempts: attemptCount,
@@ -132,29 +123,7 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
         form={form}
         sessions={sessions}
         promptLabel="Prompt (the task — runs unattended)"
-        extras={
-          engine.capabilities.interactiveApprovals ? (
-            <label className="flex min-w-0 flex-col gap-1">
-              <span className="text-label font-medium text-fg-3">Questions</span>
-              <Select
-                items={QUESTION_BEHAVIORS.map((b) => ({ value: b.value, label: b.label }))}
-                value={questions}
-                onValueChange={(value) => setQuestions(value as QuestionBehavior)}
-              >
-                <SelectTrigger className="min-w-36">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUESTION_BEHAVIORS.map((b) => (
-                    <SelectItem key={b.value} value={b.value}>
-                      <SelectItemText>{`${b.label} — ${b.description}`}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-          ) : null
-        }
+        extras={<QuestionsField form={form} />}
         actions={
           <>
             <label className="flex min-w-0 flex-col gap-1">

@@ -566,7 +566,8 @@ export type CreateSessionRequest = {
   forkSession?: boolean
   reasoningEffort?: string
   includePartialMessages?: boolean
-  approvalTimeoutMs?: number
+  // Overrides the gateway's default. null (or 0) means a prompt never expires — it waits as long as the session lives.
+  approvalTimeoutMs?: number | null
   questionBehavior?: QuestionBehavior
   capabilities?: SessionCapability[]
   meta?: Record<string, unknown>

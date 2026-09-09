@@ -51,7 +51,7 @@ describe('CodexRunner: approvals and user input', () => {
     expect(request.title).toBe('command failed; retry without sandbox?')
     expect(request.decisionReason).toBe('command failed; retry without sandbox?')
     expect(request.input).toMatchObject({ command: 'printf x > /tmp/p.txt', cwd: '/tmp' })
-    expect(request.expiresAt).toBeGreaterThan(Date.now())
+    expect(request.expiresAt).toBeUndefined()
     const use = ofType(events, 'assistant_message')
       .flatMap((e) => (Array.isArray(e.message.content) ? e.message.content : []))
       .find((b) => b.type === 'tool_use') as { id: string }

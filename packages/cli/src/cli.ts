@@ -46,6 +46,12 @@ Options
                             an agent's writes go through the permission flow and a
                             PUT does not. Every write is still conditional on the
                             hash the client last read.
+      --approval-timeout <d>
+                            how long a permission prompt or a question may wait for
+                            an answer before the engine denies it (300000, 30s, 5m;
+                            config: approvalTimeoutMs). Default 'none' — a prompt
+                            waits as long as the session lives. A session may
+                            override it per request.
       --state-dir <path>    where parked sessions are persisted
                             (default: beside the config file, else ~/.workerdeck)
       --no-parking-store    keep parked sessions in memory only; a restart drops them

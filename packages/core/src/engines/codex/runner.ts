@@ -18,6 +18,7 @@ import {
   type SkillInfo,
   type UserQuestion,
 } from '@workerdeck/protocol'
+import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
 import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
@@ -114,8 +115,6 @@ const APPROVALS_REVIEWER_BY_MODE: Partial<Record<PermissionMode, string>> = {
   auto: 'auto_review',
   bypassPermissions: 'user',
 }
-
-const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000
 
 export const CODEX_IMAGE_TOOL = 'CodexImageGeneration'
 
@@ -483,7 +482,7 @@ type PendingCodexApproval = {
   params: unknown
   offered: Set<string> | undefined
   wireId: string | number | undefined
-  timer: ReturnType<typeof setTimeout>
+  timer?: ReturnType<typeof setTimeout>
   respond: (response: unknown) => void
 }
 
@@ -491,7 +490,7 @@ export type CodexRunnerConfig = CreateSessionRequest & {
   connectFn: AppServerConnectFn
   env?: Record<string, string | undefined>
   codexHome?: string
-  defaultApprovalTimeoutMs?: number
+  defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
 }
 
@@ -1522,21 +1521,24 @@ export class CodexRunner implements Runner {
       }
     }
     const id = randomUUID()
-    const timeoutMs = this.#config.approvalTimeoutMs ?? this.#config.defaultApprovalTimeoutMs ?? DEFAULT_APPROVAL_TIMEOUT_MS
+    const timeoutMs = resolveApprovalTimeoutMs(this.#config.approvalTimeoutMs, this.#config.defaultApprovalTimeoutMs)
     const itemId = channel.itemId(params)
     const request: PermissionRequest = {
       id,
       ...channel.describe(params),
       toolUseId: itemId ? `${this.#activeTurn?.nonce ?? 'codex'}:${itemId}` : id,
-      expiresAt: Date.now() + timeoutMs,
+      expiresAt: timeoutMs === undefined ? undefined : Date.now() + timeoutMs,
     }
     return new Promise<unknown>((resolve) => {
-      const timer = setTimeout(() => {
-        const pending = this.#approvals.get(id)
-        if (pending) {
-          this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
-        }
-      }, timeoutMs)
+      const timer =
+        timeoutMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              const pending = this.#approvals.get(id)
+              if (pending) {
+                this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
+              }
+            }, timeoutMs)
       this.#approvals.set(id, {
         request,
         channel,

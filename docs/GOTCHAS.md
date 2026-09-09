@@ -269,9 +269,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   *requested* profile back, turn-scoped), `item/tool/requestUserInput` (mapped onto the
   AskUserQuestion convention, `questionBehavior` honored), `mcpServer/elicitation/request`
   (allow's `updatedInput` travels as the elicitation `content`). Everything else still gets a
-  JSON-RPC -32601 rather than a hang, an unanswered approval times out into the channel's own
-  denial (`approvalTimeoutMs`, default 300s), and turn end / interrupt / child death / session
-  close all sweep pending approvals — a card never outlives what it gates.
+  JSON-RPC -32601 rather than a hang, an unanswered approval waits forever unless a deadline is
+  configured (`approvalTimeoutMs`, gateway-wide `approvalTimeoutMs` / `defaultApprovalTimeoutMs`;
+  unset, null or 0 all mean never), and turn end / interrupt / child death / session close all
+  sweep pending approvals — a card never outlives what it gates.
 - **`availableDecisions` is per-request, experimental, and gates the ACCEPT side only.** Under
   `experimentalApi` a command approval may carry `availableDecisions` (strings plus structured
   variants like `{acceptWithExecpolicyAmendment: …}`). The runner sends plain `accept` only

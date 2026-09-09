@@ -22,7 +22,7 @@ export type ProviderRunnerOptions = {
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
   seedVfs?: Record<string, string>
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
-  approvalTimeoutMs?: number
+  approvalTimeoutMs?: number | null
   // Runs on park as well as close: parking releases the same per-session resources.
   onClose?: () => void | Promise<void>
 }
@@ -68,7 +68,7 @@ export async function createProviderRunner(ctx: EngineRunnerContext, options: Pr
     instructions: options.instructions,
     executionLimits: options.executionLimits,
     shouldApprove: options.shouldApprove,
-    approvalTimeoutMs: options.approvalTimeoutMs,
+    approvalTimeoutMs: config.defaultApprovalTimeoutMs === undefined ? options.approvalTimeoutMs : config.defaultApprovalTimeoutMs,
     seedVfs: options.seedVfs,
   })
 }

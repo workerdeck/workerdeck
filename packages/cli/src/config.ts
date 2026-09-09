@@ -42,6 +42,7 @@ export type CliFlags = {
   allowedHosts: string[]
   insecureHosts: string[]
   trustProxy?: boolean
+  approvalTimeoutMs?: number | null
   stateDir?: string
   parking?: boolean
   insecure?: boolean
@@ -54,6 +55,20 @@ export type CliFlags = {
 }
 
 export class ConfigError extends Error {}
+
+// `none`, `0` and anything non-positive all mean the same thing: a prompt that never expires.
+function parseDuration(raw: string, source: string): number | null {
+  if (raw === 'none' || raw === 'never') {
+    return null
+  }
+  const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)?$/.exec(raw)
+  if (!match) {
+    throw new ConfigError(`${source}: expected a duration like 300000, 30s, 5m — or 'none'; got: ${raw}`)
+  }
+  const scale = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[match[2] ?? 'ms']!
+  const ms = Number(match[1]) * scale
+  return ms > 0 ? ms : null
+}
 
 function parsePort(raw: string, source: string): number {
   const port = Number(raw)
@@ -163,6 +178,11 @@ export function parseArgs(argv: string[]): CliFlags {
       }
       case '--trust-proxy': {
         flags.trustProxy = true
+        break
+      }
+      case '--approval-timeout': {
+        flags.approvalTimeoutMs = parseDuration(next(i, arg), arg)
+        i++
         break
       }
       case '--state-dir': {
@@ -420,6 +440,9 @@ export function resolveInstanceConfig(
   // Flags replace rather than merge: a half-declared profile set is a credential mix-up.
   if (flags.profiles.length) {
     options.profiles = flags.profiles
+  }
+  if (flags.approvalTimeoutMs !== undefined) {
+    options.approvalTimeoutMs = flags.approvalTimeoutMs
   }
 
   return {

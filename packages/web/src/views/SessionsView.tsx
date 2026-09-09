@@ -13,7 +13,7 @@ import {
   toast,
 } from '@workerdeck/ui'
 import { History, Plus } from 'lucide-react'
-import { RunFormFields, useRunForm } from '@/components/RunForm.tsx'
+import { QuestionsField, RunFormFields, useRunForm } from '@/components/RunForm.tsx'
 import { BrandMark } from '@/components/shell/BrandMark.tsx'
 import { client } from '@/lib/client.ts'
 
@@ -80,6 +80,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         promptLabel="Initial prompt (optional)"
         // Per-profile, because another profile's rows would offer resumes this engine cannot honor.
         onProfileChange={() => setSdkSessions(undefined)}
+        extras={<QuestionsField form={form} />}
         actions={
           <Button className="ml-auto" onClick={() => void create()} disabled={creating}>
             {creating ? <Spinner className="size-3.5 text-current" /> : <Plus className="size-4" />}
