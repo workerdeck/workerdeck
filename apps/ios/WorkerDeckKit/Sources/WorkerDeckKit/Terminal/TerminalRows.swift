@@ -43,6 +43,14 @@ public enum TranscriptRow: Equatable, Sendable {
     }
   }
 
+  /// The seam's own label, when this row is one. `nil` for every other row —
+  /// the caller asks a row what it says rather than re-deriving the recap it
+  /// was folded with.
+  public var recapLabel: String? {
+    if case .recap(let label) = self { return label }
+    return nil
+  }
+
   /// The item a row is *spaced as*. The recap row has none, so it always gets a
   /// blank line on either side — and the brief row likewise: the instruction is
   /// not part of the work's own spacing run.
@@ -207,6 +215,14 @@ public struct TerminalRows: Equatable, Sendable {
 extension TerminalRows {
   /// The row indices of the **human's own prompts**, ascending.
   ///
+  /// Where the catch-up seam landed, in row space. The rail marks it and the
+  /// rows above it draw as read, and both need the row rather than the item
+  /// index the caller passed to `build`: a fold makes those two different
+  /// numbers.
+  public var recapRow: Int? {
+    rows.firstIndex { if case .recap = $0 { return true } else { return false } }
+  }
+
   /// What the sticky prompt is indexed by: "which turn am I reading" is
   /// answered by the last prompt at or above the viewport's top edge, and that
   /// is a binary search over this array rather than a walk of the transcript.

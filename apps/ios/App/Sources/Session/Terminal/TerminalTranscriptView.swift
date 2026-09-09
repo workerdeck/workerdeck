@@ -50,6 +50,18 @@ struct TerminalTranscriptView: View {
   /// readable — the fold, the height book, the follow pin, the expansion
   /// presses.
   var frame: String? = nil
+  /// The catch-up boundary in **item** space: how much of this transcript had
+  /// been read when the screen was opened. Fixed by the caller (`SessionView`
+  /// reads the watermark once, at mount), and ignored inside a frame — a
+  /// sub-agent's rows are a filtered list, so a full-transcript index means
+  /// nothing there. `nil` is catch-up mode off, or a session never visited.
+  var catchUpAt: Int? = nil
+  /// When the reader was last here (epoch ms) — the tail of the seam's line.
+  var catchUpSince: Double? = nil
+  /// Set when the reader dismisses the seam. A callback rather than a binding
+  /// the caller mutates into `catchUpAt`, because the model owns the refold and
+  /// this is the host learning the bar should go away.
+  var onRecapRows: ((Int?) -> Void)? = nil
   /// Bookmarked transcript item ids — membership and persistence are the
   /// host's (`SessionView` over `BookmarkModel`), exactly the web
   /// `SessionPanel`'s `bookmarks` seam. Ids, so the same set is valid at the
@@ -124,7 +136,13 @@ struct TerminalTranscriptView: View {
             configureRow: { cell, index in
               cell.configure(
                 lines: model.plan(at: index), typography: typography, metrics: metrics,
-                gapAbove: model.gapAbove(index), bleed: bleed, imageLoader: imageLoader,
+                gapAbove: model.gapAbove(index),
+                bleed: bleed,
+                // Row space, not item space: the seam's row is what everything
+                // above it is measured against, and a fold makes the two
+                // numbers different.
+                read: model.recapRow.map { index < $0 } ?? false,
+                imageLoader: imageLoader,
                 onPress: {
                   model.press(
                     $0, row: index, fetch: fetchToolResult,
@@ -183,6 +201,12 @@ struct TerminalTranscriptView: View {
                 // describe the same items the fold did.
                 items: model.items, rows: model.rows, book: model.book,
                 pendingApprovals: pendingApprovals, bookmarks: bookmarks,
+                // The rail's own catch-up mark, at the row the fold put the
+                // seam on. Absent inside a frame for the same reason the seam
+                // is (see `frame`).
+                recap: model.recapRow.flatMap { row in
+                  model.rows[row].recapLabel.map { ScrubberRecap(rowIndex: row, label: $0) }
+                },
                 viewportHeight: scroll.viewportHeight,
                 // What is open decides which failures the rail marks: a call
                 // folded inside a collapsed run is not on screen as a failure,
@@ -205,9 +229,18 @@ struct TerminalTranscriptView: View {
       // Keyed off the proxy's width directly rather than a mirrored `@State`:
       // the view is mounted at the moment the replay hold releases, and a state
       // round-trip would spend the reveal frame showing nothing.
-      .task(id: TranscriptEpoch(revision: revision, width: proxy.size.width)) {
+      .task(
+        id: TranscriptEpoch(
+          revision: revision, width: proxy.size.width, catchUp: catchUpAt != nil)
+      ) {
         guard proxy.size.width > 0 else { return }
         let model = model ?? TerminalTranscriptModel(metrics: metrics, frameParentId: frame)
+        // Told rather than constructed with, so the seam does not depend on
+        // whether the host had read its watermark by the time this model was
+        // built — and so "dismiss" is the same one line, clearing it. A frame
+        // never carries one: its rows are a filtered list, and the boundary is
+        // a full-transcript index.
+        model.setRecap(at: frame == nil ? catchUpAt : nil, since: catchUpSince)
         // The frame's own item list, decided once here so the fold, the empty
         // surface and the presses all describe the same items. The spawning
         // call rides beside it — it is not a frame member (`subagentItems`
@@ -215,8 +248,12 @@ struct TerminalTranscriptView: View {
         // the brief the frame's rows open with.
         let visible = frame.map { subagentItems(items, parentToolUseId: $0) } ?? items
         model.update(
-          items: visible, metrics: metrics,
+          items: visible, metrics: metrics, pendingApprovals: pendingApprovals.count,
           frameTask: frame.flatMap { subagentTask(items, id: $0) })
+        // What the bar above the composer is drawn from — including "the fold
+        // spliced no seam", which is how a boundary with nothing after it stops
+        // claiming there is something to jump to.
+        onRecapRows?(model.recapRow)
         #if DEBUG
           if expandAll, model.expansion.isEmpty { model.expandEverything() }
         #endif
@@ -265,5 +302,9 @@ struct TerminalTranscriptView: View {
   private struct TranscriptEpoch: Equatable {
     var revision: Int
     var width: CGFloat
+    /// Dismissing the catch-up seam changes the fold and nothing else — no
+    /// event, no rotation — so without it here the row above the seam would
+    /// stay faded until the next thing the agent said.
+    var catchUp: Bool
   }
 }

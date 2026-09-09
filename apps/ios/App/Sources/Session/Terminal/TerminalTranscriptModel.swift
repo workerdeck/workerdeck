@@ -41,11 +41,26 @@ final class TerminalTranscriptModel {
   /// caller's unfolded list would be a second answer to "what is on screen".
   private(set) var items: [TranscriptItem] = []
 
-  /// The catch-up seam: how many rows had already been read when this session
-  /// was opened. Fixed at mount — a boundary that moved as new rows arrived
-  /// would be a boundary that never means anything.
-  private let recapAt: Int?
-  private let recapLabel: String
+  /// The catch-up seam: how many transcript items had already been read when
+  /// this session was opened. Fixed by the caller — a boundary that moved as
+  /// new rows arrived would be a boundary that never means anything — and
+  /// settable only to `nil`, which is what "dismiss" does.
+  ///
+  /// Its **label** is not held beside it: the recap counts what has arrived
+  /// since the boundary, so it is re-derived on every fold (`recapLine` over
+  /// `summarizeSince`) and a turn that lands while the bar is up says so.
+  private(set) var recapAt: Int?
+  /// Where the seam sits in *row* space, for the rail's mark and for the rows
+  /// above it to be drawn as read. `nil` whenever the fold spliced no seam —
+  /// including the case the boundary is set but nothing has happened since.
+  private(set) var recapRow: Int?
+  /// When the reader was last here (epoch ms), which the seam's line ends with —
+  /// the web `RecapRow`'s `· last here 42m`. Held beside the boundary because it
+  /// is the same fact: one mark, read once.
+  private var recapSince: Double?
+  /// Approvals waiting, which the recap counts and the items cannot carry: the
+  /// prompt renders below the transcript. Passed per update, like `frameTask`.
+  private var pendingApprovals = 0
 
   /// Set when this model folds a sub-agent's frame — the takeover. Constant for
   /// the model's whole life (a takeover is one agent, remounted per open), which
@@ -56,13 +71,8 @@ final class TerminalTranscriptModel {
   private var metrics: TerminalMetrics
   private let cache = TerminalPlanCache()
 
-  init(
-    metrics: TerminalMetrics, recapAt: Int? = nil, recapLabel: String = "",
-    frameParentId: String? = nil
-  ) {
+  init(metrics: TerminalMetrics, frameParentId: String? = nil) {
     self.metrics = metrics
-    self.recapAt = recapAt
-    self.recapLabel = recapLabel
     self.frameParentId = frameParentId
     self.book = TerminalHeightBook(rows: TerminalRows(rows: []), metrics: metrics)
   }
@@ -73,8 +83,13 @@ final class TerminalTranscriptModel {
   ///   its brief leads the rows (`TerminalRows.build`). Passed per update
   ///   rather than held: the call is an item of the *full* transcript, which
   ///   this model never sees, and only the caller that sliced the frame has it.
-  func update(items: [TranscriptItem], metrics: TerminalMetrics, frameTask: ToolCallItem? = nil) {
+  func update(
+    items: [TranscriptItem], metrics: TerminalMetrics, pendingApprovals: Int = 0,
+    frameTask: ToolCallItem? = nil
+  ) {
     let metricsChanged = metrics != self.metrics
+    let recapChanged = pendingApprovals != self.pendingApprovals
+    self.pendingApprovals = pendingApprovals
     self.metrics = metrics
     self.items = items
     // A fetch landing is an item mutation and arrives here like any other. The
@@ -83,18 +98,38 @@ final class TerminalTranscriptModel {
     // result with no intermediate state on screen.
     resolveFetched()
 
+    let label = recapAt.flatMap { boundary -> String? in
+      guard
+        let line = recapLine(
+          summarizeSince(items: items, from: boundary, pendingApprovals: pendingApprovals))
+      else { return nil }
+      guard let recapSince else { return line }
+      return "\(line) · last here \(Fmt.ago(epochMs: recapSince))"
+    }
+    // No label, no seam: nothing happened while the reader was away, and a row
+    // saying so is the noise catch-up exists to save them.
     let rows = TerminalRows.build(
-      items: items, recapAt: recapAt, recapLabel: recapLabel, frameTask: frameTask)
+      items: items, recapAt: label == nil ? nil : recapAt, recapLabel: label ?? "",
+      frameTask: frameTask)
     // Nothing to do when neither the content nor the cell moved — this is called
     // from a view update, which fires for reasons that are not either.
-    if !metricsChanged && rows == self.rows { return }
+    if !metricsChanged && !recapChanged && rows == self.rows { return }
 
     self.rows = rows
+    recapRow = rows.recapRow
     promptRows = rows.promptRows
     remeasure()
     // A long session would otherwise keep a plan for every row it has ever
     // shown, including the ones a `/clear` took away.
     cache.evict(keeping: rows)
+  }
+
+  /// Where the catch-up seam goes, or `nil` for none — "dismiss", and a frame,
+  /// which never carries one. Assignment only: the refold is `update`'s, which
+  /// every caller runs in the same pass.
+  func setRecap(at boundary: Int?, since: Double? = nil) {
+    recapAt = boundary
+    recapSince = since
   }
 
   /// A press on a line: open or close what it points at, then re-measure.

@@ -106,11 +106,20 @@ final class AppSettings {
     didSet { defaults.set(transcriptFont.rawValue, forKey: Self.fontKey) }
   }
 
+  /// Catch-up mode: whether reopening a session marks where you left off — the
+  /// recap seam, the faded rows above it and the "N new since" bar. On by
+  /// default, matching the other two clients. Off is for a reader who hops
+  /// between sessions constantly, for whom the marker is noise rather than news.
+  var catchUpMode: Bool {
+    didSet { defaults.set(catchUpMode, forKey: Self.catchUpKey) }
+  }
+
   private let defaults: UserDefaults
 
   private static let variantKey = "bi.atomic.workerdeck.ios.transcriptVariant"
   private static let densityKey = "bi.atomic.workerdeck.ios.transcriptDensity"
   private static let fontKey = "bi.atomic.workerdeck.ios.transcriptFont"
+  private static let catchUpKey = "bi.atomic.workerdeck.ios.catchUpMode"
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
@@ -129,6 +138,7 @@ final class AppSettings {
       ?? .comfortable
     transcriptFont =
       defaults.string(forKey: Self.fontKey).flatMap(TranscriptFont.init(rawValue:)) ?? .regular
+    catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true
   }
 }
 

@@ -107,9 +107,14 @@ final class TerminalRowCell: UICollectionViewCell {
 
   // MARK: - Configure
 
+  /// - Parameter read: this row sits above the catch-up seam — the reader had
+  ///   already seen it. Drawn at the web client's own 45%, and on the whole
+  ///   cell rather than per line, because "already read" is a fact about the
+  ///   row, not about any glyph in it.
   func configure(
     lines: [TermLine], typography: TerminalTypography, metrics: TerminalMetrics,
-    gapAbove: Bool, bleed: CGFloat, imageLoader: TerminalImageLoader? = nil,
+    gapAbove: Bool, bleed: CGFloat, read: Bool = false,
+    imageLoader: TerminalImageLoader? = nil,
     onPress: @escaping (TermPress) -> Void
   ) {
     self.lines = lines
@@ -117,6 +122,7 @@ final class TerminalRowCell: UICollectionViewCell {
     self.topInset = gapAbove ? metrics.line : 0
     self.press = onPress
     self.imageLoader = imageLoader
+    contentView.alpha = read ? Self.readAlpha : 1
 
     body.attributedText = TerminalTextRun.make(
       lines: lines, typography: typography, geometry: geometry)
@@ -128,8 +134,14 @@ final class TerminalRowCell: UICollectionViewCell {
     syncPulse()
   }
 
+  /// The faded-when-read level, the web `TranscriptRows`' `opacity-45`.
+  private static let readAlpha: CGFloat = 0.45
+
   override func prepareForReuse() {
     super.prepareForReuse()
+    // A recycled cell that kept the last row's fade would draw unread work as
+    // read — the one direction of that mistake nobody would notice.
+    contentView.alpha = 1
     stopPulse()
     cancelImageLoads()
     press = nil

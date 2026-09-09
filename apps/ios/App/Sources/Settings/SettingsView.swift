@@ -42,6 +42,16 @@ struct SettingsView: View {
         Text(explanation)
       }
 
+
+      Section {
+        Toggle("Catch-up mode", isOn: $settings.catchUpMode)
+      } header: {
+        Text("Sessions")
+      } footer: {
+        Text(
+          "Reopening a session marks where you left off: a recap of what happened, the rows you had already read faded, and a bar that counts the new ones and jumps to them. Off if you switch between sessions constantly and the marker is just noise."
+        )
+      }
     }
     .navigationTitle("Settings")
     .navigationBarTitleDisplayMode(.inline)

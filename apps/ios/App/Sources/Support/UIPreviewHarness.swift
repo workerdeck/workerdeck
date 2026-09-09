@@ -32,6 +32,8 @@ enum UIPreview: String {
   case prompts
   case terminal
   case terminalOpen
+  case catchUp
+  case catchUpCards
   case terminalStress
   case subagent
   case steps
@@ -452,7 +454,15 @@ private struct TerminalAuditPreview: View {
   /// Render one sub-agent's frame instead of the conversation — the takeover's
   /// transcript, from the same fixture. The id must be a `Task` in `items`.
   var frame: String? = nil
+  /// Catch-up mode's boundary, in item space, with the bar under the transcript
+  /// exactly as the session screen stacks them.
+  var catchUpAt: Int? = nil
   @State private var verdict = "auditing…"
+  @State private var scroll = TranscriptScrollModel()
+  /// Mutable, so "dismiss" really removes the seam here too — the preview is
+  /// where the refold gets looked at.
+  @State private var catchUp: Int?
+  @State private var recapRow: Int?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -469,13 +479,25 @@ private struct TerminalAuditPreview: View {
       // ever compiled this file optimized.
       #if DEBUG
         TerminalTranscriptView(
-          items: items, revision: 0, scroll: TranscriptScrollModel(), frame: frame,
+          items: items, revision: 0, scroll: scroll, frame: frame, catchUpAt: catchUp,
+          catchUpSince: Date().timeIntervalSince1970 * 1000 - 42 * 60 * 1000,
+          onRecapRows: { recapRow = $0 },
           onAudit: { verdict = $0.summary }, expandAll: expandAll)
       #else
         TerminalTranscriptView(
-          items: items, revision: 0, scroll: TranscriptScrollModel(), frame: frame)
+          items: items, revision: 0, scroll: scroll, frame: frame, catchUpAt: catchUp,
+          catchUpSince: Date().timeIntervalSince1970 * 1000 - 42 * 60 * 1000,
+          onRecapRows: { recapRow = $0 })
       #endif
+      if let catchUp, let recapRow {
+        CatchUpBar(
+          count: items.count - catchUp,
+          onJump: { scroll.scrollToRow(recapRow, anchor: .top, animated: true) },
+          onDismiss: { self.catchUp = nil })
+        .padding(8)
+      }
     }
+    .onAppear { catchUp = catchUpAt }
   }
 }
 
@@ -977,6 +999,31 @@ struct UIPreviewHarness: View {
       // exactly these items), no sticky prompt, and the audit still reading ✔
       // against the frame's own plan at the rail-narrowed width.
       TerminalAuditPreview(items: Self.terminalItems, frame: "t1")
+
+    case .catchUp:
+      // Catch-up mode on the fixture: the reader had read the first four items,
+      // so the seam splices there. What must be true on screen: the rows above
+      // the `※ recap:` line drawn faded, the ones below at full strength, the
+      // rail carrying a mark at the seam, and the bar under the transcript
+      // counting the rest — pressing "jump" lands on the seam, "dismiss" makes
+      // every trace of it go away in one refold.
+      TerminalAuditPreview(items: Self.terminalItems, catchUpAt: 4)
+
+    case .catchUpCards:
+      // The same seam under the *cards* renderer, which is the phone's default
+      // and folds nothing: the divider is spliced by the list rather than by a
+      // row model, so it is a second implementation of one rule and worth
+      // looking at beside the first.
+      VStack(spacing: 0) {
+        TranscriptListView(
+          items: Self.terminalItems, revision: 0,
+          catchUp: (
+            at: 4,
+            label: recapLine(summarizeSince(items: Self.terminalItems, from: 4)) ?? ""
+          ))
+        CatchUpBar(count: Self.terminalItems.count - 4, onJump: {}, onDismiss: {})
+          .padding(8)
+      }
 
     case .terminalOpen:
       // The same fixture with every block open. Expansion is the one thing this

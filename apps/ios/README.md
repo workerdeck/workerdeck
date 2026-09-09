@@ -155,6 +155,11 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     Swift's is not, so both the row and the group sort carry an explicit insertion-index
     tiebreak; and `ViewConfig` decodes leniently over its defaults, the Swift spelling of the
     webview's spread.
+  - `Recap.swift` — catch-up mode's counting, ported from `packages/react/src/lib/recap.ts`:
+    `summarizeSince` + `recapLine`. **Counted, never written** — a prose recap would spend a turn
+    on a summary nobody asked for, and would be worst in the case that matters most, a session
+    that failed unattended. Shared with the seam's row (`TerminalRows.build(recapAt:)`) and with
+    the cards renderer's divider, so both draw one sentence.
   - `PromptToken.swift` — the `@file` and `/command` rules in one place: which words are tokens,
     which are being typed, which are finished, and how one is replaced. Here for the same reason
     as `MarkdownBlocks` — pure string logic whose interesting cases are all edges — and shared, so
@@ -214,6 +219,21 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     independently of any of this: an unread count wears the tint while its session is live and
     drops to the neutral badge once it settles, because on a finished session the same number is
     a record rather than a call to look.
+  - **Catch-up mode** (`AppSettings.catchUpMode`, on by default) — reopening a session marks
+    where you left off. The seam is the watermark this app already keeps: `UnreadModel.since`
+    hands the session screen the mark's `itemCount` and `seenAt`, **read once in `onAppear` and
+    frozen there** — a boundary that moved as rows arrived would be one that never means
+    anything. Above it every row draws at 45% (the web's `opacity-45`); at it sits `※ recap:` and
+    the counted line; under the composer sits `CatchUpBar` — "N new rows since you were last
+    here", `jump`, `dismiss`. Sending dismisses it too, which is the reader saying they are
+    caught up. Two renderers, two splices and deliberately no shared branch: the terminal fold
+    takes `recapAt` and returns the row it put the seam on (`TerminalRows.recapRow`, which also
+    feeds the rail's mark and the fade, because a fold makes an item index and a row index
+    different numbers), while the cards list inserts a `RecapDivider` before the boundary item.
+    The label is `Recap.swift`'s and is **re-derived on every fold**, so a turn landing while the
+    bar is up says so. It never enters a sub-agent takeover: the boundary is a full-transcript
+    index and a frame's rows are a filtered list. `UIPREVIEW=catchUp` / `catchUpCards` are the
+    look-loop for both.
   - `App/Sources/Session/Terminal/` — the terminal transcript's *rendering* half, over the rules
     in the kit's `Terminal/`. It is a **renderer, not a set of branches**: it draws every row
     itself, and nothing under the cards path asks which variant it is in. (That is the lesson of
@@ -653,7 +673,9 @@ than to look plausible — a folded run, two `Task`s whose children interleave, 
 engine's own line numbers, and a result long enough to hit both preview budgets. It reports the
 **overflow audit** across the top: the one thing that can catch the cell model disagreeing with
 real text layout, which would clip a line silently. `terminalStress` is the same screen over
-16,000 rows, which is what the virtualized engine exists for.
+16,000 rows, which is what the virtualized engine exists for. `catchUp` and `catchUpCards` put
+the catch-up seam through both renderers on the same fixture — the faded rows above it, the
+recap line on it, the rail's mark, and the bar under it.
 
 Two things that don't work and are worth not re-trying: driving the simulator's UI with System
 Events (clicking needs an Accessibility grant a CLI shell doesn't have), and guessing a layout

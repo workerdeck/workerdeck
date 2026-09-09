@@ -19,6 +19,40 @@ struct TerminalRowsTests {
   }
   private let metrics = TerminalMetrics(cell: 8, line: 18, width: 8 * 80, fontSize: 13)
 
+  // MARK: - The catch-up seam
+
+  @Test("the seam splices at the boundary and each side folds separately")
+  func recapSplitsTheFold() {
+    let items: [TranscriptItem] = [
+      .toolCall(call("a")), .toolCall(call("b")),  // 0,1 — read
+      .toolCall(call("c")), .toolCall(call("d")),  // 2,3 — new
+    ]
+    // Without the seam all four calls fold into one run.
+    #expect(TerminalRows.build(items: items).count == 1)
+    let rows = TerminalRows.build(items: items, recapAt: 2, recapLabel: "2 tool calls")
+    #expect(rows.count == 3)
+    #expect(rows.recapRow == 1)
+    #expect(rows[1].recapLabel == "2 tool calls")
+    #expect(rows[0].recapLabel == nil)
+  }
+
+  @Test("row addressing survives the seam — the rows below it keep their offsets")
+  func recapKeepsAddressing() {
+    let items = [text("a"), text("b"), text("c")]
+    let rows = TerminalRows.build(items: items, recapAt: 1, recapLabel: "1 reply")
+    #expect(rows.rowIndex(forItem: 0) == 0)
+    #expect(rows.rowIndex(forItem: 1) == 2)
+    #expect(rows.rowIndex(forItem: 2) == 3)
+  }
+
+  @Test("a boundary at either edge splices nothing — there is no seam to draw")
+  func recapAtEdgesIsNoSeam() {
+    let items = [text("a"), text("b")]
+    #expect(TerminalRows.build(items: items, recapAt: 0).recapRow == nil)
+    #expect(TerminalRows.build(items: items, recapAt: 2).recapRow == nil)
+    #expect(TerminalRows.build(items: items, recapAt: 99).recapRow == nil)
+  }
+
   // MARK: - Addressing
 
   @Test("an absorbed item resolves to the Task row that swallowed it")

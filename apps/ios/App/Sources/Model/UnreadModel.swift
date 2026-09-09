@@ -70,9 +70,26 @@ final class UnreadModel {
       mark: marks.get(hostId: host.uuidString, sessionId: info.id), info: info)
   }
 
+  /// Where this phone had read to, and when — the catch-up seam's whole input.
+  /// Deliberately **not** `revision`-dependent: the boundary is fixed when a
+  /// session is opened, and a mark that moved under a reader would walk the
+  /// recap row down the transcript while they read it.
+  func since(host: UUID, sessionId: String) -> CatchUpMark? {
+    guard let mark = marks.get(hostId: host.uuidString, sessionId: sessionId) else { return nil }
+    return CatchUpMark(itemCount: mark.itemCount, seenAt: mark.seenAt)
+  }
+
   /// The session was deleted; its mark is now noise.
   func forget(host: UUID, sessionId: String) {
     marks.forget(hostId: host.uuidString, sessionId: sessionId)
     revision &+= 1
   }
+}
+
+/// What a session screen was handed at mount: how much of the transcript had
+/// been read, and when that was true. Epoch milliseconds, the wire's unit and
+/// the kit's — the phone converts once, where it draws.
+struct CatchUpMark: Equatable {
+  var itemCount: Int
+  var seenAt: Double
 }

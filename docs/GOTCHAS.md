@@ -1870,10 +1870,18 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **The panel has no preference of its own — it reads `unseen`.** Off is `unseen={undefined}`, and
   the client decides. `SessionPanel` freezes the mark it was mounted with (`catchUpMark`), so
   turning the setting off only takes effect for sessions opened after.
-- Each client owns the storage: web `workerdeck.catch-up` in localStorage (the watermark itself
-  stays in `workerdeck.watermarks.v1` and keeps advancing either way, so the sessions-list unread
-  badge is unaffected), VS Code `workerdeck.catchUpMode` (a boolean, reloading the webview on
-  change). iOS has no recap seam yet and therefore no setting.
+- Each client owns the storage: web `workerdeck.catch-up` in localStorage, VS Code
+  `workerdeck.catchUpMode` (a boolean, reloading the webview on change), iOS
+  `AppSettings.catchUpMode`. **The watermark keeps advancing either way** — it lives in its own
+  store (`workerdeck.watermarks.v1`, `UnreadModel` on the phone) and the sessions-list unread
+  badge reads it regardless, so turning catch-up off costs a marker, never a count.
+- **iOS splices the seam twice, and that is the design.** The phone has two renderers and the
+  cards one folds nothing, so the terminal path takes a boundary into `TerminalRows.build` and
+  reports back the *row* it landed on (the fade, the rail mark and `jump` all need the row, not
+  the item index), while the cards path inserts a divider before the boundary item. What they
+  share is the counting (`Recap.swift`, the port of `packages/react`'s `recap.ts`) — one
+  sentence, two splices. A takeover frame never carries the seam on any client: the boundary is
+  a full-transcript index and a frame's rows are a filtered list.
 
 ## Web dashboard
 

@@ -116,6 +116,26 @@ struct SessionView: View {
   /// waits out the same hold the transcript does. See `resolveTakeover()`.
   @State private var pendingSubagent: String?
 
+  /// Catch-up mode's whole state on this screen: where the reader had read to
+  /// when they arrived, and when that was.
+  ///
+  /// **Seeded once, in `onAppear`, and deliberately not in `init`**: the mark
+  /// lives in an `@Environment` model, which an initializer cannot reach. That
+  /// is safe rather than lucky — `markSeen` refuses to write until the attach
+  /// snapshot has landed, which is well after the first body pass, so nothing
+  /// has moved the mark by the time this reads it. Cleared by "dismiss" and by
+  /// sending, which is the reader saying they are caught up.
+  @State private var catchUp: CatchUpMark?
+  @State private var catchUpSeeded = false
+  /// The seam's row in the terminal fold, reported back by the transcript. Nil
+  /// means no seam was spliced — nothing arrived while the reader was away —
+  /// and the bar then draws nothing rather than offering a jump to a row that
+  /// does not exist.
+  @State private var recapRow: Int?
+  /// Bumped by "jump", for the cards renderer's `ScrollViewReader`. The terminal
+  /// renderer is driven directly through `transcriptScroll` instead.
+  @State private var jumpToRecap = 0
+
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil,
     openSubagent: String? = nil, revealToolUseId: String? = nil
@@ -156,13 +176,17 @@ struct SessionView: View {
           TerminalTranscriptView(
             items: vm.state.items, pendingApprovals: vm.state.pendingApprovals,
             revision: vm.revision, scroll: transcriptScroll, focusItem: focusTarget,
+            catchUpAt: catchUp?.itemCount, catchUpSince: catchUp?.seenAt,
+            onRecapRows: { recapRow = $0 },
             // Read in the body, so a toggle from the row menu re-derives this
             // view and the rail draws the mark the same pass the menu set it.
             bookmarks: bookmarks.bookmarks(host: hostId, sessionId: vm.sessionId),
             onToggleBookmark: { bookmarks.toggle(host: hostId, sessionId: vm.sessionId, itemId: $0) },
             onOpenSubagent: { openSubagent($0) })
         } else {
-          TranscriptListView(items: vm.state.items, revision: vm.revision)
+          TranscriptListView(
+            items: vm.state.items, revision: vm.revision, catchUp: cardsCatchUp,
+            jumpToRecap: jumpToRecap)
         }
       }
         // Tapping the transcript puts the keyboard away. Simultaneous, so a tap
@@ -242,6 +266,11 @@ struct SessionView: View {
         // stops moving, after one truing-up of what *was* visible.
         push.visibleSessionId = phase == .active ? vm.sessionId : nil
         if phase != .active { finalizeSeen() }
+      }
+      .onAppear {
+        guard !catchUpSeeded else { return }
+        catchUpSeeded = true
+        catchUp = settings.catchUpMode ? unread.since(host: hostId, sessionId: vm.sessionId) : nil
       }
       // The unread watermark, written **only while this session is genuinely on
       // screen** — this view visible and showing it. A mark from anywhere else
@@ -488,6 +517,59 @@ struct SessionView: View {
     if vm.state.lastSeq >= info.lastSeq { revealResolved = true }
   }
 
+  // MARK: - Catch-up
+
+  /// What the cards renderer draws its seam from. Nil whenever there is nothing
+  /// new — the same test the terminal fold makes, spelled here because that
+  /// renderer folds nothing and so cannot report back.
+  private var cardsCatchUp: (at: Int, label: String)? {
+    guard let catchUp, catchUp.itemCount > 0, catchUp.itemCount < vm.state.items.count,
+      let label = recapLine(
+        summarizeSince(
+          items: vm.state.items, from: catchUp.itemCount,
+          pendingApprovals: vm.state.pendingApprovals.count))
+    else { return nil }
+    return (at: catchUp.itemCount, label: label)
+  }
+
+  /// How many rows arrived while the reader was away. Rows, not prose: this is
+  /// the transcript's own count and the bar sits over the transcript — the
+  /// sessions list badges prose, and the two answer different questions.
+  private var newRowCount: Int {
+    guard let catchUp else { return 0 }
+    return max(0, vm.state.items.count - catchUp.itemCount)
+  }
+
+  /// Whether the seam is actually on screen: the terminal renderer answers with
+  /// the row it folded, the cards renderer with the divider it would draw.
+  private var hasRecapSeam: Bool {
+    settings.transcriptVariant.isTerminal ? recapRow != nil : cardsCatchUp != nil
+  }
+
+  /// "N new rows since you were last here — jump / dismiss", above the composer.
+  /// Not in the transcript: it is a control, and a control that scrolls away is
+  /// one the reader cannot use at the moment they want it.
+  @ViewBuilder private var catchUpBar: (some View)? {
+    if hasRecapSeam, newRowCount > 0, subagentId == nil, !vm.replaying {
+      CatchUpBar(
+        count: newRowCount,
+        onJump: {
+          if settings.transcriptVariant.isTerminal {
+            if let recapRow { transcriptScroll.scrollToRow(recapRow, anchor: .top, animated: true) }
+          } else {
+            jumpToRecap &+= 1
+          }
+        },
+        onDismiss: { dismissCatchUp() })
+    }
+  }
+
+  private func dismissCatchUp() {
+    guard catchUp != nil else { return }
+    catchUp = nil
+    recapRow = nil
+  }
+
   // MARK: - Unread watermark
 
   /// Record what is on screen as read — but only while it really is on screen.
@@ -557,6 +639,11 @@ struct SessionView: View {
         // Edge to edge in the terminal shape — it draws its own surface and its
         // own hairline, so a gutter would make it a card again.
         statusBar
+      }
+      if let bar = catchUpBar {
+        bar
+          .padding(.horizontal, docked ? gutter : 0)
+          .padding(.bottom, docked ? 8 : 0)
       }
       ComposerView(
         text: $draft,
@@ -690,6 +777,9 @@ struct SessionView: View {
       sheet = .mcp
       return
     }
+    // Saying something is being caught up, which is the web panel's rule too
+    // (`SessionPanel`'s `setCaughtUp(true)` on send).
+    dismissCatchUp()
     vm.send(draft, attachmentIds: attachments.readyIds)
     // The bytes are the server's now, and the echoed event carries the
     // references — so the staging area empties rather than being re-sent.
