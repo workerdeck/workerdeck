@@ -79,7 +79,7 @@ struct RichTextEditor: UIViewRepresentable {
     view.onImagePaste = { coordinator.parent.onImagePaste() }
     view.backgroundColor = .clear
     view.isScrollEnabled = false
-    view.textContainerInset = DraftStyle.containerInset
+    view.textContainerInset = self.style.containerInset
     view.textContainer.lineFragmentPadding = 0
     view.adjustsFontForContentSizeCategory = true
     let style = self.style
@@ -109,6 +109,7 @@ struct RichTextEditor: UIViewRepresentable {
     if context.coordinator.style != style {
       context.coordinator.style = style
       view.font = style.base
+      view.textContainerInset = style.containerInset
     }
     style.restyle(view)
 
@@ -249,6 +250,7 @@ final class DraftTextView: UITextView {
 struct DraftStyle: Equatable {
   var design: UIFontDescriptor.SystemDesign
   var textStyle: UIFont.TextStyle
+  var isTerminal: Bool
 
   /// The one derivation. `variant` outranks `font` — see
   /// `RichTextEditor.wantedDesign` for why the terminal theme is monospace by
@@ -256,14 +258,22 @@ struct DraftStyle: Equatable {
   init(variant: TranscriptVariant, font: TranscriptFont) {
     design = variant.isTerminal ? .monospaced : font.uiDesign
     textStyle = variant.isTerminal ? lineTextUIStyle : .body
+    isTerminal = variant.isTerminal
   }
 
-  /// The field's own padding. A genuine constant, so it stays static: three
-  /// places need to agree with it — the text view, the placeholder that has to
-  /// land exactly where the first character will, and the composer's glyph
-  /// buttons, which sit on the *last line's* box rather than on the field's
-  /// bottom edge.
-  static let containerInset = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+  /// The field's own padding. Two places have to agree with it — the text view,
+  /// and the placeholder that has to land exactly where the first character will
+  /// — so it is derived here once rather than spelled twice.
+  ///
+  /// **No inset at all in the terminal shape.** There the field is one cell of a
+  /// row that supplies every gap itself (`docked` and `TermComposerMetrics` set
+  /// them): a horizontal inset pushed the typed line off the design's column, and
+  /// a vertical one made the row taller than the glyph cell it is measured
+  /// against, so the whole bar grew. The card shape keeps its 12, because there
+  /// the field *is* the surface.
+  var containerInset: UIEdgeInsets {
+    isTerminal ? .zero : UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+  }
 
   /// Dynamic Type's body font in the chosen design. Built from the descriptor
   /// rather than `monospacedSystemFont(ofSize:)` so it keeps tracking the
@@ -281,8 +291,8 @@ struct DraftStyle: Equatable {
   ///
   /// A `switch` on the style rather than `textStyle == lineTextUIStyle`, which
   /// hardcoded what `lineTextUIStyle` happens to *be*: repoint that constant and
-  /// the field, the glyphs and `glyphBaseline` all follow it (they derive from
-  /// `base`) while the placeholder would silently keep the old size and stop
+  /// the field and the glyphs both follow it (they derive from `base`) while the
+  /// placeholder would silently keep the old size and stop
   /// landing on the first character — the placeholder's one job, and the same
   /// two-spellings-of-one-rule this type was rewritten to end.
   var swiftUIFont: Font {

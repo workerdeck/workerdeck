@@ -429,6 +429,15 @@ private struct ComposerPreview: View {
   var body: some View {
     ScrollView {
       VStack(spacing: 22) {
+        Text(
+          """
+          A glyph gets a 32pt CELL only while it can act: a send with nothing to \
+          send is a bare dim \u{21B5}, and so is the resting \u{276F}, which is the gutter \
+          rather than a control. One accent rule, along the top only. Press and \
+          hold a cell and it washes.
+          """
+        )
+        .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 8)
         Row(caption: "idle, nothing to attach - the column falls back to the prompt glyph",
           busy: false, canAddMedia: false, draft: "")
         Row(caption: "idle, attachments available", busy: false, canAddMedia: true, draft: "")
@@ -437,7 +446,7 @@ private struct ComposerPreview: View {
           busy: true, canAddMedia: true, draft: "")
         Row(caption: "working WITH a draft - the bug the web fixed: stop must still be reachable",
           busy: true, canAddMedia: true, draft: "and then run the tests")
-        Row(caption: "shell mode - magenta frame, ! in the gutter, no attach affordance",
+        Row(caption: "shell mode - magenta rule, ! in the gutter, no attach affordance",
           busy: false, canAddMedia: true, draft: "git status", shell: true)
       }
       .padding(.vertical, 24)

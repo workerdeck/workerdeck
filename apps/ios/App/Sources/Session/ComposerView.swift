@@ -85,61 +85,60 @@ struct ComposerView: View {
   /// The terminal shape, and the same one VS Code's agent view wears: the
   /// composer is the *foot of the panel* rather than a card floating on it.
   ///
-  /// Edge to edge, opaque, no radius and no glass — and **one** border, the rule
-  /// along the top, which turns accent while the field has focus. That single
-  /// blue line is the whole affordance, which is what an editor does and what a
-  /// transcript with no boxes in it asks for.
+  /// Edge to edge, opaque, no radius and no glass — and **one** border, an accent
+  /// rule along the top. It does not wait for focus, because the caret already
+  /// says where focus is; that single line is the whole affordance, which is what
+  /// an editor does and what a transcript with no boxes in it asks for.
   ///
   /// The buttons stop hiding, too. A glass circle is chat furniture; here they
-  /// are characters on the same line as the field — `+` to attach, `↵` to send —
-  /// so an empty composer is one row tall instead of two, which is the point of
-  /// this variant everywhere else in the app as well.
+  /// are glyphs in square cells on the field's own row — `+` to attach, `↵` to
+  /// send — so an empty composer is one row tall instead of two, which is the
+  /// point of this variant everywhere else in the app as well.
   private var docked: some View {
+    VStack(spacing: 0) {
+      // A row of its own rather than an overlay: the frames draw this stroke
+      // *outside* the box it edges, so an overlay would eat the top padding and
+      // land every glyph cell a rule's height high.
+      rule
+      barContent
+    }
+    .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
+    .animation(.easeOut(duration: 0.15), value: isShellMode)
+  }
+
+  private var barContent: some View {
     VStack(spacing: 0) {
       if !attachments.isEmpty {
         AttachmentStrip(store: attachments)
           .padding(.bottom, 8)
       }
-      HStack(alignment: .bottom, spacing: 4) {
+      HStack(alignment: .center, spacing: TermComposerMetrics.gap) {
         gutterGlyph
-          .padding(.bottom, glyphBaseline)
         field
         TermGlyphButton(
-          glyph: "\u{21B5}", label: "Send", tint: canSend ? TerminalPalette.color(.blue) : nil,
-          action: onSend, glyphSize: style.base.pointSize
-        )
-        .disabled(!canSend)
-        .padding(.bottom, glyphBaseline)
+          glyph: "\u{21B5}", label: "Send", action: onSend, glyphSize: style.base.pointSize)
+          .disabled(!canSend)
       }
       if isShellMode {
         shellHint
-          .padding(.leading, TermGlyphButton.side + 4)
+          .padding(.leading, TermGlyphButton.side + TermComposerMetrics.gap)
       }
     }
-    .padding(.horizontal, 6)
-    // Air on each side of the prompt, inside the two rules. A plain 8, not a
-    // fraction of the line: this is chrome between two rules, not a transcript
-    // row, and the whole-multiple rule governs rows.
-    .padding(.vertical, 8)
-    // Opaque and reaching past the home indicator: a docked bar with the
-    // transcript's background showing under it is not docked.
-    .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
-    // **Two** rules, top and bottom, both turning accent on focus — the CLI's
-    // own frame for its prompt, and what makes the field its own strip of the
-    // screen rather than the transcript's last row. A side border would take
-    // the gutter glyph off the column every transcript marker sits on, which is
-    // the one thing this shape exists to hold.
-    .overlay(alignment: .top) { rule }
-    .overlay(alignment: .bottom) { rule }
-    .animation(.easeOut(duration: 0.15), value: isFocused)
+    .padding(.horizontal, TermComposerMetrics.sidePadding)
+    .padding(.top, TermComposerMetrics.topPadding)
+    .padding(.bottom, TermComposerMetrics.bottomPadding)
   }
 
+  /// **One** rule, along the top, and it does not wait for focus — the caret is
+  /// what says where focus is. A bottom rule would draw a second edge with only
+  /// the home indicator between them; a side border would take the gutter glyph
+  /// off the column every transcript marker sits on.
   private var rule: some View {
     Rectangle()
-      // Shell mode outranks focus, because it is on for the whole time the field is
-      // focused and the frame is half of what makes the mode unmistakable.
-      .fill(isShellMode ? TerminalPalette.color(.magenta) : isFocused ? Color.accentColor : Color.primary.opacity(0.15))
-      .frame(height: isShellMode || isFocused ? 1.5 : 0.5)
+      // Shell mode outranks the accent: it is on for the whole time the field is
+      // focused and the rule is half of what makes the mode unmistakable.
+      .fill(isShellMode ? TerminalPalette.color(.magenta) : Color.accentColor)
+      .frame(height: TermComposerMetrics.rule)
   }
 
   /// What the mode is and how to leave it. Rendered only while shell mode is on, so the
@@ -197,19 +196,6 @@ struct ComposerView: View {
     }
   }
 
-  /// How far a glyph has to lift off the bottom to sit on the field's **last
-  /// line** rather than on the field's bottom edge.
-  ///
-  /// `.bottom` alignment centres a 34pt button on the field's bottom 34pt, which
-  /// includes the text container's 8pt inset — so the glyph rides low by exactly
-  /// half the difference. Computed from the live font rather than nudged by a
-  /// constant, because `style.base` is a Dynamic Type font: at accessibility
-  /// sizes a hardcoded offset would be wrong in the other direction.
-  private var glyphBaseline: CGFloat {
-    let inset = DraftStyle.containerInset.bottom
-    return max(0, inset + style.base.lineHeight / 2 - TermGlyphButton.side / 2)
-  }
-
   /// The field's styling, from the same two inputs `RichTextEditor` derives it
   /// from — one derivation rather than two that have to agree.
   private var style: DraftStyle { DraftStyle(variant: variant, font: transcriptFont) }
@@ -234,8 +220,8 @@ struct ComposerView: View {
           // the placeholder had to re-derive the rule by hand to be correct.
           .font(style.swiftUIFont)
           .foregroundStyle(.tertiary)
-          .padding(.horizontal, DraftStyle.containerInset.left)
-          .padding(.vertical, DraftStyle.containerInset.top)
+          .padding(.horizontal, style.containerInset.left)
+          .padding(.vertical, style.containerInset.top)
           .allowsHitTesting(false)
       }
       RichTextEditor(
@@ -388,14 +374,23 @@ private struct CircleButton: View {
 /// same vocabulary as the markers in the column above, so the furniture reads as
 /// part of the conversation rather than as chat chrome parked underneath it.
 ///
-/// No pill and no glass behind it, for the same reason. What replaces them is
-/// tone: the two states worth colouring are coloured (an armed send is blue, a
-/// running turn's stop is yellow) and everything else is the theme's `dim`.
+/// No pill and no glass behind it, for the same reason. What it wears instead is
+/// a **cell**: a rounded square, filled and outlined, that the glyph stands in. A
+/// phone has no hover, so a bare glyph reads as text that happens to be tappable
+/// — the cell is what says "control" before you touch it. Its size and radius are
+/// `TermComposerMetrics`, which is where the design's units become points.
+///
+/// The cell is drawn **only while the button can act**. A send with nothing to
+/// send has no cell at all, just the dim `\u{21B5}`, which is the one signal that
+/// costs no layout and cannot be mistaken for a disabled-looking button. Tone
+/// still carries the two states worth colouring on top of that: a running turn's
+/// stop is yellow and shell mode is magenta. Send is deliberately **not** tinted
+/// — the cell appearing is what "armed" means here.
 private struct TermGlyphButton: View {
-  /// The hit target. 34pt is the smallest that still reads as a button under a
-  /// thumb, and it is deliberately larger than the glyph inside it — the target
-  /// is what a finger needs, the glyph is what the grid needs.
-  static let side: CGFloat = 34
+  /// The hit target, and the cell drawn in it. Deliberately larger than the glyph
+  /// inside it — the target is what a finger needs, the glyph is what the grid
+  /// needs.
+  static let side = TermComposerMetrics.cell
   /// Taken from the field's own font rather than named as a constant: the
   /// composer types at `lineTextUIStyle` and that is a Dynamic Type style, so a
   /// hardcoded size would be right at one content-size category and wrong at
@@ -415,13 +410,57 @@ private struct TermGlyphButton: View {
     Button(action: action) {
       Text(glyph)
         .font(.system(size: glyphSize, design: .monospaced))
-        .foregroundStyle(tint ?? TerminalPalette.color(.dim))
-        .frame(width: Self.side, height: Self.side)
-        .contentShape(Rectangle())
+        .foregroundStyle(tint ?? TerminalPalette.color(isEnabled ? .bright : .dim))
     }
-    .buttonStyle(.plain)
-    .opacity(isEnabled ? 1 : 0.4)
+    .buttonStyle(TermGlyphButtonStyle(filled: isEnabled))
     .accessibilityLabel(label)
+  }
+}
+
+/// Every measurement in the docked composer, taken from the Figma frames
+/// `Prompt/Default`, `Prompt/Focus` and `Prompt/Dirty`.
+///
+/// Those frames are drawn over a **1170x2532 (@3x, 390pt) screenshot placed at
+/// 585 units wide**, so one design unit is two device pixels — two thirds of a
+/// point, not one. Reading the frames' numbers as points makes every one of them
+/// half again too large, which is exactly the bug this type exists to prevent:
+/// the conversion is applied once, here, and the raw frame numbers stay legible
+/// beside it.
+private enum TermComposerMetrics {
+  private static let unit: CGFloat = 2.0 / 3.0
+
+  static let cell = 48 * unit
+  static let cellRadius = 8 * unit
+  static let cellStroke = 1 * unit
+  static let gap = 12 * unit
+  static let sidePadding = 8 * unit
+  static let topPadding = 8 * unit
+  static let bottomPadding = 12 * unit
+  static let rule = 2 * unit
+}
+
+/// The cell at rest and the wash under a finger, drawn as a `ButtonStyle` so the
+/// press state is the system's own rather than a gesture this component tracks.
+private struct TermGlyphButtonStyle: ButtonStyle {
+  private static let radius = TermComposerMetrics.cellRadius
+
+  let filled: Bool
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .frame(width: TermGlyphButton.side, height: TermGlyphButton.side)
+      .background(
+        RoundedRectangle(cornerRadius: Self.radius)
+          .fill(filled ? TerminalPalette.cellFill : .clear)
+          .overlay(
+            RoundedRectangle(cornerRadius: Self.radius)
+              .fill(configuration.isPressed ? TerminalPalette.pressedCell : .clear))
+          .overlay(
+            RoundedRectangle(cornerRadius: Self.radius)
+              .strokeBorder(
+                filled ? TerminalPalette.cellStroke : .clear,
+                lineWidth: TermComposerMetrics.cellStroke)))
+      .contentShape(Rectangle())
   }
 }
 

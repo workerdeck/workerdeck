@@ -89,6 +89,23 @@ enum TerminalPalette {
   /// real meaning would stop standing out.
   static var uiPressable: UIColor { dynamicAlpha(dark: 0.028, light: 0.024) }
 
+  /// The composer's glyph-button **cell** — the raised square a `+`, `\u{2715}`, `!` or an
+  /// armed `\u{21B5}` stands in. Concrete colours rather than an alpha on the ground:
+  /// this is a control sitting on the composer's own opaque bar, and a wash
+  /// tuned against the transcript would vanish against it.
+  static var uiCellFill: UIColor { dynamic(dark: 0x12_12_12, light: 0xf2_f2_f2) }
+  static var uiCellStroke: UIColor { dynamic(dark: 0x24_24_24, light: 0xdc_dc_dc) }
+
+  /// The wash inside that cell while a finger is down on it. Deliberately well
+  /// above `uiPressable`, which is tuned for a full-width transcript row: a 32pt
+  /// square shows a fraction of that area, and this one is momentary rather than
+  /// ambient, so it can be seen without competing with anything.
+  static var uiPressedCell: UIColor { dynamicAlpha(dark: 0.10, light: 0.08) }
+
+  static var cellFill: Color { Color(uiColor: uiCellFill) }
+  static var cellStroke: Color { Color(uiColor: uiCellStroke) }
+  static var pressedCell: Color { Color(uiColor: uiPressedCell) }
+
   /// The rule drawn *inside* a nested row's padding, so the indent stays exactly
   /// two cells — a border would be layout, and would take every subagent row
   /// half a character off the column its parent sits on.

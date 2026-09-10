@@ -544,6 +544,49 @@ and the bands (0.04/0.05), because a transcript is mostly pressable and at band 
 second row would be washed and the rows carrying real meaning would stop standing out. If it ever
 reads as noise the next move is to mark **fewer rows, not to lighten it further** — the honest
 alternative is marking only blocks that fold something and leaving a plain tool call bare.
+
+**The composer's glyphs are the same ruling, one step further.** `+`, `\u{2715}`, `!` and `\u{21B5}` are ASCII
+characters on the web and in the webview, bare until a pointer hovers them; on a thumb they read
+as *text that happens to be tappable*, which was the complaint. So on iOS a glyph stands in a
+**cell** — a 32pt rounded square, `TerminalPalette.uiCellFill` behind a `uiCellStroke` hairline,
+drawn by `TermGlyphButtonStyle` — and the cell washes with `uiPressedCell` while a finger is down.
+That wash is **0.10/0.08, deliberately above** `uiPressable`: a 32pt square shows a fraction of a
+full-width row's area, and it is momentary rather than ambient.
+
+**The cell is drawn only while the button can act, and that is the whole state model.** A send
+with nothing to send has no cell at all — just the dim `\u{21B5}` — which is why nothing here uses a
+disabled opacity: a greyed-out button still looks like a button, and an absent one cannot be
+misread. The resting `\u{276F}` is bare for the same reason, and it is a plain `Text` rather than a
+disabled button, because it is the gutter and not a control. Send is deliberately **not** tinted;
+the cell appearing *is* what armed means. Only the two tones that carry meaning survive on top of
+the cell — yellow for a running turn's stop, magenta for shell mode.
+
+**Every number in that row comes from Figma, through one conversion.** The frames are
+`Prompt/Default`, `Prompt/Focus` and `Prompt/Dirty` on the `iOS` page of the WorkerDeck file
+(nodes `43:1965`, `43:1988`, `43:1997`), and the trap in them is that **their units are not
+points**: they are drawn over a 1170x2532 screenshot — an @3x capture of a 390pt phone — placed at
+585 units wide, so one design unit is two device pixels, or **two thirds of a point**. Reading the
+frames' numbers as points makes every one of them half again too large, which is exactly what the
+first attempt shipped. `TermComposerMetrics` applies the 2/3 once and keeps the raw frame numbers
+legible beside it: a 48-unit cell is 32pt, a 12-unit gap is 8pt, 8 units of side and top padding
+are 5.33 against 8 at the bottom, and the 2-unit rule is 1.33pt.
+
+Two structural consequences of matching it. The rule is a **row of its own**, not an overlay: the
+frames give it an *outside* stroke, so an overlay ate the top padding and sat every cell 1.33pt
+high. And the terminal variant's `DraftStyle.containerInset` is now **zero on both axes** — the
+field is one cell of a row that supplies every gap itself, so a horizontal inset pushed the typed
+line off the design's column and a vertical one made the row taller than the cell it is measured
+against, growing the whole bar. The card shape keeps its 12, because there the field *is* the
+surface. The one thing deliberately *not* taken from the frames is the type size: they draw 18
+units (12pt), the app draws Dynamic Type's `lineTextUIStyle`, and a hardcoded size would be right
+at one content-size category and wrong at every other.
+
+Also gone: the old promise that the gutter glyph sits on the column every transcript marker sits
+in. A 32pt cell centres its glyph at 21pt, and the frames accept that.
+`packages/ui/src/styles/terminal.css` is untouched either way — the web and the webview keep the
+bare glyph and their hover, and the grid audit's "one cell wide, one line tall" rule still governs
+there. `UIPREVIEW=composer` stacks all five glyph states.
+
 The same absent hover is why a **long-press opens a context menu** on a row (the collection view's
 own `contextMenuConfigurationForItemsAt`, not a per-cell interaction, so UIKit installs one
 recognizer per surface and coordinates it with the scroll instead of leaving a hand-added one to
