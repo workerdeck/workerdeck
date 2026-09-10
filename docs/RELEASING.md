@@ -685,6 +685,44 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   the switch would have shipped an inert one. `TerminalRows`' `recapAt`/`recapLabel` machinery is
   still there, unwired — the iOS half of this is the obvious next cycle.
 
+  **2.2.0** — **`!` shell mode, and the composer's buttons on a thumb.** A **minor**, additive
+  throughout; **protocol stays 1** — `AttachedFrame.shell?` and the `shell_command` command are
+  both additive, so an older gateway simply advertises nothing and no mismatch banner fires.
+
+  Shell mode is the headline: type `!` as the first character and the composer becomes a host
+  shell prompt, the rest of the line runs in the session's cwd, and the output lands in the
+  transcript. Off by default, its own switch (`shell: { enabled }`, CLI `--shell`), operator-only,
+  and gated on three ANDed conditions re-checked per command with one identical refusal string so
+  the surface is not an existence oracle. It deliberately does **not** ride on `hostFiles` or
+  `allowedCwdRoots`: unlike an agent's Bash tool a `!` command goes through no permission flow at
+  all, which is the whole reason it gets its own gate. It also does not start a turn —
+  `Runner.queueLocalCommand` emits the transcript row now and holds the model-facing text for the
+  next real `sendMessage`, wrapped in `<local-command-caveat>`, because routing it through the
+  streaming input queue would earn a reply to every `ls`. This is the first child process
+  `packages/server` has ever owned, so it is spelled out: `spawn('/bin/sh', ['-c', cmd])`,
+  `detached` for its own process group, a wall-clock timeout, a shared output budget, and
+  `SIGKILL` to the **group** on timeout, close, park and shutdown.
+
+  The rest is **iOS**, and both halves are worth reading before touching the phone's composer
+  again. Shell mode ships in the same pass rather than trailing — the kit mirrors the command, the
+  frame field and both reducer rules — and the `!` is refused in `shouldChangeTextIn` *before*
+  insertion rather than cleared afterwards, because `textViewDidChangeSelection` fires before
+  `textViewDidChange`, so clearing from `onEdit` had the character written straight back and on a
+  shell prompt that meant `! ls` reaching `/bin/sh`, where a leading `!` negates the exit status.
+
+  Then the composer's glyph buttons got a **cell** — see `docs/CLIENTS.md` § apps/ios for the
+  ruling. The one thing that belongs *here* is the process failure, because it will recur: the
+  design's measurements were read straight off the Figma frames as points and shipped **1.5x too
+  large**. Those frames are drawn over a 1170x2532 screenshot — an @3x capture of a 390pt phone —
+  placed at 585 units wide, so **one design unit is two thirds of a point**. Nothing in the frame
+  says so; the only way to find it is to ask Figma for the placed image's natural size and divide.
+  The fix was not a nudge but a conversion applied once (`TermComposerMetrics`), and it was
+  **verified by measuring simulator pixels**, not by eye — cell 96px, padding 16px, text at 136px,
+  bar 140px, all exact. Take that as the standing rule for any future design hand-off: get the
+  source image's pixel dimensions, derive the unit, and check the built screen against a pixel
+  count rather than a screenshot comparison.
+
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
