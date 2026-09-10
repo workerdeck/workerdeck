@@ -342,6 +342,14 @@ private func isStreaming(_ id: String, _ base: String) -> Bool {
 private let localCommandOutput = try! NSRegularExpression(
   pattern: #"^<local-command-(stdout|stderr)>([\s\S]*?)</local-command-\1>$"#)
 
+/// The same wrapper, unanchored, for pulling every element out of a deferred `!` flush.
+/// (Mirrors `LOCAL_COMMAND_ELEMENT`.)
+private let localCommandElement = try! NSRegularExpression(
+  pattern: #"<local-command-(stdout|stderr)>([\s\S]*?)</local-command-\1>"#)
+
+/// (Mirrors `LOCAL_COMMAND_CAVEAT`.)
+private let localCommandCaveat = "<local-command-caveat>"
+
 /// JS-`trim()`-equivalent whitespace stripping.
 private func trimmed(_ value: String) -> String {
   value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -611,14 +619,28 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
           if let patch = payload.patch { updated.patch = patch }
           return updated
         }
-      case .text(let text) where payload.synthetic != true:
+      // Both local-command branches sit *ahead* of the synthetic guard, not inside it.
+      // A `!` shell run is emitted synthetic so it scores zero activity and zero prose,
+      // but it is the one synthetic message a person is meant to see; and on resume the
+      // engine returns the deferred flush and the next message as a single message that
+      // the runner marks synthetic whole. Under the old guard the first rendered nothing
+      // and the second swallowed the user's own words. Mirrors `transcript.ts`.
+      case .text(let text):
         let id = payload.uuid ?? "user-\(event.seq)"
         if let local = matchLocalCommandOutput(trimmed(text)) {
           items = upsert(
             items,
             .notice(id: id, level: local.stream == "stderr" ? .error : .info,
               text: trimmed(local.body)))
-        } else {
+        } else if leadingWhitespaceTrimmed(text).hasPrefix(localCommandCaveat) {
+          for (index, element) in localCommandElements(text).enumerated() {
+            items = upsert(
+              items,
+              .notice(id: "\(id)#\(index)",
+                level: element.stream == "stderr" ? .error : .info,
+                text: trimmed(element.body)))
+          }
+        } else if payload.synthetic != true || carriesCaveat(payload.message.content) {
           // References, not bytes — the view fetches each one to render it.
           items = upsert(
             items,
@@ -800,6 +822,34 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   }
 
   return next
+}
+
+/// Every local-command element inside a deferred `!` flush, in order.
+private func localCommandElements(_ text: String) -> [(stream: String, body: String)] {
+  let range = NSRange(text.startIndex..<text.endIndex, in: text)
+  return localCommandElement.matches(in: text, range: range).compactMap { match in
+    guard let streamRange = Range(match.range(at: 1), in: text),
+      let bodyRange = Range(match.range(at: 2), in: text)
+    else { return nil }
+    return (String(text[streamRange]), String(text[bodyRange]))
+  }
+}
+
+/// A message whose first text block is the deferred `!` flush is synthetic as a whole, but
+/// the block after it is the person's own message. Only that shape earns the exemption —
+/// `<task-notification>` and the rest stay hidden.
+private func carriesCaveat(_ content: MessageContent) -> Bool {
+  content.asBlocks.contains { block in
+    if case .text(let text) = block {
+      return leadingWhitespaceTrimmed(text).hasPrefix(localCommandCaveat)
+    }
+    return false
+  }
+}
+
+/// JS-`trimStart()`-equivalent — only the leading side, so a prefix test matches.
+private func leadingWhitespaceTrimmed(_ value: String) -> String {
+  String(value.drop(while: { $0.isWhitespace }))
 }
 
 /// Match the local-command wrapper, returning the stream name and the wrapped body.

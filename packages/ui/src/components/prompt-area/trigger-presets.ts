@@ -131,3 +131,27 @@ export function callbackTrigger(opts: CallbackTriggerOptions): TriggerConfig {
     ...rest,
   }
 }
+
+// Launch trigger — fires onActivate and swallows the character
+
+export type LaunchTriggerOptions = Omit<Partial<TriggerConfig>, 'mode'> & {
+  /** The trigger character. Required. */
+  char: string
+}
+
+/**
+ * Creates a **launch** trigger: `onActivate` fires on keydown and the character
+ * never enters the editor. For flipping the composer into another mode, or
+ * opening a surface outside it.
+ *
+ * Defaults: `position: 'start'`, `mode: 'launch'`.
+ */
+export function launchTrigger(opts: LaunchTriggerOptions): TriggerConfig {
+  const { char, ...rest } = opts
+  return {
+    char,
+    position: 'start',
+    mode: 'launch',
+    ...rest,
+  }
+}

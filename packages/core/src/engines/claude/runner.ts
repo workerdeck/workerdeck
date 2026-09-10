@@ -26,6 +26,7 @@ import {
 import { type AttachmentInput, attachmentContentBlocks, attachmentRef } from '../../lib/attachments.ts'
 import { checklistFromBody, sameChecklist } from '../../lib/checklist.ts'
 import { InputQueue } from '../../lib/input-queue.ts'
+import { isSlashCommand, localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
 import {
   type UsageRateLimits,
   defaultModelFromSdk,
@@ -86,6 +87,7 @@ export class SessionRunner implements Runner {
   #totalCostUsd: number | undefined
   #numTurns: number | undefined
   #input = new InputQueue()
+  #pendingLocalCommands: string[] = []
   #query: Query | undefined
   #capabilitiesEmitted = false
   #subscriptionType: string | undefined
@@ -176,6 +178,11 @@ export class SessionRunner implements Runner {
       throw new Error('session is closed')
     }
     const blocks = attachments?.length ? attachmentContentBlocks(attachments) : []
+    // A slash command is matched on the message text by the CLI, so held output waits for the next plain message.
+    const context = isSlashCommand(text) ? undefined : this.#takeLocalCommands()
+    if (context) {
+      blocks.unshift({ type: 'text', text: context })
+    }
     // A message may be attachments alone; an empty text block is not valid API input.
     const content = blocks.length
       ? ([...blocks, ...(text ? [{ type: 'text', text }] : [])] as unknown as SDKUserMessage['message']['content'])
@@ -193,6 +200,27 @@ export class SessionRunner implements Runner {
       attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
       uuid: randomUUID(),
     })
+  }
+
+  queueLocalCommand(result: LocalCommandResult): void {
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
+    const text = localCommandTranscript(result)
+    this.#pendingLocalCommands.push(text)
+    this.#emit({
+      type: 'user_message',
+      message: { role: 'user', content: text },
+      parentToolUseId: null,
+      synthetic: true,
+      uuid: randomUUID(),
+    })
+  }
+
+  #takeLocalCommands(): string | undefined {
+    const context = localCommandContext(this.#pendingLocalCommands)
+    this.#pendingLocalCommands = []
+    return context
   }
 
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
@@ -236,6 +264,7 @@ export class SessionRunner implements Runner {
     if (this.#status === 'closed' || this.#status === 'failed') {
       throw new Error('session is closed')
     }
+    this.#pendingLocalCommands = []
     this.sendMessage('/clear')
   }
 
@@ -265,6 +294,7 @@ export class SessionRunner implements Runner {
       return
     }
     this.#closed = true
+    this.#pendingLocalCommands = []
     for (const [id, pending] of this.#pending) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
     }
@@ -429,6 +459,7 @@ export class SessionRunner implements Runner {
     if (body) {
       this.#emit(body)
       if (body.type === 'conversation_reset') {
+        this.#pendingLocalCommands = []
         if (body.sdkSessionId) {
           this.#sdkSessionId = body.sdkSessionId
         }

@@ -643,6 +643,17 @@
   border-color: var(--term-blue);
 }
 
+/* Shell mode. The frame and the gutter glyph move together and both go magenta, because the thing
+   the mode changes is where the text goes — a subtle cue would be the wrong kind of quiet. Listed
+   after the focus rule so it wins while the field is focused, which is the whole time it is on. */
+[data-terminal].term-composer-shell,
+[data-terminal].term-composer-shell:focus-within {
+  border-color: var(--term-magenta);
+}
+[data-terminal] .term-composer-shell-hint {
+  color: var(--term-dim);
+}
+
 /* The contentEditable field. `font: inherit` is what makes it the cell — the
    surface above already carries the size and the line height, and anything that
    restates them here can disagree with the rows. */

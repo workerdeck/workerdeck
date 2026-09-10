@@ -327,13 +327,19 @@ export type SessionCommand =
       error: string
       logs?: string[]
     }
+  | { type: 'shell_command'; command: string }
   | { type: 'close' }
+
+export const SHELL_COMMAND_MAX = 4000
 
 export type AttachedFrame = {
   type: 'attached'
   protocolVersion: number
   session: SessionInfo
   replayingFrom: number
+  // Whether this principal may run `!` commands on this session: server config x operator x hostCwd.
+  // Additive, so no PROTOCOL_VERSION bump; an older gateway omits it and the client never offers the mode.
+  shell?: boolean
 }
 
 export type ToolCallRequestFrame = {

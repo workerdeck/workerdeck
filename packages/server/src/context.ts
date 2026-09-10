@@ -13,6 +13,7 @@ import type { ProfileService } from './services/profiles.ts'
 import type { ProjectInfoService } from './services/project-info.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionFactory } from './services/session-factory.ts'
+import type { ShellService } from './services/shell.ts'
 
 export type ServerContext = {
   options: WorkerServerOptions
@@ -38,4 +39,6 @@ export type ServerContext = {
   hostFilesWritable: boolean
   maxHostFileBytes: number
   maxHostDirEntries: number
+
+  shell: ShellService | null
 }

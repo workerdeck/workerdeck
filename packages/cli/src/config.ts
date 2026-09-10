@@ -38,6 +38,7 @@ export type CliFlags = {
   cwdRoots: string[]
   fsRoots: string[]
   fsWrite?: boolean
+  shell?: boolean
   allowedOrigins: string[]
   allowedHosts: string[]
   insecureHosts: string[]
@@ -159,6 +160,10 @@ export function parseArgs(argv: string[]): CliFlags {
       }
       case '--fs-write': {
         flags.fsWrite = true
+        break
+      }
+      case '--shell': {
+        flags.shell = true
         break
       }
       case '--allowed-origin': {
@@ -436,6 +441,9 @@ export function resolveInstanceConfig(
       ...(fsRoots?.length ? { roots: fsRoots } : {}),
       ...(flags.fsWrite ? { write: true } : {}),
     }
+  }
+  if (flags.shell) {
+    options.shell = { ...loaded.options.shell, enabled: true }
   }
   // Flags replace rather than merge: a half-declared profile set is a credential mix-up.
   if (flags.profiles.length) {

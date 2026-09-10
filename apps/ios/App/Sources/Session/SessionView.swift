@@ -59,6 +59,9 @@ struct SessionView: View {
   /// The caret, and whether the keyboard is up. Here rather than in the composer
   /// because the picker overlay edits the same draft it does.
   @State private var selection = NSRange(location: 0, length: 0)
+  /// Shell mode, entered by typing `!` as the whole of an empty draft. Cleared on every
+  /// attach, because the gateway's offer is re-made there and may not come back.
+  @State private var isShellMode = false
   @State private var isComposerFocused = false
   /// How much of the bottom the floating stack occupies — the picker sits on top
   /// of it, so it needs the number the layout actually produced.
@@ -258,6 +261,12 @@ struct SessionView: View {
           }
         }
         await vm.holdOpen()
+      }
+      // A reattach that no longer offers a shell — a restarted gateway with the flag
+      // dropped, or a resume onto a sandboxed engine — must not leave the composer in a
+      // mode whose commands would be refused.
+      .onChange(of: vm.canRunShell) { _, offered in
+        if !offered { isShellMode = false }
       }
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { vm.reconnectNow() }
@@ -652,13 +661,16 @@ struct SessionView: View {
         isBusy: vm.state.status == .running,
         isEnabled: vm.state.status != .closed,
         attachments: attachments,
-        canAddMedia: !acceptedKinds.isEmpty,
+        canAddMedia: !acceptedKinds.isEmpty && !isShellMode,
+        isShellMode: isShellMode,
+        onLeadingTrigger: enterShellMode(on:),
         onEdit: { text, caret in
           completion.update(for: text, cursor: Range(caret, in: text)?.lowerBound)
         },
         onSend: send,
         onStop: { vm.interrupt() },
-        onAddMedia: { sheet = .addMedia })
+        onAddMedia: { sheet = .addMedia },
+        onExitShell: { isShellMode = false })
     }
     .padding(.horizontal, docked ? 0 : gutter)
     .padding(.top, 8)
@@ -761,10 +773,32 @@ struct SessionView: View {
     selection = NSRange(location: result.cursor.utf16Offset(in: result.text), length: 0)
   }
 
+  /// `!` typed as the first character of an empty field flips the composer into shell mode
+  /// and is **swallowed before it is inserted**, exactly as the desktop composer's launch
+  /// trigger suppresses it. The field guarantees the "first character, empty field" part, so
+  /// a `!` typed inside a sentence is just a `!`.
+  private func enterShellMode(on character: String) -> Bool {
+    guard !isShellMode, vm.canRunShell, character == "!" else { return false }
+    isShellMode = true
+    completion.cancel()
+    return true
+  }
+
   private func send() {
     // A half-typed token is not a completion the user declined; sending closes
     // the list either way.
     completion.cancel()
+    if isShellMode {
+      // Not a turn: the output arrives as its own row and reaches the model with the
+      // next message, so nothing here waits on the session and the mode ends with the
+      // command, the way `esc` ends it on the desktop.
+      vm.runShell(draft)
+      isShellMode = false
+      draft = ""
+      selection = NSRange(location: 0, length: 0)
+      isComposerFocused = true
+      return
+    }
     // `/mcp` is answered here rather than sent. The CLI's own `/mcp` is an
     // interactive picker, not a prompt — forwarding it would spend a turn on a
     // model reading the words "/mcp", so the app opens its own screens instead.

@@ -1,6 +1,7 @@
 import type { McpServerStatusInfo, PermissionMode, PermissionRequest, ProfileEngine, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
+import type { LocalCommandResult } from './lib/local-command.ts'
 import type { ToolExecutionResult } from './executors/tool-executor.ts'
 
 export type SessionEventListener = (event: SessionEvent) => void
@@ -39,6 +40,7 @@ export interface Runner {
   ): () => void
   eventAt?(seq: number): SessionEvent | undefined
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void
+  queueLocalCommand?(result: LocalCommandResult): void
   mcpServers?(): Promise<McpServerStatusInfo[] | undefined>
   reconnectMcpServer?(name: string): Promise<void>
   setMcpServerEnabled?(name: string, enabled: boolean): Promise<void>

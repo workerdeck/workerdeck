@@ -1,4 +1,14 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type DragEvent, type ReactNode, type Ref } from 'react'
+import {
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from 'react'
 import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 import type { StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
 import { ArrowUp, FileText, Paperclip, RotateCw, Sparkles, Square, TriangleAlert, X } from 'lucide-react'
@@ -7,7 +17,7 @@ import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
 import { usePromptAreaState } from '../prompt-area/use-prompt-area-state.ts'
 import { plainTextToSegments } from '../prompt-area/prompt-area-engine.ts'
-import { commandTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
+import { commandTrigger, launchTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
 import type { TerminalAffordances } from '../terminal/affordances.tsx'
 import { PROMPT_GLYPH } from '../terminal/items.tsx'
@@ -17,6 +27,9 @@ import { cn } from '../../lib/utils.ts'
 import { formatBytes } from '../../lib/format.ts'
 
 export type ComposerFileMatch = { path: string; relative: string }
+
+const SHELL_PLACEHOLDER = 'Run a command on the host…'
+const SHELL_HINT = '! shell mode · esc to exit'
 
 export type ComposerHandle = {
   insertText: (text: string) => void
@@ -32,6 +45,9 @@ export interface ComposerProps {
   commands?: SlashCommandInfo[]
   skills?: SkillInfo[]
   onSearchFiles?: (query: string, options: { signal: AbortSignal }) => Promise<ComposerFileMatch[]>
+  // Shell mode: `!` as the first character turns the composer into a host shell prompt. Omit to leave the
+  // mode off entirely — the gateway only offers it to an operator on a session whose engine reaches a host cwd.
+  onShellCommand?: (command: string) => void
   attachments?: UseAttachmentsResult
   toolbar?: ReactNode
   layout?: 'stacked' | 'inline'
@@ -72,6 +88,7 @@ export function Composer({
   commands,
   skills,
   onSearchFiles,
+  onShellCommand,
   attachments,
   toolbar,
   layout = 'stacked',
@@ -91,6 +108,7 @@ export function Composer({
   )
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
+  const [shellMode, setShellMode] = useState(false)
 
   useImperativeHandle(
     ref,
@@ -196,8 +214,17 @@ export function Composer({
         }),
       )
     }
+    if (onShellCommand) {
+      configured.push(
+        launchTrigger({
+          char: '!',
+          accessibilityLabel: 'shell mode',
+          onActivate: () => setShellMode(true),
+        }),
+      )
+    }
     return configured.length > 0 ? configured : undefined
-  }, [commands, skills, onSearchFiles])
+  }, [commands, skills, onSearchFiles, onShellCommand])
 
   const saveDraft = draft?.save
   useEffect(() => {
@@ -211,12 +238,42 @@ export function Composer({
     if (!canSend) {
       return
     }
+    if (shellMode) {
+      const command = plainText.trim()
+      if (command === '') {
+        return
+      }
+      onShellCommand?.(command)
+      setShellMode(false)
+      draft?.clear()
+      clear()
+      focus()
+      return
+    }
     onSend(plainText.trim(), attachments?.readyIds ?? [])
     attachments?.clear()
     draft?.clear()
     clear()
     focus()
   }
+
+  const leaveShellMode = () => {
+    setShellMode(false)
+    focus()
+  }
+  // Escape and backspace-on-empty both leave, because both are what a person reaches for when the
+  // pink frame was not what they meant. Backspace only when there is nothing left to delete.
+  const shellKeys = shellMode
+    ? {
+        onEscape: leaveShellMode,
+        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === 'Backspace' && isEmpty) {
+            e.preventDefault()
+            leaveShellMode()
+          }
+        },
+      }
+    : {}
 
   const pick = (files: FileList | null) => {
     if (files && files.length > 0) {
@@ -250,7 +307,11 @@ export function Composer({
     </>
   ) : null
 
-  const gutter = busy ? (
+  const gutter = shellMode ? (
+    <GlyphButton gutter label="Leave shell mode" tone="magenta" onClick={leaveShellMode}>
+      !
+    </GlyphButton>
+  ) : busy ? (
     <GlyphButton gutter label="Interrupt" tone="yellow" onClick={onInterrupt}>
       ✕
     </GlyphButton>
@@ -318,12 +379,12 @@ export function Composer({
           affordances={affordances}
           bleed="1ch"
           data-dragging={dragging || undefined}
-          className={cn('term-composer', disabled && 'opacity-60')}
+          className={cn('term-composer', shellMode && 'term-composer-shell', disabled && 'opacity-60')}
         >
           <div className="term-composer-body">
             {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
             <div className="term-row">
-              {canAttach ? fileField : null}
+              {canAttach && !shellMode ? fileField : null}
               {gutter}
               <div className="flex min-w-0 items-start">
                 <PromptArea
@@ -333,17 +394,23 @@ export function Composer({
                   normalizeBullets={false}
                   onSubmit={submit}
                   disabled={disabled}
-                  placeholder={disabled ? 'Session ended' : placeholder}
+                  placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
                   minHeight={line}
                   maxHeight={line * 10}
-                  aria-label="Message the agent"
+                  aria-label={shellMode ? 'Run a shell command' : 'Message the agent'}
                   className="term-composer-field min-w-0 flex-1"
                   onImagePaste={(file) => attachments?.add([file])}
+                  {...shellKeys}
                 />
                 {submitButton}
               </div>
             </div>
-            {toolbar ? (
+            {shellMode ? (
+              <div className="term-row">
+                <span aria-hidden className="term-gutter" />
+                <span className="term-composer-shell-hint">{SHELL_HINT}</span>
+              </div>
+            ) : toolbar ? (
               <div className="term-row">
                 <span aria-hidden className="term-gutter" />
                 <div className="flex min-w-0 items-center gap-[1ch]">{toolbar}</div>
@@ -365,13 +432,15 @@ export function Composer({
           'transition-colors rounded-lg shadow-(--shadow-xs)',
           'focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
           dragging && 'border-ring ring-2 ring-ring/30',
+          shellMode &&
+            'border-[var(--wd-shell-accent)] focus-within:border-[var(--wd-shell-accent)] focus-within:ring-[var(--wd-shell-accent)]/30',
           disabled && 'opacity-60',
         )}
       >
         {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
         {inline ? (
           <div className="flex items-end gap-1 p-1">
-            {attach}
+            {shellMode ? <ShellBadge onLeave={leaveShellMode} /> : attach}
             <PromptArea
               {...bind}
               triggers={triggers}
@@ -379,12 +448,13 @@ export function Composer({
               normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
-              placeholder={disabled ? 'Session ended' : placeholder}
+              placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
               minHeight={20}
               maxHeight={192}
-              aria-label="Message the agent"
+              aria-label={shellMode ? 'Run a shell command' : 'Message the agent'}
               className="min-w-0 flex-1 py-1 text-body-sm text-text"
               onImagePaste={(file) => attachments?.add([file])}
+              {...shellKeys}
             />
             {submitButton}
           </div>
@@ -397,17 +467,18 @@ export function Composer({
               normalizeBullets={false}
               onSubmit={submit}
               disabled={disabled}
-              placeholder={disabled ? 'Session ended' : placeholder}
+              placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
               minHeight={28}
               maxHeight={192}
-              aria-label="Message the agent"
+              aria-label={shellMode ? 'Run a shell command' : 'Message the agent'}
               className="px-3 pt-2.5 pb-0 text-body-sm text-text"
               onImagePaste={(file) => attachments?.add([file])}
+              {...shellKeys}
             />
             <div className="flex items-center justify-between gap-2 px-2 pb-2">
               <div className="flex min-w-0 items-center gap-1">
-                {attach}
-                {toolbar}
+                {shellMode ? <ShellBadge onLeave={leaveShellMode} /> : attach}
+                {shellMode ? <span className="text-label text-text-muted">{SHELL_HINT}</span> : toolbar}
               </div>
               {submitButton}
             </div>
@@ -428,7 +499,7 @@ function GlyphButton({
   className,
   children,
 }: {
-  tone?: 'blue' | 'yellow'
+  tone?: 'blue' | 'yellow' | 'magenta'
   label: string
   disabled?: boolean
   onClick: () => void
@@ -525,4 +596,18 @@ function AttachmentChip({ item, onRetry, onRemove }: { item: StagedAttachment; o
 function extensionOf(name: string) {
   const dot = name.lastIndexOf('.')
   return dot > 0 ? name.slice(dot + 1).toUpperCase() : 'FILE'
+}
+
+function ShellBadge({ onLeave }: { onLeave: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Leave shell mode"
+      title="Leave shell mode"
+      onClick={onLeave}
+      className="shrink-0 rounded px-1.5 py-0.5 font-mono text-label font-semibold text-[var(--wd-shell-accent)]"
+    >
+      !
+    </button>
+  )
 }

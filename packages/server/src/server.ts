@@ -38,6 +38,7 @@ import { ProfileUsageTracker } from './services/profile-usage.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
+import { createShellService } from './services/shell.ts'
 import { isDormant, MemorySessionStore } from './services/session-store.ts'
 
 export type {
@@ -133,11 +134,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     decorateInfo: (info) => projects.withProject(info),
   })
   const producedFiles = new ProducedFileStore()
+  const shell = options.shell?.enabled === true ? createShellService(options.shell) : null
   const registry = new SessionRegistry({
     onRegister: (runner) => {
       notifier.watch(runner)
       producedFiles.watch(runner)
       profileUsage.watch(runner)
+      shell?.watch(runner)
       const profile = runner.info().profile
       if (!profile) {
         return
@@ -261,6 +264,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     hostFilesWritable: options.hostFiles?.write === true,
     maxHostFileBytes: options.hostFiles?.maxFileBytes ?? 1024 * 1024,
     maxHostDirEntries: options.hostFiles?.maxEntries ?? 5000,
+    shell,
   }
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
@@ -432,7 +436,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         return
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
-        attachClient(ctx, ws, runner, req)
+        attachClient(ctx, ws, runner, req, { operator: auth.isOperator(authCtx) })
       })
     })().catch(() => socket.destroy())
   })
@@ -486,6 +490,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         // reason 'server', or shutdown discards every dormant record. See docs/GOTCHAS.md.
         parking.close()
         registry.closeAll()
+        shell?.killAll()
         // `wss` is `noServer`, so `wss.close()` neither closes nor terminates clients — it waits for `clients` to
         // empty — and `server.closeAllConnections()` does not reach upgraded sockets. Any attached session socket
         // therefore keeps `server.close()`'s callback from ever firing. Send close frames, then force what lingers.

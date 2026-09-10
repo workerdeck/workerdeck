@@ -14,6 +14,8 @@ import Foundation
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against `AttachedFrame.protocolVersion`.
   public static let version = 1
+  /// Mirror of SHELL_COMMAND_MAX — the longest `!` command the gateway accepts.
+  public static let shellCommandMax = 4000
 }
 
 // MARK: - Session lifecycle
@@ -1118,13 +1120,16 @@ public enum SessionCommand: Sendable, Equatable {
   case setModel(String?)
   case toolCallResult(executionId: String, output: ToolExecutionOutput, logs: [String]? = nil)
   case toolCallError(executionId: String, reason: String, error: String, logs: [String]? = nil)
+  /// Run a `!` shell command on the host, in the session's cwd. Offered only when
+  /// `AttachedFrame.shell` is true; the gateway re-checks and refuses otherwise.
+  case shellCommand(command: String)
   case close
 }
 
 extension SessionCommand: Encodable {
   private enum CodingKeys: String, CodingKey {
     case type, text, requestId, behavior, updatedInput, message, interrupt, mode, model
-    case executionId, output, logs, reason, error, attachmentIds
+    case executionId, output, logs, reason, error, attachmentIds, command
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -1162,6 +1167,9 @@ extension SessionCommand: Encodable {
       try container.encode(reason, forKey: .reason)
       try container.encode(error, forKey: .error)
       try container.encodeIfPresent(logs, forKey: .logs)
+    case .shellCommand(let command):
+      try container.encode("shell_command", forKey: .type)
+      try container.encode(command, forKey: .command)
     case .close:
       try container.encode("close", forKey: .type)
     }
@@ -1176,11 +1184,17 @@ public struct AttachedFrame: Decodable, Sendable, Equatable {
   public let session: SessionInfo
   /// Events with seq > the client's `afterSeq` follow as `event` frames.
   public let replayingFrom: Int
+  /// Whether this principal may run `!` shell commands on this session: the gateway's
+  /// `shell` config, operator privilege and the engine's host cwd, ANDed. Omitted rather
+  /// than sent false, and absent entirely from a gateway that predates the feature —
+  /// so nil means no, and the composer offers the mode only on an explicit true.
+  public let shell: Bool?
 
-  public init(protocolVersion: Int, session: SessionInfo, replayingFrom: Int) {
+  public init(protocolVersion: Int, session: SessionInfo, replayingFrom: Int, shell: Bool? = nil) {
     self.protocolVersion = protocolVersion
     self.session = session
     self.replayingFrom = replayingFrom
+    self.shell = shell
   }
 }
 

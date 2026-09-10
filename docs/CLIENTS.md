@@ -520,6 +520,20 @@ result-preview character budget is **derived from the column count**, since 400 
 gate that keeps the exactness claim honest, reported on screen by the `terminal`/`terminalStress`
 preview variants — a line wider than its planned column is clipped silently, which is worse than
 a wrong height.
+**Shell mode** is the one place the phone's composer diverges from the desktop's, and only where
+it must: `!` typed as the first character of an empty draft flips it, **refused in
+`shouldChangeTextIn` before it is inserted** (`RichTextEditor.onLeadingTrigger`) rather than
+cleared afterwards — `textViewDidChangeSelection` fires *before* `textViewDidChange`, so a parent
+that emptied the draft from `onEdit` had the character written straight back by
+`parent.text = view.text`, and on a shell prompt that meant `! ls` reaching `/bin/sh`. Suppressing
+at the insertion is also what the web's `launchTrigger` does, one layer up; the frame and the gutter glyph
+go magenta, and the way *out* is tapping that `!` rather than Escape — a phone has no Escape key,
+so the glyph that names the mode is also what undoes it. The `!` outranks `\u{2715}` in the gutter
+even mid-turn, because the mode is the louder fact and stop is one tap away again the moment you
+leave. The offer is per attach (`AttachedFrame.shell` → `TranscriptViewModel.canRunShell`) and the
+mode is dropped if a reattach withdraws it, so a composer can never sit in a state whose commands
+the gateway would refuse.
+
 **A phone has no hover, so a wash *is* the affordance**: `TerminalPalette.uiPressable`, drawn by
 `BackdropView` behind any line that carries a press **and wears nothing else** — no band, not
 `inOpen`. That carve-out is the design, not an optimisation: a tool call's preview rows are

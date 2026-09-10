@@ -46,6 +46,11 @@ Options
                             an agent's writes go through the permission flow and a
                             PUT does not. Every write is still conditional on the
                             hash the client last read.
+      --shell               let an operator run '!' shell commands on the host from
+                            the composer, in the session's cwd. Off by default and
+                            its own switch: unlike an agent's Bash tool, a '!'
+                            command goes through no permission prompt at all.
+                            Never offered to a scoped principal.
       --approval-timeout <d>
                             how long a permission prompt or a question may wait for
                             an answer before the engine denies it (300000, 30s, 5m;

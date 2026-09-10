@@ -358,6 +358,74 @@ describe('transcript reducer', () => {
     expect(state.items).toEqual([{ kind: 'notice', id: 'lc-1', level: 'info', text: 'Set model to sonnet' }])
   })
 
+  it('renders local-command output even when the message is synthetic', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'user_message',
+        message: { role: 'user', content: '<local-command-stdout>$ ls\nREADME.md</local-command-stdout>' },
+        parentToolUseId: null,
+        synthetic: true,
+        uuid: 'sh-1',
+      },
+      {
+        type: 'user_message',
+        message: { role: 'user', content: '<local-command-stderr>$ nope\nnot found</local-command-stderr>' },
+        parentToolUseId: null,
+        synthetic: true,
+        uuid: 'sh-2',
+      },
+    ])
+    expect(state.items).toEqual([
+      { kind: 'notice', id: 'sh-1', level: 'info', text: '$ ls\nREADME.md' },
+      { kind: 'notice', id: 'sh-2', level: 'error', text: '$ nope\nnot found' },
+    ])
+  })
+
+  it('splits a resumed shell flush into notices and keeps the user text beside it', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'user_message',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text:
+                '<local-command-caveat>Caveat: …</local-command-caveat>\n' +
+                '<local-command-stdout>$ ls\nREADME.md</local-command-stdout>\n' +
+                '<local-command-stderr>$ nope\nnot found</local-command-stderr>',
+            },
+            { type: 'text', text: 'what did that print?' },
+          ],
+        },
+        parentToolUseId: null,
+        synthetic: true,
+        uuid: 'mix-1',
+      },
+    ])
+    expect(state.items).toEqual([
+      { kind: 'notice', id: 'mix-1#0', level: 'info', text: '$ ls\nREADME.md' },
+      { kind: 'notice', id: 'mix-1#1', level: 'error', text: '$ nope\nnot found' },
+      { kind: 'user', id: 'mix-1', text: 'what did that print?', attachments: undefined },
+    ])
+  })
+
+  it('still drops other synthetic text', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'user_message',
+        message: { role: 'user', content: '<local-command-caveat>Caveat: …</local-command-caveat>' },
+        parentToolUseId: null,
+        synthetic: true,
+        uuid: 'cav-1',
+      },
+    ])
+    expect(state.items).toEqual([])
+  })
+
   it('renders a slash command as the command line, not as the wrapper it is stored in', () => {
     seq = 0
     const state = run(initialTranscriptState, [

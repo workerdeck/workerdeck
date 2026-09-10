@@ -155,6 +155,10 @@
      and every other colour on the rail is already spoken for. */
   --wd-scrub-bookmark: #8b3a8b;
 
+  /* Shell mode's frame and glyph. The same magenta as the bookmark rail, for the same reason: the app
+     palette has no magenta, and shell mode must not read as focus (blue) or as an error (red). */
+  --wd-shell-accent: #8b3a8b;
+
   /* ---------- aliases (bridge for the @theme utilities) ---------- */
   --surface: var(--bg-surface);
   --sidebar: #f4f4f4;
@@ -238,6 +242,7 @@
 
   /* See the light block — lifted for the dark ground. */
   --wd-scrub-bookmark: #c586c0;
+  --wd-shell-accent: #c586c0;
 
   /* ---------- aliases ---------- */
   --surface: var(--bg-surface);

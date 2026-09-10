@@ -229,10 +229,12 @@ export function SessionPanel({
     connection,
     replaying,
     protocolMismatch,
+    shell,
     models,
     effectiveModel,
     handle,
     send,
+    runShell,
     approve,
     deny,
     interrupt,
@@ -695,6 +697,7 @@ export function SessionPanel({
                       attachments={attachments}
                       draft={draft}
                       onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
+                      onShellCommand={shell ? runShell : undefined}
                       layout={controlsExternal ? 'inline' : 'stacked'}
                       toolbar={controlsExternal ? undefined : sessionControls}
                       fontSize={effectiveTermFontSize}

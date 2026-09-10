@@ -37,6 +37,10 @@ final class TranscriptViewModel {
   private(set) var session: SessionInfo?
   /// Server `PROTOCOL_VERSION` when it disagrees with the mirror in the kit.
   private(set) var protocolMismatch: Int?
+  /// Whether this gateway offers `!` shell mode to this principal on this session.
+  /// Re-read on every attach, because the answer is about the connection and not the
+  /// session: an old gateway, a scoped key or a sandboxed engine all mean no.
+  private(set) var canRunShell = false
   /// Last rejected command, surfaced once rather than logged into the void.
   private(set) var lastProtocolError: String?
   /// Bumped on every applied event — a cheap change signal for auto-scroll that
@@ -318,6 +322,7 @@ final class TranscriptViewModel {
       profile?.attachedAt = ProcessInfo.processInfo.systemUptime
       profile?.target = frame.session.lastSeq
       session = frame.session
+      canRunShell = frame.shell == true
       state = seedFromSessionInfo(state, frame.session)
       loadCatalogModels(for: frame.session.profile)
       startUsagePoll(profile: frame.session.profile)
@@ -531,6 +536,17 @@ final class TranscriptViewModel {
   }
 
   func interrupt() { handle?.interrupt() }
+
+  /// Run a `!` shell command on the host. Not a turn — the output arrives as its own
+  /// transcript row and reaches the model with the next message, so nothing is appended
+  /// locally and `send` is not involved.
+  func runShell(_ command: String) {
+    let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard canRunShell, !trimmed.isEmpty, trimmed.count <= WorkerProtocol.shellCommandMax else {
+      return
+    }
+    handle?.runShell(trimmed)
+  }
 
   /// Start a fresh conversation in the same session — the reducer empties the
   /// transcript when the echoed `conversation_reset` lands, so nothing is

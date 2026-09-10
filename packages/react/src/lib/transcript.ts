@@ -1,5 +1,6 @@
 import { ENGINE_CAPABILITIES, mergeUsage, orderUsageWindows } from '@workerdeck/protocol'
 import type {
+  ApiMessage,
   ChecklistItem,
   ContentBlock,
   ContextUsage,
@@ -126,9 +127,19 @@ const STREAMING_ID = 'streaming'
 const STREAMING_THINKING_ID = 'streaming-thinking'
 
 const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>$/
+const LOCAL_COMMAND_ELEMENT = /<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>/g
+const LOCAL_COMMAND_CAVEAT = '<local-command-caveat>'
 
 const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/
 const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
+// A message whose first text block is the deferred `!` flush is synthetic as a whole, but the block after it is
+// the person's own message. Only that shape earns the exemption — `<task-notification>` and the rest stay hidden.
+function carriesCaveat(content: ApiMessage['content']): boolean {
+  return contentToBlocks(content).some(
+    (block) => block.type === 'text' && (block as { text: string }).text.trimStart().startsWith(LOCAL_COMMAND_CAVEAT),
+  )
+}
+
 function streamingTextId(parentToolUseId: string | null): string {
   return parentToolUseId == null ? STREAMING_ID : `${STREAMING_ID}:${parentToolUseId}`
 }
@@ -382,17 +393,32 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
                 }
               : item,
           )
-        } else if (block.type === 'text' && !event.synthetic) {
+        } else if (block.type === 'text') {
           const text = (block as { text: string }).text
+          const rowId = event.uuid ?? `user-${event.seq}`
+          // Both branches sit ahead of the synthetic guard on purpose. A `!` shell run is emitted synthetic so it
+          // scores zero activity and zero prose, but it is the one synthetic message a person is meant to see; and
+          // on resume the SDK hands back the shell output and the user's own text as one message, which
+          // `isSyntheticUserText` then marks synthetic whole. Without this the user's own words vanish on reload.
           const localOutput = LOCAL_COMMAND_OUTPUT.exec(text.trim())
           if (localOutput) {
             items = upsert(items, {
               kind: 'notice',
-              id: event.uuid ?? `user-${event.seq}`,
+              id: rowId,
               level: localOutput[1] === 'stderr' ? 'error' : 'info',
               text: localOutput[2].trim(),
             })
-          } else {
+          } else if (text.trimStart().startsWith(LOCAL_COMMAND_CAVEAT)) {
+            let index = 0
+            for (const match of text.matchAll(LOCAL_COMMAND_ELEMENT)) {
+              items = upsert(items, {
+                kind: 'notice',
+                id: `${rowId}#${index++}`,
+                level: match[1] === 'stderr' ? 'error' : 'info',
+                text: match[2].trim(),
+              })
+            }
+          } else if (!event.synthetic || carriesCaveat(event.message.content)) {
             items = upsert(items, {
               kind: 'user',
               id: event.uuid ?? `user-${event.seq}`,

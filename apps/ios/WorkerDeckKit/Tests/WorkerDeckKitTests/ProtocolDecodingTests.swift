@@ -311,6 +311,14 @@ struct ProtocolDecodingTests {
     #expect(object.count == 1)
   }
 
+  @Test func encodesShellCommand() throws {
+    let data = try JSONEncoder().encode(SessionCommand.shellCommand(command: "git status"))
+    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(object["type"] as? String == "shell_command")
+    #expect(object["command"] as? String == "git status")
+    #expect(object.count == 2)
+  }
+
   @Test func encodesCreateSessionRequestOmittingNils() throws {
     let request = CreateSessionRequest(cwd: "/tmp/project", permissionMode: .plan)
     let data = try JSONEncoder().encode(request)
@@ -335,5 +343,21 @@ struct ProtocolDecodingTests {
     #expect(attached.protocolVersion == WorkerProtocol.version)
     #expect(attached.session.id == "s1")
     #expect(attached.session.resolvedEngine == .claude)
+    // A gateway that predates shell mode omits the field, and nil must read as "no".
+    #expect(attached.shell == nil)
+  }
+
+  @Test func decodesTheShellOfferOnTheAttachedFrame() throws {
+    let json = #"""
+      {"type":"attached","protocolVersion":1,"replayingFrom":0,"shell":true,
+       "session":{"id":"s1","status":"idle","cwd":"/x","createdAt":1722300000000,
+                  "lastSeq":0,"pendingPermissionCount":0}}
+      """#
+    let frame = try JSONDecoder().decode(ServerFrame.self, from: Data(json.utf8))
+    guard case .attached(let attached) = frame else {
+      Issue.record("expected attached, got \(frame)")
+      return
+    }
+    #expect(attached.shell == true)
   }
 }

@@ -38,10 +38,21 @@ struct ComposerView: View {
   /// non-empty). False hides the plus button — an attach affordance the engine
   /// has no meaning for is not a choice.
   let canAddMedia: Bool
+  /// Shell mode: the field is a host shell prompt and the send button runs the line
+  /// rather than messaging the agent. Owned by the session view, because the same
+  /// `onEdit` that detects the leading `!` also drives the completion list.
+  let isShellMode: Bool
+  /// Offered the first character typed into an empty field, before it is inserted.
+  /// True swallows it — that is how `!` enters shell mode without becoming part of the
+  /// command. See `RichTextEditor.onLeadingTrigger`.
+  let onLeadingTrigger: (String) -> Bool
   let onEdit: (String, NSRange) -> Void
   let onSend: () -> Void
   let onStop: () -> Void
   let onAddMedia: () -> Void
+  /// Leave shell mode. A phone has no Escape key, so the `!` in the gutter is the way
+  /// out — the same glyph that says which mode you are in undoes it.
+  let onExitShell: () -> Void
 
   @ViewBuilder
   var body: some View {
@@ -58,6 +69,9 @@ struct ComposerView: View {
       // At rest the field is the entire card: collapsed means no focus, no draft
       // and no turn running, so there is nothing a button could do here.
       field
+      if isShellMode {
+        shellHint
+      }
       if isExpanded {
         actionRow
       }
@@ -97,6 +111,10 @@ struct ComposerView: View {
         .disabled(!canSend)
         .padding(.bottom, glyphBaseline)
       }
+      if isShellMode {
+        shellHint
+          .padding(.leading, TermGlyphButton.side + 4)
+      }
     }
     .padding(.horizontal, 6)
     // Air on each side of the prompt, inside the two rules. A plain 8, not a
@@ -118,8 +136,20 @@ struct ComposerView: View {
 
   private var rule: some View {
     Rectangle()
-      .fill(isFocused ? Color.accentColor : Color.primary.opacity(0.15))
-      .frame(height: isFocused ? 1.5 : 0.5)
+      // Shell mode outranks focus, because it is on for the whole time the field is
+      // focused and the frame is half of what makes the mode unmistakable.
+      .fill(isShellMode ? TerminalPalette.color(.magenta) : isFocused ? Color.accentColor : Color.primary.opacity(0.15))
+      .frame(height: isShellMode || isFocused ? 1.5 : 0.5)
+  }
+
+  /// What the mode is and how to leave it. Rendered only while shell mode is on, so the
+  /// composer's resting height is untouched.
+  private var shellHint: some View {
+    Text("shell mode · tap ! to exit")
+      .font(.system(size: style.base.pointSize * 0.85, design: .monospaced))
+      .foregroundStyle(TerminalPalette.color(.dim))
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .accessibilityHidden(true)
   }
 
   /// The composer's **gutter cell** — the column every transcript row's marker
@@ -145,7 +175,11 @@ struct ComposerView: View {
   /// session working.
   @ViewBuilder
   private var gutterGlyph: some View {
-    if isBusy {
+    if isShellMode {
+      TermGlyphButton(
+        glyph: "!", label: "Leave shell mode", tint: TerminalPalette.color(.magenta),
+        action: onExitShell, glyphSize: style.base.pointSize)
+    } else if isBusy {
       TermGlyphButton(
         glyph: "\u{2715}", label: "Interrupt", tint: TerminalPalette.color(.yellow), action: onStop,
         glyphSize: style.base.pointSize)
@@ -192,7 +226,7 @@ struct ComposerView: View {
       if text.isEmpty {
         // Matched to `RichTextEditor`'s `textContainerInset`, so the placeholder
         // sits exactly where the first character will.
-        Text("Message")
+        Text(isShellMode ? "Run a command on the host" : "Message")
           // The field's own derivation, not a parallel spelling of it. It used
           // to be one: `DraftStyle` was a process-wide static written by
           // `RichTextEditor` during its own `makeUIView`, so a `Text` built in
@@ -210,7 +244,8 @@ struct ComposerView: View {
         isFocused: $isFocused,
         isEnabled: isEnabled,
         onEdit: onEdit,
-        onImagePaste: pasteImage)
+        onImagePaste: pasteImage,
+        onLeadingTrigger: onLeadingTrigger)
     }
   }
 
@@ -308,8 +343,13 @@ struct ComposerView: View {
   /// A photo on its own is a message — the send button does not wait for text.
   /// It does wait for the upload, so an id that hasn't landed can't be named.
   private var canSend: Bool {
-    guard isEnabled, !attachments.isUploading, !attachments.hasFailure else { return false }
-    return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+    guard isEnabled else { return false }
+    let typed = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    // A staged photo is not a shell command, and an upload in flight has nothing to do
+    // with one either — in this mode the line alone decides.
+    if isShellMode { return typed }
+    guard !attachments.isUploading, !attachments.hasFailure else { return false }
+    return typed || !attachments.isEmpty
   }
 }
 

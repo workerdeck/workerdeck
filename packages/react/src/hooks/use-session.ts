@@ -51,6 +51,8 @@ export type UseClaudeSessionResult = {
   connection: ConnectionState
   replaying: boolean
   protocolMismatch?: number
+  // The gateway offers `!` shell mode to this principal on this session. Absent from an older gateway, so falsy by default.
+  shell: boolean
   models: ModelOption[]
   effectiveModel?: string
   handle: SessionHandle | undefined
@@ -59,6 +61,7 @@ export type UseClaudeSessionResult = {
   deny: (requestId: string, message?: string, interrupt?: boolean) => void
   interrupt: () => void
   clearContext: () => void
+  runShell: (command: string) => void
   setPermissionMode: (mode: PermissionMode) => void
   setModel: (model?: string) => void
   closeSession: () => void
@@ -81,6 +84,7 @@ export function useClaudeSession(
   )
   const [connection, setConnection] = useState<ConnectionState>('reconnecting')
   const [protocolMismatch, setProtocolMismatch] = useState<number | undefined>()
+  const [shell, setShell] = useState(false)
   const [replayTarget, setReplayTarget] = useState<number | undefined>()
   const [resyncSeq, setResyncSeq] = useState(0)
   // Ref for the stable callbacks below; state so consumers of `handle` re-render when the socket opens or the session switches.
@@ -132,6 +136,7 @@ export function useClaudeSession(
       dispatch(frame)
       setReplayTarget(initialReplayTarget(frame))
       setProtocolMismatch(frame.protocolVersion === PROTOCOL_VERSION ? undefined : frame.protocolVersion)
+      setShell(frame.shell === true)
     })
     const offConn = handle.on('connectionChange', (open: boolean) => setConnection(open ? 'live' : 'reconnecting'))
     const offRetry = handle.on('reconnectAttempt', (attempts: number) =>
@@ -151,6 +156,7 @@ export function useClaudeSession(
       setHandleState(undefined)
       setConnection('reconnecting')
       setProtocolMismatch(undefined)
+      setShell(false)
       setReplayTarget(undefined)
       const parting = stateRef.current
       if (shouldWriteParting({ cacheEnabled: cache, skipCache: skipCacheRef.current, parting })) {
@@ -214,6 +220,7 @@ export function useClaudeSession(
       connection,
       replaying,
       protocolMismatch,
+      shell,
       models,
       effectiveModel: state.model ?? state.defaultModel,
       handle: handleState,
@@ -222,13 +229,14 @@ export function useClaudeSession(
       deny: (requestId, message, interrupt) => handleRef.current?.deny(requestId, message, interrupt),
       interrupt: () => handleRef.current?.interrupt(),
       clearContext: () => handleRef.current?.clearContext(),
+      runShell: (command) => handleRef.current?.runShell(command),
       setPermissionMode: (mode) => handleRef.current?.setPermissionMode(mode),
       setModel: (model) => handleRef.current?.setModel(model),
       closeSession: () => handleRef.current?.closeSession(),
       reconnectNow,
       loadFullResult,
     }),
-    [state, connected, connection, replaying, protocolMismatch, models, handleState, reconnectNow, loadFullResult],
+    [state, connected, connection, replaying, protocolMismatch, shell, models, handleState, reconnectNow, loadFullResult],
   )
 }
 

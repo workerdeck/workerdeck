@@ -91,3 +91,26 @@ export const InlineNarrow: Story = {
     } as any,
   },
 }
+
+// Shell mode is entered by typing `!` as the first character; there is no prop that forces it on,
+// so this story is the affordance rather than the state. Type `!` to see the magenta frame.
+export const ShellMode: Story = {
+  args: {
+    layout: 'stacked',
+    onShellCommand: noop,
+  },
+}
+
+export const ShellModeTerminal: Story = {
+  args: {
+    layout: 'stacked',
+    onShellCommand: noop,
+  },
+  decorators: [
+    (Story) => (
+      <TranscriptVariantProvider value="terminal">
+        <Story />
+      </TranscriptVariantProvider>
+    ),
+  ],
+}

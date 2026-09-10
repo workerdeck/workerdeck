@@ -265,6 +265,38 @@ struct TranscriptTests {
     ])
   }
 
+  @Test func shellOutputRendersEvenThoughTheMessageIsSynthetic() {
+    let state = reduce([
+      user(1, uuid: "sh1", synthetic: true, [.text("<local-command-stdout>$ ls\nREADME.md</local-command-stdout>")]),
+      user(2, uuid: "sh2", synthetic: true, [.text("<local-command-stderr>$ nope\nnot found</local-command-stderr>")]),
+    ])
+    #expect(state.items == [
+      .notice(id: "sh1", level: .info, text: "$ ls\nREADME.md"),
+      .notice(id: "sh2", level: .error, text: "$ nope\nnot found"),
+    ])
+  }
+
+  @Test func aResumedShellFlushSplitsIntoNoticesBesideTheUserText() {
+    let flush = "<local-command-caveat>Caveat: …</local-command-caveat>\n"
+      + "<local-command-stdout>$ ls\nREADME.md</local-command-stdout>\n"
+      + "<local-command-stderr>$ nope\nnot found</local-command-stderr>"
+    let state = reduce([
+      user(1, uuid: "mix", synthetic: true, [.text(flush), .text("what did that print?")])
+    ])
+    #expect(state.items == [
+      .notice(id: "mix#0", level: .info, text: "$ ls\nREADME.md"),
+      .notice(id: "mix#1", level: .error, text: "$ nope\nnot found"),
+      .user(id: "mix", text: "what did that print?"),
+    ])
+  }
+
+  @Test func otherSyntheticTextIsStillDropped() {
+    let state = reduce([
+      user(1, uuid: "t1", synthetic: true, [.text("<task-notification>\n<task-id>abc</task-id>\n</task-notification>")])
+    ])
+    #expect(state.items.isEmpty)
+  }
+
   @Test func nonWrappedTextWithTagsInsideStaysAUserItem() {
     let text = "see <local-command-stdout>x</local-command-stdout> above"
     let state = reduce([user(1, [.text(text)])])

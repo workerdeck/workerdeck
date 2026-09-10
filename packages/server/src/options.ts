@@ -25,6 +25,15 @@ export type WorkerServerOptions = {
     maxEntries?: number
     ignore?: string[]
   }
+  // `!` shell mode: the command runs on the host in the session's cwd and its output lands in the transcript and
+  // the model's context. It goes through NO permission flow — no permission card, no allowlist, no
+  // disableBypassPermissions — hence its own switch, default off, offered to operators only (never a scoped
+  // principal) on engines with a host cwd. Defaults: 120s wall clock, 32 KiB of captured output.
+  shell?: {
+    enabled?: boolean
+    timeoutMs?: number
+    maxOutputBytes?: number
+  }
   attachments?: {
     maxFileBytes?: number
     maxSessionBytes?: number

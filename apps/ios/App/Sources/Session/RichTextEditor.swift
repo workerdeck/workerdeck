@@ -31,6 +31,16 @@ struct RichTextEditor: UIViewRepresentable {
   /// client's rule, ported — `use-prompt-area-events.ts` returns the moment it
   /// finds an image, before it looks at a single text flavour.
   var onImagePaste: () -> Bool = { false }
+  /// A character typed as the **first** one into an empty field, offered to the parent
+  /// before it is inserted. Returning true swallows it: the parent is switching modes and
+  /// the character was the gesture, not text.
+  ///
+  /// It has to be refused *here* rather than cleared from `onEdit`, and that is the whole
+  /// reason this hook exists. `textViewDidChangeSelection` fires before `textViewDidChange`
+  /// on a keystroke, so a parent that emptied the draft from `onEdit` had it written
+  /// straight back by the `parent.text = view.text` below — the mode turned on and the
+  /// character stayed, which on a shell prompt meant `! ls` reaching `/bin/sh`.
+  var onLeadingTrigger: (String) -> Bool = { _ in false }
 
   /// The reader's typeface preference, the same one the transcript above reads.
   /// A `UITextView` is outside SwiftUI's font environment entirely, so unlike
@@ -157,6 +167,15 @@ struct RichTextEditor: UIViewRepresentable {
 
     init(_ parent: RichTextEditor) {
       self.parent = parent
+    }
+
+    func textView(
+      _ view: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String
+    ) -> Bool {
+      guard !isApplyingBinding, view.text.isEmpty, range.location == 0, range.length == 0 else {
+        return true
+      }
+      return !parent.onLeadingTrigger(text)
     }
 
     func textViewDidChange(_ view: UITextView) {

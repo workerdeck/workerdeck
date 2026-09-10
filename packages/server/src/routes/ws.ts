@@ -1,10 +1,14 @@
 import type { IncomingMessage } from 'node:http'
 import type { WebSocket } from 'ws'
 import type { Runner } from '@workerdeck/core'
-import { PROTOCOL_VERSION, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
+import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
+import { shellPermitted } from '../services/shell.ts'
 
-export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage): void {
+// What the upgrade established about the principal; computed once there so the attach never re-authenticates.
+export type AttachAccess = { operator: boolean }
+
+export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage, access: AttachAccess): void {
   const { bridge, parking } = ctx
   const url = new URL(req.url ?? '/', 'http://internal')
   const afterSeq = Number(url.searchParams.get('afterSeq') ?? '0') || 0
@@ -22,6 +26,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     protocolVersion: PROTOCOL_VERSION,
     session: ctx.projects.withProject(runner.info()),
     replayingFrom: afterSeq,
+    ...(shellPermitted(ctx.shell, runner, access.operator) ? { shell: true } : {}),
   })
   const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
     coalesceReplay: true,
@@ -38,7 +43,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
       send({ type: 'protocol_error', message: 'invalid JSON frame' })
       return
     }
-    handleCommand(ctx, frame, runner).catch((error: unknown) => {
+    handleCommand(ctx, frame, runner, access).catch((error: unknown) => {
       send({
         type: 'protocol_error',
         message: error instanceof Error ? error.message : 'command failed',
@@ -52,7 +57,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   })
 }
 
-async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner): Promise<void> {
+async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner, access: AttachAccess): Promise<void> {
   const { attachmentStore, bridge } = ctx
   switch (frame.type) {
     case 'user_message': {
@@ -114,6 +119,26 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
         error: frame.error,
         logs: frame.logs,
       })
+      return
+    }
+    case 'shell_command': {
+      if (!shellPermitted(ctx.shell, runner, access.operator) || ctx.shell === null) {
+        throw new Error('shell commands are not available on this session')
+      }
+      if (typeof frame.command !== 'string' || frame.command.includes('\0')) {
+        throw new Error('shell command must be a string')
+      }
+      if (frame.command.length > SHELL_COMMAND_MAX) {
+        throw new Error(`shell command exceeds ${SHELL_COMMAND_MAX} characters`)
+      }
+      if (frame.command.trim() === '') {
+        throw new Error('shell command is empty')
+      }
+      if (!runner.queueLocalCommand) {
+        throw new Error(`the ${runner.info().engine ?? 'claude'} engine cannot take shell output`)
+      }
+      const result = await ctx.shell.run(runner.id, runner.info().cwd, frame.command)
+      runner.queueLocalCommand(result)
       return
     }
     case 'close': {

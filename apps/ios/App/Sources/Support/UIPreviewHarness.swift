@@ -402,11 +402,14 @@ private struct ComposerPreview: View {
     @State private var selection = NSRange(location: 0, length: 0)
     @State private var focused = false
 
-    init(caption: String, busy: Bool, canAddMedia: Bool, draft: String) {
+    let shell: Bool
+
+    init(caption: String, busy: Bool, canAddMedia: Bool, draft: String, shell: Bool = false) {
       self.caption = caption
       self.busy = busy
       self.canAddMedia = canAddMedia
       self.draft = draft
+      self.shell = shell
       _text = State(initialValue: draft)
     }
 
@@ -416,7 +419,9 @@ private struct ComposerPreview: View {
         ComposerView(
           text: $text, selection: $selection, isFocused: $focused, isBusy: busy,
           isEnabled: true, attachments: ComposerAttachmentStore(), canAddMedia: canAddMedia,
-          onEdit: { t, r in text = t; selection = r }, onSend: {}, onStop: {}, onAddMedia: {})
+          isShellMode: shell, onLeadingTrigger: { _ in false },
+          onEdit: { t, r in text = t; selection = r }, onSend: {}, onStop: {}, onAddMedia: {},
+          onExitShell: {})
       }
     }
   }
@@ -432,6 +437,8 @@ private struct ComposerPreview: View {
           busy: true, canAddMedia: true, draft: "")
         Row(caption: "working WITH a draft - the bug the web fixed: stop must still be reachable",
           busy: true, canAddMedia: true, draft: "and then run the tests")
+        Row(caption: "shell mode - magenta frame, ! in the gutter, no attach affordance",
+          busy: false, canAddMedia: true, draft: "git status", shell: true)
       }
       .padding(.vertical, 24)
     }

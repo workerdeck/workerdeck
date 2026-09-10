@@ -28,6 +28,7 @@ export {
   commandTrigger,
   mentionTrigger,
   hashtagTrigger,
+  launchTrigger,
   segmentsToPlainText,
   plainTextToSegments,
   isSegmentsEmpty,

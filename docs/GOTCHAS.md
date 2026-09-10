@@ -1247,6 +1247,61 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   the agent permission flow. That is not the trust story of a tool call — which is exactly why the
   bypass that matters (writing) is its own flag.
 
+## Shell mode (`!` in the composer, `shell_command`)
+
+- **It goes through nothing.** An agent's Bash tool call raises a permission card, honours
+  `disableBypassPermissions`, and can be denied. A `!` command has none of that — it is a shell on
+  whatever the gateway process can reach, in the session's cwd. That is why it is its own switch
+  (`shell: { enabled }`, CLI `--shell`), **off by default**, and never inferred from `hostFiles` or
+  `allowedCwdRoots`. Do not try to route it back through the permission model; the whole point of
+  `!` to anyone who has used the CLI is that it runs, verbatim, now.
+- **Three ANDed conditions, one refusal string.** `shell.enabled`, `auth.isOperator(authCtx)`, and
+  the engine's `hostCwd === true`. A scoped principal is never an operator (`services/auth.ts`),
+  which is what keeps an embedded end-user out; the provider engine is `hostCwd: false` and so can
+  never reach one — its VFS is a different feature. All three failures return the same
+  `protocol_error` text, so the surface is not an existence oracle. The gate is re-checked on
+  every command; the `attached.shell` advertisement is an offer, not the authorization.
+- **Advertised per attachment, not per engine.** `EngineCapabilities` is a static per-engine table
+  reaching every client through `SessionInfo`, and it cannot express config × operator × cwd.
+  `AttachedFrame.shell?: boolean` is the only place that knows all three. Omitted rather than sent
+  false, and additive — an older gateway advertises nothing and a new client never offers the mode,
+  which is how this shipped without a `PROTOCOL_VERSION` bump.
+- **`!` does not start a turn**, and this is the invariant most likely to be "fixed" back into a
+  bug. `runner.sendMessage()` pushes onto the streaming input queue and wakes the model, so routing
+  shell output through it would earn a reply to every `ls`. The CLI buffers the output and prepends
+  it — wrapped in `<local-command-caveat>` — to the *next* real message; that wrapper only makes
+  sense as text arriving inside someone else's turn. Hence `Runner.queueLocalCommand`: emit the
+  transcript row now, hold the model-facing text, flush it as a hidden leading block on the next
+  `sendMessage`. The emitted `user_message` event stays the user's own text.
+- **The buffer is dropped on every context reset** — `clearContext()`, a `conversation_reset` from
+  any engine, and `close()`. Shell output that outlived the conversation it described would be
+  read by the model as current.
+- **The claude engine holds the flush across a slash command.** The CLI matches `/compact` and
+  friends on the message text, and a leading caveat block would either break the match or lose the
+  output, so `sendMessage` skips the flush for text matching `/^\s*\/[A-Za-z]/` and waits for the
+  next plain message. Codex and provider have no slash commands and flush unconditionally.
+- **One child per session, killed by process group.** A second `shell_command` while one is running
+  is rejected rather than queued — an invisible queue is what turns a phone double-tap into two
+  `rm`s. The child is `spawn('/bin/sh', ['-c', cmd])` spelled out (never `shell: true`),
+  `detached: true` so it leads a process group, and the timeout, `session_closed`, park and server
+  shutdown all `SIGKILL` the *group* — a bare `child.kill()` leaves the grandchildren of
+  `sleep 9999 &` running past the session. Output is a shared head-keep budget across both streams
+  with an explicit truncation marker; the cap does not kill the process, the timeout bounds time.
+- **The transcript row is a synthetic `user_message` carrying exactly one
+  `<local-command-stdout|stderr>` element** — that is the shape `react`'s reducer already turns
+  into a `notice`, and marking it synthetic is what zeroes `transcriptActivity` and
+  `transcriptProse` so your own `ls` never badges a session unread. Two reducer rules follow from
+  that and are load-bearing: the local-command check sits **ahead** of the `!event.synthetic`
+  guard (inside it, a synthetic message renders nothing at all), and a message whose first text
+  block starts with `<local-command-caveat>` is split into notices with the user's own text still
+  drawn beside it — on resume the SDK hands the flush and the next message back as *one* message,
+  which `isSyntheticUserText` marks synthetic whole.
+
+- **iOS mirrors all of it** — `SessionCommand.shellCommand`, `AttachedFrame.shell`, and both
+  reducer rules in `Transcript.swift`. The reducer pair is the one that bites: Swift had the same
+  `payload.synthetic != true` guard wrapped around the same notice branch, so it had the same two
+  bugs, and a fix on one side alone silently diverges the clients.
+
 ## Message attachments (`/v1/sessions/:id/attachments`)
 
 - **The bytes never ride the protocol, and that is the whole design.** A session's event log is an

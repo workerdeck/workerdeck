@@ -110,6 +110,10 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **The host's files, in the trees sessions already run in.** Browse, read and fuzzy-search over
   your `--cwd-root` directories, so a remote client gets a real file tree instead of guessing at
   paths. Reading needs no extra grant; writing is a separate opt-in.
+- **`!` for a shell, as in the CLI.** Type `!` first in the composer and the rest of the line runs
+  on the host in the session's cwd, with the output in the transcript and in the model's next
+  context — no turn spent, no permission card, no rewording by the agent. Which is exactly why it
+  is `--shell`, off by default, and offered to an operator only.
 - **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
   and an icon, found by an ancestor walk from the session's cwd — so a list of sessions reads as
   a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it

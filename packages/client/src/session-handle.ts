@@ -76,6 +76,10 @@ export class SessionHandle {
     this.#sendFrame({ type: 'interrupt' })
   }
 
+  runShell(command: string): void {
+    this.#sendFrame({ type: 'shell_command', command })
+  }
+
   clearContext(): void {
     this.#sendFrame({ type: 'clear_context' })
   }

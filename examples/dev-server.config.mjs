@@ -28,6 +28,12 @@ export default {
     maxFileBytes: 8 * 1024 * 1024,
   },
 
+  // `!` shell mode in the composer. Off by default everywhere; on here because this is the
+  // dev gateway on a tailnet, run by the operator whose machine it is. It goes through no
+  // permission flow at all — see docs/GOTCHAS.md § Shell mode before copying this into anything
+  // that faces someone else.
+  shell: { enabled: true },
+
   apns: {
     keyFile: './.workerdeck/AuthKey_DD89249M52.p8',
     keyId: 'DD89249M52',

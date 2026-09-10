@@ -21,6 +21,7 @@ import type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, Sessi
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { EventLog } from '../../lib/event-log.ts'
+import { localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
 
@@ -65,6 +66,7 @@ export type AiSdkSessionState = {
   model?: string
   lastActivityAt?: number
   parkedAt?: number
+  pendingLocalCommands?: string[]
 }
 
 export type ToolCallOutput = { type: 'text'; value: string } | { type: 'json'; value: unknown }
@@ -81,6 +83,7 @@ export class AiSdkRunner implements Runner {
   #statusDetail: string | undefined
   #permissionMode: PermissionMode
   #messages: ModelMessage[] = []
+  #pendingLocalCommands: string[] = []
   #pendingToolCalls = new Map<string, PendingToolCall>()
   #dispatched = new Set<string>()
   #turnChain: Promise<void> = Promise.resolve()
@@ -127,6 +130,7 @@ export class AiSdkRunner implements Runner {
     }
     this.#log.restore(snapshot.events, snapshot.seq, state.lastActivityAt)
     this.#messages = [...state.messages]
+    this.#pendingLocalCommands = [...(state.pendingLocalCommands ?? [])]
     for (const call of state.pendingToolCalls) {
       this.#pendingToolCalls.set(call.toolCallId, call)
     }
@@ -258,6 +262,7 @@ export class AiSdkRunner implements Runner {
       model: this.#modelAlias,
       lastActivityAt: this.#log.lastActivityAt,
       parkedAt: Date.now(),
+      ...(this.#pendingLocalCommands.length ? { pendingLocalCommands: [...this.#pendingLocalCommands] } : {}),
     }
     return {
       engine: 'provider',
@@ -278,17 +283,18 @@ export class AiSdkRunner implements Runner {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    const content = attachments?.length
-      ? [
-          ...attachments.map((attachment) => ({
-            type: 'file' as const,
-            data: attachment.data,
-            mediaType: normalizeMediaType(attachment.mediaType),
-            filename: attachment.name,
-          })),
-          ...(text ? [{ type: 'text' as const, text }] : []),
-        ]
-      : text
+    const files = (attachments ?? []).map((attachment) => ({
+      type: 'file' as const,
+      data: attachment.data,
+      mediaType: normalizeMediaType(attachment.mediaType),
+      filename: attachment.name,
+    }))
+    const context = localCommandContext(this.#pendingLocalCommands)
+    this.#pendingLocalCommands = []
+    const content =
+      files.length || context
+        ? [...(context ? [{ type: 'text' as const, text: context }] : []), ...files, ...(text ? [{ type: 'text' as const, text }] : [])]
+        : text
     this.#messages.push({ role: 'user', content })
     this.#emit({
       type: 'user_message',
@@ -298,6 +304,24 @@ export class AiSdkRunner implements Runner {
       uuid: randomUUID(),
     })
     this.#scheduleTurn()
+  }
+
+  queueLocalCommand(result: LocalCommandResult): void {
+    if (this.#parked) {
+      throw new Error('session is parked')
+    }
+    if (this.#closed) {
+      throw new Error('session is closed')
+    }
+    const text = localCommandTranscript(result)
+    this.#pendingLocalCommands.push(text)
+    this.#emit({
+      type: 'user_message',
+      message: { role: 'user', content: text },
+      parentToolUseId: null,
+      synthetic: true,
+      uuid: randomUUID(),
+    })
   }
 
   resolveToolCall(toolCallId: string, output: ToolCallOutput, options?: { isError?: boolean }): boolean {
@@ -425,6 +449,7 @@ export class AiSdkRunner implements Runner {
         throw new Error('cannot clear context while tool calls are outstanding')
       }
       this.#messages = []
+      this.#pendingLocalCommands = []
       this.#emit({ type: 'conversation_reset' })
     })
     this.#turnChain = run.then(
@@ -493,6 +518,7 @@ export class AiSdkRunner implements Runner {
     }
     this.#closed = true
     this.#abort?.abort()
+    this.#pendingLocalCommands = []
     this.#pendingToolCalls.clear()
     this.#dispatched.clear()
     for (const { timer } of this.#pendingApprovals.values()) {
