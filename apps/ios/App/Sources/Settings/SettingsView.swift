@@ -1,4 +1,5 @@
 import SwiftUI
+import WorkerDeckActivity
 
 /// App-wide preferences.
 ///
@@ -8,6 +9,9 @@ import SwiftUI
 struct SettingsView: View {
   @Environment(AppSettings.self) private var settings
   @Environment(\.dismiss) private var dismiss
+  #if DEBUG
+    @State private var debugStatus: String?
+  #endif
 
   var body: some View {
     @Bindable var settings = settings
@@ -52,6 +56,47 @@ struct SettingsView: View {
           "Reopening a session marks where you left off: a recap of what happened, the rows you had already read faded, and a bar that counts the new ones and jumps to them. Off if you switch between sessions constantly and the marker is just noise."
         )
       }
+
+      Section {
+        Picker("Approve from the lock screen", selection: $settings.approveWhileLocked) {
+          ForEach(ApproveWhileLocked.allCases, id: \.self) { Text($0.label).tag($0) }
+        }
+      } header: {
+        Text("Live Activities")
+      } footer: {
+        Text(
+          "A running session shows a card on the lock screen and in the Dynamic Island. Its Deny button always works. Approve is the one that can let an agent write to your machine, and unlike a notification's Approve, iOS cannot ask for Face ID first — so by default it waits until the phone is unlocked."
+        )
+      }
+
+      #if DEBUG
+        Section {
+          Button("Raise a running card") { debugStatus = ActivityDebug.raise(phase: SessionActivityPhase.running) }
+          Button("Raise an approval card") { debugStatus = ActivityDebug.raise(phase: SessionActivityPhase.approval) }
+          Button("Raise a question card") { debugStatus = ActivityDebug.raise(phase: SessionActivityPhase.question) }
+          Button("Show active cards") { debugStatus = ActivityDebug.inventory() }
+          Button("Show card trail") { debugStatus = ActivityTrail.read() }
+          Button("Clear trail") {
+            ActivityTrail.clear()
+            debugStatus = "trail cleared"
+          }
+          Button("End every card", role: .destructive) {
+            Task {
+              await ActivityDebug.endAll()
+              debugStatus = "Ended every card."
+            }
+          }
+          if let debugStatus {
+            Text(debugStatus).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+          }
+        } header: {
+          Text("Live Activities (debug)")
+        } footer: {
+          Text(
+            "Starts a card locally, with no gateway and no APNs — the only way to see these layouts in the Simulator, and the cheapest way to check on a device that a card's buttons run their intent in the app process."
+          )
+        }
+      #endif
     }
     .navigationTitle("Settings")
     .navigationBarTitleDisplayMode(.inline)

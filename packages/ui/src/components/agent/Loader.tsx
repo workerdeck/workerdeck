@@ -2,8 +2,6 @@ import { cn } from '../../lib/utils.ts'
 
 export interface LoaderProps {
   label?: string
-  startedAt?: number
-  tokens?: number
   className?: string
 }
 

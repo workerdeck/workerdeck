@@ -275,3 +275,12 @@ then restarts and asserts the session is not resurrected into what it threw away
 to be **gone** afterwards: for codex the dormant record is the way back, so clearing while the
 child is dead ends the session. That is the designed trade, and this run is what makes it a
 stated one.
+
+## `pnpm smoke:activity <host> start|update|end [sessionId]`
+
+A real Live Activity push. The device half cannot be tested any other way — push-to-start does not
+work in the Simulator, and the gateway's own driver only fires on a real turn. `start` reads
+`apns-devices.json` and pushes to every `liveActivityStartToken`; `update` and `end` read
+`apns-activities.json`, which only has entries once the phone has reported an update token back —
+so the order is always start, wait a beat, then update. Same env vars and the same two 401s as
+`smoke:push`.

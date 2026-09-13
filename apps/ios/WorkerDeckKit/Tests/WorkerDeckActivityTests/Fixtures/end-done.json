@@ -1,0 +1,22 @@
+{
+  "aps": {
+    "timestamp": 1757765400,
+    "event": "end",
+    "content-state": {
+      "phase": "done",
+      "title": "Wire the forwarder",
+      "headline": "Finished in 10m 0s",
+      "startedAtMs": 1757764800000,
+      "pendingCount": 0,
+      "steps": {
+        "done": 7,
+        "total": 7
+      },
+      "epoch": 2,
+      "seq": 412,
+      "decision": null
+    },
+    "dismissal-date": 1757766300,
+    "relevance-score": 10
+  }
+}

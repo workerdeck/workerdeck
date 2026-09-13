@@ -17,6 +17,24 @@ enum DeviceRegistration {
     let hostId: String
     let bundleId: String
     let platform = "ios"
+    /// Three-state, and the gateway reads it that way: absent leaves whatever it has, an explicit
+    /// null clears it. Always encoded here — this build always knows its own answer, and "no start
+    /// token" is a real answer meaning Live Activities are off.
+    let liveActivityStartToken: String?
+
+    enum CodingKeys: String, CodingKey {
+      case token, environment, hostId, bundleId, platform, liveActivityStartToken
+    }
+
+    func encode(to encoder: Encoder) throws {
+      var container = encoder.container(keyedBy: CodingKeys.self)
+      try container.encode(token, forKey: .token)
+      try container.encode(environment, forKey: .environment)
+      try container.encode(hostId, forKey: .hostId)
+      try container.encode(bundleId, forKey: .bundleId)
+      try container.encode(platform, forKey: .platform)
+      try container.encode(liveActivityStartToken, forKey: .liveActivityStartToken)
+    }
   }
 
   enum Outcome: Sendable {
@@ -26,7 +44,7 @@ enum DeviceRegistration {
     case unsupported
   }
 
-  static func register(token: String, host: Host) async throws -> Outcome {
+  static func register(token: String, startToken: String? = nil, host: Host) async throws -> Outcome {
     guard let url = host.pushRegistrationURL else { return .unsupported }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -38,7 +56,8 @@ enum DeviceRegistration {
         token: token,
         environment: PushEnvironment.current.rawValue,
         hostId: host.id.uuidString,
-        bundleId: Bundle.main.bundleIdentifier ?? ""))
+        bundleId: Bundle.main.bundleIdentifier ?? "",
+        liveActivityStartToken: startToken))
 
     let (data, response) = try await URLSession.shared.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0

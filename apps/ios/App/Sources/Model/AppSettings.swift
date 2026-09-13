@@ -91,9 +91,36 @@ enum TranscriptFont: String, Codable, CaseIterable, Sendable {
 /// read. Follows the house pattern (`SessionListModel.config`) — `@Observable`,
 /// injected defaults, `didSet` persist — rather than `@AppStorage`, so the
 /// storage stays testable and the keys stay namespaced in one place.
+/// Whether a Live Activity's Approve button may act while the phone is locked.
+///
+/// The notification's Approve is a `UNNotificationAction` with `.authenticationRequired`, so iOS
+/// demands Face ID before it runs. **A Live Activity button has no equivalent** — this setting is
+/// the only thing standing between a locked phone in a pocket and an approved tool call. Deny is
+/// never gated: the worst a stray tap can do is refuse something the agent can ask for again.
+enum ApproveWhileLocked: String, Codable, CaseIterable, Sendable {
+  /// Approve only while unlocked; locked taps paint "Unlock to approve".
+  case unlockedOnly
+  case always
+  /// Approve opens the app instead of acting.
+  case never
+
+  var label: String {
+    switch self {
+    case .unlockedOnly: "When unlocked"
+    case .always: "Always"
+    case .never: "Open the app"
+    }
+  }
+}
+
 @MainActor
 @Observable
 final class AppSettings {
+  /// See `ApproveWhileLocked`. Defaults to the safe arm.
+  var approveWhileLocked: ApproveWhileLocked {
+    didSet { defaults.set(approveWhileLocked.rawValue, forKey: Self.approveLockKey) }
+  }
+
   var transcriptVariant: TranscriptVariant {
     didSet { defaults.set(transcriptVariant.rawValue, forKey: Self.variantKey) }
   }
@@ -120,6 +147,7 @@ final class AppSettings {
   private static let densityKey = "bi.atomic.workerdeck.ios.transcriptDensity"
   private static let fontKey = "bi.atomic.workerdeck.ios.transcriptFont"
   private static let catchUpKey = "bi.atomic.workerdeck.ios.catchUpMode"
+  private static let approveLockKey = "bi.atomic.workerdeck.ios.approveWhileLocked"
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
@@ -139,6 +167,8 @@ final class AppSettings {
     transcriptFont =
       defaults.string(forKey: Self.fontKey).flatMap(TranscriptFont.init(rawValue:)) ?? .regular
     catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true
+    approveWhileLocked =
+      defaults.string(forKey: Self.approveLockKey).flatMap(ApproveWhileLocked.init(rawValue:)) ?? .unlockedOnly
   }
 }
 

@@ -872,6 +872,33 @@ wants both halves.
 unmodelled falls through as prose rather than being lost) — the classifier is **line-local by
 design**, because the parser reruns on every streamed delta and a block that changed shape a
 token after it appeared would be worse than one that never rendered.
+**Live Activities** (iOS 18 floor, which is what sets it — push-to-start needs 17.2). One card per
+**engaged** session (`running` or `awaiting_approval`), keyed by session id, raised by the CLI
+forwarder with a push-to-start, updated by push, ended shortly after the turn settles. An idle
+session gets no card: iOS stops accepting updates at 8 h and force-ends at 12 h, so a card that
+sits through an idle session dies before the moment it exists for. `SessionActivityAttributes` and
+its `ContentState` live in **`WorkerDeckActivity`**, a second SwiftPM target beside `WorkerDeckKit`
+— the app and the widget extension must compile the *same* type, and the extension should not link
+the transcript reducer. It is deliberately not part of the kit for the same reason
+`DeviceRegistration` is not: this is a contract with the CLI's forwarder, not with
+`packages/protocol`. `packages/cli/test/live-activity.test.ts` writes the payload fixtures that
+`WorkerDeckActivityTests` decodes with the real types (`UPDATE_FIXTURES=1` to regenerate), which is
+the only place the two languages are made to agree.
+The extension (`Widgets/`) **draws and nothing else** — no credential, no network. A card's buttons
+are `LiveActivityIntent`s, which the system performs by launching the *app* in the background, so
+approving reuses the same REST path a notification action takes and no Keychain group is shared
+with a second binary. `ActivityCoordinator` owns the push-to-start token (registered with every
+host, beside the APNs device token) and the per-card update tokens (reported to the one host named
+in the attributes, over `/apns/activities`), and reconciles on every foreground: a card whose
+session is no longer engaged, whose host is gone, or which 404s is ended. Everything is started
+from `AppDelegate`, never the SwiftUI `.task` — see `docs/GOTCHAS.md` §APNs for why, and for the
+five other things about this that bite.
+An `AskUserQuestion` gets real option buttons only when it is one question, single-select and ≤ 4
+options, and the card is still carrying the original tool input; otherwise it says "Answer in app".
+The answer is the original input rewritten with an `answers` object, exactly as
+`QuestionPromptView.submit` does it — which is why the input has to travel with the card at all: no
+REST route lists pending approvals.
+
 **When you change the app, push it to the phone**: `apps/ios/scripts/deploy.sh` (build +
 install + launch, over Wi-Fi, no cable) — the point is that Tobias can follow along on the real
 device rather than read about a simulator screenshot. Add `--no-launch` and it works on a

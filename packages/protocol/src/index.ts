@@ -115,6 +115,28 @@ export type UserQuestion = {
 
 export type QuestionBehavior = 'ask' | 'auto' | 'deny'
 
+export function parseUserQuestions(input: Record<string, unknown>): UserQuestion[] {
+  const raw = Array.isArray(input.questions) ? input.questions : []
+  return raw.flatMap((entry): UserQuestion[] => {
+    const q = entry as Partial<UserQuestion>
+    if (typeof q.question !== 'string' || !Array.isArray(q.options)) {
+      return []
+    }
+    const options = q.options.filter((o): o is UserQuestionOption => typeof (o as UserQuestionOption | undefined)?.label === 'string')
+    if (options.length === 0) {
+      return []
+    }
+    return [
+      {
+        question: q.question,
+        header: typeof q.header === 'string' ? q.header : '',
+        options,
+        multiSelect: q.multiSelect === true,
+      },
+    ]
+  })
+}
+
 export type ModelOption = {
   value: string
   resolvedModel?: string

@@ -162,7 +162,7 @@ function isStreamingItem(item: TranscriptItem): boolean {
   )
 }
 
-function blockText(content: ToolResultBlock['content']): string {
+export function blockText(content: ToolResultBlock['content']): string {
   if (content === undefined) {
     return ''
   }

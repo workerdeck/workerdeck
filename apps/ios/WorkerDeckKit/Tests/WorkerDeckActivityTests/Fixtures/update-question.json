@@ -1,0 +1,38 @@
+{
+  "aps": {
+    "timestamp": 1757765010,
+    "event": "update",
+    "content-state": {
+      "phase": "question",
+      "title": "Wire the forwarder",
+      "headline": "Auth method",
+      "detail": "Which auth method should the widget use?",
+      "startedAtMs": 1757764800000,
+      "pendingCount": 1,
+      "request": {
+        "id": "req_18b3",
+        "kind": "question",
+        "choices": [
+          {
+            "index": 0,
+            "label": "Shared Keychain group"
+          },
+          {
+            "index": 1,
+            "label": "App Group"
+          },
+          {
+            "index": 2,
+            "label": "Hand off to the app"
+          }
+        ],
+        "inputJSON": "{\"questions\":[{\"question\":\"Which auth method should the widget use?\",\"header\":\"Auth method\",\"options\":[{\"label\":\"Shared Keychain group\"},{\"label\":\"App Group\"},{\"label\":\"Hand off to the app\"}]}]}"
+      },
+      "epoch": 2,
+      "seq": 447,
+      "decision": null
+    },
+    "stale-date": 1757766210,
+    "relevance-score": 100
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "aps": {
+    "timestamp": 1757764930,
+    "event": "update",
+    "content-state": {
+      "phase": "approval",
+      "title": "Wire the forwarder",
+      "headline": "Bash",
+      "detail": "pnpm --filter workerdeck test",
+      "startedAtMs": 1757764800000,
+      "expiresAtMs": 1757765230000,
+      "pendingCount": 1,
+      "steps": {
+        "done": 3,
+        "total": 7
+      },
+      "request": {
+        "id": "req_18b2",
+        "kind": "permission",
+        "choices": []
+      },
+      "epoch": 2,
+      "seq": 412,
+      "decision": null
+    },
+    "stale-date": 1757766130,
+    "relevance-score": 100
+  }
+}

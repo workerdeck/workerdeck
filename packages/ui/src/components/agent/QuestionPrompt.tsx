@@ -1,10 +1,15 @@
 import { useState } from 'react'
-import type { PermissionRequest, QuestionBehavior, UserQuestion, UserQuestionOption } from '@workerdeck/protocol'
+import { parseUserQuestions, type PermissionRequest, type QuestionBehavior } from '@workerdeck/protocol'
+
+// Re-exported, not redefined: the parse moved to protocol so the CLI's Live Activity builder could
+// share it. Kept on this path because `@workerdeck/ui` has published it since 1.0.0.
 import { MessageCircleQuestion, X } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
 import { cn } from '../../lib/utils.ts'
+
+export { parseUserQuestions }
 
 export type QuestionBehaviorMeta = {
   value: QuestionBehavior
@@ -17,28 +22,6 @@ export const QUESTION_BEHAVIORS: QuestionBehaviorMeta[] = [
   { value: 'ask', label: 'Ask', description: 'wait for a watcher or webhook controller to answer' },
   { value: 'deny', label: 'Disabled', description: 'the agent is told to decide on its own' },
 ]
-
-export function parseUserQuestions(input: Record<string, unknown>): UserQuestion[] {
-  const raw = Array.isArray(input.questions) ? input.questions : []
-  return raw.flatMap((entry): UserQuestion[] => {
-    const q = entry as Partial<UserQuestion>
-    if (typeof q.question !== 'string' || !Array.isArray(q.options)) {
-      return []
-    }
-    const options = q.options.filter((o): o is UserQuestionOption => typeof (o as UserQuestionOption | undefined)?.label === 'string')
-    if (options.length === 0) {
-      return []
-    }
-    return [
-      {
-        question: q.question,
-        header: typeof q.header === 'string' ? q.header : '',
-        options,
-        multiSelect: q.multiSelect === true,
-      },
-    ]
-  })
-}
 
 type Selection = { labels: string[]; other: string; otherActive: boolean }
 

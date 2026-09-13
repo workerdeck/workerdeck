@@ -1,5 +1,6 @@
 import UIKit
 import UserNotifications
+import WorkerDeckActivity
 
 /// The bridge between UIKit's push callbacks and `PushCoordinator`.
 ///
@@ -11,12 +12,22 @@ import UserNotifications
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   let push = PushCoordinator()
+  let activities = ActivityCoordinator()
+  /// The delegate's own stores. A push-to-start wake and a Live Activity intent both launch this
+  /// process **without a scene**, so `WorkerDeckApp.body` — where the SwiftUI copies are made and
+  /// `push.attach` runs — is never evaluated. Anything those two paths need has to be built here.
+  let hosts = HostStore()
+  private let settings = AppSettings()
 
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    push.attach(hosts: hosts)
+    activities.attach(hosts: hosts, push: push)
+    let handler = ActivityActionHandler(hosts: hosts, activities: activities, settings: settings)
+    SessionActivityActions.handler = { action in await handler.perform(action) }
     return true
   }
 

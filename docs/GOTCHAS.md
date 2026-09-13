@@ -2165,6 +2165,41 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   hand-rolled payload carries no `sessionId`, `PushPayload.init?` returns nil, and the tap routes
   nowhere — which reads exactly like a broken deep link and is not one.
 
+- **A Live Activity is a different push type AND a different topic, and Apple rejects a mismatched
+  pair.** `apns-push-type: liveactivity` goes with `apns-topic: <bundleId>.push-type.liveactivity`;
+  `ApnsRequest.pushType` defaults to `'alert'` so every existing caller is unaffected, and
+  `topicFor` is the one place the suffix is added.
+- **Three tokens, two registries, and only one of them is device-level for both.** The alert device
+  token and the Live Activity **push-to-start** token both belong to the install and live in
+  `apns-devices.json`; per-card **update** tokens churn every turn and live in
+  `apns-activities.json`, keyed `(deviceToken, sessionId)`. `POST /apns/devices` treats
+  `liveActivityStartToken` as **three-state — omitted leaves it, `null` clears it**, because an app
+  built before the field would otherwise erase it on every launch.
+- **`canImport(ActivityKit)` is true on macOS, but `ActivityAttributes` is unavailable there.** The
+  conformance in `WorkerDeckActivity` needs `#if canImport(ActivityKit) && os(iOS)` or `swift test`
+  on the Mac fails to compile — which is the only place the payload contract is tested.
+- **`Activity` is not `Sendable`, so every ActivityKit call from `@MainActor` is a Swift 6 "sending"
+  error.** `ActivityCoordinator` keeps its stream handling `nonisolated` and lets only Strings cross
+  to the actor; the two per-card watchers take the activity's **id** and look it up again rather
+  than capturing it, because a non-Sendable value captured by a task closure is the same error in a
+  different costume.
+- **A Live Activity's content state must carry dates as epoch-millisecond numbers, never `Date`.**
+  ActivityKit decodes a pushed content state with a default `JSONDecoder`, whose date strategy
+  counts seconds from 2001 — a Unix timestamp in a `Date` field draws a countdown from the wrong
+  century. For the same class of reason `phase` and `kind` are `String`, not enums: a Codable enum
+  throws on an unknown value and the system drops the whole update, freezing the card instead of
+  degrading it.
+- **A Live Activity button has no `.authenticationRequired`.** The notification's Approve is a
+  `UNNotificationAction` that iOS gates behind Face ID; the card's cannot be. Deny is always
+  allowed, Approve waits for an unlocked phone by default (`AppSettings.approveWhileLocked`), and
+  that default is the only thing standing between a locked phone and an approved tool call.
+- **The buttons run in the *app* process, not the extension** — that is what `LiveActivityIntent`
+  conformance buys, and it is why the widget extension holds no credential and needs no shared
+  Keychain group. A plain `AppIntent` with `openAppWhenRun = false` is the shape whose `perform()`
+  is silently never called. The handler is installed from
+  `AppDelegate.application(_:didFinishLaunchingWithOptions:)` and **not** from the SwiftUI `.task`:
+  a push-to-start wake and an intent both launch the process with no scene, so `WorkerDeckApp.body`
+  is never evaluated. Token registration moved there for the same reason.
 - **Sandbox and production are different token *namespaces*, not just different URLs.** A build
   run from Xcode gets a sandbox token; a TestFlight or App Store build gets a production one.
   Same key, same phone, different token — push one at the wrong endpoint and Apple answers
@@ -2324,6 +2359,31 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `apply(_:subtree:)` closes the block's whole key set with a container. The `.call` guard inside
   it is load-bearing, not defensive: the subtree passed in is the whole **block**, so a single
   result closing "its" subtree would collapse every sibling in the same run.
+
+- **A Live Activity is not drawn while its own app is frontmost.** No lock-screen card, nothing in
+  the Dynamic Island. Raise one from the app's own UI and the only honest read is to leave the app
+  first — otherwise a perfectly working card looks like a dead button.
+
+- **`ActivityCoordinator.reconcile()` ends any card it cannot attribute to a live session**, and it
+  runs from `handle()` for every card the app sees, including one raised a second earlier in the
+  same process. That is right for a real card — one outliving its turn claims work is happening
+  that is not — and fatal for `ActivityDebug`'s, whose `ses_debug` session exists on no gateway:
+  the card was ended `.immediate` within a second of the tap, so the debug affordance silently
+  killed the thing it exists to show. `isLocallyRaised` exempts it. The same guard is why a real
+  push-to-start card needs a matching `Host` entry to survive its first foreground.
+
+- **ActivityKit delivers the same activity twice.** It is in `Activity<T>.activities` at launch
+  *and* it comes down the `activityUpdates` stream, so any "have I seen this card?" guard keyed on
+  the session ends the only card there is, milliseconds after it appears — the gateway's push looks
+  dropped, the update token registers and then goes dead, and nothing anywhere says why. Key on the
+  **activity id**, and tell "this card again" apart from "a second card for this session":
+  `ActivityClaims` in WorkerDeckKit, with the tests.
+
+- **`try? Activity.request(…)` is never worth it.** It fails for Live Activities switched off for
+  the app, switched off device-wide, a payload over the cap, or too many active cards — and every
+  one of those presents identically as a button that does nothing. The debug raiser returns the
+  error string and Settings draws it.
+
 
 ## Build, test & packaging
 

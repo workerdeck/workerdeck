@@ -42,6 +42,12 @@ struct Host: Codable, Identifiable, Hashable, Sendable {
     apiURL?.deletingLastPathComponent().appendingPathComponent("apns/devices")
   }
 
+  /// Where this gateway takes Live Activity update tokens. Beside `/apns/devices` and for the same
+  /// reason: both are the CLI forwarder's, not the protocol's.
+  var activityRegistrationURL: URL? {
+    apiURL?.deletingLastPathComponent().appendingPathComponent("apns/activities")
+  }
+
   /// A client for this gateway, or nil when the address does not parse.
   ///
   /// Shared by `HostContext` and `PushCoordinator` — the latter needs a client

@@ -1,0 +1,21 @@
+{
+  "aps": {
+    "timestamp": 1757765500,
+    "event": "update",
+    "content-state": {
+      "phase": "compacting",
+      "title": "Wire the forwarder",
+      "headline": "Something a newer gateway invented",
+      "startedAtMs": 1757764800000,
+      "pendingCount": 0,
+      "request": {
+        "id": "req_18b4",
+        "kind": "handshake",
+        "choices": []
+      },
+      "decision": null
+    },
+    "stale-date": 1757766700,
+    "relevance-score": 50
+  }
+}

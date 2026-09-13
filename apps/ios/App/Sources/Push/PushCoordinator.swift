@@ -33,6 +33,9 @@ final class PushCoordinator {
   /// background, since the app holds a socket only for the one on screen.
   var visibleSessionId: String?
 
+  /// Set by `ActivityCoordinator`; sent with every registration so one POST carries both tokens.
+  var liveActivityStartToken: String?
+
   private var hosts: HostStore?
   /// `hostId|token` pairs already accepted, so re-syncing on every foreground is
   /// a no-op instead of a burst of POSTs.
@@ -80,16 +83,20 @@ final class PushCoordinator {
   /// Push this device's token at every configured gateway that has not already
   /// accepted it. Safe to call often — the view layer drives it off the host
   /// list, so adding a server registers with it immediately.
-  func syncRegistrations() async {
+  func syncRegistrations(force: Bool = false) async {
     guard let token = deviceToken, let hosts else { return }
+    if force { synced.removeAll() }
     for host in hosts.hosts where host.isValid {
-      let key = "\(host.id.uuidString)|\(token)"
+      // The start token is part of the key: a token that arrives after the first registration —
+      // which is the normal order, ActivityKit answers later than APNs — has to re-POST once.
+      let key = "\(host.id.uuidString)|\(token)|\(liveActivityStartToken ?? "-")"
       if synced.contains(key) { continue }
       do {
         // `unsupported` counts as synced: a gateway with no forwarder will not
         // grow one without a restart, and retrying it on every foreground would
         // be pure noise.
-        _ = try await DeviceRegistration.register(token: token, host: host)
+        _ = try await DeviceRegistration.register(
+          token: token, startToken: liveActivityStartToken, host: host)
         synced.insert(key)
       } catch {
         lastError = "\(host.displayName): \(error.localizedDescription)"
@@ -127,6 +134,22 @@ final class PushCoordinator {
       // Dismissal, or an action identifier from a build that is not this one.
       return
     }
+  }
+
+  /// A tapped Live Activity. `widgetURL` is the only way a card can route, so it lands here and
+  /// becomes the same `PushRoute` a notification tap produces — one destination type, one
+  /// `deepLinkSeqSurvives` rule, whichever surface asked.
+  func handle(url: URL) {
+    guard url.scheme == "workerdeck", url.host == "session",
+      let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+      let sessionId = items.first(where: { $0.name == "id" })?.value
+    else { return }
+    let value = { (name: String) in items.first { $0.name == name }?.value }
+    pendingRoute = PushRoute(
+      hostId: value("host").flatMap(UUID.init(uuidString:)),
+      sessionId: sessionId,
+      seq: value("seq").flatMap(Int.init),
+      epoch: value("epoch").flatMap(Int.init))
   }
 
   func clearRoute() {

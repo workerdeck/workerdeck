@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { WorkerDeckClient, SessionHandle } from '@workerdeck/client'
 import { PROTOCOL_VERSION } from '@workerdeck/protocol'
 import type { AttachedFrame, ModelOption, PermissionMode, SessionEvent } from '@workerdeck/protocol'
-import { applyEvent, initialTranscriptState, hydrateToolResult, seedFromSessionInfo, type TranscriptState } from '../lib/transcript.ts'
+import {
+  applyEvent,
+  blockText,
+  initialTranscriptState,
+  hydrateToolResult,
+  seedFromSessionInfo,
+  type TranscriptState,
+} from '../lib/transcript.ts'
 import { deleteTranscriptCache, readTranscriptCache, transcriptCacheKey, writeTranscriptCache } from '../lib/transcript-cache.ts'
 import { attachSeedToken, planAttach, shouldWriteParting } from '../lib/attach-plan.ts'
 
@@ -197,14 +204,7 @@ export function useClaudeSession(
       }
       try {
         const full = await client.toolResult(sessionId, result.sourceSeq, toolUseId)
-        const text =
-          typeof full.content === 'string'
-            ? full.content
-            : (full.content ?? [])
-                .map((part) => (typeof part.text === 'string' ? part.text : ''))
-                .filter(Boolean)
-                .join('\n')
-        dispatch({ type: 'transcript_hydrate_result', toolUseId, text })
+        dispatch({ type: 'transcript_hydrate_result', toolUseId, text: blockText(full.content) })
         return true
       } catch {
         return false

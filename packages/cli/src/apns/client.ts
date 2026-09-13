@@ -23,10 +23,15 @@ const TOKEN_TTL_MS = 40 * 60 * 1000
 const REQUEST_TIMEOUT_MS = 10_000
 const DIAL_ATTEMPT_TIMEOUT_MS = 2_000
 
+export type ApnsPushType = 'alert' | 'liveactivity'
+
 export type ApnsRequest = {
   deviceToken: string
   environment: ApnsEnvironment
   payload: unknown
+  // Live Activity pushes go to a different topic as well as a different type, and Apple rejects a
+  // mismatched pair. Defaulting to 'alert' keeps every existing caller and its tests untouched.
+  pushType?: ApnsPushType
   priority?: 5 | 10
   // Unix seconds after which Apple stops trying; 0 is not "no expiry" but "attempt once, never store".
   expiration?: number
@@ -46,6 +51,10 @@ export type ApnsResult =
 export type ApnsClient = {
   send(request: ApnsRequest): Promise<ApnsResult>
   close(): void
+}
+
+function topicFor(topic: string, pushType: ApnsPushType | undefined): string {
+  return pushType === 'liveactivity' ? `${topic}.push-type.liveactivity` : topic
 }
 
 function base64url(input: Buffer | string): string {
@@ -192,8 +201,8 @@ export function createApnsClient(
           ':method': 'POST',
           ':path': `/3/device/${request.deviceToken}`,
           authorization: `bearer ${jwt}`,
-          'apns-topic': config.topic,
-          'apns-push-type': 'alert',
+          'apns-topic': topicFor(config.topic, request.pushType),
+          'apns-push-type': request.pushType ?? 'alert',
           'apns-priority': String(request.priority ?? 10),
           'apns-expiration': String(request.expiration ?? 0),
           'content-length': String(body.byteLength),

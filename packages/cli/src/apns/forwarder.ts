@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
-import { type ApnsClient, type ApnsConfig, createApnsClient, loadApnsKey, type ApnsRequest } from './client.ts'
-import { createDeviceRegistry, createDeviceRoute, type DeviceRegistry } from './devices.ts'
+import { type ApnsClient, type ApnsConfig, type ApnsEnvironment, createApnsClient, loadApnsKey, type ApnsRequest } from './client.ts'
+import { createActivityRegistry, type ActivityRegistry } from './activities.ts'
+import { createDeviceRegistry, type DeviceRegistry } from './devices.ts'
+import { buildLiveActivityPush, type ActivityAttributes, type ActivityContentState } from './live-activity.ts'
+import { createApnsRoute } from './routes.ts'
 
 // Under APNs' 4 KB payload cap, with room for the alert dictionary to grow.
 const MAX_PAYLOAD_BYTES = 3800
@@ -12,6 +15,15 @@ export type ApnsForwarder = {
   onNotification: (notification: SessionNotification) => void
   handleRequest: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
   deviceCount: () => number
+  activity: {
+    start: (attributes: ActivityAttributes, state: ActivityContentState) => void
+    update: (sessionId: string, state: ActivityContentState, options: { urgent: boolean }) => void
+    end: (sessionId: string, state: ActivityContentState) => void
+    // Every card this gateway raised, ended. Run on boot against what the last process left behind,
+    // and again on a graceful close — a card whose gateway is gone has no other way to learn it.
+    endAll: (headline: string) => Promise<void>
+    count: () => number
+  }
   close: () => void
 }
 
@@ -136,7 +148,12 @@ export async function createApnsForwarder(options: {
     onError: (error, context) =>
       warn(`device registry ${context.op} failed for ${context.path}: ` + `${error instanceof Error ? error.message : String(error)}`),
   })
-  const handleRequest = createDeviceRoute(registry, options.authenticate)
+  const activities: ActivityRegistry = await createActivityRegistry({
+    dir: options.stateDir,
+    onError: (error, context) =>
+      warn(`activity registry ${context.op} failed for ${context.path}: ` + `${error instanceof Error ? error.message : String(error)}`),
+  })
+  const handleRequest = createApnsRoute({ devices: registry, activities }, options.authenticate)
   const fallbackEnvironment = options.config.production === false ? 'development' : 'production'
 
   // Per-session delivery chain: `turn_completed` collapses, so an out-of-order pair leaves the older text on the lock screen.
@@ -167,7 +184,138 @@ export async function createApnsForwarder(options: {
     )
   }
 
+  const sendActivity = async (
+    kind: 'start' | 'update' | 'end',
+    target: { deviceToken: string; token: string; environment: ApnsEnvironment; sessionId: string },
+    attributes: ActivityAttributes,
+    state: ActivityContentState,
+    urgent: boolean,
+  ): Promise<void> => {
+    const push = buildLiveActivityPush(kind, { attributes, state, urgent })
+    const result = await client.send({ ...push, deviceToken: target.token, environment: target.environment })
+    if (result.ok) {
+      await activities.touch(target.deviceToken, target.sessionId, { lastPushAt: Date.now() })
+      return
+    }
+    if (result.unregistered) {
+      // A start token dying takes the device's ability to raise cards with it; an update token
+      // dying is just that one card, already gone from the phone.
+      if (kind === 'start') {
+        await registry.clearStartToken(target.deviceToken)
+      }
+      await activities.remove(target.deviceToken, target.sessionId)
+      return
+    }
+    warn(`live activity ${kind} for ${target.sessionId} failed: ${result.reason} (${result.status})`)
+  }
+
+  const startCards = async (attributes: ActivityAttributes, state: ActivityContentState): Promise<void> => {
+    await Promise.all(
+      registry.list().map(async (device) => {
+        if (device.liveActivityStartToken === undefined) {
+          return
+        }
+        // One card per (device, session), and never a second start while a record exists: a phone
+        // that has not yet reported its update token is not a phone that needs asking again.
+        if (activities.get(device.token, attributes.sessionId) !== undefined) {
+          return
+        }
+        const environment = device.environment ?? fallbackEnvironment
+        await activities.start({
+          deviceToken: device.token,
+          sessionId: attributes.sessionId,
+          hostId: device.hostId,
+          environment,
+        })
+        await sendActivity(
+          'start',
+          { deviceToken: device.token, token: device.liveActivityStartToken, environment, sessionId: attributes.sessionId },
+          { ...attributes, hostId: device.hostId },
+          state,
+          true,
+        )
+      }),
+    )
+  }
+
+  const pushCards = async (kind: 'update' | 'end', sessionId: string, state: ActivityContentState, urgent: boolean): Promise<void> => {
+    await Promise.all(
+      activities.forSession(sessionId).map(async (record) => {
+        if (record.updateToken === undefined) {
+          // Held rather than dropped: the phone is still waking up, and the next push after the
+          // token lands carries the latest state anyway.
+          return
+        }
+        await sendActivity(
+          kind,
+          { deviceToken: record.deviceToken, token: record.updateToken, environment: record.environment, sessionId },
+          { sessionId, hostId: record.hostId, cwdLeaf: '' },
+          state,
+          urgent,
+        )
+        if (kind === 'end') {
+          await activities.remove(record.deviceToken, sessionId)
+        }
+      }),
+    )
+  }
+
+  const queueActivity = (sessionId: string, run: () => Promise<void>): void => {
+    const previous = chains.get(sessionId) ?? Promise.resolve()
+    const next = previous.then(() =>
+      run().catch((error: unknown) => {
+        warn(error instanceof Error ? error.message : String(error))
+      }),
+    )
+    chains.set(sessionId, next)
+    void next.then(() => {
+      if (chains.get(sessionId) === next) {
+        chains.delete(sessionId)
+      }
+    })
+  }
+
   return {
+    activity: {
+      start(attributes, state) {
+        queueActivity(attributes.sessionId, () => startCards(attributes, state))
+      },
+      update(sessionId, state, { urgent }) {
+        queueActivity(sessionId, () => pushCards('update', sessionId, state, urgent))
+      },
+      end(sessionId, state) {
+        queueActivity(sessionId, () => pushCards('end', sessionId, state, true))
+      },
+      async endAll(headline) {
+        await Promise.all(
+          activities.list().map(async (record) => {
+            if (record.updateToken !== undefined) {
+              await sendActivity(
+                'end',
+                {
+                  deviceToken: record.deviceToken,
+                  token: record.updateToken,
+                  environment: record.environment,
+                  sessionId: record.sessionId,
+                },
+                { sessionId: record.sessionId, hostId: record.hostId, cwdLeaf: '' },
+                {
+                  phase: 'ended',
+                  title: record.sessionId,
+                  headline,
+                  startedAtMs: record.startedAt,
+                  pendingCount: 0,
+                  decision: null,
+                },
+                true,
+              )
+            }
+            await activities.remove(record.deviceToken, record.sessionId)
+          }),
+        )
+      },
+      count: () => activities.list().length,
+    },
     onNotification(notification) {
       const previous = chains.get(notification.sessionId) ?? Promise.resolve()
       const next = previous.then(() =>

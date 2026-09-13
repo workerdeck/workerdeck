@@ -4,7 +4,7 @@ options:
   bundleIdPrefix: bi.atomic.workerdeck
   createIntermediateGroups: true
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0"
   groupSortPosition: top
 
 # The only dependency, and it is local: the app is a SwiftUI shell over the
@@ -18,7 +18,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "18.0"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
   configs:
     Debug:
@@ -45,7 +45,7 @@ targets:
   WorkerDeckApp:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: App/Sources
       # PNGs are rendered from docs/assets/app-icon-apple-{master,layer}.svg —
@@ -55,6 +55,9 @@ targets:
     dependencies:
       - package: WorkerDeckKit
         product: WorkerDeckKit
+      - package: WorkerDeckKit
+        product: WorkerDeckActivity
+      - target: WorkerDeckWidgets
     # Also generated (and gitignored). Xcode's "+ Capability" button would edit
     # the generated .xcodeproj instead and be lost on the next `xcodegen
     # generate`, so the capability is declared here or not at all.
@@ -74,6 +77,12 @@ targets:
         CFBundleDisplayName: WorkerDeck
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSSupportsLiveActivities: true
+        # A card's tap target. The same PushRoute a notification tap produces, so the session screen
+        # is reached by one path whichever surface asked for it.
+        CFBundleURLTypes:
+          - CFBundleURLName: bi.atomic.workerdeck.ios
+            CFBundleURLSchemes: [workerdeck]
         # Generated launch screen: an empty dict is the "just use the app
         # background" form, which is all a remote control needs.
         UILaunchScreen: {}
@@ -133,10 +142,43 @@ targets:
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
         SWIFT_EMIT_LOC_STRINGS: YES
+  # The Live Activity is drawn by a widget extension, which is a second process with a tight memory
+  # budget — hence the dependency on `WorkerDeckActivity` alone and not on the whole kit. It holds no
+  # credential and makes no network call: a card's buttons run their intent in the *app* process
+  # (`LiveActivityIntent`), so the extension only ever draws.
+  WorkerDeckWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Widgets/Sources
+      - path: App/Assets.xcassets
+    dependencies:
+      - package: WorkerDeckKit
+        product: WorkerDeckActivity
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: WorkerDeck
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        PRODUCT_BUNDLE_IDENTIFIER: bi.atomic.workerdeck.ios.widgets
+        PRODUCT_NAME: WorkerDeckWidgets
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+
   WorkerDeckAppUITests:
     type: bundle.ui-testing
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: App/UITests
     dependencies:
@@ -154,6 +196,7 @@ schemes:
     build:
       targets:
         WorkerDeckApp: all
+        WorkerDeckWidgets: all
         WorkerDeckAppUITests: [test]
     run:
       config: Debug

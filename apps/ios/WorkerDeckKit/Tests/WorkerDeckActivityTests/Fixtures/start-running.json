@@ -1,0 +1,34 @@
+{
+  "aps": {
+    "timestamp": 1757764800,
+    "event": "start",
+    "attributes-type": "SessionActivityAttributes",
+    "attributes": {
+      "sessionId": "ses_7f3a",
+      "hostId": "3F2504E0-4F89-11D3-9A0C-0305E82C3301",
+      "engine": "claude",
+      "cwdLeaf": "workerdeck"
+    },
+    "alert": {
+      "title": "Wire the forwarder",
+      "body": "working"
+    },
+    "input-push-token": 1,
+    "content-state": {
+      "phase": "running",
+      "title": "Wire the forwarder",
+      "headline": "Reading packages/cli/src/apns/client.ts",
+      "startedAtMs": 1757764800000,
+      "pendingCount": 0,
+      "steps": {
+        "done": 2,
+        "total": 7
+      },
+      "epoch": 2,
+      "seq": 412,
+      "decision": null
+    },
+    "stale-date": 1757766000,
+    "relevance-score": 50
+  }
+}

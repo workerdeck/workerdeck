@@ -11,6 +11,10 @@ export type DeviceRecord = {
   hostId?: string
   bundleId?: string
   platform?: string
+  // The Live Activity push-to-start token: device-level like the alert token, and the only way a
+  // gateway can raise a card on a phone whose app is not running. Absent means this device cannot
+  // be started at — an older app, or Live Activities switched off in Settings.
+  liveActivityStartToken?: string
   updatedAt: number
 }
 
@@ -18,6 +22,7 @@ export type DeviceRegistry = {
   list(): DeviceRecord[]
   register(record: Omit<DeviceRecord, 'updatedAt'>): Promise<void>
   remove(token: string): Promise<void>
+  clearStartToken(token: string): Promise<void>
 }
 
 const FILENAME = 'apns-devices.json'
@@ -70,9 +75,22 @@ export async function createDeviceRegistry(options: {
     async register(record) {
       const existing = devices.get(record.token)
       devices.set(record.token, { ...record, updatedAt: Date.now() })
-      if (existing !== undefined && existing.environment === record.environment && existing.hostId === record.hostId) {
+      if (
+        existing !== undefined &&
+        existing.environment === record.environment &&
+        existing.hostId === record.hostId &&
+        existing.liveActivityStartToken === record.liveActivityStartToken
+      ) {
         return
       }
+      await persist()
+    },
+    async clearStartToken(token) {
+      const existing = devices.get(token)
+      if (existing === undefined || existing.liveActivityStartToken === undefined) {
+        return
+      }
+      delete existing.liveActivityStartToken
       await persist()
     },
     async remove(token) {
@@ -85,7 +103,7 @@ export async function createDeviceRegistry(options: {
 }
 
 export function createDeviceRoute(
-  registry: DeviceRegistry,
+  registry: DeviceRegistry | null,
   authenticate: (req: IncomingMessage) => unknown,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
@@ -97,6 +115,12 @@ export function createDeviceRoute(
     }
     if (pathname !== '/apns/devices') {
       return false
+    }
+
+    if (registry === null) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('this gateway runs without push\n')
+      return true
     }
 
     if (req.method !== 'POST' && req.method !== 'DELETE') {
@@ -142,12 +166,24 @@ export function createDeviceRoute(
     const optionalString = (value: unknown): string | undefined =>
       typeof value === 'string' && value.length > 0 && value.length <= 200 ? value : undefined
 
+    // Omitted leaves whatever is on record — an older app that never sends the field must not erase
+    // it — while an explicit null is how the app says Live Activities were switched off.
+    const startTokenGiven = Object.hasOwn(body, 'liveActivityStartToken')
+    const startToken = body.liveActivityStartToken
+    if (startTokenGiven && startToken !== null && (typeof startToken !== 'string' || !TOKEN_PATTERN.test(startToken))) {
+      respondJson(res, 400, { error: 'liveActivityStartToken must be a hex token or null' })
+      return true
+    }
+    const previous = registry.list().find((record) => record.token === token)
+    const liveActivityStartToken = startTokenGiven ? ((startToken as string | null) ?? undefined) : previous?.liveActivityStartToken
+
     await registry.register({
       token,
       environment: body.environment,
       hostId: optionalString(body.hostId),
       bundleId: optionalString(body.bundleId),
       platform: optionalString(body.platform),
+      ...(liveActivityStartToken === undefined ? {} : { liveActivityStartToken }),
     })
     respondJson(res, 200, { registered: true, environment: body.environment })
     return true

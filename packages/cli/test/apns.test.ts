@@ -6,6 +6,8 @@ import type { SessionNotification } from '@workerdeck/protocol'
 import { afterAll, describe, expect, it } from 'vitest'
 import { type ApnsConfig, type ApnsEnvironment, createApnsClient, createProviderToken } from '../src/apns/client.ts'
 import { createDeviceRegistry, createDeviceRoute } from '../src/apns/devices.ts'
+import { createActivityRegistry, createActivityRoute } from '../src/apns/activities.ts'
+import { createApnsRoute } from '../src/apns/routes.ts'
 import { buildPush } from '../src/apns/forwarder.ts'
 
 const created: string[] = []
@@ -107,6 +109,25 @@ describe('apns client', () => {
     expect(sent.headers['apns-collapse-id']).toBe('c1')
     expect(String(sent.headers.authorization)).toMatch(/^bearer ey/)
     expect(JSON.parse(sent.body)).toEqual({ aps: { alert: 'hi' } })
+    await new Promise((resolve) => fake.server.close(resolve))
+  })
+
+  it('sends a Live Activity push to the push-type topic, which Apple rejects if mismatched', async () => {
+    const fake = await startFakeApns((_recorded, stream) => {
+      stream.respond({ ':status': 200, 'apns-id': 'id-2' })
+      stream.end()
+    })
+    const client = createApnsClient(CONFIG, KEY, { hosts: fake.hosts })
+    await client.send({
+      deviceToken: TOKEN,
+      environment: 'development',
+      payload: { aps: { event: 'update' } },
+      pushType: 'liveactivity',
+    })
+    client.close()
+    const sent = fake.seen[0]!
+    expect(sent.headers['apns-push-type']).toBe('liveactivity')
+    expect(sent.headers['apns-topic']).toBe(`${CONFIG.topic}.push-type.liveactivity`)
     await new Promise((resolve) => fake.server.close(resolve))
   })
 
@@ -366,7 +387,7 @@ async function call(
   method: string,
   url: string,
   body?: unknown,
-): Promise<{ consumed: boolean; status: number; json: unknown }> {
+): Promise<{ consumed: boolean; status: number; text: string; json: unknown }> {
   const listeners = new Map<string, ((value?: unknown) => void)[]>()
   const req = {
     method,
@@ -406,7 +427,13 @@ async function call(
     handler()
   }
   const consumed = await pending
-  return { consumed, status, json: payload === '' ? undefined : JSON.parse(payload) }
+  let json: unknown
+  try {
+    json = payload === '' ? undefined : JSON.parse(payload)
+  } catch {
+    json = undefined
+  }
+  return { consumed, status, text: payload, json }
 }
 
 describe('device route', () => {
@@ -417,6 +444,13 @@ describe('device route', () => {
     const registry = await createDeviceRegistry({ dir: null })
     const result = await call(createDeviceRoute(registry, allow), 'POST', '/index.html')
     expect(result.consumed).toBe(false)
+  })
+
+  it('claims its path with a 404 when the gateway has no forwarder', async () => {
+    const result = await call(createDeviceRoute(null, allow), 'POST', '/apns/devices', { token: TOKEN, environment: 'development' })
+    expect(result.consumed).toBe(true)
+    expect(result.status).toBe(404)
+    expect(result.text).toContain('without push')
   })
 
   it('refuses an unauthenticated registration', async () => {
@@ -450,5 +484,145 @@ describe('device route', () => {
     expect((await call(route, 'POST', '/apns/devices', { token: 'nope', environment: 'development' })).status).toBe(400)
     expect((await call(route, 'POST', '/apns/devices', { token: TOKEN, environment: 'staging' })).status).toBe(400)
     expect(registry.list()).toEqual([])
+  })
+
+  it('keeps a start token an older app never sends, and clears it only when asked to', async () => {
+    const registry = await createDeviceRegistry({ dir: null })
+    const route = createDeviceRoute(registry, allow)
+    const START = 'b'.repeat(64)
+    await call(route, 'POST', '/apns/devices', { token: TOKEN, environment: 'development', liveActivityStartToken: START })
+    expect(registry.list()[0]!.liveActivityStartToken).toBe(START)
+
+    // An app built before Live Activities omits the field entirely. Treating that as "clear" would
+    // make every launch of the old build silently disable the new one's cards.
+    await call(route, 'POST', '/apns/devices', { token: TOKEN, environment: 'development' })
+    expect(registry.list()[0]!.liveActivityStartToken).toBe(START)
+
+    await call(route, 'POST', '/apns/devices', { token: TOKEN, environment: 'development', liveActivityStartToken: null })
+    expect(registry.list()[0]!.liveActivityStartToken).toBeUndefined()
+  })
+
+  it('rejects a start token that is not hex', async () => {
+    const registry = await createDeviceRegistry({ dir: null })
+    const result = await call(createDeviceRoute(registry, allow), 'POST', '/apns/devices', {
+      token: TOKEN,
+      environment: 'development',
+      liveActivityStartToken: 'nope',
+    })
+    expect(result.status).toBe(400)
+  })
+})
+
+describe('activity route', () => {
+  const allow = () => ({ via: 'header' })
+  const deny = () => null
+  const UPDATE = 'c'.repeat(64)
+
+  async function started(sessionId = 'ses_1') {
+    const registry = await createActivityRegistry({ dir: null })
+    await registry.start({ deviceToken: TOKEN, sessionId, environment: 'development' })
+    return registry
+  }
+
+  it('claims its path with a 404 when the gateway has no forwarder', async () => {
+    const result = await call(createActivityRoute(null, allow), 'POST', '/apns/activities', { sessionId: 'ses_1', token: UPDATE })
+    expect(result.consumed).toBe(true)
+    expect(result.status).toBe(404)
+  })
+
+  it('refuses an unauthenticated attach', async () => {
+    const registry = await started()
+    const result = await call(createActivityRoute(registry, deny), 'POST', '/apns/activities', {
+      sessionId: 'ses_1',
+      token: UPDATE,
+      environment: 'development',
+    })
+    expect(result.status).toBe(401)
+    expect(registry.list()[0]!.updateToken).toBeUndefined()
+  })
+
+  it('attaches an update token to the card it belongs to and goes live', async () => {
+    const registry = await started()
+    const result = await call(createActivityRoute(registry, allow), 'POST', '/apns/activities', {
+      sessionId: 'ses_1',
+      token: UPDATE,
+      environment: 'development',
+      deviceToken: TOKEN,
+    })
+    expect(result.status).toBe(200)
+    expect(registry.list()[0]).toMatchObject({ updateToken: UPDATE, phase: 'live' })
+  })
+
+  it('matches on the session alone when the app has no device token yet', async () => {
+    const registry = await started()
+    const result = await call(createActivityRoute(registry, allow), 'POST', '/apns/activities', {
+      sessionId: 'ses_1',
+      token: UPDATE,
+      environment: 'development',
+    })
+    expect(result.status).toBe(200)
+    expect(registry.list()[0]!.updateToken).toBe(UPDATE)
+  })
+
+  it('refuses to guess when two devices are waiting on the same session', async () => {
+    const registry = await createActivityRegistry({ dir: null })
+    await registry.start({ deviceToken: TOKEN, sessionId: 'ses_1', environment: 'development' })
+    await registry.start({ deviceToken: 'd'.repeat(64), sessionId: 'ses_1', environment: 'development' })
+    // Guessing would paint the wrong phone, and the app can always say which device it is.
+    const result = await call(createActivityRoute(registry, allow), 'POST', '/apns/activities', {
+      sessionId: 'ses_1',
+      token: UPDATE,
+      environment: 'development',
+    })
+    expect(result.status).toBe(404)
+    expect(registry.list().every((record) => record.updateToken === undefined)).toBe(true)
+  })
+
+  it('404s a card this gateway never raised, so a second gateway is told to forget it', async () => {
+    const registry = await createActivityRegistry({ dir: null })
+    const result = await call(createActivityRoute(registry, allow), 'POST', '/apns/activities', {
+      sessionId: 'ses_unknown',
+      token: UPDATE,
+      environment: 'development',
+    })
+    expect(result.status).toBe(404)
+  })
+
+  it('drops the record when the phone reports the card gone', async () => {
+    const registry = await started()
+    const route = createActivityRoute(registry, allow)
+    await call(route, 'POST', '/apns/activities', { sessionId: 'ses_1', token: UPDATE, environment: 'development' })
+    const deleted = await call(route, 'DELETE', '/apns/activities', { token: UPDATE })
+    expect(deleted.status).toBe(204)
+    expect(registry.list()).toEqual([])
+  })
+
+  it('rejects a bad token, a missing session and an unknown environment', async () => {
+    const registry = await started()
+    const route = createActivityRoute(registry, allow)
+    expect((await call(route, 'POST', '/apns/activities', { sessionId: 'ses_1', token: 'nope' })).status).toBe(400)
+    expect((await call(route, 'POST', '/apns/activities', { token: UPDATE, environment: 'development' })).status).toBe(400)
+    expect((await call(route, 'POST', '/apns/activities', { sessionId: 'ses_1', token: UPDATE, environment: 'x' })).status).toBe(400)
+  })
+})
+
+describe('apns routes', () => {
+  const allow = () => ({ via: 'header' })
+
+  it('claims both paths whether or not a forwarder is configured', async () => {
+    const unconfigured = createApnsRoute(null, allow)
+    for (const path of ['/apns/devices', '/apns/activities']) {
+      const result = await call(unconfigured, 'POST', path, { token: TOKEN })
+      expect(result.consumed, path).toBe(true)
+      expect(result.status, path).toBe(404)
+    }
+
+    const configured = createApnsRoute(
+      { devices: await createDeviceRegistry({ dir: null }), activities: await createActivityRegistry({ dir: null }) },
+      allow,
+    )
+    expect((await call(configured, 'POST', '/apns/devices', { token: TOKEN, environment: 'development' })).status).toBe(200)
+    // Still not the dashboard's: an unclaimed path falls through to the SPA catch-all's 405.
+    expect((await call(configured, 'POST', '/index.html')).consumed).toBe(false)
   })
 })

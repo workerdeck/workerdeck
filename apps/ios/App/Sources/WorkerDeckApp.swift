@@ -9,7 +9,6 @@ import SwiftUI
 @main
 struct WorkerDeckApp: App {
   @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-  @State private var hosts = HostStore()
   /// One unread memory for the whole process — the session screen writes marks
   /// into it, the list and the app icon badge count from it.
   @State private var unread = UnreadModel()
@@ -34,14 +33,16 @@ struct WorkerDeckApp: App {
         UIPreviewHarness(variant: preview)
       } else {
         RootView()
-          .environment(hosts)
+          .environment(delegate.hosts)
           .environment(unread)
           .environment(settings)
           .environment(bookmarks)
           .environment(delegate.push)
-          // The delegate is built by UIKit before any of this exists, so the two
-          // are introduced here rather than at either one's construction.
-          .task { delegate.push.attach(hosts: hosts) }
+          .environment(delegate.activities)
+          // Both coordinators are attached in `didFinishLaunching`, not here: a background launch
+          // has no scene and would otherwise never register a token or answer a card's button.
+          .task { await delegate.activities.reconcile() }
+          .onOpenURL { delegate.push.handle(url: $0) }
       }
     }
   }

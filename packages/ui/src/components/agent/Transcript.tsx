@@ -196,11 +196,7 @@ export function Transcript({
                   />
                 </>
               ) : (
-                <Loader
-                  label={state.status === 'starting' ? 'Starting session…' : undefined}
-                  startedAt={runStartedAt}
-                  tokens={state.contextUsage?.totalTokens}
-                />
+                <Loader label={state.status === 'starting' ? 'Starting session…' : undefined} />
               )
             ) : null}
           </TerminalShell>

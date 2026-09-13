@@ -1611,7 +1611,17 @@ and the split is by what a half-applied value would mean. `allowedOrigins`, `all
 so losing the file's half would silently narrow a gate the operator declared. `corsOrigins` and
 `cwdRoots`/`fsRoots` **replace** when the flag side is non-empty. `--profile` replaces too, and
 that one is a security decision rather than a convenience: a merged profile set is a credential
-mix-up, so naming any profile on the command line means the command line names them all. Browser
+mix-up, so naming any profile on the command line means the command line names them all. The APNs forwarder (`src/apns/`) also drives **iOS Live Activities**, and it is the CLI that does
+it rather than the server: `driveLiveActivities` observes `server.registry.observe()` — the seam
+`driveWakeLock` already uses — so `packages/server` learns nothing about push, `SessionNotifier`
+keeps its four-type webhook contract, and **no `PROTOCOL_VERSION` bump and no new `/v1` route** was
+needed. The driver decides *when* (2 s start debounce to swallow the `system_init` flash, immediate
+on an approval, 20 s end grace, renewal at 7 h 45 m against the system's 8 h ceiling, a content
+hash so an event that changes nothing drawable costs no push); the forwarder decides *who* (fan-out
+across devices holding a push-to-start token) and owns `apns-activities.json`. Cards are ended on
+boot — whatever the file holds belongs to a dead process — and again on a graceful close.
+
+Browser
 logins are durable (`auth-sessions.ts` → `<stateDir>/auth-sessions.json`, 0600) and the table is
 keyed by `HMAC(secret, token)`, which is what makes the file worthless to a reader and makes key
 rotation invalidate every cookie for free — see `docs/GOTCHAS.md`. Loopback

@@ -44,7 +44,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | `packages/cli` | Published unscoped as **`workerdeck`**. Gateway + dashboard on one port. Hosts the only push credential (APNs). |
 | `apps/vscode` | The VS Code extension. No webview draws its own header; no view has screens. |
 | `apps/embedded` | The reference embedding — read it before designing another one. |
-| `apps/ios` | Native iOS remote control. `WorkerDeckKit/` hand-mirrors protocol + the reducer. |
+| `apps/ios` | Native iOS remote control (iOS 18+). `WorkerDeckKit/` hand-mirrors protocol + the reducer; `WorkerDeckActivity` + `Widgets/` are the Live Activity. |
 | `apps/docs` | Astro site → Pages. Keep in sync with README. |
 
 **Dependency direction:** `protocol ← core ← queue ← server ← cli`,

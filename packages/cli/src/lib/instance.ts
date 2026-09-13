@@ -3,7 +3,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { createFileSessionStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { dashboardDir } from '@workerdeck/web'
+import { createApnsRoute } from '../apns/routes.ts'
 import { createApnsForwarder } from '../apns/forwarder.ts'
+import { driveLiveActivities } from '../apns/live-activities.ts'
 import { materializeAuthKey, type MaterializedAuthKey } from '../auth/auth-key.ts'
 import { createAuthSessionStore } from '../auth/auth-sessions.ts'
 import { createCliAuth, type CliAuth } from '../auth/auth.ts'
@@ -53,21 +55,13 @@ export function createHostGuard(allowedHosts: Set<string> | null): (req: Incomin
   }
 }
 
-function pathnameOf(req: IncomingMessage): string | null {
-  try {
-    return new URL(req.url ?? '/', 'http://internal').pathname
-  } catch {
-    return null
-  }
-}
-
 // The order here is the contract: auth endpoints first (they are how a browser gets a session at all), then the APNs
 // route, then assets — ungated, being the app's own code — and documents last, the one place the auth decision is made.
 function createFallback(
   auth: CliAuth,
   webRoot: string | undefined,
   hostAllowed: (req: IncomingMessage) => boolean,
-  apnsRoute?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>,
+  apnsRoute: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     if (!hostAllowed(req)) {
@@ -83,12 +77,7 @@ function createFallback(
     if (await auth.handleAuthRequest(req, res)) {
       return
     }
-    if (apnsRoute !== undefined && (await apnsRoute(req, res))) {
-      return
-    }
-    if (apnsRoute === undefined && pathnameOf(req) === '/apns/devices') {
-      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
-      res.end('this gateway runs without push\n')
+    if (await apnsRoute(req, res)) {
       return
     }
 
@@ -174,16 +163,17 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
   const hostAllowed = createHostGuard(config.allowedHosts)
 
   // A bad key path throws before we listen: better a refusal at startup than a phone that never buzzes.
+  const authenticateHost = (req: IncomingMessage): unknown => (hostAllowed(req) ? auth.authenticate(req) : null)
   const apns =
     config.apns === undefined
       ? undefined
       : await createApnsForwarder({
           config: config.apns,
           stateDir: config.stateDir,
-          authenticate: (req) => (hostAllowed(req) ? auth.authenticate(req) : null),
+          authenticate: authenticateHost,
         })
 
-  const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest)
+  const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest ?? createApnsRoute(null, authenticateHost))
 
   const parking = { ...config.options.parking }
   if (config.stateDir && !parking.store) {
@@ -239,6 +229,15 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     sweep.unref()
   }
 
+  let stopActivities: (() => void) | undefined
+  if (apns) {
+    // Boot reconcile before the driver, and before any session rebuilds: whatever is in the
+    // activities file belongs to a process that is gone, so its cards are lying about a turn that
+    // died with it. A `kill -9` skips this, which is what `stale-date` is for.
+    await apns.activity.endAll('Gateway restarted')
+    stopActivities = driveLiveActivities({ source: server.registry, target: apns.activity })
+  }
+
   const { port } = await server.listen(config.port, config.host)
   const displayHost = config.host === '0.0.0.0' || config.host === '::' ? 'localhost' : config.host
   const url = `http://${displayHost.includes(':') ? `[${displayHost}]` : displayHost}:${port}`
@@ -283,7 +282,12 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     )
     if (apns) {
       const count = apns.deviceCount()
-      line(`  push: APNs forwarder on ${config.apns?.topic} — ` + `${count === 0 ? 'no devices registered yet' : `${count} device(s)`}`)
+      const cards = apns.activity.count()
+      line(
+        `  push: APNs forwarder on ${config.apns?.topic} — ` +
+          `${count === 0 ? 'no devices registered yet' : `${count} device(s)`}` +
+          `${cards === 0 ? '' : `, ${cards} live card(s)`}`,
+      )
     }
     if (config.configPath) {
       line(`  config ${config.configPath}`)
@@ -302,10 +306,16 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
         clearInterval(sweep)
       }
       wake?.release()
+      stopActivities?.()
       await server.close()
       // The session table's writes are queued rather than awaited by the request that caused them, so a last-moment
       // login is lost unless the queue drains here.
       await sessions?.flush?.()
+      if (apns) {
+        // A card outlives the gateway that drew it, so a clean shutdown is the one chance to say so.
+        // Capped, because a phone that cannot be reached must not hold the process open.
+        await Promise.race([apns.activity.endAll('Gateway stopped'), new Promise((resolve) => setTimeout(resolve, 3_000))])
+      }
       apns?.close()
       resolveClosed()
     },
