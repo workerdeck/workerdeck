@@ -450,10 +450,15 @@ describe('deferred execution: durability across a restart', () => {
     await backdateDeadline(session.id)
 
     const second = await withStore(0)
-    await vi.waitFor(() => expect(second.runners).toHaveLength(1), { timeout: 2000 })
-    expect(second.runners[0]!.settled[0]).toMatchObject({
-      executionId: 'exec-1',
-      result: { status: 'failed', reason: 'timeout' },
-    })
+    // The settle is what this asserts, and it lands a tick after the resume that triggers it —
+    // waiting only for the runner leaves the assertion racing the sweep on a loaded runner.
+    await vi.waitFor(
+      () =>
+        expect(second.runners[0]?.settled[0]).toMatchObject({
+          executionId: 'exec-1',
+          result: { status: 'failed', reason: 'timeout' },
+        }),
+      { timeout: 2000 },
+    )
   })
 })
