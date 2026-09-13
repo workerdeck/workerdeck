@@ -93,6 +93,8 @@ export class SessionRunner implements Runner {
   // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
   // correlating here is what lets one row settle rather than two rows appear.
   #compactionId: string | undefined
+  #compactionTurns = 0
+  #idleWhileCompacting = false
   #query: Query | undefined
   #capabilitiesEmitted = false
   #subscriptionType: string | undefined
@@ -466,14 +468,7 @@ export class SessionRunner implements Runner {
     }
     if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
       const meta = msg.compact_metadata
-      this.#emit({
-        type: 'context_compacted',
-        uuid: this.#compactionId ?? msg.uuid,
-        trigger: meta.trigger,
-        preTokens: meta.pre_tokens,
-        postTokens: meta.post_tokens,
-      })
-      this.#compactionId = undefined
+      this.#settleCompaction({ trigger: meta.trigger, preTokens: meta.pre_tokens, postTokens: meta.post_tokens }, msg.uuid)
       void this.#fetchContextUsage()
       return
     }
@@ -488,8 +483,13 @@ export class SessionRunner implements Runner {
         void this.#fetchContextUsage()
       }
       if (body.type === 'turn_result') {
-        // A compaction the turn never reported a boundary for would otherwise spin forever.
-        this.#settleCompaction()
+        // A manual `/compact` ends its own local-command turn straight away and summarises for
+        // a minute afterwards, so the first result is no evidence at all. Only a second turn
+        // ending with the boundary still missing means the compaction is really lost.
+        this.#compactionTurns += 1
+        if (this.#compactionTurns > 1) {
+          this.#settleCompaction()
+        }
         this.#totalCostUsd = body.totalCostUsd
         this.#numTurns = body.numTurns
         if (this.#pending.size === 0) {
@@ -507,21 +507,30 @@ export class SessionRunner implements Runner {
   #handleCompactionStatus(msg: { status?: string | null; compact_result?: 'success' | 'failed'; compact_error?: string }): void {
     if (msg.status === 'compacting') {
       this.#compactionId ??= randomUUID()
+      this.#compactionTurns = 0
       this.#emit({ type: 'context_compacted', uuid: this.#compactionId, pending: true })
+      this.#setStatus('running')
       return
     }
     if (msg.compact_result === 'failed') {
-      this.#settleCompaction(msg.compact_error ?? 'the engine reported no reason')
+      this.#settleCompaction({ error: msg.compact_error ?? 'the engine reported no reason' })
     }
   }
 
-  #settleCompaction(error?: string): void {
-    const uuid = this.#compactionId
+  #settleCompaction(
+    settled: { trigger?: 'manual' | 'auto'; preTokens?: number; postTokens?: number; error?: string } = {},
+    boundaryUuid?: string,
+  ): void {
+    const uuid = this.#compactionId ?? boundaryUuid
     if (uuid === undefined) {
       return
     }
     this.#compactionId = undefined
-    this.#emit({ type: 'context_compacted', uuid, ...(error === undefined ? {} : { error }) })
+    this.#emit({ type: 'context_compacted', uuid, ...settled })
+    if (this.#idleWhileCompacting && this.#pending.size === 0) {
+      this.#setStatus('idle')
+    }
+    this.#idleWhileCompacting = false
   }
 
   // Best-effort: the SDK's status type stops short of the MCP title, so a server that sets one
@@ -747,6 +756,13 @@ export class SessionRunner implements Runner {
   }
 
   #setStatus(status: SessionStatus, detail?: string): void {
+    // Summarising is work even when the engine calls the turn that asked for it over, and a
+    // session that reports idle mid-compaction invites a prompt the engine cannot take yet.
+    if (status === 'idle' && this.#compactionId !== undefined) {
+      this.#idleWhileCompacting = true
+      return
+    }
+    this.#idleWhileCompacting = false
     if (this.#status === status && this.#statusDetail === detail) {
       return
     }

@@ -1288,12 +1288,18 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   than appending a second. On claude that id has to be *minted by the runner* and held in
   `#compactionId`, because `compact_boundary` carries a uuid of its own that names the end, not
   the row; a boundary that arrives with nothing pending (auto-compaction on a fresh attach) falls
-  back to that uuid. Three rules hold it up: `turn_result` settles any compaction still pending,
-  so a turn that never reported a boundary cannot leave a row spinning forever;
-  `replayCoalesceKey` keys on `context_compacted:<uuid>`, so a replay of the pair delivers only
+  back to that uuid. Three rules hold it up: a **second** `turn_result` settles a compaction still
+  pending, so a turn that never reported a boundary cannot leave a row spinning forever — it must
+  be the second, because a manual `/compact` is a local command whose own turn ends immediately
+  while the summary runs on for a minute, and settling on the first drew "context compacted" the
+  instant the user asked for it; `replayCoalesceKey` keys on `context_compacted:<uuid>`, so a
+  replay of the pair delivers only
   the settled one; and the row's sentence lives in one place per client (`compactionText` in
   `packages/ui/src/lib/format.ts`, `TermFmt.compaction` in the kit, pinned against each other by
   `TerminalTextTests`) because the terminal renderer **measures** the string it draws.
+  An open compaction also holds the session **busy**: `#setStatus` swallows an `idle` that arrives
+  while `#compactionId` is set and replays it on settle, so the composer does not invite a prompt
+  the engine cannot take yet.
 - **The claude engine holds the flush across a slash command.** The CLI matches `/compact` and
   friends on the message text, and a leading caveat block would either break the match or lose the
   output, so `sendMessage` skips the flush for text matching `/^\s*\/[A-Za-z]/` and waits for the
