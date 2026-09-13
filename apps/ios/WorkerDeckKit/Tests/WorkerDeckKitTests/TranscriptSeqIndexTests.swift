@@ -113,3 +113,31 @@ struct TranscriptSeqIndexTests {
     #expect(built.item(forSeq: 997) == 249)
   }
 }
+
+@Suite("deepLinkPlacement")
+struct DeepLinkPlacementTests {
+  @Test("a row found while the replay is still filling is landed on but not followed")
+  func rowFoundMidReplay() {
+    #expect(
+      deepLinkPlacement(item: 27, lastSeq: 1503, attachLastSeq: 8472) == .item(27, complete: false))
+  }
+
+  @Test("a row found once the stated seq is reached follows the tail if it is the tail")
+  func rowFoundAfterLanding() {
+    #expect(
+      deepLinkPlacement(item: 27, lastSeq: 8472, attachLastSeq: 8472) == .item(27, complete: true))
+    // A live session keeps moving past the attach frame's seq; that is still complete.
+    #expect(
+      deepLinkPlacement(item: 27, lastSeq: 8490, attachLastSeq: 8472) == .item(27, complete: true))
+  }
+
+  @Test("no row yet is a question to ask again on the next event")
+  func noRowBeforeLanding() {
+    #expect(deepLinkPlacement(item: nil, lastSeq: 1503, attachLastSeq: 8472) == .pending)
+  }
+
+  @Test("no row once the stated seq is reached is the tail, settled")
+  func noRowAfterLanding() {
+    #expect(deepLinkPlacement(item: nil, lastSeq: 8472, attachLastSeq: 8472) == .unplaceable)
+  }
+}

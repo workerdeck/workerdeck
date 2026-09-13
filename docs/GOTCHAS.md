@@ -1741,6 +1741,15 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Terminal theme (`transcriptVariant: 'terminal'`)
 
+- **Selectability is declared, never inherited — the host's default is not the same in every
+  client.** `.term-press` says `user-select: text` out loud because a transcript is read far more
+  often than it is opened. The user band (`.term-user`) is the one block that is neither a press
+  nor plain flow text, and it said nothing, so it took whatever the host gave it: selectable with
+  an arrow cursor on the web, and **not selectable at all in the VS Code webview**. A block that
+  cannot host a selection endpoint does not merely refuse the drag — the selection jumps to the
+  next valid position above it and swallows everything in between, which reads as a layout bug
+  rather than a missing declaration. Anything in this theme that is neither `.term-press` nor
+  ordinary text has to state `user-select` and `cursor` itself.
 - **The gutter markers are the CLI's, and they are the whole of a row's identity.** `❯` is what
   you typed, `●` what the model said or a tool it called, `⎿` that tool's output one level in,
   `✻` thinking, `!` a notice from the runner rather than the model. Every renderer in
@@ -2183,6 +2192,24 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   answer that 404, because the catch-all below will otherwise answer for it — and it will answer
   405 or a 200 with an HTML document, both of which read as a broken gateway rather than an absent
   feature. Only reachable with the dashboard on; `--no-web` 404s and hid it.
+- **A `turn_completed` push REPLACES a session's notification rather than stacking it, which makes
+  a live session untestable.** `forwarder.ts` gives every `turn_completed` a
+  `collapseId: t:<hash(sessionId)>` so a burst of real turn notifications collapses to one on the
+  lock screen — correct in production, hostile to a test loop. `pnpm smoke:push` builds the same
+  payload (deliberately: a probe that diverged from what ships would not test what ships), so a
+  test push aimed at a session with an agent attached is silently taken over by the next real turn
+  that completes. Measured: a device sent seq 2,790 tapped a notification carrying **11,277**,
+  landed correctly on its tail, and read as a deep-link failure — three times, before a device
+  trace caught it. **Push at an idle session, force-quit first, and confirm the seq that arrived
+  rather than the one you sent.** `smoke/README.md` carries the three rules.
+- **A dormant wake renumbers a session's seqs, and a notification can outlive one.**
+  `parking.ts`: *"a dormant session starts a fresh log, so it has no prior seq to skip"* —
+  `this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)`. Observed across every idle
+  session on one gateway within minutes: 16,120 → 544, 1,699 → 8, 4,494 → 228. The push payload
+  carries a bare `seq` with nothing to date it against, so one that sits on a lock screen across a
+  wake deep-links into a log that no longer exists — landing on an unrelated row, or, when the seq
+  now exceeds `lastSeq`, at the tail, which is the *documented* nil answer and therefore
+  indistinguishable from a bug. Known and unfixed; dating the payload is the shape of the fix.
 - **Two things 401 `pnpm smoke:push` against a real gateway.** `WD_AUTH_KEY` (the gateway's own
   operator secret, `<state-dir>/auth-key`) is needed the moment `--auth-key` is in play; and the
   host must be spelled **the way the gateway was started** — the Host-header guard rejects the
@@ -2219,6 +2246,31 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   item count *shrinks*. The route carries the seq as part of its identity, so a second notification
   about the same session is a destination SwiftUI treats as new; what makes a repeat tap on the
   *same* notification re-fire is still `clearRoute()` putting the pending route back to nil.
+- **`TranscriptSeqIndex` treats any item-count shrink as a `/clear` and drops every landmark — and
+  the reducer shrinks by one on ordinary streaming.** The wipe is right for `conversation_reset`,
+  where a stale landmark would scroll to a row that no longer exists. But `applyEvent`'s
+  `assistant_message` branch drops a streamed thinking placeholder, shrinking the list by one in a
+  perfectly normal turn, and the index goes with it. Every seq older than the last wipe then
+  resolves to item 0, so a deep link into a session that has ever shown thinking lands at the top
+  rather than on its row. Known and unfixed: the wipe needs to distinguish a reset from an
+  ordinary drop, which the counts alone cannot do — `note` has to be told which it was.
+- **The hold lifting is not the replay landing, and a jump's pin is derived from the bottom of
+  whatever has arrived.** `ReplayHold` also gives up on a stall (1.5s) and at a 20s ceiling, so on
+  a phone replaying thousands of events over a tailnet `!replaying` routinely means "shown early",
+  not "complete". `resolveFocus()` fired there, found the row, and `scrollToRow` then decided the
+  pin from where it landed — which, for any seq near the tail of what had arrived (or any row at
+  all in a transcript still shorter than the screen), is within `repinThreshold` of the bottom.
+  Pinned, every later replay event re-asserted the bottom and dragged the reader to the tail: seq
+  1 of 16,120 and seq 1,900 of 4,008 both landed at the foot on a real phone, and the simulator
+  reproduced it with the hold released at seq 1,503 of 8,472 (row 9 of 10 at 2,295 of 2,329
+  points → pinned → offset followed `bottom` for 1,200 epochs). The rule now lives in two pure
+  pieces the kit tests: `deepLinkPlacement` says whether the row was found against a complete
+  transcript (`lastSeq >= session.lastSeq`, never "the hold ended"), and
+  `TranscriptScrollGeometry.pinsAfterJump` never pins an incomplete jump — a row found mid-replay
+  is landed on, the escaped-regime anchor holds it still while the rest streams in below, and the
+  reader is never followed to the tail. A user jump or scrub (`complete: true`) keeps the old
+  rule: landing on the last row *is* going to the bottom. Reproduce without a device via the
+  simulator loop in `apps/ios/README.md` § Push deep links on the simulator.
 
 - **Closing a container must close what it contains, and only this renderer has to say so.**
   iOS holds expansion *beside* the rows (`TerminalExpansion`) because every frame comes from the

@@ -32,7 +32,7 @@ struct SessionView: View {
   /// The gateway this session belongs to — the watermark key's first half.
   private let hostId: UUID
   /// The event a tapped notification was about, when this screen was opened by
-  /// one. Resolved to a row once the replay has landed — see `focusTarget`.
+  /// one. Resolved to a row once the replay hold lifts — see `focusTarget`.
   private let focusSeq: Int?
   /// The `tool_use` id a **task** step under the sessions-list row named, when
   /// this screen was opened by one. Resolved to a row the same way `focusSeq`
@@ -477,16 +477,17 @@ struct SessionView: View {
   /// to land on, and a deep link there opens at the tail as it always has.
   private func resolveFocus() {
     guard let focusSeq, !focusResolved, let info = vm.session, !vm.replaying else { return }
-    if let item = vm.itemIndex(forSeq: focusSeq) {
-      focusResolved = true
-      focusTarget = .init(item: item, nonce: focusSeq)
+    switch deepLinkPlacement(
+      item: vm.itemIndex(forSeq: focusSeq), lastSeq: vm.state.lastSeq, attachLastSeq: info.lastSeq)
+    {
+    case .pending:
       return
+    case .unplaceable:
+      focusResolved = true
+    case .item(let item, let complete):
+      focusResolved = true
+      focusTarget = .init(item: item, nonce: focusSeq, complete: complete)
     }
-    // Nothing to land on *yet*. Give up only once the attach's stated seq has
-    // actually been reached — the hold can also end on a stall (see
-    // `armReplayHold`), and a transcript that is still filling in has not
-    // answered the question, it has merely been shown early.
-    if vm.state.lastSeq >= info.lastSeq { focusResolved = true }
   }
 
   // MARK: - Sub-task reveal
@@ -513,17 +514,18 @@ struct SessionView: View {
   /// renderer can do" look identical from the outside.
   private func resolveReveal() {
     guard let revealToolUseId, !revealResolved, let info = vm.session, !vm.replaying else { return }
-    if let item = toolCallItemIndex(vm.state.items, id: revealToolUseId) {
+    let item = toolCallItemIndex(vm.state.items, id: revealToolUseId)
+    switch deepLinkPlacement(item: item, lastSeq: vm.state.lastSeq, attachLastSeq: info.lastSeq) {
+    case .pending:
+      return
+    case .unplaceable:
+      revealResolved = true
+    case .item(let item, let complete):
       revealResolved = true
       // The item index is the nonce: this resolves once per screen, and a
       // second press of the same step is a new route and so a new screen.
-      focusTarget = .init(item: item, nonce: item)
-      return
+      focusTarget = .init(item: item, nonce: item, complete: complete)
     }
-    // Not there *yet*. Give up only once the attach's stated seq has been
-    // reached — the same settling `resolveFocus()` does, and for the same
-    // reason: a transcript still filling in has not answered the question.
-    if vm.state.lastSeq >= info.lastSeq { revealResolved = true }
   }
 
   // MARK: - Catch-up
@@ -907,8 +909,12 @@ struct SessionView: View {
   /// From inside the sheet the session is already open, so a spawn travels to
   /// its row directly rather than routing to the screen it is already on.
   private func revealTask(_ toolUseId: String) {
-    guard let item = toolCallItemIndex(vm.state.items, id: toolUseId) else { return }
-    focusTarget = .init(item: item, nonce: item)
+    guard let info = vm.session,
+      case .item(let item, let complete) = deepLinkPlacement(
+        item: toolCallItemIndex(vm.state.items, id: toolUseId), lastSeq: vm.state.lastSeq,
+        attachLastSeq: info.lastSeq)
+    else { return }
+    focusTarget = .init(item: item, nonce: item, complete: complete)
   }
 
   private var statusBar: some View {

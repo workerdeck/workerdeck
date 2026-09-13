@@ -38,6 +38,9 @@ struct TranscriptRevealRequest: Equatable, Sendable {
 struct TranscriptFocusRequest: Equatable, Sendable {
   var row: Int
   var nonce: Int
+  // Whether the transcript this row sits in has fully arrived. A row found while the replay is
+  // still filling is landed on but never followed — see `TranscriptScrollGeometry.pinsAfterJump`.
+  var complete: Bool
 }
 
 /// One frame's worth of scroll geometry, all in **content space** (the top
@@ -513,14 +516,9 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       scrollToRow(request.row, anchor: .top, animated: true)
     }
 
-    /// Take the reader to the row a deep link named.
-    ///
-    /// Unconditional, unlike ``reveal(_:)`` — and **unanimated**, which is the
-    /// one judgement here: this fires as the session opens, and animating it
-    /// would mean watching the whole transcript rush past on the way to a row
-    /// the reader has not seen yet. `scrollToRow` decides the pin from where it
-    /// lands, so landing anywhere but the foot leaves the tail unfollowed, which
-    /// is what stops the next applied event from yanking the reader back down.
+    // Take the reader to the row a deep link named. Unconditional, unlike `reveal(_:)`, and
+    // unanimated: this fires as the session opens, and animating it would mean watching the
+    // whole transcript rush past on the way to a row the reader has not seen yet.
     func focus(_ request: TranscriptFocusRequest?) {
       guard let request, request.nonce != focusedNonce else { return }
       guard collectionView != nil, request.row >= 0, request.row < rows.count else { return }
@@ -528,7 +526,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       // the very first epoch, and a request dropped because the collection view
       // was not mounted yet would never be offered again.
       focusedNonce = request.nonce
-      scrollToRow(request.row, anchor: .top, animated: false)
+      jump(to: request.row, anchor: .top, animated: false, complete: request.complete)
     }
 
     // MARK: Geometry
@@ -567,15 +565,19 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       book?.totalHeight ?? scrollView.contentSize.height
     }
 
-    private func bottomOffsetY(_ scrollView: UIScrollView) -> CGFloat {
+    private func geometry(_ scrollView: UIScrollView) -> TranscriptScrollGeometry {
       let inset = scrollView.adjustedContentInset
-      return max(
-        -inset.top,
-        contentHeight(scrollView) + inset.bottom - scrollView.bounds.height)
+      return TranscriptScrollGeometry(
+        contentHeight: contentHeight(scrollView), frameHeight: scrollView.bounds.height,
+        insetTop: inset.top, insetBottom: inset.bottom)
+    }
+
+    private func bottomOffsetY(_ scrollView: UIScrollView) -> CGFloat {
+      geometry(scrollView).bottom
     }
 
     private func clampedOffsetY(_ y: CGFloat, in scrollView: UIScrollView) -> CGFloat {
-      min(max(y, -scrollView.adjustedContentInset.top), bottomOffsetY(scrollView))
+      geometry(scrollView).clamped(y)
     }
 
     private func distanceFromBottom(_ scrollView: UIScrollView) -> CGFloat {
@@ -636,18 +638,21 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
 
     func scrollTo(contentOffset: CGFloat) {
       guard let cv = collectionView else { return }
-      let target = clampedOffsetY(contentOffset - cv.adjustedContentInset.top, in: cv)
-      // A scrub decides the pin from where it lands, like a jump: dragging the
-      // rail to its foot *is* going to the bottom.
-      setPinned(target >= bottomOffsetY(cv) - repinThreshold)
+      let geometry = geometry(cv)
+      let target = geometry.clamped(contentOffset - geometry.insetTop)
+      setPinned(geometry.pinsAfterJump(to: target, threshold: repinThreshold, complete: true))
       cv.setContentOffset(CGPoint(x: cv.contentOffset.x, y: target), animated: false)
       publishReadings(cv)
     }
 
     func scrollToRow(_ index: Int, anchor: TranscriptRowAnchor, animated: Bool) {
+      jump(to: index, anchor: anchor, animated: animated, complete: true)
+    }
+
+    private func jump(to index: Int, anchor: TranscriptRowAnchor, animated: Bool, complete: Bool) {
       guard let cv = collectionView, let book, index >= 0, index < rows.count else { return }
-      let inset = cv.adjustedContentInset
-      let visible = cv.bounds.height - inset.top - inset.bottom
+      let geometry = geometry(cv)
+      let visible = cv.bounds.height - geometry.insetTop - geometry.insetBottom
       let top = book.offset(at: index)
       let height = book.height(at: index)
       let contentY: CGFloat
@@ -659,10 +664,8 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       case .center: contentY = top + (height - visible) / 2
       case .bottom: contentY = top + height - visible
       }
-      let target = clampedOffsetY(contentY - inset.top, in: cv)
-      // A jump decides the pin from where it lands, not from where it left:
-      // jumping to the last row *is* going to the bottom.
-      setPinned(target >= bottomOffsetY(cv) - repinThreshold)
+      let target = geometry.clamped(contentY - geometry.insetTop)
+      setPinned(geometry.pinsAfterJump(to: target, threshold: repinThreshold, complete: complete))
       cv.setContentOffset(CGPoint(x: cv.contentOffset.x, y: target), animated: animated)
       if !animated { publishReadings(cv) }
     }

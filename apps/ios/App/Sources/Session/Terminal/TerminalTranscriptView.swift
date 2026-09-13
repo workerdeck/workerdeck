@@ -130,7 +130,9 @@ struct TerminalTranscriptView: View {
             // and the frame's rows fold a filtered list.
             focus: frame == nil
               ? focusItem.map {
-                TranscriptFocusRequest(row: model.rows.rowIndex(forItem: $0.item), nonce: $0.nonce)
+                TranscriptFocusRequest(
+                  row: model.rows.rowIndex(forItem: $0.item), nonce: $0.nonce,
+                  complete: $0.complete)
               } : nil,
             showsScrollIndicator: false,
             configureRow: { cell, index in
@@ -295,6 +297,7 @@ struct TerminalTranscriptView: View {
   struct TranscriptFocusTarget: Equatable {
     var item: Int
     var nonce: Int
+    var complete: Bool
   }
 
   /// What a refold is keyed on. The width belongs here as much as the revision

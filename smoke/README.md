@@ -211,6 +211,23 @@ point rather than a convenience. A hand-rolled payload carries no `sessionId`, s
 returns nil and the tap routes nowhere — which looks exactly like a broken deep link and is not one.
 If you are testing routing, the payload has to be the one the forwarder really sends.
 
+**Three rules, each of which cost an invalid run.** They are about the *test*, not the gateway:
+
+- **Push at an idle session.** Every `turn_completed` carries `collapseId: t:<hash(sessionId)>`
+  (`forwarder.ts`), so APNs **replaces** a session's notification rather than stacking it. A session
+  with an agent attached fires a real push whenever a turn ends, which silently takes the place of
+  the one you sent — a tap then opens a payload you did not write, with a seq near the tail, and the
+  correct landing reads as a bug. Observed: `focusSeq=11277` on a device that had been sent 2790.
+- **Force-quit the app first.** A warm attach has nothing to replay, so a deep link that lands
+  correctly and one that ignores `seq` entirely are indistinguishable.
+- **Re-read `lastSeq` immediately before sending.** A dormant wake starts a fresh log
+  (`parking.ts`: `this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)`), so a seq minted
+  minutes ago may now exceed `lastSeq` — which is the documented *nil* case and lands at the tail
+  for the right reason.
+
+The payload stays byte-identical to the forwarder's on purpose, collapse id included; a probe that
+diverged from what really ships would not be testing the thing that ships.
+
 Needs an `apns`-configured gateway: one without it answers `/apns/devices` with 404 and keeps no
 registry. Credentials come from the environment and must match that gateway's own `apns` config —
 this script is deliberately not a second place that knows how to mint one. `WD_STATE_DIR` points at

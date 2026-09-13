@@ -98,3 +98,20 @@ public struct TranscriptSeqIndex: Sendable, Equatable {
     return marks[low].item
   }
 }
+
+// What a deep link does with the row it looked up. `complete` is whether the attach's stated
+// seq has been reached — not whether the replay hold has ended, which it also does on a stall.
+// A row found while the transcript is still filling is landed on but must never be followed:
+// it sits at the tail of what has arrived so far, and a pin taken there is dragged down by
+// everything that lands after it.
+public enum DeepLinkPlacement: Equatable, Sendable {
+  case pending
+  case unplaceable
+  case item(Int, complete: Bool)
+}
+
+public func deepLinkPlacement(item: Int?, lastSeq: Int, attachLastSeq: Int) -> DeepLinkPlacement {
+  let complete = lastSeq >= attachLastSeq
+  if let item { return .item(item, complete: complete) }
+  return complete ? .unplaceable : .pending
+}

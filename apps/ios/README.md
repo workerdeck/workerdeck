@@ -130,14 +130,22 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     - `ToolRun.swift` / `ResultPreview.swift` / `TerminalFormat.swift` — the exact strings. In
       this theme **the string is the height**, so every summary, preview and affordance is
       spelled once, here, and never in a view.
+    - `TranscriptScrollGeometry.swift` — the scroll view's range in content-offset space (`top`,
+      `bottom`, `clamped`) and `pinsAfterJump`, the one rule for whether a jump re-arms the
+      bottom pin. Here because the coordinator in `App/` has no test host, and the bug it fixes
+      (a deep link into a still-filling transcript pinning at a bottom that was not the bottom
+      yet) is arithmetic on four numbers.
   - `TranscriptSeqIndex.swift` — where each event's rows landed in `items`, so a tapped push
     notification can open **on** the event it was about instead of at the tail. Deliberately
     *beside* the reducer, not in it: `TranscriptState` is a hand-mirror of the react reducer, and a
     field only the phone needs is a field the two copies would disagree about. The caller notes the
     item count either side of `applyEvent`; the lookup answers with the first item appended at or
     after a seq, which is what lets an event that appended nothing (a permission request) still
-    resolve. The two permanent limits — the cards renderer ignores `seq`, and a `seq` older than
-    retention lands at the top of what remains — are in `docs/CLIENTS.md`.
+    resolve. `deepLinkPlacement` beside it is the rule for acting on the answer: a row found while
+    the replay is still filling (the hold lifts on a stall, not only on the stated seq) is landed
+    on but marked incomplete, so the scroll never follows the tail from there. The two permanent
+    limits — the cards renderer ignores `seq`, and a `seq` older than retention lands at the top
+    of what remains — are in `docs/CLIENTS.md`.
   - `ModelName.swift` — `friendlyModel`, a 1:1 port of the rule in
     `packages/ui/src/lib/format.ts`: `claude-haiku-4-5-20251001` → "Haiku 4.5". A port and it has
     to stay one — a sessions list is where the same person reads all three clients, and a model
@@ -552,6 +560,42 @@ Point the app at your server's base URL (e.g. `http://your-mac.tailnet-name.ts.n
 paste the `--auth-key`. The app talks to `<base>/v1`. Plain-`http` hosts on a tailnet are
 allowed via an ATS exception in the app — tighten this if you ever distribute beyond personal
 use.
+
+## Push deep links on the simulator
+
+A tapped notification's landing can be checked without a device, APNs or a device token:
+`xcrun simctl push` delivers a payload straight to the booted simulator, and the app routes it
+exactly as it routes a real tap. Three one-time preparations: add the gateway in the app, answer
+the notifications prompt with Allow, and put the app on the terminal renderer (the cards
+renderer has no row model and opens at the tail by design):
+
+```sh
+xcrun simctl terminate booted bi.atomic.workerdeck.ios
+xcrun simctl spawn booted defaults write bi.atomic.workerdeck.ios bi.atomic.workerdeck.ios.transcriptVariant terminal
+```
+
+Then, with the app **force-quit** (a warm attach replays nothing, and the streaming replay is
+the condition every deep-link bug so far has needed), mint the payload the forwarder would —
+`Simulator Target Bundle` is what `simctl` reads, everything else must match `buildPush` in
+`packages/cli/src/apns/forwarder.ts` or `PushPayload.init?` returns nil and the tap routes
+nowhere — and tap the banner on the simulator window:
+
+```sh
+cat > /tmp/wd-push.json <<'JSON'
+{ "Simulator Target Bundle": "bi.atomic.workerdeck.ios",
+  "aps": { "alert": { "title": "probe", "body": "should land on seq N" }, "sound": "default",
+           "category": "SESSION_EVENT", "thread-id": "<sessionId>" },
+  "type": "turn_completed", "sessionId": "<sessionId>", "seq": N }
+JSON
+xcrun simctl push booted bi.atomic.workerdeck.ios /tmp/wd-push.json
+```
+
+Read the session's `lastSeq` from `GET /v1/sessions` immediately before minting: a dormant wake
+renumbers a session's log from seq 0, and a `seq` above `lastSeq` is the documented nil case that
+lands at the tail on purpose — indistinguishable from a landing bug. The hold's own report
+(`[attach] attach landed|released …`, subsystem `bi.atomic.workerdeck`, category `attach`) says
+whether the replay was complete when the transcript was revealed; `released` is the streaming
+case.
 
 ## Pushing a build to your phone
 

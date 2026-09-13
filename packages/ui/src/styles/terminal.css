@@ -401,6 +401,14 @@
   background: var(--term-user-bg);
   margin-inline: calc(-1 * var(--term-bleed, 0px));
   padding-inline: var(--term-bleed, 0px);
+  /* Declared, never inherited. This band is the one transcript block that is
+     neither a `.term-press` nor plain flow text, so without saying so it takes
+     whatever the host gives it — which differs between the browser and the VS
+     Code webview, and a block that cannot host a selection endpoint does not
+     merely refuse the drag: the selection jumps to the next valid position
+     above it, swallowing everything in between. */
+  user-select: text;
+  cursor: text;
 }
 
 [data-terminal] .term-link {

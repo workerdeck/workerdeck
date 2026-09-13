@@ -615,8 +615,13 @@ and should not be — a pointer is exact and a thumb is not, and `press.tsx`'s r
 that travelled, refuse one with a selection standing) are the pointer's version of the same care.
 A **deep link lands on the row that triggered it** rather than at the tail: `TranscriptSeqIndex`
 (see `docs/GOTCHAS.md`) maps the push payload's `seq` to the first item appended at or after it,
-and `resolveFocus()` is asked **once**, when the attach's stated seq is reached. Two limits are
-permanent rather than debt. The **cards renderer ignores `seq`** — `TranscriptListView` has no row
+and `resolveFocus()` is asked from the moment the replay hold lifts, settling **once**. The hold
+can lift on a stall, so a row can be found while the transcript is still filling; the kit's
+`deepLinkPlacement` then lands on it but marks it incomplete, and
+`TranscriptScrollGeometry.pinsAfterJump` refuses to re-arm the bottom pin from where such a jump
+lands — the bottom of a filling transcript is not the bottom, and a pin taken there dragged the
+reader to the tail with the rest of the replay (`docs/GOTCHAS.md`). Two limits are permanent
+rather than debt. The **cards renderer ignores `seq`** — `TranscriptListView` has no row
 model to land on, so a deep link there opens at the tail as it always has; deliberate, the
 terminal theme being the default. And a **`seq` older than retention** lands on the top of what
 remains, which is the closest the transcript can get, untested against a real retention cut.

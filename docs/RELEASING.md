@@ -685,6 +685,44 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   the switch would have shipped an inert one. `TerminalRows`' `recapAt`/`recapLabel` machinery is
   still there, unwired — the iOS half of this is the obvious next cycle.
 
+  **2.2.1** — **the deep link lands where it was pointed, and the user band can be selected.**
+  A **patch**: two bug fixes, nothing additive, no API or wire change; **protocol stays 1**.
+
+  **A tapped notification was landing at the tail instead of on its row**, on every client surface
+  that streams. `ReplayHold` lifts on a 1.5s stall as well as on the stated seq, so `!replaying`
+  routinely means "shown early" rather than "complete"; `resolveFocus` found the row and
+  `scrollToRow` then derived the pin from where it landed — which, in a transcript still filling,
+  is within `repinThreshold` of the bottom. Pinned, every later replay event re-asserted the
+  bottom. The rule now lives in two pure kit pieces: `deepLinkPlacement` reports whether the row
+  was found against a *complete* transcript (`lastSeq >= session.lastSeq`, never "the hold ended"),
+  and `TranscriptScrollGeometry.pinsAfterJump` refuses to pin an incomplete jump. A user jump or
+  scrub is unchanged — landing on the last row still *is* going to the bottom. The same hazard was
+  fixed in `resolveReveal` and `revealTask`.
+
+  **The terminal theme's user band declares its own selectability.** `.term-user` is the one block
+  that is neither a `.term-press` nor plain flow text, and it said nothing about `user-select` or
+  `cursor`, so it inherited the host's default — selectable with an arrow cursor on the web, and
+  **not selectable at all in the VS Code webview**, where the selection jumped past it and
+  swallowed everything above. Declared now, as `.term-press` already did deliberately.
+
+  **Verification is uneven and recorded as such.** The fix's `complete: true` branch is confirmed
+  on a physical device from an instrumented trace; `complete: false`, the branch it exists for, is
+  green on the simulator only — a phone on a tailnet lands 5,100 events in ~1s and never streams
+  long enough to reach it without Network Link Conditioner.
+
+  **Two defects ship knowingly**, both written up in `docs/GOTCHAS.md`: a dormant wake renumbers a
+  session's seqs (`parking.ts`) and the push payload carries nothing to date a `seq` against, so a
+  notification outliving a wake deep-links into a log that no longer exists; and
+  `TranscriptSeqIndex.note` wipes every landmark on *any* item-count shrink, which the reducer does
+  on an ordinary dropped thinking placeholder. Neither is a scroll problem and neither was in scope.
+
+  **The cycle's real lesson was about testing, not scrolling.** Three of four "failures" on device
+  were the harness: `turn_completed` carries a session-keyed `collapseId`, so a real turn push
+  *replaces* a test push, and the large session chosen for the runs was the one driving the live
+  Claude conversation — the phone tapped a payload carrying seq 11,277 when 2,790 had been sent,
+  landed correctly on its tail, and read as a failure three times. `smoke/README.md` now carries
+  the three rules: push at an idle session, force-quit first, and confirm the seq that *arrived*.
+
   **2.2.0** — **`!` shell mode, and the composer's buttons on a thumb.** A **minor**, additive
   throughout; **protocol stays 1** — `AttachedFrame.shell?` and the `shell_command` command are
   both additive, so an older gateway simply advertises nothing and no mismatch banner fires.
