@@ -2202,14 +2202,23 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   landed correctly on its tail, and read as a deep-link failure — three times, before a device
   trace caught it. **Push at an idle session, force-quit first, and confirm the seq that arrived
   rather than the one you sent.** `smoke/README.md` carries the three rules.
-- **A dormant wake renumbers a session's seqs, and a notification can outlive one.**
+- **A dormant wake renumbers a session's seqs, so every seq needs an epoch to be worth anything.**
   `parking.ts`: *"a dormant session starts a fresh log, so it has no prior seq to skip"* —
   `this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)`. Observed across every idle
-  session on one gateway within minutes: 16,120 → 544, 1,699 → 8, 4,494 → 228. The push payload
-  carries a bare `seq` with nothing to date it against, so one that sits on a lock screen across a
-  wake deep-links into a log that no longer exists — landing on an unrelated row, or, when the seq
-  now exceeds `lastSeq`, at the tail, which is the *documented* nil answer and therefore
-  indistinguishable from a bug. Known and unfixed; dating the payload is the shape of the fix.
+  session on one gateway within minutes: 16,120 → 544, 1,699 → 8, 4,494 → 228. A push payload
+  carrying a bare `seq` therefore deep-linked into a log that no longer existed — landing on an
+  unrelated row, or, when the seq now exceeded `lastSeq`, at the tail, which is the *documented*
+  nil answer and so indistinguishable from a bug. What dates it is `SessionInfo.epoch`: the
+  gateway bumps it on every dormant wake (`server.ts`'s `rebuild`, applied **after** the host's
+  `buildRunnerConfig` hook, which is free to rebuild the config from the request and would drop a
+  field it has never heard of), the runners echo `config.epoch` from `info()`, the forwarder puts
+  it beside `seq`, and `deepLinkSeqSurvives` refuses a mismatch and lands at the tail. Three rules
+  hold it up: **absent on either side means "same log"** (an older gateway never says otherwise,
+  and a session that has never woken is still on its first log), so the field stays additive and
+  costs no `PROTOCOL_VERSION` bump; the epoch travels through the *config*, so `parking.ts` must
+  remember the config the runner was actually built with (`remember(id, { ...record.config, epoch:
+  runner.info().epoch })`) or a later park resurrects the old one; and it dates the seq only —
+  nothing else may key on it.
 - **Two things 401 `pnpm smoke:push` against a real gateway.** `WD_AUTH_KEY` (the gateway's own
   operator secret, `<state-dir>/auth-key`) is needed the moment `--auth-key` is in play; and the
   host must be spelled **the way the gateway was started** — the Host-header guard rejects the
@@ -2237,23 +2246,27 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   recorded as the transcript folds.** The payload's `seq` is the event behind the notification;
   nothing in the reduced transcript state can place it afterwards, because items are folded,
   merged and mutated by later events and only a few embed a seq in their id. iOS therefore keeps a
-  landmark table beside the reducer (`TranscriptSeqIndex`), noting the item count either side of
+  landmark table beside the reducer (`TranscriptSeqIndex`), noting the item list either side of
   each `applyEvent` — **beside**, not inside, because `TranscriptState` is a hand-mirror of the
   react reducer and a field only one client needs is a field the two copies will disagree about.
   Two rules fall out of it: the lookup answers with the first item appended *at or after* a seq
   (an event that appends nothing — a permission request — must still resolve somewhere honest),
-  and a `conversation_reset` invalidates every recorded index, so the table is dropped whenever the
-  item count *shrinks*. The route carries the seq as part of its identity, so a second notification
+  and a `conversation_reset` invalidates every recorded index, so the landmarks go with it. The
+  route carries the seq as part of its identity, so a second notification
   about the same session is a destination SwiftUI treats as new; what makes a repeat tap on the
   *same* notification re-fire is still `clearRoute()` putting the pending route back to nil.
-- **`TranscriptSeqIndex` treats any item-count shrink as a `/clear` and drops every landmark — and
-  the reducer shrinks by one on ordinary streaming.** The wipe is right for `conversation_reset`,
-  where a stale landmark would scroll to a row that no longer exists. But `applyEvent`'s
-  `assistant_message` branch drops a streamed thinking placeholder, shrinking the list by one in a
-  perfectly normal turn, and the index goes with it. Every seq older than the last wipe then
-  resolves to item 0, so a deep link into a session that has ever shown thinking lands at the top
-  rather than on its row. Known and unfixed: the wipe needs to distinguish a reset from an
-  ordinary drop, which the counts alone cannot do — `note` has to be told which it was.
+- **A shrinking item list is not a `/clear`, and counts cannot tell them apart.** `note` once
+  treated any item-count shrink as a reset and dropped every landmark — right for
+  `conversation_reset`, where a stale landmark scrolls to a row that no longer exists, but
+  `applyEvent`'s `assistant_message` branch also drops the streamed thinking placeholder it
+  supersedes, shrinking the list by one in a perfectly normal turn. Every seq older than the last
+  wipe then resolved to item 0, so a deep link into any session that had ever shown thinking landed
+  at the top rather than on its row. `note` takes the two item *lists* instead: the index where
+  their ids first diverge is where this event's rows begin, landmarks at or past it are dropped
+  and earlier ones survive, and an emptied list falls out as the reset case without a special
+  case. The O(n) walk is guarded by an O(1) check — if the last item of `before` is still at its
+  old index in `after`, nothing earlier moved and the event only appended — so a replay of
+  thousands of events does not pay for it.
 - **The hold lifting is not the replay landing, and a jump's pin is derived from the bottom of
   whatever has arrived.** `ReplayHold` also gives up on a stall (1.5s) and at a 20s ceiling, so on
   a phone replaying thousands of events over a tailnet `!replaying` routinely means "shown early",

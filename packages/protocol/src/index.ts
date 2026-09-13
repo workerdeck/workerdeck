@@ -620,6 +620,12 @@ export type SessionInfo = {
   apiKeySource?: string
   createdAt: number
   lastSeq: number
+  // Which log the seqs belong to. A dormant wake starts a fresh log and bumps it, so a `seq`
+  // that outlived one — a notification sitting on a lock screen — can be told from a live one.
+  // Absent from a gateway that predates it, and from a session that has never woken; additive,
+  // so no `PROTOCOL_VERSION` bump, and a reader that finds it absent on either side must keep
+  // trusting the seq.
+  epoch?: number
   pendingPermissionCount: number
   subagents?: SubagentInfo[]
   checklist?: ChecklistItem[]

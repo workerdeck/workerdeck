@@ -393,7 +393,9 @@ export class SessionParkManager {
       throw error
     }
     this.#options.registry.register(runner)
-    this.remember(id, record.config)
+    // The config the runner was actually built with, not the one on the record: a dormant wake
+    // bumps the epoch, and the next park must carry the new one rather than resurrect the old.
+    this.remember(id, { ...record.config, epoch: runner.info().epoch })
     // A park must not re-arm watchdogs from its own replayed events; a dormant session starts a fresh log, so it has no prior seq to skip.
     this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)
     this.#options.onResumed?.(id, runner)

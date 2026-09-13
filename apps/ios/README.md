@@ -138,10 +138,12 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
   - `TranscriptSeqIndex.swift` — where each event's rows landed in `items`, so a tapped push
     notification can open **on** the event it was about instead of at the tail. Deliberately
     *beside* the reducer, not in it: `TranscriptState` is a hand-mirror of the react reducer, and a
-    field only the phone needs is a field the two copies would disagree about. The caller notes the
-    item count either side of `applyEvent`; the lookup answers with the first item appended at or
-    after a seq, which is what lets an event that appended nothing (a permission request) still
-    resolve. `deepLinkPlacement` beside it is the rule for acting on the answer: a row found while
+    field only the phone needs is a field the two copies would disagree about. The caller hands it
+    the item list either side of `applyEvent` — the lists, not their counts, because a normal turn
+    shrinks the list too and only the ids say where the change began; the lookup answers with the
+    first item appended at or after a seq, which is what lets an event that appended nothing (a
+    permission request) still resolve. `deepLinkSeqSurvives` beside it refuses a seq numbered in a
+    log the session has since woken out of (`SessionInfo.epoch`). `deepLinkPlacement` beside it is the rule for acting on the answer: a row found while
     the replay is still filling (the hold lifts on a stall, not only on the stated seq) is landed
     on but marked incomplete, so the scroll never follows the tail from there. The two permanent
     limits — the cards renderer ignores `seq`, and a `seq` older than retention lands at the top
@@ -585,14 +587,16 @@ cat > /tmp/wd-push.json <<'JSON'
 { "Simulator Target Bundle": "bi.atomic.workerdeck.ios",
   "aps": { "alert": { "title": "probe", "body": "should land on seq N" }, "sound": "default",
            "category": "SESSION_EVENT", "thread-id": "<sessionId>" },
-  "type": "turn_completed", "sessionId": "<sessionId>", "seq": N }
+  "type": "turn_completed", "sessionId": "<sessionId>", "seq": N, "epoch": E }
 JSON
 xcrun simctl push booted bi.atomic.workerdeck.ios /tmp/wd-push.json
 ```
 
-Read the session's `lastSeq` from `GET /v1/sessions` immediately before minting: a dormant wake
-renumbers a session's log from seq 0, and a `seq` above `lastSeq` is the documented nil case that
-lands at the tail on purpose — indistinguishable from a landing bug. The hold's own report
+Read the session's `lastSeq` **and `epoch`** from `GET /v1/sessions` immediately before minting: a
+dormant wake renumbers a session's log from seq 0, and a `seq` above `lastSeq` is the documented
+nil case that lands at the tail on purpose — indistinguishable from a landing bug. Omit `epoch`
+against a session that has one and the app refuses the seq for exactly that reason, landing at the
+tail; drop the key entirely only when the session reports none. The hold's own report
 (`[attach] attach landed|released …`, subsystem `bi.atomic.workerdeck`, category `attach`) says
 whether the replay was complete when the transcript was revealed; `released` is the streaming
 case.

@@ -7,14 +7,18 @@ import Testing
 /// here and the app is left with plumbing.
 @Suite("TranscriptSeqIndex")
 struct TranscriptSeqIndexTests {
-  /// Fold a script of `(seq, appended)` into an index.
+  private func rows(_ ids: [String]) -> [TranscriptItem] {
+    ids.map { .notice(id: $0, level: .info, text: $0) }
+  }
+
+  /// Fold a script of `(seq, appended)` into an index, minting a fresh row id per append.
   private func index(_ script: [(seq: Int, appended: Int)]) -> TranscriptSeqIndex {
     var index = TranscriptSeqIndex()
-    var count = 0
+    var ids: [String] = []
     for step in script {
-      let before = count
-      count += step.appended
-      index.note(seq: step.seq, itemsBefore: before, itemsAfter: count)
+      let before = ids
+      for _ in 0..<step.appended { ids.append("r\(ids.count)") }
+      index.note(seq: step.seq, before: rows(before), after: rows(ids))
     }
     return index
   }
@@ -37,12 +41,9 @@ struct TranscriptSeqIndexTests {
   func nearestAfter() {
     // seq 6 mutated an existing item (a tool result settling onto its call) and
     // recorded nothing; the row nearest after it is seq 9's.
-    var built = TranscriptSeqIndex()
-    built.note(seq: 2, itemsBefore: 0, itemsAfter: 1)
-    built.note(seq: 6, itemsBefore: 1, itemsAfter: 1)
-    built.note(seq: 9, itemsBefore: 1, itemsAfter: 2)
-    #expect(built.item(forSeq: 6) == 1)
-    #expect(built.count == 2)
+    let index = index([(2, 1), (6, 0), (9, 1)])
+    #expect(index.item(forSeq: 6) == 1)
+    #expect(index.count == 2)
   }
 
   @Test("a seq older than anything held lands on the top of what there is")
@@ -64,31 +65,57 @@ struct TranscriptSeqIndexTests {
   @Test("a /clear drops every landmark it invalidated")
   func conversationReset() {
     var built = TranscriptSeqIndex()
-    built.note(seq: 2, itemsBefore: 0, itemsAfter: 1)
-    built.note(seq: 5, itemsBefore: 1, itemsAfter: 3)
-    // conversation_reset empties `items`; every recorded index now points past
-    // the end of the list.
-    built.note(seq: 8, itemsBefore: 3, itemsAfter: 0)
+    built.note(seq: 2, before: [], after: rows(["a"]))
+    built.note(seq: 5, before: rows(["a"]), after: rows(["a", "b", "c"]))
+    built.note(seq: 8, before: rows(["a", "b", "c"]), after: [])
     #expect(built.isEmpty)
     #expect(built.item(forSeq: 2) == nil)
-    built.note(seq: 11, itemsBefore: 0, itemsAfter: 1)
+    built.note(seq: 11, before: [], after: rows(["d"]))
     #expect(built.item(forSeq: 11) == 0)
   }
 
   @Test("a reset that leaves rows behind starts them at zero")
   func resetLeavingRows() {
+    // A compaction that replaced the history with a summary: nothing of the old
+    // list survives, so the surviving landmark is the summary's own.
     var built = TranscriptSeqIndex()
-    built.note(seq: 2, itemsBefore: 0, itemsAfter: 4)
-    built.note(seq: 8, itemsBefore: 4, itemsAfter: 1)
+    built.note(seq: 2, before: [], after: rows(["a", "b", "c", "d"]))
+    built.note(seq: 8, before: rows(["a", "b", "c", "d"]), after: rows(["summary"]))
     #expect(built.count == 1)
     #expect(built.item(forSeq: 8) == 0)
+  }
+
+  @Test("a streamed placeholder giving way to its finished message keeps the older landmarks")
+  func streamedThinkingSuperseded() {
+    // `assistant_message` drops the streamed thinking row it supersedes, shrinking the
+    // list by one in a perfectly ordinary turn. Treating that as a `/clear` is what left
+    // every session that has ever shown thinking with no landmarks at all.
+    var built = TranscriptSeqIndex()
+    built.note(seq: 2, before: [], after: rows(["prompt"]))
+    built.note(seq: 4, before: rows(["prompt"]), after: rows(["prompt", "stream-thinking"]))
+    built.note(
+      seq: 7, before: rows(["prompt", "stream-thinking"]), after: rows(["prompt", "msg-0"]))
+    #expect(built.item(forSeq: 2) == 0)
+    #expect(built.item(forSeq: 7) == 1)
+  }
+
+  @Test("a message that replaces one streamed row with two starts at the first of them")
+  func streamedTextSupersededByTwoBlocks() {
+    var built = TranscriptSeqIndex()
+    built.note(seq: 2, before: [], after: rows(["prompt"]))
+    built.note(seq: 4, before: rows(["prompt"]), after: rows(["prompt", "stream-text"]))
+    built.note(
+      seq: 7, before: rows(["prompt", "stream-text"]),
+      after: rows(["prompt", "msg-0", "msg-1"]))
+    #expect(built.item(forSeq: 7) == 1)
+    #expect(built.item(forSeq: 2) == 0)
   }
 
   @Test("a seq that does not advance is refused")
   func nonAdvancingSeq() {
     var built = TranscriptSeqIndex()
-    built.note(seq: 5, itemsBefore: 0, itemsAfter: 1)
-    built.note(seq: 5, itemsBefore: 1, itemsAfter: 2)
+    built.note(seq: 5, before: [], after: rows(["a"]))
+    built.note(seq: 5, before: rows(["a"]), after: rows(["a", "b"]))
     #expect(built.count == 1)
     #expect(built.item(forSeq: 5) == 0)
   }
@@ -98,12 +125,11 @@ struct TranscriptSeqIndexTests {
     // Every second event appends, so the answer is checkable in closed form and
     // the search is exercised well past the point a walk would still pass.
     var built = TranscriptSeqIndex()
-    var count = 0
+    var ids: [String] = []
     for step in 0..<500 {
-      let seq = step * 2 + 1
-      let before = count
-      count += step.isMultiple(of: 2) ? 1 : 0
-      built.note(seq: seq, itemsBefore: before, itemsAfter: count)
+      let before = ids
+      if step.isMultiple(of: 2) { ids.append("r\(ids.count)") }
+      built.note(seq: step * 2 + 1, before: rows(before), after: rows(ids))
     }
     #expect(built.item(forSeq: 1) == 0)
     // seq 5 is step 2, the second appending event.
@@ -111,6 +137,27 @@ struct TranscriptSeqIndexTests {
     // seq 4 appended nothing (it is not even an event) — round up to step 2's.
     #expect(built.item(forSeq: 4) == 1)
     #expect(built.item(forSeq: 997) == 249)
+  }
+}
+
+@Suite("deepLinkSeqSurvives")
+struct DeepLinkSeqSurvivesTests {
+  @Test("a gateway that never names a log is trusted, as it was before the field existed")
+  func bothAbsent() {
+    #expect(deepLinkSeqSurvives(pushEpoch: nil, sessionEpoch: nil))
+  }
+
+  @Test("a session still on its first log is trusted")
+  func sameEpoch() {
+    #expect(deepLinkSeqSurvives(pushEpoch: 2, sessionEpoch: 2))
+  }
+
+  @Test("a push that sat on a lock screen across a wake is refused")
+  func staleAcrossWake() {
+    // The wake renumbers the log, so the payload's seq now names some unrelated row —
+    // the failure the counts cannot see, because a small seq is a plausible one.
+    #expect(!deepLinkSeqSurvives(pushEpoch: nil, sessionEpoch: 1))
+    #expect(!deepLinkSeqSurvives(pushEpoch: 1, sessionEpoch: 2))
   }
 }
 

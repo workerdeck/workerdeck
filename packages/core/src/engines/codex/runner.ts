@@ -488,6 +488,7 @@ type PendingCodexApproval = {
 }
 
 export type CodexRunnerConfig = CreateSessionRequest & {
+  epoch?: number
   connectFn: AppServerConnectFn
   env?: Record<string, string | undefined>
   codexHome?: string
@@ -621,6 +622,7 @@ export class CodexRunner implements Runner {
       permissionMode: this.#permissionMode,
       canBypassPermissions: true,
       createdAt: this.createdAt,
+      epoch: this.#config.epoch,
       lastSeq: this.#log.seq,
       activityCount: this.#log.activityCount,
       proseCount: this.#log.proseCount,

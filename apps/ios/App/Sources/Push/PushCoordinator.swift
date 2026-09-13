@@ -121,7 +121,8 @@ final class PushCoordinator {
       await resolve(payload: payload, allow: action == PushAction.approve)
     case UNNotificationDefaultActionIdentifier:
       pendingRoute = PushRoute(
-        hostId: payload.hostId, sessionId: payload.sessionId, seq: payload.seq)
+        hostId: payload.hostId, sessionId: payload.sessionId, seq: payload.seq,
+        epoch: payload.epoch)
     default:
       // Dismissal, or an action identifier from a build that is not this one.
       return
@@ -173,6 +174,7 @@ final class PushCoordinator {
     // Carried through so tapping the *failure* lands on the same row the
     // notification it failed to answer would have.
     if let seq = payload.seq { content.userInfo["seq"] = seq }
+    if let epoch = payload.epoch { content.userInfo["epoch"] = epoch }
     content.threadIdentifier = payload.sessionId
     try? await UNUserNotificationCenter.current().add(
       UNNotificationRequest(

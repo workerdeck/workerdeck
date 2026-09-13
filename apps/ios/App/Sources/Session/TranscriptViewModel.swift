@@ -334,10 +334,9 @@ final class TranscriptViewModel {
         // are the two things every view watches, so leaving both alone is what
         // makes the hold cover the whole screen rather than one subview.
         var buffer = replayBuffer ?? state
-        let before = buffer.items.count
+        let before = buffer.items
         buffer = applyEvent(buffer, sessionEvent)
-        seqIndex.note(
-          seq: sessionEvent.seq, itemsBefore: before, itemsAfter: buffer.items.count)
+        seqIndex.note(seq: sessionEvent.seq, before: before, after: buffer.items)
         replayBuffer = buffer
         // Charged before the hold is advanced: `advanceReplayHold` can end the
         // hold, which reports, and the fold that completed the replay is part
@@ -348,9 +347,9 @@ final class TranscriptViewModel {
         profile?.seq = buffer.lastSeq
         advanceReplayHold(lastSeq: buffer.lastSeq)
       } else {
-        let before = state.items.count
+        let before = state.items
         state = applyEvent(state, sessionEvent)
-        seqIndex.note(seq: sessionEvent.seq, itemsBefore: before, itemsAfter: state.items.count)
+        seqIndex.note(seq: sessionEvent.seq, before: before, after: state.items)
         revision &+= 1
           }
       if case .systemInit(let info) = sessionEvent.body, initModel == nil {

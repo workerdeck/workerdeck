@@ -102,7 +102,10 @@ struct SessionListView: View {
     }
     // Replaces rather than appends, so Back from a pushed-to session lands on
     // the list however deep the stack happened to be.
-    path = [.session(hostId: hostId, sessionId: route.sessionId, seq: route.seq)]
+    path = [
+      .session(
+        hostId: hostId, sessionId: route.sessionId, seq: route.seq, epoch: route.epoch)
+    ]
     push.clearRoute()
   }
 
@@ -111,11 +114,11 @@ struct SessionListView: View {
   @ViewBuilder
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
-    case .session(let hostId, let sessionId, let seq, let subagent, let reveal):
+    case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal):
       if let context = model?.context(for: hostId) {
         SessionView(
           sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
-          openSubagent: subagent, revealToolUseId: reveal)
+          focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal)
       } else {
         missingHost
       }

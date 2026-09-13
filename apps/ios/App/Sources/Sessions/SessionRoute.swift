@@ -24,8 +24,8 @@ enum SessionRoute: Hashable {
   ///   the kinds different destinations rather than teaching the frame to cope.
   ///   Part of the identity for the same reason the other two are.
   case session(
-    hostId: UUID, sessionId: String, seq: Int? = nil, subagent: String? = nil,
-    reveal: String? = nil)
+    hostId: UUID, sessionId: String, seq: Int? = nil, epoch: Int? = nil,
+    subagent: String? = nil, reveal: String? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
 
   // Where a step line under a session row goes. Here rather than at the list,

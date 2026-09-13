@@ -51,6 +51,7 @@ export type HistoryFn = (sdkSessionId: string, options: { dir?: string }) => Pro
 export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SDKSessionInfo | undefined>
 
 export type SessionRunnerConfig = CreateSessionRequest & {
+  epoch?: number
   queryFn?: QueryFn
   env?: Record<string, string | undefined>
   pathToClaudeCodeExecutable?: string
@@ -141,6 +142,7 @@ export class SessionRunner implements Runner {
       canBypassPermissions: this.#config.permissionMode === 'bypassPermissions' || this.#config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
       createdAt: this.createdAt,
+      epoch: this.#config.epoch,
       lastSeq: this.#log.seq,
       activityCount: this.#log.activityCount,
       proseCount: this.#log.proseCount,

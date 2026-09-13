@@ -28,6 +28,7 @@ import { sessionTitle, withTitle } from '../../lib/title.ts'
 const SUPPORTED_PERMISSION_MODES: readonly PermissionMode[] = ['default', 'bypassPermissions', 'dontAsk']
 
 export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
+  epoch?: number
   cwd?: string
   languageModel: LanguageModel
   tools?: ToolSet
@@ -188,6 +189,7 @@ export class AiSdkRunner implements Runner {
       model: this.#modelId(),
       permissionMode: this.#permissionMode,
       createdAt: this.createdAt,
+      epoch: this.#config.epoch,
       lastSeq: this.#log.seq,
       activityCount: this.#log.activityCount,
       proseCount: this.#log.proseCount,

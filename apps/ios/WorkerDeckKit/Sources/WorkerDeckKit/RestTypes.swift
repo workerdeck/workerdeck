@@ -556,6 +556,12 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let createdAt: Double
   /// Highest event seq emitted so far; attach with `afterSeq` to catch up.
   public let lastSeq: Int
+  /// Which log `lastSeq` counts in. A dormant wake starts the session's log again from
+  /// zero, so a seq kept across one — the one on a notification that sat on a lock screen —
+  /// addresses a row that no longer exists. Absent on a gateway that predates the field and
+  /// on a session that has never woken; **absent on either side means "same log"**, which is
+  /// the behaviour this client had before it existed.
+  public let epoch: Int?
   public let pendingPermissionCount: Int
   public let meta: [String: JSONValue]?
   /// Display title: meta.title if the host set one, else derived (e.g. first prompt).
@@ -628,7 +634,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     capabilities: EngineCapabilities? = nil, model: String? = nil,
     permissionMode: PermissionMode? = nil, canBypassPermissions: Bool? = nil,
     apiKeySource: String? = nil,
-    createdAt: Double, lastSeq: Int, pendingPermissionCount: Int,
+    createdAt: Double, lastSeq: Int, epoch: Int? = nil, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
     numTurns: Int? = nil, activityCount: Int? = nil, proseCount: Int? = nil,
     lastActivityAt: Double? = nil,
@@ -649,6 +655,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.apiKeySource = apiKeySource
     self.createdAt = createdAt
     self.lastSeq = lastSeq
+    self.epoch = epoch
     self.pendingPermissionCount = pendingPermissionCount
     self.meta = meta
     self.title = title

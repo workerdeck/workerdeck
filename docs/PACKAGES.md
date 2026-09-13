@@ -17,7 +17,7 @@ older one. **From the public launch it is locked** — after that a bump is a re
 someone else's build, and the version-mismatch banner (`use-session.ts`, `SessionPanel`, iOS's
 `protocolMismatch`) is what makes it visible. The banner logic is untouched by the reset; only
 the number it compares moved. The lesson the reset paid for: an *additive* field never earns a
-bump (see `proseCount`, `contextUsage`, `project`, 0.18.0's sub-agents) — bumping for one warns
+bump (see `proseCount`, `contextUsage`, `project`, `epoch`, 0.18.0's sub-agents) — bumping for one warns
 every operator whose gateway is merely a release behind, about nothing. It also owns the
 few *rules* both sides must agree on rather than each guess: `transcriptActivity(event)` is
 the row-count rule the react reducer renders by and the runners count with
@@ -28,7 +28,11 @@ the row-count rule the react reducer renders by and the runners count with
 `thinking` and `tool_use` score zero there, which is the whole point: a session that tool-loops
 for a minute was ticking a badge 6, 7, 8 with nothing yet said. A successful `turn_result`
 scores zero too — it already carried its own prose, and counting both double-counts every
-answer. The two numbers are **not interchangeable**: `activityCount` stays "has anything
+answer. `SessionInfo.epoch` is the third such rule, and the shortest: **a `seq` only means anything in
+the log it was numbered in.** A dormant wake starts the log again from zero, so anything that
+keeps a seq across one — a push on a lock screen, a cached tool-result address — must carry the
+epoch beside it and refuse a mismatch. Absent on either side means "same log", which is what
+keeps the field additive. The two numbers are **not interchangeable**: `activityCount` stays "has anything
 happened at all", which is what sorting and dormancy read; `proseCount` is "is there something
 to read". Purely additive — an optional field an older client ignores and a newer one falls
 back from — so deliberately **no `PROTOCOL_VERSION` bump**, the 0.18.0 precedent. `unseenCount`

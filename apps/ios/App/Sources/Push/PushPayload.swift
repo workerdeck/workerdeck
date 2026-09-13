@@ -27,6 +27,9 @@ struct PushPayload: Sendable, Equatable {
   /// Optional like `hostId`, and for the same reason: a hand-crafted
   /// `simctl push` carries none and must still deep-link to the session.
   let seq: Int?
+  /// Which log `seq` counts in (`SessionInfo.epoch`). A wake renumbers the log, so a payload
+  /// that outlived one has to be told from a current one — see `deepLinkSeqSurvives`.
+  let epoch: Int?
 
   init?(userInfo: [AnyHashable: Any]) {
     guard let sessionId = userInfo["sessionId"] as? String, !sessionId.isEmpty else { return nil }
@@ -37,6 +40,7 @@ struct PushPayload: Sendable, Equatable {
     // APNs hands JSON numbers over as `NSNumber`, which bridges to `Int` — but
     // only a positive one is a seq, and 0 is "no event" rather than the first.
     seq = (userInfo["seq"] as? NSNumber).map(\.intValue).flatMap { $0 > 0 ? $0 : nil }
+    epoch = (userInfo["epoch"] as? NSNumber).map(\.intValue)
   }
 }
 
@@ -53,6 +57,9 @@ struct PushRoute: Sendable, Hashable {
   /// notification re-fire is `clearRoute()` putting the value back to nil, not
   /// this field — see `SessionListView.consumePushRoute`.)
   var seq: Int?
+  /// Carried beside `seq` because it is what makes it trustworthy, and part of the identity
+  /// for the same reason `seq` is.
+  var epoch: Int?
 }
 
 /// Category and action identifiers. The forwarder sets the category, so these

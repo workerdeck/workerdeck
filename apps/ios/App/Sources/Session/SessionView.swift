@@ -34,6 +34,9 @@ struct SessionView: View {
   /// The event a tapped notification was about, when this screen was opened by
   /// one. Resolved to a row once the replay hold lifts — see `focusTarget`.
   private let focusSeq: Int?
+  /// The log that `focusSeq` was numbered in, when the notification named one. A dormant
+  /// wake renumbers the log, so a seq kept across one is not the row it says it is.
+  private let focusEpoch: Int?
   /// The `tool_use` id a **task** step under the sessions-list row named, when
   /// this screen was opened by one. Resolved to a row the same way `focusSeq`
   /// is, and for the same reason it is held rather than acted on immediately:
@@ -141,10 +144,11 @@ struct SessionView: View {
 
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil,
-    openSubagent: String? = nil, revealToolUseId: String? = nil
+    focusEpoch: Int? = nil, openSubagent: String? = nil, revealToolUseId: String? = nil
   ) {
     self.hostId = hostId
     self.focusSeq = focusSeq
+    self.focusEpoch = focusEpoch
     self.revealToolUseId = revealToolUseId
     _pendingSubagent = State(initialValue: openSubagent)
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
@@ -477,6 +481,10 @@ struct SessionView: View {
   /// to land on, and a deep link there opens at the tail as it always has.
   private func resolveFocus() {
     guard let focusSeq, !focusResolved, let info = vm.session, !vm.replaying else { return }
+    guard deepLinkSeqSurvives(pushEpoch: focusEpoch, sessionEpoch: info.epoch) else {
+      focusResolved = true
+      return
+    }
     switch deepLinkPlacement(
       item: vm.itemIndex(forSeq: focusSeq), lastSeq: vm.state.lastSeq, attachLastSeq: info.lastSeq)
     {

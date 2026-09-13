@@ -303,6 +303,12 @@ describe('buildPush', () => {
     expect(push.expiration).toBe(5000)
   })
 
+  it("dates the seq with the session's epoch, and omits it on a session that has never woken", () => {
+    expect((buildPush(notification({ preview: 'done' }), undefined).payload as Record<string, unknown>).epoch).toBeUndefined()
+    const woken = buildPush(notification({ preview: 'done', session: { ...session, epoch: 3 } }), undefined)
+    expect((woken.payload as Record<string, unknown>).epoch).toBe(3)
+  })
+
   it('collapses turn_completed per session', () => {
     const first = buildPush(notification({ preview: 'done' }), undefined)
     const other = buildPush(notification({ sessionId: 'sess_2', preview: 'done' }), undefined)

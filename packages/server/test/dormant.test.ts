@@ -63,6 +63,7 @@ class ResumableRunner implements Runner {
       capabilities: { ...ENGINE_CAPABILITIES.provider, resume: true, resumeBackfill: true },
       model: 'test-model',
       createdAt: this.createdAt,
+      epoch: this.config.epoch,
       lastSeq: this.#seq,
       pendingPermissionCount: 0,
       meta: this.#meta,
@@ -197,6 +198,16 @@ async function stateDir(): Promise<string> {
   return dir
 }
 
+async function attachOnce(gateway: Gateway, id: string): Promise<SessionInfo> {
+  const ws = new WebSocket(`${gateway.base.replace('http', 'ws')}/sessions/${id}/ws`)
+  await new Promise((resolve, reject) => {
+    ws.once('open', resolve)
+    ws.once('error', reject)
+  })
+  ws.close()
+  return (await list(gateway.base)).find((row) => row.id === id)!
+}
+
 describe('sessions that survive a restart', () => {
   it('remembers a live session once the engine names it, without double-listing it', async () => {
     const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
@@ -240,6 +251,29 @@ describe('sessions that survive a restart', () => {
     const rebuilt = second.built[0]!
     expect(rebuilt.id).toBe(session.id)
     expect(rebuilt.config.resume).toBe('engine-session-1')
+  })
+
+  it("dates a woken session's seqs with a fresh epoch, so a push that outlived the wake is knowable", async () => {
+    // The wake starts the log again from zero (`this.watch(runner, isDormant(record) ? 0 : …)`),
+    // so every seq a client is holding from before it now points into a log that is gone.
+    const dir = await stateDir()
+    const first = await startGateway(createFileSessionStore({ dir }))
+    const session = await create(first.base)
+    expect(session.epoch).toBeUndefined()
+    await vi.waitFor(async () => {
+      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+    })
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(createFileSessionStore({ dir }))
+    const woken = await attachOnce(second, session.id)
+    expect(woken.epoch).toBe(1)
+
+    await second.server.close()
+    servers.splice(servers.indexOf(second.server), 1)
+    const third = await startGateway(createFileSessionStore({ dir }))
+    expect((await attachOnce(third, session.id)).epoch).toBe(2)
   })
 
   it('wakes under the name it was renamed to, not the one it was built with', async () => {

@@ -620,7 +620,10 @@ can lift on a stall, so a row can be found while the transcript is still filling
 `deepLinkPlacement` then lands on it but marks it incomplete, and
 `TranscriptScrollGeometry.pinsAfterJump` refuses to re-arm the bottom pin from where such a jump
 lands — the bottom of a filling transcript is not the bottom, and a pin taken there dragged the
-reader to the tail with the rest of the replay (`docs/GOTCHAS.md`). Two limits are permanent
+reader to the tail with the rest of the replay (`docs/GOTCHAS.md`). A seq is only worth acting on
+in the log it was numbered in, so the payload carries `SessionInfo.epoch` beside it and
+`deepLinkSeqSurvives` drops the landing to the tail when the session has woken since — absent on
+either side means "same log" (`docs/GOTCHAS.md`). Two limits are permanent
 rather than debt. The **cards renderer ignores `seq`** — `TranscriptListView` has no row
 model to land on, so a deep link there opens at the tail as it always has; deliberate, the
 terminal theme being the default. And a **`seq` older than retention** lands on the top of what
