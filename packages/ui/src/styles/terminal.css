@@ -559,8 +559,8 @@
  * top, not a line early.
  *
  * The lane spans the whole turn and the head is an overlay, so both are
- * transparent to the pointer — the real row beneath owns interaction, and
- * the head is `aria-hidden` in the markup. The z-index is on the lane —
+ * transparent to the pointer — the rows it covers own interaction, and the
+ * head is `aria-hidden` in the markup. The z-index is on the lane —
  * every row wrapper is its own stacking context (they are transformed), so
  * the head's own z-index could never beat a later sibling.
  *
@@ -573,6 +573,15 @@
 [data-terminal] [data-slot='transcript-rows'] > [data-sticky-lane] {
   z-index: 3;
   pointer-events: none;
+}
+
+/* The prompt itself is *inside* the lane, not beneath it, so the lane's `none`
+   reached it too and made a user message the one block in the transcript the
+   pointer could not touch: a drag started on it landed on the lane instead and
+   selected nothing. Only the real row is given back — the head overlay above
+   stays transparent, which is the whole point of the lane. */
+[data-terminal] [data-sticky-lane] > [data-index] {
+  pointer-events: auto;
 }
 
 /* The head's own strip: the full lane, out of flow, so the head needs no

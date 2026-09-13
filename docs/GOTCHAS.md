@@ -1773,7 +1773,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   cannot host a selection endpoint does not merely refuse the drag — the selection jumps to the
   next valid position above it and swallows everything in between, which reads as a layout bug
   rather than a missing declaration. Anything in this theme that is neither `.term-press` nor
-  ordinary text has to state `user-select` and `cursor` itself.
+  ordinary text has to state `user-select` and `cursor` itself. Declaring it is only half of it:
+  a user prompt is the one row rendered inside `StickyPromptLane`, and the lane is
+  `pointer-events: none` so the head overlay cannot trap the pointer over the rows it covers. The
+  prompt sits *inside* that lane rather than beneath it, so it inherited the `none` and could not
+  take a mousedown at all — a drag begun on it selected in the container instead, which looks
+  exactly like an unselectable block. `[data-sticky-lane] > [data-index]` hands the pointer back
+  to the real row and leaves the overlay transparent.
 - **The gutter markers are the CLI's, and they are the whole of a row's identity.** `❯` is what
   you typed, `●` what the model said or a tool it called, `⎿` that tool's output one level in,
   `✻` thinking, `!` a notice from the runner rather than the model. Every renderer in
