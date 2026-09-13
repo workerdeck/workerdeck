@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { TranscriptItem } from '@workerdeck/react'
-import { COMPACTION_TEXT, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
+import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
@@ -281,10 +281,11 @@ export function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 
   )
 }
 
-export function CompactionRow() {
+export function CompactionRow({ item }: { item: Extract<TranscriptItem, { kind: 'compaction' }> }) {
+  const failed = item.error !== undefined
   return (
-    <Row glyph="≡" glyphTone="yellow" tone="faint">
-      {COMPACTION_TEXT}
+    <Row glyph={item.pending ? '⋯' : '≡'} glyphTone={failed ? 'red' : 'yellow'} tone={failed ? 'red' : 'faint'}>
+      {compactionText(item)}
     </Row>
   )
 }

@@ -657,7 +657,7 @@ public func scrubberPeek(
     case .toolCall(let call): return "\(call.name)(\(TermFmt.toolInputPreview(call.input)))"
     case .turnResult: return doneLine(item) ?? ""
     case .fileDelivered(_, let path, _, _): return path
-    case .compaction: return TermFmt.compaction
+    case .compaction(let item): return TermFmt.compaction(item)
     }
   }
 

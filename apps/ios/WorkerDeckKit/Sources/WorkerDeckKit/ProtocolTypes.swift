@@ -945,7 +945,7 @@ public enum SessionEventBody: Sendable, Equatable {
   /// The engine summarised earlier turns to fit the context window. Not a
   /// reset: the transcript keeps everything, and the engine reports the
   /// post-compaction occupancy itself.
-  case contextCompacted(uuid: String, parentToolUseId: String?)
+  case contextCompacted(CompactionItem)
   case assistantMessage(AssistantMessageEvent)
   case userMessage(UserMessageEvent)
   case streamDelta(StreamDeltaEvent)
@@ -994,6 +994,7 @@ extension SessionEvent: Decodable {
     case reason, error, path, bytes, description, payload
     case skills, titles, items, fileId, mediaType, toolUseId
     case sdkSessionId, uuid, parentToolUseId
+    case pending, trigger, preTokens, postTokens
   }
 
   public init(from decoder: Decoder) throws {
@@ -1044,8 +1045,15 @@ extension SessionEvent: Decodable {
           sdkSessionId: try container.decodeIfPresent(String.self, forKey: .sdkSessionId))
       case "context_compacted":
         body = .contextCompacted(
-          uuid: try container.decode(String.self, forKey: .uuid),
-          parentToolUseId: try container.decodeIfPresent(String.self, forKey: .parentToolUseId))
+          CompactionItem(
+            id: try container.decode(String.self, forKey: .uuid),
+            parentToolUseId: try container.decodeIfPresent(String.self, forKey: .parentToolUseId),
+            pending: try container.decodeIfPresent(Bool.self, forKey: .pending) ?? false,
+            trigger: CompactionTrigger(
+              rawValue: try container.decodeIfPresent(String.self, forKey: .trigger) ?? ""),
+            preTokens: try container.decodeIfPresent(Int.self, forKey: .preTokens),
+            postTokens: try container.decodeIfPresent(Int.self, forKey: .postTokens),
+            error: try container.decodeIfPresent(String.self, forKey: .error)))
       case "assistant_message":
         body = .assistantMessage(try AssistantMessageEvent(from: decoder))
       case "user_message":

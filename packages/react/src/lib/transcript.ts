@@ -74,7 +74,16 @@ export type TranscriptItem =
       errors?: string[]
     }
   | { kind: 'notice'; id: string; level: 'info' | 'error'; text: string }
-  | { kind: 'compaction'; id: string; parentToolUseId: string | null }
+  | {
+      kind: 'compaction'
+      id: string
+      parentToolUseId: string | null
+      pending?: boolean
+      trigger?: 'manual' | 'auto'
+      preTokens?: number
+      postTokens?: number
+      error?: string
+    }
   | { kind: 'file_delivered'; id: string; path: string; bytes: number; description?: string }
 
 export type ProducedFileRef = {
@@ -362,6 +371,11 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           kind: 'compaction',
           id: event.uuid,
           parentToolUseId: event.parentToolUseId ?? null,
+          pending: event.pending,
+          trigger: event.trigger,
+          preTokens: event.preTokens,
+          postTokens: event.postTokens,
+          error: event.error,
         }),
       }
     }

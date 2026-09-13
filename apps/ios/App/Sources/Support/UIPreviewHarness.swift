@@ -745,7 +745,7 @@ struct UIPreviewHarness: View {
         "c4", "mcp__roam_code__search", ["query": .string("terminalBlocks")],
         result: "{\"hits\":[" + String(repeating: "{\"f\":\"blocks.ts\",\"l\":42},", count: 400) + "]}"),
       // The boundary. Everything above it stays: a compaction is not a reset.
-      .compaction(id: "cx1", parentToolUseId: nil),
+      .compaction(CompactionItem(id: "cx1", trigger: .auto, preTokens: 148_000, postTokens: 32_000)),
       .assistantText(
         id: "a16", text: "And the diff, with the engine's own line numbers.", streaming: false,
         parentToolUseId: nil),

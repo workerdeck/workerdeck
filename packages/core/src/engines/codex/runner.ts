@@ -1660,6 +1660,13 @@ export class CodexRunner implements Runner {
       this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments, agent)
       return
     }
+    if (item.type === 'contextCompaction' && !active.toolUseEmitted.has(id)) {
+      // Reuses the tool-use ledger only as a once-per-item latch; the row it draws is the
+      // compaction boundary, which `item/completed` then settles under the same id.
+      active.toolUseEmitted.add(id)
+      this.#emit({ type: 'context_compacted', uuid: id, pending: true, parentToolUseId: agent?.toolUseId ?? null })
+      return
+    }
     if (item.type === 'collabAgentToolCall' && !active.toolUseEmitted.has(id)) {
       active.toolUseEmitted.add(id)
       this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)

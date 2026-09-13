@@ -376,7 +376,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     (occupancy). A long session passes 800k cumulative without occupancy ever leaving the window,
     because **auto-compaction keeps resetting it** — which is how "I just kept going naturally"
     happens. Since 2026-09-02 that summarisation is **drawn**: `contextCompaction` maps to a
-    `context_compacted` event and a boundary row, so a ring that drops for no user-caused reason
+    `context_compacted` event and a boundary row — since 2026-09-13 a row that appears when the
+    compaction *starts* and settles when it lands — so a ring that drops for no user-caused reason
     now has a marker saying why. Since 2026-09-02 the 272K tier is also **explained in the product**,
     from `packages/ui/src/lib/context-note.ts` — see `docs/PACKAGES.md` §`packages/ui`, and keep
     that copy in sync with this section, caveat included. **The ring itself carries no mark, and
@@ -1276,6 +1277,23 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **The buffer is dropped on every context reset** — `clearContext()`, a `conversation_reset` from
   any engine, and `close()`. Shell output that outlived the conversation it described would be
   read by the model as current.
+- **A compaction is one row with two halves, and the boundary's own uuid is not that row's id.**
+  Both engines announce a compaction before they finish one — claude with `system/status`
+  (`status: 'compacting'`, then `compact_result: 'success' | 'failed'`), codex with `item/started`
+  for its `contextCompaction` item — and both used to be thrown away: the claude runner never
+  emitted `context_compacted` at all (the SDK's `compact_boundary` fell into the catch-all
+  `sdk_event`), so `/compact` drew nothing while it ran and nothing when it landed. It is now one
+  `context_compacted` emitted twice under **one id**: `pending: true` at the start, and again
+  without it when the boundary lands, so the reducer's `upsert` settles the row in place rather
+  than appending a second. On claude that id has to be *minted by the runner* and held in
+  `#compactionId`, because `compact_boundary` carries a uuid of its own that names the end, not
+  the row; a boundary that arrives with nothing pending (auto-compaction on a fresh attach) falls
+  back to that uuid. Three rules hold it up: `turn_result` settles any compaction still pending,
+  so a turn that never reported a boundary cannot leave a row spinning forever;
+  `replayCoalesceKey` keys on `context_compacted:<uuid>`, so a replay of the pair delivers only
+  the settled one; and the row's sentence lives in one place per client (`compactionText` in
+  `packages/ui/src/lib/format.ts`, `TermFmt.compaction` in the kit, pinned against each other by
+  `TerminalTextTests`) because the terminal renderer **measures** the string it draws.
 - **The claude engine holds the flush across a slash command.** The CLI matches `/compact` and
   friends on the message text, and a leading caveat block would either break the match or lose the
   output, so `sendMessage` skips the flush for text matching `/^\s*\/[A-Za-z]/` and waits for the

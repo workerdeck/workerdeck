@@ -1,6 +1,6 @@
 import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
-import { COMPACTION_TEXT, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
+import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
 import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
@@ -623,7 +623,7 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
       return rowH(item.text, m, { extraPx })
     }
     case 'compaction': {
-      return rowH(COMPACTION_TEXT, m, { extraPx })
+      return rowH(compactionText(item), m, { extraPx })
     }
     case 'file_delivered': {
       const text = `${item.path} · ${formatBytes(item.bytes)}` + (item.description ? ` · ${item.description}` : '')

@@ -230,7 +230,9 @@ const failure: TranscriptItem[] = [
       isError: true,
     },
   }),
-  item({ kind: 'compaction', parentToolUseId: null }),
+  item({ kind: 'compaction', parentToolUseId: null, pending: true }),
+  item({ kind: 'compaction', parentToolUseId: null, trigger: 'auto', preTokens: 148_000, postTokens: 32_000 }),
+  item({ kind: 'compaction', parentToolUseId: null, error: 'the model refused to summarise' }),
   item({ kind: 'notice', level: 'error', text: 'Session ended: the runner exited with code 1' }),
   item({
     kind: 'turn_result',

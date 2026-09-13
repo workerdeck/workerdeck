@@ -176,7 +176,7 @@ struct TerminalRowsTests {
   @Test("a compaction is an ordinary item row, not a synthetic seam")
   func compactionRow() {
     let rows = TerminalRows.build(items: [
-      text("a"), .compaction(id: "c1", parentToolUseId: nil), text("b"),
+      text("a"), .compaction(CompactionItem(id: "c1")), text("b"),
     ])
     #expect(rows.count == 3)
     #expect(rows.rowIndex(forItem: 1) == 1)
@@ -189,7 +189,7 @@ struct TerminalRowsTests {
 
     // A sub-agent's compaction nests inside that agent's frame.
     let nested = TerminalPlanner.plan(
-      item: .compaction(id: "c2", parentToolUseId: "T1"), metrics: metrics,
+      item: .compaction(CompactionItem(id: "c2", parentToolUseId: "T1")), metrics: metrics,
       expansion: TerminalExpansion(), inOpen: false)
     #expect(nested.allSatisfy { $0.nested })
   }

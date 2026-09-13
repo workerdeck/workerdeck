@@ -496,9 +496,11 @@ mirrored there (`WorkerProtocol.version` tracks `PROTOCOL_VERSION`); see `apps/i
 `context_compacted` draws as an ordinary transcript item, not as a synthetic seam like the recap
 row: it has a uuid, so it is addressable and bookmarkable, and it nests inside a sub-agent's
 frame on `parentToolUseId`. It appends where `conversation_reset` empties, and leaves
-`contextUsage` alone — the engine reports post-compaction occupancy itself. `TermFmt.compaction`
-is Swift's own copy of `COMPACTION_TEXT`, pinned by `TerminalTextTests` because there is no
-module the two sides can share.
+`contextUsage` alone — the engine reports post-compaction occupancy itself. It arrives twice
+under one id — `pending` while the engine summarises, settled when the boundary lands — so the
+row says it is working and then says what it did (`docs/GOTCHAS.md`). `TermFmt.compaction` is
+Swift's own port of `compactionText`, pinned by `TerminalTextTests` because there is no module
+the two sides can share.
 The three agent-view preferences are mirrored too (`AppSettings.swift`): variant and density as
 environment values the rows read, and the font as one `fontDesign` on the session view — with
 the composer's `UITextView` told separately, since UIKit sits outside SwiftUI's font

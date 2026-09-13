@@ -635,6 +635,17 @@ describe('transcript reducer', () => {
     expect(run(state, [{ type: 'context_compacted', uuid: 'c1' }]).items).toHaveLength(2)
   })
 
+  it('a compaction announces itself and settles the same row', () => {
+    seq = 0
+    const pending = run(initialTranscriptState, [{ type: 'context_compacted', uuid: 'c1', pending: true }])
+    expect(pending.items).toMatchObject([{ kind: 'compaction', id: 'c1', pending: true }])
+
+    const settled = run(pending, [{ type: 'context_compacted', uuid: 'c1', trigger: 'auto', preTokens: 148_000, postTokens: 32_000 }])
+    expect(settled.items).toHaveLength(1)
+    expect(settled.items[0]).toMatchObject({ kind: 'compaction', preTokens: 148_000, postTokens: 32_000, trigger: 'auto' })
+    expect((settled.items[0] as { pending?: boolean }).pending).toBeUndefined()
+  })
+
   it('conversation_reset empties the transcript and keeps session-scoped state', () => {
     seq = 0
     const before = run(initialTranscriptState, [

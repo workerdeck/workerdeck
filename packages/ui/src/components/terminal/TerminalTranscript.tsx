@@ -53,7 +53,7 @@ export function TerminalItemView({ item, fileUrl }: { item: TranscriptItem; file
       return <NoticeRow item={item} />
     }
     case 'compaction': {
-      return <CompactionRow />
+      return <CompactionRow item={item} />
     }
     case 'file_delivered': {
       return <FileRow item={item} href={fileUrl?.(item.path)} />

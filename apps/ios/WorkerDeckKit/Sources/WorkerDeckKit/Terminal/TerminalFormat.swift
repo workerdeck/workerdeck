@@ -13,7 +13,21 @@ import Foundation
 public enum TermFmt {
   /// `COMPACTION_TEXT` (`packages/ui/src/lib/format.ts`), copied because there
   /// is no module the two sides can share. `TerminalTextTests` pins it.
-  public static let compaction = "context compacted · earlier turns summarised to fit the window"
+  public static let compactionText = "context compacted · earlier turns summarised to fit the window"
+
+  /// `compactionText` (same file), and a port for the same reason: one session read on two
+  /// clients must say the same sentence about the same row.
+  public static func compaction(_ item: CompactionItem) -> String {
+    if let error = item.error { return "context compaction failed · \(error)" }
+    if item.pending { return "compacting context · summarising earlier turns to fit the window" }
+    var parts = [compactionText]
+    if let pre = item.preTokens {
+      parts.append(
+        item.postTokens.map { "\(tokens(pre)) → \(tokens($0))" } ?? "from \(tokens(pre))")
+    }
+    if item.trigger == .auto { parts.append("automatic") }
+    return parts.joined(separator: " · ")
+  }
 
   /// `formatCost` — `nil`/NaN reads "—" rather than "$0.00", because "we do not
   /// know" and "it was free" are different facts.

@@ -276,20 +276,42 @@ struct ProtocolDecodingTests {
   @Test func decodesContextCompacted() throws {
     let event = try decodeEvent(
       #"{"type":"context_compacted","uuid":"c1","seq":13,"ts":1}"#)
-    guard case .contextCompacted(let uuid, let parentToolUseId) = event.body else {
+    guard case .contextCompacted(let item) = event.body else {
       Issue.record("expected context_compacted, got \(event.body)")
       return
     }
-    #expect(uuid == "c1")
-    #expect(parentToolUseId == nil)
+    #expect(item.id == "c1")
+    #expect(item.parentToolUseId == nil)
+    // A gateway that predates the progress fields says nothing about them, and absent reads as
+    // the settled boundary this client already drew.
+    #expect(!item.pending)
+    #expect(item.trigger == nil)
 
     let nested = try decodeEvent(
       #"{"type":"context_compacted","uuid":"c2","parentToolUseId":"task-1","seq":14,"ts":1}"#)
-    guard case .contextCompacted(_, let parent) = nested.body else {
+    guard case .contextCompacted(let nestedItem) = nested.body else {
       Issue.record("expected context_compacted, got \(nested.body)")
       return
     }
-    #expect(parent == "task-1")
+    #expect(nestedItem.parentToolUseId == "task-1")
+
+    let progress = try decodeEvent(
+      #"{"type":"context_compacted","uuid":"c3","pending":true,"seq":15,"ts":1}"#)
+    guard case .contextCompacted(let pending) = progress.body else {
+      Issue.record("expected context_compacted, got \(progress.body)")
+      return
+    }
+    #expect(pending.pending)
+
+    let settled = try decodeEvent(
+      #"{"type":"context_compacted","uuid":"c3","trigger":"auto","preTokens":148000,"postTokens":32000,"seq":16,"ts":1}"#)
+    guard case .contextCompacted(let done) = settled.body else {
+      Issue.record("expected context_compacted, got \(settled.body)")
+      return
+    }
+    #expect(done.trigger == .auto)
+    #expect(done.preTokens == 148_000)
+    #expect(done.postTokens == 32_000)
   }
 
   @Test func encodesPermissionDecisionCommand() throws {

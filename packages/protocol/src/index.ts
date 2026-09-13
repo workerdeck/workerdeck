@@ -220,6 +220,15 @@ export type SessionEventBody =
       type: 'context_compacted'
       uuid: string
       parentToolUseId?: string | null
+      // The same `uuid` is emitted twice: once with `pending` when the engine starts summarising,
+      // once without it when the boundary lands, so one row settles in place. A reader that
+      // never sees the first (an older gateway, a replay coalesced to the last) draws the
+      // boundary alone, which is what it drew before.
+      pending?: boolean
+      trigger?: 'manual' | 'auto'
+      preTokens?: number
+      postTokens?: number
+      error?: string
     }
   | {
       type: 'assistant_message'
@@ -741,6 +750,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     }
     case 'status_changed': {
       return 'status_changed'
+    }
+    case 'context_compacted': {
+      return `context_compacted:${body.uuid}`
     }
     case 'checklist': {
       return 'checklist'

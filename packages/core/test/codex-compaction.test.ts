@@ -25,6 +25,26 @@ describe('CodexRunner context compaction', () => {
     expect(ofType(events, 'sdk_event').filter((e) => e.payload.type === 'codex.contextCompaction')).toHaveLength(0)
   })
 
+  it('draws the row while it is compacting and settles the same row when it lands', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      const root = { threadId: 'thread-1', turnId }
+      emit('item/started', { ...root, item: compactionItem() })
+      emit('item/updated', { ...root, item: compactionItem() })
+      emit('item/completed', { ...root, item: compactionItem() })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const compactions = ofType(events, 'context_compacted')
+    // Two events, one row: `item/updated` must not mint a second pending, and both carry the
+    // item's own id so the reducer upserts rather than appends.
+    expect(compactions.map((c) => c.pending)).toEqual([true, undefined])
+    expect(new Set(compactions.map((c) => c.uuid)).size).toBe(1)
+  })
+
   it('does NOT empty the transcript — a compaction preserves what a reset discards', async () => {
     const peer = scriptedPeer()
     let threads = 0

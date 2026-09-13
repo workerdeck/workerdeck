@@ -1,14 +1,18 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import { COMPACTION_TEXT } from '../src/lib/format.ts'
+import { COMPACTION_TEXT, compactionText } from '../src/lib/format.ts'
 import { terminalBlocks } from '../src/components/terminal/blocks.ts'
 import { itemHeight, type CellMetrics } from '../src/components/terminal/height.ts'
 
 const m: CellMetrics = { width: 800, ch: 8, line: 18 }
 
-function compaction(parentToolUseId: string | null = null, id = 'c1'): TranscriptItem {
-  return { kind: 'compaction', id, parentToolUseId }
+function compaction(
+  parentToolUseId: string | null = null,
+  id = 'c1',
+  over: Partial<Extract<TranscriptItem, { kind: 'compaction' }>> = {},
+): TranscriptItem {
+  return { kind: 'compaction', id, parentToolUseId, ...over }
 }
 
 function text(body: string, id = 'a1'): TranscriptItem {
@@ -25,10 +29,26 @@ describe('the compaction boundary', () => {
   it('is measured against the string it draws, never a copy of it', () => {
     const items = readFileSync(new URL('../src/components/terminal/items.tsx', import.meta.url), 'utf8')
     const height = readFileSync(new URL('../src/components/terminal/height.ts', import.meta.url), 'utf8')
-    expect(items).toContain('COMPACTION_TEXT')
-    expect(height).toContain('rowH(COMPACTION_TEXT, m, { extraPx })')
+    expect(items).toContain('compactionText(item)')
+    expect(height).toContain('rowH(compactionText(item), m, { extraPx })')
     expect(items).not.toContain(`'${COMPACTION_TEXT}'`)
     expect(height).not.toContain(`'${COMPACTION_TEXT}'`)
+  })
+
+  it('says it is working while it works, and what it did once it is done', () => {
+    expect(compactionText({ pending: true })).toContain('compacting context')
+    // The pending row and the settled one are the same row: same id, so the reducer upserts.
+    expect(compactionText({})).toBe(COMPACTION_TEXT)
+    expect(compactionText({ preTokens: 148_000, postTokens: 32_000 })).toBe(`${COMPACTION_TEXT} · 148.0k → 32.0k`)
+    // An automatic compaction is the one a reader is surprised by, so only that one is named.
+    expect(compactionText({ trigger: 'auto', preTokens: 148_000, postTokens: 32_000 })).toContain('automatic')
+    expect(compactionText({ trigger: 'manual' })).not.toContain('manual')
+    expect(compactionText({ error: 'the model refused' })).toBe('context compaction failed · the model refused')
+  })
+
+  it('measures the pending row and the settled one separately', () => {
+    expect(itemHeight(compaction(null, 'c1', { pending: true }), m).px).toBe(m.line)
+    expect(itemHeight(compaction(null, 'c1', { preTokens: 148_000, postTokens: 32_000 }), m).exact).toBe(true)
   })
 
   it('folds as its own block — it never joins a tool run or swallows a neighbour', () => {

@@ -40,8 +40,8 @@ struct TranscriptItemView: View {
       NoticeRow(level: level, text: text)
     case .fileDelivered(_, let path, let bytes, let description):
       FileDeliveredCard(path: path, bytes: bytes, description: description)
-    case .compaction:
-      CompactionRow()
+    case .compaction(let item):
+      CompactionRow(item: item)
     }
   }
 }
@@ -194,10 +194,12 @@ private struct NoticeRow: View {
 }
 
 private struct CompactionRow: View {
+  let item: CompactionItem
+
   var body: some View {
-    Text(TermFmt.compaction)
+    Text(TermFmt.compaction(item))
       .font(.caption2)
-      .foregroundStyle(.secondary)
+      .foregroundStyle(item.error == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.red))
       .multilineTextAlignment(.center)
       .frame(maxWidth: .infinity, alignment: .center)
       .padding(.vertical, 2)

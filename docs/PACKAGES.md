@@ -28,14 +28,17 @@ the row-count rule the react reducer renders by and the runners count with
 `thinking` and `tool_use` score zero there, which is the whole point: a session that tool-loops
 for a minute was ticking a badge 6, 7, 8 with nothing yet said. A successful `turn_result`
 scores zero too — it already carried its own prose, and counting both double-counts every
-answer. `SessionInfo.epoch` is the third such rule, and the shortest: **a `seq` only means anything in
-the log it was numbered in.** A dormant wake starts the log again from zero, so anything that
-keeps a seq across one — a push on a lock screen, a cached tool-result address — must carry the
-epoch beside it and refuse a mismatch. Absent on either side means "same log", which is what
-keeps the field additive. The two numbers are **not interchangeable**: `activityCount` stays "has anything
+answer. The two numbers are **not interchangeable**: `activityCount` stays "has anything
 happened at all", which is what sorting and dormancy read; `proseCount` is "is there something
 to read". Purely additive — an optional field an older client ignores and a newer one falls
-back from — so deliberately **no `PROTOCOL_VERSION` bump**, the 0.18.0 precedent. `unseenCount`
+back from — so deliberately **no `PROTOCOL_VERSION` bump**, the 0.18.0 precedent. `SessionInfo.epoch`
+is the third rule of this kind, and the shortest: **a `seq` only means anything in the log it was
+numbered in.** A dormant wake starts the log again from zero, so anything that keeps a seq across
+one — a push on a lock screen, a cached tool-result address — must carry the epoch beside it and
+refuse a mismatch; absent on either side means "same log", which is what keeps the field additive.
+`context_compacted` is the fourth: the **same uuid is emitted twice**, once with `pending` while
+the engine summarises and once without it when the boundary lands, and a reader upserts on it
+rather than appends — one compaction is one row, whatever the engine underneath. `unseenCount`
 walks prose → rows → turns so a gateway without the field badges exactly as it did before, and reads a watermark with no `prose` as *caught up* — the alternative badges
 every previously-visited session with its entire history the first time it polls. A **subagent's own messages score
 zero** (any event carrying a `parentToolUseId`): they render *inside* the `Task` call that

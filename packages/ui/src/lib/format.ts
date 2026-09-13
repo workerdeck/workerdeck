@@ -1,6 +1,31 @@
 // Here rather than beside the row: height.ts must measure the string items.tsx draws, and cannot import a .tsx.
 export const COMPACTION_TEXT = 'context compacted · earlier turns summarised to fit the window'
 
+export function compactionText(item: {
+  pending?: boolean
+  trigger?: 'manual' | 'auto'
+  preTokens?: number
+  postTokens?: number
+  error?: string
+}): string {
+  if (item.error) {
+    return `context compaction failed · ${item.error}`
+  }
+  if (item.pending) {
+    return 'compacting context · summarising earlier turns to fit the window'
+  }
+  const window =
+    item.preTokens === undefined
+      ? undefined
+      : item.postTokens === undefined
+        ? `from ${formatTokens(item.preTokens)}`
+        : `${formatTokens(item.preTokens)} → ${formatTokens(item.postTokens)}`
+  // The trigger is worth a word only when nobody asked for it: an automatic compaction mid-turn
+  // is the one a reader is surprised by.
+  const auto = item.trigger === 'auto' ? 'automatic' : undefined
+  return [COMPACTION_TEXT, window, auto].filter(Boolean).join(' · ')
+}
+
 export function formatCost(usd: number | undefined): string {
   if (usd === undefined || Number.isNaN(usd)) {
     return '—'

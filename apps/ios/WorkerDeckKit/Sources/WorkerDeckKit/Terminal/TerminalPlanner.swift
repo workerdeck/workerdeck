@@ -324,10 +324,13 @@ public enum TerminalPlanner {
         gutterTone: level == .error ? .red : .yellow, tone: level == .error ? .red : .dim,
         inOpen: inOpen)
 
-    case .compaction:
+    case .compaction(let item):
+      let failed = item.error != nil
       return wrapBody(
-        TermFmt.compaction, metrics: metrics, gutter: TermGlyph.compaction, gutterTone: .yellow,
-        tone: .faint, nested: nested, inOpen: inOpen)
+        TermFmt.compaction(item), metrics: metrics,
+        gutter: item.pending ? TermGlyph.compactionPending : TermGlyph.compaction,
+        gutterTone: failed ? .red : .yellow, tone: failed ? .red : .faint, nested: nested,
+        inOpen: inOpen)
 
     case .fileDelivered(_, let path, let bytes, let description):
       var body = "\(path) · \(TermFmt.bytes(bytes))"

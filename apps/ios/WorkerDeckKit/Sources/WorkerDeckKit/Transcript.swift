@@ -108,6 +108,38 @@ public struct ToolCallResult: Sendable, Equatable {
   }
 }
 
+/// A context compaction, from the moment the engine starts summarising to the boundary that
+/// settles it. The event carries the same shape as the row it draws, and both halves arrive
+/// under one `id`, so the second upserts onto the first rather than appending a second row.
+public struct CompactionItem: Sendable, Equatable, Identifiable {
+  public var id: String
+  public var parentToolUseId: String?
+  public var pending: Bool
+  public var trigger: CompactionTrigger?
+  public var preTokens: Int?
+  public var postTokens: Int?
+  public var error: String?
+
+  public init(
+    id: String, parentToolUseId: String? = nil, pending: Bool = false,
+    trigger: CompactionTrigger? = nil, preTokens: Int? = nil, postTokens: Int? = nil,
+    error: String? = nil
+  ) {
+    self.id = id
+    self.parentToolUseId = parentToolUseId
+    self.pending = pending
+    self.trigger = trigger
+    self.preTokens = preTokens
+    self.postTokens = postTokens
+    self.error = error
+  }
+}
+
+public enum CompactionTrigger: String, Sendable, Equatable {
+  case manual
+  case auto
+}
+
 public struct ToolCallItem: Sendable, Equatable, Identifiable {
   /// The `tool_use` block id; also the executionId for calls the model made.
   public var id: String
@@ -182,7 +214,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
   case fileDelivered(id: String, path: String, bytes: Int, description: String?)
   /// The engine summarised earlier turns to fit the window (`context_compacted`).
   /// A boundary, not a reset — everything before it is still here.
-  case compaction(id: String, parentToolUseId: String?)
+  case compaction(CompactionItem)
 
   public var id: String {
     switch self {
@@ -193,7 +225,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
     case .turnResult(let id, _, _, _, _, _): return id
     case .notice(let id, _, _): return id
     case .fileDelivered(let id, _, _, _): return id
-    case .compaction(let id, _): return id
+    case .compaction(let item): return item.id
     }
   }
 
@@ -592,10 +624,10 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     next.checklist = nil
     if let sdkSessionId { next.sdkSessionId = sdkSessionId }
 
-  case .contextCompacted(let uuid, let parentToolUseId):
+  case .contextCompacted(let payload):
     // Appends where the reset above empties, and leaves `contextUsage` alone:
     // the engine reports post-compaction occupancy itself.
-    next.items = upsert(next.items, .compaction(id: uuid, parentToolUseId: parentToolUseId))
+    next.items = upsert(next.items, .compaction(payload))
 
   case .userMessage(let payload):
     var items = next.items

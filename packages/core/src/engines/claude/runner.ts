@@ -89,6 +89,10 @@ export class SessionRunner implements Runner {
   #numTurns: number | undefined
   #input = new InputQueue()
   #pendingLocalCommands: string[] = []
+  // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
+  // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
+  // correlating here is what lets one row settle rather than two rows appear.
+  #compactionId: string | undefined
   #query: Query | undefined
   #capabilitiesEmitted = false
   #subscriptionType: string | undefined
@@ -457,6 +461,22 @@ export class SessionRunner implements Runner {
       }
       return
     }
+    if (msg.type === 'system' && msg.subtype === 'status') {
+      this.#handleCompactionStatus(msg)
+    }
+    if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
+      const meta = msg.compact_metadata
+      this.#emit({
+        type: 'context_compacted',
+        uuid: this.#compactionId ?? msg.uuid,
+        trigger: meta.trigger,
+        preTokens: meta.pre_tokens,
+        postTokens: meta.post_tokens,
+      })
+      this.#compactionId = undefined
+      void this.#fetchContextUsage()
+      return
+    }
     const body = normalizeSdkMessage(msg)
     if (body) {
       this.#emit(body)
@@ -468,6 +488,8 @@ export class SessionRunner implements Runner {
         void this.#fetchContextUsage()
       }
       if (body.type === 'turn_result') {
+        // A compaction the turn never reported a boundary for would otherwise spin forever.
+        this.#settleCompaction()
         this.#totalCostUsd = body.totalCostUsd
         this.#numTurns = body.numTurns
         if (this.#pending.size === 0) {
@@ -480,6 +502,26 @@ export class SessionRunner implements Runner {
         void this.#fetchEngineTitle()
       }
     }
+  }
+
+  #handleCompactionStatus(msg: { status?: string | null; compact_result?: 'success' | 'failed'; compact_error?: string }): void {
+    if (msg.status === 'compacting') {
+      this.#compactionId ??= randomUUID()
+      this.#emit({ type: 'context_compacted', uuid: this.#compactionId, pending: true })
+      return
+    }
+    if (msg.compact_result === 'failed') {
+      this.#settleCompaction(msg.compact_error ?? 'the engine reported no reason')
+    }
+  }
+
+  #settleCompaction(error?: string): void {
+    const uuid = this.#compactionId
+    if (uuid === undefined) {
+      return
+    }
+    this.#compactionId = undefined
+    this.#emit({ type: 'context_compacted', uuid, ...(error === undefined ? {} : { error }) })
   }
 
   // Best-effort: the SDK's status type stops short of the MCP title, so a server that sets one

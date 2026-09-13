@@ -538,16 +538,16 @@ struct TranscriptTests {
     ])
 
     let state = reduce(
-      [event(4, .contextCompacted(uuid: "c1", parentToolUseId: nil))], from: seeded)
+      [event(4, .contextCompacted(CompactionItem(id: "c1")))], from: seeded)
     #expect(state.items.count == seeded.items.count + 1)
-    #expect(state.items.last == .compaction(id: "c1", parentToolUseId: nil))
+    #expect(state.items.last == .compaction(CompactionItem(id: "c1")))
     #expect(state.contextUsage == usage)
 
     // Upserts on id, like every other item, and carries a sub-agent's parent.
     let nested = reduce(
       [
-        event(5, .contextCompacted(uuid: "c1", parentToolUseId: nil)),
-        event(6, .contextCompacted(uuid: "c2", parentToolUseId: "task-1")),
+        event(5, .contextCompacted(CompactionItem(id: "c1"))),
+        event(6, .contextCompacted(CompactionItem(id: "c2", parentToolUseId: "task-1"))),
       ], from: state)
     #expect(nested.items.filter { $0.kind == .compaction }.count == 2)
     #expect(parentToolUseId(of: nested.items[nested.items.count - 1]) == "task-1")

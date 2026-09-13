@@ -30,10 +30,20 @@ struct TerminalTextTests {
 
   // MARK: - Pinned strings
 
-  @Test("the compaction line matches COMPACTION_TEXT verbatim")
+  @Test("the compaction line matches compactionText in packages/ui, in all four of its states")
   func compactionText() {
     #expect(
-      TermFmt.compaction == "context compacted · earlier turns summarised to fit the window")
+      TermFmt.compactionText == "context compacted · earlier turns summarised to fit the window")
+    #expect(
+      TermFmt.compaction(CompactionItem(id: "c", pending: true))
+        == "compacting context · summarising earlier turns to fit the window")
+    #expect(TermFmt.compaction(CompactionItem(id: "c")) == TermFmt.compactionText)
+    #expect(
+      TermFmt.compaction(CompactionItem(id: "c", trigger: .auto, preTokens: 148_000, postTokens: 32_000))
+        == "\(TermFmt.compactionText) · 148.0k → 32.0k · automatic")
+    #expect(
+      TermFmt.compaction(CompactionItem(id: "c", error: "the model refused"))
+        == "context compaction failed · the model refused")
   }
 
   // MARK: - Run summaries
