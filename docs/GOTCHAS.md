@@ -1778,6 +1778,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 ## Terminal theme (`transcriptVariant: 'terminal'`)
 
+- **The free-text prompt field grows by whole lines only because it has no padding.**
+  `PromptInput` (the question card's "Other…" and the permission card's deny reason) is a
+  `textarea` with `field-sizing: content`, so its content box is `N × line-height` — and since
+  `line-height` is `--term-line` and the field sets no padding, every height it takes is an exact
+  multiple of the cell. Add vertical padding to `.term-input` and the field, the rule under it and
+  everything below all leave the grid at the second line. The cap is lines too
+  (`calc(8 * var(--term-line))`), not a pixel height, for the same reason. Where `field-sizing` is
+  unsupported (Firefox) it degrades to the one-line scrolling box it used to be, which is the
+  right failure: the old behaviour, minus the sideways crawl.
+- **Enter sends and Shift+Enter is the newline, in the prompts as well as the composer** — and the
+  `isComposing` guard is not optional. Without it an IME's candidate-confirming Enter submits a
+  half-typed answer, which is the bug the single-line field shipped with and nobody on a Latin
+  keyboard could see.
+
 - **Selectability is declared, never inherited — the host's default is not the same in every
   client.** `.term-press` says `user-select: text` out loud because a transcript is read far more
   often than it is opened. The user band (`.term-user`) is the one block that is neither a press

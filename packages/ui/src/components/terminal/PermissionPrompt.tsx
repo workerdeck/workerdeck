@@ -113,7 +113,11 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
         }}
       />
       <Blank />
-      <Hint>Enter to select · ↑/↓ to navigate · 1–3 to choose · Esc to cancel</Hint>
+      <Hint>
+        {denying
+          ? 'Enter to send · Shift+Enter for a new line · Esc to go back'
+          : 'Enter to select · ↑/↓ to navigate · 1–3 to choose · Esc to cancel'}
+      </Hint>
     </div>
   )
 }

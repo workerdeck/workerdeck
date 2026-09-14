@@ -122,7 +122,11 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
         />
       )}
       <Blank />
-      <Hint>Enter to select · ↑/↓ to navigate · Tab to switch questions · Esc to cancel</Hint>
+      <Hint>
+        {!review && selection.otherActive
+          ? 'Enter to submit · Shift+Enter for a new line · Tab to switch questions · Esc to cancel'
+          : 'Enter to select · ↑/↓ to navigate · Tab to switch questions · Esc to cancel'}
+      </Hint>
     </div>
   )
 }

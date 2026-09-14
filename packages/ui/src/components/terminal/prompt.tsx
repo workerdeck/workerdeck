@@ -162,13 +162,17 @@ export function PromptInput({
 }) {
   return (
     <Row columns={5} glyph="   ›" glyphTone="dim">
-      <input
+      <textarea
         autoFocus
+        rows={1}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') {
+          // The composer's contract, so the send key means the same thing everywhere:
+          // Enter sends, Shift+Enter is the newline. `isComposing` keeps an IME's
+          // candidate-confirming Enter from submitting a half-typed answer.
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault()
             onSubmit()
           }

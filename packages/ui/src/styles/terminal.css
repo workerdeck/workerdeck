@@ -532,6 +532,19 @@
   caret-animation: manual;
   background: linear-gradient(var(--term-faint), var(--term-faint)) bottom left / 100% 1px no-repeat;
 }
+/* The same field over more than one line. It stays on the grid for free: there is
+   no padding and `line-height` is `--term-line`, so the content box is always a
+   whole number of lines and the rule under it lands on a cell boundary. The cap is
+   lines too, not a pixel height. Where `field-sizing` is unsupported this is a
+   one-line box that scrolls — the old single-line behaviour, minus the sideways
+   crawl, so the degradation costs nothing that was there before. */
+[data-terminal] textarea.term-input {
+  display: block;
+  field-sizing: content;
+  resize: none;
+  overflow-y: auto;
+  max-height: calc(8 * var(--term-line));
+}
 [data-terminal] .term-input:focus {
   background-image: linear-gradient(var(--term-blue), var(--term-blue));
 }
