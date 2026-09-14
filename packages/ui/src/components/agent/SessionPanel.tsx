@@ -1,4 +1,13 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import {
   PROTOCOL_VERSION,
@@ -92,6 +101,14 @@ function PromptSurface({
 
 export type TerminalMetrics = { fontSize?: number; lineHeight?: number }
 
+// Deliberately the built-in prompts' own callback shapes, so `PermissionPrompt` and
+// `TerminalPermissionPrompt` stay drop-in fallbacks for an input a host declines to draw.
+export interface ApprovalPromptProps {
+  request: PermissionRequest
+  onApprove: (requestId: string, updatedInput?: Record<string, unknown>) => void
+  onDeny: (requestId: string, message?: string, interrupt?: boolean) => void
+}
+
 export interface SessionPanelProps {
   client: WorkerDeckClient
   sessionId: string | undefined
@@ -121,12 +138,7 @@ export interface SessionPanelProps {
   focusComposerOnClick?: boolean
   unseen?: { itemCount: number; since?: number }
   readOnly?: boolean
-  // Draw a non-question approval as the host's own card; returning undefined falls back to the default permission prompt.
-  renderApproval?: (
-    request: PermissionRequest,
-    approve: (requestId: string, updatedInput?: Record<string, unknown>) => void,
-    deny: (requestId: string, message?: string) => void,
-  ) => ReactNode | undefined
+  approvalPrompts?: Record<string, ComponentType<ApprovalPromptProps>>
   toolHost?: UseToolCallHostOptions | false
   cacheTranscript?: boolean
   emptyState?: ReactNode
@@ -212,7 +224,7 @@ export function SessionPanel({
   focusComposerOnClick = false,
   unseen,
   readOnly = false,
-  renderApproval,
+  approvalPrompts,
   toolHost,
   clientTools,
   cacheTranscript,
@@ -665,6 +677,12 @@ export function SessionPanel({
                       affordances={affordances}
                     >
                       {state.pendingApprovals.map((request) => {
+                        // Before the variant split: a host's entry is the renderer for its tool in
+                        // both themes, and it overrides the built-in entries rather than racing them.
+                        const HostPrompt = approvalPrompts?.[request.toolName]
+                        if (HostPrompt) {
+                          return <HostPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                        }
                         const isQuestion = request.toolName === 'AskUserQuestion' && parseUserQuestions(request.input).length > 0
                         if (terminal) {
                           return isQuestion ? (
@@ -678,21 +696,16 @@ export function SessionPanel({
                             <TerminalPermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
                           )
                         }
-                        if (isQuestion) {
-                          return (
-                            <QuestionPrompt
-                              key={request.id}
-                              request={request}
-                              onAnswer={approve}
-                              onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                            />
-                          )
-                        }
-                        const hostCard = renderApproval?.(request, approve, deny)
-                        if (hostCard !== undefined) {
-                          return <Fragment key={request.id}>{hostCard}</Fragment>
-                        }
-                        return <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                        return isQuestion ? (
+                          <QuestionPrompt
+                            key={request.id}
+                            request={request}
+                            onAnswer={approve}
+                            onDismiss={(id) => deny(id, 'Question dismissed by user')}
+                          />
+                        ) : (
+                          <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                        )
                       })}
                     </PromptSurface>
                   </div>
