@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import {
   PROTOCOL_VERSION,
@@ -8,6 +8,7 @@ import {
   usageInfos,
   type ModelOption,
   type PermissionMode,
+  type PermissionRequest,
   type RateLimitInfo,
   type SessionTask,
   type SkillInfo,
@@ -120,6 +121,12 @@ export interface SessionPanelProps {
   focusComposerOnClick?: boolean
   unseen?: { itemCount: number; since?: number }
   readOnly?: boolean
+  // Draw a non-question approval as the host's own card; returning undefined falls back to the default permission prompt.
+  renderApproval?: (
+    request: PermissionRequest,
+    approve: (requestId: string, updatedInput?: Record<string, unknown>) => void,
+    deny: (requestId: string, message?: string) => void,
+  ) => ReactNode | undefined
   toolHost?: UseToolCallHostOptions | false
   cacheTranscript?: boolean
   emptyState?: ReactNode
@@ -205,6 +212,7 @@ export function SessionPanel({
   focusComposerOnClick = false,
   unseen,
   readOnly = false,
+  renderApproval,
   toolHost,
   clientTools,
   cacheTranscript,
@@ -670,16 +678,21 @@ export function SessionPanel({
                             <TerminalPermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
                           )
                         }
-                        return isQuestion ? (
-                          <QuestionPrompt
-                            key={request.id}
-                            request={request}
-                            onAnswer={approve}
-                            onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                          />
-                        ) : (
-                          <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
-                        )
+                        if (isQuestion) {
+                          return (
+                            <QuestionPrompt
+                              key={request.id}
+                              request={request}
+                              onAnswer={approve}
+                              onDismiss={(id) => deny(id, 'Question dismissed by user')}
+                            />
+                          )
+                        }
+                        const hostCard = renderApproval?.(request, approve, deny)
+                        if (hostCard !== undefined) {
+                          return <Fragment key={request.id}>{hostCard}</Fragment>
+                        }
+                        return <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
                       })}
                     </PromptSurface>
                   </div>
