@@ -5,13 +5,15 @@ import SwiftUI
 /// as a facet (filter/group/sort) rather than the frame — the model the VS Code
 /// extension proved. Search, the three facets, group/sort, and the subset line
 /// all come from the shared rules in the kit (`SessionList.swift`); this view
-/// only renders what they derive. Owns the navigation stack for everything
-/// below, and each route names its gateway explicitly.
+/// only renders what they derive. Owns the routing for everything below — a
+/// stack at compact width, a split view's sidebar at regular — and each route
+/// names its gateway explicitly.
 struct SessionListView: View {
   @Environment(HostStore.self) private var hosts
   @Environment(PushCoordinator.self) private var push
   @Environment(UnreadModel.self) private var unread
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.horizontalSizeClass) private var sizeClass
 
   @State private var model: SessionListModel?
   @State private var path: [SessionRoute] = []
@@ -27,6 +29,12 @@ struct SessionListView: View {
   /// about the glance you are having, and a list that reopened yesterday's
   /// twisties would be answering a question nobody asked twice.
   @State private var expandedAgents: Set<String> = []
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
+  // A regular width is the whole iPad claim: the list stops being a screen you
+  // leave and becomes a column you keep. Size class rather than idiom, so a
+  // Slide Over or a narrow multitasking split correctly gets the phone's stack.
+  private var isSplit: Bool { sizeClass == .regular }
 
   /// Restarting identity for the poll loop: any of these changing means the
   /// current loop is polling for the wrong world (or should not run at all).
@@ -36,28 +44,22 @@ struct SessionListView: View {
   }
 
   private var pollKey: PollKey {
-    PollKey(active: scenePhase == .active && path.isEmpty, hosts: hosts.hosts)
+    // Split keeps the list on screen behind an open session, so it keeps polling.
+    PollKey(active: scenePhase == .active && (path.isEmpty || isSplit), hosts: hosts.hosts)
   }
 
   var body: some View {
-    NavigationStack(path: $path) {
-      Group {
-        if let model {
-          content(model)
-        } else {
-          ProgressView()
-        }
-      }
-      .navigationTitle("Sessions")
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar { toolbar }
-      .navigationDestination(for: SessionRoute.self) { route in
-        destination(route)
+    Group {
+      if isSplit {
+        splitLayout
+      } else {
+        stackLayout
       }
     }
     // One task owns both the model's existence and the poll. The poll runs only
-    // while the list itself is what's on screen (stack empty, app active): an
-    // open session has its own socket, and a backgrounded app has no reader.
+    // while the list itself is on screen and the app is active: a session the
+    // stack covered the list with has its own socket, and a backgrounded app has
+    // no reader.
     .task(id: pollKey) {
       let live = model ?? SessionListModel(hosts: hosts, unread: unread)
       if model == nil { model = live }
@@ -85,6 +87,51 @@ struct SessionListView: View {
     }
   }
 
+  private var stackLayout: some View {
+    NavigationStack(path: $path) {
+      listColumn
+        .navigationDestination(for: SessionRoute.self) { route in
+          destination(route)
+        }
+    }
+  }
+
+  private var splitLayout: some View {
+    NavigationSplitView(columnVisibility: $columnVisibility) {
+      listColumn
+    } detail: {
+      if let model {
+        SessionWorkspaceView(
+          route: path.first, model: model, onLeave: { path = [] },
+          onCreated: { hostId, info in open(.session(hostId: hostId, sessionId: info.id)) })
+      } else {
+        ProgressView()
+      }
+    }
+    .navigationSplitViewStyle(.balanced)
+  }
+
+  private var listColumn: some View {
+    Group {
+      if let model {
+        content(model)
+      } else {
+        ProgressView()
+      }
+    }
+    .navigationTitle("Sessions")
+    .navigationBarTitleDisplayMode(.inline)
+    .toolbar { toolbar }
+    .navigationSplitViewColumnWidth(min: 320, ideal: 360, max: 460)
+  }
+
+  // The one way into a session, from either layout. Assignment rather than
+  // append because the list never pushes deeper than one: the stack's root is
+  // the list, and the split's detail is a single pane.
+  private func open(_ route: SessionRoute) {
+    path = [route]
+  }
+
   /// Open the session a notification was tapped for. The route names its
   /// gateway; a payload without one (a hand-crafted `simctl push`) falls back to
   /// whichever gateway is showing that session, then to the first host.
@@ -102,10 +149,8 @@ struct SessionListView: View {
     }
     // Replaces rather than appends, so Back from a pushed-to session lands on
     // the list however deep the stack happened to be.
-    path = [
-      .session(
-        hostId: hostId, sessionId: route.sessionId, seq: route.seq, epoch: route.epoch)
-    ]
+    open(
+      .session(hostId: hostId, sessionId: route.sessionId, seq: route.seq, epoch: route.epoch))
     push.clearRoute()
   }
 
@@ -120,28 +165,18 @@ struct SessionListView: View {
           sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
           focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal)
       } else {
-        missingHost
+        MissingHostView()
       }
     case .create(let hostId, let seed):
       if let context = model?.context(for: hostId) {
         CreateSessionView(seed: seed, client: context.client) { info in
           context.rememberCwd(info.cwd)
-          // Replace the create step so Back from the session lands on the list.
-          path = [.session(hostId: hostId, sessionId: info.id)]
+          open(.session(hostId: hostId, sessionId: info.id))
         }
         .environment(context)
       } else {
-        missingHost
+        MissingHostView()
       }
-    }
-  }
-
-  /// A route can outlive its gateway (deleted mid-navigation, a stale push).
-  private var missingHost: some View {
-    ContentUnavailableView {
-      Label("Server removed", systemImage: "server.rack")
-    } description: {
-      Text("The gateway this session belongs to is no longer configured on this device.")
     }
   }
 
@@ -267,7 +302,7 @@ struct SessionListView: View {
             if let route = sessionRoute(for: row) {
               SessionCardView(
                 row: row,
-                onOpen: { path.append(route) },
+                onOpen: { open(route) },
                 // Grouped by gateway, the section header already names it.
                 hostName: showsHostNames(model) && model.config.groupBy != .gateway
                   ? row.hostName : nil,
@@ -277,6 +312,7 @@ struct SessionListView: View {
                 expanded: expandedAgents.contains(row.info.id),
                 onToggle: { toggleAgents(row) },
                 menu: { rowActions(for: row, model: model) })
+              .listRowBackground(selectionBackground(for: route))
               // Two different actions wearing one gesture. Closing a *live*
               // session terminates a run someone may be relying on, so it asks
               // first; removing an already-closed one only drops a finished
@@ -395,6 +431,17 @@ struct SessionListView: View {
     }
   }
 
+  // The split view's detail pane has no back button, so the list is the only
+  // thing that can say which session it is showing.
+  @ViewBuilder
+  private func selectionBackground(for route: SessionRoute) -> some View {
+    if isSplit, path.first == route {
+      Color.accentColor.opacity(0.14)
+    } else {
+      Color.clear
+    }
+  }
+
   private func sessionRoute(for row: SessionRow) -> SessionRoute? {
     UUID(uuidString: row.hostId).map { .session(hostId: $0, sessionId: row.info.id) }
   }
@@ -424,9 +471,9 @@ struct SessionListView: View {
   /// opens the session and travels to that tool call's row (`reveal:`). A task
   /// used to be drawn inert here, on the argument that there was nowhere to
   /// send it — but there always was, and a row that looks like a list item,
-  /// sits in a list, and does nothing under a thumb is the worse lie. Both are
-  /// `NavigationLink`s to the same case with different payloads, so this is one
-  /// row shape with one destination type, not a variant branch inside a row.
+  /// sits in a list, and does nothing under a thumb is the worse lie. Both go
+  /// through `open` to the same case with different payloads, so this is one row
+  /// shape with one destination type, not a variant branch inside a row.
   @ViewBuilder
   private func stepRows(for row: SessionRow) -> some View {
     ForEach(sessionSteps(row.info)) { step in
@@ -435,7 +482,8 @@ struct SessionListView: View {
       }
       Group {
         if let route {
-          NavigationLink(value: route) { SessionStepRow(step: step) }
+          Button { open(route) } label: { SessionStepRow(step: step) }
+            .buttonStyle(.plain)
         } else {
           // No gateway id to route to — a shape this list has never actually
           // produced, but the row still draws rather than vanishing.
@@ -482,13 +530,15 @@ struct SessionListView: View {
         if !summaries.isEmpty {
           Section {
             ForEach(summaries) { summary in
-              NavigationLink(
-                value: SessionRoute.create(
-                  hostId: host.id,
-                  seed: CreateSessionSeed(cwd: summary.cwd ?? "", resume: summary.sessionId))
-              ) {
+              Button {
+                open(
+                  .create(
+                    hostId: host.id,
+                    seed: CreateSessionSeed(cwd: summary.cwd ?? "", resume: summary.sessionId)))
+              } label: {
                 SdkSessionRowView(summary: summary)
               }
+              .buttonStyle(.plain)
             }
           } header: {
             if hosts.hosts.count > 1 {
@@ -527,14 +577,28 @@ struct SessionListView: View {
   /// itself conditional, which is another way to lose identity.
   @ToolbarContentBuilder
   private var toolbar: some ToolbarContent {
-    ToolbarItem(id: "hosts", placement: .topBarLeading) {
-      Button { showHostManager = true } label: {
-        Label("Servers", systemImage: "server.rack")
+    // The sidebar is narrower than a phone's bar and carries the split view's
+    // own toggle as well, so these two fold into one menu there rather than
+    // being pushed into the system's "…" overflow.
+    if isSplit {
+      ToolbarItem(id: "app", placement: .topBarLeading) {
+        Menu {
+          Button("Servers", systemImage: "server.rack") { showHostManager = true }
+          Button("Settings", systemImage: "gearshape") { showSettings = true }
+        } label: {
+          Label("App", systemImage: "gearshape")
+        }
       }
-    }
-    ToolbarItem(id: "settings", placement: .topBarLeading) {
-      Button { showSettings = true } label: {
-        Label("Settings", systemImage: "gearshape")
+    } else {
+      ToolbarItem(id: "hosts", placement: .topBarLeading) {
+        Button { showHostManager = true } label: {
+          Label("Servers", systemImage: "server.rack")
+        }
+      }
+      ToolbarItem(id: "settings", placement: .topBarLeading) {
+        Button { showSettings = true } label: {
+          Label("Settings", systemImage: "gearshape")
+        }
       }
     }
     ToolbarItem(id: "filter", placement: .topBarTrailing) {
@@ -559,7 +623,7 @@ struct SessionListView: View {
   private var addButton: some View {
     if hosts.hosts.count == 1, let host = hosts.hosts.first {
       Button {
-        path.append(.create(hostId: host.id, seed: seed(for: host)))
+        open(.create(hostId: host.id, seed: seed(for: host)))
       } label: {
         Label("New session", systemImage: "plus")
       }
@@ -567,7 +631,7 @@ struct SessionListView: View {
       Menu {
         ForEach(hosts.hosts) { host in
           Button(host.displayName) {
-            path.append(.create(hostId: host.id, seed: seed(for: host)))
+            open(.create(hostId: host.id, seed: seed(for: host)))
           }
         }
       } label: {

@@ -15,23 +15,46 @@ struct HostFilesView: View {
   let scope: HostFileScope
 
   @Environment(\.dismiss) private var dismiss
-  @State private var model: HostFilesModel?
 
   var body: some View {
     NavigationStack {
-      Group {
-        if let model {
-          content(model)
-        } else {
-          ProgressView()
+      HostFilesBrowser(scope: scope)
+        .navigationTitle(Fmt.lastComponent(scope.cwd))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: .topBarTrailing) {
+            Button("Done") { dismiss() }
+          }
         }
-      }
-      .navigationTitle(Fmt.lastComponent(scope.cwd))
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button("Done") { dismiss() }
-        }
+    }
+  }
+}
+
+/// The browser without a frame around it, in two navigation modes.
+///
+/// The phone's sheet wraps it in a `NavigationStack` and drills with
+/// `NavigationLink`, so the stack *is* the path. The iPad's rail cannot: a
+/// `NavigationLink` inside a `NavigationSplitView` column resolves against the
+/// **split view**, so a sub-folder pushed itself over the whole detail pane
+/// instead of staying in its 280pt column. `inline` mode is the fix — the rail
+/// owns a plain `[String]` of directories and draws the top of it, which is
+/// self-contained by construction rather than by hoping the nearest stack wins.
+struct HostFilesBrowser: View {
+  let scope: HostFileScope
+  // Where a file row goes. Nil is the phone's sheet, which pushes the editor onto
+  // its own stack; the iPad workspace passes a closure and opens a tab instead.
+  var onOpenFile: ((String) -> Void)?
+  var inline = false
+
+  @State private var model: HostFilesModel?
+  @State private var stack: [String] = []
+
+  var body: some View {
+    Group {
+      if let model {
+        content(model)
+      } else {
+        ProgressView()
       }
     }
     .task {
@@ -71,8 +94,79 @@ struct HostFilesView: View {
         Button("Try again") { Task { await model.load() } }
       }
     case .ready:
-      HostDirectoryView(model: model, path: model.cwd)
+      if inline {
+        inlineBrowser(model)
+      } else {
+        HostDirectoryView(model: model, path: model.cwd, onOpenFile: onOpenFile)
+      }
     }
+  }
+
+  private func inlineBrowser(_ model: HostFilesModel) -> some View {
+    let current = stack.last ?? model.cwd
+    return VStack(spacing: 0) {
+      Breadcrumbs(
+        root: model.cwd, stack: stack,
+        onSelect: { depth in stack = Array(stack.prefix(depth)) })
+      Divider()
+      HostDirectoryView(
+        model: model, path: current, onOpenFile: onOpenFile,
+        onOpenDirectory: { stack.append($0) })
+    }
+  }
+}
+
+/// Where you are in the rail, and every way back out of it.
+///
+/// A breadcrumb rather than a back chevron: the rail is 280pt of a screen that
+/// also holds a transcript, so climbing out of `packages/ui/src/components` one
+/// tap at a time is the wrong trade. Every crumb is a full-height button, which
+/// is also the answer to a chevron being a small target.
+private struct Breadcrumbs: View {
+  let root: String
+  let stack: [String]
+  let onSelect: (Int) -> Void
+
+  var body: some View {
+    ScrollViewReader { proxy in
+      ScrollView(.horizontal) {
+        HStack(spacing: 2) {
+          crumb(Fmt.lastComponent(root), depth: 0, last: stack.isEmpty)
+          ForEach(Array(stack.enumerated()), id: \.offset) { index, path in
+            Image(systemName: "chevron.right")
+              .font(.system(size: 9, weight: .semibold))
+              .foregroundStyle(.tertiary)
+            crumb(Fmt.lastComponent(path), depth: index + 1, last: index == stack.count - 1)
+          }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .scrollIndicators(.hidden)
+      // Left-aligned while it fits, and following the folder you just entered
+      // when it does not — a trailing anchor pinned a two-crumb path to the
+      // right edge, which read as the rail being misaligned.
+      .onChange(of: stack.count) { _, _ in
+        withAnimation { proxy.scrollTo(stack.count, anchor: .trailing) }
+      }
+    }
+    .frame(height: 38)
+    .background(.bar)
+  }
+
+  private func crumb(_ name: String, depth: Int, last: Bool) -> some View {
+    Button { onSelect(depth) } label: {
+      Text(name)
+        .font(.subheadline.weight(last ? .semibold : .regular))
+        .foregroundStyle(last ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        .lineLimit(1)
+        .padding(.horizontal, 6)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(last)
+    .id(depth)
   }
 }
 
@@ -81,6 +175,10 @@ struct HostFilesView: View {
 private struct HostDirectoryView: View {
   let model: HostFilesModel
   let path: String
+  var onOpenFile: ((String) -> Void)?
+  // Set in the rail's inline mode, where there is no stack to push onto — and
+  // also what says this view must not name a navigation title it does not own.
+  var onOpenDirectory: ((String) -> Void)?
 
   var body: some View {
     List {
@@ -105,31 +203,61 @@ private struct HostDirectoryView: View {
       }
     }
     .listStyle(.plain)
-    .navigationTitle(Fmt.lastComponent(path))
-    .navigationBarTitleDisplayMode(.inline)
+    .modifier(
+      OptionalNavigationTitle(
+        title: onOpenDirectory == nil ? Fmt.lastComponent(path) : nil))
     .refreshable { await model.loadDirectory(path, force: true) }
-    .task { await model.loadDirectory(path) }
+    // Keyed: inline, this view keeps its position and only its `path` changes,
+    // so a bare `.task` loaded the root once and never the folder you entered.
+    .task(id: path) { await model.loadDirectory(path) }
   }
 
   @ViewBuilder
   private func row(_ entry: HostDirEntry) -> some View {
     switch entry.type {
     case .dir:
-      NavigationLink {
-        HostDirectoryView(model: model, path: entry.path)
-      } label: {
-        EntryRow(entry: entry)
+      if let onOpenDirectory {
+        Button { onOpenDirectory(entry.path) } label: { EntryRow(entry: entry) }
+          .buttonStyle(.plain)
+      } else {
+        NavigationLink {
+          HostDirectoryView(model: model, path: entry.path, onOpenFile: onOpenFile)
+        } label: {
+          EntryRow(entry: entry)
+        }
       }
     case .file, .symlink:
       // A symlink is opened like a file: only the server knows whether it resolves
       // somewhere allowed, and it answers that by refusing the read.
-      NavigationLink {
-        HostFileView(model: model, path: entry.path)
-      } label: {
-        EntryRow(entry: entry)
+      if let onOpenFile {
+        Button { onOpenFile(entry.path) } label: { EntryRow(entry: entry) }
+          .buttonStyle(.plain)
+      } else {
+        NavigationLink {
+          HostFileView(model: model, path: entry.path)
+        } label: {
+          EntryRow(entry: entry)
+        }
       }
     case .other:
       EntryRow(entry: entry).foregroundStyle(.secondary)
+    }
+  }
+}
+
+// Inline, this view is a *column* inside someone else's stack, so it must not
+// name a title at all — applying one with an empty string overwrote the
+// session's, which is what blanked the header when the rail was open.
+private struct OptionalNavigationTitle: ViewModifier {
+  let title: String?
+
+  func body(content: Content) -> some View {
+    if let title {
+      content
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    } else {
+      content
     }
   }
 }

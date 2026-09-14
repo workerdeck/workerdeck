@@ -189,7 +189,8 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     scope passed as `nil` throughout: a phone has no open folders, so that filter is genuinely
     inert here rather than hiding everything. The poll follows the work (2s while anything runs
     or waits on a human, 5s otherwise) and runs only while the list itself is on screen — inside
-    a session, that session's socket is the fresher source. Each row carries an **unread count**
+    a session, that session's socket is the fresher source, except on the iPad, where the list is
+    a column that never leaves. Each row carries an **unread count**
     (`App/Sources/Model/UnreadModel.swift`, the kit's `Watermarks` over `UserDefaults`), and the
     same sum — over the rows the filter is *showing*, never the hidden ones — is stamped on the
     app icon. Marks are written only while a session is genuinely on screen and attached; the
@@ -490,8 +491,22 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     only for the one you are looking at, so those are as invisible as they are in the background.
     (The server-side alternative — have `SessionNotifier` skip sessions with an attached client —
     would fix this for the dashboard too, at the cost of coupling the notifier to the registry.)
+  - `App/Sources/Sessions/SessionWorkspaceView.swift`, `App/Sources/Session/SessionFilesRail.swift`,
+    `App/Sources/Session/EditorPane.swift`, `App/Sources/Files/OpenFilesModel.swift`
+    — the **iPad layout**: sessions sidebar, project rail, open files over the transcript, the
+    shape the dashboard's `SessionWorkspace` has. The rail is toggled from the folder button in
+    the session's header and has no collapsed strip; it navigates by breadcrumb rather than by
+    `NavigationLink` (which, in a split-view column, pushes over the whole detail pane — see
+    `docs/GOTCHAS.md` §iPad workspace). A file opens as a **tab**, not a push, the editor and the
+    transcript share the column through a drag bar, and the header is one line: Files toggle,
+    project, file badges, Save, `⋯`. `SessionListView` picks it on `horizontalSizeClass`, not idiom, so a
+    Slide Over gets the phone's stack. Both arms share one `path: [SessionRoute]` and one
+    `open(route)` that assigns rather than appends, because the list never pushes deeper than one
+    — which is what makes the stack's depth-1 and the split's selection literally the same value.
+    `docs/CLIENTS.md` §`apps/ios` carries the rest (why `onLeave` replaces `dismiss()`, why the
+    detail pane needs `.id(route)`, where the rail's `cwd` comes from).
   - `App/Sources/Files/` — the host file browser, reached from the folder button in an open
-    session's toolbar. **Scoped to that session's `cwd`**: rooted there, with no roots list and no
+    session's toolbar — or, on the iPad, standing open as its own column. **Scoped to that session's `cwd`**: rooted there, with no roots list and no
     way up, because what you want on a phone is this project's tree, not an inventory of what the
     gateway exposes. (The server's `--fs-root` roots are still the security boundary; this scope
     is only what's offered.) Directory per navigation level so the stack *is* the path, a

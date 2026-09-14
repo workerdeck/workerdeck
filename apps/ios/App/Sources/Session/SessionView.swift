@@ -44,6 +44,12 @@ struct SessionView: View {
   /// item lookup over a half-replayed transcript answers "not here" about a
   /// call that simply has not arrived. See `resolveReveal()`.
   private let revealToolUseId: String?
+  // The iPad workspace draws the project tree as a column beside the transcript,
+  // so the toolbar's Files button would be a second door to what is already open.
+  private let showsFilesAction: Bool
+  // Leaving the session. On the phone that is popping the stack; in the iPad
+  // workspace there is no stack to pop — the detail pane has to clear instead.
+  private let onLeave: (() -> Void)?
 
   @State private var vm: TranscriptViewModel
   @State private var draft = ""
@@ -144,12 +150,15 @@ struct SessionView: View {
 
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil,
-    focusEpoch: Int? = nil, openSubagent: String? = nil, revealToolUseId: String? = nil
+    focusEpoch: Int? = nil, openSubagent: String? = nil, revealToolUseId: String? = nil,
+    showsFilesAction: Bool = true, onLeave: (() -> Void)? = nil
   ) {
     self.hostId = hostId
     self.focusSeq = focusSeq
     self.focusEpoch = focusEpoch
     self.revealToolUseId = revealToolUseId
+    self.showsFilesAction = showsFilesAction
+    self.onLeave = onLeave
     _pendingSubagent = State(initialValue: openSubagent)
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
   }
@@ -400,7 +409,7 @@ struct SessionView: View {
       ) {
         Button("Close session", role: .destructive) {
           vm.closeSession()
-          dismiss()
+          leave()
         }
         Button("Cancel", role: .cancel) {}
       } message: {
@@ -1007,7 +1016,7 @@ struct SessionView: View {
   private var toolbarMenu: some ToolbarContent {
     // Only once the cwd is known — the browser is rooted at it, so there is
     // nothing to open before then.
-    if vm.hostFiles != nil {
+    if showsFilesAction, vm.hostFiles != nil {
       ToolbarItem(placement: .topBarTrailing) {
         Button { sheet = .files } label: {
           Label("Files", systemImage: "folder")
@@ -1050,6 +1059,14 @@ struct SessionView: View {
       } label: {
         Label("Session actions", systemImage: "ellipsis.circle")
       }
+    }
+  }
+
+  private func leave() {
+    if let onLeave {
+      onLeave()
+    } else {
+      dismiss()
     }
   }
 

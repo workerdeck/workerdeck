@@ -2144,6 +2144,30 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   dialog state), but an app with a real top bar wants it up there — hence the seam rather than a
   second menu.
 
+## iPad workspace (SwiftUI split view)
+
+- **A `NavigationLink` inside a `NavigationSplitView` column resolves against the split view, not
+  against a `NavigationStack` you nested in that column.** The iOS file rail put a stack around its
+  browser and a sub-folder still pushed itself over the *whole detail pane*. Wrapping harder does
+  not help — the rail now owns a plain `[String]` of directories and draws the top of it
+  (`HostFilesBrowser`'s inline mode), which is self-contained by construction. The general rule:
+  inside a split-view column, drill with state you own, never with a link whose destination the
+  framework routes for you.
+- **A view reused at the same position does not re-run a bare `.task` when only its input
+  changes.** The inline rail keeps one `HostDirectoryView` and swaps its `path`, so `.task` loaded
+  the root once and every folder you entered came up empty. `.task(id: path)`.
+- **`navigationTitle` applied by *any* view in a column reaches the bar, including an empty
+  one.** `HostDirectoryView` set `navigationTitle("")` in inline mode and blanked the session's
+  title beside it. A title has to be *not applied*, not applied-with-nothing — hence the
+  `OptionalNavigationTitle` modifier rather than a ternary on the string.
+- **Split `.topBarLeading` + `.principal` leaves a gap you cannot close**: the principal region
+  begins where the system decides the leading one ends. The workspace's header (Files toggle,
+  project, file tabs) is therefore *one* principal item with
+  `.frame(maxWidth: .infinity, alignment: .leading)`.
+- **The navigation bar spans the whole detail pane, so a column placed beside the stack is drawn
+  under it.** The rail sits *inside* the `NavigationStack`, in an `HStack` with the session column,
+  which is what gives it the bar's safe area.
+
 ## APNs push (the CLI's forwarder)
 
 - **The `apns.topic` is the iOS app's bundle id, and the two halves live in files that never see

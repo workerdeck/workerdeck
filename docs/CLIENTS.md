@@ -808,8 +808,10 @@ people paste into an agent most.
 
 **The phone draws no list selection**, deliberately: the dashboard paints a card blue and moves
 the blue down to a step when a sub-agent is framed, but that needs list and panel on screen
-together, and a `NavigationStack` push means the list is gone. So `--row-selected`,
-`--row-selected-weak`, `--row-hover` and `--row-active` have no expression here.
+together, and a `NavigationStack` push means the list is gone. The iPad is where that condition
+finally holds, so the split view's sidebar *does* paint the selected row — see §`apps/ios` iPad
+layout below. `--row-hover` and `--row-active` still have no expression on either: there is no
+hover, and a press is a navigation.
 `--badge`/`--badge-fg` do (`ListPalette`, beside `VendorPalette`): an unread count wears the tint
 while its session is live and drops to the neutral badge once it settles, because the same number
 on a finished session is a record rather than a call to look. The old third line spent a third of every row on a labelled `Idle`
@@ -861,6 +863,46 @@ field to compute it from, which is the more interesting half of why that bug sur
 being written down. Sub-agents render now: `SessionSteps.swift` ports the shared step model,
 `SessionListView` draws the expandable step rows, and a step press lands in the takeover
 (`SubagentTakeoverView`) rather than inline expansion — no hover on a thumb.
+**iPad layout.** `SessionListView` switches on `horizontalSizeClass`, never on idiom: a stack at
+compact, a `NavigationSplitView` at regular, so Slide Over and a narrow multitasking split
+correctly get the phone's shape. Both arms drive **one** `path: [SessionRoute]` through one
+`open(route)` that *assigns* rather than appends — the list never pushes deeper than one, so the
+stack's depth-1 and the split's selected pane are the same value, and push routing, the create
+form's hand-off and the step rows all keep working unchanged in both. Leaving a session is the
+seam that does not survive the move: `dismiss()` pops a stack and does nothing to a detail pane,
+so `SessionView` takes an `onLeave` and closing from its menu clears `path` instead. Two more
+things follow from the list staying on screen — the poll no longer stops when a session is open
+(`pollKey.active` includes the split arm), and the detail pane carries `.id(route)`, without which
+SwiftUI hands the next session's screen the previous one's `TranscriptViewModel`.
+The **third column** is `SessionFilesRail`, the dashboard's `SessionWorkspace` shape ported:
+rail, drag-resizable divider, then the session screen. It is shown or not shown — there is no
+collapsed strip, because a permanent gutter holding one button was paying rent in the column the
+transcript needs most; the way back is the **folder button in the session's own header**, which
+is where someone looks for it. It reuses `HostFilesBrowser` — extracted out of `HostFilesView` so
+the phone's sheet and the iPad's column are the same browser in two frames — and it is rooted at
+the **list row's** `cwd`, which is known before the socket has said anything. `SessionView` is
+told `showsFilesAction: false` there, since its toolbar's Files button would be a second door to
+what is already open.
+Navigation inside the rail is the rail's own: a `[String]` of directories with a **breadcrumb**
+over it, not a `NavigationLink` stack. Two reasons, and the first is not cosmetic — a link inside
+a split-view column pushes over the whole detail pane (`docs/GOTCHAS.md` §iPad workspace). The
+second is that 280pt beside a transcript is the wrong place to climb out of
+`packages/ui/src/components` one back-tap at a time; every crumb is a full-height button.
+Opening a file does not push either: `OpenFilesModel` (the Swift side of `useOpenFiles`) holds the
+tabs, and `EditorPane` draws the active one above the transcript with a grab bar between — the
+same band the web workspace has. The **header is one line** — Files toggle, project, a badge per
+open file, then Save and the session's own `⋯` — built as a single `.principal` item, because
+splitting it across placements leaves a gap the framework owns. A thin owner rather than a port of the reducer, because `HostFileModel` already
+carries a file's whole life (load, draft, dirty, save, the 409); what was left was which files
+are open and which is showing. Two rules are mirrored deliberately: the tab is keyed on the path
+**asked for**, never the canonical one the gateway answers with, and closing the active tab
+activates the right-hand neighbour that slid into its index. The split is the one place the two
+clients diverge in shape rather than in styling — the column's whole height is measured through a
+preference and the editor is clamped against a transcript floor, where the web clamps against a
+`ResizeObserver`. Editing is gated on `--fs-write` asked **once by the tab model** rather than
+read off the browser's: a Save that depended on a rail having been opened first would offer a
+write the server refuses. The rail's visibility and width are `AppSettings` preferences like the
+transcript ones, written once at the end of a drag rather than per frame.
 A **`Menu` in a toolbar closes when its item is re-identified**, and the sessions list's filter
 dropdown shut itself on every poll because of it — the menu read `model.adapters`, a property
 computed from the session rows, so `@Observable` invalidated it whenever a snapshot was

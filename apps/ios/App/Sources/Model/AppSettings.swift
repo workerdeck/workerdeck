@@ -141,6 +141,17 @@ final class AppSettings {
     didSet { defaults.set(catchUpMode, forKey: Self.catchUpKey) }
   }
 
+  // The iPad workspace's file rail. A reader preference like the rest, and
+  // persisted for the same reason: reopening with the rail you closed is the
+  // only behaviour that isn't surprising.
+  var filesRailCollapsed: Bool {
+    didSet { defaults.set(filesRailCollapsed, forKey: Self.railCollapsedKey) }
+  }
+
+  var filesRailWidth: Double {
+    didSet { defaults.set(filesRailWidth, forKey: Self.railWidthKey) }
+  }
+
   private let defaults: UserDefaults
 
   private static let variantKey = "bi.atomic.workerdeck.ios.transcriptVariant"
@@ -148,6 +159,8 @@ final class AppSettings {
   private static let fontKey = "bi.atomic.workerdeck.ios.transcriptFont"
   private static let catchUpKey = "bi.atomic.workerdeck.ios.catchUpMode"
   private static let approveLockKey = "bi.atomic.workerdeck.ios.approveWhileLocked"
+  private static let railCollapsedKey = "bi.atomic.workerdeck.ios.filesRailCollapsed"
+  private static let railWidthKey = "bi.atomic.workerdeck.ios.filesRailWidth"
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
@@ -169,6 +182,8 @@ final class AppSettings {
     catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true
     approveWhileLocked =
       defaults.string(forKey: Self.approveLockKey).flatMap(ApproveWhileLocked.init(rawValue:)) ?? .unlockedOnly
+    filesRailCollapsed = defaults.object(forKey: Self.railCollapsedKey) as? Bool ?? true
+    filesRailWidth = defaults.object(forKey: Self.railWidthKey) as? Double ?? SessionFilesRail.defaultWidth
   }
 }
 
