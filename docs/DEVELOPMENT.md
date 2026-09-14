@@ -90,8 +90,13 @@ Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path or
 CLI-control-request changes need one — the fake harness can't validate those payloads — and **an
 engine's process contract can't either**: any change to `CodexRunner`'s spawn options,
 handshake, or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
-`smoke:codex --canary` are free; `smoke:live`, `smoke:sdk`, `smoke:media` (the only check that
-the CLI accepts image/PDF/text attachment blocks at all) and the full `smoke:codex` are not.
+`smoke:codex --canary` are free; `smoke:live`, `smoke:live-approval`, `smoke:sdk`, `smoke:media`
+(the only check that the CLI accepts image/PDF/text attachment blocks at all) and the full
+`smoke:codex` are not. **`smoke:live` does not cover the provider engine's approval path** — it
+drives tools by hand and configures no executor, so it never reaches `#dispatchSingle`; that is
+what `smoke:live-approval` is for. It edits the first tool call at approval and proves the edit
+ran from a **VFS entry** rather than from anything the model says, so it does not rest on a model
+behaving; it fails on both assertions against a runner without the amend.
 Three more the list above omits. `smoke:mcp --probe` is **free** — it connects to the real
 DeepWiki server, asserts the tools come back namespaced, and exits before touching a model;
 without `--probe` it grants those tools to a real session and costs tokens. `smoke:restart` spawns
