@@ -760,6 +760,61 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   source image's pixel dimensions, derive the unit, and check the built screen against a pixel
   count rather than a screenshot comparison.
 
+  **2.3.0** — **a host can draw its own approval card, and an edited approval finally reaches the
+  tool.** A **minor**, additive throughout; **protocol stays 1**. Opened by a contributor PR
+  (RuliSlim, #1) whose two commits are in the history under their own name; the seam it proposed
+  was reshaped before merge and the bug it exposed was fixed separately.
+
+  **`SessionPanel.approvalPrompts`** is the new seam: `Record<toolName,
+  ComponentType<ApprovalPromptProps>>`, so a host draws the one tool it has a real review screen
+  for (a record the agent wants to save, laid out as the form the reviewer already knows) and the
+  built-in prompt keeps the rest. It is a *registry* rather than the render prop first proposed
+  because the panel already was one, with two private entries — `AskUserQuestion` →
+  `QuestionPrompt`, `ExitPlanMode` → `PermissionPrompt`'s plan arm — so this publishes the
+  mechanism it had instead of bolting a second dispatch beside it, matching `clientTools` and
+  `tool_titles`. Three defects died with the shape. The lookup sits **above** the theme split, so
+  an entry draws in both; the render prop was consulted only on the cards path, which made it a
+  silent no-op in `apps/embedded` (the reference embedding runs `transcriptVariant="terminal"`) and
+  would have made a host's card blink in and out of existence with the dashboard's and VS Code's
+  runtime theme toggle. There is no fallback sentinel, and so no way to hit the trap that `null`,
+  `false` and `''` all render nothing while passing `!== undefined` — the natural
+  `cond ? <Card/> : null` left an approval nobody could answer. And `ApprovalPromptProps` carries
+  the built-ins' own callback shapes, `interrupt?` included, without which a host card could not
+  offer the default card's "Deny & stop"; `packages/ui/test/approval-prompts.test.ts` holds that
+  assignability, since a stray required prop on either prompt would break the drop-in fallback
+  silently.
+
+  **The provider runner was dropping `decision.updatedInput`** — edit-then-approve, wired end to
+  end and honored by the claude and codex engines since each existed, did nothing on this one.
+  Amending the pending call is only half the fix: `AiSdkRunner` keeps its own `#messages`, whose
+  assistant message still held the `tool-call` part the model wrote, so running B while the history
+  claimed A would have the model reason from A on the next leg. `#amendToolInput` rewrites the
+  matching part too, immutably, and both halves ride `#buildSnapshot` so an edit survives
+  park/resume. The transcript still shows the input the model wrote, which is what the other two
+  engines do — the edit goes to the tool, not to the row.
+
+  **The terminal theme's free-text fields grow.** The cards theme got a growing "Other…" in the
+  same PR; the terminal kept a single-line `<input>`, so the sideways-scrolling window survived in
+  the dashboard, the VS Code webview and iOS — every client that actually ships this theme.
+  `PromptInput` is a `textarea` now, which fixes the question card's own-words answer and the
+  permission card's deny reason at once. It stays on the cell grid because it has no padding and
+  `line-height` is `--term-line`: measured 1 through 8 rows in the playground, with the grid audit
+  still clean. Enter sends and Shift+Enter is the newline, the composer's contract rather than a
+  second one — which brought the `isComposing` guard with it, fixing a bug nobody on a Latin
+  keyboard could see: the old field submitted on an IME's candidate-confirming Enter, so a Japanese
+  or Chinese answer could never be typed past its first word.
+
+  **Coverage the fix needed and did not have.** Provider approvals had *no* tests at all;
+  there are now three plus a park/resume round trip, and each was confirmed to fail against the
+  unfixed runner. `smoke:live` could not stand in — it drives tool calls by hand and configures no
+  executor, so it never reaches `#dispatchSingle` — hence **`smoke:live-approval`**, which edits
+  the first call at approval and proves the edit ran from a *VFS entry* rather than from anything
+  the model chose to say. Checked both ways against Anthropic: passing on the fix, failing on both
+  assertions without it. Also fixed on the way past: `attachment-routes`' `settle()` was a fixed
+  60ms stand-in for "the message reached the runner" that flaked once under the full suite's
+  parallel load; the three positive sites now wait for the input and the negative one waits for the
+  error frame that *is* its signal.
+
 
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
