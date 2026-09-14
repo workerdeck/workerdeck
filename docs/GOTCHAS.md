@@ -216,6 +216,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   more, but `AiSdkRunner`, its tests, `smoke:live`/`smoke:sdk`, and `examples/provider-server.ts`
   all stay green — they are the proof the path still works, and the route back if those providers
   return as bespoke adapters.
+- **An approval's `updatedInput` has to reach the model's history, not just the executor.** The
+  runner keeps its own `#messages`, and the assistant message already holds the `tool-call` part
+  the model wrote. Amending only `PendingToolCall.input` runs the edit while the history still
+  claims the original, so the next leg reasons from arguments that were never executed — a file
+  it believes holds A when B was written. `#amendToolInput` rewrites the matching part too, and
+  immutably, so a `messages` copy already taken does not change under its holder. It runs inside
+  `#dispatchSingle`'s pending guard, so an approval answered after an `interrupt()` already
+  failed the call amends nothing. Both halves ride `#buildSnapshot`, so the edit survives
+  park/resume for free.
+- **The transcript keeps the input the model wrote, on all three engines** — the edit goes to the
+  tool, not to the row, and `permission_resolved` carries no input. Surfacing an edit in the
+  transcript is therefore a cross-engine protocol change, not a runner fix; the provider tests
+  pin the current behaviour so there is one place to flip it.
 
 ## Codex engine (`codex app-server` / the `@openai/codex` binary)
 
