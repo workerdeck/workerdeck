@@ -56,8 +56,18 @@ async function withSocket(wsBase: string, id: string, fn: (ws: WebSocket, events
   }
 }
 
-function settle() {
-  return new Promise((resolve) => setTimeout(resolve, 60))
+// A fixed sleep here was a flake: 60ms is plenty on an idle machine and not always
+// enough while the other nine packages' suites run beside this one, and the failure
+// lands on `inputs.at(-1)` reading a turn that has not arrived.
+async function until(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
+function awaitTurn(harness: ReturnType<typeof fakeHarness>) {
+  return until(() => harness.captured.inputs.length > 0)
 }
 
 describe('session attachments', () => {
@@ -83,7 +93,7 @@ describe('session attachments', () => {
           attachmentIds: [uploaded.attachment.id],
         }),
       )
-      await settle()
+      await awaitTurn(harness)
 
       const sent = harness.captured.inputs.at(-1)!
       expect(sent.message.content).toEqual([
@@ -113,7 +123,7 @@ describe('session attachments', () => {
 
     await withSocket(wsBase, id, async (ws) => {
       ws.send(JSON.stringify({ type: 'user_message', text: '', attachmentIds: [uploaded.attachment.id] }))
-      await settle()
+      await awaitTurn(harness)
       expect(harness.captured.inputs.at(-1)!.message.content).toEqual([
         {
           type: 'image',
@@ -134,7 +144,7 @@ describe('session attachments', () => {
 
     await withSocket(wsBase, id, async (ws) => {
       ws.send(JSON.stringify({ type: 'user_message', text: 'read it', attachmentIds: [uploaded.attachment.id] }))
-      await settle()
+      await awaitTurn(harness)
       expect(harness.captured.inputs.at(-1)!.message.content).toEqual([
         {
           type: 'text',
@@ -196,7 +206,8 @@ describe('session attachments', () => {
         }
       })
       ws.send(JSON.stringify({ type: 'user_message', text: 'look', attachmentIds: ['nope'] }))
-      await settle()
+      // The rejection *is* the signal, so this waits for it rather than for a duration.
+      await until(() => errors.length > 0)
       expect(errors.join()).toMatch(/unknown attachment\(s\): nope/)
       expect(harness.captured.inputs).toHaveLength(0)
     })
