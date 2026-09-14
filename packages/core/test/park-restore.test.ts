@@ -4,7 +4,14 @@ import { MockLanguageModelV3 } from 'ai/test'
 import { z } from 'zod'
 import { createVfs } from '@workerdeck/sandbox'
 import type { SessionEvent } from '@workerdeck/protocol'
-import { AiSdkRunner, DeferredExecutor, type AiSdkRunnerConfig, type DeferredDispatch, type RunnerSnapshot } from '../src/index.ts'
+import {
+  AiSdkRunner,
+  DeferredExecutor,
+  type AiSdkRunnerConfig,
+  type AiSdkSessionState,
+  type DeferredDispatch,
+  type RunnerSnapshot,
+} from '../src/index.ts'
 import { streamCalls, streamText } from './helpers/ai-sdk-mocks.ts'
 import { waitFor } from './helpers/wait.ts'
 
@@ -24,6 +31,14 @@ function streamStalls(text: string) {
 }
 
 const TOOLS = { remote_task: tool({ inputSchema: z.object({ task: z.string() }) }) }
+
+function toolCallInputs(messages: ReadonlyArray<{ role: string; content: unknown }>): unknown[] {
+  return messages.flatMap((message) =>
+    message.role === 'assistant' && Array.isArray(message.content)
+      ? (message.content as Array<{ type: string; input?: unknown }>).filter((part) => part.type === 'tool-call').map((part) => part.input)
+      : [],
+  )
+}
 
 function harness(config: Partial<AiSdkRunnerConfig> & Pick<AiSdkRunnerConfig, 'languageModel'>) {
   const runner = new AiSdkRunner({ tools: TOOLS, executableTools: ['remote_task'], ...config })
@@ -119,6 +134,36 @@ describe('deferred execution: park and rehydrate', () => {
     expect(result).toMatchObject({ numTurns: 1, usage: { input_tokens: 20, output_tokens: 10 } })
     expect(Math.min(...after.map((e) => e.seq))).toBeGreaterThan(snapshot.seq)
     expect(resumed.messages.filter((m) => m.role === 'user')).toHaveLength(1)
+  })
+
+  it('parks an approval’s edited input and resumes with it in the pending call, the history and the next leg', async () => {
+    const dispatched: DeferredDispatch[] = []
+    const model = new MockLanguageModelV3({
+      modelId: 'mock-1',
+      doStream: [streamCalls([{ id: 'call-1', tool: 'remote_task', input: { task: 'draft' } }]), streamText('shipped')],
+    })
+    const executor = new DeferredExecutor({ onDispatch: (call) => void dispatched.push(call) })
+    const h = harness({ languageModel: model, executor, shouldApprove: () => true })
+    h.runner.sendMessage('go')
+    await waitFor(() => h.runner.pendingApprovals.length === 1)
+    h.runner.resolvePermission(h.runner.pendingApprovals[0]!.id, { behavior: 'allow', updatedInput: { task: 'final' } })
+    await waitFor(() => h.runner.info().status === 'parked')
+    expect(dispatched.map((d) => d.input)).toEqual([{ task: 'final' }])
+
+    const snapshot = h.runner.park()!
+    expect((snapshot.state as AiSdkSessionState).pendingToolCalls).toMatchObject([{ toolCallId: 'call-1', input: { task: 'final' } }])
+
+    const resumed = new AiSdkRunner({ languageModel: model, tools: TOOLS, executableTools: ['remote_task'], executor, restore: snapshot })
+    const after: SessionEvent[] = []
+    resumed.subscribe((e) => after.push(e), snapshot.seq)
+    void resumed.start()
+    expect(resumed.pendingToolCalls).toMatchObject([{ toolCallId: 'call-1', input: { task: 'final' } }])
+    expect(toolCallInputs(resumed.messages)).toEqual([{ task: 'final' }])
+
+    expect(resumed.settleExecution('call-1', { status: 'ok', output: 'ok' })).toBe(true)
+    await waitFor(() => after.some((e) => e.type === 'turn_result'))
+    expect(after.find((e) => e.type === 'turn_result')).toMatchObject({ subtype: 'success', result: 'shipped' })
+    expect(toolCallInputs(model.doStreamCalls[1]!.prompt)).toEqual([{ task: 'final' }])
   })
 
   it('stays parked until every deferred call is settled', async () => {

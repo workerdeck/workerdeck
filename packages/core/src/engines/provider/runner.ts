@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { ToolLoopAgent, generateText, isStepCount, type LanguageModel, type ModelMessage, type ToolSet } from 'ai'
+import { ToolLoopAgent, generateText, isStepCount, type LanguageModel, type ModelMessage, type ToolCallPart, type ToolSet } from 'ai'
 import {
   ENGINE_CAPABILITIES,
   snapshotRetains,
@@ -392,7 +392,7 @@ export class AiSdkRunner implements Runner {
         behavior: 'allow',
         resolvedBy: source,
       })
-      this.#dispatchSingle(approval.toolCallId)
+      this.#dispatchSingle(approval.toolCallId, decision.updatedInput)
     } else {
       const message = decision.message ?? 'Permission denied by user'
       this.#emit({
@@ -620,7 +620,7 @@ export class AiSdkRunner implements Runner {
     }
   }
 
-  #dispatchSingle(toolCallId: string): void {
+  #dispatchSingle(toolCallId: string, updatedInput?: Record<string, unknown>): void {
     const executor = this.#config.executor
     if (!executor) {
       return
@@ -629,10 +629,31 @@ export class AiSdkRunner implements Runner {
     if (!call || this.#dispatched.has(toolCallId)) {
       return
     }
+    if (updatedInput !== undefined) {
+      this.#amendToolInput(call, updatedInput)
+    }
     this.#dispatched.add(toolCallId)
     const dispatched = this.#dispatchCall(executor, call)
     if (dispatched.deferred) {
       void dispatched.promise.then(() => this.#announceParked())
+    }
+  }
+
+  // The next leg must see the call the way it ran, not the way the model wrote it.
+  #amendToolInput(call: PendingToolCall, input: Record<string, unknown>): void {
+    call.input = input
+    for (let i = this.#messages.length - 1; i >= 0; i--) {
+      const message = this.#messages[i]!
+      if (
+        message.role !== 'assistant' ||
+        !Array.isArray(message.content) ||
+        !message.content.some((part) => callsTool(part, call.toolCallId))
+      ) {
+        continue
+      }
+      const content = message.content.map((part) => (callsTool(part, call.toolCallId) ? { ...part, input } : part))
+      this.#messages[i] = { ...message, content }
+      return
     }
   }
 
@@ -1018,4 +1039,8 @@ function textValue(output: ToolCallOutput): string {
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function callsTool(part: { type: string }, toolCallId: string): part is ToolCallPart {
+  return part.type === 'tool-call' && (part as ToolCallPart).toolCallId === toolCallId
 }
