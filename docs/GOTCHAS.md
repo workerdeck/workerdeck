@@ -216,6 +216,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   more, but `AiSdkRunner`, its tests, `smoke:live`/`smoke:sdk`, and `examples/provider-server.ts`
   all stay green — they are the proof the path still works, and the route back if those providers
   return as bespoke adapters.
+- **An approval's `updatedInput` has to reach the model's history, not just the executor.** The
+  runner keeps its own `#messages`, and the assistant message already holds the `tool-call` part
+  the model wrote. Amending only `PendingToolCall.input` runs the edit while the history still
+  claims the original, so the next leg reasons from arguments that were never executed — a file
+  it believes holds A when B was written. `#amendToolInput` rewrites the matching part too, and
+  immutably, so a `messages` copy already taken does not change under its holder. It runs inside
+  `#dispatchSingle`'s pending guard, so an approval answered after an `interrupt()` already
+  failed the call amends nothing. Both halves ride `#buildSnapshot`, so the edit survives
+  park/resume for free.
+- **The transcript keeps the input the model wrote, on all three engines** — the edit goes to the
+  tool, not to the row, and `permission_resolved` carries no input. Surfacing an edit in the
+  transcript is therefore a cross-engine protocol change, not a runner fix; the provider tests
+  pin the current behaviour so there is one place to flip it.
 
 ## Codex engine (`codex app-server` / the `@openai/codex` binary)
 
@@ -1764,6 +1777,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   written to prevent — see the streaming notes above before promising otherwise.
 
 ## Terminal theme (`transcriptVariant: 'terminal'`)
+
+- **The free-text prompt field grows by whole lines only because it has no padding.**
+  `PromptInput` (the question card's "Other…" and the permission card's deny reason) is a
+  `textarea` with `field-sizing: content`, so its content box is `N × line-height` — and since
+  `line-height` is `--term-line` and the field sets no padding, every height it takes is an exact
+  multiple of the cell. Add vertical padding to `.term-input` and the field, the rule under it and
+  everything below all leave the grid at the second line. The cap is lines too
+  (`calc(8 * var(--term-line))`), not a pixel height, for the same reason. Where `field-sizing` is
+  unsupported (Firefox) it degrades to the one-line scrolling box it used to be, which is the
+  right failure: the old behaviour, minus the sideways crawl.
+- **Enter sends and Shift+Enter is the newline, in the prompts as well as the composer** — and the
+  `isComposing` guard is not optional. Without it an IME's candidate-confirming Enter submits a
+  half-typed answer, which is the bug the single-line field shipped with and nobody on a Latin
+  keyboard could see.
 
 - **Selectability is declared, never inherited — the host's default is not the same in every
   client.** `.term-press` says `user-select: text` out loud because a transcript is read far more

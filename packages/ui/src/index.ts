@@ -44,6 +44,7 @@ export {
 
 export {
   SessionPanel,
+  type ApprovalPromptProps,
   type SessionControls,
   type SessionPanelProps,
   type SessionSurfacePanel,

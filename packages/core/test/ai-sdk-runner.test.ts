@@ -3,7 +3,7 @@ import { tool } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
 import { z } from 'zod'
 import type { SessionEvent } from '@workerdeck/protocol'
-import { AiSdkRunner, type AiSdkRunnerConfig } from '../src/index.ts'
+import { AiSdkRunner, type AiSdkRunnerConfig, type ToolExecutor } from '../src/index.ts'
 import { streamCall, streamText } from './helpers/ai-sdk-mocks.ts'
 import { waitFor } from './helpers/wait.ts'
 
@@ -14,6 +14,32 @@ function makeRunner(config: Partial<AiSdkRunnerConfig> & { languageModel: AiSdkR
   void runner.start()
   const eventsOf = (type: string) => events.filter((e) => e.type === type)
   return { runner, events, eventsOf }
+}
+
+function recordingExecutor(seen: unknown[]): ToolExecutor {
+  return {
+    dispatch: async (call) => {
+      seen.push(call.input)
+      return { executionId: call.executionId, status: 'settled', result: { status: 'ok', output: { ran: true } } }
+    },
+  }
+}
+
+function toolCallInputs(messages: ReadonlyArray<{ role: string; content: unknown }>): unknown[] {
+  return messages.flatMap((message) =>
+    message.role === 'assistant' && Array.isArray(message.content)
+      ? (message.content as Array<{ type: string; input?: unknown }>).filter((part) => part.type === 'tool-call').map((part) => part.input)
+      : [],
+  )
+}
+
+function approvalHarness(seen: unknown[]) {
+  const model = new MockLanguageModelV3({
+    modelId: 'mock-1',
+    doStream: [streamCall('c1', 'run', { cmd: 'rm -rf build' }), streamText('done')],
+  })
+  const tools = { run: tool({ inputSchema: z.object({ cmd: z.string() }) }) }
+  return { model, ...makeRunner({ languageModel: model, tools, executor: recordingExecutor(seen), shouldApprove: () => true }) }
 }
 
 describe('AiSdkRunner', () => {
@@ -278,5 +304,61 @@ describe('AiSdkRunner', () => {
     expect(h.eventsOf('session_closed')).toHaveLength(1)
     expect(h.runner.info().status).toBe('closed')
     expect(() => h.runner.sendMessage('hi')).toThrow(/closed/)
+  })
+
+  it('approving with updatedInput runs the edit, rewrites the model history to match, and leaves the transcript as written', async () => {
+    const seen: unknown[] = []
+    const h = approvalHarness(seen)
+    h.runner.sendMessage('clean up')
+    await waitFor(() => h.runner.pendingApprovals.length === 1)
+    expect(h.runner.info().status).toBe('awaiting_approval')
+    expect(h.runner.pendingApprovals[0]).toMatchObject({ toolName: 'run', toolUseId: 'c1', input: { cmd: 'rm -rf build' } })
+
+    const ok = h.runner.resolvePermission(h.runner.pendingApprovals[0]!.id, {
+      behavior: 'allow',
+      updatedInput: { cmd: 'rm -rf build/tmp' },
+    })
+    expect(ok).toBe(true)
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
+
+    expect(seen).toEqual([{ cmd: 'rm -rf build/tmp' }])
+    expect(toolCallInputs(h.runner.messages)).toEqual([{ cmd: 'rm -rf build/tmp' }])
+    expect(toolCallInputs(h.model.doStreamCalls[1]!.prompt)).toEqual([{ cmd: 'rm -rf build/tmp' }])
+    expect(h.eventsOf('permission_resolved')[0]).toMatchObject({ behavior: 'allow', resolvedBy: 'client' })
+    expect(h.eventsOf('turn_result')[0]).toMatchObject({ subtype: 'success', result: 'done' })
+    const toolUse = h
+      .eventsOf('assistant_message')
+      .flatMap((e) => (e as { message: { content: Array<{ type: string }> } }).message.content)
+      .find((block) => block.type === 'tool_use')
+    expect(toolUse).toMatchObject({ id: 'c1', input: { cmd: 'rm -rf build' } })
+  })
+
+  it('approving without updatedInput runs the call as the model wrote it', async () => {
+    const seen: unknown[] = []
+    const h = approvalHarness(seen)
+    h.runner.sendMessage('clean up')
+    await waitFor(() => h.runner.pendingApprovals.length === 1)
+    h.runner.resolvePermission(h.runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
+
+    expect(seen).toEqual([{ cmd: 'rm -rf build' }])
+    expect(toolCallInputs(h.runner.messages)).toEqual([{ cmd: 'rm -rf build' }])
+    expect(toolCallInputs(h.model.doStreamCalls[1]!.prompt)).toEqual([{ cmd: 'rm -rf build' }])
+  })
+
+  it('denying never reaches the executor and feeds the refusal back as an errored tool result', async () => {
+    const seen: unknown[] = []
+    const h = approvalHarness(seen)
+    h.runner.sendMessage('clean up')
+    await waitFor(() => h.runner.pendingApprovals.length === 1)
+    h.runner.resolvePermission(h.runner.pendingApprovals[0]!.id, { behavior: 'deny', message: 'not that' })
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
+
+    expect(seen).toEqual([])
+    expect(h.eventsOf('permission_resolved')[0]).toMatchObject({ behavior: 'deny', message: 'not that' })
+    expect(h.eventsOf('execution_failed')[0]).toMatchObject({ executionId: 'c1', reason: 'permission_denied' })
+    expect(h.runner.messages.find((m) => m.role === 'tool')).toMatchObject({
+      content: [{ type: 'tool-result', toolCallId: 'c1', output: { type: 'error-text' } }],
+    })
   })
 })

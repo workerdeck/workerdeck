@@ -862,6 +862,27 @@ surface that is *about* a run rather than in it (the dashboard's job detail, whe
 would be a second operator arriving mid-run). Absent, not disabled — a greyed-out composer
 says the session is busy, an absent one says this screen does not drive it — and **not an
 authorization boundary**: it removes the affordance, the gateway does the enforcing.
+`approvalPrompts` is the fifth, and it is a *registry* rather than a render prop on purpose:
+the panel already was a per-tool registry of approval prompts with two private entries
+(`AskUserQuestion` → `QuestionPrompt`, `ExitPlanMode` → the plan arm of `PermissionPrompt`),
+so `Record<toolName, ComponentType<ApprovalPromptProps>>` makes that mechanism public with the
+built-ins as its defaults instead of bolting a second dispatch beside it — the same shape
+`clientTools` and `tool_titles` already have. It is **not** an `approvalSurface: 'external'`:
+the three `*Surface` enums hand a region to chrome the host already has, and this need is
+*in place*, in the slot the default occupies inside `PromptSurface`. Handing all approvals out
+would make a host rebuild placement and re-import both themes' defaults for every tool it does
+not own — the default inverted. The lookup happens **above** the variant split, because a shell
+that withheld a host seam by theme would be exactly the branch the terminal renderer rule
+forbids, and because the reference embedding runs `transcriptVariant="terminal"` while the
+dashboard and VS Code flip it at runtime — a card that appeared and vanished with a theme
+toggle would be the bug. `ApprovalPromptProps` is deliberately the built-ins' own callback
+shapes (`onDeny` keeps `interrupt?`, so a host card can still offer "Deny & stop"), which is
+what makes `PermissionPrompt`/`TerminalPermissionPrompt` drop-in fallbacks for an input a
+registered host declines to draw; `test/approval-prompts.test.ts` holds that assignability, since
+a stray required prop on either would break it silently. A registry also has no fallback
+sentinel to get wrong: the earlier shape returned `ReactNode | undefined`, where `null`, `false`
+and `''` all render nothing while passing `!== undefined`, so the natural
+`cond ? <Card/> : null` produced an approval nobody could answer.
 `reveal={{ toolUseId, nonce }}` is the seam a *list* needs: sub-agent work is nested inside the
 `Task` row that spawned it, so "open that sub-agent" can only mean "take me to its row". A prop
 rather than a ref (the shape `jumpToRecapRef` uses) because the asker is outside the webview and
