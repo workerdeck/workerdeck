@@ -833,6 +833,19 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `npm dist-tag add <pkg>@<current> latest` per package (npm forbids unpublishing); the bad
   versions stay on the registry forever. Check `git tag` against `git ls-remote --tags origin`
   before any release: a local tag the remote has never seen is a loaded gun.
+
+  **A just-published version reads as *absent*, not as stale — do not re-run on that evidence.**
+  npm accepts a publish and holds the version **staged** for a few minutes before it enters the
+  packument. In that window the gap is not a cache you can bust: `npm view <pkg> versions` omits
+  it, the version document 404s, and a real `npm install` of a package depending on it fails
+  `ETARGET` — with `--prefer-online` and a brand-new `--cache` directory. On 2026-09-14 nine of
+  ten packages went live within a minute and `@workerdeck/protocol@2.3.0` did not, which looked
+  exactly like a lost publish that had broken every dependent, and the run was re-triggered. The
+  re-run is what told the truth: **`409 Cannot publish over previously staged version`** — the
+  first publish had worked all along. Read a 409 saying *staged* as "it is there, wait", never as
+  a conflict to clear. The workflow's own `✅ Published` line is the authority; the registry catches
+  up. Waiting costs minutes, and a re-run against a genuinely half-published release is the one
+  operation that can make things worse.
 - catalogs: when `@openai/codex` moves, refresh `packages/core/src/engines/codex/catalog.ts` —
   the model table is extracted from the JSON embedded in the *platform binary*. The extraction
   script lived in that file's header comment until 2026-09-02 and lives here now, which is where a
