@@ -6,7 +6,7 @@ import { parseUserQuestions, type PermissionRequest, type QuestionBehavior } fro
 import { MessageCircleQuestion, X } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'
-import { Input } from '../ui/Input.tsx'
+import { Textarea } from '../ui/Textarea.tsx'
 import { cn } from '../../lib/utils.ts'
 
 export { parseUserQuestions }
@@ -121,12 +121,13 @@ export function QuestionPrompt({ request, onAnswer, onDismiss, className }: Ques
                       Other…
                     </button>
                     {selection.otherActive ? (
-                      <Input
+                      <Textarea
                         autoFocus
+                        rows={1}
                         value={selection.other}
                         onChange={(e) => update(index, { other: e.target.value })}
                         placeholder="Type your own answer"
-                        className="flex-1"
+                        className="max-h-40 flex-1 overflow-y-auto py-1.5 field-sizing-content"
                       />
                     ) : null}
                   </div>
