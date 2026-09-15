@@ -461,7 +461,16 @@ export class AiSdkRunner implements Runner {
     await run
   }
 
+  #cancelPendingApprovals(message: string): void {
+    for (const [requestId, { timer }] of this.#pendingApprovals) {
+      clearTimeout(timer)
+      this.#emit({ type: 'permission_resolved', requestId, behavior: 'deny', resolvedBy: 'client', message })
+    }
+    this.#pendingApprovals.clear()
+  }
+
   async interrupt(): Promise<void> {
+    this.#cancelPendingApprovals('interrupted')
     if (this.#abort) {
       this.#abort.abort()
     } else if (this.#pendingToolCalls.size > 0) {

@@ -346,6 +346,21 @@ describe('AiSdkRunner', () => {
     expect(toolCallInputs(h.model.doStreamCalls[1]!.prompt)).toEqual([{ cmd: 'rm -rf build' }])
   })
 
+  it('interrupt() drops pending approvals so a late timeout cannot resolve them', async () => {
+    const seen: unknown[] = []
+    const h = approvalHarness(seen)
+    h.runner.sendMessage('clean up')
+    await waitFor(() => h.runner.pendingApprovals.length === 1)
+
+    await h.runner.interrupt()
+
+    expect(h.runner.pendingApprovals).toEqual([])
+    expect(h.runner.info().pendingPermissionCount).toBe(0)
+    expect(h.eventsOf('permission_resolved')[0]).toMatchObject({ behavior: 'deny', message: 'interrupted' })
+    expect(h.runner.info().status).toBe('idle')
+    expect(seen).toEqual([])
+  })
+
   it('denying never reaches the executor and feeds the refusal back as an errored tool result', async () => {
     const seen: unknown[] = []
     const h = approvalHarness(seen)
