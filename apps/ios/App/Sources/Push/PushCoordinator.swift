@@ -37,14 +37,17 @@ final class PushCoordinator {
   var liveActivityStartToken: String?
 
   private var hosts: HostStore?
+  private var settings: AppSettings?
   /// `hostId|token` pairs already accepted, so re-syncing on every foreground is
   /// a no-op instead of a burst of POSTs.
   private var synced: Set<String> = []
 
-  /// Called once from the app entry, with the store that owns the gateway list.
-  func attach(hosts: HostStore) {
+  /// Called once from the app entry, with the store that owns the gateway list and the
+  /// preferences that decide which events are allowed to reach this device.
+  func attach(hosts: HostStore, settings: AppSettings) {
     guard self.hosts == nil else { return }
     self.hosts = hosts
+    self.settings = settings
     registerCategories()
     Task { await requestAuthorization() }
   }
@@ -86,17 +89,19 @@ final class PushCoordinator {
   func syncRegistrations(force: Bool = false) async {
     guard let token = deviceToken, let hosts else { return }
     if force { synced.removeAll() }
+    let notify = settings?.notifyEvents ?? PushEvent.standard.map(\.rawValue).sorted()
     for host in hosts.hosts where host.isValid {
-      // The start token is part of the key: a token that arrives after the first registration —
-      // which is the normal order, ActivityKit answers later than APNs — has to re-POST once.
-      let key = "\(host.id.uuidString)|\(token)|\(liveActivityStartToken ?? "-")"
+      // The start token and the allowlist are part of the key: a token that arrives after the first
+      // registration — which is the normal order, ActivityKit answers later than APNs — has to
+      // re-POST once, and so does a gateway still holding a preference the reader has since changed.
+      let key = "\(host.id.uuidString)|\(token)|\(liveActivityStartToken ?? "-")|\(notify.joined(separator: ","))"
       if synced.contains(key) { continue }
       do {
         // `unsupported` counts as synced: a gateway with no forwarder will not
         // grow one without a restart, and retrying it on every foreground would
         // be pure noise.
         _ = try await DeviceRegistration.register(
-          token: token, startToken: liveActivityStartToken, host: host)
+          token: token, startToken: liveActivityStartToken, notify: notify, host: host)
         synced.insert(key)
       } catch {
         lastError = "\(host.displayName): \(error.localizedDescription)"

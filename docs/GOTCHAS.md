@@ -2201,7 +2201,23 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `apns-devices.json`; per-card **update** tokens churn every turn and live in
   `apns-activities.json`, keyed `(deviceToken, sessionId)`. `POST /apns/devices` treats
   `liveActivityStartToken` as **three-state — omitted leaves it, `null` clears it**, because an app
-  built before the field would otherwise erase it on every launch.
+  built before the field would otherwise erase it on every launch. `notify` follows the same rule
+  for the same reason, with one extra trap: **`[]` is a real answer** (this device wants no alerts),
+  so "the field is absent" and "the array is empty" must not be collapsed. Absent falls back to
+  `DEFAULT_NOTIFY`, which is every type but `session_closed`.
+- **Filtering is per device, and the only filter there is.** `SessionNotifier` still emits all four
+  types to `onNotification`; the forwarder is what drops them, in `deliver`, per `DeviceRecord`.
+  Webhooks keep their own `events` list and are unaffected. So a device that wants nothing keeps its
+  token registered and simply receives nothing — turning notifications back on is one POST, not a
+  re-authorization.
+- **Every push collapses per session, per kind.** `buildPush` sets `collapseId` on all four types
+  (`COLLAPSE_PREFIX`: `p`/`t`/`e`/`c` + a hash of the session id), so a session with five tool calls
+  waiting — or one erroring five times — holds one banner showing the newest, not five. The older
+  requests are still pending in the app and still counted on the Live Activity card; the banner is a
+  summons, not a queue. **The per-kind prefix is the part to not "simplify" away**: collapsing on
+  the session alone would let an arriving approval silently overwrite a "Turn finished" for the same
+  session, which is different news lost rather than a repeat folded away. `thread-id` is per session
+  and only *groups* in Notification Center — it collapses nothing.
 - **`canImport(ActivityKit)` is true on macOS, but `ActivityAttributes` is unavailable there.** The
   conformance in `WorkerDeckActivity` needs `#if canImport(ActivityKit) && os(iOS)` or `swift test`
   on the Mac fails to compile — which is the only place the payload contract is tested.

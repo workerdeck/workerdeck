@@ -1,8 +1,21 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
+import type { SessionNotificationType } from '@workerdeck/protocol'
 import type { ApnsEnvironment } from './client.ts'
 import { readBody, respondJson } from '../lib/http.ts'
+
+export const NOTIFY_EVENTS: readonly SessionNotificationType[] = [
+  'permission_requested',
+  'turn_completed',
+  'session_error',
+  'session_closed',
+]
+
+// A session closing is bookkeeping, not news — it fires whenever a tab goes away — so it is out of
+// the default. The other three are what someone is actually waiting on. A device that says nothing
+// gets this; `[]` is how a device says "no alerts at all" without giving up its token.
+export const DEFAULT_NOTIFY: readonly SessionNotificationType[] = ['permission_requested', 'turn_completed', 'session_error']
 
 export type DeviceRecord = {
   token: string
@@ -15,6 +28,10 @@ export type DeviceRecord = {
   // gateway can raise a card on a phone whose app is not running. Absent means this device cannot
   // be started at — an older app, or Live Activities switched off in Settings.
   liveActivityStartToken?: string
+  // Which notification types this device wants. Absent means `DEFAULT_NOTIFY`; an explicit empty
+  // array means none. Per-device rather than per-gateway because a phone and an iPad watching the
+  // same sessions do not want the same interruptions.
+  notify?: SessionNotificationType[]
   updatedAt: number
 }
 
@@ -32,6 +49,21 @@ const MAX_BODY_BYTES = 4096
 
 function isEnvironment(value: unknown): value is ApnsEnvironment {
   return value === 'development' || value === 'production'
+}
+
+function isNotifyList(value: unknown): value is SessionNotificationType[] {
+  return Array.isArray(value) && value.every((entry) => NOTIFY_EVENTS.includes(entry as SessionNotificationType))
+}
+
+function sameNotify(a: SessionNotificationType[] | undefined, b: SessionNotificationType[] | undefined): boolean {
+  if (a === undefined || b === undefined) {
+    return a === b
+  }
+  return a.length === b.length && a.every((entry, index) => entry === b[index])
+}
+
+export function wantsNotification(device: Pick<DeviceRecord, 'notify'>, type: SessionNotificationType): boolean {
+  return (device.notify ?? DEFAULT_NOTIFY).includes(type)
 }
 
 export async function createDeviceRegistry(options: {
@@ -79,7 +111,8 @@ export async function createDeviceRegistry(options: {
         existing !== undefined &&
         existing.environment === record.environment &&
         existing.hostId === record.hostId &&
-        existing.liveActivityStartToken === record.liveActivityStartToken
+        existing.liveActivityStartToken === record.liveActivityStartToken &&
+        sameNotify(existing.notify, record.notify)
       ) {
         return
       }
@@ -174,8 +207,16 @@ export function createDeviceRoute(
       respondJson(res, 400, { error: 'liveActivityStartToken must be a hex token or null' })
       return true
     }
+    // Same three-state rule as the start token: omitted leaves the record alone, so an older app
+    // that never sends the field keeps whatever it last chose rather than being reset to defaults.
+    const notifyGiven = Object.hasOwn(body, 'notify')
+    if (notifyGiven && !isNotifyList(body.notify)) {
+      respondJson(res, 400, { error: `notify must be an array of ${NOTIFY_EVENTS.join(', ')}` })
+      return true
+    }
     const previous = registry.list().find((record) => record.token === token)
     const liveActivityStartToken = startTokenGiven ? ((startToken as string | null) ?? undefined) : previous?.liveActivityStartToken
+    const notify = notifyGiven ? (body.notify as SessionNotificationType[]) : previous?.notify
 
     await registry.register({
       token,
@@ -184,6 +225,7 @@ export function createDeviceRoute(
       bundleId: optionalString(body.bundleId),
       platform: optionalString(body.platform),
       ...(liveActivityStartToken === undefined ? {} : { liveActivityStartToken }),
+      ...(notify === undefined ? {} : { notify }),
     })
     respondJson(res, 200, { registered: true, environment: body.environment })
     return true

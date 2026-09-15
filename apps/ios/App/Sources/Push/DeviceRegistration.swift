@@ -21,9 +21,13 @@ enum DeviceRegistration {
     /// null clears it. Always encoded here — this build always knows its own answer, and "no start
     /// token" is a real answer meaning Live Activities are off.
     let liveActivityStartToken: String?
+    /// The event allowlist (`AppSettings.notifyEvents`). Three-state on the gateway the same way —
+    /// but always sent, because an empty array is this app's "no alerts" and must not read as
+    /// "leave it alone".
+    let notify: [String]
 
     enum CodingKeys: String, CodingKey {
-      case token, environment, hostId, bundleId, platform, liveActivityStartToken
+      case token, environment, hostId, bundleId, platform, liveActivityStartToken, notify
     }
 
     func encode(to encoder: Encoder) throws {
@@ -34,6 +38,7 @@ enum DeviceRegistration {
       try container.encode(bundleId, forKey: .bundleId)
       try container.encode(platform, forKey: .platform)
       try container.encode(liveActivityStartToken, forKey: .liveActivityStartToken)
+      try container.encode(notify, forKey: .notify)
     }
   }
 
@@ -44,7 +49,7 @@ enum DeviceRegistration {
     case unsupported
   }
 
-  static func register(token: String, startToken: String? = nil, host: Host) async throws -> Outcome {
+  static func register(token: String, startToken: String? = nil, notify: [String], host: Host) async throws -> Outcome {
     guard let url = host.pushRegistrationURL else { return .unsupported }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -57,7 +62,7 @@ enum DeviceRegistration {
         environment: PushEnvironment.current.rawValue,
         hostId: host.id.uuidString,
         bundleId: Bundle.main.bundleIdentifier ?? "",
-        liveActivityStartToken: startToken))
+        liveActivityStartToken: startToken, notify: notify))
 
     let (data, response) = try await URLSession.shared.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0

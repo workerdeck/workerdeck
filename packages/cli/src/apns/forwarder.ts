@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
+import type { SessionInfo, SessionNotification, SessionNotificationType } from '@workerdeck/protocol'
 import { type ApnsClient, type ApnsConfig, type ApnsEnvironment, createApnsClient, loadApnsKey, type ApnsRequest } from './client.ts'
 import { createActivityRegistry, type ActivityRegistry } from './activities.ts'
-import { createDeviceRegistry, type DeviceRegistry } from './devices.ts'
+import { createDeviceRegistry, wantsNotification, type DeviceRegistry } from './devices.ts'
 import { buildLiveActivityPush, type ActivityAttributes, type ActivityContentState } from './live-activity.ts'
 import { createApnsRoute } from './routes.ts'
 
@@ -50,6 +50,17 @@ function oneLine(text: string | undefined, limit = BODY_LIMIT): string {
 // Hashed rather than truncated to 64 bytes: two session ids sharing a prefix must not collapse into each other.
 function collapseKey(sessionId: string): string {
   return createHash('sha256').update(sessionId).digest('base64url').slice(0, 32)
+}
+
+// One banner per session per kind. Every type collapses — a session that errors five times should
+// occupy one line on the lock screen, not five — but each kind keeps its own key, because an
+// arriving approval replacing a "Turn finished" for the same session would be different news
+// silently overwritten rather than a repeat folded away.
+const COLLAPSE_PREFIX: Record<SessionNotificationType, string> = {
+  permission_requested: 'p',
+  turn_completed: 't',
+  session_error: 'e',
+  session_closed: 'c',
 }
 
 function titleFor(notification: SessionNotification, name: string): string {
@@ -130,7 +141,7 @@ export function buildPush(notification: SessionNotification, hostId: string | un
       permission && notification.request?.expiresAt !== undefined
         ? Math.floor(notification.request.expiresAt / 1000)
         : Math.floor(Date.now() / 1000) + 3600,
-    ...(notification.type === 'turn_completed' ? { collapseId: `t:${collapseKey(notification.sessionId)}` } : {}),
+    collapseId: `${COLLAPSE_PREFIX[notification.type]}:${collapseKey(notification.sessionId)}`,
   }
 }
 
@@ -160,7 +171,7 @@ export async function createApnsForwarder(options: {
   const chains = new Map<string, Promise<void>>()
 
   const deliver = async (notification: SessionNotification): Promise<void> => {
-    const devices = registry.list()
+    const devices = registry.list().filter((device) => wantsNotification(device, notification.type))
     if (devices.length === 0) {
       return
     }

@@ -82,3 +82,14 @@ The server holds no push credentials, by design: it speaks HTTP to a URL you con
 nothing about APNs, FCM, Slack or email. Turning a notification into a phone push is a
 forwarder's job — it needs credentials, and those belong to whatever you run in front of, or
 alongside, the gateway.
+
+The `workerdeck` CLI ships one such forwarder for APNs, used by the iOS app. Two rules there are
+worth knowing because they shape what a phone actually buzzes about:
+
+- **The allowlist is per device, not per gateway.** Each device registers which of the four types
+  it wants; the forwarder sends nothing outside that list. The default is every type except
+  `session_closed`, which fires whenever a session goes away and is mostly noise across several
+  open sessions. A phone and an iPad watching the same gateway can choose differently.
+- **Every push collapses per session, per kind.** A session with five tool calls waiting holds one
+  banner showing the newest, not five — the rest are still pending and answerable in the app. Each
+  kind keeps its own banner, so an arriving approval never overwrites a finished turn.

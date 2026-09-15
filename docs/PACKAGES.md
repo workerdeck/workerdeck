@@ -1681,8 +1681,9 @@ hand-rolled APNs client (`node:http2` + ES256 JWT, zero deps), a device registry
 `POST/DELETE /apns/devices` through the same `fallback` seam that serves the dashboard, and a
 forwarder hooked to `notifications.onNotification` in-process. It lives here and not in
 `server` so the OSS gateway stays credential-free; absent an `apns` config the routes 404 and
-the forwarder does not exist. Environment is per device token, never a flag —
-`docs/GOTCHAS.md` §APNs.
+the forwarder does not exist. Environment is per device token, never a flag, and so is the
+`notify` event allowlist that decides which of the four notification types the forwarder sends
+that device (`DEFAULT_NOTIFY` = everything but `session_closed`) — `docs/GOTCHAS.md` §APNs.
 ## `apps/docs`
 
 Astro site → Pages via `docs.yml`. `examples` — dev entries with root-level deps

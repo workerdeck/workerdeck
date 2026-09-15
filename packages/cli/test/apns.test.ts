@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { SessionNotification } from '@workerdeck/protocol'
 import { afterAll, describe, expect, it } from 'vitest'
 import { type ApnsConfig, type ApnsEnvironment, createApnsClient, createProviderToken } from '../src/apns/client.ts'
-import { createDeviceRegistry, createDeviceRoute } from '../src/apns/devices.ts'
+import { createDeviceRegistry, createDeviceRoute, wantsNotification } from '../src/apns/devices.ts'
 import { createActivityRegistry, createActivityRoute } from '../src/apns/activities.ts'
 import { createApnsRoute } from '../src/apns/routes.ts'
 import { buildPush } from '../src/apns/forwarder.ts'
@@ -306,7 +306,7 @@ function notification(over: Partial<SessionNotification>): SessionNotification {
 }
 
 describe('buildPush', () => {
-  it('carries requestId and the permission category, and never collapses', () => {
+  it('carries requestId and the permission category, and collapses per session', () => {
     const push = buildPush(
       notification({
         type: 'permission_requested',
@@ -319,7 +319,7 @@ describe('buildPush', () => {
     expect(payload.requestId).toBe('req_9')
     expect(payload.hostId).toBe('host-a')
     expect((payload.aps as Record<string, unknown>).category).toBe('PERMISSION_REQUEST')
-    expect(push.collapseId).toBeUndefined()
+    expect(push.collapseId).toMatch(/^p:/)
     expect(push.priority).toBe(10)
     expect(push.expiration).toBe(5000)
   })
@@ -330,12 +330,18 @@ describe('buildPush', () => {
     expect((woken.payload as Record<string, unknown>).epoch).toBe(3)
   })
 
-  it('collapses turn_completed per session', () => {
-    const first = buildPush(notification({ preview: 'done' }), undefined)
-    const other = buildPush(notification({ sessionId: 'sess_2', preview: 'done' }), undefined)
-    expect(first.collapseId).toBeDefined()
-    expect(first.collapseId!.length).toBeLessThanOrEqual(64)
-    expect(first.collapseId).not.toBe(other.collapseId)
+  it('collapses every type per session, one key per kind', () => {
+    const types: SessionNotification['type'][] = ['permission_requested', 'turn_completed', 'session_error', 'session_closed']
+    const keys = types.map((type) => buildPush(notification({ type }), undefined).collapseId)
+    // Each kind keeps its own banner: an arriving approval must not overwrite "Turn finished".
+    expect(new Set(keys).size).toBe(types.length)
+    for (const key of keys) {
+      expect(key!.length).toBeLessThanOrEqual(64)
+    }
+    // Same kind, same session, twice — the second folds into the first.
+    expect(buildPush(notification({ type: 'session_error' }), undefined).collapseId).toBe(keys[2])
+    // Different session, same kind — never folded together.
+    expect(buildPush(notification({ type: 'session_error', sessionId: 'sess_2' }), undefined).collapseId).not.toBe(keys[2])
   })
 
   it('shrinks the body rather than blowing the 4 KB cap', () => {
@@ -361,6 +367,22 @@ describe('device registry', () => {
     const reopened = await createDeviceRegistry({ dir })
     expect(reopened.list()).toHaveLength(1)
     expect(reopened.list()[0]!.hostId).toBe('host-a')
+  })
+
+  it('defaults to every event but session_closed, and honours an explicit list', () => {
+    expect(wantsNotification({}, 'turn_completed')).toBe(true)
+    expect(wantsNotification({}, 'permission_requested')).toBe(true)
+    expect(wantsNotification({}, 'session_closed')).toBe(false)
+    expect(wantsNotification({ notify: ['permission_requested'] }, 'turn_completed')).toBe(false)
+    expect(wantsNotification({ notify: [] }, 'permission_requested')).toBe(false)
+  })
+
+  it('leaves notify alone when omitted and replaces it when given', async () => {
+    const registry = await createDeviceRegistry({ dir: null })
+    await registry.register({ token: TOKEN, environment: 'development', notify: ['session_error'] })
+    expect(registry.list()[0]!.notify).toEqual(['session_error'])
+    await registry.register({ token: TOKEN, environment: 'development', notify: [] })
+    expect(registry.list()[0]!.notify).toEqual([])
   })
 
   it('starts empty on a corrupt file rather than refusing to boot', async () => {

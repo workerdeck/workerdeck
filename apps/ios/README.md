@@ -483,7 +483,16 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     provisioning profile rather than guessed from `#if DEBUG` — see `docs/GOTCHAS.md` §APNs for
     why that distinction is expensive to get wrong. A `permission_requested` push carries
     Approve/Deny actions that answer over REST without opening the app; tapping the body deep-links
-    to the session. A gateway with no forwarder configured answers 404 and the app stops asking.
+    to the session, and a session's pending approvals collapse into one banner showing the newest.
+    A gateway with no forwarder configured answers 404 and the app stops asking.
+    **Which events arrive at all is this device's choice**, sent as the `notify` array on every
+    registration (`AppSettings.pushEvents`, Settings ▸ Notifications): the gateway sends nothing the
+    array leaves out, so an unticked event is stopped at the source rather than hidden on arrival.
+    Per device rather than per gateway — a phone and an iPad watching the same sessions do not want
+    the same interruptions — and the master switch sends `[]` rather than deleting the token, so
+    turning it back on costs one POST. Live Activities have the matching switch
+    (`AppSettings.liveActivitiesEnabled`): off withholds the push-to-start token, which is the only
+    thing that lets a gateway raise a card, and ends any card already on screen.
     **The session on screen is never announced**: `PushCoordinator.visibleSessionId` is claimed by
     `SessionView` and released when it leaves or the app backgrounds, and `willPresent` returns no
     options for it. Every other session still banners in the foreground — the app holds a socket

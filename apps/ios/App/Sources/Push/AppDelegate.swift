@@ -17,15 +17,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
   /// process **without a scene**, so `WorkerDeckApp.body` — where the SwiftUI copies are made and
   /// `push.attach` runs — is never evaluated. Anything those two paths need has to be built here.
   let hosts = HostStore()
-  private let settings = AppSettings()
+  /// One for the whole process, and the *only* one — `WorkerDeckApp` puts this instance in the
+  /// environment rather than making its own, so a toggle flipped in Settings is seen by the intent
+  /// handler and the two coordinators immediately instead of at the next launch.
+  let settings = AppSettings()
 
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
     UNUserNotificationCenter.current().delegate = self
-    push.attach(hosts: hosts)
-    activities.attach(hosts: hosts, push: push)
+    push.attach(hosts: hosts, settings: settings)
+    activities.attach(hosts: hosts, push: push, settings: settings)
     let handler = ActivityActionHandler(hosts: hosts, activities: activities, settings: settings)
     SessionActivityActions.handler = { action in await handler.perform(action) }
     return true

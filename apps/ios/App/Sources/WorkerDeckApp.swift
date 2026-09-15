@@ -12,9 +12,6 @@ struct WorkerDeckApp: App {
   /// One unread memory for the whole process — the session screen writes marks
   /// into it, the list and the app icon badge count from it.
   @State private var unread = UnreadModel()
-  /// Reader preferences (transcript variant and density) — one for the process,
-  /// because how a transcript should read is a property of the reader.
-  @State private var settings = AppSettings()
   /// The reader's bookmarks — one map for every gateway, the session screen
   /// toggles into it and the rail draws from it.
   @State private var bookmarks = BookmarkModel()
@@ -35,7 +32,10 @@ struct WorkerDeckApp: App {
         RootView()
           .environment(delegate.hosts)
           .environment(unread)
-          .environment(settings)
+          // The delegate's instance, not a second one: it is also what the Live Activity intent
+          // handler and the two push coordinators read, and two copies would drift the moment a
+          // toggle moved.
+          .environment(delegate.settings)
           .environment(bookmarks)
           .environment(delegate.push)
           .environment(delegate.activities)

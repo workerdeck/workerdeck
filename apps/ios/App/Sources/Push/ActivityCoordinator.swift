@@ -20,27 +20,56 @@ final class ActivityCoordinator {
 
   private var hosts: HostStore?
   private weak var push: PushCoordinator?
+  private var settings: AppSettings?
+  /// Whether the ActivityKit streams are already running. `applyEnablement` may be called again
+  /// every time the reader flips the switch, and a second set of watchers would report every token
+  /// twice.
+  private var watchingTokens = false
   /// `sessionId|token` pairs already reported, so re-reporting on every foreground is a no-op.
   private var reported: Set<String> = []
   private var watching = ActivityClaims()
   private var streams: [Task<Void, Never>] = []
 
-  func attach(hosts: HostStore, push: PushCoordinator) {
+  func attach(hosts: HostStore, push: PushCoordinator, settings: AppSettings) {
     guard self.hosts == nil else { return }
     self.hosts = hosts
     self.push = push
-    ActivityTrail.note("attach hosts=\(hosts.hosts.count) enabled=\(ActivityAuthorizationInfo().areActivitiesEnabled)")
-    guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+    self.settings = settings
+    ActivityTrail.note("attach hosts=\(hosts.hosts.count) enabled=\(enabled)")
+    watchEnablement()
+    Task { await applyEnablement() }
+  }
+
+  /// Both switches have to be on: the system's, and the reader's. iOS owns the first (Settings ▸
+  /// WorkerDeck ▸ Live Activities) and this app owns the second, but they mean the same thing to
+  /// the gateway — no start token, no card.
+  private var enabled: Bool {
+    ActivityAuthorizationInfo().areActivitiesEnabled && (settings?.liveActivitiesEnabled ?? true)
+  }
+
+  /// Called at attach and every time either switch moves.
+  func applyEnablement() async {
+    guard enabled else {
       // Registering a start token the phone will ignore burns the gateway's push budget on cards
-      // that never appear. Clearing it is what stops that.
-      Task { await clearStartToken() }
-      watchEnablement()
+      // that never appear. Clearing it is what stops the next one being raised; ending the live
+      // ones is what clears the ones already on screen — the gateway learns they are gone from the
+      // detach that `watchState` fires, so it stops pushing updates into nothing.
+      await clearStartToken()
+      await endEveryCard()
       return
     }
-    watchStartTokens()
-    watchActivities()
-    watchEnablement()
+    if !watchingTokens {
+      watchingTokens = true
+      watchStartTokens()
+      watchActivities()
+    }
     adoptRunning()
+  }
+
+  private nonisolated func endEveryCard() async {
+    for activity in Activity<SessionActivityAttributes>.activities where activity.activityState == .active {
+      await activity.end(nil, dismissalPolicy: .immediate)
+    }
   }
 
   // MARK: - Tokens
@@ -72,16 +101,8 @@ final class ActivityCoordinator {
   private func watchEnablement() {
     streams.append(
       Task { [weak self] in
-        for await enabled in ActivityAuthorizationInfo().activityEnablementUpdates {
-          guard let self else { return }
-          if enabled {
-            await MainActor.run {
-              self.watchStartTokens()
-              self.watchActivities()
-            }
-          } else {
-            await self.clearStartToken()
-          }
+        for await _ in ActivityAuthorizationInfo().activityEnablementUpdates {
+          await self?.applyEnablement()
         }
       })
   }

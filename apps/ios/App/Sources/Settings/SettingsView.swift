@@ -8,6 +8,8 @@ import WorkerDeckActivity
 /// the session you happen to have open.
 struct SettingsView: View {
   @Environment(AppSettings.self) private var settings
+  @Environment(PushCoordinator.self) private var push
+  @Environment(ActivityCoordinator.self) private var activities
   @Environment(\.dismiss) private var dismiss
   #if DEBUG
     @State private var debugStatus: String?
@@ -58,14 +60,39 @@ struct SettingsView: View {
       }
 
       Section {
+        Toggle("Notifications", isOn: $settings.pushEnabled)
+        // Nested under the master switch rather than hidden by it: seeing which events are off is
+        // most of the value of the screen, and a disabled row still reads.
+        ForEach(PushEvent.allCases, id: \.self) { event in
+          Toggle(
+            event.label,
+            isOn: Binding(
+              get: { settings.pushEvents.contains(event) },
+              set: { on in
+                if on { settings.pushEvents.insert(event) } else { settings.pushEvents.remove(event) }
+              })
+          )
+          .disabled(!settings.pushEnabled)
+        }
+      } header: {
+        Text("Notifications")
+      } footer: {
+        Text(
+          "The gateway sends only what is ticked here, so an event you turn off never reaches the phone at all. Approvals and questions are the ones that actually need you — a session with several tool calls waiting collapses into a single banner showing the newest. Session ended is off by default: it fires whenever a session goes away, which across a few open sessions is most of the noise."
+        )
+      }
+
+      Section {
+        Toggle("Live Activities", isOn: $settings.liveActivitiesEnabled)
         Picker("Approve from the lock screen", selection: $settings.approveWhileLocked) {
           ForEach(ApproveWhileLocked.allCases, id: \.self) { Text($0.label).tag($0) }
         }
+        .disabled(!settings.liveActivitiesEnabled)
       } header: {
         Text("Live Activities")
       } footer: {
         Text(
-          "A running session shows a card on the lock screen and in the Dynamic Island. Its Deny button always works. Approve is the one that can let an agent write to your machine, and unlike a notification's Approve, iOS cannot ask for Face ID first — so by default it waits until the phone is unlocked."
+          "A running session shows a card on the lock screen and in the Dynamic Island. Turning them off withholds the token a gateway needs to raise one and ends any card already showing. Deny always works. Approve is the one that can let an agent write to your machine, and unlike a notification's Approve, iOS cannot ask for Face ID first — so by default it waits until the phone is unlocked."
         )
       }
 
@@ -97,6 +124,14 @@ struct SettingsView: View {
           )
         }
       #endif
+    }
+    // Pushed at the gateways on change rather than on dismiss: the sheet can be swiped away, and a
+    // preference the server never heard about is the same as one that was never set.
+    .onChange(of: settings.notifyEvents) { _, _ in
+      Task { await push.syncRegistrations() }
+    }
+    .onChange(of: settings.liveActivitiesEnabled) { _, _ in
+      Task { await activities.applyEnablement() }
     }
     .navigationTitle("Settings")
     .navigationBarTitleDisplayMode(.inline)
