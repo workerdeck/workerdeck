@@ -104,6 +104,10 @@ describe('session attachments', () => {
         { type: 'text', text: 'what is this?' },
       ])
 
+      // The captured input and the broadcast frame are two independent signals: the runner can
+      // have the turn before this socket has been written to, so waiting on one says nothing
+      // about the other.
+      await until(() => events.some((e) => e.type === 'user_message'))
       const logged = events.find((e) => e.type === 'user_message')
       expect(logged).toMatchObject({
         message: { role: 'user', content: 'what is this?' },
