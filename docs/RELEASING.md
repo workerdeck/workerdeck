@@ -815,6 +815,45 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   parallel load; the three positive sites now wait for the input and the negative one waits for the
   error frame that *is* its signal.
 
+  **2.4.0** — **the phone decides what it is worth buzzing for.** A **minor**, additive
+  throughout; **protocol stays 1**. Running several sessions at once meant a notification for
+  every approval, every finished turn and every session that went away, with no dial short of
+  revoking notifications for the whole app.
+
+  **`DeviceRecord.notify` is a per-device event allowlist**, accepted on `POST /apns/devices`
+  under the same three-state rule as `liveActivityStartToken` — omitted leaves the record alone,
+  so an older app that never sends the field keeps what it last chose instead of being reset —
+  with one addition the start token does not have: `[]` is a *real answer* meaning "no alerts",
+  so absent and empty must never be collapsed into one nullish check. Absent falls back to
+  `DEFAULT_NOTIFY`, which is every type but `session_closed`: a session closing is bookkeeping,
+  not news, since it fires whenever a tab goes away. Per **device** rather than per gateway
+  because a phone and an iPad watching the same sessions do not want the same interruptions —
+  and per device is also why this is not `SessionNotifier.events`, which stays untouched, so
+  webhooks keep their own config.
+
+  **Every type now collapses per session, keyed by kind.** `collapseId` was `turn_completed`-only;
+  it is now `COLLAPSE_PREFIX[type]` plus a hash of the session id, so a session with five calls
+  waiting — or one erroring five times — holds one banner instead of five. The per-kind prefix is
+  load-bearing rather than tidiness: collapsing on the session alone would let an arriving
+  approval silently overwrite a finished turn, which is news *lost*, not a repeat folded away.
+
+  **iOS gets the two switches** (Settings ▸ Notifications): a master toggle plus a row per event,
+  and Live Activities on their own. Turning notifications off sends `[]` rather than deleting the
+  token, so turning them back on is one POST and not a re-authorization. The Live Activities
+  toggle withholds the push-to-start token — the only thing that lets a gateway raise a card —
+  and ends any card already on screen; `ActivityCoordinator.applyEnablement` is the single path
+  for both that switch and the system's, which is what keeps the app's answer and iOS's answer
+  from disagreeing. It also killed a latent bug it surfaced: `WorkerDeckApp` built its own
+  `AppSettings` while `AppDelegate` held a second, and the delegate's copy reads UserDefaults at
+  init only, so `approveWhileLocked` changed in Settings stayed invisible to the Live Activity
+  intent handler until the next launch. Both share the delegate's instance now.
+
+  **An interrupted provider run drops its pending approvals.** `AiSdkRunner.interrupt()` aborted
+  the stream and left every entry in `#pendingApprovals` with its timeout still armed, so a
+  request raised moments before an interrupt could resolve itself minutes later against a session
+  that had long gone idle. Interrupting now denies each with `resolvedBy: 'client'` and clears the
+  timer — which is what the session's own bookkeeping reads, so `pendingApprovals` and
+  `pendingPermissionCount` both settle to empty and the executor is never reached.
 
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
