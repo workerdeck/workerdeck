@@ -183,7 +183,7 @@ jobs:
 
       - name: Keep the vsix as a run artifact
         if: steps.pat.outputs.present == 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: workerdeck-${{ github.ref_name }}.vsix
           path: apps/vscode/workerdeck.vsix
