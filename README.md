@@ -217,6 +217,10 @@ provider-owned code.
   are tighter by construction: MCP is declared on the profile, never by the caller.)
 - **Parking is single-host either way.** The file store survives a restart, but two servers over
   one directory would race to rebuild the same sessions.
+- **The VS Code extension can run the server for you.** Turn on `workerdeck.host.enabled` and it
+  supervises a `workerdeck` process on your machine — via `npx` if you have not installed it — with
+  start/stop/restart in the palette and the dashboard on the same port. One server per machine, not
+  per window.
 - **Neither app is in a store.** iOS and VS Code are built and side-loaded from this repo today.
 
 ## Contributing

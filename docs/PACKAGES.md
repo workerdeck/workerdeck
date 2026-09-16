@@ -1632,7 +1632,18 @@ and the split is by what a half-applied value would mean. `allowedOrigins`, `all
 so losing the file's half would silently narrow a gate the operator declared. `corsOrigins` and
 `cwdRoots`/`fsRoots` **replace** when the flag side is non-empty. `--profile` replaces too, and
 that one is a security decision rather than a convenience: a merged profile set is a credential
-mix-up, so naming any profile on the command line means the command line names them all. The APNs forwarder (`src/apns/`) also drives **iOS Live Activities**, and it is the CLI that does
+mix-up, so naming any profile on the command line means the command line names them all. That rule
+is about *declared* profiles, and it is why the CLI also opens a **`createFileProfileStore` at
+`<state-dir>/profiles.json` by default**, wiring up the runtime CRUD half of `/v1/profiles` that
+was built and, until now, reachable from nothing: a profile added at runtime is a separate,
+`managed`-flagged set that `declaredGuard` keeps out of the declared one, so the two never merge
+and the dashboard's profile editor stops being dead UI. `allowedConfigDirRoots` defaults to the
+**home directory** — the guard's real job at this authority level is refusing `/etc` and another
+user's home, since an operator principal can already start an agent with `bypassPermissions` in
+any cwd — narrowable with a repeatable `--profile-root` and refusable outright with
+`--no-profile-store`, which also unhooks a store a config file supplied rather than leaving one
+wired up under a flag that says off. No state dir means no store: management stays refused rather
+than silently forgetting every profile on the next restart. The APNs forwarder (`src/apns/`) also drives **iOS Live Activities**, and it is the CLI that does
 it rather than the server: `driveLiveActivities` observes `server.registry.observe()` — the seam
 `driveWakeLock` already uses — so `packages/server` learns nothing about push, `SessionNotifier`
 keeps its four-type webhook contract, and **no `PROTOCOL_VERSION` bump and no new `/v1` route** was

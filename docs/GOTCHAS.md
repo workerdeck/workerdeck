@@ -1075,6 +1075,17 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   run of the same pid), and `apns/devices.ts` (rewritten on every device registration). The `chmod`
   reads as redundant beside the `mode` argument and is not.
 
+- **Runtime profile CRUD is gated on three separate things, and all three matter.** `profileStore`
+  must be supplied (absent → 404 "profile management is not enabled"), the principal must carry
+  `canManageProfiles` (the CLI grants it to operator principals only, never to a scoped one), and
+  `allowedConfigDirRoots` must contain the `configDir` being asked for. Removing any one of them
+  turns the other two into decoration — in particular, an empty root list refuses *every* managed
+  Claude profile rather than allowing any, which is the safe direction but reads as a bug when the
+  API answers 403 to a perfectly ordinary request.
+- **The API never accepts a credential, only a directory to resolve one from.** That is what keeps
+  runtime profiles on the right side of the auth red line: `configDir`/`codexHome` name a store the
+  official SDK/CLI reads for itself. A field that carried a key would be a credential route on this
+  surface, which is exactly what the policy forbids — the guard is the *root list*, not a sanitizer.
 - `createWorkerServer` refuses to start without `authenticate` unless `allowUnauthenticated: true`
   (loopback dev only). Keep it that way.
 - **A browser cannot authenticate a WebSocket attach with a header** — the `WebSocket` constructor
@@ -2427,6 +2438,49 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   one of those presents identically as a button that does nothing. The debug raiser returns the
   error string and Settings draws it.
 
+
+## VS Code Host Mode (the supervised `workerdeck` child)
+
+- **Every `workerdeck.host.*` setting is `scope: "machine"`, never `machine-overridable`.** The
+  overridable variant lets a workspace win, and a `bindAddress: "0.0.0.0"` planted in a cloned
+  repo's `.vscode/settings.json` then exposes an agent runner on the LAN the moment the folder is
+  trusted. `machine` still allows a per-remote value, which is all this ever needed.
+- **The auth key goes in the child's environment, never its argv.** `ps` is world-readable on
+  every platform this runs on, so `--auth-key` would publish the key to any local process;
+  `WORKERDECK_AUTH_KEY` does not. Same reason the CLI reads it from env at all.
+- **The child writes to a log file, not a pipe.** It is `detached` and `unref`ed so the server
+  survives the window that started it — and a `detached` child piped to a dead extension host dies
+  with `EPIPE` on its next write, which is the whole point defeated. The Output channel is fed by
+  *tailing* that file (`log-tail.ts`), which is also the only way a window can show the log of a
+  server it merely adopted. Two things that tail must get right, and both have bitten file tails
+  before: decode through a `StringDecoder`, because a read can land mid-codepoint and `toString`
+  emits U+FFFD for the split; and treat `size < offset` as rotation, resetting to 0 rather than
+  reading garbage forever.
+- **The port is the lock; `vscode-host.json` is only the ownership record.** Adopt-whatever-answers
+  is what makes a sibling window, a hand-started `npx workerdeck` and a crash-restart all one
+  case. Never elect a leader across windows: there is no reliable channel, and the loser of a spawn
+  race already self-resolves via `EADDRINUSE` → re-probe → adopt in under a second. The pidfile
+  exists so **Stop refuses to kill a server VS Code did not start**, and a pidfile whose pid is
+  gone is a crash leftover, not a lock.
+- **Signal the process group, not the pid.** On the `npx` path the server is a *grandchild*, so
+  `process.kill(pid)` stops the launcher and orphans the server. `process.kill(-pid)` works because
+  the spawn was `detached` (hence a group leader); Windows needs `taskkill /T`.
+- **`SIGTERM` to this CLI is a drain, not a kill** — turns in flight finish, and a *second*
+  `SIGTERM` is its "stop now". A stop that waits 2s and reports failure is reading a working
+  shutdown as a hang.
+- **`Extension.extensionKind` is not "am I where the files are", and gating Host Mode on
+  `=== Workspace` disables it in every ordinary window.** A local window has no remote extension
+  host to be `Workspace` *relative to*, so it reports `UI` — the check passed only under Remote SSH,
+  which is precisely backwards from what it read like. The condition that actually means "this host
+  is not the machine holding the workspace" is `env.remoteName !== undefined && extensionKind ===
+  UI`; everything else, local included, is the right place to run the server.
+- **Host Mode does not configure profiles.** It launches a server; profiles are managed live over
+  `/v1/profiles` by the gateway-agnostic Profiles command. A settings array could only ever reach
+  the local server, and expanding `~` for a remote gateway resolves *this* machine's home against
+  *that* machine's filesystem — so the flow expands it only for a loopback gateway.
+- **Bundling the CLI into the `.vsix` is not a size trade-off, it is impossible.** `@openai/codex`
+  is 275 MB and the Agent SDK's platform package 190 MB, both per-platform. Measure before
+  redesigning around "just ship it inside".
 
 ## Build, test & packaging
 
