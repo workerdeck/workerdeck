@@ -221,7 +221,10 @@ provider-owned code.
   supervises a `workerdeck` process on your machine — via `npx` if you have not installed it — with
   start/stop/restart in the palette and the dashboard on the same port. One server per machine, not
   per window.
-- **Neither app is in a store.** iOS and VS Code are built and side-loaded from this repo today.
+- **VS Code is on the Marketplace; iOS is not in a store.** Install the extension from the
+  [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode) or with
+  `code --install-extension silkweave.workerdeck-vscode`. The iOS app is still built and
+  side-loaded from this repo.
 
 ## Contributing
 

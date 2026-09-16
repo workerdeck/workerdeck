@@ -1062,6 +1062,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
     README *is* the listing page, so **unpack the vsix and read `extension/readme.md`** before
     publishing: `unzip -q apps/vscode/workerdeck.vsix -d /tmp/vsix && grep '](' /tmp/vsix/extension/readme.md`.
 
+  **First listing: 2.7.0, uploaded by hand on 2026-09-16**, through
+  `marketplace.visualstudio.com/manage` rather than the CI job — a first listing is worth seeing
+  before it is automatic, and the web upload needs no PAT on disk. The CI job takes over from the
+  next tag. Two things that run counter to instinct while waiting on it: the extension reads
+  `flags: public` and every asset is already on the CDN **before** validation finishes, so
+  "it's live" is not the same question as "it passed"; the one that answers it is whether an
+  `extensionquery` with `ExcludeNonValidated` (flag `32`) still returns the extension. And the
+  CDN asset sizes are an exact check on what shipped — they matched the packaged bytes file for
+  file, which is how the Changelog and License tabs were confirmed, both of them assets
+  `.vscodeignore` had never admitted before that release.
+
   Open VSX — the registry Cursor, Windsurf and VSCodium actually read — is **not** done. Same
   vsix, different registry: `pnpm dlx ovsx create-namespace silkweave -p <TOKEN>` then
   `pnpm dlx ovsx publish apps/vscode/workerdeck.vsix -p <TOKEN>`, token from open-vsx.org via
