@@ -1,4 +1,5 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { ConfigError, defaultStateDir, isLoopback, loadConfigFile, parseArgs, resolveInstanceConfig } from '../src/config.ts'
@@ -64,6 +65,45 @@ describe('parseArgs', () => {
 
   it('treats a missing value as an error, not as the next flag', () => {
     expect(() => parseArgs(['--auth-key', '--port', '9000'])).toThrow(/requires a value/)
+  })
+})
+
+describe('runtime profile management', () => {
+  it('opens a profile store rooted at the home directory by default', () => {
+    const config = resolveInstanceConfig(parseArgs([]), noConfig, {})
+    expect(config.profileStore).toBe(true)
+    expect(config.options.allowedConfigDirRoots).toEqual([homedir()])
+  })
+
+  it('narrows the roots to --profile-root when given, resolved against the cwd', () => {
+    const config = resolveInstanceConfig(parseArgs(['--profile-root', './creds', '--profile-root', '/srv/agents']), noConfig, {})
+    expect(config.options.allowedConfigDirRoots).toEqual([resolve('./creds'), '/srv/agents'])
+  })
+
+  it('refuses management entirely under --no-profile-store, leaving no roots to point at', () => {
+    const config = resolveInstanceConfig(parseArgs(['--no-profile-store']), noConfig, {})
+    expect(config.profileStore).toBe(false)
+    expect(config.options.allowedConfigDirRoots).toBeUndefined()
+  })
+
+  // A flag that says "off" must not leave a config file's own store wired up underneath it.
+  it('unhooks a config file store under --no-profile-store', () => {
+    const store = { list: () => [], save: () => {}, delete: () => {} }
+    const config = resolveInstanceConfig(parseArgs(['--no-profile-store']), { path: null, options: { profileStore: store } }, {})
+    expect(config.options.profileStore).toBeUndefined()
+    expect(config.profileStore).toBe(false)
+  })
+
+  it('leaves a config file store in place and does not open a second one', () => {
+    const store = { list: () => [], save: () => {}, delete: () => {} }
+    const config = resolveInstanceConfig(parseArgs([]), { path: null, options: { profileStore: store } }, {})
+    expect(config.options.profileStore).toBe(store)
+    expect(config.profileStore).toBe(false)
+  })
+
+  it('leaves an explicit allowedConfigDirRoots alone', () => {
+    const config = resolveInstanceConfig(parseArgs([]), { path: null, options: { allowedConfigDirRoots: ['/only/here'] } }, {})
+    expect(config.options.allowedConfigDirRoots).toEqual(['/only/here'])
   })
 })
 

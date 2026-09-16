@@ -34,7 +34,15 @@ Options
                             none generated — and, while unauthenticated, also
                             accepted as a Host header (repeatable; config:
                             insecureHosts). Names the host alone, no port.
-      --profile <name=dir>  Claude config dir a session may run under (repeatable)
+      --profile <name=dir>  Claude config dir a session may run under (repeatable). Declared
+                            this way a profile is fixed: it cannot be changed over the API.
+      --profile-root <path> directory a profile created at runtime may point its config dir at
+                            (repeatable; default: your home directory). Narrow this to pin
+                            exactly which credential stores the dashboard may reach for.
+      --no-profile-store    refuse runtime profile management entirely — /v1/profiles stays
+                            read-only and profiles come from --profile and the config file
+                            alone. Profiles created at runtime are stored in
+                            <state-dir>/profiles.json, so --no-parking-store implies this.
       --cwd-root <path>     restrict session cwds to this root (repeatable,
                             WORKERDECK_CWD_ROOTS as a ':'-separated list)
       --fs-root <path>      narrow which host directories /v1/fs serves

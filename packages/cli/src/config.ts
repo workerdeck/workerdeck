@@ -37,6 +37,8 @@ export type CliFlags = {
   profiles: ProfileInfo[]
   cwdRoots: string[]
   fsRoots: string[]
+  profileRoots: string[]
+  profileStore?: boolean
   fsWrite?: boolean
   shell?: boolean
   allowedOrigins: string[]
@@ -82,6 +84,7 @@ function parsePort(raw: string, source: string): number {
 export function parseArgs(argv: string[]): CliFlags {
   const flags: CliFlags = {
     profiles: [],
+    profileRoots: [],
     cwdRoots: [],
     fsRoots: [],
     allowedOrigins: [],
@@ -146,6 +149,15 @@ export function parseArgs(argv: string[]): CliFlags {
           throw new ConfigError(`--profile ${name}= is missing a directory`)
         }
         flags.profiles.push({ name, configDir: resolve(dir) })
+        break
+      }
+      case '--profile-root': {
+        flags.profileRoots.push(resolve(next(i, arg)))
+        i++
+        break
+      }
+      case '--no-profile-store': {
+        flags.profileStore = false
         break
       }
       case '--cwd-root': {
@@ -290,6 +302,8 @@ export type ResolvedConfig = {
   corsOrigins: string[]
   apns?: ApnsConfig
   open: boolean
+  // Runtime profile CRUD over /v1/profiles. The store itself is opened by `startInstance`, which owns the state dir.
+  profileStore: boolean
   options: WorkerServerOptions
 }
 
@@ -452,6 +466,18 @@ export function resolveInstanceConfig(
   if (flags.approvalTimeoutMs !== undefined) {
     options.approvalTimeoutMs = flags.approvalTimeoutMs
   }
+  // --no-profile-store wins over a config file's own store: a flag that says "off" must not leave one wired up.
+  if (flags.profileStore === false) {
+    delete options.profileStore
+  }
+  const manageProfiles = flags.profileStore !== false
+  // The home directory, because an operator principal already has full authority over this machine — it can start an
+  // agent with bypassPermissions in any cwd. What this guard can meaningfully refuse is /etc and another user's home.
+  if (manageProfiles && !options.allowedConfigDirRoots) {
+    options.allowedConfigDirRoots = flags.profileRoots.length ? flags.profileRoots : [homedir()]
+  }
+  // `startInstance` opens the file store only when nothing else supplied one.
+  const profileStore = manageProfiles && options.profileStore === undefined
 
   return {
     port,
@@ -469,6 +495,7 @@ export function resolveInstanceConfig(
     corsOrigins,
     apns: resolveApns(loaded),
     open: flags.open ?? false,
+    profileStore,
     options,
   }
 }

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
-import { createFileSessionStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
+import { createFileProfileStore, createFileSessionStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
 import { dashboardDir } from '@workerdeck/web'
 import { createApnsRoute } from '../apns/routes.ts'
 import { createApnsForwarder } from '../apns/forwarder.ts'
@@ -188,8 +188,13 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     })
   }
 
+  // Profiles created over /v1/profiles live beside the parked sessions. With no state dir there is nowhere to put them,
+  // so management stays refused rather than silently forgetting every profile on restart.
+  const profileStore = config.profileStore && config.stateDir ? createFileProfileStore(join(config.stateDir, 'profiles.json')) : undefined
+
   const server = createWorkerServer({
     ...config.options,
+    ...(profileStore ? { profileStore } : {}),
     // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
     parking,
