@@ -32,6 +32,14 @@ updates:
         update-types:
           - minor
           - patch
+      # Catch-all, last: without it every devDependency that misses the two
+      # named groups above opens its own PR, which is the noise the limit is
+      # there to prevent. The first run did exactly that for zod and postcss.
+      development:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: /
     schedule:
