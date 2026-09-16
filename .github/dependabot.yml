@@ -40,6 +40,19 @@ updates:
         update-types:
           - minor
           - patch
+    # QuickJS is pinned at 0.31 deliberately. 0.32 typechecks and then fails
+    # 13/13 sandbox tests and 12 core tests on teardown with
+    # `QuickJSRuntime(rt = N) not found when trying to free HostRef(id =
+    # -2147483648)` — INT32_MIN, an uninitialized host ref freed on dispose,
+    # upstream in quickjs-emscripten-core. The two packages must also move in
+    # lockstep: the variant's module type only satisfies `SandboxVariantInput`
+    # when it matches the core it was built against. Re-test both together
+    # before lifting this, and run `pnpm smoke:sandbox`, not just the unit
+    # tests — the types were green while the runtime was not.
+    ignore:
+      - dependency-name: "quickjs-emscripten-core"
+      - dependency-name: "@jitl/quickjs-*"
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
