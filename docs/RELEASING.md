@@ -966,6 +966,28 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   server behind it stays whatever npm last served. Point `workerdeck.host.binaryPath` at
   `packages/cli/build/cli.mjs` for that loop.
 
+  **2.7.0** — **the window badge counts gateways.** A **minor**, and a small one: one status-bar
+  item changed what it is about. **Protocol stays 1.**
+
+  It read `:8787`. Of the five Host Mode states it was the only one showing infrastructure rather
+  than a state word, and the port is the one fact about a running server already on its tooltip.
+  The consistent fix — `on`, matching `off`/`starting`/`stopping` — would have been equally dead
+  pixels, since it is true almost always. So the steady state became **`X/Y`**: gateways answering
+  their probe over gateways that exist. Host Mode's own counts in both halves *while it serves*,
+  which falls out of the supervisor already registering `This machine` on start and unregistering
+  it on stop — a stopped host is absent from the denominator rather than a permanent miss in it.
+
+  Two things followed from that and are the part worth remembering. A **transient** Host Mode state
+  still takes the badge whole (`starting`, `stopping`, the error `$(warning)`): those are
+  short-lived, they are what the click acts on, and a count cannot say "starting". And the badge
+  **stopped being Host-Mode-only** — it used to hide whenever Host Mode was `disabled`, but a
+  window with only remote gateways still has a count worth drawing, so it now hides only when there
+  are no gateways at all, and consequently renders in a window with no supervisor (the UI side of a
+  remote) where it never did before. `workerdeck.host.actions` is registered `"when": false`, so
+  this badge is its **only** entry point; the QuickPick gained a Gateways entry so the list the
+  badge counts is reachable from the thing counting it, and `workerdeck.host.statusBar`'s
+  description no longer calls it a Host Mode badge.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
