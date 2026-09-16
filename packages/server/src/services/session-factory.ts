@@ -217,7 +217,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     if (all.length === 0) {
       return name !== undefined ? { ok: false, status: 400, error: 'no profiles are configured on this server' } : { ok: true }
     }
-    const effective = name ?? (all.length === 1 ? all[0]!.name : undefined)
+    // One profile needs no naming, and neither does a set that still carries the auto-detected
+    // `default` — otherwise choosing is the caller's, because a profile is a credential store.
+    const effective = name ?? (all.length === 1 ? all[0]!.name : all.find((p) => p.name === 'default')?.name)
     if (effective === undefined) {
       const available = all.map((p) => p.name).join(', ')
       return { ok: false, status: 400, error: `profile is required (available: ${available})` }

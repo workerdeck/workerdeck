@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -170,6 +170,59 @@ describe('profile management', () => {
 
     const inside = await post(port, { name: 'inside', configDir: root })
     expect(inside.status).toBe(200)
+  })
+
+  it('seeds detected profiles into the store on first launch, as editable managed ones', async () => {
+    const home = temp()
+    const claudeDir = join(home, '.claude')
+    const codexDir = join(home, '.codex')
+    mkdirSync(claudeDir, { recursive: true })
+    mkdirSync(codexDir, { recursive: true })
+    const previous = { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR, CODEX_HOME: process.env.CODEX_HOME }
+    process.env.CLAUDE_CONFIG_DIR = claudeDir
+    process.env.CODEX_HOME = codexDir
+    const store = createMemoryProfileStore()
+    try {
+      running = manageableServer({ profiles: undefined, profileStore: store, allowedConfigDirRoots: [home] })
+      const { port } = await running.listen(0, '127.0.0.1')
+
+      const listed = (await (await fetch(`http://127.0.0.1:${port}/v1/profiles`)).json()) as { profiles: ProfileInfo[] }
+      expect(listed.profiles.map((p) => p.name)).toEqual(['default', 'codex'])
+      expect(listed.profiles.every((p) => p.managed === true)).toBe(true)
+
+      const patched = await fetch(`http://127.0.0.1:${port}/v1/profiles/default`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ description: 'mine now' }),
+      })
+      expect(patched.status).toBe(200)
+    } finally {
+      process.env.CLAUDE_CONFIG_DIR = previous.CLAUDE_CONFIG_DIR
+      process.env.CODEX_HOME = previous.CODEX_HOME
+      if (previous.CLAUDE_CONFIG_DIR === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR
+      }
+      if (previous.CODEX_HOME === undefined) {
+        delete process.env.CODEX_HOME
+      }
+    }
+  })
+
+  it('bounds a managed codex profile by its CODEX_HOME, not by a configDir it never has', async () => {
+    const root = temp()
+    running = manageableServer({ allowedConfigDirRoots: [root] })
+    const { port } = await running.listen(0, '127.0.0.1')
+
+    const inside = await post(port, { name: 'codex-in', engine: 'codex', codexHome: root })
+    expect(inside.status).toBe(200)
+
+    const outside = await post(port, { name: 'codex-out', engine: 'codex', codexHome: homedirLike() })
+    expect(outside.status).toBe(403)
+    expect(((await outside.json()) as { error: string }).error).toMatch(/codexHome is outside the allowed roots/)
+
+    // No CODEX_HOME names no credential store of its own — it runs on the server's own environment.
+    const inherited = await post(port, { name: 'codex-env', engine: 'codex' })
+    expect(inherited.status).toBe(200)
   })
 
   it('cannot widen a session past what the profile grants, however the profile got there', async () => {

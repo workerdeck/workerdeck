@@ -88,8 +88,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const profileDefaultModels = new Map<string, string>()
   const profileUsage = new ProfileUsageTracker()
+  // With a store in play, detection seeds it on first launch instead of declaring anything: a
+  // declared profile cannot be edited over the API, and an auto-detected one is exactly the profile
+  // an operator most wants to rename or retarget.
+  const detected = options.profiles ? [] : detectDefaultProfiles()
   const profiles = new ProfileService({
-    declared: options.profiles ?? detectDefaultProfiles(),
+    declared: options.profiles ?? (options.profileStore ? [] : detected),
+    seed: detected,
     store: options.profileStore,
     allowedConfigDirRoots: options.allowedConfigDirRoots,
     disableBypassPermissions: options.disableBypassPermissions,
@@ -454,6 +459,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     parking,
     listen: async (port, host) => {
       await profiles.refreshStored()
+      await profiles.seedStore()
       await parking.hydrate()
       return new Promise((resolve, reject) => {
         server.once('error', reject)

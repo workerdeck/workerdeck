@@ -31,12 +31,14 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
   const [models, setModels] = useState('')
   const [apiKeyEnv, setApiKeyEnv] = useState('')
   const [configDir, setConfigDir] = useState('')
+  const [codexHome, setCodexHome] = useState('')
   const [capabilities, setCapabilities] = useState<SessionCapability[]>([])
   const [mcpServers, setMcpServers] = useState('')
   const [instructions, setInstructions] = useState('')
   const [saving, setSaving] = useState(false)
 
   const isProvider = engine === 'provider'
+  const isCodex = engine === 'codex'
 
   const submit = async () => {
     if (!name.trim()) {
@@ -68,6 +70,11 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
       if (Object.keys(session).length > 0) {
         profile.session = session
       }
+    } else if (isCodex) {
+      // Absent means the server's own CODEX_HOME, which is a real choice — do not send an empty string.
+      if (codexHome.trim()) {
+        profile.codexHome = codexHome.trim()
+      }
     } else {
       profile.configDir = configDir.trim()
     }
@@ -91,6 +98,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
             items={[
               { value: 'provider', label: 'provider' },
               { value: 'claude', label: 'claude' },
+              { value: 'codex', label: 'codex' },
             ]}
             value={engine}
             onValueChange={(value) => setEngine(value as ProfileEngine)}
@@ -104,6 +112,9 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
               </SelectItem>
               <SelectItem value="claude">
                 <SelectItemText>claude — Agent SDK + config dir</SelectItemText>
+              </SelectItem>
+              <SelectItem value="codex">
+                <SelectItemText>codex — app-server + CODEX_HOME</SelectItemText>
               </SelectItem>
             </SelectContent>
           </Select>
@@ -177,6 +188,23 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
             Leave capabilities and MCP servers empty to inherit whatever the server&apos;s engine factory wired — that factory is the
             ceiling either way, so a grant here can never exceed it. MCP servers are named, never configured: their transport config (and
             any credentials in it) stays on the server.
+          </p>
+        </>
+      ) : isCodex ? (
+        <>
+          <Field label="Home directory (optional)">
+            <Input
+              value={codexHome}
+              onChange={(e) => setCodexHome(e.target.value)}
+              placeholder="/Users/you/.codex"
+              spellCheck={false}
+              className="font-mono"
+            />
+          </Field>
+          <p className="text-label text-fg-4">
+            This profile&apos;s <code className="font-mono">CODEX_HOME</code>. Must resolve inside the server&apos;s{' '}
+            <code className="font-mono">allowedConfigDirRoots</code> — a home directory is a credential store, so the server bounds which
+            ones a managed profile may point at. Leave it empty to run on the server&apos;s own environment.
           </p>
         </>
       ) : (

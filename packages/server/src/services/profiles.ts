@@ -8,6 +8,7 @@ export type Refusal = { status: number; error: string }
 
 export type ProfileServiceOptions = {
   declared: ProfileInfo[]
+  seed?: ProfileInfo[]
   store?: ProfileStore
   allowedConfigDirRoots?: string[]
   disableBypassPermissions?: boolean
@@ -81,6 +82,22 @@ export class ProfileService {
     }
   }
 
+  // Auto-detected profiles land in the store, not in `declared`, so the first thing an operator sees
+  // is a profile they can rename, retarget or delete. Seeding only an empty store is what keeps it a
+  // first-launch act: once a profile exists, detection never writes again.
+  async seedStore(): Promise<void> {
+    const seed = this.#opts.seed ?? []
+    if (!this.#opts.store || seed.length === 0 || this.#stored.size > 0) {
+      return
+    }
+    for (const p of seed) {
+      if (this.validate(p) === null) {
+        await this.#opts.store.save(p)
+      }
+    }
+    await this.refreshStored()
+  }
+
   withManagedFlag(p: ProfileInfo): ProfileInfo {
     return this.#declaredByName.has(p.name) ? p : { ...p, managed: true }
   }
@@ -146,16 +163,23 @@ export class ProfileService {
     if (isProviderProfile(profile)) {
       return null
     }
+    const codex = engineOf(profile) === 'codex'
+    const dir = codex ? profile.codexHome : profile.configDir
+    // A codex profile that names no CODEX_HOME runs on the server's own environment, which every
+    // session already inherits — there is no separate credential store for the roots to bound.
+    if (codex && !dir) {
+      return null
+    }
     const roots = this.#opts.allowedConfigDirRoots
     if (!roots || roots.length === 0) {
       return {
         status: 403,
-        error: 'managed Claude profiles are disabled: set `allowedConfigDirRoots` to the ' + 'directories they may point at',
+        error: 'managed Claude and Codex profiles are disabled: set `allowedConfigDirRoots` to the ' + 'directories they may point at',
       }
     }
-    return profile.configDir && cwdAllowed(profile.configDir, roots)
+    return dir && cwdAllowed(dir, roots)
       ? null
-      : { status: 403, error: 'configDir is outside the allowed roots' }
+      : { status: 403, error: `${codex ? 'codexHome' : 'configDir'} is outside the allowed roots` }
   }
 
   async saveManaged(incoming: ProfileInfo): Promise<{ ok: true; profile: ProfileInfo } | ({ ok: false } & Refusal)> {

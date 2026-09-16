@@ -135,11 +135,18 @@ session is actually granted, so withholding one is a profile edit rather than a 
   detail page). A nonexistent `configDir` fails `createWorkerServer` fast — the CLI would
   otherwise silently start from an empty config.
 - With **more than one** profile declared, every `POST /sessions` and `POST /jobs` must name its
-  `profile` (400 without one); with **exactly one** it is implicit. The resolved name always
-  lands on `SessionInfo.profile` and `JobInfo.profile`, even when implicit.
-- **No `profiles` option** → a `default` profile is auto-created from `$CLAUDE_CONFIG_DIR` or
-  `~/.claude` when that directory exists, so single-operator deployments need no configuration.
-  Pass `[]` to run without profiles (no env pinning at all).
+  `profile` (400 without one); with **exactly one** it is implicit. A profile literally named
+  `default` is also implicit, however many others sit beside it — that is what keeps auto-detection
+  (below) from breaking callers that never named a profile. The resolved name always lands on
+  `SessionInfo.profile` and `JobInfo.profile`, even when implicit.
+- **No `profiles` option** → the server detects the operator's own credential directories and
+  creates a `default` profile from `$CLAUDE_CONFIG_DIR`/`~/.claude` and a `codex` profile from
+  `$CODEX_HOME`/`~/.codex`, for each that exists, so single-operator deployments need no
+  configuration. With a `profileStore` wired, detection **seeds the store on first launch** rather
+  than declaring anything, so the detected profiles are editable and deletable like any other
+  managed one; detection never writes again once the store holds a profile. Without a store they
+  are declared, and therefore read-only. Pass `[]` to run without profiles (no env pinning at
+  all).
 - `defaults` (`model`, `permissionMode`) fill request fields the caller left unset — they are
   defaults, not enforced caps; an explicit request value wins.
 - Profile pinning composes with `buildRunnerConfig`: the hook runs first, then the profile's
@@ -177,9 +184,12 @@ createWorkerServer({
   `createWorkerServer` would have applied, so the API can't produce one the server would have
   refused to boot with.
 - **No renames.** The name is the route, not the body — sessions and jobs are already pinned to it.
-- **Managed Claude profiles need `allowedConfigDirRoots`.** A config directory is a credential
-  store, so the server bounds which ones a managed profile may point at; unset, only provider
-  profiles can be created. Startup-declared profiles are unaffected.
+- **Managed Claude and Codex profiles need `allowedConfigDirRoots`.** A credential directory —
+  a Claude profile's `configDir`, a Codex profile's `codexHome` — is a credential store, so the
+  server bounds which ones a managed profile may point at; unset, only provider profiles can be
+  created. A Codex profile that names no `codexHome` is exempt: it runs on the server's own
+  environment, which every session already inherits. Startup-declared profiles are unaffected, and
+  so are the profiles auto-detection seeds.
 - **`createFileProfileStore` is single-process**, exactly like the bundled queue adapter. Two
   servers sharing one file would race — that is what the seam is for.
 

@@ -1078,10 +1078,15 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **Runtime profile CRUD is gated on three separate things, and all three matter.** `profileStore`
   must be supplied (absent → 404 "profile management is not enabled"), the principal must carry
   `canManageProfiles` (the CLI grants it to operator principals only, never to a scoped one), and
-  `allowedConfigDirRoots` must contain the `configDir` being asked for. Removing any one of them
-  turns the other two into decoration — in particular, an empty root list refuses *every* managed
-  Claude profile rather than allowing any, which is the safe direction but reads as a bug when the
-  API answers 403 to a perfectly ordinary request.
+  `allowedConfigDirRoots` must contain the credential directory being asked for. Removing any one of
+  them turns the other two into decoration — in particular, an empty root list refuses *every*
+  managed Claude or Codex profile rather than allowing any, which is the safe direction but reads as
+  a bug when the API answers 403 to a perfectly ordinary request. The guard reads the field the
+  *engine* uses — `configDir` for claude, `codexHome` for codex — and for a year it read `configDir`
+  unconditionally, so every codex profile created over the API was refused with "configDir is
+  outside the allowed roots" while naming no `configDir` at all. A codex profile with no `codexHome`
+  names no store of its own and is exempt: it runs on the server's own environment, which every
+  session already inherits.
 - **The API never accepts a credential, only a directory to resolve one from.** That is what keeps
   runtime profiles on the right side of the auth red line: `configDir`/`codexHome` name a store the
   official SDK/CLI reads for itself. A field that carried a key would be a credential route on this
@@ -1164,10 +1169,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   win a name collision — while the store holds UI-created ones. `validateProfile` is shared by
   startup and the routes so a POSTed profile can never be one startup would have refused, and
   `managed` is recomputed on every response (never persisted, never trusted from a client). A
-  managed *Claude* profile needs `allowedConfigDirRoots`: naming a config dir is choosing a
-  credential store, so unset means the routes create provider profiles only. Profiles can't be
-  renamed — sessions and jobs are pinned to the name. A store does NOT suppress the auto-detected
-  `default` profile; opting out of that is still `profiles: []`.
+  managed *Claude or Codex* profile needs `allowedConfigDirRoots`: naming a credential directory is
+  choosing a credential store, so unset means the routes create provider profiles only. Profiles
+  can't be renamed — sessions and jobs are pinned to the name. A store **redirects** auto-detection
+  rather than suppressing it: with a store wired, the detected profiles are *seeded into it* on the
+  first launch that finds it empty, so they arrive `managed` and editable instead of declared and
+  immutable, and detection never writes again once the store holds anything. Without a store they
+  are still declared. Opting out entirely is still `profiles: []`.
 - Provider-session grants live on `ProfileInfo.session` (`capabilities`, `mcpServers`,
   `instructions`) and narrow — never widen — via `CreateSessionRequest.capabilities`; the gateway
   400s a widening request rather than silently downgrading it. The enforcement is the gateway's

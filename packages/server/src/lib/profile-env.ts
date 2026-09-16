@@ -15,9 +15,24 @@ export function cliConfigDir(env: Record<string, string | undefined>): string {
   return env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
 }
 
-export function detectDefaultProfiles(): ProfileInfo[] {
-  const dir = cliConfigDir(process.env)
-  return existsSync(dir) ? [{ name: 'default', configDir: dir }] : []
+export function codexHomeDir(env: Record<string, string | undefined>): string {
+  return env.CODEX_HOME ?? join(homedir(), '.codex')
+}
+
+// Detection is by credential directory, not by binary: a directory that exists is one the operator
+// has already logged into, and a profile pointing at an engine that is not installed reports itself
+// unavailable rather than failing at session start.
+export function detectDefaultProfiles(env: Record<string, string | undefined> = process.env): ProfileInfo[] {
+  const detected: ProfileInfo[] = []
+  const claude = cliConfigDir(env)
+  if (existsSync(claude)) {
+    detected.push({ name: 'default', configDir: claude })
+  }
+  const codex = codexHomeDir(env)
+  if (existsSync(codex)) {
+    detected.push({ name: 'codex', engine: 'codex', codexHome: codex })
+  }
+  return detected
 }
 
 export function canonicalDir(path: string): string {
