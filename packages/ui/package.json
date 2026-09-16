@@ -74,7 +74,7 @@
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "monaco-editor": "^0.56.0",
-    "postcss": "^8.5.26",
+    "postcss": "^8.5.28",
     "postcss-selector-parser": "^7.1.5",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
