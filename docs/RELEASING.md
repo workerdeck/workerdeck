@@ -925,6 +925,47 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   Server** output channel, which follows live and works for an adopted server too — decoded
   through a `StringDecoder`, because a read landing mid-codepoint makes `toString` emit U+FFFD.
 
+  **2.6.0** — **the first launch that 2.5.0 shipped, fixed.** A **minor** — detection grew a second
+  profile and the dashboard grew an engine — but the reach is two first-run bugs that Host Mode's
+  own release surfaced the moment someone pressed Start on a clean machine. **Protocol stays 1.**
+
+  **A managed codex profile could never be created.** `configDirGuard` read `profile.configDir`
+  unconditionally, but a codex profile carries `codexHome` and no `configDir` at all, so every
+  codex create was refused with `configDir is outside the allowed roots` — naming a field the
+  request had never sent, against roots that did contain the directory it *had* sent. The guard now
+  reads the field the engine actually uses and names that field in the refusal. A codex profile with
+  **no** `codexHome` is exempt rather than refused: it names no credential store of its own and runs
+  on the server's own environment, which every session already inherits. The rule this restores is
+  the one 2.5.0 stated and did not implement — the guard is the root list, applied to whichever
+  directory the profile actually points at.
+
+  **The auto-detected `default` profile was declared, and declared means immutable.** 2.5.0 gave
+  every existing user a working Profiles editor on upgrade, and then the one profile they had was
+  the one row it refused to touch. Detection now **seeds the store** on the first launch that finds
+  it empty instead of declaring anything, so detected profiles arrive `managed` and editable;
+  without a store they are still declared, and detection never writes again once the store holds a
+  profile. Deleting every profile and restarting does re-seed — that is the cost of using emptiness
+  as the first-launch signal, and it is the cheap direction to be wrong in.
+
+  Detection also covers **codex** now (`$CODEX_HOME`/`~/.codex` → a `codex` profile, beside
+  `$CLAUDE_CONFIG_DIR`/`~/.claude` → `default`), by directory rather than by binary: a directory
+  that exists is one the operator has logged into, and a profile whose engine is not installed
+  reports itself unavailable rather than failing at session start. That second detected profile is
+  what forced the one compatibility change here — "exactly one profile is implicit" would have
+  started 400ing every caller that never named one, so **a profile literally named `default` is
+  implicit too**, however many sit beside it. Choosing is otherwise still the caller's, because a
+  profile is a credential store.
+
+  The dashboard's create-profile dialog also gained **codex**, which it had never offered while the
+  extension's QuickPick had — `codexHome` optional there, since absent means the server's own
+  `CODEX_HOME` and an empty string would not.
+
+  One thing to know when testing Host Mode against an unreleased server: **the extension spawns the
+  CLI it finds, not the one in the tree.** `binaryPath` → PATH → npx, and a PATH hit is usually an
+  npx cache of the *published* version, so reinstalling the `.vsix` moves the client while the
+  server behind it stays whatever npm last served. Point `workerdeck.host.binaryPath` at
+  `packages/cli/build/cli.mjs` for that loop.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
