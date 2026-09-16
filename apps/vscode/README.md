@@ -1,5 +1,7 @@
 # WorkerDeck for VS Code
 
+![WorkerDeck in VS Code](https://github.com/workerdeck/workerdeck/raw/HEAD/apps/vscode/media/hero.png)
+
 The agent rides in the editor: WorkerDeck sessions in the bottom panel (next to Terminal),
 gateways and sessions in a left sidebar, and — for remote gateways — the session's project
 mounted as a `workerdeck://` virtual workspace folder. The panel is the real
@@ -7,9 +9,10 @@ mounted as a `workerdeck://` virtual workspace folder. The panel is the real
 session surface does (streaming transcript, approvals, composer with attachments and `/` `@`
 completion, model/permission switches, capability gating per engine) works here unchanged.
 
-Design + decisions: the extension section of [`docs/CLIENTS.md`](../../docs/CLIENTS.md) (the
-navigation rule the sidebar was rebuilt around). Not published to the Marketplace yet — build the
-`.vsix` and side-load it.
+Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode),
+or build the `.vsix` and side-load it (`pnpm install:local`). Design + decisions: the extension
+section of [`docs/CLIENTS.md`](https://github.com/workerdeck/workerdeck/blob/HEAD/docs/CLIENTS.md) (the navigation rule the sidebar was rebuilt
+around).
 
 ## How it connects
 

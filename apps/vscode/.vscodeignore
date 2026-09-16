@@ -1,8 +1,9 @@
-# The .vsix ships the two bundles and the manifest — nothing else. Sources,
-# configs and node_modules stay out (`vsce package --no-dependencies`).
+# The .vsix ships the two bundles, the manifest and the listing files — nothing
+# else. Sources, configs and node_modules stay out (`vsce package --no-dependencies`).
 **
 !dist/**
 !media/**
 !package.json
 !README.md
+!CHANGELOG.md
 !LICENSE

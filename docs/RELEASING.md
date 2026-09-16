@@ -1018,6 +1018,54 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   a conflict to clear. The workflow's own `✅ Published` line is the authority; the registry catches
   up. Waiting costs minutes, and a re-run against a genuinely half-published release is the one
   operation that can make things worse.
+- marketplace: yes, on the same tag — `.github/workflows/publish.yml`'s second job, `vscode`,
+  publishes `apps/vscode` to the **VS Code Marketplace** under the publisher **`silkweave`**
+  (display `Silkweave`, domain `silkweave.dev`, owned by the Microsoft account
+  `tobias.strebitzer@gmail.com` — the personal address). Reused rather than a new `workerdeck`
+  publisher so the extension inherits the domain verification, and the verified checkmark when
+  Microsoft's two 6-month clocks (domain age, publish age) run out. The listing is
+  `https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode`.
+
+  **This is the one credential in this repo that is not OIDC.** `vsce` authenticates with a
+  long-lived Azure DevOps PAT in the `VSCE_PAT` repo secret, scoped **Marketplace → Manage** and —
+  the part everyone gets wrong once — **All accessible organizations**; a token scoped to a single
+  org fails to publish. So the job is deliberately fenced: it `needs: publish` (npm first), skips
+  prerelease tags entirely (the Marketplace has no dist-tags, so `next` has nowhere to go), and
+  **warns and skips rather than failing the release** when the secret is absent. A 401 there is
+  almost always an expired or single-org token; rotate and re-run. Manual fallback is
+  `pnpm package && pnpm exec vsce publish --no-dependencies --packagePath workerdeck.vsix` from
+  `apps/vscode`, or a hand upload at
+  `https://marketplace.visualstudio.com/manage/publishers/silkweave`, which keeps the PAT off disk.
+
+  Version is the repo's, in lockstep with the packages — the Marketplace **rejects re-publishing
+  an existing version**, and the job re-checks the tag against `apps/vscode/package.json` because
+  the npm job's check only walks `packages/`. Keep `apps/vscode/CHANGELOG.md` in step; it is the
+  Marketplace's Changelog tab and the extension's own record, separate from this ledger.
+
+  Three things about packaging this extension that are not guessable:
+
+  - **`--no-dependencies` is mandatory**, and not merely a pnpm workaround. It skips vsce's
+    `npm list --production` walk, which cannot read pnpm's symlinked `node_modules`. It is
+    *correct* because the vsix ships no runtime `node_modules` at all — esbuild and vite bundle
+    everything. If a real runtime dependency is ever added, it must be vendored into `dist/` the
+    same way or the install breaks silently.
+  - **`private: true` is not a blocker.** The 2.5.0-era note said vsce refuses to package a
+    private package; it does not — `vsce package` and `vsce publish` both accept it (verified
+    against 3.9.2, which went straight past manifest validation to auth). So `apps/vscode` keeps
+    `private: true`, which is what stops `pnpm publish -r` from pushing the extension to npm. Do
+    not remove it.
+  - **Every relative path in `apps/vscode/README.md` must be an absolute URL.** vsce rewrites
+    relative links at package time using `repository`, and it **ignores `repository.directory`**:
+    in a monorepo `media/hero.png` becomes `…/raw/HEAD/media/hero.png` (the `apps/vscode/` prefix
+    dropped, 404) and `../../docs/CLIENTS.md` becomes `…/blob/HEAD/../../docs/CLIENTS.md`. Both
+    were verified broken and then fixed by writing the full URL, which vsce passes through. The
+    README *is* the listing page, so **unpack the vsix and read `extension/readme.md`** before
+    publishing: `unzip -q apps/vscode/workerdeck.vsix -d /tmp/vsix && grep '](' /tmp/vsix/extension/readme.md`.
+
+  Open VSX — the registry Cursor, Windsurf and VSCodium actually read — is **not** done. Same
+  vsix, different registry: `pnpm dlx ovsx create-namespace silkweave -p <TOKEN>` then
+  `pnpm dlx ovsx publish apps/vscode/workerdeck.vsix -p <TOKEN>`, token from open-vsx.org via
+  GitHub sign-in.
 - catalogs: when `@openai/codex` moves, refresh `packages/core/src/engines/codex/catalog.ts` —
   the model table is extracted from the JSON embedded in the *platform binary*. The extraction
   script lived in that file's header comment until 2026-09-02 and lives here now, which is where a
