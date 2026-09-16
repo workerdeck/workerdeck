@@ -24,7 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "quickjs-emscripten-core": "^0.31.0"
+    "quickjs-emscripten-core": "^0.32.0"
   },
   "devDependencies": {
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
