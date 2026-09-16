@@ -988,6 +988,34 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   badge counts is reachable from the thing counting it, and `workerdeck.host.statusBar`'s
   description no longer calls it a Host Mode badge.
 
+  **2.7.1** — **the first release CI publishes to the Marketplace.** A **patch**, and it earns
+  that: nothing since 2.7.0 adds a feature to any package. **Protocol stays 1.**
+
+  2.7.0's listing went up through the Marketplace's own web form, deliberately — a first listing
+  is worth seeing before it is automatic, and that path needs no PAT on disk. 2.7.1 is what
+  proves the tag-driven job, so treat a green `vscode` job here as the thing being released.
+
+  The dependency work behind it is worth more than the version number. **All 41 dependabot alerts
+  were fictional** — every advisory's first-patched version was already met and `pnpm audit`
+  reported zero across 1207 deps. They could not close because **GitHub held no dependency graph
+  for this repo at all** (`dependencyGraphManifests.totalCount: 0`; the SBOM endpoint 404s where a
+  working repo times out). Dependabot *updates* were fine throughout — they use their own pnpm
+  resolver — but *alerts* ride on the graph, and those are two separate pipelines. Enabling the
+  graph closed all 42 as `fixed` on the first scan. **Check the graph before triaging an alert
+  backlog**: an alert count is not a vulnerability count, and three lockfile-changing pushes moved
+  it not at all.
+
+  Two dependency facts worth keeping. **`zod` was split** — `^4.5.4` in root and core against
+  `^3.25.76` in `apps/embedded` — which is what made the grouped dev bump fail typecheck: two
+  `@silkweave/core` instances, one resolved per zod, with mutually unassignable
+  `AdapterGenerator` types. And **QuickJS is pinned at 0.31 with a dependabot `ignore`**: 0.32
+  typechecks once the variant and `quickjs-emscripten-core` move in lockstep (the variant's module
+  type only satisfies `SandboxVariantInput` when it matches the core it was built against), and
+  then fails 13/13 sandbox tests and 12 core tests on teardown with `QuickJSRuntime(rt = N) not
+  found when trying to free HostRef(id = -2147483648)` — INT32_MIN, an uninitialized host ref
+  freed on dispose. **A green typecheck was actively misleading about a WASM boundary**, so
+  re-test that pin with `pnpm smoke:sandbox`, never the unit tests alone.
+
 - publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees

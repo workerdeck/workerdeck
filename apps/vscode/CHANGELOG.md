@@ -5,6 +5,18 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [2.7.1] — 2026-09-16
+
+First release published by CI rather than by hand. No behaviour change — 2.7.0 was uploaded
+through the Marketplace's own web form to see the listing before it became automatic, and this
+release exercises the tag-driven path that takes over from here.
+
+### Changed
+
+- Dependency refresh across the workspace it is built from (astro, oxlint, oxfmt, and `zod`
+  unified on 4 — the extension bundles `@workerdeck/client`, `protocol` and `ui`, so their
+  resolutions are its own).
+
 ## [2.7.0] — 2026-09-16
 
 First Marketplace release. The extension has shipped as a side-loadable `.vsix` since 0.10.0; this
