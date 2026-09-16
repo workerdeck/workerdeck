@@ -40,7 +40,7 @@
   "devDependencies": {
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
     "@jitl/quickjs-singlefile-browser-release-asyncify": "^0.31.0",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.5.1",
     "@types/react": "^19.2.18",
     "@types/ws": "^8.18.1",
     "@workerdeck/core": "workspace:*",

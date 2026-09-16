@@ -33,7 +33,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.258",
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.1",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.5.1",
     "@types/ws": "^8.18.1",
     "@workerdeck/sandbox": "workspace:*",
     "rimraf": "^6.1.3",
