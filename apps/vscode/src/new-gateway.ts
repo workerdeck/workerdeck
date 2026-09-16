@@ -1,26 +1,12 @@
 import * as vscode from 'vscode'
 import { randomUUID } from 'node:crypto'
 import { apiUrl, type HostStore } from './hosts.ts'
+import { BACK, CANCEL, showInput } from './quick-input.ts'
 
 export type GatewayFlowDeps = {
   store: HostStore
   refresh: () => Promise<void>
 }
-
-type InputOptions = {
-  title: string
-  prompt: string
-  placeHolder?: string
-  value?: string
-  password?: boolean
-  step: number
-  totalSteps: number
-  validate?: (value: string) => string | undefined
-}
-
-const CANCEL = Symbol('cancel')
-const BACK = Symbol('back')
-type Answer<T> = T | typeof CANCEL | typeof BACK
 
 const LOCAL_GATEWAY_URL = 'http://127.0.0.1:8787'
 const TOTAL_STEPS = 3
@@ -32,6 +18,11 @@ export async function addGateway(deps: GatewayFlowDeps): Promise<void> {
 export async function editGateway(deps: GatewayFlowDeps, hostId: string): Promise<void> {
   const host = deps.store.get(hostId)
   if (!host) {
+    return
+  }
+  // A managed gateway is Host Mode's own record of the server it runs: settings are the only place it can change.
+  if (host.managed) {
+    await vscode.commands.executeCommand('workerdeck.host.openSettings')
     return
   }
   // SecretStorage is not reachable from a webview, which is why the key is read here rather than sent to the list.
@@ -124,55 +115,4 @@ function suggestName(baseUrl: string): string {
   } catch {
     return ''
   }
-}
-
-function showInput(options: InputOptions): Promise<Answer<string>> {
-  return new Promise((resolve) => {
-    const input = vscode.window.createInputBox()
-    input.title = options.title
-    input.prompt = options.prompt
-    input.placeholder = options.placeHolder
-    input.password = options.password ?? false
-    input.step = options.step
-    input.totalSteps = options.totalSteps
-    input.ignoreFocusOut = true
-    if (options.step > 1) {
-      input.buttons = [vscode.QuickInputButtons.Back]
-    }
-
-    let answered = false
-    const finish = (answer: Answer<string>) => {
-      answered = true
-      resolve(answer)
-      input.hide()
-    }
-    input.onDidTriggerButton((button) => {
-      if (button === vscode.QuickInputButtons.Back) {
-        finish(BACK)
-      }
-    })
-    // `validationMessage` only greys the box out; accepting has to be refused here too.
-    input.onDidChangeValue((value) => {
-      input.validationMessage = options.validate?.(value)
-    })
-    input.onDidAccept(() => {
-      const problem = options.validate?.(input.value)
-      if (problem) {
-        input.validationMessage = problem
-        return
-      }
-      finish(input.value)
-    })
-    // Fires for `esc` and for a real hide alike, so it must not clobber an answer already resolved.
-    input.onDidHide(() => {
-      if (!answered) {
-        resolve(CANCEL)
-      }
-      input.dispose()
-    })
-    // After the change handler is registered: assigning `value` fires it, so a prefill that
-    // does not validate says so before the first keystroke.
-    input.value = options.value ?? ''
-    input.show()
-  })
 }

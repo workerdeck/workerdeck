@@ -1,7 +1,7 @@
 {
   "name": "workerdeck-vscode",
   "displayName": "WorkerDeck",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Watch, steer, and approve WorkerDeck agent sessions from VS Code: sessions in the bottom panel, gateways in the sidebar, remote projects as a virtual workspace.",
   "publisher": "workerdeck",
   "private": true,
@@ -105,6 +105,14 @@
           "visibility": "collapsed"
         },
         {
+          "id": "workerdeck.profiles",
+          "type": "webview",
+          "name": "Profiles",
+          "contextualTitle": "WorkerDeck",
+          "icon": "media/sidebar.svg",
+          "visibility": "collapsed"
+        },
+        {
           "id": "workerdeck.gateways",
           "type": "webview",
           "name": "Gateways",
@@ -201,6 +209,68 @@
         "title": "Hide Completed Tasks",
         "category": "WorkerDeck",
         "icon": "$(eye)"
+      },
+      {
+        "command": "workerdeck.host.start",
+        "title": "Start Server",
+        "category": "WorkerDeck Host",
+        "icon": "$(play)"
+      },
+      {
+        "command": "workerdeck.host.stop",
+        "title": "Stop Server",
+        "category": "WorkerDeck Host",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "workerdeck.host.restart",
+        "title": "Restart Server",
+        "category": "WorkerDeck Host",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "workerdeck.host.openDashboard",
+        "title": "Open Dashboard in Browser",
+        "category": "WorkerDeck Host"
+      },
+      {
+        "command": "workerdeck.host.showLog",
+        "title": "Show Server Log",
+        "category": "WorkerDeck Host"
+      },
+      {
+        "command": "workerdeck.host.openSettings",
+        "title": "Host Mode Settings",
+        "category": "WorkerDeck Host"
+      },
+      {
+        "command": "workerdeck.host.actions",
+        "title": "Host Mode",
+        "category": "WorkerDeck Host"
+      },
+      {
+        "command": "workerdeck.manageProfiles",
+        "title": "Profiles",
+        "category": "WorkerDeck",
+        "icon": "$(account)"
+      },
+      {
+        "command": "workerdeck.addProfile",
+        "title": "Add Profile",
+        "category": "WorkerDeck",
+        "icon": "$(add)"
+      },
+      {
+        "command": "workerdeck.refreshProfiles",
+        "title": "Refresh Profiles",
+        "category": "WorkerDeck",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "workerdeck.showProfiles",
+        "title": "Show Profiles",
+        "category": "WorkerDeck",
+        "icon": "$(account)"
       }
     ],
     "menus": {
@@ -244,6 +314,16 @@
           "command": "workerdeck.addGateway",
           "when": "view == workerdeck.gateways",
           "group": "navigation@1"
+        },
+        {
+          "command": "workerdeck.addProfile",
+          "when": "view == workerdeck.profiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "workerdeck.refreshProfiles",
+          "when": "view == workerdeck.profiles",
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [
@@ -253,6 +333,10 @@
         },
         {
           "command": "workerdeck.hideFilter",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.host.actions",
           "when": "false"
         }
       ]
@@ -400,6 +484,95 @@
           "type": "boolean",
           "default": true,
           "description": "In an Extension Development Host window, re-render the webviews (or reload the window) when the extension is rebuilt. No effect in an installed extension."
+        },
+        "workerdeck.host.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Host Mode: run a WorkerDeck server on this machine and manage it from VS Code. Off by default — with it off the extension only talks to gateways you add yourself. Machine-scoped on purpose: a workspace must never be able to start a server."
+        },
+        "workerdeck.host.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "description": "Start the server when VS Code starts. With this off, Host Mode still adopts a server that is already running and the palette's Start Server command launches one."
+        },
+        "workerdeck.host.port": {
+          "type": "number",
+          "default": 8787,
+          "minimum": 1,
+          "maximum": 65535,
+          "scope": "machine",
+          "description": "Port the server listens on. The port is also the lock: every VS Code window probes it first and adopts whatever is already there rather than starting a second server."
+        },
+        "workerdeck.host.bindAddress": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "scope": "machine",
+          "description": "Interface to bind. `127.0.0.1` is reachable only from this machine. Any other address — including `0.0.0.0` — exposes the server to your network and forces an auth key to be generated."
+        },
+        "workerdeck.host.requireAuthKey": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Protect the server with a generated auth key even on loopback. The key is generated by the extension, stored in the OS keychain, and passed to the server through its environment — never through settings and never on the command line, where `ps` would show it. Always on for a non-loopback bind address."
+        },
+        "workerdeck.host.stateDir": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Where parked sessions, the auth key and the server log are kept. Empty means `~/.workerdeck`."
+        },
+        "workerdeck.host.configPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to your own `workerdeck.config.mjs`, passed through with `--config`. The escape hatch for anything the flags cannot spell — most importantly a provider profile, which needs functions. Profiles declared in that file are immutable over the API by design; everyday profiles are better added with the WorkerDeck: Profiles command, which works against any gateway and needs no restart."
+        },
+        "workerdeck.host.cwdRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Restrict session working directories to these roots. Empty means any directory on this machine."
+        },
+        "workerdeck.host.dashboard": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "description": "Serve the web dashboard on the same port, so a browser or a phone on your network can reach the same sessions. Turning it off leaves the gateway API untouched."
+        },
+        "workerdeck.host.shell": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Let `!` commands typed in the composer run on this machine. Off by default and its own switch: unlike an agent's Bash tool, a `!` command goes through no permission prompt at all."
+        },
+        "workerdeck.host.binaryPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to the `workerdeck` executable. Empty means: use the one on PATH, and fall back to `npx` if there is none."
+        },
+        "workerdeck.host.useNpx": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "description": "When `workerdeck` is not on PATH, run it with `npx` instead of asking you to install it. The first such start downloads the package and its engine binaries, which is minutes rather than seconds; every later start is fast."
+        },
+        "workerdeck.host.npxSpec": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "What to hand `npx`. Empty means `workerdeck@<this extension's version>`, which is what keeps the server and the extension on the same protocol. Set `workerdeck@latest`, a tag, or a tarball path to override."
+        },
+        "workerdeck.host.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "description": "Show the Host Mode badge in the window status bar. Clicking it offers start, stop, restart and the log."
         }
       }
     }

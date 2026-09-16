@@ -19,6 +19,7 @@ export default defineConfig({
         main: fileURLToPath(new URL('./webview/main.tsx', import.meta.url)),
         sidebar: fileURLToPath(new URL('./webview/sidebar/main.tsx', import.meta.url)),
         gateways: fileURLToPath(new URL('./webview/gateways/main.tsx', import.meta.url)),
+        profiles: fileURLToPath(new URL('./webview/profiles/main.tsx', import.meta.url)),
         sections: fileURLToPath(new URL('./webview/sections/main.tsx', import.meta.url)),
       },
       output: {

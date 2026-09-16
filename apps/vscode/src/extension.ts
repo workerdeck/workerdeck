@@ -7,7 +7,13 @@ import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore, isLoopbackHost } from './hosts.ts'
 import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 import { SessionPanelProvider } from './panel.ts'
+import { addProfile, editProfile, manageProfiles, removeProfile, type ProfileFlowDeps } from './profiles.ts'
+import { ProfilesModel } from './profiles-model.ts'
+import { ProfilesViewProvider } from './profiles-view.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
+import { hostActions, HostStatusItem } from './host/status-item.ts'
+import { HostSupervisor } from './host/supervisor.ts'
+import { HOST_SECTION } from './host/settings.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
 import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
@@ -74,6 +80,21 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
   const gatewayFlow: GatewayFlowDeps = { store, refresh: () => model.refresh() }
+  const profilesModel = new ProfilesModel(store)
+  const profileFlow: ProfileFlowDeps = {
+    store,
+    hosts: () => store.all(),
+    refresh: async () => {
+      await Promise.all([model.refresh(), profilesModel.refresh()])
+    },
+  }
+  const profiles = new ProfilesViewProvider(context.extensionUri, profilesModel, {
+    refresh: () => profilesModel.refresh(),
+    add: (hostId) => addProfile(profileFlow, hostId),
+    edit: (hostId, name) => editProfile(profileFlow, hostId, name),
+    remove: (hostId, name) => removeProfile(profileFlow, hostId, name),
+  })
+  profilesModel.onDidChange(() => profiles.push())
   const gateways = new GatewaysViewProvider(context.extensionUri, store, {
     state: () => model.sidebarState(),
     refresh: () => model.refresh(),
@@ -224,10 +245,33 @@ export function activate(context: vscode.ExtensionContext): void {
       void context.workspaceState.update(ACTIVE_SESSION_KEY, undefined)
     }
   }
+  const hostStatus = new HostStatusItem()
+  // Host Mode runs the server where the workspace is. `extensionKind` alone cannot express that:
+  // a local window has no remote extension host to be `Workspace` relative to, so it reports `UI`
+  // and gating on `Workspace` refuses every ordinary window. The one host that must not start a
+  // server is a UI-side copy while a remote is attached — there the workspace is the other machine.
+  const uiSideOfRemote = vscode.env.remoteName !== undefined && context.extension.extensionKind === vscode.ExtensionKind.UI
+  const hostSupervisor = uiSideOfRemote
+    ? undefined
+    : new HostSupervisor(context, store, { sessionsOf: (id) => model.sessionsOf(id), refresh: () => model.refresh() })
+  if (hostSupervisor) {
+    hostSupervisor.onDidChangeState((state) => hostStatus.update(state))
+    hostStatus.update(hostSupervisor.state)
+    void hostSupervisor.sync()
+  }
+  const requireHost = (): HostSupervisor | undefined => {
+    if (!hostSupervisor) {
+      void vscode.window.showInformationMessage(
+        `WorkerDeck: Host Mode runs where the workspace is — on ${vscode.env.remoteName ?? 'the remote'}, not in this local window.`,
+      )
+    }
+    return hostSupervisor
+  }
+
   void model.refresh()
 
   context.subscriptions.push(
-    startDevReload(context, [panel, sidebar, gateways, ...Object.values(sections)]),
+    startDevReload(context, [panel, sidebar, gateways, profiles, ...Object.values(sections)]),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (
         e.affectsConfiguration('workerdeck.fontSize') ||
@@ -241,6 +285,10 @@ export function activate(context: vscode.ExtensionContext): void {
       ) {
         panel.reloadWebview()
       }
+      if (e.affectsConfiguration(HOST_SECTION)) {
+        hostStatus.render()
+        void hostSupervisor?.sync()
+      }
       if (e.affectsConfiguration('workerdeck.statusBar')) {
         statusBar.refresh()
         unread.render()
@@ -249,17 +297,22 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     model,
+    profilesModel,
     panel,
     sidebar,
     gateways,
+    profiles,
     fs,
     statusBar,
     unread,
     subagents,
+    hostStatus,
+    ...(hostSupervisor ? [hostSupervisor] : []),
     vscode.window.registerWebviewViewProvider(SidebarProvider.viewId, sidebar, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.window.registerWebviewViewProvider(GatewaysViewProvider.viewId, gateways),
+    vscode.window.registerWebviewViewProvider(ProfilesViewProvider.viewId, profiles),
     ...Object.entries(sections).map(([kind, provider]) =>
       vscode.window.registerWebviewViewProvider(SECTION_VIEWS[kind as SectionKind], provider),
     ),
@@ -271,6 +324,20 @@ export function activate(context: vscode.ExtensionContext): void {
       isCaseSensitive: true,
     }),
 
+    vscode.commands.registerCommand('workerdeck.host.start', () => requireHost()?.start()),
+    vscode.commands.registerCommand('workerdeck.host.stop', () => requireHost()?.stop()),
+    vscode.commands.registerCommand('workerdeck.host.restart', () => requireHost()?.restart()),
+    vscode.commands.registerCommand('workerdeck.host.openDashboard', () => requireHost()?.openDashboard()),
+    vscode.commands.registerCommand('workerdeck.host.showLog', () => requireHost()?.showLog()),
+    vscode.commands.registerCommand('workerdeck.host.actions', () => hostActions(hostSupervisor?.state ?? { kind: 'disabled' })),
+    vscode.commands.registerCommand('workerdeck.host.openSettings', () =>
+      vscode.commands.executeCommand('workbench.action.openSettings', `@ext:workerdeck.workerdeck ${HOST_SECTION}`),
+    ),
+
+    vscode.commands.registerCommand('workerdeck.manageProfiles', () => manageProfiles(profileFlow)),
+    vscode.commands.registerCommand('workerdeck.showProfiles', () => profiles.reveal()),
+    vscode.commands.registerCommand('workerdeck.addProfile', () => addProfile(profileFlow)),
+    vscode.commands.registerCommand('workerdeck.refreshProfiles', () => profilesModel.refresh()),
     vscode.commands.registerCommand('workerdeck.addGateway', () => addGateway(gatewayFlow)),
     vscode.commands.registerCommand('workerdeck.showGateways', () => gateways.reveal()),
     vscode.commands.registerCommand('workerdeck.newSession', () => createSession(sessionFlow)),

@@ -5,6 +5,8 @@ export type GatewayHost = {
   id: string
   name: string
   baseUrl: string
+  // Owned by Host Mode: the supervisor writes it, and the Gateways view offers settings instead of edit/remove.
+  managed?: boolean
 }
 
 const HOSTS_KEY = 'workerdeck.hosts'

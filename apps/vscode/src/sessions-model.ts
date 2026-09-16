@@ -196,6 +196,7 @@ export class SessionsModel implements vscode.Disposable {
         local,
         probe: snap?.probe ?? 'pending',
         cwdSuggestion: folder ?? this.sessionsOf(host.id)[0]?.cwd,
+        ...(host.managed ? { managed: true } : {}),
       })
       if (snap?.probe === 'connected') {
         sessions[host.id] = snap.sessions

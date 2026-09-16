@@ -1,5 +1,5 @@
 import { Button, cn } from '@workerdeck/ui'
-import { Pencil, Plug, Trash2 } from 'lucide-react'
+import { Pencil, Plug, Settings, Trash2 } from 'lucide-react'
 import type { WireHost } from '../../src/bridge-protocol.ts'
 import { Empty, Key } from '../ui/Empty.tsx'
 
@@ -28,7 +28,8 @@ export function GatewayList({
         title="No gateways yet"
         description={
           <>
-            Start one with <code className="font-mono">npx workerdeck</code>, then add it with <Key>+</Key> above.
+            Turn on <code className="font-mono">workerdeck.host.enabled</code> to run one here, start one with{' '}
+            <code className="font-mono">npx workerdeck</code>, or add a remote one with <Key>+</Key> above.
           </>
         }
       />
@@ -48,16 +49,25 @@ export function GatewayList({
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-body-sm text-fg-1">{host.name}</span>
             <span className="truncate text-label text-fg-4">
+              {host.managed ? 'Host Mode · ' : ''}
               {host.rawUrl} · {PROBE_LABELS[host.probe]}
               {host.probe === 'connected' ? ` · ${sessionCounts[host.id] ?? 0} session${sessionCounts[host.id] === 1 ? '' : 's'}` : ''}
             </span>
           </span>
-          <Button variant="ghost" size="icon-sm" aria-label={`Edit ${host.name}`} onClick={() => onEdit(host.id)}>
-            <Pencil className="size-3" />
-          </Button>
-          <Button variant="ghost" size="icon-sm" aria-label={`Remove ${host.name}`} onClick={() => onRemove(host.id)}>
-            <Trash2 className="size-3" />
-          </Button>
+          {host.managed ? (
+            <Button variant="ghost" size="icon-sm" aria-label={`Host Mode settings for ${host.name}`} onClick={() => onEdit(host.id)}>
+              <Settings className="size-3" />
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="icon-sm" aria-label={`Edit ${host.name}`} onClick={() => onEdit(host.id)}>
+                <Pencil className="size-3" />
+              </Button>
+              <Button variant="ghost" size="icon-sm" aria-label={`Remove ${host.name}`} onClick={() => onRemove(host.id)}>
+                <Trash2 className="size-3" />
+              </Button>
+            </>
+          )}
         </div>
       ))}
     </div>

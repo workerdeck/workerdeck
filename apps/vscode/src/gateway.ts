@@ -4,11 +4,14 @@ import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 
 export async function clientFor(store: HostStore, host: GatewayHost): Promise<WorkerDeckClient | undefined> {
-  const base = apiUrl(host)
+  return clientForUrl(host.baseUrl, await store.authHeaders(host.id))
+}
+
+export function clientForUrl(baseUrl: string, headers: Record<string, string>): WorkerDeckClient | undefined {
+  const base = apiUrl({ baseUrl })
   if (!base) {
     return undefined
   }
-  const headers = await store.authHeaders(host.id)
   return new WorkerDeckClient({
     baseUrl: base,
     headers,

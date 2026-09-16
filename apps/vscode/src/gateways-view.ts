@@ -82,6 +82,16 @@ export class GatewaysViewProvider extends WebviewHost<GatewaysToHost, HostToGate
     if (!host) {
       return
     }
+    if (host.managed) {
+      const answer = await vscode.window.showInformationMessage(
+        `"${host.name}" is run by Host Mode. Turn Host Mode off to remove it.`,
+        'Host Mode Settings',
+      )
+      if (answer === 'Host Mode Settings') {
+        await vscode.commands.executeCommand('workerdeck.host.openSettings')
+      }
+      return
+    }
     const confirmed = await vscode.window.showWarningMessage(
       `Remove gateway "${host.name}"? Its auth key is deleted from the keychain.`,
       { modal: true },

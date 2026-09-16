@@ -10,6 +10,22 @@ export type WireHost = {
   local: boolean
   probe: 'connected' | 'unauthorized' | 'unreachable' | 'pending'
   cwdSuggestion?: string
+  managed?: boolean
+}
+
+export type WireProfile = {
+  hostId: string
+  hostName: string
+  name: string
+  engine: string
+  managed: boolean
+  canManage: boolean
+  configDir?: string
+  description?: string
+  available?: boolean
+  unavailableReason?: string
+  defaultModel?: string
+  defaultPermissionMode?: string
 }
 
 export type { ScopeRoot, WorkspaceScope }
@@ -165,6 +181,15 @@ export type GatewaysToHost =
 // so nothing about a form crosses this bridge.
 export type HostToGateways = { kind: 'wd-gateways'; hosts: WireHost[]; sessionCounts: Record<string, number> }
 
+export type ProfilesToHost =
+  | { kind: 'wd-ready' }
+  | { kind: 'wd-edit-profile'; hostId: string; name: string }
+  | { kind: 'wd-remove-profile'; hostId: string; name: string }
+  | { kind: 'wd-add-profile'; hostId: string }
+
+// Like the gateways view, every mutation is a native flow on the host side: this bridge carries a list and three verbs.
+export type HostToProfiles = { kind: 'wd-profiles'; profiles: WireProfile[]; gateways: number }
+
 export type SectionToHost = TransportToHost | { kind: 'wd-ready' }
 
 export type HostToSection =
@@ -173,5 +198,5 @@ export type HostToSection =
   | { kind: 'wd-vitals'; vitals?: SessionVitals }
   | { kind: 'wd-tasks-show-completed'; showCompleted: boolean }
 
-export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost
-export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways
+export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost
+export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles
