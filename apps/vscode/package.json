@@ -572,7 +572,7 @@
           "type": "boolean",
           "default": true,
           "scope": "machine",
-          "description": "Show the Host Mode badge in the window status bar. Clicking it offers start, stop, restart and the log."
+          "description": "Show the WorkerDeck badge in the window status bar — connected gateways over total, counting Host Mode's own while it serves. Clicking it offers start, stop, restart, the gateway list and the log."
         }
       }
     }

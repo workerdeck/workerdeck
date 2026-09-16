@@ -245,7 +245,7 @@ export function activate(context: vscode.ExtensionContext): void {
       void context.workspaceState.update(ACTIVE_SESSION_KEY, undefined)
     }
   }
-  const hostStatus = new HostStatusItem()
+  const hostStatus = new HostStatusItem(() => model.gatewayRows())
   // Host Mode runs the server where the workspace is. `extensionKind` alone cannot express that:
   // a local window has no remote extension host to be `Workspace` relative to, so it reports `UI`
   // and gating on `Workspace` refuses every ordinary window. The one host that must not start a
@@ -259,6 +259,10 @@ export function activate(context: vscode.ExtensionContext): void {
     hostStatus.update(hostSupervisor.state)
     void hostSupervisor.sync()
   }
+  // The badge counts gateways, so it follows the model as well as the supervisor — and it renders
+  // once here because a window with no supervisor (the UI side of a remote) still has gateways.
+  model.onDidChange(() => hostStatus.render())
+  hostStatus.render()
   const requireHost = (): HostSupervisor | undefined => {
     if (!hostSupervisor) {
       void vscode.window.showInformationMessage(

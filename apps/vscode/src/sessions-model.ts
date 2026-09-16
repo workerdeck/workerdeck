@@ -161,6 +161,13 @@ export class SessionsModel implements vscode.Disposable {
     return snap?.probe === 'connected' ? snap.sessions : []
   }
 
+  // Every gateway that exists right now, which includes Host Mode’s own: the supervisor
+  // registers `This machine` while it serves and unregisters it when it stops, so a stopped host is
+  // absent from both halves rather than sitting in the denominator as a permanent miss.
+  gatewayRows(): { name: string; probe: 'connected' | 'unauthorized' | 'unreachable' | 'pending' }[] {
+    return this.#store.all().map((host) => ({ name: host.name, probe: this.#snapshots.get(host.id)?.probe ?? 'pending' }))
+  }
+
   attentionCount(): number {
     let waiting = 0
     for (const snap of this.#snapshots.values()) {

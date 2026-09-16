@@ -177,9 +177,23 @@ a local window reports `UI` (having no remote host to be `Workspace` relative to
 supervisor is refused only for the one host that really is the wrong machine — a UI-side copy
 while a remote is attached (`env.remoteName !== undefined && extensionKind === UI`). The server
 log is tailed into a **WorkerDeck Server** Output channel rather than opened as a document, so it
-follows live and works for an adopted server as well as one this window started. The window status bar carries its state
-(`workerdeck.host.statusBar`), and clicking it opens the start/stop/restart/log QuickPick —
-a `StatusBarItem` has one command and no dropdown.
+follows live and works for an adopted server as well as one this window started.
+
+The window status badge (`workerdeck.host.statusBar`) is **not** a Host Mode badge, despite the
+setting's name and the slot's history: it reads `X/Y` — gateways answering their probe over
+gateways that exist — and Host Mode's own counts in both halves *while it serves*, since the
+supervisor registers `This machine` on start and unregisters it on stop. A stopped host is
+therefore absent from the denominator rather than sitting in it as a permanent miss. A transient
+Host Mode state (`starting`, `stopping`, the error `$(warning)`) still outranks the count and
+takes the badge whole: those are short-lived, they are what the click acts on, and a count cannot
+say "starting". What the count replaced was `:8787` — the steady state used to show the port,
+which is the one thing about a running server you can already read off the tooltip, while
+"running" would have been true almost always and told you nothing. The badge also outlived its
+old hide-when-Host-Mode-is-disabled rule, because a window with only remote gateways still has a
+count worth drawing; it now hides only when there are no gateways at all. Clicking it opens the
+start/stop/restart/gateways/log QuickPick — a `StatusBarItem` has one command and no dropdown,
+and that QuickPick is `workerdeck.host.actions`'s **only** entry point (`"when": false` keeps it
+out of the palette), which is why the gateway list the badge counts had to be added to it.
 
 ### The Sessions and Gateways views
 
