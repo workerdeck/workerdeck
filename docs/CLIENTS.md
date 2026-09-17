@@ -5,8 +5,9 @@ embedding, and the iOS app. Dispatched from `CLAUDE.md`.
 
 ## `apps/vscode`
 
-the VS Code extension (side-loaded `.vsix`; CI uploads it as an artifact,
-no Marketplace yet). A workspace member like any package (esbuild for the extension host,
+the VS Code extension, published to the **Visual Studio Marketplace** as
+`silkweave.workerdeck-vscode` by the `vscode` job on a version tag, which also keeps the `.vsix`
+as a run artifact; `pnpm install:local` side-loads a local build. A workspace member like any package (esbuild for the extension host,
 Vite for the webview, both from `@workerdeck/source`), importing `client`/`react`/`ui`/
 `protocol` and **never** `core`/`server`. The webview runs an *unmodified* `WorkerDeckClient`
 + `SessionPanel` (root entry — no Monaco; VS Code is the workspace): its `fetchImpl`/

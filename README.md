@@ -172,7 +172,9 @@ Each package has its own README, with the code for using it.
 
 The apps — [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode), the
 [docs site](apps/docs) and [`apps/embedded`](apps/embedded) — are not published to npm; each has
-its own README.
+its own README. The extension ships on the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode)
+instead, in lockstep with the packages above.
 
 **Putting an agent in front of your own users?** Start with
 [Embed WorkerDeck in your app](https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/),
