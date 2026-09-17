@@ -1,217 +1,179 @@
 # WorkerDeck for VS Code
 
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/v/silkweave.workerdeck-vscode?label=marketplace)](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/silkweave.workerdeck-vscode)](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode)
+[![License](https://img.shields.io/badge/license-MIT-black.svg)](https://github.com/workerdeck/workerdeck/blob/HEAD/LICENSE)
+
+> **Run Claude Code or OpenAI Codex as a session that lives in your editor, and keeps running
+> when you close the window.**
+
+The agent sits in the bottom panel where a terminal would be. You watch the transcript stream,
+you approve or deny each tool call, and the session itself runs in a server outside VS Code, so
+the same session is still there in the next window, in a browser tab, or on your phone.
+
 ![WorkerDeck in VS Code](https://github.com/workerdeck/workerdeck/raw/HEAD/apps/vscode/media/hero.png)
 
-The agent rides in the editor: WorkerDeck sessions in the bottom panel (next to Terminal),
-gateways and sessions in a left sidebar, and — for remote gateways — the session's project
-mounted as a `workerdeck://` virtual workspace folder. The panel is the real
-`@workerdeck/ui` `SessionPanel` on a real `@workerdeck/client`, so everything the dashboard's
-session surface does (streaming transcript, approvals, composer with attachments and `/` `@`
-completion, model/permission switches, capability gating per engine) works here unchanged.
+## 🎯 Why you might want it
 
-Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode),
-or build the `.vsix` and side-load it (`pnpm install:local`). Design + decisions: the extension
-section of [`docs/CLIENTS.md`](https://github.com/workerdeck/workerdeck/blob/HEAD/docs/CLIENTS.md) (the navigation rule the sidebar was rebuilt
-around).
+- **No terminal to babysit.** The session is a server-side object, not a process attached to a
+  shell you have to leave open.
+- **Approve or deny, per tool call.** Nothing touches your checkout until you say so, and the
+  tool blocks while it waits.
+- **It survives the window.** Close VS Code, reopen it, reattach. The transcript replays and the
+  turn is where you left it.
+- **Same session, other screens.** A browser tab, an iPhone, another editor. They all attach to
+  one ordered event stream and stay in step.
+- **Two engines.** Claude Code via the Agent SDK, OpenAI Codex via the codex CLI. Any AI SDK
+  provider through a second engine.
+- **Remote projects mount as folders.** A gateway on another machine shows up as a
+  `workerdeck://` workspace folder you can open files from.
+- **Bring your own login.** The extension holds no model credentials. Your agent's own CLI
+  resolves its login exactly as it does in your terminal.
 
-## How it connects
+## 🚀 Getting started
 
-The webview never talks to the network. It runs a `WorkerDeckClient` whose `fetchImpl` and
-`WebSocketImpl` are `postMessage` shims (`webview/bridge.ts`); the extension host executes
-them with Node `fetch` / `ws`, injecting the gateway's `Authorization: Bearer` header there
-(`src/panel.ts`). Auth keys live in VS Code `SecretStorage` (the OS keychain) and never enter
-the webview; the webview CSP has no external `connect-src`. The bridge refuses URLs that
-don't belong to a registered gateway, so it can't be used as an open proxy.
+**1. Install the extension** from the
+[Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode),
+or from the command line:
 
-Local vs remote is decided per gateway from its URL (`isLoopbackHost`), never by probing
-paths. Three tiers:
+```sh
+code --install-extension silkweave.workerdeck-vscode
+```
 
-- **loopback gateway** — transcript paths open real files; "Open Session Project Folder"
-  adds the real folder.
-- **remote gateway** — paths open `workerdeck://<hostId>/<path>` via the FileSystemProvider
-  (`src/fsp.ts`): reads/lists over `/fs/*`, hash-guarded conditional writes (a 409 tells you
-  the agent got there first — nothing silently overwrites), no mkdir/delete/rename (the
-  gateway has no such routes), read-only when the gateway hasn't opted into `hostFiles.write`.
-- **Remote SSH window** — `extensionKind: ["workspace", "ui"]` runs the extension on the
-  remote host, where its loopback gateway is local and the first tier applies. Zero
-  extension code; full fidelity.
+**2. Start a server.** Open the Command Palette and run **WorkerDeck: Start Server**. Host Mode
+is off until you ask for it, so the first run offers an **Enable Host Mode** button; click it
+and the server comes up. That is all the setup there is.
 
-## Settings
+Behind that button, the extension supervises the published `workerdeck` CLI as a background
+process: it uses the binary on your `PATH` if there is one, otherwise it runs it through `npx`.
+The first `npx` run downloads a few hundred megabytes and can take several minutes, so it shows
+a progress notification.
+
+Already running a gateway somewhere, or want to point at one on another machine? Skip this step
+and use the **Gateways** view instead (the plug icon above the Sessions list) to add it by URL
+and auth key.
+
+**3. Start a session.** Click **+** above the Sessions list in the Explorer sidebar, pick a
+directory and an engine, and type a prompt. The Agent panel opens at the bottom, beside
+Terminal.
+
+**Requirements:** VS Code 1.106 or newer, Node 22 or newer, and a logged-in
+[Claude Code](https://claude.ai/code) or [Codex](https://developers.openai.com/codex/cli) CLI.
+
+## ✨ What you get
+
+### The Agent panel
+
+The conversation, docked at the bottom next to Terminal, in your editor font. Streaming
+transcript, tool calls you can expand, a composer with `@` file references, `/` slash commands
+and image paste. Click anywhere that is not a control and the caret lands in the composer.
+
+Come back to a session that moved on without you and it opens in **catch-up**: a recap row at
+the boundary counting what happened while you were gone (turns, tool calls, files, errors,
+approvals waiting), everything above it dimmed, and a bar offering jump or dismiss.
+
+### Approvals
+
+A tool call your permission mode does not already cover becomes a card in the transcript, and
+the tool blocks until someone answers. Edits arrive as a diff. VS Code raises a native
+notification when a session needs you and the panel is not on screen.
+
+Permission modes range from approving everything by hand to letting the agent run unattended.
+Switch modes mid-session from the status bar.
+
+### The status bar
+
+Session state, context window, plan usage for the five-hour and weekly windows, model picker,
+permission-mode picker, and an unread count across every session your filter is showing. Click
+the model or the mode and you get a Quick Pick. Every badge is a setting, so turn off the ones
+you do not want.
+
+### The sidebar views
+
+**Sessions** sits in the Explorer beside your files, and lists every gateway's sessions at once,
+with a search box and a funnel holding the facets (gateway, engine, state, plus group and sort).
+Session cards carry the engine mark, the model, the folder, turn count and cost, an unread
+badge, and the state at a glance. Double-click a name to rename it, and the dashboard and your
+phone see the new name too.
+
+Five more views live in the secondary sidebar and describe the session you have open: **Usage**,
+**Context**, **MCP Servers**, **Tasks** and **Session Info**. They appear only when a session is
+open. Drag any of them to whichever sidebar or panel you prefer.
+
+### Remote gateways
+
+Point the extension at a gateway on another machine and its projects mount as a
+`workerdeck://` workspace folder. Files open, edit and save over the gateway, with a conflict
+check on write, so you find out if the agent got there first instead of overwriting it. A
+Remote SSH window is simpler still: the extension runs on the remote host, where the gateway is
+local.
+
+## 💡 How people use it
+
+**Review what the agent wants to do before it does it.**
+
+> Ask for a refactor across a handful of files. Each edit arrives as a diff in the panel with
+> Allow and Deny under it. You read the diff, allow the three that are right, deny the one that
+> is not, and tell it why in the same breath.
+
+**Start something long, then walk away.**
+
+> Kick off a migration in the morning and close the laptop. The session keeps running on the
+> gateway. When it needs an approval your phone gets a push, you answer it from the lock screen,
+> and it carries on. Open VS Code that afternoon and the whole transcript replays.
+
+**Work on a repo that is not on this machine.**
+
+> Add your workstation's gateway from a laptop. Its projects appear as workspace folders, you
+> start a session in one, and you are reading and editing the real files over the gateway.
+
+**Keep one server for every window.**
+
+> Host Mode probes the port on activation and adopts whatever already answers, so a second VS
+> Code window attaches to the first window's server rather than starting its own. The server is
+> detached, so closing a window does not kill the sessions another window is watching.
+
+## ⚙️ Settings
+
+Every key is optional. The ones people actually change:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `workerdeck.fontFamily` | `editor` | Typeface for the **agent panel**: the editor font (monospace) or VS Code's UI font. The sidebar and section views always use the UI font. |
-| `workerdeck.statusBar.status` | `true` | The session-status badge in the window status bar. |
-| `workerdeck.statusBar.context` | `true` | The context-window badge. Absent anyway for engines that report no context window. |
-| `workerdeck.statusBar.sessionUsage` | `true` | The session plan-usage badge — the five-hour window, the one that resets while you work. |
-| `workerdeck.statusBar.weeklyUsage` | `true` | The weekly plan-usage badge — the seven-day window. |
-| `workerdeck.statusBar.modelUsage` | `false` | The per-model weekly badge — the fullest model-scoped window, named for its model (Fable, Opus, …). |
-| `workerdeck.statusBar.model` | `true` | The model picker. Click → Quick Pick. |
-| `workerdeck.statusBar.mode` | `true` | The permission-mode picker. Click → Quick Pick. |
-| `workerdeck.newSession.permissionMode` | `remember` | Permission mode for sessions created from VS Code. `remember` follows the last session on that adapter; pin a mode (e.g. `auto`) to always start there. A mode the chosen engine does not support falls back to that profile's own default. |
-| `workerdeck.dev.autoReload` | `true` | Extension Development Host only: re-render the webviews on rebuild. |
+| `workerdeck.host.enabled` | `false` | Let the extension run its own server. **WorkerDeck: Start Server** offers to turn this on for you. |
+| `workerdeck.host.autoStart` | `true` | Once Host Mode is on, bring the server up on activation rather than waiting for the command. |
+| `workerdeck.host.port` | `8787` | Port the managed server listens on, and the port every window probes. |
+| `workerdeck.host.cwdRoots` | `[]` | Confine sessions to these directory trees. |
+| `workerdeck.fontFamily` | `editor` | Typeface for the Agent panel: the editor font, or VS Code's UI font. |
+| `workerdeck.fontSize` | `0` | Panel font size. `0` follows the editor. |
+| `workerdeck.transcriptDensity` | `comfortable` | Row spacing in the transcript. |
+| `workerdeck.catchUpMode` | `true` | The recap row when you return to a session that moved on. |
+| `workerdeck.newSession.permissionMode` | `remember` | Permission mode for new sessions. `remember` follows your last one. |
+| `workerdeck.statusBar.*` | mixed | One toggle per status-bar badge: status, context, session usage, weekly usage, per-model usage, unread, subagents, model, mode. |
 
-## Develop
+Host Mode keys are machine-scoped on purpose, so a cloned repo's `.vscode/settings.json` can
+never quietly expose an agent runner on your network. The auth key is generated for you and
+kept in VS Code's SecretStorage.
 
-```sh
-pnpm install               # repo root — apps/vscode is a workspace member
-cd apps/vscode
-pnpm build                 # esbuild (extension host) + vite (webview) → dist/
-# then: File → Open… apps/vscode in VS Code, F5 (Extension Development Host)
-```
+## 🔒 Security
 
-From a terminal (no F5, no VS Code window needed to start it):
+The webview never talks to the network. It runs a client whose transport is a `postMessage`
+shim; the extension host performs the actual requests and injects the gateway's
+`Authorization` header there. Auth keys live in SecretStorage, which is your OS keychain, and
+never enter the webview. The webview's CSP has no external `connect-src`, and the bridge
+refuses any URL that does not belong to a registered gateway, so it cannot be used as an open
+proxy.
 
-```sh
-pnpm dev:host              # build, open an Extension Development Host, keep watching
-```
+The extension implements no model-provider authentication at all. It never sees your Anthropic
+or OpenAI credentials; the official CLI resolves those from your own environment.
 
-That is the whole loop. The extension watches its own `dist/` **in development mode only**
-(`src/dev-reload.ts`) and reacts to each rebuild: a **webview** change re-renders the webviews
-in place (instant; the extension host keeps its gateways, selection and sockets), an
-**extension-host** change reloads the window — VS Code cannot swap an extension's code in a
-live host, so the window is the unit. Turn it off with `workerdeck.dev.autoReload`. The
-webview has no dev server on purpose: webview assets must be files on disk.
+## 📚 More
 
-To run the extension in the window you are *working* in, install it like any other extension:
+- [Documentation](https://workerdeck.github.io/workerdeck/), including the embedding guide and
+  the protocol reference
+- [GitHub repository](https://github.com/workerdeck/workerdeck)
+- [Report an issue](https://github.com/workerdeck/workerdeck/issues)
+- [Extension design notes](https://github.com/workerdeck/workerdeck/blob/HEAD/docs/CLIENTS.md),
+  if you want to know why the sidebar is shaped the way it is
+- [Building from source](https://github.com/workerdeck/workerdeck/blob/HEAD/docs/DEVELOPMENT.md)
 
-```sh
-pnpm install:local         # package a .vsix and install it into `code`
-```
-
-That one needs a manual **Developer: Reload Window** afterwards, and it is a real install —
-it shadows nothing, but it also does not hot-reload. Prefer `dev:host` while iterating.
-
-Try it against a local gateway: `pnpm server` at the repo root, then in the dev host add a
-gateway (sidebar plug icon → Add gateway; the first one is prefilled with
-`http://127.0.0.1:8787`).
-
-## Package
-
-```sh
-pnpm package               # → workerdeck.vsix (side-load: Extensions ⋯ → Install from VSIX)
-```
-
-## Design
-
-Two surfaces with a hard split (there are no floating custom dialogs in VS Code, so nothing
-pretends otherwise):
-
-- **Agent panel** (bottom dock, tabbed as **Agent** beside Terminal) — purely the
-  conversation. A click on anything that isn't itself a control puts the caret in the
-  composer (`focusComposerOnClick`): a dock is focussed in order to type in it. Expanding a
-  tool row, following a path, or ending a text selection stays what it was. `SessionPanel` runs with
-  `panelSurface: 'external'`: no dialogs, no `⋯` menu; the composer sits flush to the panel
-  edges. Panel-open intents (status-bar clicks, `/mcp`) and live vitals flow OUT to the
-  sidebar via the extension host. The transcript runs `transcriptVariant: 'lines'`: vertical
-  space is the scarce resource in a dock, so nothing is boxed — every event is one
-  full-width, transparent, hover-highlit row behind a fixed gutter glyph (`❯` typed, `●` said
-  or called, `✻` thought, `⎿` the collapsed first line of a tool's output), everything
-  left-aligned on one column. The panel's typeface follows `workerdeck.fontFamily`, which
-  defaults to the **editor font** — monospace, so it reads as part of the editor rather than
-  as a web app docked beside it. **Model and permission mode are not in the composer**: they
-  live in the window status bar, where a click opens a Quick Pick — a `StatusBarItem` carries
-  one command and no dropdown, so command → Quick Pick is the native shape (it is what the
-  language-mode and encoding items do). The composer is then a single line that grows with the
-  message, attach and send beside the field. Both the transcript variant and the controls seam
-  (`controlsSurface`, `onControls`) are `@workerdeck/ui` props, not local CSS: vitals carry the
-  *options* out, `onControls` carries the setters back in, and no second attach is involved.
-  Returning to a session that moved on without you opens in **catch-up**: a `※ recap:` row at
-  the boundary counting what happened (turns, tool calls and their names, files, errors,
-  approvals waiting — counted from the transcript, never written by the model), everything
-  above it dimmed, and a bar offering `jump` or `dismiss`. Sending a message dismisses it too.
-  All of that is `workerdeck.catchUpMode`, on by default — off for a reader who hops between
-  sessions constantly and reads the marker as noise.
-- **WorkerDeck views** — management and switching, split across both sidebars and with no
-  activity-bar container of its own. **Sessions** sits in **Explorer** beside the file tree;
-  the other six sit in a **`secondarySidebar` container titled "WorkerDeck"**, one tab
-  stacked vertically: Usage → Context → MCP Servers → Tasks → Session Info → Gateways. The five
-  detail views are `when`-gated on `workerdeck.hasSession` — they are *about the session you have
-  open*, Outline and Timeline's shape — so they do not exist at all with no session on screen.
-  The secondary-sidebar contribution point is why `engines.vscode` is `^1.106.0` (finalized
-  there; the schema is `additionalProperties: false`, so an older build drops the key and the
-  views vanish). A contributed location is only a default: any view drags to either sidebar or
-  the panel, and `contextualTitle` names the container it lands in. Note VS Code cannot order
-  an extension view against a built-in one, so Sessions appears *under* the file tree until
-  you drag it up, and a stored `views.customizations` beats any new default — **View: Reset
-  View Locations** is how you get back to the shipped layout. **Unread lives in the window status bar** (`$(bell) N`,
-  `workerdeck.statusBar.unread`): the **total new rows across the sessions the list is
-  showing** — the webview mirrors its filter to the extension host (`wd-view-config`, one-way:
-  the webview owns it, the host only counts with it), so it never announces work in a session
-  the filter or the workspace scope is hiding. It is not a view badge, and that is the point:
-  VS Code aggregates a view badge onto its *container's* icon, which here would be Explorer's,
-  beside a user's files. Because it is the extension's only always-visible signal, the sessions
-  poll runs while it is enabled even with every WorkerDeck view closed; turning the setting off
-  releases that watcher. The rules themselves live in `@workerdeck/protocol`
-  (`session-list.ts`) — the dashboard renders the same list and iOS mirrors it in Swift —
-  and `src/view-config.ts` re-exports them beside the one thing that is ours, turning the
-  bridge state into rows. Sessions waiting on a human lead its tooltip and turn it amber, since
-  they are the more urgent thing without being the bigger number. The **Sessions** view lists **every
-  gateway's sessions at once**: the gateway is a facet, not the frame the list lives in.
-  Above the list, the Extensions view's shape: a **search box that is always there** and a
-  **funnel** beside it holding the facets — scope/gateway/adapter/state dropdowns plus group
-  and sort, laid out label left, control right. Multi-select with nothing chosen means
-  "all", and the funnel wears a dot while any facet is hiding rows (the list is scoped by
-  default, so the control that explains a short list must not itself be hidden). The row
-  lives inside the webview because VS Code's own search/filter row is workbench chrome — a
-  view title can contribute commands, never an input. State persists across reloads in
-  webview state. The view-title icons are New Session and the
-  **Gateways** screen, the only place a gateway is viewed, added, edited or removed. The
-  window's **open folders are a facet too, and the only one on by default** — a session counts
-  as inside a folder only where its gateway could be (a real folder scopes loopback gateways;
-  a `workerdeck://` mount scopes its own), and because it hides without being asked, the scope
-  and a one-click "show all" sit above the list rather than behind the icon. Session
-  cards are rich — the title starts at the left edge with the second line under it (engine
-  mark, friendly model name, folder, turns, cost), and everything status-ish rides the right:
-  unread badge (transcript rows since you last had the session on screen), age, state icon (spinner
-  while working, ringing bell when a human is needed, moon when idle) last of all. Stop and
-  Delete are hover icons at the right of the second line — off the line you read, and away
-  from the state icon; Delete confirms in a native modal, so the icon is a request rather
-  than the deed. **Double-click the name** to rename in place: a rename is a
-  `PATCH /sessions/:id` on the gateway, so the dashboard and the phone see the same name, and
-  clearing it restores the derived title. New Session and the gateway form are
-  **pushed screens** with a back arrow. New Session is also the **resume** picker where the
-  engine has a browsable store: it lists what is on disk for that directory and profile, and
-  picking one continues that engine session instead of starting a fresh one. There is no implicit localhost gateway: an
-  unconfigured install shows an empty list with an add affordance rather than a phantom
-  entry that is usually unreachable. The scoped surfaces —
-  **Session Info / Context / Usage / MCP Servers / Tasks** — are each their **own VS Code view**
-  (one shared bundle, the provider stamps which section a view is), so collapse, reorder,
-  and drag-to-anywhere are native. All five are `when`-gated on `workerdeck.hasSession`, and
-  Session Info starts collapsed. A view can't be disabled or collapsed through the API, so an
-  inert one says so the two ways that exist — the header's description (`no session`,
-  `not reported`, and the task count) and an empty state in its body.
-  Context, Usage and Tasks render from vitals the panel relays — the
-  panel holds the one live attach; no sidebar surface ever attaches. Tasks carries a
-  **Show/Hide Completed** title-bar toggle, persisted in `globalState` and mirrored to a context
-  key the way the session filter's is. Everything on this side
-  renders in **VS Code's UI font** (`--vscode-font-family`) — it is workbench UI, and the
-  panel's monospace setting deliberately does not reach it.
-
-Vendor marks come from `@workerdeck/ui`'s `EngineIcon` (it moved out of this app once the
-dashboard needed the same glyphs) — single-path `currentColor` SVGs inlined
-from [`@lobehub/icons-static-svg`](https://lobehub.com/icons) (MIT) — the React package pulls
-antd and a whole UI kit, which is not a trade worth making for a few 12px glyphs. Claude and
-codex are named by engine; a `provider` session is identified from its model id (gemini,
-deepseek, moonshot/kimi, gpt/o1/o3), and falls back to no mark rather than a wrong one.
-
-## Layout
-
-- `src/` — extension host (Node): `extension.ts` activation/commands, `hosts.ts` the gateway
-  store (URL normalization is `@workerdeck/client`'s `apiUrl`/`isLoopbackHost`),
-  `sessions-model.ts` the poll model, `sidebar.ts` +
-  `panel.ts` the two webview providers, `webview-transports.ts` the shared bridge host side,
-  `fsp.ts` the virtual filesystem, `gateway.ts` host-side clients, `watermarks.ts` the
-  `globalState` backing for protocol's unread model, `bridge-protocol.ts` the postMessage wire
-  (shared with the webviews, type-only) and `view-config.ts` the list's rows.
-  The filter/group/sort rules and the unread arithmetic are protocol's now
-  (`session-list.ts`, `watermarks.ts`) but still *executed* on both sides here — the webview
-  renders the list with them, the host counts the badge with them.
-- `webview/` — browser side: `bridge.ts` transport shims (shared), `App.tsx` the agent
-  panel, `sidebar/` the sidebar app (cards, sections, push screens), `forms/` the two
-  forms, `theme.ts` VS Code→`data-theme` mapping, `styles.css` Tailwind over the ui
-  package's source styles plus the VS Code token skin.
-
-Rules that bind this app: it imports `client`/`react`/`ui`/`protocol` only — never
-`core`/`server` — and session-surface features belong in `ui`/`react` so every embedder gets
-them; the extension adds only VS Code glue (per the repo-wide rule in `docs/CLIENTS.md`).
+MIT licensed. Self-hosted. No telemetry.
