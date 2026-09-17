@@ -16,7 +16,7 @@
     "typecheck": "tsgo -p tsconfig.json && tsgo -p tsconfig.web.json"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^4.0.53",
+    "@ai-sdk/openai": "^4.0.66",
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@silkweave/core": "^5.2.0",
@@ -40,7 +40,7 @@
     "@workerdeck/sandbox": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/ui": "workspace:*",
-    "ai": "^7.0.87",
+    "ai": "^7.0.99",
     "concurrently": "^10.0.5",
     "cors": "^2.8.6",
     "express": "^5.2.1",

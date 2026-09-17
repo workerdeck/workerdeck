@@ -42,7 +42,7 @@
     "@workerdeck/protocol": "workspace:*",
     "@workerdeck/react": "workspace:*",
     "@workerdeck/ui": "workspace:*",
-    "lucide-react": "^1.38.0",
+    "lucide-react": "^1.45.0",
     "monaco-editor": "^0.56.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
