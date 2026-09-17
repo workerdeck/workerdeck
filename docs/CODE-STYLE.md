@@ -1,7 +1,7 @@
 # Code style
 
 The reference file for these rules is `packages/core/src/engines/claude/subagents.ts`. This is
-a first set; it will grow. Anything the tooling can enforce, the tooling enforces — the goal is
+a first set; it will grow. Anything the tooling can enforce, the tooling enforces - the goal is
 that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-save keeps it there.
 
 ## Tooling
@@ -15,39 +15,55 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
 
 - **No semicolons** (`semi: false`).
 - **Single quotes** (`singleQuote: true`).
-- **`printWidth: 140`** — long lines are fine; signatures and imports overwhelmingly stay on one
+- **`printWidth: 140`** - long lines are fine; signatures and imports overwhelmingly stay on one
   line. Not higher: width is also the join threshold, and a wider limit collapses deliberately
-  multi-line expressions into dense one-liners. 140 is the compromise — we never use
+  multi-line expressions into dense one-liners. 140 is the compromise - we never use
   `// oxfmt-ignore`.
-- **Trailing commas in multi-line structures** (`trailingComma: "all"`). Single-line structures —
-  which is what imports normally are at width 160 — never get one.
+- **Trailing commas in multi-line structures** (`trailingComma: "all"`). Single-line structures -
+  which is what imports normally are at width 160 - never get one.
 - 2-space indent, spaces not tabs.
 
 ## Lint-enforced (oxlint)
 
 - **Always use curly braces**, including single-statement bodies (`curly: error`, autofixable).
   `if`/`else if` chains always take newlines and braces. `case` arms are always braced
-  (`unicorn/switch-case-braces` — `curly` alone does not cover switch).
+  (`unicorn/switch-case-braces` - `curly` alone does not cover switch).
 - **`import type` for type-only imports** (`typescript/consistent-type-imports`;
   `disallowTypeAnnotations` is off because vitest's `importOriginal<typeof import('m')>()` is
   idiomatic).
 - **Custom rules** in `lint/wd-plugin.js` (loaded via `jsPlugins`):
-  - `wd/module-func-style` — module-level functions must be `function` declarations. The one
+  - `wd/module-func-style` - module-level functions must be `function` declarations. The one
     exemption is a binding whose *type* is the point: an explicit annotation
     (`const C: FunctionComponent<Props> = …`) or a JSDoc `@type` tag in `.mjs`. Converting those
     would throw the type away, so they stay arrow consts.
-  - `wd/no-stacked-jsdoc` — two `/** */` blocks on one declaration is always a mistake: one of
+  - `wd/no-stacked-jsdoc` - two `/** */` blocks on one declaration is always a mistake: one of
     them documents the wrong symbol or went stale.
-  - `wd/no-jsdoc` (error) — bans `/** */` outside the vendored `prompt-area`. Exact where
+  - `wd/no-jsdoc` (error) - bans `/** */` outside the vendored `prompt-area`. Exact where
     `max-comment-lines` is approximate: a JSDoc block is the form the rule names, so there is no
     threshold to sit just under. `@type` and `@deprecated` are exempt because those tags are read
-    by TypeScript itself — converting them to `//` would throw semantics away, not just prose.
-  - `wd/max-comment-lines` (warn) — a **smoke alarm only**, and a weak one: see § Comments below
+    by TypeScript itself - converting them to `//` would throw semantics away, not just prose.
+  - `wd/max-comment-lines` (warn) - a **smoke alarm only**, and a weak one: see § Comments below
     for the actual rule, which no line-count check can express. Vendored code
     (`packages/ui/src/components/prompt-area`) is exempt because most of those blocks are the upstream library's
     `@example` API docs, and rewriting them is pure diff noise against a tree we want to keep
-    diffable. The few that carry WorkerDeck-added invariants stay at the call site deliberately —
+    diffable. The few that carry WorkerDeck-added invariants stay at the call site deliberately -
     documenting vendored internals in our `docs/` is how the vendored boundary rots.
+
+## Prose (ratchet-enforced)
+
+**No em dashes anywhere in this project.** Not in markdown, not in comments, not in UI copy, not
+in Swift, not in commit messages. Use a comma where the dash was joining clauses, parentheses
+where it was fencing an aside, a colon where it was introducing a definition, and a plain `-`
+only where a dash is genuinely what you want. The character reads as machine-written, and this
+project's prose is one of its products.
+
+`scripts/lint-changed.mjs` enforces it over **changed files of every text type**, not just the
+ones oxlint can parse: most of the existing backlog is markdown and Swift, which no JS linter
+sees. It is a ratchet, the same shape as the comment rules above, because the backlog is large
+and gets swept separately. A line where the character is genuinely data rather than prose, a
+fixture quoting an engine's own output, say, can carry `wd-em-dash-ok` to opt out.
+
+En dashes get the same treatment for the same reason. A numeric range takes `to` or a hyphen.
 
 ## Conventions the tooling cannot (yet) enforce
 
@@ -70,7 +86,7 @@ The supporting rules:
   duplication in a smaller font.
 - **Deleting a comment is not the end of the job.** If it carried critical information that is
   hard to derive from the code, or anything system-relevant (a status flow, a state machine, a
-  lifecycle), it must reach `docs/` — and if it cannot be placed immediately, it goes in
+  lifecycle), it must reach `docs/` - and if it cannot be placed immediately, it goes in
   `_docs/DOC-DEBT.md` (gitignored scratch) so the next pass covers it, never straight to /dev/null. Be strict about what qualifies: most comments
   are restating the code and simply go.
 - **Tests are held to the rule too**, with one allowance: a single-line `//` may stay where a
@@ -82,13 +98,13 @@ The supporting rules:
 Why the rule reads this way: an earlier attempt enforced "comments under 12 lines" with a lint
 rule, and the threshold became the target. 58 blocks ended up at exactly 12 lines against 3 at 13,
 each keeping its narrative and adding a `docs/` pointer to the doc that already told the same
-story — strictly worse than either alone. Line count cannot express this rule; the test is
+story - strictly worse than either alone. Line count cannot express this rule; the test is
 **"would this sentence read naturally in a design doc?"** If yes, it belongs in one.
 
 The reference result is `packages/protocol/src/index.ts`: 2,144 lines and 1,199 comment lines
 became 923 lines and **zero** comments, with no change to a single token of code.
 
-**The tree drifted after that sweep, and neighbouring code is not evidence of the convention** —
+**The tree drifted after that sweep, and neighbouring code is not evidence of the convention** -
 this file is. That is exactly how the rule was broken on 2026-09-02: the compaction work matched
 the JSDoc it found beside the symbols it was extending and added 8 more blocks, all of them
 narrative already written into `docs/` in the same change. 97 blocks had accumulated repo-wide.
@@ -96,7 +112,7 @@ narrative already written into `docs/` in the same change. 97 blocks had accumul
 They were converted to `//` the same day and `wd/no-jsdoc` is now an **error**, so the *form* can
 no longer drift. **The prose those blocks carry is a separate, unfinished job**: converting a
 JSDoc block to `//` keeps every word, and many of the 48 multi-line ones are still narrative that
-would read naturally in a design doc — which is the actual test. Deleting them wholesale was
+would read naturally in a design doc - which is the actual test. Deleting them wholesale was
 refused deliberately, because most carry real invariants and the rule above says a comment that
 carries critical information must reach `docs/` before it is removed, not instead of it.
 `wd/max-comment-lines` is what still watches that backlog.
@@ -105,16 +121,16 @@ carries critical information must reach `docs/` before it is removed, not instea
 
 - **Name types that carry meaning.** Define a named interface/type when the shape is meaningful,
   reused, or spans multiple lines. The exception is narrowing untrusted wire data: a one-off
-  probe cast like `block as { tool_use_id?: unknown }` may stay inline — a named interface there
+  probe cast like `block as { tool_use_id?: unknown }` may stay inline - a named interface there
   would imply more certainty about the shape than exists.
 - **Module-level `const`s at the top of the file** (after imports and type declarations).
 - **Module-level functions are `function` declarations** on a single-line signature:
-  `function fn(a: string): R { … }` — not arrow consts. Two reasons: they hoist, so a helper can
+  `function fn(a: string): R { … }` - not arrow consts. Two reasons: they hoist, so a helper can
   sit below its caller and the file reads top-down; and a declaration carries its JSDoc naturally,
   where an assignment documents a binding that happens to hold a function. React components use
   the same form (`export function Component()`), so the component layer and the helper layer
-  finally read alike. **The exception is a binding whose type is the point** — an explicit
-  annotation like `const C: FunctionComponent<Props> = …`, or a JSDoc `@type` tag in `.mjs` —
+  finally read alike. **The exception is a binding whose type is the point** - an explicit
+  annotation like `const C: FunctionComponent<Props> = …`, or a JSDoc `@type` tag in `.mjs` -
   because the annotation types the binding and converting would discard it. Enforced by
   `wd/module-func-style`.
 
@@ -125,7 +141,7 @@ carries critical information must reach `docs/` before it is removed, not instea
 
 ## Known formatter tradeoff
 
-Single-line braced guards (`if (!record) { continue }`) do not survive oxfmt — prettier
+Single-line braced guards (`if (!record) { continue }`) do not survive oxfmt - prettier
 semantics always expand a braced block to three lines, and oxfmt has no plugin system to change
 that. We accept the three-line form:
 
