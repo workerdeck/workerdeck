@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="WorkerDeck — coding agent sessions you can watch, steer, and embed" width="100%" />
+  <img src="docs/assets/banner.png" alt="WorkerDeck - coding agent sessions you can watch, steer, and embed" width="100%" />
 </p>
 
 # WorkerDeck
@@ -12,26 +12,29 @@
   <img src="https://img.shields.io/badge/node-%E2%89%A522-black.svg" alt="Node >= 22" />
 </p>
 
-**Coding agent sessions you can watch, steer, and embed.** A coding agent — Claude Code, OpenAI
-Codex, or any model provider — is a terminal program: it runs where you started it, and it is
-yours only while that terminal is open. WorkerDeck puts a session server, a typed wire protocol
-and an approve/deny UI around one, so the same session is reachable from a browser, your phone,
-your editor, or an app you build yourself.
-
-Self-hosted, MIT, and no credentials of its own: your agent's CLI resolves its own login exactly
-as it does in your terminal.
-
-## Quickstart
+**Your coding agent, in a browser tab.** One command, no clone, no config file:
 
 ```bash
 npx workerdeck
 ```
 
-That is the whole install. Gateway **and** web dashboard on one port at `http://127.0.0.1:8787` —
-nothing to clone, no config file. Open it, point a session at a project directory, give it a
-prompt, and watch the transcript stream while you approve or deny the tool calls it wants to make.
+<p align="center">
+  <img src="docs/assets/screenshot-web.png" alt="The WorkerDeck dashboard: a Claude session on a monorepo, the agent's proposed edit to a file shown as a diff, and an approve-or-deny prompt underneath it" width="100%" />
+</p>
 
-To reach it from another machine — your phone on the same tailnet, say — bind it and give it a
+<p align="center">
+  <sub>A real session, mid-turn. The agent wants to edit a file; it is blocked on your answer.<br />
+  Same tab from your laptop, your phone, your editor, or docked inside an app you build.</sub>
+</p>
+
+## Quickstart
+
+`npx workerdeck` is the whole install. Gateway **and** web dashboard on one port at
+`http://127.0.0.1:8787`, with nothing to clone and no config file. Open it, point a session at a project
+directory, give it a prompt, and watch the transcript stream while you approve or deny the tool
+calls it wants to make.
+
+To reach it from another machine (your phone on the same tailnet, say), bind it and give it a
 secret:
 
 ```bash
@@ -40,45 +43,55 @@ npx workerdeck --host 0.0.0.0 --auth-key "$SECRET" --cwd-root ~/projects
 
 `--auth-key` is one secret over two transports: browsers get a login page and an `HttpOnly`
 cookie, services send the same secret as a header. Off loopback *without* a key the instance
-generates one rather than serving open — printed once, kept in `<state-dir>/auth-key`, reused
+generates one rather than serving open: printed once, kept in `<state-dir>/auth-key`, reused
 across restarts. Browser logins persist beside it, so a restart does not sign every tab out;
 rotating the key invalidates them all. `--cwd-root` is what confines sessions to a directory tree.
 
-**Docs: [workerdeck.github.io/workerdeck](https://workerdeck.github.io/workerdeck/)** — the full
-flag surface, embedding, permissions, profiles, the job queue, and the protocol reference.
+**Docs: [workerdeck.github.io/workerdeck](https://workerdeck.github.io/workerdeck/)** covers the
+full flag surface, embedding, permissions, profiles, the job queue, and the protocol reference.
+
+## What this is
+
+A coding agent (Claude Code, OpenAI Codex, or any model provider) is a terminal program: it runs
+where you started it, and it is yours only while that terminal is open. WorkerDeck puts a session
+server, a typed wire protocol and an approve/deny UI around one, so the same session is reachable
+from a browser, your phone, your editor, or an app you build yourself.
+
+Self-hosted, MIT, and no credentials of its own: your agent's CLI resolves its own login exactly
+as it does in your terminal.
 
 ## One server, four ways in
 
 The gateway is the base layer: it owns the sessions, the approvals and the event stream. Every
-client above it is a view onto the same sessions — attach from three of them at once and they
+client above it is a view onto the same sessions - attach from three of them at once and they
 stay in step, because there is one ordered, seq-numbered stream and everything replays from it.
 
 <table>
   <tr>
     <td align="center" valign="top" width="25%">
-      <a href="packages/web"><img src="docs/assets/card-web.png" alt="Web App — the dashboard workspace: file rail, transcript with a live session, composer" /></a>
+      <a href="packages/web"><img src="docs/assets/card-web.png" alt="Web App - the dashboard workspace: file rail, transcript with a live session, composer" /></a>
       <br /><b><a href="packages/web">Web App</a></b>
       <br /><sub>The dashboard <code>npx workerdeck</code> already serves: file tree, Monaco editor, and the session panel with approvals, jobs and profiles.</sub>
     </td>
     <td align="center" valign="top" width="25%">
-      <a href="apps/ios"><img src="docs/assets/card-ios.png" alt="iOS App — a phone showing the transcript and an Allow / Deny approval prompt" /></a>
+      <a href="apps/ios"><img src="docs/assets/card-ios.png" alt="iOS App - a phone showing the transcript and an Allow / Deny approval prompt" /></a>
       <br /><b><a href="apps/ios">iOS App</a></b>
-      <br /><sub>Native SwiftUI remote for the gateways you run — every session in one list, approve or deny on the spot, APNs push to the lock screen.</sub>
+      <br /><sub>Native SwiftUI remote for the gateways you run - every session in one list, approve or deny on the spot, APNs push to the lock screen.</sub>
     </td>
     <td align="center" valign="top" width="25%">
-      <a href="apps/vscode"><img src="docs/assets/card-vscode.png" alt="VS Code Extension — the editor with the agent session in the bottom panel and sessions in the sidebar" /></a>
+      <a href="apps/vscode"><img src="docs/assets/card-vscode.png" alt="VS Code Extension - the editor with the agent session in the bottom panel and sessions in the sidebar" /></a>
       <br /><b><a href="apps/vscode">VS Code Extension</a></b>
       <br /><sub>The session rides the bottom panel, terminal-shaped; sessions in the Explorer, the session's own readings in the secondary sidebar, approvals as native notifications, remote projects as a virtual workspace.</sub>
     </td>
     <td align="center" valign="top" width="25%">
-      <a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/"><img src="docs/assets/card-embedded.png" alt="Embedded App — someone else's product with the WorkerDeck session panel docked inside it" /></a>
+      <a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/"><img src="docs/assets/card-embedded.png" alt="Embedded App - someone else's product with the WorkerDeck session panel docked inside it" /></a>
       <br /><b><a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/">Embedded App</a></b>
-      <br /><sub>An agent inside your own product: gateway in your server, sessions owned by your users — the <a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/">embedding guide</a> walks it end to end.</sub>
+      <br /><sub>An agent inside your own product: gateway in your server, sessions owned by your users - the <a href="https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/">embedding guide</a> walks it end to end.</sub>
     </td>
   </tr>
   <tr>
     <td colspan="4" align="center">
-      <a href="packages"><img src="docs/assets/card-server.png" alt="The server underneath: one gateway built from six packages — protocol, core, queue, server, cli, sandbox" /></a>
+      <a href="packages"><img src="docs/assets/card-server.png" alt="The server underneath: one gateway built from six packages - protocol, core, queue, server, cli, sandbox" /></a>
       <br /><sub><a href="packages/protocol"><code>protocol</code></a> · <a href="packages/core"><code>core</code></a> · <a href="packages/queue"><code>queue</code></a> · <a href="packages/server"><code>server</code></a> · <a href="packages/cli"><code>cli</code></a> · <a href="packages/sandbox"><code>sandbox</code></a></sub>
     </td>
   </tr>
@@ -90,7 +103,7 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   directory: the same skills, the same project instructions, the same MCP surface, the same
   permission system.
 - **Human-in-the-loop permissions.** A tool call not covered by the session's permission mode
-  becomes a pending approval, and the tool blocks until someone decides — deny-on-timeout by
+  becomes a pending approval, and the tool blocks until someone decides - deny-on-timeout by
   default. This is what makes it safe to point at a real checkout.
 - **Attach, replay, resume.** One ordered stream of seq-numbered events. Clients reconnect and
   replay from their last seen seq; a closed session resumes from the engine's own on-disk store
@@ -100,30 +113,30 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **Unattended runs.** A job queue with bounded concurrency, token budgets, retries, a wall-clock
   watchdog, and webhooks. A job is an ordinary registry session, so the dashboard watches it
   stream live.
-- **Work that outlives the turn.** A session can park on something nothing here is doing — a batch
-  job, a human approving on Monday — and wake days later, mid-turn, as itself. A parked run frees
+- **Work that outlives the turn.** A session can park on something nothing here is doing - a batch
+  job, a human approving on Monday - and wake days later, mid-turn, as itself. A parked run frees
   its concurrency slot and stops its wall-clock budget.
 - **Reaching a person who isn't watching.** Server-wide webhooks for the four moments a human acts
   on (permission requested, turn finished, error, closed). The permission payload carries the
-  whole request, so a consumer can answer it over REST — which is what makes an Approve button in
+  whole request, so a consumer can answer it over REST - which is what makes an Approve button in
   a chat message, or on a phone's lock screen, work. The server itself holds no push credentials.
 - **The host's files, in the trees sessions already run in.** Browse, read and fuzzy-search over
   your `--cwd-root` directories, so a remote client gets a real file tree instead of guessing at
   paths. Reading needs no extra grant; writing is a separate opt-in.
 - **`!` for a shell, as in the CLI.** Type `!` first in the composer and the rest of the line runs
   on the host in the session's cwd, with the output in the transcript and in the model's next
-  context — no turn spent, no permission card, no rewording by the agent. Which is exactly why it
+  context - no turn spent, no permission card, no rewording by the agent. Which is exactly why it
   is `--shell`, off by default, and offered to an operator only.
 - **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
-  and an icon, found by an ancestor walk from the session's cwd — so a list of sessions reads as
+  and an icon, found by an ancestor walk from the session's cwd - so a list of sessions reads as
   a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it
   (a phone cannot see the gateway's filesystem) and the wire carries an address, not bytes.
 - **Sessions you can put in front of your own users.** A gateway embedded in an app's backend can
-  run the provider engine with nothing granted — no shell, no host filesystem, no egress, just the
-  QuickJS guest and an in-memory VFS (`sandboxedProviderProfile()`) — and tag each session with
+  run the provider engine with nothing granted - no shell, no host filesystem, no egress, just the
+  QuickJS guest and an in-memory VFS (`sandboxedProviderProfile()`) - and tag each session with
   opaque `scope` tags the gateway then enforces at every route, the WS attach and the job queue. A
   scope miss answers 404. What the tags *mean* is your `authorizeSession` policy: "space" and
-  "user" are your app's vocabulary, not ours. This is scoped embedding, not multi-tenant SaaS —
+  "user" are your app's vocabulary, not ours. This is scoped embedding, not multi-tenant SaaS -
   your edge is still the authorization boundary and this is defense in depth behind it.
 
 ## Engines
@@ -131,15 +144,15 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 A **profile** is what a session runs as, and it picks the engine.
 
 - **Claude Code**, via the [Anthropic Agent SDK](https://code.claude.com/docs/en/agent-sdk).
-- **OpenAI Codex** — the local `codex` binary, driven over its `app-server` JSON-RPC surface with
+- **OpenAI Codex** - the local `codex` binary, driven over its `app-server` JSON-RPC surface with
   token streaming and interactive approvals. Its ask channels map onto the same permission
   surface, with one difference carried honestly in the request itself: a codex command approval
   is usually an *escalation after its sandbox already refused the command*, not a gate before
   execution, and approving re-runs it unsandboxed. Network is codex's third axis, not an approval
   question: outbound access is off by default in `workspace-write`, so a `git push` fails rather
-  than asking. WorkerDeck honours — and never overwrites — your
+  than asking. WorkerDeck honours - and never overwrites - your
   `[sandbox_workspace_write]` settings.
-- **Any provider** the [AI SDK](https://ai-sdk.dev) supports, through a host hook — no CLI
+- **Any provider** the [AI SDK](https://ai-sdk.dev) supports, through a host hook - no CLI
   process. This engine trades ambient authority for a sandbox: no shell, no host filesystem,
   capability-scoped tools, and untrusted code confined to a QuickJS guest that can run in the
   user's own browser tab so client-held documents never reach the server.
@@ -160,8 +173,8 @@ Each package has its own README, with the code for using it.
 | Package | What it is |
 | --- | --- |
 | [`workerdeck`](packages/cli) | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
-| [`@workerdeck/protocol`](packages/protocol) | The wire protocol — events, commands, REST shapes, and the few rules every client must agree on. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
-| [`@workerdeck/core`](packages/core) | The engines, as adapters — each with a capability record, a shipped model catalog and a credential probe — behind one `Runner` interface, plus tool execution on a swappable seam and park/restore. No transport. |
+| [`@workerdeck/protocol`](packages/protocol) | The wire protocol - events, commands, REST shapes, and the few rules every client must agree on. Dependency-free, browser-safe. **The product boundary**, versioned from day one. |
+| [`@workerdeck/core`](packages/core) | The engines, as adapters - each with a capability record, a shipped model catalog and a credential probe - behind one `Runner` interface, plus tool execution on a swappable seam and park/restore. No transport. |
 | [`@workerdeck/sandbox`](packages/sandbox) | The untrusted-code boundary: QuickJS-NG WASM guest, in-memory scratch VFS, by-value host bridge, interpreter-enforced memory and time limits. Runs server-side or in a tab. |
 | [`@workerdeck/queue`](packages/queue) | The job queue: concurrency, token budgets, retries, watchdog, retention, webhooks. Pluggable adapter (in-memory bundled). |
 | [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage, opt-in host-file routes. |
@@ -170,8 +183,8 @@ Each package has its own README, with the code for using it.
 | [`@workerdeck/ui`](packages/ui) | Styled agent-control components: the session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file` / `/command` completion), the sessions browser, and the workspace around them. Tailwind v4 + Base UI. |
 | [`@workerdeck/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
 
-The apps — [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode), the
-[docs site](apps/docs) and [`apps/embedded`](apps/embedded) — are not published to npm; each has
+The apps - [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode), the
+[docs site](apps/docs) and [`apps/embedded`](apps/embedded) - are not published to npm; each has
 its own README. The extension ships on the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode)
 instead, in lockstep with the packages above.
@@ -179,28 +192,28 @@ instead, in lockstep with the packages above.
 **Putting an agent in front of your own users?** Start with
 [Embed WorkerDeck in your app](https://workerdeck.github.io/workerdeck/docs/guides/embed-in-your-app/),
 then read [`apps/embedded`](apps/embedded), which is the guide as a working app. It is a small wiki
-whose right-hand sidebar is a sandboxed agent, with the gateway inside the app's own server — one port, the app's cookie as the only
+whose right-hand sidebar is a sandboxed agent, with the gateway inside the app's own server - one port, the app's cookie as the only
 credential, `scope` as the entire ownership model, and the app's data reaching the loop as a real
 MCP server. It is a working app, not a snippet: `pnpm --filter @workerdeck/embedded-example dev`.
 
 ## Auth & the providers' terms
 
-**WorkerDeck performs no model-provider authentication of its own — by design.** It spawns the
+**WorkerDeck performs no model-provider authentication of its own - by design.** It spawns the
 official SDK or CLI, which resolves whatever credentials the *operator's* environment provides.
 It never implements a provider's OAuth flow, never reads, stores or proxies tokens, and never
 touches a credential store. `codex login` is likewise your job, in your own terminal.
 
 Our good-faith reading, not legal advice: **an API key (or Bedrock/Vertex) is the supported path**
-for anything that is a service — unattended runs, multi-user deployments, anything you expose to
-others — because Anthropic's Agent SDK docs are explicit that third-party developers may not offer
+for anything that is a service - unattended runs, multi-user deployments, anything you expose to
+others - because Anthropic's Agent SDK docs are explicit that third-party developers may not offer
 claude.ai login or subscription rate limits in their products. Set `ANTHROPIC_API_KEY` and use
 `requireApiKey: true` to **fail closed** on subscription credentials. Your own subscription for
 your own single-user use (the equivalent of running the CLI yourself) is the one case where those
 may be appropriate; the server allows it with a one-time notice, and every session reports its
 provenance. Whether OpenAI's terms restrict headless ChatGPT-subscription codex use the same way
 is unresolved, and we take the same posture there. **The compliance and legal posture of this
-project is still under review** — with our own specialists and, where appropriate, the providers
-— so do your own diligence.
+project is still under review** - with our own specialists and, where appropriate, the providers
+- so do your own diligence.
 [Full discussion](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
 
 **Red lines for contributors** (PRs crossing these are rejected): no provider OAuth flows or login
@@ -215,12 +228,12 @@ provider-owned code.
 - **Sessions are single-host.** Transcripts live on the server's local disk; resume works across
   restarts on the same host.
 - **The server trusts its host app.** For CLI engines a create request accepts MCP servers and
-  tool policy — gate creation behind your own auth and clamp it server-side. (Provider sessions
+  tool policy - gate creation behind your own auth and clamp it server-side. (Provider sessions
   are tighter by construction: MCP is declared on the profile, never by the caller.)
 - **Parking is single-host either way.** The file store survives a restart, but two servers over
   one directory would race to rebuild the same sessions.
 - **The VS Code extension can run the server for you.** Turn on `workerdeck.host.enabled` and it
-  supervises a `workerdeck` process on your machine — via `npx` if you have not installed it — with
+  supervises a `workerdeck` process on your machine - via `npx` if you have not installed it - with
   start/stop/restart in the palette and the dashboard on the same port. One server per machine, not
   per window.
 - **VS Code is on the Marketplace; iOS is not in a store.** Install the extension from the
@@ -236,7 +249,7 @@ pnpm dev:server   # gateway on http://127.0.0.1:8787, no auth (loopback only!)
 pnpm dev:web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the gateway
 
 pnpm typecheck   # tsgo (TypeScript 7 native preview)
-pnpm test        # vitest — core runner, server integration, transcript reducer
+pnpm test        # vitest - core runner, server integration, transcript reducer
 pnpm lint        # oxlint
 ```
 
@@ -249,20 +262,20 @@ Dev never builds: apps and tests resolve packages straight to TS source via the
 
 ## Status
 
-**0.15.0** — early but real. Three engines, the protocol, server, client, headless React layer,
+**0.15.0** - early but real. Three engines, the protocol, server, client, headless React layer,
 styled UI, dashboard, job queue, sandbox and deferred execution are all in and tested. 0.9 landed
 the engine adapters and the Codex engine; 0.10 added the session workspace and codex skills and
 generated images; 0.11 published the VS Code extension; 0.12 rebuilt its navigation around native
 editor chrome and lifted the sessions-list and unread models into the protocol so every client
 shows the same list; 0.13 added cross-origin gateway auth and rebuilt the dashboard; 0.14 and 0.15
-shipped together as **0.15.0** — session `scope` enforced at every door, `sandboxedProviderProfile()`,
+shipped together as **0.15.0** - session `scope` enforced at every door, `sandboxedProviderProfile()`,
 a loud MCP failure instead of a silently tool-less session, host tools at a stated trust, and
 [`apps/embedded`](apps/embedded) as the reference embedding. The iOS app's APNs push reached a
-physical phone from a live gateway for the first time on 2026-08-20 — registration, delivery and a
+physical phone from a live gateway for the first time on 2026-08-20 - registration, delivery and a
 tapped notification opening the session it names are all confirmed; the lock-screen Approve/Deny
 action still is not. That first real pass immediately found two bugs (every tap aborted the app on
 a main-thread assert, and a dial could fail silently), so treat push as newly proven rather than
-settled. `PROTOCOL_VERSION` guards breaking changes and is at **1** — reset at the 1.0.0 launch
+settled. `PROTOCOL_VERSION` guards breaking changes and is at **1** - reset at the 1.0.0 launch
 and locked since, so every breaking wire change now costs a bump and a mismatch banner.
 
 MIT © Tobias Strebitzer

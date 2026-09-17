@@ -23,7 +23,7 @@ const surfaces = [
   {
     title: 'Web dashboard',
     tag: 'included',
-    body: 'Served from the same port as the gateway — nothing separate to deploy. A workspace around each session: file tree, editor, transcript, approvals, plus the sessions list and the job queue.',
+    body: 'Served from the same port as the gateway - nothing separate to deploy. A workspace around each session: file tree, editor, transcript, approvals, plus the sessions list and the job queue.',
     href: `${base}/docs/getting-started/run-an-instance/`,
     cta: 'Run an instance',
   },
@@ -54,7 +54,7 @@ const features = [
   },
   {
     title: 'Typed wire protocol',
-    body: 'One ordered stream of seq-numbered events plus a small command set. Versioned from day one — the protocol is the product boundary.',
+    body: 'One ordered stream of seq-numbered events plus a small command set. Versioned from day one - the protocol is the product boundary.',
   },
   {
     title: 'Three engines, one protocol',
@@ -62,7 +62,7 @@ const features = [
   },
   {
     title: 'Embeddable panel components',
-    body: 'A styled session panel with streaming transcript, tool-call cards and composer — or go headless with the hook and the reducers.',
+    body: 'A styled session panel with streaming transcript, tool-call cards and composer - or go headless with the hook and the reducers.',
   },
   {
     title: 'Attach, replay, resume',
@@ -74,11 +74,11 @@ const features = [
   },
   {
     title: 'Work that outlives the turn',
-    body: 'A session can park on work nothing here is doing — a batch job, a human approving on Monday — and wake days later, mid-turn, as itself.',
+    body: 'A session can park on work nothing here is doing - a batch job, a human approving on Monday - and wake days later, mid-turn, as itself.',
   },
   {
     title: 'Sandboxed, scoped embedding',
-    body: 'Run the provider engine with nothing granted — no shell, no host filesystem, no egress — and tag each session with opaque scope tags the gateway enforces at every route, attach and job. Your policy decides what the tags mean.',
+    body: 'Run the provider engine with nothing granted - no shell, no host filesystem, no egress - and tag each session with opaque scope tags the gateway enforces at every route, attach and job. Your policy decides what the tags mean.',
   },
 ]
 
@@ -98,7 +98,7 @@ const packages = [
 
 <Base
   title="WorkerDeck · coding agent sessions you can watch, steer, and embed"
-  description="Run a coding agent — Claude Code, OpenAI Codex, or any model provider — as a session your browser, phone, editor or app can watch, steer and embed. Self-hosted, MIT."
+  description="Run a coding agent - Claude Code, OpenAI Codex, or any model provider - as a session your browser, phone, editor or app can watch, steer and embed. Self-hosted, MIT."
 >
   <main>
     <section class="mx-auto max-w-4xl px-4 pb-20 pt-24 text-center sm:px-6">
@@ -113,7 +113,7 @@ const packages = [
       <p class="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-fg-3">
         A coding agent is a terminal program: it runs where you started it, and it is yours only
         while that terminal is open. WorkerDeck puts a session server, a typed wire protocol and an
-        approve/deny UI around one — so the same session is reachable from a browser, your phone,
+        approve/deny UI around one - so the same session is reachable from a browser, your phone,
         your editor, or an app you build yourself.
       </p>
       <div
@@ -136,13 +136,26 @@ const packages = [
           >GitHub</a
         >
       </div>
+
+      <figure class="mt-14">
+        <img
+          src={`${base}/screenshot-web.png`}
+          alt="The WorkerDeck dashboard: a Claude session on a monorepo, the agent's proposed edit to a file shown as a diff, and an approve-or-deny prompt underneath it"
+          width="2880"
+          height="1520"
+          class="w-full rounded-xl border border-border"
+        />
+        <figcaption class="mt-3 text-[13px] text-fg-4">
+          A real session, mid-turn. The agent wants to edit a file; it is blocked on your answer.
+        </figcaption>
+      </figure>
     </section>
 
     <section class="border-t border-border bg-surface">
       <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <h2 class="text-xl font-bold tracking-tight text-fg-1">One server, four ways in</h2>
         <p class="mt-2 max-w-2xl text-sm text-fg-3">
-          Attach from three of them at once and they stay in step — there is one ordered,
+          Attach from three of them at once and they stay in step - there is one ordered,
           seq-numbered event stream, and everything replays from it.
         </p>
 
@@ -181,7 +194,7 @@ const packages = [
           <p class="mt-2 max-w-3xl text-sm leading-relaxed text-fg-3">
             Owns the sessions, the approvals and the event stream. Runs the engines, enforces the
             permission mode, keeps the job queue, parks work that outlives a turn, and serves the
-            dashboard from the same port. Everything above is a view onto the sessions it holds —
+            dashboard from the same port. Everything above is a view onto the sessions it holds -
             and so is anything you build, at whatever level of control you want.
           </p>
           <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 font-mono text-[12px] text-fg-4">
@@ -221,7 +234,7 @@ const packages = [
       <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <h2 class="text-xl font-bold tracking-tight text-fg-1">One instance, ten libraries</h2>
         <p class="mt-2 max-w-2xl text-sm text-fg-3">
-          Run the turnkey instance, or take just the layers you need — from the runner in-process
+          Run the turnkey instance, or take just the layers you need - from the runner in-process
           with no server at all, to a drop-in session panel.
         </p>
         <ul class="mt-6 grid gap-3 sm:grid-cols-2">
@@ -248,7 +261,7 @@ const packages = [
       >
         <span>MIT © Tobias Strebitzer</span>
         <span>
-          Not affiliated with Anthropic or OpenAI — credentials stay with the operator’s official
+          Not affiliated with Anthropic or OpenAI - credentials stay with the operator’s official
           SDK/CLI environment.
         </span>
       </div>
