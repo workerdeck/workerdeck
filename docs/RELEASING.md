@@ -993,7 +993,9 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
 
   2.7.0's listing went up through the Marketplace's own web form, deliberately — a first listing
   is worth seeing before it is automatic, and that path needs no PAT on disk. 2.7.1 is what
-  proves the tag-driven job, so treat a green `vscode` job here as the thing being released.
+  proves the tag-driven job, so treat a green `vscode` job here as the thing being released. It
+  went green on the **fourth** attempt, and none of the first three were the extension's fault —
+  see the `VSCE_PAT` note under `- marketplace:` before debugging a `TF400813`.
 
   The dependency work behind it is worth more than the version number. **All 41 dependabot alerts
   were fictional** — every advisory's first-patched version was already met and `pnpm audit`
@@ -1089,6 +1091,23 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
     were verified broken and then fixed by writing the full URL, which vsce passes through. The
     README *is* the listing page, so **unpack the vsix and read `extension/readme.md`** before
     publishing: `unzip -q apps/vscode/workerdeck.vsix -d /tmp/vsix && grep '](' /tmp/vsix/extension/readme.md`.
+
+  **Setting `VSCE_PAT` — the failure that cost four CI attempts.** `gh secret set` takes
+  `--body <string>` and **reads stdin only when `--body` is omitted**, so
+  `… | gh secret set VSCE_PAT --body -` stores the literal string `-`. It fails silently in the
+  worst way: the job's own "is the PAT present?" guard passes, because `-` is a non-empty string,
+  and the publish then returns `TF400813: The user 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' is not
+  authorized` — the anonymous-identity sentinel, which reads exactly like a mis-scoped token. The
+  correct form is `… | gh secret set VSCE_PAT` with no `--body` at all. **Also give the secret
+  ~60s before re-running**: an attempt fired 8s after the write still used the old value.
+
+  The diagnosis that error invites is wrong, and was wrong here: the Marketplace read endpoints
+  (`/_apis/gallery/publishers/<pub>` and `…/extensions/<ext>`) return **200 for any valid PAT and
+  302 anonymously**, so a 200 proves the token authenticates and says *nothing* about publish
+  authority. `vsce verify-pat` is not a substitute — it **hangs**, twice reproduced, even with
+  stdin closed. The only honest local check is to **publish an already-published version**:
+  `vsce publish --packagePath <old>.vsix`. The Marketplace rejects a duplicate *after* it
+  authenticates, so `already exists` proves write authority and publishes nothing.
 
   **First listing: 2.7.0, uploaded by hand on 2026-09-16**, through
   `marketplace.visualstudio.com/manage` rather than the CI job — a first listing is worth seeing
