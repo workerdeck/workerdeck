@@ -11,13 +11,14 @@ import {
 } from 'react'
 import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 import type { StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
-import { ArrowUp, FileText, Paperclip, RotateCw, Sparkles, Square, TriangleAlert, X } from 'lucide-react'
+import { ArrowUp, FileText, Paperclip, RotateCw, SlidersHorizontal, Sparkles, Square, TriangleAlert, X } from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
 import { usePromptAreaState } from '../prompt-area/use-prompt-area-state.ts'
 import { plainTextToSegments } from '../prompt-area/prompt-area-engine.ts'
 import { commandTrigger, launchTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
+import { mergeComposerRows, rankComposerRows, skillPrompt, type ClientCommand } from './composer-commands.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
 import type { TerminalAffordances } from '../terminal/affordances.tsx'
 import { PROMPT_GLYPH } from '../terminal/items.tsx'
@@ -44,6 +45,9 @@ export interface ComposerProps {
   placeholder?: string
   commands?: SlashCommandInfo[]
   skills?: SkillInfo[]
+  // Session controls the host offers as `/` rows. Merged into the same ranked list as the engine's own
+  // commands, and suppressed name-for-name by an engine command so the real one always wins.
+  clientCommands?: ClientCommand[]
   onSearchFiles?: (query: string, options: { signal: AbortSignal }) => Promise<ComposerFileMatch[]>
   // Shell mode: `!` as the first character turns the composer into a host shell prompt. Omit to leave the
   // mode off entirely - the gateway only offers it to an operator on a session whose engine reaches a host cwd.
@@ -61,24 +65,6 @@ export interface ComposerProps {
   ref?: Ref<ComposerHandle>
 }
 
-function cleanName(name: string) {
-  return name.replace(/\s*\(MCP\)$/i, '')
-}
-
-export function skillPrompt(skill: SkillInfo): string {
-  const base = skill.defaultPrompt?.trim() || `$${skill.name}`
-  return /\s$/.test(base) ? base : base + ' '
-}
-
-function matchScore(query: string, haystacks: string[]): number {
-  const needle = query.toLowerCase()
-  const lowered = haystacks.map((s) => s.toLowerCase())
-  if (lowered.some((h) => h.startsWith(needle))) {
-    return 2
-  }
-  return lowered.some((h) => h.includes(needle)) ? 1 : 0
-}
-
 export function Composer({
   onSend,
   onInterrupt,
@@ -87,6 +73,7 @@ export function Composer({
   placeholder = 'Message the agent…',
   commands,
   skills,
+  clientCommands,
   onSearchFiles,
   onShellCommand,
   attachments,
@@ -109,6 +96,7 @@ export function Composer({
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [shellMode, setShellMode] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   useImperativeHandle(
     ref,
@@ -125,73 +113,40 @@ export function Composer({
 
   const triggers = useMemo(() => {
     const configured = []
-    const usableSkills = (skills ?? []).filter((s) => s.enabled)
-    if (commands && commands.length > 0) {
-      const seen = new Set<string>()
-      const unique = commands.flatMap((c) => {
-        const name = cleanName(c.name)
-        if (seen.has(name)) {
-          return []
-        }
-        seen.add(name)
-        return [{ ...c, name }]
-      })
+    const rows = mergeComposerRows({ commands, clientCommands, skills })
+    if (rows.length > 0) {
+      // Keyed by kind as well as name: an engine command and a skill may share one, and a chip's `data`
+      // is serialized into the DOM, so the row itself never travels there.
+      const byTag = new Map(rows.map((row) => [`${row.kind}:${row.name}`, row]))
       configured.push(
         commandTrigger({
-          onSearch: (query: string): TriggerSuggestion[] => {
-            const scored: Array<{ score: number; suggestion: TriggerSuggestion }> = []
-            for (const c of unique) {
-              const score = matchScore(query, [c.name, ...(c.aliases ?? []), ...c.name.split(':')])
-              if (score === 0) {
-                continue
-              }
-              scored.push({
-                score,
-                suggestion: {
-                  value: c.name,
-                  label: `/${c.name}${c.argumentHint ? ` ${c.argumentHint}` : ''}`,
-                  description: c.description,
-                },
-              })
+          onSearch: (query: string): TriggerSuggestion[] =>
+            rankComposerRows(query, rows).map((row) =>
+              row.kind === 'skill'
+                ? {
+                    value: row.name,
+                    label: row.label,
+                    description: row.description ? `Skill · ${row.description}` : 'Skill · inserts a message you can edit',
+                    icon: <Sparkles className="size-3.5 text-fg-3" />,
+                    data: `${row.kind}:${row.name}`,
+                  }
+                : {
+                    value: row.name,
+                    label: `/${row.name}${row.argumentHint ? ` ${row.argumentHint}` : ''}`,
+                    description: row.description,
+                    icon: row.kind === 'client' ? <SlidersHorizontal className="size-3.5 text-fg-3" /> : undefined,
+                    data: `${row.kind}:${row.name}`,
+                  },
+            ),
+          insertAsText: (suggestion) => {
+            const row = byTag.get(String(suggestion.data))
+            if (row?.kind === 'skill') {
+              return skillPrompt(row.skill)
             }
-            scored.sort((a, b) => b.score - a.score)
-            return scored.map(({ suggestion }) => suggestion)
+            return row?.kind === 'client' && row.command.requiresArgs ? `/${row.name} ` : undefined
           },
           onSelect: (suggestion) => suggestion.value,
           chipClassName: 'font-mono',
-        }),
-      )
-    }
-    if (usableSkills.length > 0) {
-      configured.push(
-        commandTrigger({
-          char: '$',
-          accessibilityLabel: 'skill',
-          onSearch: (query: string): TriggerSuggestion[] => {
-            const scored: Array<{ score: number; suggestion: TriggerSuggestion }> = []
-            for (const skill of usableSkills) {
-              const score = matchScore(query, [skill.name, ...skill.name.split(/[-:_]/)])
-              if (score === 0) {
-                continue
-              }
-              const summary = skill.shortDescription ?? skill.description
-              scored.push({
-                score,
-                suggestion: {
-                  value: skill.name,
-                  label: skill.displayName ?? skill.name,
-                  description: summary ? `Skill · ${summary}` : 'Skill · inserts a message you can edit',
-                  icon: <Sparkles className="size-3.5 text-fg-3" />,
-                },
-              })
-            }
-            scored.sort((a, b) => b.score - a.score)
-            return scored.map(({ suggestion }) => suggestion)
-          },
-          insertAsText: (suggestion) => {
-            const skill = usableSkills.find((s) => s.name === suggestion.value)
-            return skill ? skillPrompt(skill) : `$${suggestion.value} `
-          },
         }),
       )
     }
@@ -224,7 +179,7 @@ export function Composer({
       )
     }
     return configured.length > 0 ? configured : undefined
-  }, [commands, skills, onSearchFiles, onShellCommand])
+  }, [commands, skills, clientCommands, onSearchFiles, onShellCommand])
 
   const saveDraft = draft?.save
   useEffect(() => {
@@ -261,6 +216,13 @@ export function Composer({
     setShellMode(false)
     focus()
   }
+
+  const hints = [
+    triggers?.some((t) => t.char === '/') ? { key: '/', what: 'commands and skills' } : undefined,
+    onSearchFiles ? { key: '@', what: 'mention a file' } : undefined,
+    onShellCommand ? { key: '!', what: 'run a shell command' } : undefined,
+    { key: '?', what: 'this list, on an empty composer' },
+  ].filter((h) => h !== undefined)
   // Escape and backspace-on-empty both leave, because both are what a person reaches for when the
   // pink frame was not what they meant. Backspace only when there is nothing left to delete.
   const shellKeys = shellMode
@@ -273,7 +235,40 @@ export function Composer({
           }
         },
       }
-    : {}
+    : {
+        onEscape: helpOpen ? () => setHelpOpen(false) : undefined,
+        // Only on a genuinely empty composer, so a message that opens with a question mark still types.
+        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === '?' && isEmpty && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            setHelpOpen(true)
+            return
+          }
+          if (helpOpen) {
+            setHelpOpen(false)
+          }
+        },
+      }
+
+  const helpHints = helpOpen ? (
+    <>
+      {hints.map((hint) => (
+        <span key={hint.key} className="flex items-center gap-1">
+          <kbd className="font-mono text-text">{hint.key}</kbd>
+          {hint.what}
+        </span>
+      ))}
+    </>
+  ) : null
+  const helpRow = helpOpen ? (
+    <div
+      role="note"
+      aria-label="Composer shortcuts"
+      className="mx-auto mb-1 flex w-full max-w-[var(--wd-transcript-max-width)] flex-wrap items-center gap-x-3 gap-y-1 text-label text-fg-3"
+    >
+      {helpHints}
+    </div>
+  ) : null
 
   const pick = (files: FileList | null) => {
     if (files && files.length > 0) {
@@ -405,6 +400,12 @@ export function Composer({
                 {submitButton}
               </div>
             </div>
+            {helpOpen ? (
+              <div role="note" aria-label="Composer shortcuts" className="term-row">
+                <span aria-hidden className="term-gutter" />
+                <div className="flex min-w-0 flex-wrap items-center gap-x-[2ch] text-fg-3">{helpHints}</div>
+              </div>
+            ) : null}
             {shellMode ? (
               <div className="term-row">
                 <span aria-hidden className="term-gutter" />
@@ -425,6 +426,7 @@ export function Composer({
 
   return (
     <div data-slot="composer" className={cn('px-[var(--wd-composer-padding)] pb-[var(--wd-composer-padding)]', className)}>
+      {helpRow}
       <div
         {...dropHandlers}
         className={cn(

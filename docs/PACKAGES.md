@@ -827,11 +827,13 @@ button here is for the way out of a state the header has no answer to: clearing 
 widening a scope. It lives in `ui/` rather than in one client because every panel that can be
 empty should be empty the same way - the extension's views and the dashboard's four sidebars are
 the same shape of thing. `SessionPanel` is the
-whole session surface - transcript, composer (attachments, `/` and `@` completion), and the
+whole session surface - transcript, composer (attachments; `/` for commands, client commands and
+skills; `@` for files; `!` for shell; `?` for the shortcut list on an empty composer), and the
 panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
 files) - each gated on the capability record, so one component is correct for every engine.
 `panelSurface: 'external'` hands that dialog surface to the embedder: no dialogs, no `⋯`
-menu, intents via `onOpenPanel`, live readings via `onVitals` (what lets external chrome
+menu, intents via `onOpenPanel`, live readings via `onVitals` (including `composerCommands`, the
+flattened `/` list a native host renders when it cannot run `mergeComposerRows` itself) (what lets external chrome
 render context/usage without a second attach - the tool bridge asks the first attached
 client). `statusSurface: 'external'` is the *separate* opt-out for the bar itself, for an
 embedder whose chrome already has a status line (VS Code's window bar); it carries the `⋯`

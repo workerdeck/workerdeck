@@ -125,7 +125,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const panel = new SessionPanelProvider(context.extensionUri, store, {
     openPanel: async (p) => {
       if (p === 'skills') {
-        await pickSkill(panel, vitals)
+        await pickCommand(panel, vitals)
         return
       }
       if (p === 'files') {
@@ -400,7 +400,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand('workerdeck.useSkill', () => pickSkill(panel, vitals)),
+    vscode.commands.registerCommand('workerdeck.useSkill', () => pickCommand(panel, vitals)),
 
     vscode.commands.registerCommand('workerdeck.openProjectFolder', async () => {
       const active = panel.active
@@ -425,31 +425,34 @@ export function activate(context: vscode.ExtensionContext): void {
   )
 }
 
-// The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts - this QuickPick is its native stand-in.
-async function pickSkill(panel: SessionPanelProvider, vitals: SessionVitals | undefined): Promise<void> {
-  const skills = vitals?.skills
-  if (!skills) {
-    void vscode.window.showInformationMessage('WorkerDeck: skills are listed once the session connects - send a message first.')
+// The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts - this QuickPick is its
+// native stand-in, over the same merged list the composer's `/` offers.
+async function pickCommand(panel: SessionPanelProvider, vitals: SessionVitals | undefined): Promise<void> {
+  const rows = vitals?.composerCommands
+  if (!rows) {
+    void vscode.window.showInformationMessage('WorkerDeck: commands are listed once the session connects - send a message first.')
     return
   }
-  if (skills.length === 0) {
-    void vscode.window.showInformationMessage('WorkerDeck: this session found no skills.')
+  if (rows.length === 0) {
+    void vscode.window.showInformationMessage('WorkerDeck: this session offers no commands or skills.')
     return
   }
   const picked = await vscode.window.showQuickPick(
-    skills.map((s) => ({
-      label: s.displayName ?? s.name,
-      description: [s.scope, s.enabled ? undefined : 'disabled'].filter(Boolean).join(' - '),
-      detail: s.shortDescription ?? s.description?.split('\n')[0],
-      skill: s,
+    rows.map((row) => ({
+      label: row.label,
+      description: [row.kind === 'skill' ? 'skill' : undefined, row.scope, row.enabled ? undefined : 'disabled']
+        .filter(Boolean)
+        .join(' - '),
+      detail: row.description?.split('\n')[0],
+      insertText: row.insertText,
       // A skill the session reported but disabled stays visible and unpickable, like an ungrantable permission mode.
       alwaysShow: true,
-      disabled: !s.enabled,
+      disabled: !row.enabled,
     })),
-    { title: 'WorkerDeck: skills', placeHolder: 'Insert a skill prompt into the composer' },
+    { title: 'WorkerDeck: commands and skills', placeHolder: 'Insert into the composer' },
   )
   if (picked && !picked.disabled) {
-    panel.useSkill(picked.skill)
+    panel.insertComposerText(picked.insertText)
   }
 }
 

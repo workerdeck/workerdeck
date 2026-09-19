@@ -40,7 +40,15 @@ import { ChartPie, FolderTree, Gauge, Info, MoreHorizontal, Plug, Sparkles, Tria
 import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu.tsx'
-import { Composer, skillPrompt, type ComposerHandle } from './Composer.tsx'
+import { Composer, type ComposerHandle } from './Composer.tsx'
+import {
+  composerCommandRows,
+  matchClientCommand,
+  mergeComposerRows,
+  skillPrompt,
+  type ClientCommand,
+  type ComposerCommandRow,
+} from './composer-commands.ts'
 import { ContextDialog } from './ContextDialog.tsx'
 import { TasksDialog } from './TasksDialog.tsx'
 import { HostFilesDialog } from './HostFilesDialog.tsx'
@@ -185,6 +193,8 @@ export type SessionVitals = {
   permissionMode: TranscriptState['permissionMode']
   permissionModes: PermissionModeChoice[]
   skills: SkillInfo[] | undefined
+  // Everything `/` offers this session, flattened for a native host that cannot run the composer's own merge.
+  composerCommands: ComposerCommandRow[]
   cwd: TranscriptState['cwd']
   contextUsage: TranscriptState['contextUsage']
   tasks: SessionTask[]
@@ -258,6 +268,7 @@ export function SessionPanel({
     approve,
     deny,
     interrupt,
+    clearContext,
     setModel,
     setPermissionMode,
     reconnectNow,
@@ -334,6 +345,79 @@ export function SessionPanel({
     [state.checklist, subagents, state.session?.subagents],
   )
 
+  const clientCommands = useMemo((): ClientCommand[] => {
+    const modes = capabilities.permissionModes
+    const built: ClientCommand[] = []
+    if (models.length > 0) {
+      built.push({
+        name: 'model',
+        description: 'Switch the model for this session',
+        argumentHint: '<model>',
+        requiresArgs: true,
+        run: (args) => {
+          const wanted = args.split(/\s+/)[0]
+          if (!wanted) {
+            return false
+          }
+          setModel(wanted)
+          return true
+        },
+      })
+    }
+    if (modes.length > 1) {
+      built.push({
+        name: 'permissions',
+        description: `Set the permission mode (${modes.join(', ')})`,
+        argumentHint: '<mode>',
+        requiresArgs: true,
+        run: (args) => {
+          const wanted = args.split(/\s+/)[0] as PermissionMode
+          if (!modes.includes(wanted)) {
+            return false
+          }
+          setPermissionMode(wanted)
+          return true
+        },
+      })
+    }
+    if (capabilities.clearContext) {
+      built.push({
+        name: 'clear',
+        description: 'Clear the conversation - the session keeps running and the old one stays resumable',
+        run: () => {
+          clearContext()
+          return true
+        },
+      })
+    }
+    if (capabilities.mcpStatus) {
+      built.push({ name: 'mcp', description: 'MCP servers and their status', run: () => (openPanel('mcp'), true) })
+    }
+    if (capabilities.contextUsage) {
+      built.push({ name: 'context', description: 'Context window usage', run: () => (openPanel('context'), true) })
+    }
+    built.push({ name: 'status', description: 'Session details', run: () => (openPanel('info'), true) })
+    if (capabilities.rateLimits) {
+      built.push({ name: 'usage', description: 'Rate limits and spend', run: () => (openPanel('usage'), true) })
+    }
+    if (capabilities.skillsList) {
+      built.push({ name: 'skills', description: 'Browse the skills this session can use', run: () => (openPanel('skills'), true) })
+    }
+    return built
+  }, [capabilities, models.length, openPanel, clearContext, setModel, setPermissionMode])
+
+  const composerCommands = useMemo(
+    () =>
+      composerCommandRows(
+        mergeComposerRows({
+          commands: capabilities.slashCommands ? state.commands : undefined,
+          clientCommands,
+          skills: capabilities.skillsList ? state.skills : undefined,
+        }),
+      ),
+    [capabilities.slashCommands, capabilities.skillsList, state.commands, state.skills, clientCommands],
+  )
+
   const onVitalsRef = useRef(onVitals)
   onVitalsRef.current = onVitals
   const vitalsModel = effectiveModel ?? state.model
@@ -352,6 +436,7 @@ export function SessionPanel({
       permissionMode: state.permissionMode,
       permissionModes,
       skills: state.skills,
+      composerCommands,
       cwd: state.cwd,
       contextUsage: state.contextUsage,
       tasks,
@@ -370,6 +455,7 @@ export function SessionPanel({
     state.permissionMode,
     permissionModes,
     state.skills,
+    composerCommands,
     state.cwd,
     state.contextUsage,
     tasks,
@@ -423,25 +509,10 @@ export function SessionPanel({
   const jumpToRecap = useRef<(() => void) | null>(null)
   const repinTranscript = useRef<(() => void) | null>(null)
 
-  const commands = useMemo(() => {
-    if (!state.commands) {
-      return undefined
-    }
-    if (state.commands.some((c) => c.name === 'model')) {
-      return state.commands
-    }
-    return [{ name: 'model', description: 'Switch the model for this session', argumentHint: '<model>' }, ...state.commands]
-  }, [state.commands])
-
   const handleSend = (text: string, attachmentIds: string[]) => {
     if (attachmentIds.length === 0) {
-      const modelCommand = /^\/model\s+(\S+)$/.exec(text)
-      if (modelCommand) {
-        setModel(modelCommand[1])
-        return
-      }
-      if (capabilities.mcpStatus && text.trim() === '/mcp') {
-        openPanel('mcp')
+      const local = matchClientCommand(text, clientCommands)
+      if (local && local.command.run(local.args)) {
         return
       }
     }
@@ -718,8 +789,9 @@ export function SessionPanel({
                       onInterrupt={interrupt}
                       busy={busy}
                       disabled={ended || !sessionId}
-                      commands={capabilities.slashCommands ? commands : undefined}
+                      commands={capabilities.slashCommands ? state.commands : undefined}
                       skills={capabilities.skillsList ? state.skills : undefined}
+                      clientCommands={clientCommands}
                       attachments={attachments}
                       draft={draft}
                       onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}

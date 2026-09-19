@@ -32,6 +32,18 @@ const DEV_COMMANDS = [
   { name: 'model', description: 'Switch model' },
 ]
 
+const DEV_SKILLS = [
+  { name: 'pdf', displayName: 'PDF tools', shortDescription: 'Inspect a PDF for layout problems', enabled: true, scope: 'user' },
+  { name: 'compose', shortDescription: 'Draft a document from notes', defaultPrompt: 'Turn these notes into a document:', enabled: true },
+  { name: 'retired', shortDescription: 'Not available here', enabled: false },
+]
+
+const DEV_CLIENT_COMMANDS = [
+  { name: 'model', description: 'Shadowed by the engine command of the same name', requiresArgs: true, run: () => true },
+  { name: 'mcp', description: 'MCP servers and their status', run: () => true },
+  { name: 'status', description: 'Session details', run: () => true },
+]
+
 const ATTACHMENT_PREVIEW =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
@@ -441,6 +453,14 @@ export function App() {
             <Composer
               attachments={stagedAttachments}
               commands={DEV_COMMANDS}
+              skills={DEV_SKILLS}
+              clientCommands={DEV_CLIENT_COMMANDS}
+              onSearchFiles={async (query) =>
+                ['src/index.ts', 'docs/GOTCHAS.md', 'packages/ui/src/components/agent/Composer.tsx']
+                  .filter((p) => p.includes(query))
+                  .map((p) => ({ path: `/repo/${p}`, relative: p }))
+              }
+              onShellCommand={(command) => setAnswered(`shell: ${command}`)}
               onSend={(text) => {
                 repinRef.current?.()
                 setAnswered(`sent: ${text}`)

@@ -1,4 +1,4 @@
-import type { PermissionMode, ScopeRoot, SessionInfo, SkillInfo, WorkspaceScope } from '@workerdeck/protocol'
+import type { PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
 import type { ViewConfig } from './view-config.ts'
 import type { SessionSurfacePanel, SessionVitals } from '@workerdeck/ui'
 
@@ -102,7 +102,7 @@ export type HostToPanel =
       model?: string
     }
   | { kind: 'wd-set-permission-mode'; mode: PermissionMode }
-  | { kind: 'wd-use-skill'; skill: SkillInfo }
+  | { kind: 'wd-insert-composer-text'; text: string }
   | {
       kind: 'wd-focus-composer'
     }

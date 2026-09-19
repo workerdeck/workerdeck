@@ -58,10 +58,11 @@ language-mode item uses); the panel's `onControls` setters are what they drive.
 
 The panel's `onOpenPanel` requests all land somewhere native - none are dropped. The four
 section kinds focus their views; **`skills`** opens a QuickPick (also
-`workerdeck.useSkill`) fed from `vitals.skills`, and picking one posts `wd-use-skill` so the
-webview inserts the same `skillPrompt(...)` text web's SkillsDialog would, through the
-controls' `insertComposerText` - a disabled skill stays visible and unpickable, like an
-ungrantable permission mode; **`files`** runs `workerdeck.openProjectFolder`, the existing
+`workerdeck.useSkill`) over `vitals.composerCommands` - the same merged list the composer's `/`
+offers, flattened in `SessionPanel` because the extension host cannot import `@workerdeck/ui` at
+runtime. Each row carries a resolved `insertText`, so picking one posts `wd-insert-composer-text`
+and no second surface reimplements `skillPrompt` or the leading slash. A disabled skill stays
+visible and unpickable, like an ungrantable permission mode; **`files`** runs `workerdeck.openProjectFolder`, the existing
 `workerdeck://` mount of the active session's cwd, rather than growing a webview file
 browser.
 

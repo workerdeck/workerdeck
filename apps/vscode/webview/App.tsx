@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { SessionPanel, Toaster, skillPrompt, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
+import { SessionPanel, Toaster, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
 import type { Bridge } from './bridge.ts'
 import { matchPath } from './paths.ts'
 
@@ -90,8 +90,8 @@ export function App({
           controls.current?.setModel(msg.model)
         } else if (msg.kind === 'wd-set-permission-mode') {
           controls.current?.setPermissionMode(msg.mode)
-        } else if (msg.kind === 'wd-use-skill') {
-          controls.current?.insertComposerText(skillPrompt(msg.skill))
+        } else if (msg.kind === 'wd-insert-composer-text') {
+          controls.current?.insertComposerText(msg.text)
         } else if (msg.kind === 'wd-focus-composer') {
           focusWanted.current = true
           tryFocus()

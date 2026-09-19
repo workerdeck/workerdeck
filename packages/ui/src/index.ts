@@ -86,7 +86,15 @@ export {
   type QuestionPromptProps,
   type QuestionBehaviorMeta,
 } from './components/agent/QuestionPrompt.tsx'
-export { Composer, skillPrompt, type ComposerFileMatch, type ComposerHandle, type ComposerProps } from './components/agent/Composer.tsx'
+export { Composer, type ComposerFileMatch, type ComposerHandle, type ComposerProps } from './components/agent/Composer.tsx'
+export {
+  mergeComposerRows,
+  rankComposerRows,
+  matchClientCommand,
+  skillPrompt,
+  type ClientCommand,
+  type ComposerRow,
+} from './components/agent/composer-commands.ts'
 export { ModelSelect, type ModelSelectProps } from './components/agent/ModelSelect.tsx'
 export {
   PERMISSION_MODES,

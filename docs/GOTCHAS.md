@@ -1465,24 +1465,43 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   capability: **never** `capabilities.commands`, which means "the CLI accepts these as commands".
   A client may list them and may offer them as a typing aid; it may not render them as command
   chips.
-- **Skills complete on `$`, not `/`, and that is codex's own convention, not a preference.**
-  Its TUI completes skills on `$` and reserves `/` for commands, its `skill-creator` documents the
-  reference form (`Use $skill-x at /path/to/skill-x to solve problem y`), and its bundled prompts
-  are written that way ("Use $pdf to …"). So the two are separate triggers in both composers, and
-  they behave differently: `/` resolves to a **chip** (the CLI really does parse `/name` out of a
-  message), `$` resolves to plain editable **text**.
-- **Picking one inserts text; it does not send.** Both clients insert the skill's own
-  `interface.defaultPrompt` where it has one, else `$name`: the engine's own spelling beats
-  paraphrasing it. The vendored prompt-area grew `TriggerConfig.insertAsText` for exactly this: a
-  dropdown that can resolve a row to plain text instead of a chip.
-- **`$` completes but is never *styled* in a sent message.** `$PATH`, `$5.00` and any shell
-  snippet would otherwise be coloured as skills, and the charset check that saves `/` cannot save
-  `$` (`5.00` passes it). Unlike `@` and `/` it is not syntax any engine parses, so a false
-  positive buys nothing. Swift's `PromptTokens.scan` skips `.skill` outright; a test pins it.
+- **Skills complete on `/`, alongside commands, and the merge is the product decision.** They used
+  to complete on `$`, which is codex's own TUI convention. It was dropped because it made the
+  composer engine-dependent: `/` did nothing in a codex session and `$` did not exist in a claude
+  one, so which prefix worked was a coin flip the user had to remember per session. One ranked `/`
+  list is built by `mergeComposerRows` in `packages/ui/src/components/agent/composer-commands.ts`
+  from three sources: engine commands, host client commands, and skills.
+- **The merge is one list, but not one behaviour, and the row must say which before it is picked.**
+  An engine command resolves to a **chip** (the CLI really does parse `/name` out of a message); a
+  skill resolves to plain editable **text**; a client command resolves to a chip and is then
+  intercepted at send. Skills carry a `Sparkles` icon and a `Skill ·` description prefix, client
+  commands a `SlidersHorizontal` icon. The vendored prompt-area's `TriggerConfig.insertAsText` is
+  per-suggestion, which is what lets one dropdown mix chip rows and text rows.
+- **An engine command suppresses a client command of the same name, including via its aliases.**
+  Claude's real `/compact` must win over any host imitation, and the same client command must
+  still appear on codex, which has no engine commands at all. Getting this backwards gives a
+  duplicate row on claude and nothing on codex.
+- **Picking a skill inserts text; it does not send.** Clients insert the skill's own
+  `interface.defaultPrompt` where it has one, else `Use the <name> skill:` - never `$name`, which
+  is now a sigil no surface teaches.
+- **Skill names are never *styled* in a sent message.** Unlike `@` and `/` a skill name is not
+  syntax any engine parses, so a false positive buys nothing. Swift's `PromptTokens.scan` skips
+  `.skill` outright; a test pins it.
 - **Codex has skills and no commands; Claude has commands and no listable skills.** The two axes
   are orthogonal. Claude's CLI reports skill *names* on `system_init` and nothing else (no
   descriptions, no scope, no suggested prompt), which is not enough to fill a picker honestly, so
-  `skillsList` is false there rather than rendering a list of bare words.
+  `skillsList` is false there rather than rendering a list of bare words. **This costs claude
+  nothing**: the SDK's `supportedCommands()` is documented entirely in terms of skills
+  (`SlashCommand.name` is "Skill name (without the leading slash)"), so claude's skills already
+  arrive inside `capabilities.commands` and submit as `/name` like any other command. Do not add a
+  second claude skills source; you would get duplicate rows.
+- **Claude pushes `system` / `commands_changed` mid-session** when skills are discovered (for
+  instance once the agent works in a subdirectory), and the SDK instructs clients to *replace*
+  their cached list. `SessionRunner` re-emits `capabilities` with the cached models on that push.
+  A push arriving before the first fetch resolves is **ignored**: `supportedCommands()` tracks the
+  latest push, so the fetch returns that list anyway, and re-emitting early would ship an empty
+  model list to every client. `capabilities` is deliberately *not* in `replayCoalesceKey` - its
+  reducer case is not a plain replace (`defaultModel` falls back to the previous value).
 - **Clients gate the skills affordance on the `skills` event having arrived** (`state.skills`
   defined), never on `capabilities.skillsList` alone: the flag says the engine *can* answer, the
   list says it *has*. The list is always asynchronous to the capability.
