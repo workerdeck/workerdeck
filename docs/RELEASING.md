@@ -1079,6 +1079,48 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   and `.vscodeignore` still carry dashes, since neither the check nor the fixer covers those
   extensions.
 
+  **2.9.0** - **the unread badge means what it says, and a file link opens a file.** A **minor**:
+  two client fixes, two runtime fixes ahead of a consumer's Bun migration, and the gotchas doc cut
+  by a quarter. **Protocol stays 1**, deliberately: the one semantic change is to a field's
+  meaning, not its type, and no client scores events itself.
+
+  **A session badged you for the prompt you had just typed into it.** `transcriptProse` counted a
+  non-synthetic `user_message`, and the watermark only advances when the polled sessions list ticks
+  while the session view is mounted and visible - so sending a message and switching away inside
+  that window left the session showing one unread, for a message you wrote. It painted accent too,
+  because accent meant `working`, which made every mid-turn increment look like a finished turn.
+  A human cannot have an unread message they typed, so it scores zero, and the colour now answers
+  "is this waiting for me": grey while producing, accent once stopped or asking for an approval.
+  Tool and shell steps already scored zero; measured on a live session, 556 `assistant_message`
+  events scored 73 prose and 508 `user_message` events scored 25, so the filter was never the bug.
+
+  **A markdown link to a file did nothing.** An agent names a file as a link far more often than as
+  a bare path, and the link's text is the name, so the anchor's scheme-less href resolved against
+  the dashboard's origin while the Cmd/Ctrl linkifier, which matches on `textContent`, saw a name
+  and not a path. `parseFileLink` resolves the shapes both engines emit against the session cwd;
+  with `SessionPanel.onOpenFile` wired the link becomes a button, and without it nothing changes
+  for an existing embedding. `resolveAgainstCwd` delegates to it rather than keeping a second rule
+  that could not handle `..`.
+
+  **Two fixes for a consumer moving to Bun**, neither of them Bun-only in the end. `close()`
+  resolved on the HTTP callback alone and cleared the force timer there; it now awaits the
+  WebSocket drain too and is bounded by `CLOSE_DEADLINE_MS`, which also closes a case that was
+  unbounded on Node - a socket between the `upgrade` event and `wss.handleUpgrade` belongs to
+  neither `wss.clients` nor `closeAllConnections()`, yet `net.Server` counts it. And
+  `hot-reload.ts` imported `registerHooks` by name, so a runtime without it threw at module load
+  instead of reaching the `unsupported` path the file is built around; that also covers Node before
+  22.15. Worth recording for the same consumer: **no engine launcher needs Node.** The agent SDK
+  resolves a per-platform native `claude` binary, has no `execPath` anywhere in `sdk.mjs`, and
+  ships an `extractFromBunfs` helper; codex spawns its own binary. The gateway is the only question.
+
+  **GOTCHAS went from 2730 lines to 2047**, verified claim by claim rather than trimmed on sight.
+  Three things had rotted in a document that size: a list-rendering entry describing CSS the
+  terminal theme no longer uses, a `#backfillHistory` that exists nowhere (the logic is
+  `buildMarks`), and a drifted `DormantSessionRecord` field list. Everything else still held, which
+  is its own result. Headings are unchanged character for character, since `CLAUDE.md` and the
+  other docs point at them by name. The file is still the largest in `docs/` and a split into
+  `docs/gotchas/<topic>.md` behind an index is the obvious next step.
+
 - publish: yes - npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
