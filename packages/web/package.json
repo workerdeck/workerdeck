@@ -1,8 +1,8 @@
 {
   "name": "@workerdeck/web",
-  "version": "2.7.2",
+  "version": "2.8.0",
   "type": "module",
-  "description": "The WorkerDeck dashboard as prebuilt static files: session list, create/resume flow, live panel, jobs, profiles, settings. Ships dist/ plus the path to it \u2014 serve it from the same origin as the gateway. Zero runtime dependencies.",
+  "description": "The WorkerDeck dashboard as prebuilt static files: session list, create/resume flow, live panel, jobs, profiles, settings. Ships dist/ plus the path to it - serve it from the same origin as the gateway. Zero runtime dependencies.",
   "license": "MIT",
   "main": "./entry.mjs",
   "types": "./entry.d.mts",

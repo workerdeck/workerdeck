@@ -11,7 +11,9 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   shipped and needed a follow-up commit to strip.
 - test: `pnpm test`
 - push: yes - branch `master`, repo is public, and every push deploys the docs site.
-- version_bump: yes - `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
+- version_bump: yes - `pnpm version:set <x.y.z> && pnpm install --lockfile-only && pnpm fix:dashes`
+  (the last step is not optional: `npm version` rewrites each `package.json` and expands any
+  `\u2014` escape back into a literal em dash, so the ratchet fires on the bump itself) (the 10 packages
   plus `apps/vscode`; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 is published
   (protocol **7** + the codex engine + the session-runner parity work; it absorbed the
   never-published 0.8.0). 0.10.0 added codex skills and generated images, the codex MCP panel and
@@ -1017,6 +1019,65 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   found when trying to free HostRef(id = -2147483648)` - INT32_MIN, an uninitialized host ref
   freed on dispose. **A green typecheck was actively misleading about a WASM boundary**, so
   re-test that pin with `pnpm smoke:sandbox`, never the unit tests alone.
+
+  **2.8.0** - **the codex engine answers you mid-turn.** A **minor**: one new engine behavior,
+  one bug fix, the dependency floor moved under both engines, and the dash backlog retired.
+  **Protocol stays 1.**
+
+  A message typed while a codex turn was running used to wait for `turn/completed` before it
+  reached the model, which on a long turn is dozens of minutes, while the claude engine ingests
+  the same message into the turn in flight. `sendMessage` now sends `turn/steer`, whose
+  `expectedTurnId` is a precondition the server rejects once it no longer names the active turn;
+  every rejection falls back to the old queue path, so a message is never lost and never sent
+  twice. **The unsupported-binary check is not `-32601`**: measured against 0.153.4, an unknown
+  method answers `-32600` carrying ``unknown variant `turn/steer` `` (a serde miss on the
+  `ClientRequest` enum), and a failed precondition is `-32600` too, so only that literal message
+  marks a connection unable to steer. Steering is allowed while an approval is pending, because
+  the approval gates codex's tool call and not the turn's input channel.
+
+  A completed sub-agent read "processing" for the life of the session. `SubAgentActivityKind`
+  did **not** carry `completed` when this engine was written, which is why settling keyed on the
+  agent thread's own `turn/completed`; codex added the kind later and nothing followed up, so the
+  terminal signal fell through to the revive branch. Both paths settle now and `settle()` is
+  first-wins, so the thread's `turn/completed` still supplies the richer report when it lands
+  first. The GOTCHAS bullet asserting **there is no `completed`** is corrected.
+
+  `smoke:codex` grew a `--steer` scenario, and it is why this is verified rather than argued: the
+  load-bearing assertion is that the run produces exactly **one** `turn_result`, since a steer
+  that degraded to the queue would produce two. It buys its mid-turn window with `sleep 12`
+  rather than with tokens. The full paid run is 29/29 plus those three on 0.155.1.
+
+  **`minimumReleaseAge` is now 0 and the exclude list is gone.** pnpm honors
+  `minimumReleaseAgeExclude` while *resolving* but its lockfile *verifier* will not match codex's
+  platform binaries, which ship as prerelease-shaped versions of one package
+  (`0.155.1-darwin-arm64`), so the version lands on the first install and every install after it
+  fails, CI included. The alias form does not help either. The policy went rather than the entry
+  because it could not express the one dependency that needed it. `allowBuilds` stays the real
+  install-time guard, since it is what gates postinstall. Consequence for the agent SDK bullet
+  above: nothing gates taking a new SDK release any more.
+
+  Dependencies: `@openai/codex` 0.153.4 to **0.155.1** (the v2 schema delta is additive only, and
+  `TurnSteerParams` is byte-identical across the two), `@anthropic-ai/claude-agent-sdk` 0.3.258 to
+  **0.3.278**, plus a full in-range sweep. Core's optional **peer** floor stays `~0.149.0`
+  deliberately: the steer path feature-detects, so an older binary degrades to the queue instead
+  of breaking, and raising a published package's peer range is semver-relevant for consumers.
+
+  **The dash ban stopped costing a sweep per session.** `lint-changed.mjs` scans a changed file
+  whole, so editing one line of a pre-rule file meant re-punctuating every other line in it
+  first: three sweeps happened in this cycle, two as dedicated agent runs. Unnecessary, because
+  CODE-STYLE.md already sanctions a plain `-`. `pnpm fix:dashes` now does it deterministically
+  (changed files by default, `--all` for the tree, honoring `wd-em-dash-ok`), and the tree was
+  swept: **4248 lines in 480 files**, green on typecheck, test, build, lint and all 523
+  `swift test` cases in WorkerDeckKit, which `pnpm test` does not cover and which 166 of the
+  swept files belong to. A global rewrite is safe precisely because it is global: a source string
+  and the test asserting on it move together. With the backlog gone the ratchet guards new prose
+  instead of taxing every edit.
+
+  Two debts this left. `core/src/engines/codex/catalog.ts` still records its provenance as
+  0.153.4 and wants a real re-extract against 0.155.1 (a binary string scan shows our six presets
+  present, plus a `gpt-6-pro` we do not carry, which a scan cannot adjudicate). And `.gitignore`
+  and `.vscodeignore` still carry dashes, since neither the check nor the fixer covers those
+  extensions.
 
 - publish: yes - npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no

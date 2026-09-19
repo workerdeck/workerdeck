@@ -1,8 +1,8 @@
 {
   "name": "@workerdeck/protocol",
-  "version": "2.7.2",
+  "version": "2.8.0",
   "type": "module",
-  "description": "The WorkerDeck wire protocol: typed session events, commands, and REST shapes shared by server and clients. Dependency-free, browser-safe. This protocol is the product boundary \u2014 versioned from day one.",
+  "description": "The WorkerDeck wire protocol: typed session events, commands, and REST shapes shared by server and clients. Dependency-free, browser-safe. This protocol is the product boundary - versioned from day one.",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -21,7 +21,7 @@
     "build": "tsdown",
     "prepack": "pnpm clean && pnpm build",
     "typecheck": "tsgo -p tsconfig.json",
-    "test": "echo \"@workerdeck/protocol has no tests of its own \u2014 its rules (transcriptActivity, replayCoalesceKey, snapshotRetains/replayRetains, result truncation, image refs) are proven against real consumers in packages/react/test and packages/core/test.\""
+    "test": "echo \"@workerdeck/protocol has no tests of its own - its rules (transcriptActivity, replayCoalesceKey, snapshotRetains/replayRetains, result truncation, image refs) are proven against real consumers in packages/react/test and packages/core/test.\""
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
