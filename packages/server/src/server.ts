@@ -54,6 +54,9 @@ export type {
 // How long a client gets to acknowledge the shutdown close frame before its socket is torn down.
 const SOCKET_CLOSE_GRACE_MS = 250
 
+// The outer bound on close(): it resolves by then whether or not the runtime ever reports the drains complete.
+const CLOSE_DEADLINE_MS = 1_000
+
 // How old the account-level rate-limit reading may be before a profiles read asks a live session for a newer one.
 // Generous: the windows move over hours, and the point is to bound staleness at minutes rather than at days.
 const USAGE_STALE_MS = 5 * 60_000
@@ -550,9 +553,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       return report
     },
     close: () => {
-      // Idempotent by contract, not by luck: a second SIGINT re-enters here, and `http.Server.close()` on an
-      // already-closed server only fires its callback because we ignore the ERR_SERVER_NOT_RUNNING it passes.
-      // Returning the first promise makes the second call a no-op we can reason about.
       closing ??= new Promise((resolve) => {
         queue?.close()
         // Ordering is load-bearing: parking's `#closed` guard must be set before the registry closes runners with
@@ -560,9 +560,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         parking.close()
         registry.closeAll()
         shell?.killAll()
-        // `wss` is `noServer`, so `wss.close()` neither closes nor terminates clients - it waits for `clients` to
-        // empty - and `server.closeAllConnections()` does not reach upgraded sockets. Any attached session socket
-        // therefore keeps `server.close()`'s callback from ever firing. Send close frames, then force what lingers.
+        // `wss` is `noServer`, so `wss.close()` only waits for `clients` to empty, and `server.closeAllConnections()`
+        // never reaches an upgraded socket: close every client ourselves, then terminate what has not acknowledged.
         for (const ws of wss.clients) {
           ws.close(1001, 'server shutting down')
         }
@@ -573,12 +572,18 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           }
         }, SOCKET_CLOSE_GRACE_MS)
         force.unref()
-        wss.close()
-        server.close(() => {
+        const deadline = setTimeout(() => resolve(), CLOSE_DEADLINE_MS)
+        deadline.unref()
+        const drained = Promise.all([
+          new Promise<void>((done) => wss.close(() => done())),
+          new Promise<void>((done) => server.close(() => done())),
+        ])
+        server.closeAllConnections()
+        void drained.then(() => {
           clearTimeout(force)
+          clearTimeout(deadline)
           resolve()
         })
-        server.closeAllConnections()
       })
       return closing
     },

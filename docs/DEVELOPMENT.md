@@ -90,7 +90,10 @@ generation that does not compile. Three triggers, all the same signal underneath
 
 How it works, in three pieces:
 
-- A synchronous `module.registerHooks` resolve hook appends `?wdgen=N` to every resolved URL under
+- A synchronous `module.registerHooks` resolve hook, reached through a namespace lookup and a
+  capability check so a runtime without it (Node before 22.15, or Bun) returns the flag's
+  `unsupported` result and serves without hot reload rather than failing to load the module. It
+  appends `?wdgen=N` to every resolved URL under
   `packages/` and to **nothing** under `node_modules`. Bumping N and re-importing re-evaluates the
   whole workspace subgraph; leaving node_modules alone is what keeps the Agent SDK, `ws` and
   quickjs at one copy each. It chains correctly under `@swc-node/register`.

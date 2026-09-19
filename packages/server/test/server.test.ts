@@ -1,5 +1,7 @@
+import { randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
+import { connect, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -904,19 +906,31 @@ describe('shutdown', () => {
     const { base, wsBase } = await startServer(harness)
 
     const ws = await attachSessionSocket(base, wsBase)
+    const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)))
 
-    // `wss` is `noServer`, so nothing in the close path used to reach an upgraded session socket and
-    // `server.close()`'s callback never fired: any attached dashboard tab hung Ctrl+C forever.
     const server = running!
     running = undefined
     await expect(withTimeout(server.close(), 2000)).resolves.toBeUndefined()
-    expect(ws.readyState).not.toBe(WebSocket.OPEN)
+    await expect(withTimeout(closed, 2000)).resolves.toBe(1001)
+  })
+
+  it('terminates a client that never acknowledges the close frame', async () => {
+    const harness = fakeHarness()
+    const { base } = await startServer(harness)
+
+    const socket = await attachSilentSocket(base)
+    const gone = new Promise<void>((resolve) => socket.once('close', () => resolve()))
+
+    const server = running!
+    running = undefined
+    await expect(withTimeout(server.close(), 2000)).resolves.toBeUndefined()
+    await expect(withTimeout(gone, 2000)).resolves.toBeUndefined()
   })
 
   it('is idempotent, so a second signal does not hang or throw', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startServer(harness)
-    const ws = await attachSessionSocket(base, wsBase)
+    await attachSessionSocket(base, wsBase)
 
     const server = running!
     running = undefined
@@ -938,6 +952,39 @@ async function attachSessionSocket(base: string, wsBase: string): Promise<WebSoc
   const ws = new WebSocket(`${wsBase}/sessions/${session.id}/ws`)
   await frameCollector(ws).waitFor((f) => f.type === 'attached')
   return ws
+}
+
+// A raw upgraded socket that reads everything and answers nothing, so the server's close frame is never echoed.
+async function attachSilentSocket(base: string): Promise<Socket> {
+  const createRes = await fetch(`${base}/sessions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ cwd: '/tmp/project', prompt: 'hello' }),
+  })
+  const { session } = (await createRes.json()) as { session: SessionInfo }
+  const url = new URL(`${base}/sessions/${session.id}/ws`)
+  const socket = connect({ host: url.hostname, port: Number(url.port) })
+  await new Promise<void>((resolve, reject) => {
+    socket.once('connect', resolve)
+    socket.once('error', reject)
+  })
+  const request = [
+    `GET ${url.pathname} HTTP/1.1`,
+    `Host: ${url.host}`,
+    'Connection: Upgrade',
+    'Upgrade: websocket',
+    'Sec-WebSocket-Version: 13',
+    `Sec-WebSocket-Key: ${randomBytes(16).toString('base64')}`,
+    '',
+    '',
+  ].join('\r\n')
+  const upgraded = new Promise<void>((resolve, reject) => {
+    socket.once('data', (chunk) => (chunk.toString().startsWith('HTTP/1.1 101') ? resolve() : reject(new Error(chunk.toString()))))
+  })
+  socket.write(request)
+  await upgraded
+  socket.resume()
+  return socket
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { registerHooks } from 'node:module'
+import * as nodeModule from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createFileSessionStore, isDormant, reloadPlan, type CarriedSession, type SessionStore } from '@workerdeck/server'
@@ -52,6 +52,17 @@ export async function runHotReload(flags: CliFlags): Promise<number | 'unsupport
     process.stderr.write(
       '[workerdeck] --hot-reload needs a source checkout; this build is one bundled file with nothing to swap.\n' +
         '            Serving without it. Run it as `pnpm cli --hot-reload` from the repo instead.\n',
+    )
+    return 'unsupported'
+  }
+
+  // A namespace lookup, not a named import: `registerHooks` landed in Node 22.15, and a runtime without it (an
+  // older Node, or Bun) must reach the unsupported path below rather than fail to load this module at all.
+  const registerHooks = (nodeModule as Partial<typeof nodeModule>).registerHooks
+  if (!registerHooks) {
+    process.stderr.write(
+      '[workerdeck] --hot-reload needs `module.registerHooks`, which this runtime does not provide (Node 22.15+).\n' +
+        '            Serving without it.\n',
     )
     return 'unsupported'
   }
