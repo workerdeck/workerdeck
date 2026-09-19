@@ -712,6 +712,8 @@ export function transcriptActivity(body: SessionEventBody): number {
 }
 
 // The narrower door beside transcriptActivity: output addressed to the human, not evidence of work.
+// `user_message` is deliberately absent: the human wrote it, so it can never be unread by them, and
+// counting it badged the sender's own prompt whenever they navigated away before the list next polled.
 export function transcriptProse(body: SessionEventBody): number {
   if ('parentToolUseId' in body && body.parentToolUseId != null) {
     return 0
@@ -723,9 +725,6 @@ export function transcriptProse(body: SessionEventBody): number {
         return content.trim() === '' ? 0 : 1
       }
       return content.filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '').length
-    }
-    case 'user_message': {
-      return body.synthetic ? 0 : 1
     }
     case 'turn_result': {
       return body.isError ? 1 : 0

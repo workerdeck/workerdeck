@@ -178,13 +178,15 @@ describe('transcriptProse', () => {
   it('counts the other things said to a human, and nothing that is merely work or state', () => {
     expect(transcriptProse({ type: 'session_error', message: 'boom' })).toBe(1)
     expect(transcriptProse({ type: 'file_delivered', path: '/tmp/x.png', bytes: 12 })).toBe(1)
+    // The human wrote it, so it can never be unread by them: their own prompt used to badge the
+    // session they had just navigated away from.
     expect(
       transcriptProse({
         type: 'user_message',
         message: { role: 'user', content: 'hi' },
         parentToolUseId: null,
       }),
-    ).toBe(1)
+    ).toBe(0)
     expect(
       transcriptProse({
         type: 'user_message',

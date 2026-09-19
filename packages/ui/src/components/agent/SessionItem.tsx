@@ -162,7 +162,9 @@ export function SessionItem({
               className={cn(
                 'flex h-4 min-w-6 shrink-0 items-center justify-center rounded-full px-2',
                 'text-[0.75rem] leading-none tracking-[-0.005em] tabular-nums',
-                row.state === 'working' || row.state === 'attention' ? 'bg-accent text-accent-fg' : 'bg-badge text-badge-fg',
+                // Grey while the turn is still producing, accent once it has stopped: the badge's colour
+                // answers "is this waiting for me", and a working session is not yet.
+                row.state === 'working' ? 'bg-badge text-badge-fg' : 'bg-accent text-accent-fg',
               )}
             >
               {row.unseen}
