@@ -901,7 +901,14 @@ up - horizontal measures are `ch` (one cell) and vertical measures are whole mul
 primitives: `Row` (gutter cell + body cell, which is what gives every wrap its hanging indent),
 `Blank` (one empty line, the theme's only spacing) and `Band` (a full-bleed wash). Markdown goes
 through Streamdown with a **component map** rather than the sixty `!important` overrides the
-retired `lines` variant needed,
+retired `lines` variant needed. A markdown link whose target is a **file** (`./SPEC.md`,
+`docs/AUTH.md#L12`, `/Users/me/src/main.ts:42`, `file://…`) is not an anchor: a scheme-less href
+resolves against the host page, so it led nowhere. `parseFileLink` classifies it against the
+session's `cwd` and, when a `FileLinkProvider` is wired (`SessionPanel.onOpenFile`, which
+`SessionWorkspace` defaults to its own editor and the VS Code webview posts as `wd-open-path`), it
+renders as a button that opens the file. Without a provider it stays an anchor, so no existing
+embedding changes. It is the same resolution rule `use-path-links.ts` applies to bare paths under
+Cmd/Ctrl, and deliberately one function, not two.
 `TerminalDiff` renders protocol's `FilePatch` with the engine's own line numbers (and
 without a number column when the hunks start at 0 - an approval, where the edit has not
 happened), and the prompts are the CLI's: one question at a time behind a chip strip, ending in

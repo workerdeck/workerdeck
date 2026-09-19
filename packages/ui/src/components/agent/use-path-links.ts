@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from 'react'
+import { parseFileLink } from '../../lib/file-link.ts'
 
 export type PathHit = { path: string; line?: number }
 
@@ -119,11 +120,5 @@ export function usePathLinks({
 }
 
 export function resolveAgainstCwd(path: string, cwd: string | undefined): string {
-  if (path.startsWith('/')) {
-    return path
-  }
-  if (!cwd) {
-    return path
-  }
-  return `${cwd.replace(/\/$/, '')}/${path.replace(/^\.\//, '')}`
+  return parseFileLink(path, cwd)?.path ?? path
 }

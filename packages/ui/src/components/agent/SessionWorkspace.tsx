@@ -31,6 +31,7 @@ export interface SessionWorkspaceProps {
   controlsSurface?: SessionPanelProps['controlsSurface']
   fontSize?: SessionPanelProps['fontSize']
   onLinkClick?: SessionPanelProps['onLinkClick']
+  onOpenFile?: SessionPanelProps['onOpenFile']
   unseen?: SessionPanelProps['unseen']
   readOnly?: SessionPanelProps['readOnly']
   onVitals?: SessionPanelProps['onVitals']
@@ -64,6 +65,7 @@ export function SessionWorkspace({
   controlsSurface,
   fontSize,
   onLinkClick,
+  onOpenFile,
   unseen,
   readOnly,
   onVitals,
@@ -222,6 +224,7 @@ export function SessionWorkspace({
             controlsSurface={controlsSurface}
             fontSize={fontSize}
             onLinkClick={onLinkClick}
+            onOpenFile={onOpenFile ?? files.open}
             statusPlacement={statusPlacement}
             unseen={unseen}
             readOnly={readOnly}

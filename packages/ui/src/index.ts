@@ -61,6 +61,8 @@ export { TerminalDiff, previewPatch } from './components/terminal/diff.tsx'
 export { TerminalMarkdown, type TerminalMarkdownProps } from './components/terminal/markdown.tsx'
 export { Band, Blank, Ink, Row, type RowProps, type Tone } from './components/terminal/row.tsx'
 export { CopyAction, WithActions, useAffordances, type TerminalAffordances } from './components/terminal/affordances.tsx'
+export { FileLinkProvider, useFileLinks, type FileLinkHandle, type FileLinkOpener } from './components/terminal/file-link.tsx'
+export { parseFileLink, type FileLink } from './lib/file-link.ts'
 export { Conversation, ConversationContent, ConversationScrollButton, type ConversationProps } from './components/agent/Conversation.tsx'
 export { Message, MessageContent, type MessageProps } from './components/agent/Message.tsx'
 export {

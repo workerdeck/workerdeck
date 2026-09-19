@@ -210,6 +210,7 @@ export function App({
         scrubber
         bookmarks={bookmarks}
         onToggleBookmark={toggleBookmark}
+        onOpenFile={(path, line) => bridge.post({ kind: 'wd-open-path', path, line })}
         openSubagent={openSubagent}
         reveal={reveal}
         stickyPrompt

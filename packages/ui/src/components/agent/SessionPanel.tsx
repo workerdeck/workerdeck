@@ -64,6 +64,7 @@ import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
 import { BookmarkProvider, type BookmarkHandle, type TerminalAffordances } from '../terminal/affordances.tsx'
+import { FileLinkProvider, type FileLinkOpener } from '../terminal/file-link.tsx'
 
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
@@ -133,6 +134,8 @@ export interface SessionPanelProps {
   // Bookmarked transcript item ids - the host owns membership and persistence.
   bookmarks?: readonly string[]
   onToggleBookmark?: (itemId: string) => void
+  // Where a file link in the transcript goes. Without it, such a link stays an ordinary anchor.
+  onOpenFile?: FileLinkOpener
   reveal?: { toolUseId: string; nonce: number }
   openSubagent?: { toolUseId: string; nonce: number }
   onSubagentChange?: (toolUseId: string | undefined) => void
@@ -240,6 +243,7 @@ export function SessionPanel({
   cacheTranscript,
   emptyState,
   onLinkClick,
+  onOpenFile,
   fontSize,
   className,
 }: SessionPanelProps) {
@@ -606,6 +610,8 @@ export function SessionPanel({
     />
   )
 
+  const fileLinks = useMemo(() => (onOpenFile ? { cwd: state.cwd, open: onOpenFile } : undefined), [onOpenFile, state.cwd])
+
   const panelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!onLinkClick) {
@@ -650,223 +656,225 @@ export function SessionPanel({
   return (
     <TranscriptVariantProvider value={transcriptVariant}>
       <TranscriptDensityProvider value={transcriptDensity}>
-        <ToolResultFetchProvider value={loadFullResult}>
-          <ToolTitleProvider value={state.toolTitles}>
-            <ToolResultImageProvider value={resultImages}>
-              <div
-                ref={panelRef}
-                data-slot="session-panel"
-                data-agent-font={transcriptFont}
-                onClick={handleClick}
-                className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}
-                style={fontSize !== undefined ? ({ '--wd-font-size': `${Math.round(fontSize)}px` } as React.CSSProperties) : undefined}
-              >
-                {headerTakesActions ? header({ actions: menu }) : header}
-                {statusPlacement === 'top' ? statusBar : null}
-                {protocolMismatch !== undefined ? (
-                  <Notice level="warning">
-                    Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
-                  </Notice>
-                ) : null}
-                {protocolError ? (
-                  <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
-                    {protocolError}
-                  </Notice>
-                ) : null}
-                {subagentId !== undefined ? (
-                  <SubagentStrip
-                    task={subagentTask}
-                    items={subagentFrameItems}
-                    label={subagentFallbackLabel}
-                    onBack={leaveSubagent}
-                    terminal={terminal}
-                    fontSize={effectiveTermFontSize}
-                    lineHeight={effectiveTermLineHeight}
-                  />
-                ) : null}
-                <BookmarkProvider value={bookmarkHandle}>
-                  <Transcript
-                    key={subagentId ?? 'session'}
-                    state={state}
-                    fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-                    attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
-                    canBrowseFiles={hostFiles.available}
-                    hostImage={hostImage}
-                    variant={transcriptVariant}
-                    density={transcriptDensity}
-                    fontSize={effectiveTermFontSize}
-                    lineHeight={effectiveTermLineHeight}
-                    affordances={affordances}
-                    stickyPrompt={stickyPrompt}
-                    scrubber={scrubber}
-                    bookmarks={bookmarks}
-                    replaying={replaying}
-                    catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
-                    reveal={taskReveal ?? returnReveal ?? reveal}
-                    frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
-                    onOpenSubagent={enterSubagent}
-                    emptyState={emptyState}
-                    jumpToRecapRef={jumpToRecap}
-                    repinRef={repinTranscript}
-                  />
-                </BookmarkProvider>
-                {catchUp && newCount > 0 && !replaying && subagentId === undefined ? (
-                  <div className="px-3 pb-1">
-                    <div
-                      data-slot="catch-up"
-                      className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-fg-3"
-                    >
-                      <span aria-hidden className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
-                        ※
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">
-                        {newCount} new {newCount === 1 ? 'row' : 'rows'}
-                        {catchUp.since !== undefined ? ` since you were last here` : ''}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => jumpToRecap.current?.()}
-                        className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
-                      >
-                        jump
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCaughtUp(true)}
-                        className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
-                      >
-                        dismiss
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
-                  <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
-                    <PromptSurface
+        <FileLinkProvider value={fileLinks}>
+          <ToolResultFetchProvider value={loadFullResult}>
+            <ToolTitleProvider value={state.toolTitles}>
+              <ToolResultImageProvider value={resultImages}>
+                <div
+                  ref={panelRef}
+                  data-slot="session-panel"
+                  data-agent-font={transcriptFont}
+                  onClick={handleClick}
+                  className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}
+                  style={fontSize !== undefined ? ({ '--wd-font-size': `${Math.round(fontSize)}px` } as React.CSSProperties) : undefined}
+                >
+                  {headerTakesActions ? header({ actions: menu }) : header}
+                  {statusPlacement === 'top' ? statusBar : null}
+                  {protocolMismatch !== undefined ? (
+                    <Notice level="warning">
+                      Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
+                    </Notice>
+                  ) : null}
+                  {protocolError ? (
+                    <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
+                      {protocolError}
+                    </Notice>
+                  ) : null}
+                  {subagentId !== undefined ? (
+                    <SubagentStrip
+                      task={subagentTask}
+                      items={subagentFrameItems}
+                      label={subagentFallbackLabel}
+                      onBack={leaveSubagent}
                       terminal={terminal}
-                      metrics={{ fontSize: effectiveTermFontSize, lineHeight: effectiveTermLineHeight }}
+                      fontSize={effectiveTermFontSize}
+                      lineHeight={effectiveTermLineHeight}
+                    />
+                  ) : null}
+                  <BookmarkProvider value={bookmarkHandle}>
+                    <Transcript
+                      key={subagentId ?? 'session'}
+                      state={state}
+                      fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+                      attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+                      canBrowseFiles={hostFiles.available}
+                      hostImage={hostImage}
+                      variant={transcriptVariant}
+                      density={transcriptDensity}
+                      fontSize={effectiveTermFontSize}
+                      lineHeight={effectiveTermLineHeight}
                       affordances={affordances}
-                    >
-                      {state.pendingApprovals.map((request) => {
-                        // Before the variant split: a host's entry is the renderer for its tool in
-                        // both themes, and it overrides the built-in entries rather than racing them.
-                        const HostPrompt = approvalPrompts?.[request.toolName]
-                        if (HostPrompt) {
-                          return <HostPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
-                        }
-                        const isQuestion = request.toolName === 'AskUserQuestion' && parseUserQuestions(request.input).length > 0
-                        if (terminal) {
+                      stickyPrompt={stickyPrompt}
+                      scrubber={scrubber}
+                      bookmarks={bookmarks}
+                      replaying={replaying}
+                      catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
+                      reveal={taskReveal ?? returnReveal ?? reveal}
+                      frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
+                      onOpenSubagent={enterSubagent}
+                      emptyState={emptyState}
+                      jumpToRecapRef={jumpToRecap}
+                      repinRef={repinTranscript}
+                    />
+                  </BookmarkProvider>
+                  {catchUp && newCount > 0 && !replaying && subagentId === undefined ? (
+                    <div className="px-3 pb-1">
+                      <div
+                        data-slot="catch-up"
+                        className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-fg-3"
+                      >
+                        <span aria-hidden className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
+                          ※
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">
+                          {newCount} new {newCount === 1 ? 'row' : 'rows'}
+                          {catchUp.since !== undefined ? ` since you were last here` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => jumpToRecap.current?.()}
+                          className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
+                        >
+                          jump
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCaughtUp(true)}
+                          className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
+                        >
+                          dismiss
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
+                    <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
+                      <PromptSurface
+                        terminal={terminal}
+                        metrics={{ fontSize: effectiveTermFontSize, lineHeight: effectiveTermLineHeight }}
+                        affordances={affordances}
+                      >
+                        {state.pendingApprovals.map((request) => {
+                          // Before the variant split: a host's entry is the renderer for its tool in
+                          // both themes, and it overrides the built-in entries rather than racing them.
+                          const HostPrompt = approvalPrompts?.[request.toolName]
+                          if (HostPrompt) {
+                            return <HostPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                          }
+                          const isQuestion = request.toolName === 'AskUserQuestion' && parseUserQuestions(request.input).length > 0
+                          if (terminal) {
+                            return isQuestion ? (
+                              <TerminalQuestionPrompt
+                                key={request.id}
+                                request={request}
+                                onAnswer={approve}
+                                onDismiss={(id) => deny(id, 'Question dismissed by user')}
+                              />
+                            ) : (
+                              <TerminalPermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                            )
+                          }
                           return isQuestion ? (
-                            <TerminalQuestionPrompt
+                            <QuestionPrompt
                               key={request.id}
                               request={request}
                               onAnswer={approve}
                               onDismiss={(id) => deny(id, 'Question dismissed by user')}
                             />
                           ) : (
-                            <TerminalPermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
+                            <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
                           )
-                        }
-                        return isQuestion ? (
-                          <QuestionPrompt
-                            key={request.id}
-                            request={request}
-                            onAnswer={approve}
-                            onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                          />
-                        ) : (
-                          <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
-                        )
-                      })}
-                    </PromptSurface>
-                  </div>
-                ) : null}
-                {readOnly || subagentId !== undefined ? null : (
-                  <>
-                    <Composer
-                      ref={composerRef}
-                      onSend={handleSend}
-                      onInterrupt={interrupt}
-                      busy={busy}
-                      disabled={ended || !sessionId}
-                      commands={capabilities.slashCommands ? state.commands : undefined}
-                      skills={capabilities.skillsList ? state.skills : undefined}
-                      clientCommands={clientCommands}
-                      attachments={attachments}
-                      draft={draft}
-                      onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
-                      onShellCommand={shell ? runShell : undefined}
-                      layout={controlsExternal ? 'inline' : 'stacked'}
-                      toolbar={controlsExternal ? undefined : sessionControls}
-                      fontSize={effectiveTermFontSize}
-                      lineHeight={effectiveTermLineHeight}
-                      affordances={affordances}
-                    />
-                  </>
-                )}
-                {statusPlacement === 'bottom' ? statusBar : null}
+                        })}
+                      </PromptSurface>
+                    </div>
+                  ) : null}
+                  {readOnly || subagentId !== undefined ? null : (
+                    <>
+                      <Composer
+                        ref={composerRef}
+                        onSend={handleSend}
+                        onInterrupt={interrupt}
+                        busy={busy}
+                        disabled={ended || !sessionId}
+                        commands={capabilities.slashCommands ? state.commands : undefined}
+                        skills={capabilities.skillsList ? state.skills : undefined}
+                        clientCommands={clientCommands}
+                        attachments={attachments}
+                        draft={draft}
+                        onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
+                        onShellCommand={shell ? runShell : undefined}
+                        layout={controlsExternal ? 'inline' : 'stacked'}
+                        toolbar={controlsExternal ? undefined : sessionControls}
+                        fontSize={effectiveTermFontSize}
+                        lineHeight={effectiveTermLineHeight}
+                        affordances={affordances}
+                      />
+                    </>
+                  )}
+                  {statusPlacement === 'bottom' ? statusBar : null}
 
-                {!external ? (
-                  <>
-                    <SessionInfoDialog
-                      state={state}
-                      client={client}
-                      sessionId={sessionId}
-                      open={panel === 'info'}
-                      onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
-                    />
-                    <ContextDialog
-                      usage={state.contextUsage}
-                      engine={state.engine ?? 'claude'}
-                      open={panel === 'context'}
-                      onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
-                    />
-                    <UsageDialog
-                      rateLimits={windows}
-                      subscriptionType={state.subscriptionType}
-                      engine={state.engine ?? 'claude'}
-                      totalCostUsd={state.totalCostUsd}
-                      updatedAt={usageUpdatedAt}
-                      open={panel === 'usage'}
-                      onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
-                    />
-                    <McpDialog
-                      client={client}
-                      sessionId={sessionId}
-                      canManageServers={capabilities.mcpServerActions}
-                      open={panel === 'mcp'}
-                      onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
-                    />
-                    <TasksDialog
-                      tasks={tasks}
-                      showCompleted={showCompletedTasks}
-                      onShowCompletedChange={setShowCompletedTasks}
-                      onSelectTask={(task) => {
-                        if (task.toolUseId) {
-                          setTaskReveal({ toolUseId: task.toolUseId, nonce: Date.now() })
-                        }
-                      }}
-                      open={panel === 'tasks'}
-                      onOpenChange={(next) => setPanel(next ? 'tasks' : undefined)}
-                    />
-                    <SkillsDialog
-                      skills={state.skills}
-                      open={panel === 'skills'}
-                      onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
-                      onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
-                    />
-                    <HostFilesDialog
-                      client={client}
-                      cwd={state.cwd}
-                      open={panel === 'files'}
-                      onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
-                    />
-                  </>
-                ) : null}
-              </div>
-            </ToolResultImageProvider>
-          </ToolTitleProvider>
-        </ToolResultFetchProvider>
+                  {!external ? (
+                    <>
+                      <SessionInfoDialog
+                        state={state}
+                        client={client}
+                        sessionId={sessionId}
+                        open={panel === 'info'}
+                        onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
+                      />
+                      <ContextDialog
+                        usage={state.contextUsage}
+                        engine={state.engine ?? 'claude'}
+                        open={panel === 'context'}
+                        onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
+                      />
+                      <UsageDialog
+                        rateLimits={windows}
+                        subscriptionType={state.subscriptionType}
+                        engine={state.engine ?? 'claude'}
+                        totalCostUsd={state.totalCostUsd}
+                        updatedAt={usageUpdatedAt}
+                        open={panel === 'usage'}
+                        onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
+                      />
+                      <McpDialog
+                        client={client}
+                        sessionId={sessionId}
+                        canManageServers={capabilities.mcpServerActions}
+                        open={panel === 'mcp'}
+                        onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
+                      />
+                      <TasksDialog
+                        tasks={tasks}
+                        showCompleted={showCompletedTasks}
+                        onShowCompletedChange={setShowCompletedTasks}
+                        onSelectTask={(task) => {
+                          if (task.toolUseId) {
+                            setTaskReveal({ toolUseId: task.toolUseId, nonce: Date.now() })
+                          }
+                        }}
+                        open={panel === 'tasks'}
+                        onOpenChange={(next) => setPanel(next ? 'tasks' : undefined)}
+                      />
+                      <SkillsDialog
+                        skills={state.skills}
+                        open={panel === 'skills'}
+                        onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
+                        onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
+                      />
+                      <HostFilesDialog
+                        client={client}
+                        cwd={state.cwd}
+                        open={panel === 'files'}
+                        onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
+                      />
+                    </>
+                  ) : null}
+                </div>
+              </ToolResultImageProvider>
+            </ToolTitleProvider>
+          </ToolResultFetchProvider>
+        </FileLinkProvider>
       </TranscriptDensityProvider>
     </TranscriptVariantProvider>
   )

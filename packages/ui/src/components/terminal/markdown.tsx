@@ -1,7 +1,9 @@
 import { memo, type ReactNode } from 'react'
 import { Streamdown, type Components } from 'streamdown'
 import { cn } from '../../lib/utils.ts'
+import { parseFileLink } from '../../lib/file-link.ts'
 import { CopyAction, WithActions } from './affordances.tsx'
+import { useFileLinks } from './file-link.tsx'
 import { Band } from './row.tsx'
 
 function codeText(node: ReactNode): string {
@@ -45,6 +47,34 @@ function heading(tone: 'bright' | 'fg'): Components['h1'] {
   }
 }
 
+// An agent writes a file as a markdown link far more often than it writes a URL, and the link text is
+// its name, not its path: an anchor to a scheme-less href resolves against the host page and leads nowhere.
+function Link({ href, children }: { href?: string; children: ReactNode }) {
+  const links = useFileLinks()
+  const file = links ? parseFileLink(href, links.cwd) : undefined
+  if (file) {
+    return (
+      <button
+        type="button"
+        className="term-link"
+        data-tone="blue"
+        title={file.line === undefined ? file.path : `${file.path}:${file.line}`}
+        onClick={(event) => {
+          event.stopPropagation()
+          links?.open(file.path, file.line)
+        }}
+      >
+        {children}
+      </button>
+    )
+  }
+  return (
+    <a className="term-link" data-tone="blue" href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  )
+}
+
 const TERMINAL_COMPONENTS: Components = {
   p: ({ children }) => <div className="term-block">{children}</div>,
 
@@ -85,11 +115,7 @@ const TERMINAL_COMPONENTS: Components = {
     </strong>
   ),
   em: ({ children }) => <em className="term-em">{children}</em>,
-  a: ({ children, href }) => (
-    <a className="term-link" data-tone="blue" href={href} target="_blank" rel="noreferrer">
-      {children}
-    </a>
-  ),
+  a: ({ children, href }) => <Link href={href}>{children}</Link>,
 
   table: ({ children }) => (
     <div className="term-block term-table-wrap">

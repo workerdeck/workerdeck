@@ -416,6 +416,21 @@
   text-underline-offset: 2px;
 }
 
+/* A link to a file opens through the host rather than the address bar, so it is a button.
+ * Outside `[data-terminal]` too: a cards transcript renders the same markdown. */
+button.term-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* A file path, while the modifier that would open it is held.
  *
  * Only then, and that is the point: a path *is* clickable but only under
