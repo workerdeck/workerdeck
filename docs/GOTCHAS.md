@@ -1202,17 +1202,27 @@ handover wrong.
   because it made the composer engine-dependent.
 - **The merge is one list but not one behaviour, and the row must say which before it is picked.**
   An engine command resolves to a chip (the CLI really parses `/name` out of a message); a skill
-  resolves to plain editable text; a client command resolves to a chip and is intercepted at send.
+  resolves to a `$name` chip followed by its default prompt as editable text; a client command
+  resolves to a chip and is intercepted at send (`requiresArgs` rows to `/name ` text instead).
   Skills carry a `Sparkles` icon and `Skill ·` prefix, client commands a `SlidersHorizontal` icon.
-  The vendored prompt-area's `TriggerConfig.insertAsText` is per-suggestion, letting one dropdown
-  mix chip rows and text rows.
+  The vendored prompt-area's `TriggerConfig.insertAsText` and `chipOptions` are per-suggestion,
+  letting one dropdown mix chip rows, text rows, and chips that serialise with a sigil other than
+  the trigger that opened the menu (`ChipSegment.sigil`, carried as `data-chip-sigil`).
 - **An engine command suppresses a client command of the same name, including via its aliases.**
   Claude's real `/compact` must win over any host imitation; the same client command must still
   appear on codex, which has no engine commands at all.
-- **Picking a skill inserts text; it does not send.** Clients insert `interface.defaultPrompt`
-  where it has one, else `Use the <name> skill:`, never `$name`.
-- **Skill names are never styled in a sent message.** Not syntax any engine parses, unlike `@` and
-  `/`. Swift's `PromptTokens.scan` skips `.skill` outright, pinned by a test.
+- **Picking a skill inserts `$name`; it does not send.** That is codex's own mention token: its
+  system prompt tells the model to use a skill the user names with `$SkillName`, and the runner
+  turns every `$name` matching a listed skill into a `{ type: 'skill', name, path }` item on
+  `turn/start`, which codex core expands into the SKILL.md body deterministically. `skillPrompt`
+  is `$name` plus `interface.defaultPrompt` with the token taken out (a skill with no prompt is
+  the bare `$name `); VS Code inserts that string, the web composer inserts the chip form of it.
+  The runner re-resolves mentions right before `turn/start`, because the first turn's input is
+  built before the connection's own `skills/list` has answered.
+- **`$name` is styled in a sent codex message, but only for a listed skill.** `scanPromptTokens`
+  takes the session's skill names (`Transcript` provides them from `state.skills`), so `$10` is
+  never a badge and a session with no skills never badges. Swift's `PromptTokens.scan` still skips
+  `.skill`, pinned by a test; iOS has not caught up.
 - **Codex has skills and no commands; Claude has commands and no listable skills.** Claude's CLI
   reports skill names on `system_init` and nothing else (no descriptions, scope, or suggested
   prompt), not enough to fill a picker honestly, so `skillsList` is false there. The SDK's

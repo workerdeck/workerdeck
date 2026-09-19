@@ -190,7 +190,10 @@ export type AppServerMcpStatusUpdate = {
   failureReason?: string | null
 }
 
-export type AppServerUserInput = { type: 'text'; text: string } | { type: 'localImage'; path: string }
+export type AppServerUserInput =
+  | { type: 'text'; text: string }
+  | { type: 'localImage'; path: string }
+  | { type: 'skill'; name: string; path: string }
 
 export type AppServerPlanUpdate = {
   threadId: string

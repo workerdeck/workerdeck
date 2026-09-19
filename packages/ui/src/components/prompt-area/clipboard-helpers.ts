@@ -6,8 +6,16 @@
  * clipboard I/O concerns alongside its DOM traversal and chip-accessor helpers.
  */
 import type { Segment, ChipSegment } from './types.ts'
-import { chipNodeToSegment, getChipDisplay, getChipTrigger, getSelectionRange, isChipElement, isHTMLElement } from './dom-helpers.ts'
-import { mergeAdjacentTextSegments } from './prompt-area-engine.ts'
+import {
+  chipNodeToSegment,
+  getChipDisplay,
+  getChipSigil,
+  getChipTrigger,
+  getSelectionRange,
+  isChipElement,
+  isHTMLElement,
+} from './dom-helpers.ts'
+import { chipPlainText, mergeAdjacentTextSegments } from './prompt-area-engine.ts'
 import { getTextLengthInRange } from './cursor-helpers.ts'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -63,7 +71,7 @@ export function serializeFragmentToPlainText(fragment: DocumentFragment): string
       text += value
     },
     onChip: (node) => {
-      text += (getChipTrigger(node) ?? '') + (getChipDisplay(node) ?? '')
+      text += (getChipSigil(node) ?? getChipTrigger(node) ?? '') + (getChipDisplay(node) ?? '')
     },
     onBreak: () => {
       text += '\n'
@@ -129,6 +137,7 @@ export function parseSegmentsFromClipboard(json: string): Segment[] | null {
           trigger: item.trigger,
           value: item.value,
           displayText: item.displayText,
+          ...(typeof item.sigil === 'string' ? { sigil: item.sigil } : {}),
           ...(item.data !== undefined ? { data: item.data } : {}),
           ...(item.autoResolved ? { autoResolved: true } : {}),
         }
@@ -173,7 +182,7 @@ export function insertSegmentsAtCursor(currentSegments: Segment[], pastedSegment
 
   for (const seg of currentSegments) {
     if (seg.type === 'chip') {
-      const chipLen = seg.trigger.length + seg.displayText.length
+      const chipLen = chipPlainText(seg).length
       if (offset >= cursorOffset) {
         insertOnce()
       }

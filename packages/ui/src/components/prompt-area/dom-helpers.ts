@@ -139,6 +139,13 @@ export function getChipData(node: Node): unknown {
   return safeJsonParse(raw)
 }
 
+export function getChipSigil(node: Node): string | undefined {
+  if (!isChipElement(node)) {
+    return undefined
+  }
+  return node.dataset.chipSigil
+}
+
 /**
  * Length of a chip's plain-text representation (`trigger + displayText`).
  *
@@ -148,7 +155,7 @@ export function getChipData(node: Node): unknown {
  * `textContent` for resilience against externally-mutated nodes.
  */
 export function chipNodeTextLength(node: HTMLElement): number {
-  const trigger = node.dataset.chipTrigger ?? ''
+  const trigger = node.dataset.chipSigil ?? node.dataset.chipTrigger ?? ''
   const display = node.dataset.chipDisplay ?? node.textContent ?? ''
   return trigger.length + display.length
 }
@@ -174,6 +181,7 @@ export function chipNodeToSegment(node: Node): ChipSegment | null {
     return null
   }
 
+  const sigil = getChipSigil(node)
   const data = getChipData(node)
   const autoResolved = getChipAutoResolved(node)
 
@@ -182,6 +190,7 @@ export function chipNodeToSegment(node: Node): ChipSegment | null {
     trigger,
     value,
     displayText,
+    ...(sigil !== undefined ? { sigil } : {}),
     ...(data !== undefined ? { data } : {}),
     ...(autoResolved ? { autoResolved: true } : {}),
   }

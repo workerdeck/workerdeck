@@ -18,7 +18,7 @@ import { PromptArea } from '../prompt-area/prompt-area.tsx'
 import { usePromptAreaState } from '../prompt-area/use-prompt-area-state.ts'
 import { plainTextToSegments } from '../prompt-area/prompt-area-engine.ts'
 import { commandTrigger, launchTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
-import { mergeComposerRows, rankComposerRows, skillPrompt, type ClientCommand } from './composer-commands.ts'
+import { mergeComposerRows, rankComposerRows, skillTrailingText, type ClientCommand } from './composer-commands.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
 import type { TerminalAffordances } from '../terminal/affordances.tsx'
 import { PROMPT_GLYPH } from '../terminal/items.tsx'
@@ -140,10 +140,13 @@ export function Composer({
             ),
           insertAsText: (suggestion) => {
             const row = byTag.get(String(suggestion.data))
-            if (row?.kind === 'skill') {
-              return skillPrompt(row.skill)
-            }
             return row?.kind === 'client' && row.command.requiresArgs ? `/${row.name} ` : undefined
+          },
+          // A skill row came off the `/` menu but is codex's `$name` token, so the chip serialises with
+          // that sigil and the default prompt's remainder lands after it as editable text.
+          chipOptions: (suggestion) => {
+            const row = byTag.get(String(suggestion.data))
+            return row?.kind === 'skill' ? { sigil: '$', trailingText: skillTrailingText(row.skill) } : undefined
           },
           onSelect: (suggestion) => suggestion.value,
           chipClassName: 'font-mono',

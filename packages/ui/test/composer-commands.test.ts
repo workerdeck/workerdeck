@@ -6,6 +6,8 @@ import {
   mergeComposerRows,
   rankComposerRows,
   skillPrompt,
+  skillToken,
+  skillTrailingText,
   type ClientCommand,
 } from '../src/components/agent/composer-commands.ts'
 
@@ -110,12 +112,24 @@ describe('matchClientCommand', () => {
 })
 
 describe('skillPrompt', () => {
-  it('uses the skill default prompt, space-terminated', () => {
-    expect(skillPrompt(skill({ defaultPrompt: 'Inspect this PDF' }))).toBe('Inspect this PDF ')
+  it('is the $name token followed by the default prompt, space-terminated', () => {
+    expect(skillPrompt(skill({ defaultPrompt: 'Inspect this PDF' }))).toBe('$pdf Inspect this PDF ')
   })
 
-  it('falls back to prose rather than a dead sigil', () => {
-    expect(skillPrompt(skill({ displayName: 'PDF tools' }))).toBe('Use the PDF tools skill: ')
+  it('falls back to the bare token, never prose, when there is no default prompt', () => {
+    expect(skillPrompt(skill({ displayName: 'PDF tools' }))).toBe('$pdf ')
+  })
+
+  it('does not repeat a token the default prompt already carries', () => {
+    expect(skillPrompt(skill({ defaultPrompt: '$pdf inspect this' }))).toBe('$pdf inspect this ')
+    expect(skillPrompt(skill({ defaultPrompt: 'Run $pdf on  $pdf ' }))).toBe('$pdf Run on ')
+  })
+
+  it('is exactly what the chip and its trailing text serialise to', () => {
+    const s = skill({ defaultPrompt: 'Turn these notes into a document:' })
+    expect(skillToken(s) + skillTrailingText(s)).toBe(skillPrompt(s))
+    expect(skillTrailingText(s)).toBe(' Turn these notes into a document: ')
+    expect(skillTrailingText(skill())).toBe(' ')
   })
 })
 
@@ -136,7 +150,7 @@ describe('composerCommandRows', () => {
         description: undefined,
         scope: 'project',
         enabled: false,
-        insertText: 'Use the pdf skill: ',
+        insertText: '$pdf ',
       },
     ])
   })

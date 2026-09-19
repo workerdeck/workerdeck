@@ -10,6 +10,7 @@ import { subagentItems, terminalBlocks, type ToolCallItem } from '../terminal/bl
 import { taskBrief, taskBusy } from '../terminal/tool-run.ts'
 import { type TranscriptRow } from './transcript-rows.ts'
 import { TranscriptRows } from './TranscriptRows.tsx'
+import { SkillNamesProvider } from './PromptTokenText.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
 import { ROW_GAP, TranscriptVariantProvider, type TranscriptDensity, type TranscriptVariant } from './transcript-variant.tsx'
 
@@ -136,90 +137,93 @@ export function Transcript({
     }
     return [...fold(0, boundary), { key: 'recap' as const, line: recap }, ...fold(boundary, items.length)]
   }, [items, boundary, recap, terminal, brief])
+  const skillNames = useMemo(() => state.skills?.map((skill) => skill.name), [state.skills])
   return (
     <TranscriptVariantProvider value={variant}>
-      <Conversation className={cn(replaying && 'invisible', className)}>
-        <ConversationContent className={cn(terminal && 'gap-0 p-0')}>
-          <TerminalShell active={terminal} fontSize={fontSize} lineHeight={lineHeight} affordances={affordances}>
-            {frame ? (
-              frameTask === undefined && !replaying ? (
-                <div className={cn(terminal ? 'term-row text-fg-4' : 'p-4 text-body-sm text-fg-4')}>
-                  This sub-agent's work is not in this transcript.
-                </div>
-              ) : null
-            ) : items.length === 0 && state.status !== 'starting' ? (
-              emptyState !== undefined ? (
-                emptyState
-              ) : (
-                <SessionEmptyState
-                  cwd={state.cwd}
-                  hasCommands={!!state.commands?.length}
-                  hasSkills={!!state.skills?.some((s) => s.enabled)}
-                  canBrowseFiles={canBrowseFiles}
-                />
-              )
-            ) : null}
-            {frame && frameTask === undefined && !replaying ? null : (
-              <TranscriptRows
-                rows={rows}
-                boundary={boundary}
-                since={catchUp?.since}
-                terminal={terminal}
-                replaying={replaying}
-                stickyPrompt={!frame && stickyPrompt}
-                gap={gap}
-                fontSize={fontSize}
-                lineHeight={lineHeight}
-                items={items}
-                pendingApprovals={state.pendingApprovals}
-                scrubber={scrubber}
-                bookmarks={frame ? undefined : bookmarks}
-                affordances={affordances}
-                fileUrl={fileUrl}
-                attachmentUrl={attachmentUrl}
-                hostImage={hostImage}
-                jumpToRecapRef={jumpToRecapRef}
-                repinRef={repinRef}
-                reveal={frame ? undefined : reveal}
-                frameParentId={frame?.parentToolUseId}
-                onOpenSubagent={frame ? undefined : onOpenSubagent}
-              />
-            )}
-            {(frame ? frameTask !== undefined && taskBusy(frameTask, items) : showLoader(state)) ? (
-              terminal ? (
-                <>
-                  {state.items.length > 0 ? <div className="term-blank" aria-hidden /> : null}
-                  <WorkingRow
-                    label={state.status === 'starting' ? 'Starting…' : 'Working…'}
-                    startedAt={runStartedAt}
-                    tokens={state.contextUsage?.totalTokens}
+      <SkillNamesProvider names={skillNames}>
+        <Conversation className={cn(replaying && 'invisible', className)}>
+          <ConversationContent className={cn(terminal && 'gap-0 p-0')}>
+            <TerminalShell active={terminal} fontSize={fontSize} lineHeight={lineHeight} affordances={affordances}>
+              {frame ? (
+                frameTask === undefined && !replaying ? (
+                  <div className={cn(terminal ? 'term-row text-fg-4' : 'p-4 text-body-sm text-fg-4')}>
+                    This sub-agent's work is not in this transcript.
+                  </div>
+                ) : null
+              ) : items.length === 0 && state.status !== 'starting' ? (
+                emptyState !== undefined ? (
+                  emptyState
+                ) : (
+                  <SessionEmptyState
+                    cwd={state.cwd}
+                    hasCommands={!!state.commands?.length}
+                    hasSkills={!!state.skills?.some((s) => s.enabled)}
+                    canBrowseFiles={canBrowseFiles}
                   />
-                </>
-              ) : (
-                <Loader label={state.status === 'starting' ? 'Starting session…' : undefined} />
-              )
-            ) : null}
-          </TerminalShell>
-        </ConversationContent>
-        <ConversationScrollButton />
-        {replaying ? (
-          <div
-            data-slot="transcript-hold"
-            aria-hidden
-            className="wd-hold-appear visible pointer-events-none absolute inset-0 overflow-hidden"
-          >
-            <div className={cn('mx-auto w-full max-w-[var(--wd-transcript-max-width)]', !terminal && 'px-4 py-4')}>
-              {terminal ? (
-                <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} affordances={false} bleed="1ch" className="term-transcript">
-                  <WorkingRow label="Loading…" />
-                </TerminalSurface>
-              ) : (
-                <Loader label="Loading session…" />
+                )
+              ) : null}
+              {frame && frameTask === undefined && !replaying ? null : (
+                <TranscriptRows
+                  rows={rows}
+                  boundary={boundary}
+                  since={catchUp?.since}
+                  terminal={terminal}
+                  replaying={replaying}
+                  stickyPrompt={!frame && stickyPrompt}
+                  gap={gap}
+                  fontSize={fontSize}
+                  lineHeight={lineHeight}
+                  items={items}
+                  pendingApprovals={state.pendingApprovals}
+                  scrubber={scrubber}
+                  bookmarks={frame ? undefined : bookmarks}
+                  affordances={affordances}
+                  fileUrl={fileUrl}
+                  attachmentUrl={attachmentUrl}
+                  hostImage={hostImage}
+                  jumpToRecapRef={jumpToRecapRef}
+                  repinRef={repinRef}
+                  reveal={frame ? undefined : reveal}
+                  frameParentId={frame?.parentToolUseId}
+                  onOpenSubagent={frame ? undefined : onOpenSubagent}
+                />
               )}
+              {(frame ? frameTask !== undefined && taskBusy(frameTask, items) : showLoader(state)) ? (
+                terminal ? (
+                  <>
+                    {state.items.length > 0 ? <div className="term-blank" aria-hidden /> : null}
+                    <WorkingRow
+                      label={state.status === 'starting' ? 'Starting…' : 'Working…'}
+                      startedAt={runStartedAt}
+                      tokens={state.contextUsage?.totalTokens}
+                    />
+                  </>
+                ) : (
+                  <Loader label={state.status === 'starting' ? 'Starting session…' : undefined} />
+                )
+              ) : null}
+            </TerminalShell>
+          </ConversationContent>
+          <ConversationScrollButton />
+          {replaying ? (
+            <div
+              data-slot="transcript-hold"
+              aria-hidden
+              className="wd-hold-appear visible pointer-events-none absolute inset-0 overflow-hidden"
+            >
+              <div className={cn('mx-auto w-full max-w-[var(--wd-transcript-max-width)]', !terminal && 'px-4 py-4')}>
+                {terminal ? (
+                  <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} affordances={false} bleed="1ch" className="term-transcript">
+                    <WorkingRow label="Loading…" />
+                  </TerminalSurface>
+                ) : (
+                  <Loader label="Loading session…" />
+                )}
+              </div>
             </div>
-          </div>
-        ) : null}
-      </Conversation>
+          ) : null}
+        </Conversation>
+      </SkillNamesProvider>
     </TranscriptVariantProvider>
   )
 }

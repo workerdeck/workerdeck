@@ -7,8 +7,15 @@ import type { Segment, ChipSegment, TriggerConfig, TriggerPosition, ActiveTrigge
 // Serialization
 
 /**
+ * A chip's plain-text form: `{sigil ?? trigger}{displayText}` (e.g., "@Alice").
+ */
+export function chipPlainText(seg: ChipSegment): string {
+  return `${seg.sigil ?? seg.trigger}${seg.displayText}`
+}
+
+/**
  * Converts an array of segments to a plain text string.
- * Chips are represented as `{trigger}{displayText}` (e.g., "@Alice").
+ * Chips are represented by {@link chipPlainText}.
  */
 export function segmentsToPlainText(segments: Segment[]): string {
   return segments
@@ -16,7 +23,7 @@ export function segmentsToPlainText(segments: Segment[]): string {
       if (seg.type === 'text') {
         return seg.text
       }
-      return `${seg.trigger}${seg.displayText}`
+      return chipPlainText(seg)
     })
     .join('')
 }
@@ -45,7 +52,7 @@ export function truncateSegmentsToLength(segments: Segment[], maxLength: number)
   const result: Segment[] = []
   let length = 0
   for (const seg of segments) {
-    const segLength = seg.type === 'text' ? seg.text.length : seg.trigger.length + seg.displayText.length
+    const segLength = seg.type === 'text' ? seg.text.length : chipPlainText(seg).length
     if (length + segLength <= maxLength) {
       result.push(seg)
       length += segLength
@@ -195,7 +202,8 @@ export function detectActiveTrigger(text: string, cursorPos: number, triggers: T
 export function resolveChip(
   segments: Segment[],
   activeTrigger: ActiveTrigger,
-  chip: { value: string; displayText: string; data?: unknown; autoResolved?: boolean },
+  chip: { value: string; displayText: string; sigil?: string; data?: unknown; autoResolved?: boolean },
+  trailingText = ' ',
 ): { segments: Segment[]; cursorOffset: number } {
   const triggerStart = activeTrigger.startOffset
   const triggerEnd = triggerStart + 1 + activeTrigger.query.length // +1 for trigger char
@@ -205,7 +213,7 @@ export function resolveChip(
 
   for (const seg of segments) {
     if (seg.type === 'chip') {
-      const chipText = `${seg.trigger}${seg.displayText}`
+      const chipText = chipPlainText(seg)
       const chipStart = offset
       const chipEnd = offset + chipText.length
 
@@ -239,16 +247,17 @@ export function resolveChip(
           trigger: activeTrigger.config.char,
           value: chip.value,
           displayText: chip.displayText,
+          ...(chip.sigil !== undefined ? { sigil: chip.sigil } : {}),
           ...(chip.data !== undefined ? { data: chip.data } : {}),
           ...(chip.autoResolved ? { autoResolved: true } : {}),
         }
         newSegments.push(newChip)
 
-        // Add trailing space after chip, then any remaining text
+        // Add the trailing text (a space by default) after the chip, then any remaining text
         if (afterText) {
-          newSegments.push({ type: 'text', text: ' ' + afterText.replace(/^\s/, '') })
+          newSegments.push({ type: 'text', text: trailingText + afterText.replace(/^\s/, '') })
         } else {
-          newSegments.push({ type: 'text', text: ' ' })
+          newSegments.push({ type: 'text', text: trailingText })
         }
       }
 
@@ -266,14 +275,14 @@ export function resolveChip(
     if (seg.type === 'text') {
       runningOffset += seg.text.length
     } else {
-      runningOffset += seg.trigger.length + seg.displayText.length
+      runningOffset += chipPlainText(seg).length
       if (seg.value === chip.value && seg.displayText === chip.displayText && seg.trigger === activeTrigger.config.char) {
         lastChipEndOffset = runningOffset
       }
     }
   }
-  // +1 accounts for the trailing space after the chip
-  const cursorOffset = lastChipEndOffset === -1 ? runningOffset : lastChipEndOffset + 1
+  // The caret lands after the chip and its trailing text
+  const cursorOffset = lastChipEndOffset === -1 ? runningOffset : lastChipEndOffset + trailingText.length
 
   return { segments: merged, cursorOffset }
 }
@@ -302,7 +311,7 @@ export function resolveText(
 
   for (const seg of segments) {
     if (seg.type === 'chip') {
-      const chipEnd = offset + `${seg.trigger}${seg.displayText}`.length
+      const chipEnd = offset + chipPlainText(seg).length
       // A trigger range can never overlap a chip - chips are atomic - so a chip
       // is either wholly before or wholly after, and is kept either way.
       if (chipEnd <= triggerStart || offset >= triggerEnd) {
@@ -377,7 +386,7 @@ export function revertChipAtIndex(segments: Segment[], index: number): { segment
     return null
   }
 
-  const revertedText = `${seg.trigger}${seg.displayText}`
+  const revertedText = chipPlainText(seg)
   const result = [...segments.slice(0, index), { type: 'text' as const, text: revertedText }, ...segments.slice(index + 1)]
   return { segments: mergeAdjacentTextSegments(result), revertedText }
 }
@@ -491,7 +500,7 @@ export function replaceTextRange(segments: Segment[], start: number, end: number
 
   for (const seg of segments) {
     if (seg.type === 'chip') {
-      const chipText = `${seg.trigger}${seg.displayText}`
+      const chipText = chipPlainText(seg)
       const chipStart = offset
       const chipEnd = offset + chipText.length
 

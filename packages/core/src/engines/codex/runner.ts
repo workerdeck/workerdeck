@@ -193,6 +193,32 @@ function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
   }
 }
 
+const SKILL_MENTION = /(^|[^A-Za-z0-9_$-])\$([a-z0-9][a-z0-9-]*)(?![A-Za-z0-9_-])/g
+
+export function withSkillItems(input: readonly AppServerUserInput[], paths: ReadonlyMap<string, string>): AppServerUserInput[] {
+  const present = new Set(input.flatMap((item) => (item.type === 'skill' ? [item.name] : [])))
+  const added: AppServerUserInput[] = []
+  for (const item of input) {
+    if (item.type !== 'text') {
+      continue
+    }
+    for (const match of item.text.matchAll(SKILL_MENTION)) {
+      const name = match[2]!
+      const path = paths.get(name)
+      if (path === undefined || present.has(name)) {
+        continue
+      }
+      present.add(name)
+      added.push({ type: 'skill', name, path })
+    }
+  }
+  return added.length > 0 ? [...input, ...added] : [...input]
+}
+
+function mentionsSkill(input: readonly AppServerUserInput[]): boolean {
+  return input.some((item) => item.type === 'text' && /(^|[^A-Za-z0-9_$-])\$[a-z0-9]/.test(item.text))
+}
+
 function mcpStatusOf(
   authStatus: string | undefined,
   update: { status: string; failureReason?: string } | undefined,
@@ -576,6 +602,7 @@ export class CodexRunner implements Runner {
   #replayingHistory = false
   #skillsFingerprint: string | undefined
   #skillsRefresh: Promise<void> | undefined
+  #skillPaths = new Map<string, string>()
   #producedPaths = new Set<string>()
   #mcpStatus = new Map<string, { status: string; error?: string; failureReason?: string }>()
   #agents = new CodexAgentTracker()
@@ -852,7 +879,7 @@ export class CodexRunner implements Runner {
     if (context) {
       parts.unshift({ type: 'text', text: context })
     }
-    return parts
+    return withSkillItems(parts, this.#skillPaths)
   }
 
   queueLocalCommand(result: LocalCommandResult): void {
@@ -1147,6 +1174,7 @@ export class CodexRunner implements Runner {
         const entries = Array.isArray(result?.data) ? result.data : []
         const seen = new Set<string>()
         const skills: SkillInfo[] = []
+        const paths = new Map<string, string>()
         for (const entry of entries) {
           for (const skill of entry?.skills ?? []) {
             if (typeof skill?.name !== 'string' || seen.has(skill.name)) {
@@ -1154,8 +1182,12 @@ export class CodexRunner implements Runner {
             }
             seen.add(skill.name)
             skills.push(skillInfo(skill))
+            if (typeof skill.path === 'string' && skill.path) {
+              paths.set(skill.name, skill.path)
+            }
           }
         }
+        this.#skillPaths = paths
         skills.sort((a, b) => a.name.localeCompare(b.name))
         const fingerprint = JSON.stringify(skills)
         if (fingerprint === this.#skillsFingerprint) {
@@ -1341,6 +1373,11 @@ export class CodexRunner implements Runner {
     this.#activeTurn = active
     try {
       const connection = await this.#ensureThread()
+      // The first turn's input was built before the connection's own skills/list answered.
+      if (mentionsSkill(turn.input)) {
+        await this.#skillsRefresh
+        turn.input = withSkillItems(turn.input, this.#skillPaths)
+      }
       const params: Record<string, unknown> = {
         threadId: this.#sdkSessionId,
         input: turn.input,

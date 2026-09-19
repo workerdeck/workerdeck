@@ -23,6 +23,12 @@ export type ChipSegment = {
   value: string
   /** The display text shown in the chip */
   displayText: string
+  /**
+   * The character the chip serialises and renders with, when it differs from
+   * `trigger`. The trigger is the menu the chip came from; the sigil is the
+   * token the host parses. Unset, the trigger character is the sigil.
+   */
+  sigil?: string
   /** Optional data payload attached to the chip */
   data?: unknown
   /**
@@ -74,6 +80,11 @@ export type TriggerSuggestion = {
   data?: unknown
 }
 
+export type ChipOptions = {
+  sigil?: string
+  trailingText?: string
+}
+
 /**
  * Configuration for a trigger character.
  */
@@ -113,6 +124,15 @@ export type TriggerConfig = {
    * `onChipAdd` does not fire either.
    */
   insertAsText?: (suggestion: TriggerSuggestion) => string | undefined
+  /**
+   * For 'dropdown' mode: per-suggestion overrides for the chip a selection
+   * resolves to. `sigil` replaces the trigger character in the chip's text and
+   * serialisation (a `/` menu inserting a `$name` token); `trailingText` is
+   * the editable text placed after the chip in place of the default single
+   * space (it is inserted verbatim, so include the leading space). Return
+   * undefined for the plain chip.
+   */
+  chipOptions?: (suggestion: TriggerSuggestion) => ChipOptions | undefined
   /**
    * For 'callback' and 'launch' modes: called when the trigger is activated.
    * Receives the full input text and cursor position. For 'launch' it fires on

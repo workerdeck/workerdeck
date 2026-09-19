@@ -3,6 +3,7 @@ import type { TranscriptItem } from '@workerdeck/react'
 import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
+import { PromptTokenText } from '../agent/PromptTokenText.tsx'
 import { BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
@@ -46,7 +47,7 @@ export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user'
         {item.text
           ? item.text.split('\n').map((line, index) => (
               <Row key={index} glyph={index === 0 ? PROMPT_GLYPH : undefined} glyphTone="dim" tone="fg">
-                {line || ' '}
+                {line ? <PromptTokenText text={line} /> : ' '}
               </Row>
             ))
           : null}

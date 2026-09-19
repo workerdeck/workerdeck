@@ -23,9 +23,21 @@ export function cleanCommandName(name: string): string {
   return name.replace(/\s*\(MCP\)$/i, '')
 }
 
+// Codex's own mention token, which its system prompt names and its runner maps to a skill input item.
+export function skillToken(skill: SkillInfo): string {
+  return `$${skill.name}`
+}
+
+// What follows the `$name` chip as editable text: the default prompt with the token taken out, or
+// nothing. Always space-terminated so typing continues from a clean boundary.
+export function skillTrailingText(skill: SkillInfo): string {
+  const token = skillToken(skill)
+  const rest = (skill.defaultPrompt ?? '').split(token).join(' ').replace(/\s+/g, ' ').trim()
+  return rest ? ` ${rest} ` : ' '
+}
+
 export function skillPrompt(skill: SkillInfo): string {
-  const base = skill.defaultPrompt?.trim() || `Use the ${skill.displayName ?? skill.name} skill:`
-  return /\s$/.test(base) ? base : base + ' '
+  return skillToken(skill) + skillTrailingText(skill)
 }
 
 export function mergeComposerRows(sources: {

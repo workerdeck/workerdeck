@@ -12,6 +12,7 @@ import {
   resolveChip,
   resolveText,
   truncateSegmentsToLength,
+  chipPlainText,
 } from './prompt-area-engine.ts'
 import {
   autoFormatListPrefix,
@@ -223,6 +224,9 @@ export function usePromptArea({
           chip.dataset.chipTrigger = seg.trigger
           chip.dataset.chipValue = seg.value
           chip.dataset.chipDisplay = seg.displayText
+          if (seg.sigil !== undefined) {
+            chip.dataset.chipSigil = seg.sigil
+          }
           if (seg.data !== undefined) {
             const json = safeJsonStringify(seg.data)
             if (json) {
@@ -236,7 +240,7 @@ export function usePromptArea({
           const chipStyle = triggerConfig?.chipStyle ?? 'pill'
           chip.dataset.chipStyle = chipStyle
           chip.className = cn('prompt-area-chip', chipStyle === 'inline' && 'prompt-area-chip--inline', triggerConfig?.chipClassName)
-          chip.textContent = `${seg.trigger}${seg.displayText}`
+          chip.textContent = chipPlainText(seg)
           chip.setAttribute('role', 'button')
           chip.setAttribute('tabindex', '-1')
           editor.appendChild(chip)
@@ -598,10 +602,12 @@ export function usePromptArea({
       }
 
       const displayText = activeTrigger.config.onSelect?.(suggestion) ?? suggestion.label
+      const options = activeTrigger.config.chipOptions?.(suggestion)
 
       const chipData = {
         value: suggestion.value,
         displayText: displayText || suggestion.label,
+        ...(options?.sigil !== undefined ? { sigil: options.sigil } : {}),
         data: suggestion.data,
       }
 
@@ -616,7 +622,7 @@ export function usePromptArea({
         }, 0)
         return
       }
-      const result = resolveChip(segments, activeTrigger, chipData)
+      const result = resolveChip(segments, activeTrigger, chipData, options?.trailingText)
 
       onChange(result.segments)
       renderSegmentsToDOM(result.segments)

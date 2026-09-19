@@ -10,6 +10,7 @@ import {
   revertChipAtIndex,
   replaceTextRange,
   toggleMarkdownWrap,
+  chipPlainText,
 } from './prompt-area-engine.ts'
 import {
   getListContext,
@@ -138,7 +139,7 @@ export function usePromptAreaKeydown({
         if (s.type === 'text') {
           targetOffset += s.text.length
         } else {
-          targetOffset += s.trigger.length + s.displayText.length
+          targetOffset += chipPlainText(s).length
         }
       }
       targetOffset += result.revertedText.length

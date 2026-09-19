@@ -36,4 +36,14 @@ describe('scanPromptTokens', () => {
   it('finds a command anywhere, not only at the front', () => {
     expect(texts('then /verify-content 42')).toEqual(['/verify-content'])
   })
+
+  it('badges a $name only when the session listed that skill', () => {
+    expect(texts('run $pdf on $10 of $unknown')).toEqual([])
+    expect(scanPromptTokens('run $pdf on $10 of $unknown.', { skills: ['pdf', 'unknown'] }).map((t) => [t.kind, t.text])).toEqual([
+      ['skill', '$pdf'],
+      ['skill', '$unknown'],
+    ])
+    expect(scanPromptTokens('($pdf), $pdf!', { skills: ['pdf'] }).map((t) => t.text)).toEqual(['$pdf'])
+    expect(scanPromptTokens('x$pdf $pdfx', { skills: ['pdf'] })).toEqual([])
+  })
 })

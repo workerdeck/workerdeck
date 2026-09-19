@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CodexRunner } from '../src/engines/codex/runner.ts'
+import { CodexRunner, withSkillItems } from '../src/engines/codex/runner.ts'
 import type { Runner } from '../src/runner-interface.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
 
@@ -73,6 +73,43 @@ describe('CodexRunner: skills and MCP servers', () => {
     peer.emit('skills/changed', {})
     await vi.waitFor(() => expect(listCalls).toBeGreaterThanOrEqual(3))
     expect(ofType(events, 'skills')).toHaveLength(2)
+  })
+
+  it('turns a $name mention into a skill input item, even on the first turn', async () => {
+    const peer = scriptedPeer()
+    peer.respond('skills/list', () => ({
+      data: [
+        {
+          cwd: '/tmp/project',
+          skills: [
+            { name: 'imagegen', path: '/home/me/.codex/skills/imagegen/SKILL.md', enabled: true },
+            { name: 'pathless', enabled: true },
+          ],
+        },
+      ],
+    }))
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+
+    const runner = new CodexRunner({ cwd: '/tmp/project', prompt: 'use $imagegen and $pathless here', connectFn: peer.connectFn })
+    collect(runner)
+    await runner.start()
+
+    const started = peer.requests.filter((r) => r.method === 'turn/start')
+    expect(started).toHaveLength(1)
+    expect((started[0]!.params as { input: unknown }).input).toEqual([
+      { type: 'text', text: 'use $imagegen and $pathless here' },
+      { type: 'skill', name: 'imagegen', path: '/home/me/.codex/skills/imagegen/SKILL.md' },
+    ])
+
+    runner.sendMessage('now $imagegen again, $imagegen, and $nothing')
+    await vi.waitFor(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(2))
+    const second = peer.requests.filter((r) => r.method === 'turn/start')[1]!
+    expect((second.params as { input: unknown }).input).toEqual([
+      { type: 'text', text: 'now $imagegen again, $imagegen, and $nothing' },
+      { type: 'skill', name: 'imagegen', path: '/home/me/.codex/skills/imagegen/SKILL.md' },
+    ])
   })
 
   it('lists skills before the first turn, over a connection it then throws away', async () => {
@@ -208,5 +245,46 @@ describe('CodexRunner: skills and MCP servers', () => {
     expect(ofType(events, 'skills')).toHaveLength(0)
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
     expect(runner.status).toBe('idle')
+  })
+})
+
+describe('withSkillItems', () => {
+  const paths = new Map([
+    ['pdf', '/skills/pdf/SKILL.md'],
+    ['pdf-fill', '/skills/pdf-fill/SKILL.md'],
+  ])
+  function names(text: string) {
+    return withSkillItems([{ type: 'text', text }], paths)
+      .filter((item) => item.type === 'skill')
+      .map((item) => (item as { name: string }).name)
+  }
+
+  it('appends one item per distinct mentioned skill, after the text', () => {
+    const input = withSkillItems([{ type: 'text', text: 'run $pdf then $pdf-fill then $pdf' }], paths)
+    expect(input).toEqual([
+      { type: 'text', text: 'run $pdf then $pdf-fill then $pdf' },
+      { type: 'skill', name: 'pdf', path: '/skills/pdf/SKILL.md' },
+      { type: 'skill', name: 'pdf-fill', path: '/skills/pdf-fill/SKILL.md' },
+    ])
+  })
+
+  it('ignores an unknown skill', () => {
+    expect(names('use $foo')).toEqual([])
+  })
+
+  it('does not match a skill that is a prefix or an infix of a longer token', () => {
+    expect(names('$pdfx and $pdf_x and x$pdf and $$pdf and USD$pdf')).toEqual([])
+    expect(names('($pdf) $pdf. $pdf, "$pdf"')).toEqual(['pdf'])
+  })
+
+  it('does not add an item the input already carries', () => {
+    const input = withSkillItems(
+      [
+        { type: 'text', text: '$pdf' },
+        { type: 'skill', name: 'pdf', path: '/elsewhere' },
+      ],
+      paths,
+    )
+    expect(input.filter((item) => item.type === 'skill')).toHaveLength(1)
   })
 })

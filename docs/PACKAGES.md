@@ -388,7 +388,9 @@ server→client ask channels (granular policy under `experimentalApi`, no fallba
 command approval is an *escalation after a sandbox refusal*, see `docs/GOTCHAS.md` §Codex),
 complete child env always - a spawn env *replaces*, never merges; and the `ThreadItem` union in
 `engines/codex/types.ts` must cover what the binary emits, because an unmapped item is
-**invisible**, not merely unstyled), and `AiSdkRunner`
+**invisible**, not merely unstyled; and `skills/list`'s per-skill `path` is kept in a private
+name-to-path map so a `$name` mention in the user text becomes a `{ type: 'skill', name, path }`
+input item on `turn/start`, one per distinct listed skill, the text left in place), and `AiSdkRunner`
 (provider, over AI SDK v7, built by the host's `createEngineRunner` hook - its adapter is a
 pseudo-adapter). The
 **model list clients see is shaped here**, not by each UI: catalogs apply
@@ -873,7 +875,10 @@ widening a scope. It lives in `ui/` rather than in one client because every pane
 empty should be empty the same way - the extension's views and the dashboard's four sidebars are
 the same shape of thing. `SessionPanel` is the
 whole session surface - transcript, composer (attachments; `/` for commands, client commands and
-skills; `@` for files; `!` for shell; `?` for the shortcut list on an empty composer), and the
+skills, a skill resolving to a `$name` chip whose serialisation sigil differs from the `/` that
+opened the menu, via the prompt-area's per-suggestion `chipOptions` and `ChipSegment.sigil`, with
+the default prompt's remainder as editable text after it; `skillPrompt`'s fallback is the bare
+`$name`; `@` for files; `!` for shell; `?` for the shortcut list on an empty composer), and the
 panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
 files) - each gated on the capability record, so one component is correct for every engine.
 `panelSurface: 'external'` hands that dialog surface to the embedder: no dialogs, no `⋯`
