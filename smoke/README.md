@@ -14,6 +14,12 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | APNs push | `pnpm smoke:push <host> [sessionId]` | No, but it rings a real phone |
 | Restart, end to end | `pnpm smoke:restart [claude\|codex] [clear] [noprofile] [swept] [all]` | **Yes, two short turns** |
 
+`smoke:sandbox`, `smoke:codex` and `smoke:restart` report through `smoke/lib/report.ts`: a bold
+`step` heading, green `✓` / red `✗` lines with a dim detail, `!` for a warning that is not a
+failure, and one `N passed, M failed` summary from `finish()`, which owns the exit code (non-zero
+on any `✗`). No script calls `process.exit` itself. `smoke/lib/providers.ts` is the same idea for
+the env-var / default-model / dynamic-import table the live scripts share.
+
 ## `smoke:sandbox`: the untrusted-code boundary
 
 Eight scenarios covering the happy path, two escape attempts, two denial-of-service attempts,

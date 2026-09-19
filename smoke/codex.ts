@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { CodexRunner, connectAppServer, resolveBundledCodexExecutable } from '@workerdeck/core'
 import type { PermissionRequest, SessionEvent } from '@workerdeck/protocol'
+import { fail, finish, ok } from './lib/report.ts'
 
 const MODEL = process.argv.find((a) => !a.startsWith('-') && a.includes('gpt')) ?? 'gpt-5.6-luna'
 const CANARY_ONLY = process.argv.includes('--canary')
@@ -23,14 +24,6 @@ const CLEAR_ONLY = process.argv.includes('--clear')
 const STEER_ONLY = process.argv.includes('--steer')
 
 const execFileP = promisify(execFile)
-let failures = 0
-function pass(name: string, detail: string) {
-  return console.log(`  PASS  ${name}: ${detail}`)
-}
-function fail(name: string, detail: string) {
-  failures += 1
-  console.error(`  FAIL  ${name}: ${detail}`)
-}
 
 const codexBin = resolveBundledCodexExecutable()
 
@@ -125,7 +118,7 @@ async function canaries(): Promise<void> {
 
   const viaOpenai = await probeTurn(scratchEnv({ OPENAI_API_KEY: 'sk-smoke-fake' }))
   if (viaOpenai.includes('Missing bearer')) {
-    pass('OPENAI_API_KEY ignored', 'app-server sent no credential (Missing bearer)')
+    ok('OPENAI_API_KEY ignored', 'app-server sent no credential (Missing bearer)')
   } else if (viaOpenai.toLowerCase().includes('invalid') && viaOpenai.includes('api')) {
     fail(
       'OPENAI_API_KEY ignored',
@@ -140,7 +133,7 @@ async function canaries(): Promise<void> {
   // `login status` alone.
   const viaCodexKey = await probeTurn(scratchEnv({ CODEX_API_KEY: 'sk-smoke-fake' }))
   if (viaCodexKey.includes('Missing bearer')) {
-    pass('CODEX_API_KEY exec-only', 'app-server sent no credential (Missing bearer)')
+    ok('CODEX_API_KEY exec-only', 'app-server sent no credential (Missing bearer)')
   } else if (viaCodexKey.includes('invalid_api_key') || viaCodexKey.includes('Incorrect API key')) {
     fail(
       'CODEX_API_KEY exec-only',
@@ -161,7 +154,7 @@ async function canaries(): Promise<void> {
       const failed = error as { stdout?: string; stderr?: string }
       const output = `${failed.stdout ?? ''}\n${failed.stderr ?? ''}`
       if (output.includes('Not logged in')) {
-        pass('login status verdict', 'empty home → "Not logged in", exit 1')
+        ok('login status verdict', 'empty home → "Not logged in", exit 1')
       } else {
         fail('login status verdict', `unexpected output: ${output.trim().slice(0, 80)}`)
       }
@@ -179,7 +172,7 @@ async function canaries(): Promise<void> {
         clientInfo: { name: 'workerdeck-smoke', title: 'WorkerDeck smoke', version: 'gates' },
         capabilities: { experimentalApi: true },
       })
-      pass('experimentalApi gate', 'initialize accepted capabilities.experimentalApi: true')
+      ok('experimentalApi gate', 'initialize accepted capabilities.experimentalApi: true')
       connection.notify('initialized')
       try {
         const started = (await connection.request('thread/start', {
@@ -196,7 +189,7 @@ async function canaries(): Promise<void> {
           },
         })) as { thread?: { id?: string } }
         if (typeof started?.thread?.id === 'string') {
-          pass('granular approvalPolicy gate', 'thread/start accepted the granular object')
+          ok('granular approvalPolicy gate', 'thread/start accepted the granular object')
         } else {
           fail('granular approvalPolicy gate', 'thread/start answered without a thread id')
         }
@@ -210,7 +203,7 @@ async function canaries(): Promise<void> {
         const listed = (await connection.request('skills/list', {})) as {
           data?: Array<{
             cwd?: string
-            skills?: Array<{ name?: unknown; enabled?: unknown; interface?: unknown }>
+            skills?: Array<{ name?: unknown; enabled?: unknown; interface?: unknown; path?: unknown }>
             errors?: unknown[]
           }>
         }
@@ -231,17 +224,22 @@ async function canaries(): Promise<void> {
             const wrongInterface = skills.find(
               (s) => s.interface !== undefined && (typeof s.interface !== 'object' || s.interface === null),
             )
+            const wrongPath = skills.find((s) => s.path !== undefined && typeof s.path !== 'string')
             if (wrongEnabled) {
               fail('skills/list shape', '`enabled` is not a boolean')
             } else if (wrongInterface) {
               fail('skills/list shape', '`interface` is not an object')
+            } else if (wrongPath) {
+              fail('skills/list shape', '`path` is not a string; the runner maps `$name` mentions to skill input items through it')
             } else {
               const withPrompt = skills.filter(
                 (s) => typeof (s.interface as { defaultPrompt?: unknown })?.defaultPrompt === 'string',
               ).length
-              pass(
+              const withPath = skills.filter((s) => typeof s.path === 'string').length
+              ok(
                 'skills/list shape',
-                `${skills.length} skill(s) across ${entries.length} cwd(s), ` + `${withPrompt} carrying interface.defaultPrompt`,
+                `${skills.length} skill(s) across ${entries.length} cwd(s), ` +
+                  `${withPrompt} carrying interface.defaultPrompt, ${withPath} carrying path`,
               )
             }
           }
@@ -270,14 +268,14 @@ async function canaries(): Promise<void> {
           )
         } else if (block === null) {
           // Nothing configured in this scratch home: the key's presence is the contract, not its value.
-          pass('config/read sandbox_workspace_write', 'key present, null (nothing configured)')
+          ok('config/read sandbox_workspace_write', 'key present, null (nothing configured)')
         } else {
           const keys = ['writable_roots', 'network_access', 'exclude_tmpdir_env_var', 'exclude_slash_tmp']
           const missing = keys.filter((k) => !(k in block))
           if (missing.length) {
             fail('config/read sandbox_workspace_write', `block is missing ${missing.join(', ')}: the restated policy would default them`)
           } else {
-            pass('config/read sandbox_workspace_write', `all four fields present`)
+            ok('config/read sandbox_workspace_write', `all four fields present`)
           }
         }
       } catch (error) {
@@ -381,7 +379,7 @@ async function threadItemUnionCanary(): Promise<void> {
       return
     }
     const unmapped = variants.filter((name) => !MAPPED.has(name))
-    pass(
+    ok(
       'ThreadItem union',
       `${variants.length} variants, none new` + (unmapped.length > 0 ? ` · ${unmapped.length} unmapped: ${unmapped.join(', ')}` : ''),
     )
@@ -435,7 +433,7 @@ async function steerScenario(cwd: string): Promise<void> {
 
     const results = turnResults(steer.events)
     if (results.length === 1) {
-      pass('steer stays in one turn', 'the mid-turn message did not start a second turn')
+      ok('steer stays in one turn', 'the mid-turn message did not start a second turn')
     } else {
       fail(
         'steer stays in one turn',
@@ -444,14 +442,14 @@ async function steerScenario(cwd: string): Promise<void> {
     }
     const answer = results.map((r) => r.result ?? '').join('\n')
     if (answer.includes(MARKER)) {
-      pass('steer reached the model', `the running turn's answer carries ${MARKER}`)
+      ok('steer reached the model', `the running turn's answer carries ${MARKER}`)
     } else {
       fail('steer reached the model', `no ${MARKER} in the answer: ${answer.slice(0, 160) || '(empty)'}`)
     }
     if (!answer.includes('phase-one')) {
       fail('steer did not derail the turn', 'the original command output is missing from the answer')
     } else {
-      pass('steer did not derail the turn', 'the original task still completed')
+      ok('steer did not derail the turn', 'the original task still completed')
     }
   } finally {
     steer.runner.close()
@@ -505,12 +503,12 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
   if (newThread && newThread !== clearedThread) {
     // The LAST octet, not the first: codex thread ids are time-ordered, so two threads started a minute apart share
     // a long prefix and `slice(0, 8)` renders a genuine change as no change at all.
-    pass('clear starts a new thread', `…${clearedThread.slice(-8)} → …${newThread.slice(-8)}`)
+    ok('clear starts a new thread', `…${clearedThread.slice(-8)} → …${newThread.slice(-8)}`)
   } else {
     fail('clear starts a new thread', newThread ? 'the thread id did not change: this was a resume, not a start' : 'no new thread id')
   }
   if (clearRun.runner.info().contextUsage === undefined) {
-    pass('the reading is retired', 'contextUsage is absent, so the ring goes blank rather than 0%')
+    ok('the reading is retired', 'contextUsage is absent, so the ring goes blank rather than 0%')
   } else {
     fail('the reading is retired', `contextUsage survived the reset: ${JSON.stringify(clearRun.runner.info().contextUsage)}`)
   }
@@ -522,7 +520,7 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
   const afterClear = turnResults(clearRun.events)[1]
   const recalled = afterClear?.result?.includes(CODEWORD) ?? false
   if (afterClear?.subtype === 'success' && !recalled) {
-    pass('the model context is really empty', `it answered ${JSON.stringify(afterClear.result?.trim().slice(0, 40))}`)
+    ok('the model context is really empty', `it answered ${JSON.stringify(afterClear.result?.trim().slice(0, 40))}`)
   } else {
     fail(
       'the model context is really empty',
@@ -541,7 +539,7 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
         `(both ≈ the fresh-thread baseline; the reading is a floor, not a witness)\u001b[0m`,
     )
     if (growth <= 0.2) {
-      pass('the window did not carry over', `${Math.round(growth * 100)}% change across the clear`)
+      ok('the window did not carry over', `${Math.round(growth * 100)}% change across the clear`)
     } else {
       fail(
         'the window did not carry over',
@@ -559,7 +557,7 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
     await resumedNew.runner.start()
     const history = userTexts(resumedNew.events)
     if (!history.includes(CODEWORD) && history.includes('What codeword did I ask you')) {
-      pass('the new thread is resumable, and clean', 'its history starts after the clear')
+      ok('the new thread is resumable, and clean', 'its history starts after the clear')
     } else {
       fail(
         'the new thread is resumable, and clean',
@@ -572,7 +570,7 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
   open.push(resumedOld.runner)
   await resumedOld.runner.start()
   if (userTexts(resumedOld.events).includes(CODEWORD)) {
-    pass('the cleared thread is NOT deleted', 'it is still in CODEX_HOME and still resumable')
+    ok('the cleared thread is NOT deleted', 'it is still in CODEX_HOME and still resumable')
   } else {
     fail('the cleared thread is NOT deleted', 'resuming the pre-clear thread replayed no history')
   }
@@ -620,7 +618,7 @@ async function paid(): Promise<void> {
         e.message.content.some((b) => b.type === 'tool_use' && (b as { name?: string }).name === 'CodexCommand'),
     )
     if (commandUse) {
-      pass('command execution', 'CodexCommand tool_use emitted for the echo')
+      ok('command execution', 'CodexCommand tool_use emitted for the echo')
     } else {
       fail('command execution', 'no CodexCommand tool_use in the transcript')
     }
@@ -628,7 +626,7 @@ async function paid(): Promise<void> {
       (e) => e.type === 'user_message' && Array.isArray(e.message.content) && JSON.stringify(e.message.content).includes('codex-smoke-ok'),
     )
     if (echoed) {
-      pass('command output', 'tool_result carries the echoed marker')
+      ok('command output', 'tool_result carries the echoed marker')
     } else {
       fail('command output', 'echo output did not reach a tool_result')
     }
@@ -641,7 +639,7 @@ async function paid(): Promise<void> {
       .filter((d) => d?.type === 'text_delta')
       .map((d) => d!.text ?? '')
     if (textDeltas.length >= 2) {
-      pass('token streaming', `${textDeltas.length} text deltas for one answer`)
+      ok('token streaming', `${textDeltas.length} text deltas for one answer`)
     } else if (textDeltas.length === 1) {
       fail('token streaming', 'the whole answer arrived as ONE delta: check item/agentMessage/delta')
     } else {
@@ -683,7 +681,7 @@ async function paid(): Promise<void> {
       pending = ''
     }
     if (matched > 0 && mismatches.length === 0) {
-      pass('delta/final agreement', `${matched} message(s) reconstructed exactly from their deltas`)
+      ok('delta/final agreement', `${matched} message(s) reconstructed exactly from their deltas`)
     } else if (mismatches.length > 0) {
       fail('delta/final agreement', mismatches[0]!)
     } else {
@@ -697,12 +695,12 @@ async function paid(): Promise<void> {
       fail('usage', 'turn_result carried no usage: tokenUsage/updated never arrived')
     } else {
       if (usage.output_tokens! > 0) {
-        pass('usage', `nonzero output (${usage.output_tokens})`)
+        ok('usage', `nonzero output (${usage.output_tokens})`)
       } else {
         fail('usage', 'zero output tokens')
       }
       if (usage.input_tokens! >= 0 && usage.cache_read_input_tokens! >= 0) {
-        pass(
+        ok(
           'usage relation',
           `input(excl. cache)=${usage.input_tokens} cacheRead=${usage.cache_read_input_tokens} ` +
             '(a negative input would have been clamped; see the resume turn for the cache-heavy case)',
@@ -724,7 +722,7 @@ async function paid(): Promise<void> {
     await resumed.runner.start()
     const [turn2] = turnResults(resumed.events)
     if (turn2?.subtype === 'success' && turn2.result?.includes('codex-smoke-ok')) {
-      pass('resume', 'turn 2 recalled turn 1 through thread/resume')
+      ok('resume', 'turn 2 recalled turn 1 through thread/resume')
     } else {
       fail('resume', `turn 2: ${turn2?.result ?? turn2?.errors?.join('; ') ?? 'no result'}`)
     }
@@ -739,7 +737,7 @@ async function paid(): Promise<void> {
             'inputTokens may NOT include cached; re-check the subtraction in #finishTurn',
         )
       } else {
-        pass(
+        ok(
           'usage relation (cache-heavy)',
           `resume turn: input(excl. cache)=${u2.input_tokens} cacheRead=${u2.cache_read_input_tokens}, subtraction holds`,
         )
@@ -758,7 +756,7 @@ async function paid(): Promise<void> {
     await spinRun
     const [spinResult] = turnResults(spinner.events)
     if (spinResult?.errors?.includes('interrupted')) {
-      pass('interrupt', 'aborted turn landed as error_during_execution [interrupted]')
+      ok('interrupt', 'aborted turn landed as error_during_execution [interrupted]')
     } else {
       fail('interrupt', `unexpected result: ${JSON.stringify(spinResult?.errors ?? spinResult?.subtype)}`)
     }
@@ -771,7 +769,7 @@ async function paid(): Promise<void> {
     await afterInterrupt.runner.start()
     const [aliveResult] = turnResults(afterInterrupt.events)
     if (aliveResult?.subtype === 'success' && /alive/i.test(aliveResult.result ?? '')) {
-      pass('post-interrupt resume', 'the thread stayed resumable after an interrupted turn')
+      ok('post-interrupt resume', 'the thread stayed resumable after an interrupted turn')
     } else {
       fail('post-interrupt resume', `resume after interrupt: ${aliveResult?.result ?? aliveResult?.errors?.join('; ') ?? 'nothing'}`)
     }
@@ -800,7 +798,7 @@ async function paid(): Promise<void> {
     await readonly.runner.start()
     clearTimeout(readonlyTimeout)
     if (approvals.length > 0) {
-      pass('sandbox escalation asks', `permission_requested (${approvals[0]!.toolName}): "${approvals[0]!.title ?? ''}"`)
+      ok('sandbox escalation asks', `permission_requested (${approvals[0]!.toolName}): "${approvals[0]!.title ?? ''}"`)
     } else {
       fail(
         'sandbox escalation asks',
@@ -809,13 +807,13 @@ async function paid(): Promise<void> {
     }
     const wrote = existsSync(join(cwd, 'smoke-write-test.txt'))
     if (!wrote) {
-      pass('denied escalation stays denied', 'the write never landed')
+      ok('denied escalation stays denied', 'the write never landed')
     } else {
       fail('denied escalation stays denied', 'the file exists, so a decline still let the write through')
     }
     const [readonlyResult] = turnResults(readonly.events)
     if (readonlyResult?.subtype === 'success') {
-      pass('decline keeps the turn alive', 'the turn completed after the deny')
+      ok('decline keeps the turn alive', 'the turn completed after the deny')
     } else {
       fail(
         'decline keeps the turn alive',
@@ -843,7 +841,7 @@ async function paid(): Promise<void> {
     })
     const [visionResult] = turnResults(vision.events)
     if (visionResult?.subtype === 'success' && /red/i.test(visionResult.result ?? '')) {
-      pass('image attachment', `the model saw the red pixel ("${visionResult.result?.trim()}")`)
+      ok('image attachment', `the model saw the red pixel ("${visionResult.result?.trim()}")`)
     } else {
       fail('image attachment', `answer: ${visionResult?.result ?? visionResult?.errors?.join('; ') ?? 'none'} (expected red)`)
     }
@@ -862,8 +860,4 @@ await canaries()
 if (!CANARY_ONLY) {
   await paid()
 }
-if (failures > 0) {
-  console.error(`\n${failures} check(s) failed`)
-  process.exit(1)
-}
-console.log('\nall checks passed')
+finish()

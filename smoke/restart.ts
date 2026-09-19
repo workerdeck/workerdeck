@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import WebSocket from 'ws'
 import type { ServerFrame, SessionEvent, SessionInfo } from '@workerdeck/protocol'
+import { fail, finish, note, ok, step, warn } from './lib/report.ts'
 
 const [engineArg = 'claude', ...extras] = process.argv.slice(2)
 const engine = engineArg === 'codex' ? 'codex' : 'claude'
@@ -36,19 +37,6 @@ const configPath = join(root, 'gateway.config.mjs')
 
 mkdirSync(workDir, { recursive: true })
 
-let pass = 0
-let fail = 0
-function ok(what: string, detail = '') {
-  pass++
-  console.log(`  [32m✓[0m ${what}${detail ? ` [2m${detail}[0m` : ''}`)
-}
-function bad(what: string, detail = '') {
-  fail++
-  console.log(`  [31m✗[0m ${what}${detail ? ` [2m${detail}[0m` : ''}`)
-}
-function step(what: string) {
-  return console.log(`\n[1m${what}[0m`)
-}
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
@@ -220,11 +208,11 @@ async function waitForRecord(id: string, timeoutMs: number): Promise<boolean> {
   for (;;) {
     const names = existsSync(dir) ? readdirSync(dir) : []
     if (names.some((n) => n.startsWith(id) && n.endsWith('.json'))) {
-      console.log(`  \u001b[2m- dormant record on disk\u001b[0m`)
+      note('dormant record on disk')
       return true
     }
     if (Date.now() > deadline) {
-      console.log(`  \u001b[33m!\u001b[0m no dormant record after ${timeoutMs / 1000}s - expect the row to vanish`)
+      warn(`no dormant record after ${timeoutMs / 1000}s - expect the row to vanish`)
       return false
     }
     await sleep(250)
@@ -250,7 +238,7 @@ async function main(): Promise<void> {
   if (first.text) {
     ok('the engine answered a turn', JSON.stringify(first.text.slice(0, 40)))
   } else {
-    bad('the engine answered a turn', 'no assistant text - is the profile logged in?')
+    fail('the engine answered a turn', 'no assistant text - is the profile logged in?')
   }
 
   step('2. ctrl-c, and back')
@@ -266,13 +254,13 @@ async function main(): Promise<void> {
   const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
   const row = listed.sessions.find((s) => s.id === id)
   if (!row) {
-    bad('the session is still listed', 'the row is gone entirely')
+    fail('the session is still listed', 'the row is gone entirely')
   } else {
     ok('the session is still listed')
     if (row.status === 'idle') {
       ok('it reads idle', row.status)
     } else {
-      bad('it reads idle', `reads ${row.status}`)
+      fail('it reads idle', `reads ${row.status}`)
     }
   }
 
@@ -286,13 +274,13 @@ async function main(): Promise<void> {
   if (priorPrompt) {
     ok('history arrived as replay', `${second.replayed} events before this turn`)
   } else {
-    bad('history arrived as replay', 'the pre-restart prompt was not replayed')
+    fail('history arrived as replay', 'the pre-restart prompt was not replayed')
   }
 
   if (second.text.toUpperCase().includes(WORD)) {
     ok('the engine resumed the SAME thread', JSON.stringify(second.text.slice(0, 40)))
   } else {
-    bad('the engine resumed the SAME thread', `expected ${WORD}, got ${JSON.stringify(second.text.slice(0, 60))}`)
+    fail('the engine resumed the SAME thread', `expected ${WORD}, got ${JSON.stringify(second.text.slice(0, 60))}`)
   }
 
   // Order matters: `clear` needs a real, current dormant record and both destructive variants below leave it
@@ -324,7 +312,7 @@ async function sweptStore(id: string): Promise<void> {
   const slug = realpathSync(workDir).replace(/[/.]/g, '-')
   const dir = join(process.env.HOME ?? '', '.claude', 'projects', slug)
   if (!existsSync(dir)) {
-    bad('found the engine store to sweep', `no ${dir}`)
+    fail('found the engine store to sweep', `no ${dir}`)
     return
   }
   const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
@@ -338,7 +326,7 @@ async function sweptStore(id: string): Promise<void> {
   if (listed.sessions.some((s) => s.id === id)) {
     ok('the record deliberately stays')
   } else {
-    bad('the record deliberately stays', 'the row removed itself')
+    fail('the record deliberately stays', 'the row removed itself')
   }
 
   // The gateway's event log lives in its own record, so the transcript replays either way and only a turn can say
@@ -350,7 +338,7 @@ async function sweptStore(id: string): Promise<void> {
   console.log(`  [2m- attach succeeded; history replayed: ${replayedHistory}[0m`)
   console.log(`  [2m- the engine's answer: ${JSON.stringify(after.text.slice(0, 60))}[0m`)
   if (after.text.toUpperCase().includes(WORD)) {
-    console.log(`  [33m![0m the engine still recalled the word - the CLI rebuilt the thread from somewhere`)
+    warn('the engine still recalled the word - the CLI rebuilt the thread from somewhere')
   } else {
     ok('the engine thread is gone (the word is not recalled)')
   }
@@ -366,10 +354,7 @@ async function sweptStore(id: string): Promise<void> {
 async function clearNoChild(id: string): Promise<void> {
   step('5. A clear with no live child, across a restart')
   if (engine !== 'codex') {
-    console.log(
-      '  \u001b[2m- skipped: only codex can be cleared with its child dead ' +
-        "(claude's reset comes back from the CLI, which needs one)\u001b[0m",
-    )
+    note("skipped: only codex can be cleared with its child dead (claude's reset comes back from the CLI, which needs one)")
     return
   }
   const recordPath = () => {
@@ -379,7 +364,7 @@ async function clearNoChild(id: string): Promise<void> {
     return name ? join(dir, name) : undefined
   }
   if (!recordPath()) {
-    bad('a dormant record to invalidate', 'none on disk - nothing for the clear to get wrong')
+    fail('a dormant record to invalidate', 'none on disk - nothing for the clear to get wrong')
     return
   }
   ok('a dormant record exists, naming the conversation about to be cleared')
@@ -402,7 +387,7 @@ async function clearNoChild(id: string): Promise<void> {
   if (pids.length > 0) {
     ok('the codex child killed', `pid ${pids.join(', ')}`)
   } else {
-    bad('the codex child killed', 'the gateway had no child process to kill')
+    fail('the codex child killed', 'the gateway had no child process to kill')
   }
   await sleep(1_000)
 
@@ -410,7 +395,7 @@ async function clearNoChild(id: string): Promise<void> {
   if (reset) {
     ok('the clear landed with no child', 'conversation_reset emitted')
   } else {
-    bad('the clear landed with no child', 'no conversation_reset within 20s')
+    fail('the clear landed with no child', 'no conversation_reset within 20s')
   }
 
   // Give the (asynchronous, queued) store delete a moment to land.
@@ -418,7 +403,7 @@ async function clearNoChild(id: string): Promise<void> {
   if (!recordPath()) {
     ok('the stale dormant record is gone', 'it named the cleared conversation')
   } else {
-    bad('the stale dormant record is gone', 'it survived, still naming the cleared thread')
+    fail('the stale dormant record is gone', 'it survived, still naming the cleared thread')
   }
 
   await stopGateway()
@@ -429,11 +414,11 @@ async function clearNoChild(id: string): Promise<void> {
     ok('the cleared session is NOT resurrected', 'the row is gone - for codex the dormant record is the way back, and the clear removed it')
     return
   }
-  console.log(`  \u001b[2m- the row came back (status ${row.status}); checking it came back empty\u001b[0m`)
+  note(`the row came back (status ${row.status}); checking it came back empty`)
   const after = await attach(id, undefined, 8_000)
   const priorPrompt = after.events.some((e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'))
   if (priorPrompt) {
-    bad('the cleared session is NOT resurrected', 'the pre-clear conversation replayed')
+    fail('the cleared session is NOT resurrected', 'the pre-clear conversation replayed')
   } else {
     ok('the cleared session is NOT resurrected', 'it came back with none of the cleared history')
   }
@@ -480,12 +465,12 @@ async function deletedProfile(id: string): Promise<void> {
   if (listed.sessions.some((s) => s.id === id)) {
     ok('the row stays')
   } else {
-    bad('the row stays', 'the row vanished')
+    fail('the row stays', 'the row vanished')
   }
 
   try {
     await attach(id, undefined, 8_000)
-    bad('the attach fails with unknown profile', 'it attached anyway')
+    fail('the attach fails with unknown profile', 'it attached anyway')
   } catch {
     ok('the attach fails, as it must')
   }
@@ -494,12 +479,10 @@ async function deletedProfile(id: string): Promise<void> {
 
 main()
   .catch((error) => {
-    fail++
-    console.error(`\n[31mfatal[0m ${(error as Error).message}`)
+    fail('fatal', (error as Error).message)
   })
   .finally(async () => {
     await stopGateway()
     rmSync(root, { recursive: true, force: true })
-    console.log(`\n${pass} passed, ${fail} failed\n`)
-    process.exit(fail === 0 ? 0 : 1)
+    finish()
   })

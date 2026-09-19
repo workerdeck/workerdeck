@@ -4,7 +4,7 @@
 //
 //   node scripts/dev-host.mjs [folder-to-open]   # defaults to the repo root
 //
-// `pnpm install:local` is a different thing: it packages a .vsix into the editor you are reading
+// `pnpm install:vscode` is a different thing: it packages a .vsix into the editor you are reading
 // this in, and needs a manual "Developer: Reload Window".
 import { spawn, spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'

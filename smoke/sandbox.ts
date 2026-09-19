@@ -2,10 +2,9 @@
 // pnpm smoke:sandbox 'vfs.list("/")'    # your own script, against a VFS seeded with /docs/example.txt
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
 import { createVfs, loadEngine, runScript, type RunScriptResult } from '@workerdeck/sandbox'
+import { fail, finish, note, ok as pass, step } from './lib/report.ts'
 
 const engine = await loadEngine(variant)
-
-let failures = 0
 
 function report(result: RunScriptResult): void {
   if (result.ok) {
@@ -19,17 +18,14 @@ function report(result: RunScriptResult): void {
 }
 
 async function scenario(title: string, proves: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<void> {
-  process.stdout.write(`\n▸ ${title}\n  proves: ${proves}\n`)
+  step(title)
+  note(`proves: ${proves}`)
   const started = Date.now()
   try {
     const { ok, detail } = await run()
-    if (!ok) {
-      failures += 1
-    }
-    console.log(`  ${ok ? '✅' : '❌'} ${detail}  (${Date.now() - started}ms)`)
+    ;(ok ? pass : fail)(detail, `${Date.now() - started}ms`)
   } catch (error) {
-    failures += 1
-    console.log(`  ❌ threw: ${error instanceof Error ? error.message : String(error)}`)
+    fail('threw', error instanceof Error ? error.message : String(error))
   }
 }
 
@@ -40,7 +36,8 @@ if (custom) {
   const result = await runScript(engine, { script: custom, vfs, timeoutMs: 5000 })
   report(result)
   console.log('\nVFS after the run:', vfs.snapshot())
-  process.exit(result.ok ? 0 : 1)
+  ;(result.ok ? pass : fail)('your script', result.ok ? undefined : result.reason)
+  finish()
 }
 
 console.log('QuickJS sandbox smoke - untrusted script boundary\n' + '='.repeat(50))
@@ -163,9 +160,7 @@ await scenario('Isolation: nothing survives between runs', 'fresh context per ca
   return { ok: result.ok && String(result.value) === '["undefined",[]]', detail: 'second run saw no globals and an empty VFS' }
 })
 
-console.log('\n' + '='.repeat(50))
-if (failures > 0) {
-  console.error(`\n❌ ${failures} scenario(s) failed - the sandbox boundary is NOT holding.\n`)
-  process.exit(1)
-}
-console.log("\n✅ All scenarios held. Try your own: pnpm smoke:sandbox '<your script>'\n")
+finish({
+  onFail: 'the sandbox boundary is NOT holding',
+  onPass: "All scenarios held. Try your own: pnpm smoke:sandbox '<your script>'",
+})

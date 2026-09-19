@@ -614,7 +614,7 @@
     "typecheck": "tsgo -p tsconfig.json && tsgo -p tsconfig.webview.json",
     "package": "vsce package --no-dependencies -o workerdeck.vsix",
     "dev:host": "node scripts/dev-host.mjs",
-    "install:local": "pnpm package && code --install-extension workerdeck.vsix --force",
+    "install:vscode": "pnpm package && code --install-extension workerdeck.vsix --force",
     "dev:preview": "vite --port 5199 --strictPort --open /dev/preview.html"
   },
   "devDependencies": {
