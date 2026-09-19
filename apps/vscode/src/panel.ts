@@ -298,9 +298,13 @@ async function openTranscriptPath(active: ActiveSession | undefined, clicked: st
     ? vscode.Uri.file(path)
     : vscode.Uri.from({ scheme: 'workerdeck', authority: active.host.id.toLowerCase(), path })
   try {
-    const doc = await vscode.workspace.openTextDocument(uri)
-    const selection = line ? new vscode.Range(line - 1, 0, line - 1, 0) : undefined
-    await vscode.window.showTextDocument(doc, { preview: true, selection })
+    if (line) {
+      const doc = await vscode.workspace.openTextDocument(uri)
+      const selection = new vscode.Range(line - 1, 0, line - 1, 0)
+      await vscode.window.showTextDocument(doc, { preview: true, selection })
+    } else {
+      await vscode.commands.executeCommand('vscode.open', uri, { preview: true })
+    }
   } catch {
     void vscode.window.showWarningMessage(`WorkerDeck: could not open ${path}`)
   }

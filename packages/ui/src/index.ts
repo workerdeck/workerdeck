@@ -63,6 +63,8 @@ export { Band, Blank, Ink, Row, type RowProps, type Tone } from './components/te
 export { CopyAction, WithActions, useAffordances, type TerminalAffordances } from './components/terminal/affordances.tsx'
 export { FileLinkProvider, useFileLinks, type FileLinkHandle, type FileLinkOpener } from './components/terminal/file-link.tsx'
 export { parseFileLink, type FileLink } from './lib/file-link.ts'
+export { matchPath, type PathHit, type PathMatch } from './lib/path-match.ts'
+export { usePathLinks, resolveAgainstCwd } from './components/agent/use-path-links.ts'
 export { Conversation, ConversationContent, ConversationScrollButton, type ConversationProps } from './components/agent/Conversation.tsx'
 export { Message, MessageContent, type MessageProps } from './components/agent/Message.tsx'
 export {

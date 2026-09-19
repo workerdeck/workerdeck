@@ -171,18 +171,15 @@ body {
  * Links, and the things that behave like them.
  *
  * A real anchor underlines on hover, like every link in the editor. A path only
- * *opens* while Cmd/Ctrl is down, so it only looks clickable then: App.tsx adds
- * `.wd-linkish` to whatever is under the pointer while the modifier is held,
- * using the same test the click itself makes.
+ * *opens* while Cmd/Ctrl is down, so it only looks clickable then: `usePathLinks`
+ * (terminal.css owns the underline) marks whatever is under the pointer while the
+ * modifier is held; this only lends it the editor's link colour.
  */
 a:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.wd-linkish {
+.wd-path-link {
   color: var(--vscode-editorLink-activeForeground, var(--vscode-foreground));
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
 }

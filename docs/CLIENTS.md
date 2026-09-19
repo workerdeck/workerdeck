@@ -7,7 +7,7 @@ embedding, and the iOS app. Dispatched from `CLAUDE.md`.
 
 the VS Code extension, published to the **Visual Studio Marketplace** as
 `silkweave.workerdeck-vscode` by the `vscode` job on a version tag, which also keeps the `.vsix`
-as a run artifact; `pnpm install:local` side-loads a local build. A workspace member like any package (esbuild for the extension host,
+as a run artifact; `pnpm install:vscode` side-loads a local build. A workspace member like any package (esbuild for the extension host,
 Vite for the webview, both from `@workerdeck/source`), importing `client`/`react`/`ui`/
 `protocol` and **never** `core`/`server`. The webview runs an *unmodified* `WorkerDeckClient`
 + `SessionPanel` (root entry - no Monaco; VS Code is the workspace): its `fetchImpl`/
@@ -71,12 +71,17 @@ browser.
 One live attach per session, owned by the panel: sidebar/status
 bar/notifications read REST rollups (`pendingPermissionCount`) or tap frames already flowing
 through the bridge - never a second attach. A Cmd/Ctrl-clicked path in the transcript goes
-through `webview/paths.ts`, which is a named module because the rule earned one: a match must
-start at a **token boundary** (unanchored, `@_docs/BACKLOG.md` matched the *suffix* `/BACKLOG.md`
-and the host confidently opened at the filesystem root) and a *relative* path must end in a
-filename-with-extension, or the modifier underlines `and/or`. Resolution against the session
+through `usePathLinks` from `@workerdeck/ui` (the webview no longer carries its own copy), whose
+matcher `packages/ui/src/lib/path-match.ts` is a named module because the rule earned one: a
+match must start at a **token boundary** (unanchored, `@_docs/BACKLOG.md` matched the *suffix*
+`/BACKLOG.md` and the host confidently opened at the filesystem root) and a *relative* path must
+end in a filename-with-extension, or the modifier underlines `and/or`; a bare filename counts
+only inside `<code>`. Resolution against the session
 cwd is host-side, in POSIX arithmetic - the cwd is the *gateway's*, so a Windows host joining
-it with `\` builds a path neither side has seen. Remote gateways mount as a `workerdeck://`
+it with `\` builds a path neither side has seen. A click without a line number opens through
+the `vscode.open` command, not `openTextDocument`, because the latter throws on binary files
+and a `.jpg`/`.pdf` the agent linked would toast "could not open" while sitting on disk; only a
+`path:line` click goes through `openTextDocument`, for the selection. Remote gateways mount as a `workerdeck://`
 FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename -
 no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
 by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole

@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { SessionPanel, Toaster, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
+import { SessionPanel, Toaster, usePathLinks, type PathHit, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
 import type { Bridge } from './bridge.ts'
-import { matchPath } from './paths.ts'
 
-const LINKISH = 'wd-linkish'
 
 type Shown = {
   baseUrl: string
@@ -118,75 +116,9 @@ export function App({
     [bridge, shown?.baseUrl],
   )
 
-  useEffect(() => {
-    // Capture phase, so it wins over text selection.
-    const onClick = (e: MouseEvent) => {
-      if (!e.metaKey && !e.ctrlKey) {
-        return
-      }
-      const match = matchPath((e.target as HTMLElement | null)?.textContent)
-      if (!match) {
-        return
-      }
-      e.preventDefault()
-      e.stopPropagation()
-      bridge.post({ kind: 'wd-open-path', path: match.path, line: match.line })
-    }
-    document.addEventListener('click', onClick, true)
-    return () => document.removeEventListener('click', onClick, true)
-  }, [bridge])
-
-  // The editor's own ctrl-hover affordance, in JS rather than CSS because "is this text a path" is not a selector.
-  useEffect(() => {
-    let hovered: HTMLElement | undefined
-
-    const unmark = () => {
-      hovered?.classList.remove(LINKISH)
-      hovered = undefined
-    }
-    const mark = (target: EventTarget | null) => {
-      const element = target instanceof HTMLElement ? target : undefined
-      if (element === hovered) {
-        return
-      }
-      unmark()
-      if (!element) {
-        return
-      }
-      const text = element.textContent?.trim() ?? ''
-      const match = matchPath(text)
-      // Mostly-a-path, or an element whose whole job is to be one (inline code).
-      if (!match || (match.length < text.length * 0.6 && element.tagName !== 'CODE')) {
-        return
-      }
-      hovered = element
-      element.classList.add(LINKISH)
-    }
-
-    const onMove = (e: MouseEvent) => {
-      if (e.metaKey || e.ctrlKey) {
-        mark(e.target)
-      } else {
-        unmark()
-      }
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey && !e.ctrlKey) {
-        unmark()
-      }
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('keydown', onKey)
-    document.addEventListener('keyup', onKey)
-    window.addEventListener('blur', unmark)
-    return () => {
-      unmark()
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('keydown', onKey)
-      document.removeEventListener('keyup', onKey)
-      window.removeEventListener('blur', unmark)
-    }
-  }, [])
+  const page = useRef<HTMLDivElement>(null)
+  const openPath = useCallback((hit: PathHit) => bridge.post({ kind: 'wd-open-path', path: hit.path, line: hit.line }), [bridge])
+  usePathLinks({ container: page, onOpen: openPath, enabled: shown !== undefined && client !== undefined })
 
   // Called unconditionally (hooks rule) - the empty key never accumulates entries because toggle
   // is only reachable from a mounted panel.
@@ -197,7 +129,7 @@ export function App({
   }
 
   return (
-    <div className="h-screen">
+    <div ref={page} className="h-screen">
       <SessionPanel
         key={`${shown.baseUrl}#${shown.sessionId}`}
         client={client}

@@ -1,41 +1,27 @@
 import { useEffect, type RefObject } from 'react'
 import { parseFileLink } from '../../lib/file-link.ts'
+import { matchPath, type PathHit } from '../../lib/path-match.ts'
 
-export type PathHit = { path: string; line?: number }
+export type { PathHit } from '../../lib/path-match.ts'
 
 const LINKISH = 'wd-path-link'
 
-const PATH_RE = /^(\/[^\s:'"`()[\]{}]+|[\w.@~-]+(?:\/[\w.@~-]+)+)(?::(\d+))?$/
-const FILE_RE = /^([\w.@-]+\.[A-Za-z0-9]{1,10})(?::(\d+))?$/
-
 const COVERAGE = 0.6
-
-export function matchPath(text: string, inCode: boolean): PathHit | undefined {
-  const trimmed = text.trim()
-  if (!trimmed || trimmed.endsWith('/')) {
-    return undefined
-  }
-  const hit = PATH_RE.exec(trimmed) ?? (inCode ? FILE_RE.exec(trimmed) : null)
-  if (!hit) {
-    return undefined
-  }
-  return { path: hit[1]!, line: hit[2] ? Number(hit[2]) : undefined }
-}
 
 function hitFor(element: HTMLElement | undefined): PathHit | undefined {
   if (!element) {
     return undefined
   }
   const inCode = element.closest('code') !== null
-  const text = element.textContent ?? ''
+  const text = element.textContent?.trim() ?? ''
   const hit = matchPath(text, inCode)
   if (!hit) {
     return undefined
   }
-  if (!inCode && hit.path.length < text.trim().length * COVERAGE) {
+  if (!inCode && hit.length < text.length * COVERAGE) {
     return undefined
   }
-  return hit
+  return { path: hit.path, line: hit.line }
 }
 
 export function usePathLinks({
