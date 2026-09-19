@@ -9,14 +9,15 @@ import {
   type ClientCommand,
 } from '../src/components/agent/composer-commands.ts'
 
-const skill = (over: Partial<SkillInfo> = {}): SkillInfo => ({ name: 'pdf', enabled: true, ...over })
-const command = (over: Partial<SlashCommandInfo> = {}): SlashCommandInfo => ({ name: 'compact', ...over })
-const client = (over: Partial<ClientCommand> = {}): ClientCommand => ({
-  name: 'mcp',
-  description: 'MCP servers',
-  run: () => true,
-  ...over,
-})
+function skill(over: Partial<SkillInfo> = {}): SkillInfo {
+  return { name: 'pdf', enabled: true, ...over }
+}
+function command(over: Partial<SlashCommandInfo> = {}): SlashCommandInfo {
+  return { name: 'compact', ...over }
+}
+function client(over: Partial<ClientCommand> = {}): ClientCommand {
+  return { name: 'mcp', description: 'MCP servers', run: () => true, ...over }
+}
 
 describe('mergeComposerRows', () => {
   it('suppresses a client command the engine already provides', () => {
