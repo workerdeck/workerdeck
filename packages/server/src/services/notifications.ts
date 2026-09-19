@@ -21,11 +21,11 @@ export class SessionNotifier {
     return !this.#options.webhook && !this.#options.onNotification
   }
 
-  watch(runner: Runner, afterSeq = runner.info().lastSeq): void {
+  watch(runner: Runner, afterSeq = runner.info().lastSeq): () => void {
     if (this.idle) {
-      return
+      return () => {}
     }
-    runner.subscribe((event) => {
+    return runner.subscribe((event) => {
       switch (event.type) {
         case 'permission_requested': {
           this.#emit(runner, event.seq, event.ts, {

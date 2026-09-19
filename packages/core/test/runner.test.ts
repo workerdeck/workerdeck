@@ -451,6 +451,35 @@ describe('SessionRunner', () => {
     })
   })
 
+  it('refreshes the rate-limit windows on demand, and not twice within the throttle', async () => {
+    const { harness, runner, events } = makeRunner(
+      {},
+      {
+        usage: {
+          subscription_type: 'max',
+          rate_limits_available: true,
+          rate_limits: { seven_day: { utilization: 92, resets_at: '2026-09-20T12:00:00Z' } },
+        },
+      },
+    )
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+    const afterInit = events.filter((e) => e.type === 'rate_limit').length
+    expect(afterInit).toBeGreaterThan(0)
+
+    // The init poll is recent, so an attach arriving behind it must not ask the CLI again.
+    await runner.refreshUsage()
+    await tick()
+    expect(events.filter((e) => e.type === 'rate_limit').length).toBe(afterInit)
+
+    // A reading old enough to be worth replacing is exactly what an attach is for: an idle session's last one can
+    // be days old, and before this there was no way to ask for a newer one.
+    await runner.refreshUsage(0)
+    await tick()
+    expect(events.filter((e) => e.type === 'rate_limit').length).toBeGreaterThan(afterInit)
+  })
+
   it('emits capabilities after init when the query reports models/commands', async () => {
     const { harness, runner, events } = makeRunner(
       { prompt: 'hi' },

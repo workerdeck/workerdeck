@@ -322,3 +322,13 @@ describe('isLoopback', () => {
     expect(isLoopback('192.168.1.4')).toBe(false)
   })
 })
+
+describe('--hot-reload', () => {
+  it('is off unless asked for', () => {
+    expect(parseArgs([]).hotReload).toBeUndefined()
+  })
+
+  it('is a flag, not a mode with a value', () => {
+    expect(parseArgs(['--hot-reload', '--port', '9000']).hotReload).toBe(true)
+  })
+})

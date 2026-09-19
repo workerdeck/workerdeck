@@ -53,6 +53,7 @@ export type CliFlags = {
   keepAwake?: boolean
   corsOrigins: string[]
   open?: boolean
+  hotReload?: boolean
   help?: boolean
   version?: boolean
 }
@@ -230,6 +231,10 @@ export function parseArgs(argv: string[]): CliFlags {
       }
       case '--open': {
         flags.open = true
+        break
+      }
+      case '--hot-reload': {
+        flags.hotReload = true
         break
       }
       default: {

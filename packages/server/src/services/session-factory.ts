@@ -234,9 +234,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     return { ok: true, profile }
   }
 
-  const watchAuthSource = (runner: Runner): void => {
+  const watchAuthSource = (runner: Runner): (() => void) => {
     let seen = false
-    runner.subscribe((event) => {
+    return runner.subscribe((event) => {
       if (seen || event.type !== 'system_init') {
         return
       }

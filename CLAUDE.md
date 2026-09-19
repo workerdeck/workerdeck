@@ -62,6 +62,11 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
   not a defect count - public exports have no in-repo caller.
 - `pnpm typecheck|test|build|lint|format`. In-package imports use explicit `.ts` extensions. Dev never
   builds. Releases go through **pnpm only**. Details in `docs/DEVELOPMENT.md`.
+- **Never restart a gateway you are developing against.** `workerdeck --hot-reload` re-evaluates
+  every module under `packages/` in place on ctrl-r / `workerdeck reload` / SIGUSR2, carrying live
+  sessions and their engine children through the swap; a restart kills every turn in flight and
+  dormancy brings the session back idle. `docs/DEVELOPMENT.md` §Hot reload, invariants in
+  `docs/GOTCHAS.md` §Hot reload.
 - **Read `pnpm lint`'s warnings; never grep it for `error`.** `wd/max-comment-lines` reports as a
   warning by design, so an error-only filter reports clean while it fires. `pnpm lint:changed`
   escalates the two comment rules to failures on changed files only, and a `PostToolUse` hook

@@ -45,6 +45,9 @@ import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
 import { SubagentTracker } from './subagents.ts'
 
+// An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
+const USAGE_REFRESH_MIN_MS = 60_000
+
 export type QueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => Query
 
 export type HistoryFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SessionMessage[]>
@@ -102,6 +105,7 @@ export class SessionRunner implements Runner {
   #defaultModel: string | undefined
   #subscriptionType: string | undefined
   #engineTitle: string | undefined
+  #lastRateLimitPoll = 0
   #started = false
   #closed = false
   #runPromise: Promise<void> | undefined
@@ -647,7 +651,18 @@ export class SessionRunner implements Runner {
     } catch {}
   }
 
+  // The account-level reading only ever moved at a turn boundary before this, so a gateway whose sessions were all
+  // idle served whatever it last heard, for days, with nothing saying how old it was. An attach and a profiles read
+  // are the other two moments someone is actually looking at the number.
+  async refreshUsage(minIntervalMs = USAGE_REFRESH_MIN_MS): Promise<void> {
+    if (Date.now() - this.#lastRateLimitPoll < minIntervalMs) {
+      return
+    }
+    await this.#fetchRateLimits()
+  }
+
   async #fetchRateLimits(): Promise<void> {
+    this.#lastRateLimitPoll = Date.now()
     const query = this.#query as { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: () => Promise<unknown> } | undefined
     const fetchUsage = query?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET
     if (typeof fetchUsage !== 'function') {

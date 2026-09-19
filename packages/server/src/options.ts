@@ -100,6 +100,11 @@ export type QueueServerOptions = {
 }
 
 // A point-in-time answer to "is it safe to stop yet?", as reported while draining.
+// A live session handed from one server to another inside one process, which is what `--hot-reload` does: the
+// runner object keeps its engine child alive, and `config` is the one fact the next server cannot rederive (a
+// durable record strips `env`, `queryFn`, `historyFn` and `extraOptions`, and does not exist before `system_init`).
+export type CarriedSession = { runner: Runner; config?: SessionRunnerConfig }
+
 export type DrainReport = {
   // Sessions mid-turn. These resolve on their own, so the drain waits for them.
   working: string[]
@@ -127,5 +132,12 @@ export type WorkerServer = {
   // Let running turns finish before `close()`. A courtesy, never a correctness requirement: records are written
   // continuously, so a hard stop already loses nothing. Refuses new sessions for as long as it runs.
   drain: (options?: DrainOptions) => Promise<DrainReport>
+  // Hands a live session out without closing it: unwatches it, detaches everything its registration attached, and
+  // returns it with its config. Throws for a session `reloadPlan` says must not be carried by identity, because
+  // handing one over is a bug rather than a condition. See docs/GOTCHAS.md under Hot reload.
+  releaseSession: (id: string) => CarriedSession | undefined
+  // The other half, and it must run BEFORE `listen()`: between the port opening and the adoption, an attach reads
+  // the session's dormant record and resumes a second engine child on the same transcript.
+  adoptSession: (carried: CarriedSession) => boolean
   close: () => Promise<void>
 }

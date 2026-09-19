@@ -246,6 +246,12 @@
         "icon": "$(debug-restart)"
       },
       {
+        "command": "workerdeck.host.reload",
+        "title": "Hot-Reload Server",
+        "category": "WorkerDeck Host",
+        "icon": "$(sync)"
+      },
+      {
         "command": "workerdeck.host.openDashboard",
         "title": "Open Dashboard in Browser",
         "category": "WorkerDeck Host"
@@ -560,6 +566,12 @@
           "default": true,
           "scope": "machine",
           "description": "Serve the web dashboard on the same port, so a browser or a phone on your network can reach the same sessions. Turning it off leaves the gateway API untouched."
+        },
+        "workerdeck.host.hotReload": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "markdownDescription": "Start the server with `--hot-reload`, so **WorkerDeck: Hot-Reload Server** re-evaluates its own source in place, carrying live sessions and their engine child processes across the swap. Source checkouts only: the published CLI is one bundled file and serves without it."
         },
         "workerdeck.host.shell": {
           "type": "boolean",

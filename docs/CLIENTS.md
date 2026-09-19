@@ -130,6 +130,19 @@ finish), so Stop sends one, waits 30s, sends a second (the CLI's own "stop now")
 the signal goes to the **process group** (`-pid`), because on the npx path the server is a
 grandchild. Parked sessions survive all of it, which is what makes the prompt tolerable at all.
 
+**Hot-Reload Server is the opposite of Restart and addresses the gateway differently on purpose.**
+`workerdeck.host.hotReload` adds `--hot-reload` to the child's argv; the command then signals
+`SIGUSR2` and the gateway re-evaluates its own source in place, carrying live sessions and their
+engine child processes across the swap (`docs/DEVELOPMENT.md` §Hot reload). Two deliberate
+differences from Stop/Restart. It reads the **pid from `<state-dir>/gateway.pid`, not from the
+ownership lock**: only a gateway started with `--hot-reload` writes that file, so its presence
+*is* the capability, and a server the operator started by hand in a terminal reloads from this
+command exactly like one VS Code launched - the ownership rule exists to stop VS Code *killing*
+what it did not start, and a reload kills nothing. And it signals the **pid, never the group**,
+which is the inverse of Stop's rule for the same reason Stop needs the group: the swap happens
+inside the gateway process, so `-pid` would reach the npx launcher and every engine child with it.
+Windows has no POSIX signals, so the command refuses there and says so.
+
 The managed instance registers itself as a gateway (`workerdeck-managed`, "This machine") - the
 one exception to **there is no implicit localhost gateway**, and marked `managed` so the Gateways
 view offers a gear to Host Mode's settings instead of the edit/remove pair; removing it means

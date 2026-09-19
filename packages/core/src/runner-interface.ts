@@ -41,6 +41,10 @@ export interface Runner {
   eventAt?(seq: number): SessionEvent | undefined
   sendMessage(text: string, attachments?: readonly AttachmentInput[]): void
   queueLocalCommand?(result: LocalCommandResult): void
+  // Re-reads the account's rate-limit windows and re-emits them as `rate_limit` events. Optional because only the
+  // claude engine has a control request for it. Throttled by the implementation: an attach is a client's arrival,
+  // not a reason to ask the CLI anything a second time within the minute.
+  refreshUsage?(): Promise<void>
   mcpServers?(): Promise<McpServerStatusInfo[] | undefined>
   reconnectMcpServer?(name: string): Promise<void>
   setMcpServerEnabled?(name: string, enabled: boolean): Promise<void>

@@ -331,6 +331,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('workerdeck.host.start', () => requireHost()?.start()),
     vscode.commands.registerCommand('workerdeck.host.stop', () => requireHost()?.stop()),
     vscode.commands.registerCommand('workerdeck.host.restart', () => requireHost()?.restart()),
+    vscode.commands.registerCommand('workerdeck.host.reload', () => requireHost()?.hotReload()),
     vscode.commands.registerCommand('workerdeck.host.openDashboard', () => requireHost()?.openDashboard()),
     vscode.commands.registerCommand('workerdeck.host.showLog', () => requireHost()?.showLog()),
     vscode.commands.registerCommand('workerdeck.host.actions', () => hostActions(hostSupervisor?.state ?? { kind: 'disabled' })),

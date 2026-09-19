@@ -15,6 +15,7 @@ export type HostSettings = {
   npxSpec: string | undefined
   dashboard: boolean
   shell: boolean
+  hotReload: boolean
   cwdRoots: string[]
   statusBar: boolean
 }
@@ -55,6 +56,7 @@ export function readHostSettings(): HostSettings {
     npxSpec: config.get<string>('npxSpec', '').trim() || undefined,
     dashboard: config.get<boolean>('dashboard', true),
     shell: config.get<boolean>('shell', false),
+    hotReload: config.get<boolean>('hotReload', false),
     cwdRoots: config.get<string[]>('cwdRoots', []).map(expandHome).filter(Boolean),
     statusBar: config.get<boolean>('statusBar', true),
   }

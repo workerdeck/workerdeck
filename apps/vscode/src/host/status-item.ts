@@ -89,6 +89,7 @@ export async function hostActions(state: HostState): Promise<void> {
       ? [
           { label: '$(debug-stop) Stop Server', command: 'workerdeck.host.stop' },
           { label: '$(debug-restart) Restart Server', command: 'workerdeck.host.restart' },
+          ...(readHostSettings().hotReload ? [{ label: '$(sync) Hot-Reload Server', command: 'workerdeck.host.reload' }] : []),
           { label: '$(globe) Open Dashboard in Browser', description: state.url, command: 'workerdeck.host.openDashboard' },
         ]
       : [{ label: '$(play) Start Server', command: 'workerdeck.host.start' }]),

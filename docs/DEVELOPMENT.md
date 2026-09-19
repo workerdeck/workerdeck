@@ -68,6 +68,46 @@ In-package imports use explicit `.ts` extensions. Releases go through **pnpm onl
 `npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/GOTCHAS.md`
 before touching versioning or the publish workflow.
 
+## Hot reload (`--hot-reload`)
+
+Restarting the gateway kills every engine child with it, and dormancy brings a session back
+**idle**: the turn that was in flight is gone, and no API resumes an interrupted agentic loop.
+`workerdeck --hot-reload` sidesteps that by never restarting the process. It re-evaluates every
+module under `packages/` in place and carries the live runners, and therefore the `claude` /
+`codex app-server` children, their subagents and their shell grandchildren, into the new code.
+Measured at ~90ms per reload, mid-turn, with a 30-second `bash` loop spanning the swap.
+
+It is manual, never a watcher: reloading between two halves of a multi-file edit would boot a
+generation that does not compile. Three triggers, all the same signal underneath:
+
+- **ctrl-r** in the gateway's terminal. stdin goes into raw mode, so ctrl-c arrives as a byte
+  rather than a SIGINT and is re-spelled as the drain-then-stop it was.
+- **`workerdeck reload`**, which reads `<state-dir>/gateway.pid` and sends SIGUSR2. The pid, never
+  the process group: the swap happens *inside* the gateway, and `-pid` would reach the npx
+  launcher and every engine child with it.
+- **SIGUSR2** directly, which is what VS Code's `WorkerDeck Host: Hot-Reload Server` sends
+  (`workerdeck.host.hotReload` adds the flag to the supervised child's argv).
+
+How it works, in three pieces:
+
+- A synchronous `module.registerHooks` resolve hook appends `?wdgen=N` to every resolved URL under
+  `packages/` and to **nothing** under `node_modules`. Bumping N and re-importing re-evaluates the
+  whole workspace subgraph; leaving node_modules alone is what keeps the Agent SDK, `ws` and
+  quickjs at one copy each. It chains correctly under `@swc-node/register`.
+- `registry.evict()` then `registry.register()` is the adoption seam. **Evict, never `remove()`**,
+  which closes the runner, which is the one thing this path exists to avoid. `Runner` is
+  self-contained by design (a permission resolves through `runner.resolvePermission`, not through
+  a captured service), so a generation-0 runner is a working citizen of generation 3.
+- One `SessionStore` object for the whole process, built once and injected into every generation's
+  `parking` options. A file store is single-process by contract, and two generations holding two of
+  them over one directory is exactly the two-servers-one-directory case it refuses to be.
+
+Dev only, and it says so rather than refusing to start: the published CLI is a single bundled file
+with no subgraph to re-evaluate, so the flag warns to stderr and serves without it. Memory grows
+per generation (old module graphs stay reachable from live closures), which is why this is a dev
+loop and not a deployment strategy. The invariants that bite are in
+[GOTCHAS.md](./GOTCHAS.md) under Hot reload.
+
 ## Testing
 
 `pnpm test` - core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer

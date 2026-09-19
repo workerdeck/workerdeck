@@ -95,10 +95,17 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   in the SDK, method name included, so it is probed for by name and every failure is silent: if
   it disappears, usage goes back to change-only, and nothing else breaks.
 - **A session's own rate-limit reading can be arbitrarily old, and the poll has no timer.** Its
-  three call sites are a promptless start, `system_init` and `turn_result`, so a session idle
-  since yesterday is never refreshed, an attach triggers no poll, and replay faithfully
-  re-installs yesterday's number as current (`replayCoalesceKey` keeps the last per window *on
-  purpose*). A dormant wake is **not** affected: a fresh log means there is nothing to replay and
+  three *event-driven* call sites are a promptless start, `system_init` and `turn_result`, so a
+  session idle since yesterday is never refreshed by anything it does itself, and replay
+  faithfully re-installs yesterday's number as current (`replayCoalesceKey` keeps the last per
+  window *on purpose*). Two pulls were added because that made a gateway of idle sessions serve a
+  reading **days** old with nothing saying so: `Runner.refreshUsage()` (optional, claude-only, and
+  throttled to a minute inside the runner) is called on **every attach**, and `GET /profiles` asks
+  one live session per profile for a newer one when the held reading is older than
+  `USAGE_STALE_MS`. Both are fire-and-forget: the request answers with what is known and the newer
+  reading lands as an ordinary `rate_limit` event moments later. Do not turn either into an
+  awaited call - a usage reading is not worth failing an attach over, and the control request is
+  marked experimental. A dormant wake is **not** affected: a fresh log means there is nothing to replay and
   `system_init` polls immediately. The gateway therefore keeps the account-level truth itself:
   `ProfileUsageTracker` (`server/src/services/profile-usage.ts`), fed from every session's `rate_limit`
   events and served as `ProfileInfo.usage` on `GET /profiles`. Two rules there: last-write-wins is
@@ -107,7 +114,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   **0%-after-reset inference happens at serve time**, because it is a function of the wall clock:
   a fabricated `rate_limit` event would be replayed from transcripts forever and captured into
   parking snapshots. `inferredReset` is what keeps that zero distinguishable from an
-  engine-reported one; an absent window is still **unknown, never 0%**. On the client side
+  engine-reported one; an absent window is still **unknown, never 0%**. And **age is part of the reading**:
+  a poll is not a stream, so protocol's `usageIsStale` (older than `USAGE_STALE_AFTER_MS`, 15
+  minutes) is what every surface dims and labels `last reported ...` by. A stale reading asserted
+  as current is how a two-day-old 68% passed for a real 92%; the fix is to draw it differently,
+  never to hide it, because it is still the best answer anyone has. An `inferredReset` window is
+  never stale: it is derived at serve time from the wall clock and says so in its own words. On the client side
   `mergeUsage` (protocol) decides which of the two a surface draws; the profile's per-window
   reading wins wherever it exists, and *not* by comparing timestamps: the reducer keeps one clock
   for the whole map, so a session's morning `five_hour` is dated with its afternoon `seven_day`
@@ -1091,6 +1103,59 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   none yet); the live record *carries* the transcript, so without the second call the on-disk
   snapshot keeps the pre-clear messages until the next turn ends. Either omission means a restart
   in that window wakes the session straight back into the transcript the user threw away.
+
+## Hot reload (`--hot-reload`)
+
+Dev only, and only from a checkout. What it does is re-evaluate every module under `packages/` in
+place and hand the live runners to the new code, so an engine child process, its subagents and its
+shell grandchildren survive an edit. `docs/DEVELOPMENT.md` has the shape; these are the ways to get
+the handover wrong.
+
+- **`parking.close()` does not make a manager inert, and `#closed` was never meant to.** The guard
+  covers the four write-throughs and the `session_closed` discard. It does not cover `#track`: a
+  deferred `execution_dispatched` reaching a closed manager still arms a watchdog, and when that
+  fires, `submitResult` -> `ensureLive` -> `#rebuild` builds a **second runner** for that id through
+  the registry and factory of a generation that is over. That is why `watch()` retains its
+  unsubscribe in `#watches` and why `release()` exists at all.
+- **Carry with `releaseSession`/`adoptSession`, never with `evict`/`register`.**
+  `registry.register(runner)` re-attaches everything `onRegister` wires and **nothing**
+  `createRunner` wires: `parking.remember`, `parking.watch` and `watchAuthSource` all live outside
+  that hook. A session registered the bare way stops being written through (no record on a rename or
+  a `conversation_reset`) and a client `close` never discards its record, so it comes back dormant on
+  the next start. It tests green, because the pre-reload record is still on disk. `hot-reload-seam.test.ts`
+  pins it by counting notifications and deletions across two servers.
+- **Adopt before `listen()`, not after.** Between the port opening and the adoption, an attach for a
+  carried id reads its dormant record and resumes a **second engine child on the same transcript**.
+  Hiding the record for the duration only masks it, and not from `hydrate`, `delete`, or a `DELETE`
+  route. Registering first removes the window, and `listInfo`'s registry filter then hides the record
+  for free. The corollary is the failure path: a `listen()` that throws has already attached the new
+  generation's watchers, so `startInstance` releases every carried session **before** it closes the
+  half-built server. Release first or `registry.closeAll()` kills the children the whole feature
+  exists to keep.
+- **Flush the old manager before `close()`, and let it close before the new one adopts.** `touch()`
+  is fire-and-forget by design (the PATCH route has nobody to report to) and the queued write
+  re-checks `#closed`, so a snapshot forced at the seam without `flush()` is silently skipped. Two
+  managers in one process also share the file store's `${path}.${pid}.tmp`, so their writes to one id
+  must never overlap: the sequence is the whole protection.
+- **A provider session is never carried; a reload is a restart for it.** Its executors close over the
+  generation's `BridgeHub`, so a carried one fails **every later** bridged call with `no_client` while
+  a client is attached, not merely the call in flight, and the manager's execution bookkeeping cannot
+  be rebuilt from the runner. They go through `snapshot()` and `persistLive` like any restart, which
+  is why `--hot-reload` forces `persistLive: true` and interrupts a turn in flight (the documented way
+  out of everything `snapshot()` refuses) before the write. `reloadPlan` keys that on the presence of
+  `snapshot`, never on the engine name: "can this session persist itself" is the actual question.
+- **`parking.adopt` registers first, watches from `lastSeq`, and touches once.** `#rememberDormant`
+  has an ownership guard, so a `touch()` for a runner the *new* registry does not hold yet writes
+  nothing at all. Watching from 0 instead of `lastSeq` queues one dormant re-save per historical
+  `status_changed`, which on a long session is hundreds of file writes per reload.
+- **A carried session runs the code it was born with.** Keeping the child alive means keeping the
+  `SessionRunner`/`CodexRunner` object, which is the old generation's `packages/core`. An engine or
+  protocol edit reaches **new** sessions only; do not debug "my change had no effect" on a carried one.
+- **`registry.evict()` detaches as well as forgets**, and `onRegister`/`observe` may hand back a
+  cleanup to make that possible. The hook is typed `unknown` rather than `void | (() => void)`
+  because TypeScript forgives a stray return only against a bare `void`, and the narrower union would
+  break every embedder whose hook is a one-expression arrow. Safe for `#park`, which clears the
+  runner's subscribers first, so the cleanups are no-ops there.
 
 ## Server, profiles & auth
 

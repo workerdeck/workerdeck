@@ -5,12 +5,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ConfigError, loadConfigFile, parseArgs, resolveInstanceConfig } from './config.ts'
 import { startInstance } from './lib/instance.ts'
+import { installShutdown } from './lib/shutdown.ts'
 
 const HELP = `workerdeck - run a workerdeck instance: session gateway + dashboard, one port.
 
 Usage
   workerdeck [options]
   workerdeck guard [options]     check whether it is safe to restart an instance
+  workerdeck reload [options]    hot-reload a gateway started with --hot-reload
 
 Options
   -p, --port <n>            port to listen on (default 8787, WORKERDECK_PORT)
@@ -86,6 +88,11 @@ Options
                             404s. For a gateway reached only from the VS Code
                             extension, the phone, or another host's dashboard.
       --open                open the dashboard in a browser once it is up
+      --hot-reload          dev only: re-evaluate the gateway's own source in place on
+                            ctrl-r, SIGUSR2 or \`workerdeck reload\`, carrying live
+                            sessions and their engine child processes across the swap.
+                            Needs a source checkout; the published CLI is one bundled
+                            file with nothing to swap.
   -h, --help                show this
   -v, --version             print the version
 
@@ -131,6 +138,11 @@ function line(text: string): void {
 }
 
 async function main(argv: string[]): Promise<number> {
+  if (argv[0] === 'reload') {
+    const { runReload } = await import('./dev/reload-command.ts')
+    return await runReload(argv.slice(1))
+  }
+
   if (argv[0] === 'guard') {
     const { runGuard } = await import('./lib/guard.ts')
     return await runGuard(argv.slice(1))
@@ -146,6 +158,14 @@ async function main(argv: string[]): Promise<number> {
     return 0
   }
 
+  if (flags.hotReload) {
+    const { runHotReload } = await import('./dev/hot-reload.ts')
+    const result = await runHotReload(flags)
+    if (result !== 'unsupported') {
+      return result
+    }
+  }
+
   const loaded = await loadConfigFile(flags.config)
   const config = resolveInstanceConfig(flags, loaded)
   const instance = await startInstance(config)
@@ -154,41 +174,7 @@ async function main(argv: string[]): Promise<number> {
     openInBrowser(instance.url)
   }
 
-  // A second signal must always be able to kill a shutdown that is taking too long. That used to work only by
-  // accident - the second call re-entered `instance.close()` and got an immediate callback out of an already-closed
-  // http server - so it evaporated the moment close stopped being idempotent-by-luck. Make it a real path.
-  let shuttingDown = false
-  const shutdown = (signal: string): void => {
-    if (shuttingDown) {
-      process.stdout.write(`\n[workerdeck] ${signal} again - terminating now\n`)
-      process.exit(130)
-    }
-    shuttingDown = true
-    line(`\n[workerdeck] ${signal} - shutting down (press again to stop now)`)
-    instance
-      .drain({
-        onProgress: (report) => {
-          if (report.working.length > 0) {
-            line(`[workerdeck] waiting for ${report.working.length} session(s) to finish the current turn`)
-          }
-          // Named, not waited for: nothing about shutting down answers a permission prompt.
-          for (const id of report.awaitingHuman) {
-            line(`[workerdeck] session ${id} is waiting on an approval - not waiting for it`)
-          }
-          if (report.timedOut) {
-            line(`[workerdeck] ${report.working.length} session(s) still running - stopping anyway`)
-          } else if (report.working.length === 0) {
-            line('[workerdeck] all turns finished')
-          }
-        },
-      })
-      .catch(() => undefined)
-      .then(() => instance.close())
-      .then(() => process.exit(0))
-      .catch(() => process.exit(1))
-  }
-  process.on('SIGINT', () => shutdown('SIGINT'))
-  process.on('SIGTERM', () => shutdown('SIGTERM'))
+  installShutdown({ current: () => instance, log: line })
 
   // Resolves only on close: until then the process stays up, serving.
   await instance.closed

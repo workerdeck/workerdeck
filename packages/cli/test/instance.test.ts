@@ -409,3 +409,88 @@ describe('apns device route', () => {
     expect(res.headers.get('content-type') ?? '').not.toContain('text/html')
   })
 })
+
+// A stand-in for a session handed over by a previous generation of this process: no snapshot, so `reloadPlan` says
+// carry, and it counts what is still listening to it.
+class CarriedFake {
+  readonly id = 'carried-1'
+  readonly createdAt = Date.now()
+  closedWith: string | undefined
+  listeners = new Set<(event: unknown) => void>()
+  async start(): Promise<void> {}
+  info() {
+    return {
+      id: this.id,
+      status: 'idle' as const,
+      cwd: '/tmp',
+      engine: 'claude' as const,
+      createdAt: this.createdAt,
+      lastSeq: 0,
+      pendingPermissionCount: 0,
+    }
+  }
+  subscribe(listener: (event: unknown) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+  sendMessage(): void {}
+  setTitle(): void {}
+  resolvePermission(): boolean {
+    return false
+  }
+  async interrupt(): Promise<void> {}
+  async setPermissionMode(): Promise<void> {}
+  async setModel(): Promise<void> {}
+  fail(): void {}
+  close(reason = 'server'): void {
+    this.closedWith = reason
+  }
+}
+
+describe('startInstance with carried sessions', () => {
+  it('has them answering from the first request the port ever takes', async () => {
+    const runner = new CarriedFake()
+    const stateDir = await mkdtemp(join(import.meta.dirname, '.tmp-state-'))
+    dirs.push(stateDir)
+    const config: ResolvedConfig = {
+      ...resolveInstanceConfig(parseArgs(['--port', '0']), { path: null, options: {} }, {}),
+      webRoot: await fakeWebRoot(),
+      stateDir,
+    }
+    config.options.profiles = []
+    instance = await startInstance(config, { quiet: true, carried: [{ runner: runner as never }] })
+    expect(instance.adopted).toEqual(['carried-1'])
+
+    const res = await fetch(`http://127.0.0.1:${instance.port}/v1/sessions`)
+    const body = (await res.json()) as { sessions: { id: string }[] }
+    // Exactly once: a session the registry holds is filtered out of the record listing, so a double row would mean
+    // the adoption landed somewhere the parking manager cannot see.
+    expect(body.sessions.filter((session) => session.id === 'carried-1')).toHaveLength(1)
+  })
+
+  it('gives them back unclosed and unwatched when the generation cannot listen', async () => {
+    const stateDir = await mkdtemp(join(import.meta.dirname, '.tmp-state-'))
+    dirs.push(stateDir)
+    const webRoot = await fakeWebRoot()
+    const first: ResolvedConfig = {
+      ...resolveInstanceConfig(parseArgs(['--port', '0']), { path: null, options: {} }, {}),
+      webRoot,
+      stateDir,
+    }
+    first.options.profiles = []
+    instance = await startInstance(first, { quiet: true })
+
+    const runner = new CarriedFake()
+    const clash: ResolvedConfig = {
+      ...resolveInstanceConfig(parseArgs(['--port', String(instance.port)]), { path: null, options: {} }, {}),
+      webRoot,
+      stateDir,
+    }
+    clash.options.profiles = []
+    await expect(startInstance(clash, { quiet: true, carried: [{ runner: runner as never }] })).rejects.toThrow()
+    // The two halves of the contract: the child process this carried runner stands for is still alive, and nothing
+    // from the failed generation is left listening to it beside the generation that eventually works.
+    expect(runner.closedWith).toBeUndefined()
+    expect(runner.listeners.size).toBe(0)
+  })
+})

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdir, open } from 'node:fs/promises'
+import { mkdir, open, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import * as vscode from 'vscode'
 import type { SessionInfo } from '@workerdeck/protocol'
 import { clientForUrl, probe } from '../gateway.ts'
@@ -138,6 +139,35 @@ export class HostSupervisor implements vscode.Disposable {
       }
       await this.#launch(settings)
     })
+  }
+
+  // Addressed through <state-dir>/gateway.pid rather than the ownership lock: only a gateway started with
+  // --hot-reload writes that file, so its presence IS the capability, and a server started by hand in a terminal
+  // reloads from here exactly like one VS Code launched. The pid, never the group: the swap happens inside the
+  // gateway process, and -pid would reach the npx launcher and every engine child with it.
+  async hotReload(): Promise<void> {
+    const settings = readHostSettings()
+    if (process.platform === 'win32') {
+      void vscode.window.showWarningMessage('WorkerDeck: hot reload needs POSIX signals, which Windows does not have.')
+      return
+    }
+    let pid: number
+    try {
+      pid = Number.parseInt(await readFile(join(settings.stateDir, 'gateway.pid'), 'utf8'), 10)
+    } catch {
+      void vscode.window.showWarningMessage(
+        'WorkerDeck: this gateway was not started with --hot-reload, so there is nothing to reload in place. ' +
+          'Turn on workerdeck.host.hotReload (source checkouts only) or use Restart Server.',
+      )
+      return
+    }
+    try {
+      process.kill(pid, 'SIGUSR2')
+    } catch {
+      void vscode.window.showWarningMessage(`WorkerDeck: no process ${pid} to reload - the pidfile is stale.`)
+      return
+    }
+    void vscode.window.setStatusBarMessage('$(sync) WorkerDeck: gateway reloaded', 2000)
   }
 
   async openDashboard(): Promise<void> {
@@ -357,6 +387,9 @@ export class HostSupervisor implements vscode.Disposable {
     }
     if (settings.shell) {
       args.push('--shell')
+    }
+    if (settings.hotReload) {
+      args.push('--hot-reload')
     }
     for (const root of settings.cwdRoots) {
       args.push('--cwd-root', root)

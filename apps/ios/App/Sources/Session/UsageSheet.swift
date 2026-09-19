@@ -131,8 +131,10 @@ private struct UsageWindowCard: View {
         Spacer(minLength: 8)
         Text("\(Fmt.percent(utilization)) used")
           .font(.body.weight(.semibold).monospacedDigit())
+          .foregroundStyle(stale ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
       }
       UsageBar(fraction: utilization / 100, pace: pace, tint: usageTint(utilization))
+        .opacity(stale ? 0.4 : 1)
       HStack(spacing: 5) {
         if let resetsAt = info.resetsAt, let text = Fmt.resets(epochSeconds: resetsAt, now: now) {
           Image(systemName: "arrow.counterclockwise")
@@ -148,8 +150,14 @@ private struct UsageWindowCard: View {
           Text("window reset · nothing reported since")
         } else if window.updatedAt > 0 {
           // Event time, not receipt time: a replayed reading keeps its age. A
-          // zero stamp is a transcript with no clock - say nothing.
-          Text(Fmt.agoPrecise(Date(timeIntervalSince1970: window.updatedAt / 1000), now: now))
+          // zero stamp is a transcript with no clock - say nothing. Past
+          // `usageIsStale` it stops being a claim about right now and is drawn
+          // as what it is: the last thing anybody heard.
+          Text(
+            (stale ? "last reported " : "")
+              + Fmt.agoPrecise(Date(timeIntervalSince1970: window.updatedAt / 1000), now: now)
+          )
+          .foregroundStyle(stale ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
         }
       }
       .font(.caption)
@@ -158,6 +166,8 @@ private struct UsageWindowCard: View {
     .accessibilityElement(children: .combine)
     .accessibilityLabel(accessibilityLabel)
   }
+
+  private var stale: Bool { usageIsStale(window, now: now.timeIntervalSince1970 * 1000) }
 
   private var key: String { window.key }
   private var info: RateLimitInfo { window.info }
@@ -184,7 +194,8 @@ private struct UsageWindowCard: View {
       parts.append("window reset, nothing reported since")
     } else if window.updatedAt > 0 {
       parts.append(
-        "updated " + Fmt.agoPrecise(Date(timeIntervalSince1970: window.updatedAt / 1000), now: now))
+        (stale ? "last reported " : "updated ")
+          + Fmt.agoPrecise(Date(timeIntervalSince1970: window.updatedAt / 1000), now: now))
     }
     return parts.joined(separator: ", ")
   }

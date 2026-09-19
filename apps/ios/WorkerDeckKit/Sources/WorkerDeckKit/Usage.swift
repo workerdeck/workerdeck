@@ -78,6 +78,22 @@ public func orderUsageWindows(_ usage: ProfileUsage?) -> [UsageWindowRow] {
   return named + perModel
 }
 
+/// How old a reading may be before a surface stops drawing it as a claim about
+/// right now - the mirror of `USAGE_STALE_AFTER_MS` / `usageIsStale`.
+///
+/// A rate-limit reading is a poll, not a stream: the engine reports one at a
+/// turn boundary, on an attach and on a profiles read, and nothing in between.
+/// A stale one is still the best answer anyone has, so it is dimmed and
+/// labelled rather than hidden - a two-day-old 68% asserted as current is how
+/// a real 92% went unnoticed. An inferred reset is never stale: it is derived
+/// at serve time from the wall clock and says so in its own words.
+public let usageStaleAfterMs: Double = 15 * 60 * 1000
+
+public func usageIsStale(_ row: UsageWindowRow, now: Double) -> Bool {
+  if row.inferredReset || row.updatedAt == 0 { return false }
+  return now - row.updatedAt > usageStaleAfterMs
+}
+
 /// Flatten back to the per-window map every existing meter reads.
 public func usageInfos(_ usage: ProfileUsage?) -> [String: RateLimitInfo]? {
   guard let usage else { return nil }

@@ -55,13 +55,15 @@ export type WakeSource = {
 // the gateway stops. Derived state cannot leak that way, so the sweep below is insurance, not the mechanism.
 export function driveWakeLock(source: WakeSource, lock: Pick<WakeLock, 'set'>): void {
   const sync = (): void => lock.set(sessionsNeedTheMachine(source.list()))
-  source.observe((runner) => {
+  source.observe((runner) =>
+    // Handed back, not dropped: a runner carried to another generation by a hot reload would otherwise keep
+    // syncing a lock that belongs to a process state this observer no longer describes.
     runner.subscribe((event) => {
       if (event.type === 'status_changed' || event.type === 'session_closed' || event.type === 'session_error') {
         sync()
       }
-    }, runner.info().lastSeq)
-  })
+    }, runner.info().lastSeq),
+  )
   sync()
 }
 

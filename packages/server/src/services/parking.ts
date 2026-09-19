@@ -36,6 +36,7 @@ export class SessionParkManager {
   #configs = new Map<string, SessionRunnerConfig>()
   #remembered = new Set<string>()
   #storeOps = new Map<string, Promise<void>>()
+  #watches = new Map<string, () => void>()
   #closed = false
 
   constructor(options: SessionParkOptions) {
@@ -63,8 +64,13 @@ export class SessionParkManager {
     }
   }
 
+  // The unsubscribe is retained, not merely returned. Every caller drops it, and `#track` has neither the `#closed`
+  // guard the writers have nor an ownership check: a deferred dispatch reaching a closed manager still arms a
+  // watchdog, and when that fires it rebuilds the session through the registry and factory of a generation that is
+  // over. `release()` is the only thing that can take the listener off a runner nobody closed.
   watch(runner: Runner, afterSeq = 0): () => void {
-    return runner.subscribe((event) => {
+    this.#watches.get(runner.id)?.()
+    const unsubscribe = runner.subscribe((event) => {
       switch (event.type) {
         case 'execution_dispatched': {
           if (!event.deferred) {
@@ -124,6 +130,52 @@ export class SessionParkManager {
         }
       }
     }, afterSeq)
+    const detach = (): void => {
+      if (this.#watches.get(runner.id) === detach) {
+        this.#watches.delete(runner.id)
+      }
+      unsubscribe()
+    }
+    this.#watches.set(runner.id, detach)
+    return detach
+  }
+
+  // Hands a live session to another manager: stops watching it, forgets what this manager knows about it, and
+  // returns the one fact the next manager cannot rederive. A durable record strips `env`, `queryFn`, `historyFn`
+  // and `extraOptions`, and before `system_init` there is no record at all, so `#configs` is not recoverable from
+  // the store. Deliberately leaves the store alone: the record is the point of the handover, not a casualty of it.
+  release(sessionId: string): SessionRunnerConfig | undefined {
+    this.#watches.get(sessionId)?.()
+    this.#watches.delete(sessionId)
+    clearTimeout(this.#detachTimers.get(sessionId))
+    this.#detachTimers.delete(sessionId)
+    const config = this.#configs.get(sessionId)
+    this.#configs.delete(sessionId)
+    this.#remembered.delete(sessionId)
+    return config
+  }
+
+  // The order is what `#rememberDormant`'s ownership guard turns into a silent no-write if reversed: `touch()`
+  // writes nothing for a runner this manager's registry does not hold, so the register comes first. `#rebuild` does
+  // the same four steps for the same reason. `lastSeq`, never 0: replaying a long session's history queues one
+  // dormant re-save per historical `status_changed`, and the single `touch()` is what writes the current record.
+  adopt(runner: Runner, config?: SessionRunnerConfig): void {
+    this.#options.registry.register(runner)
+    if (config) {
+      this.remember(runner.id, config)
+    }
+    this.watch(runner, runner.info().lastSeq)
+    this.touch(runner)
+  }
+
+  // `touch()` is fire-and-forget for the PATCH route that has no one to report to. A caller that is about to close
+  // this manager, or to let another one write the same files, needs to know the write landed.
+  async flush(sessionId?: string): Promise<void> {
+    if (sessionId === undefined) {
+      await Promise.all(this.#storeOps.values())
+      return
+    }
+    await this.#storeOps.get(sessionId)
   }
 
   onDetach(sessionId: string): void {
@@ -186,6 +238,9 @@ export class SessionParkManager {
   }
 
   async discard(sessionId: string): Promise<void> {
+    // Dropped rather than run: `discard` is reached from the `session_closed` arm of the very subscription this
+    // handle unsubscribes, and the runner drops its subscribers on close anyway.
+    this.#watches.delete(sessionId)
     clearTimeout(this.#detachTimers.get(sessionId))
     this.#detachTimers.delete(sessionId)
     this.#configs.delete(sessionId)

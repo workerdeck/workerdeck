@@ -11,8 +11,8 @@ export type ProducedFile = {
 export class ProducedFileStore {
   #bySession = new Map<string, Map<string, ProducedFile>>()
 
-  watch(runner: Runner): void {
-    runner.subscribe((event) => {
+  watch(runner: Runner): () => void {
+    return runner.subscribe((event) => {
       if (event.type !== 'file_produced') {
         return
       }

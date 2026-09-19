@@ -17,6 +17,7 @@ import type { ServerContext } from './context.ts'
 import { json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { parseSessionRoute } from './lib/parse-route.ts'
+import { reloadPlan } from './lib/reload-plan.ts'
 import type { DrainReport, LateBoundRefs, WorkerServer, WorkerServerOptions } from './options.ts'
 import { handleExecutionResult } from './routes/executions.ts'
 import { handleHostFiles } from './routes/host-files.ts'
@@ -53,6 +54,10 @@ export type {
 // How long a client gets to acknowledge the shutdown close frame before its socket is torn down.
 const SOCKET_CLOSE_GRACE_MS = 250
 
+// How old the account-level rate-limit reading may be before a profiles read asks a live session for a newer one.
+// Generous: the windows move over hours, and the point is to bound staleness at minutes rather than at days.
+const USAGE_STALE_MS = 5 * 60_000
+
 // Split live sessions into "will finish by itself" and "needs a person".
 //
 // `sessionState` is the vocabulary the dashboard, the session list and `workerdeck guard` already sort by, and it
@@ -88,6 +93,27 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const profileDefaultModels = new Map<string, string>()
   const profileUsage = new ProfileUsageTracker()
+  // The backstop behind the attach-time refresh, for the surface that reads the account number without opening a
+  // session at all. Fire and forget: this request still answers with what is known, and the newer reading arrives
+  // as a `rate_limit` event moments later. One session per profile is enough - the reading is account-level - and
+  // the runner's own throttle is what keeps a page of profiles from becoming a page of control requests.
+  const refreshStaleUsage = (name: string): void => {
+    const held = profileUsage.usage(name)
+    const newest = Math.max(0, ...Object.values(held ?? {}).map((window) => window.updatedAt ?? 0))
+    if (Date.now() - newest < USAGE_STALE_MS) {
+      return
+    }
+    for (const info of refs.registry?.list() ?? []) {
+      if (info.profile !== name) {
+        continue
+      }
+      const runner = refs.registry?.get(info.id)
+      if (runner?.refreshUsage) {
+        void runner.refreshUsage().catch(() => {})
+        return
+      }
+    }
+  }
   // With a store in play, detection seeds it on first launch instead of declaring anything: a
   // declared profile cannot be edited over the API, and an auto-detected one is exactly the profile
   // an operator most wants to rename or retarget.
@@ -103,7 +129,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     decorate: {
       defaultModel: (name) => profileDefaultModels.get(name),
       availability: (name) => availability.get(name),
-      usage: (name) => profileUsage.usage(name),
+      usage: (name) => {
+        refreshStaleUsage(name)
+        return profileUsage.usage(name)
+      },
     },
   })
   for (const p of options.profiles ?? []) {
@@ -141,21 +170,27 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const producedFiles = new ProducedFileStore()
   const shell = options.shell?.enabled === true ? createShellService(options.shell) : null
   const registry = new SessionRegistry({
+    // Every watcher here hands back its detach, and the registry runs them when the runner leaves. A hot reload is
+    // the case that needs it: the runner outlives this server, and these closures would otherwise keep delivering
+    // webhooks and pushes from a generation that is over, one extra copy per reload.
     onRegister: (runner) => {
-      notifier.watch(runner)
-      producedFiles.watch(runner)
-      profileUsage.watch(runner)
-      shell?.watch(runner)
+      const detachers = [notifier.watch(runner), producedFiles.watch(runner), profileUsage.watch(runner), shell?.watch(runner)]
       const profile = runner.info().profile
-      if (!profile) {
-        return
+      if (profile) {
+        detachers.push(
+          runner.subscribe((event) => {
+            if (event.type !== 'capabilities' || !event.defaultModel) {
+              return
+            }
+            profileDefaultModels.set(profile, event.defaultModel)
+          }),
+        )
       }
-      runner.subscribe((event) => {
-        if (event.type !== 'capabilities' || !event.defaultModel) {
-          return
+      return () => {
+        for (const detach of detachers) {
+          detach?.()
         }
-        profileDefaultModels.set(profile, event.defaultModel)
-      })
+      }
     },
   })
   const attachmentStore = new AttachmentStore(options.attachments)
@@ -469,6 +504,29 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           resolve({ port: typeof address === 'object' && address ? address.port : port })
         })
       })
+    },
+    releaseSession: (id) => {
+      const runner = registry.get(id)
+      if (!runner) {
+        return undefined
+      }
+      const plan = reloadPlan(runner)
+      if (plan !== 'carry') {
+        throw new Error(`session ${id} cannot be carried by identity (${plan})`)
+      }
+      const config = parking.release(id)
+      registry.evict(id)
+      return { runner, config }
+    },
+    adoptSession: ({ runner, config }) => {
+      // Re-checked here, not only at release: a runner held across a failed generation may have ended in the
+      // meantime, and adopting a dead one would list a session nothing can answer.
+      if (reloadPlan(runner) !== 'carry') {
+        return false
+      }
+      parking.adopt(runner, config)
+      registry.retain(runner.id, factory.watchAuthSource(runner))
+      return true
     },
     drain: async (drainOptions = {}) => {
       const { timeoutMs = 30_000, pollMs = 250, onProgress } = drainOptions

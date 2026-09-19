@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
-import { createFileProfileStore, createFileSessionStore, createWorkerServer, type WorkerServer } from '@workerdeck/server'
+import { createFileProfileStore, createFileSessionStore, createWorkerServer, type CarriedSession, type WorkerServer } from '@workerdeck/server'
 import { dashboardDir } from '@workerdeck/web'
 import { createApnsRoute } from '../apns/routes.ts'
 import { createApnsForwarder } from '../apns/forwarder.ts'
@@ -18,8 +18,16 @@ import { looksLikeAsset, resolveWithinRoot, sendHtml, serveFile } from './static
 // that no event announced. Long, because holding a laptop awake for one extra minute is the cheap failure.
 const WAKE_SWEEP_MS = 60_000
 
+export type StartOptions = {
+  quiet?: boolean
+  // Live sessions handed over from a previous generation of this process. See `docs/DEVELOPMENT.md` §Hot reload.
+  carried?: CarriedSession[]
+}
+
 export type Instance = {
   server: WorkerServer
+  // The carried ids this instance took on. Short of the handed-over list when one of them ended while it was held.
+  adopted: string[]
   url: string
   port: number
   closed: Promise<void>
@@ -133,7 +141,7 @@ function createFallback(
   }
 }
 
-export async function startInstance(config: ResolvedConfig, options: { quiet?: boolean } = {}): Promise<Instance> {
+export async function startInstance(config: ResolvedConfig, options: StartOptions = {}): Promise<Instance> {
   const webRoot = config.web ? (config.webRoot ?? resolveWebRoot()) : undefined
   const generated: MaterializedAuthKey | null =
     config.generateAuthKey && !config.hostAuthenticates ? await materializeAuthKey(config.stateDir) : null
@@ -243,7 +251,28 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     stopActivities = driveLiveActivities({ source: server.registry, target: apns.activity })
   }
 
-  const { port } = await server.listen(config.port, config.host)
+  // Before `listen`, never after: between the port opening and the adoption, an attach for a carried id reads its
+  // dormant record and resumes a SECOND engine child on the same transcript. Registering first closes the window
+  // outright rather than masking it, and `listInfo` then hides the record for free.
+  const adopted: CarriedSession[] = []
+  for (const carried of options.carried ?? []) {
+    if (server.adoptSession(carried)) {
+      adopted.push(carried)
+    }
+  }
+
+  let port: number
+  try {
+    ;({ port } = await server.listen(config.port, config.host))
+  } catch (error) {
+    // Release before close: `close()` closes every runner the registry holds, which for a carried session is the
+    // engine child this whole path exists to keep. Release first and the registry is empty, so it closes nothing.
+    for (const carried of adopted) {
+      server.releaseSession(carried.runner.id)
+    }
+    await server.close()
+    throw error
+  }
   const displayHost = config.host === '0.0.0.0' || config.host === '::' ? 'localhost' : config.host
   const url = `http://${displayHost.includes(':') ? `[${displayHost}]` : displayHost}:${port}`
 
@@ -302,6 +331,7 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
 
   return {
     server,
+    adopted: adopted.map((carried) => carried.runner.id),
     url,
     port,
     closed,

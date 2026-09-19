@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { UsageWindowRow } from '@workerdeck/protocol'
+import { usageIsStale, type UsageWindowRow } from '@workerdeck/protocol'
 import { RotateCcw } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { formatAgoPrecise, formatCountdown, formatRateLimitWindowLong, rateLimitWindowSeconds } from '../../lib/format.ts'
@@ -33,6 +33,9 @@ export function UsageMeters({ windows, now, className }: { windows: UsageWindowR
 function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
   const { key: windowKey, info, updatedAt, inferredReset } = window
   const utilization = info.utilization ?? 0
+  // Drawn differently rather than hidden: this is still the best answer anyone has, it is just not a claim about
+  // right now, and a stale reading asserted as current is how a number from two days ago passes for the truth.
+  const stale = usageIsStale(window, now)
   const resetsAtMs = info.resetsAt !== undefined ? info.resetsAt * 1000 : undefined
   const duration = rateLimitWindowSeconds(windowKey)
   const remaining = resetsAtMs !== undefined ? (resetsAtMs - now) / 1000 : undefined
@@ -44,13 +47,18 @@ function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <span className="truncate text-body-sm text-fg-1">{formatRateLimitWindowLong(windowKey)}</span>
-        <span className={cn('shrink-0 font-mono text-body-sm font-medium', info.status === 'rejected' ? 'text-danger' : 'text-fg-1')}>
+        <span
+          className={cn(
+            'shrink-0 font-mono text-body-sm font-medium',
+            info.status === 'rejected' ? 'text-danger' : stale ? 'text-fg-4' : 'text-fg-1',
+          )}
+        >
           {utilization.toFixed(0)}% used
         </span>
       </div>
       <div className="relative mt-2 h-2 rounded-full bg-border">
         <div
-          className={cn('h-full rounded-full', meterTintClass(utilization))}
+          className={cn('h-full rounded-full', meterTintClass(utilization), stale && 'opacity-40')}
           style={{ width: `${Math.min(100, Math.max(2, utilization))}%` }}
         />
         {pace !== undefined ? (
@@ -71,7 +79,12 @@ function UsageMeter({ window, now }: { window: UsageWindowRow; now: number }) {
         {info.isUsingOverage ? <span className="text-warning">overage</span> : null}
         {info.status === 'rejected' ? <span className="text-danger">limit reached</span> : null}
         {inferredReset ? <span>window reset · nothing reported since</span> : null}
-        {updatedAt && !inferredReset ? <span>{formatAgoPrecise(updatedAt, now)}</span> : null}
+        {updatedAt && !inferredReset ? (
+          <span className={cn(stale && 'text-warning')}>
+            {stale ? 'last reported ' : ''}
+            {formatAgoPrecise(updatedAt, now)}
+          </span>
+        ) : null}
       </div>
     </div>
   )

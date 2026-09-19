@@ -35,6 +35,12 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   })
   const detachBridge = bridge.attach(runner.id, send)
 
+  // After the replay is wired, so a fresh reading arrives as a live event behind the history rather than racing it.
+  // The replay faithfully re-installs whatever this session last heard, which on an idle session can be days old,
+  // and until now nothing in an attach asked for a newer one. Throttled inside the runner; failures are silent by
+  // design (the control request is experimental, and a missing usage reading is not an attach failure).
+  void runner.refreshUsage?.().catch(() => {})
+
   ws.on('message', (data: Buffer) => {
     let frame: ClientFrame
     try {

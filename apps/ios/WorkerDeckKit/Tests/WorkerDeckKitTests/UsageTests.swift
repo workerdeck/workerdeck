@@ -149,3 +149,41 @@ struct UsageTests {
     #expect(meterSeverity(100) == .error)
   }
 }
+
+extension UsageTests {
+  /// Mirrors `packages/ui/test/usage-stale.test.ts`. A reading is a poll, not a
+  /// stream, so its age is part of it: past the window a surface draws it as
+  /// the last thing anybody heard rather than as the truth right now.
+  @Test("a reading older than the window is marked stale")
+  func staleReadingIsMarked() {
+    let now = 1_800_000_000_000.0
+    #expect(
+      usageIsStale(
+        UsageWindowRow(
+          key: "seven_day", info: info(1, type: "seven_day"),
+          updatedAt: now - 2 * 24 * 60 * 60 * 1000), now: now))
+    #expect(
+      !usageIsStale(
+        UsageWindowRow(
+          key: "seven_day", info: info(92, type: "seven_day"),
+          updatedAt: now - usageStaleAfterMs + 1), now: now))
+  }
+
+  /// An inferred reset is derived at serve time from the wall clock and says so
+  /// in its own words, so its age never turns it stale.
+  @Test("an inferred reset is never stale")
+  func inferredResetIsNeverStale() {
+    let now = 1_800_000_000_000.0
+    #expect(
+      !usageIsStale(
+        UsageWindowRow(
+          key: "five_hour", info: info(0),
+          updatedAt: now - 5 * 24 * 60 * 60 * 1000, inferredReset: true), now: now))
+  }
+
+  /// A transcript with no clock stamps 0; that is "unknown", not 1970.
+  @Test("an unstamped reading says nothing about its age")
+  func unstampedReadingIsNotStale() {
+    #expect(!usageIsStale(UsageWindowRow(key: "seven_day", info: info(5, type: "seven_day")), now: 1_800_000_000_000.0))
+  }
+}

@@ -6,12 +6,12 @@ type HeldWindow = { info: RateLimitInfo; updatedAt: number }
 export class ProfileUsageTracker {
   #profiles = new Map<string, Map<string, HeldWindow>>()
 
-  watch(runner: Runner): void {
+  watch(runner: Runner): () => void {
     const profile = runner.info().profile
     if (!profile) {
-      return
+      return () => {}
     }
-    runner.subscribe((event) => {
+    return runner.subscribe((event) => {
       if (event.type !== 'rate_limit') {
         return
       }
