@@ -28,15 +28,15 @@
     "dev": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register src/cli.ts"
   },
   "dependencies": {
-    "@openai/codex": "~0.153.4",
+    "@openai/codex": "~0.155.1",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/web": "workspace:*"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.258",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.278",
     "@swc-node/register": "^1.12.1",
-    "@swc/core": "^1.16.1",
-    "@types/node": "^26.4.0",
+    "@swc/core": "^1.16.2",
+    "@types/node": "^26.6.1",
     "@types/ws": "^8.18.1",
     "@workerdeck/protocol": "workspace:*",
     "rimraf": "^6.1.3",

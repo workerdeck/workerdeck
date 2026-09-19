@@ -31,7 +31,7 @@ function spawnItem(call: string, thread: string, path: string) {
 }
 
 describe('CodexRunner sub-agents', () => {
-  it("attributes two concurrent agents' interleaved work — deltas included — each to its own anchor", async () => {
+  it("attributes two concurrent agents' interleaved work, deltas included, each to its own anchor", async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
       const root = { threadId: 'thread-1', turnId }
@@ -100,7 +100,7 @@ describe('CodexRunner sub-agents', () => {
     ])
   })
 
-  it("an agent's own turn/completed settles it — report as the anchor's result — while the root turn continues", async () => {
+  it("an agent's own turn/completed settles it, report as the anchor's result, while the root turn continues", async () => {
     const peer = scriptedPeer()
     let runner: CodexRunner | undefined
     let mid: unknown
@@ -181,7 +181,7 @@ describe('CodexRunner sub-agents', () => {
     expect(runner.info().subagents).toMatchObject([{ status: 'failed' }])
   })
 
-  it('work from a thread that was never announced still gets an anchor — label-less, but a frame', async () => {
+  it('work from a thread that was never announced still gets an anchor: label-less, but a frame', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
       emit('item/agentMessage/delta', { threadId: 'thread-x', turnId: 'turn-x', itemId: 'm-x', delta: 'stray' })
@@ -233,5 +233,65 @@ describe('CodexRunner sub-agents', () => {
     expect(result.replay).toBe(true)
     expect((result.message.content as Array<{ is_error?: boolean }>)[0]!.is_error).toBeUndefined()
     expect(runner.info().subagents).toBeUndefined()
+  })
+
+  it("settles an agent on its subAgentActivity 'completed' item, without the agent thread's own turn/completed", async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      const root = { threadId: 'thread-1', turnId }
+      emit('item/completed', { ...root, item: spawnItem('call_a', 'thread-a', '/root/alpha') })
+      emit('item/agentMessage/delta', { threadId: 'thread-a', turnId: 'turn-a', itemId: 'm-a', delta: 'working' })
+      emit('item/completed', {
+        ...root,
+        item: { id: 'call_a', type: 'subAgentActivity', kind: 'completed', agentThreadId: 'thread-a', agentPath: '/root/alpha' },
+      })
+      emit('item/completed', { ...root, item: { id: 'm-root', type: 'agentMessage', text: 'root answer' } })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'spawn one', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const anchor = toolUses(events).find((t) => t.block.name === 'CodexAgent')!
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: anchor.block.id, status: 'done' }])
+    const result = ofType(events, 'user_message').find((e) => {
+      const content = e.message.content
+      return Array.isArray(content) && (content[0] as { tool_use_id?: string }).tool_use_id === anchor.block.id
+    })!
+    expect((result.message.content as Array<{ is_error?: boolean }>)[0]!.is_error).toBeUndefined()
+  })
+
+  it("prefers the agent thread's turn/completed report when it arrives before the 'completed' item", async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      const root = { threadId: 'thread-1', turnId }
+      emit('item/completed', { ...root, item: spawnItem('call_a', 'thread-a', '/root/alpha') })
+      emit('item/completed', {
+        threadId: 'thread-a',
+        turnId: 'turn-a',
+        item: { id: 'm-a', type: 'agentMessage', text: 'agent verdict' },
+      })
+      emit('turn/completed', {
+        threadId: 'thread-a',
+        turn: { id: 'turn-a', status: 'completed', items: [{ id: 'm-a', type: 'agentMessage', text: 'agent verdict' }] },
+      })
+      emit('item/completed', {
+        ...root,
+        item: { id: 'call_a', type: 'subAgentActivity', kind: 'completed', agentThreadId: 'thread-a', agentPath: '/root/alpha' },
+      })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'spawn one', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const anchor = toolUses(events).find((t) => t.block.name === 'CodexAgent')!
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: anchor.block.id, status: 'done' }])
+    const results = ofType(events, 'user_message').filter((e) => {
+      const content = e.message.content
+      return Array.isArray(content) && (content[0] as { tool_use_id?: string }).tool_use_id === anchor.block.id
+    })
+    expect(results).toHaveLength(1)
+    expect((results[0]!.message.content as Array<{ content?: string }>)[0]!.content).toContain('agent verdict')
   })
 })

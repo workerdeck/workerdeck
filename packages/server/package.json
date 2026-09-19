@@ -2,7 +2,7 @@
   "name": "@workerdeck/server",
   "version": "2.7.2",
   "type": "module",
-  "description": "The WorkerDeck gateway: HTTP + WebSocket session server over @workerdeck/core. Session registry (create/list/attach/interrupt/kill), pluggable auth hook, replay-from-seq attach. Runs anywhere Node runs — needs a real filesystem (no serverless).",
+  "description": "The WorkerDeck gateway: HTTP + WebSocket session server over @workerdeck/core. Session registry (create/list/attach/interrupt/kill), pluggable auth hook, replay-from-seq attach. Runs anywhere Node runs \u2014 needs a real filesystem (no serverless).",
   "license": "MIT",
   "main": "./build/index.mjs",
   "types": "./build/index.d.mts",
@@ -30,10 +30,10 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.258",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.278",
     "@swc-node/register": "^1.12.1",
-    "@swc/core": "^1.16.1",
-    "@types/node": "^26.4.0",
+    "@swc/core": "^1.16.2",
+    "@types/node": "^26.6.1",
     "@types/ws": "^8.18.1",
     "@workerdeck/sandbox": "workspace:*",
     "rimraf": "^6.1.3",

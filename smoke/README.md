@@ -5,16 +5,16 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Script | Command | Costs money? |
 | --- | --- | --- |
 | Sandbox boundary | `pnpm smoke:sandbox` | No |
-| Live model loop | `<KEY>=... pnpm smoke:live [provider] [model]` | **Yes — real tokens** |
-| Full SDK-client stack | `<KEY>=... pnpm smoke:sdk [provider] [model]` | **Yes — real tokens** |
+| Live model loop | `<KEY>=... pnpm smoke:live [provider] [model]` | **Yes, real tokens** |
+| Full SDK-client stack | `<KEY>=... pnpm smoke:sdk [provider] [model]` | **Yes, real tokens** |
 | Live MCP | `pnpm smoke:mcp --probe` / `<KEY>=... pnpm smoke:mcp [provider] [model]` | Probe: no. Full: **yes** |
-| Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes — real tokens** |
-| Codex engine | `pnpm smoke:codex --canary` / `--clear` / `pnpm smoke:codex [model]` | Canary: no. Clear: **two tiny turns**. Full: **yes — plan/API usage** |
+| Message attachments | `pnpm smoke:media [image\|pdf\|text]` | **Yes, real tokens** |
+| Codex engine | `pnpm smoke:codex --canary` / `--clear` / `--steer` / `pnpm smoke:codex [model]` | Canary: no. Clear: **two tiny turns**. Steer: **one short turn**. Full: **yes, plan/API usage** |
 | Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |
-| APNs push | `pnpm smoke:push <host> [sessionId]` | No — but it rings a real phone |
-| Restart, end to end | `pnpm smoke:restart [claude\|codex] [clear] [noprofile] [swept] [all]` | **Yes — two short turns** |
+| APNs push | `pnpm smoke:push <host> [sessionId]` | No, but it rings a real phone |
+| Restart, end to end | `pnpm smoke:restart [claude\|codex] [clear] [noprofile] [swept] [all]` | **Yes, two short turns** |
 
-## `smoke:sandbox` — the untrusted-code boundary
+## `smoke:sandbox`: the untrusted-code boundary
 
 Eight scenarios covering the happy path, two escape attempts, two denial-of-service attempts,
 the network gate, and cross-run isolation. Each prints what it proves, so a green run reads as
@@ -28,7 +28,7 @@ pnpm smoke:sandbox 'while (true) {}'            # watch the deadline fire
 pnpm smoke:sandbox 'require("fs")'              # watch it fail
 ```
 
-## `smoke:live` — the model-agnostic loop against a real provider
+## `smoke:live`: the model-agnostic loop against a real provider
 
 The unit tests drive a fake model, so they cannot validate real tool-call payload shapes or
 provider event drift. This closes that gap: the model is asked a question it can only answer by
@@ -42,14 +42,14 @@ ANTHROPIC_API_KEY=... pnpm smoke:live anthropic
 ANTHROPIC_API_KEY=... pnpm smoke:live anthropic claude-opus-5
 ```
 
-The document says `revenue: 4173`, `employees: 12`, so the only correct answer is **348** — a
+The document says `revenue: 4173`, `employees: 12`, so the only correct answer is **348**: a
 model that guesses instead of running code gets it wrong visibly. The script exits non-zero if
 the turn never completes, or if the model answered without calling the tool at all (which would
 mean the loop was never exercised).
 
 Run it against two providers to satisfy the PRD's SM-1 (same workflow, config swap only).
 
-## `smoke:sdk` — the whole stack, the way a consumer runs it
+## `smoke:sdk`: the whole stack, the way a consumer runs it
 
 `smoke:live` drives the runner in-process; `bridge-e2e.test.ts` drives the real server and
 client with a stubbed model. This smoke is the combination neither covers:
@@ -57,7 +57,7 @@ client with a stubbed model. This smoke is the combination neither covers:
     real model → AiSdkRunner on createWorkerServer → HTTP/WS → WorkerDeckClient
     → createToolCallHost executing in a real QuickJS guest
 
-The server has **no QuickJS executor at all** here — every `eval_script` call must travel the
+The server has **no QuickJS executor at all** here: every `eval_script` call must travel the
 bridge to the client's sandbox (the run fails if none does), while the authoritative `fs_*`
 tools run server-side, proving the trust split live. Bridged results re-enter the loop through
 the server's own wiring (`BridgeHub.onResult` → `runner.settleExecution`).
@@ -70,10 +70,10 @@ ANTHROPIC_API_KEY=... pnpm smoke:sdk anthropic
 
 Hard failures: turn doesn't complete or errors, no bridged client execution, an execution on a
 non-browser backend, wrong answer (348), or empty turn usage. The server-side
-`/out/report.json` written by `fs_write` is reported but only warned on — providers vary in
+`/out/report.json` written by `fs_write` is reported but only warned on: providers vary in
 following that instruction. Verified against `claude-sonnet-5` and `gpt-5`.
 
-## `smoke:mcp` — live MCP tools from a real remote server
+## `smoke:mcp`: live MCP tools from a real remote server
 
 The unit tests drive `connectMcpTools` against a stub; this connects to **DeepWiki**
 (`https://mcp.deepwiki.com/mcp`, free, no auth) for real: streamable-http transport, tools
@@ -81,21 +81,21 @@ namespaced `deepwiki__*`, granted to a provider session as authoritative (server
 never bridged), with a prompt only answerable through them.
 
 ```bash
-pnpm smoke:mcp --probe                    # connect + list tools + clean close — FREE
-ANTHROPIC_API_KEY=... pnpm smoke:mcp anthropic   # full loop — costs tokens
+pnpm smoke:mcp --probe                    # connect + list tools + clean close, FREE
+ANTHROPIC_API_KEY=... pnpm smoke:mcp anthropic   # full loop, costs tokens
 ```
 
 Hard failures: no tools (server unreachable or protocol drift), tools not namespaced, turn
 doesn't complete, or the model answered without a single `deepwiki__*` call. Verified against
 `claude-sonnet-5`.
 
-## `smoke:media` — attachments the model can actually see
+## `smoke:media`: attachments the model can actually see
 
 The only thing that can validate the attachment wire. `pnpm test` proves the server turns an
 uploaded file into the right content blocks; it cannot prove the **CLI accepts them on streamed
 input**, and a CLI that dropped non-text blocks would look exactly like a model ignoring the
-picture. So this drives the shipped path end to end — generated file → `POST
-/sessions/:id/attachments` → `user_message(attachmentIds)` → real Claude Code — and asks a
+picture. So this drives the shipped path end to end: generated file → `POST
+/sessions/:id/attachments` → `user_message(attachmentIds)` → real Claude Code, and asks a
 question whose answer exists only inside the attachment.
 
 ```bash
@@ -104,39 +104,40 @@ pnpm smoke:media image        # one kind
 ```
 
 The three fixtures are generated, not committed: a PNG built chunk by chunk (so the repo carries
-no binaries) and a one-page PDF with computed xref offsets — a hand-guessed xref is the usual
+no binaries) and a one-page PDF with computed xref offsets: a hand-guessed xref is the usual
 reason a minimal PDF is rejected. Hard failures: an answer that doesn't name the colour, the two
 words on the PDF page, or the passphrase in the text file. Verified against `claude-opus-5`.
 
-## `smoke:codex` — the Codex engine against the real binary
+## `smoke:codex`: the Codex engine against the real binary
 
 The codex unit tests drive a scripted JSON-RPC peer, so they cannot validate the real
-`codex app-server` v2 vocabulary (pre-1.0, regenerable per release — drift is promised), the
+`codex app-server` v2 vocabulary (pre-1.0, regenerable per release; drift is promised), the
 spawn contract, the handshake, or the auth chain. This is the drift alarm: **any change to
-`CodexRunner`'s spawn options, handshake, or event mapping requires a run** — it is to Codex
+`CodexRunner`'s spawn options, handshake, or event mapping requires a run**: it is to Codex
 what the permission smoke is to Claude.
 
 ```bash
 pnpm smoke:codex --canary       # FREE (network only): the auth-drift canaries
-pnpm smoke:codex                # full run — needs codex auth, costs plan/API usage
+pnpm smoke:codex                # full run, needs codex auth, costs plan/API usage
 pnpm smoke:codex gpt-5.6-sol    # full run on a specific model (default gpt-5.6-luna)
-pnpm smoke:codex --clear        # JUST the clear scenario — two tiny turns
+pnpm smoke:codex --clear        # JUST the clear scenario, two tiny turns
+pnpm smoke:codex --steer        # JUST the steer scenario, one short turn
 ```
 
 The free canaries pin the verified auth matrix with fake keys against a scratch `CODEX_HOME`,
-running real turns through `CodexRunner` + `connectAppServer` — so a free run also exercises
+running real turns through `CodexRunner` + `connectAppServer`, so a free run also exercises
 the spawn, the `initialize` handshake, and `thread/start`. The pinned facts (2026-08-05,
-0.146.0): `OPENAI_API_KEY` is ignored ("Missing bearer" — no credential sent), `CODEX_API_KEY`
+0.146.0): `OPENAI_API_KEY` is ignored ("Missing bearer", no credential sent), `CODEX_API_KEY`
 is **exec-only and equally ignored by the app-server** (the day either flips to
-`invalid_api_key`, the availability probe's rules are stale — see GOTCHAS §Codex), and
+`invalid_api_key`, the availability probe's rules are stale; see GOTCHAS §Codex), and
 `codex login status` still exit-codes its verdict. They also pin the two approval gates
 (`capabilities.experimentalApi` at initialize, the granular `approvalPolicy` at `thread/start`)
-and the shape of `skills/list` — free because it is a local directory scan, and worth pinning
+and the shape of `skills/list`, free because it is a local directory scan, and worth pinning
 because `engines/codex/types.ts` mirrors it by hand. The skills check asserts *structure* only,
 never which skills this machine happens to have.
 
-The paid part needs the one supported auth route — `codex login` (or
-`codex login --with-api-key`) **run in your own terminal** — and covers: token deltas actually
+The paid part needs the one supported auth route, `codex login` (or
+`codex login --with-api-key`) **run in your own terminal**, and covers: token deltas actually
 arriving and agreeing with the final message (the reason this transport exists), a real command
 execution mapped to `CodexCommand` with its output and exit code, the usage-relation asserts on
 a cache-heavy resume turn (usage is summed from `thread/tokenUsage/updated`), resume continuity
@@ -144,10 +145,20 @@ across child processes, interrupt landing cleanly *and* the thread staying resum
 `default` mode's read-only sandbox actually refusing a write, a `localImage` attachment
 answered correctly, and **the clear** (`--clear` runs this alone, for two tiny turns).
 
+The steer scenario proves the one thing the scripted peer cannot: that codex **folds a
+`turn/steer` injection into the running turn** rather than answering it afterwards. The tell is
+the turn count, so the load-bearing assertion is that the run produced exactly **one**
+`turn_result`: a steer that quietly degraded to the old queue path would produce two. It then
+checks that the injected marker reached the model's answer, and that the original task still
+completed. It is deliberately cheap: the mid-turn window is bought with `sleep 12` inside a shell
+command rather than with a long generation, and the effort is pinned `low`. It waits for the
+`CodexCommand` tool card before injecting, so it exercises the real steer path and not the
+"turn was already over" fallback.
+
 The clear scenario is the one place where the *assertions* needed rethinking after the first live
 run, and the reason is worth knowing before adding to it: **the context reading cannot witness a
 clear.** A fresh codex thread reads ~14k tokens before anyone types (system prompt + tool schemas
-+ skills), so two small turns either side of a clear both read ≈ that floor — the measured pair
++ skills), so two small turns either side of a clear both read ≈ that floor, the measured pair
 was 13909 → 14028, the *cleared* thread reading higher. So the run asks for a codeword given
 before the clear and requires the model to fail to produce it; the window is printed, not
 asserted. The two resumes at the end are free (a promptless resume backfills history and runs no
@@ -156,17 +167,17 @@ turn), which is what makes "the old thread is still there, the new one is clean"
 `WD_SMOKE_DEBUG=1` prints a timestamped event timeline for the clear scenario; pair it with
 `WORKERDECK_CODEX_TRACE=<file>` for the inbound wire, where a second `thread/started` is the
 clear's `thread/start` (the trace records inbound traffic only, so the outbound request itself is
-not in it — the new thread id is the evidence).
+not in it, the new thread id is the evidence).
 
 **A timed-out paid run is not automatically a failure.** Two turns in this file have hung past
-their 90–120s waits on a first attempt and passed on an immediate re-run (2026-08-24, twice) —
+their 90-120s waits on a first attempt and passed on an immediate re-run (2026-08-24, twice) , 
 the app-server reconnects through 401s and transport fallbacks on its way to a turn. Re-run
 before diagnosing.
 
-## `smoke:attach` — what a replay actually costs, on the wire
+## `smoke:attach`: what a replay actually costs, on the wire
 
 Attaches to a session that already exists on a running gateway and reports what the replay is
-made of: bytes per event type, and — the split that matters — how much of each `tool_result` is
+made of: bytes per event type, and, the split that matters, how much of each `tool_result` is
 **text** versus **non-text parts** (a base64 screenshot, which every client ships and then
 discards).
 
@@ -179,7 +190,7 @@ pnpm smoke:attach 127.0.0.1:8787 <sessionId> --capture /tmp/before.jsonl
 **Run this before calling any new replay rule finished.** `truncateResults` shipped on a
 projection of 68% and was worth **0.3%** when it was finally measured: the projection had used
 `JSON.stringify(content).length`, so it counted base64 parts as text. The bytes that were really
-there needed a different rule (`imageRefs`), and that one was measured first — 4,548 KB → 1,275 KB.
+there needed a different rule (`imageRefs`), and that one was measured first, 4,548 KB → 1,275 KB.
 Keeping text and non-text apart is the whole point of the output here.
 
 `--capture <file>` writes the raw frames as JSONL instead of summarising, which is how you show a
@@ -193,7 +204,7 @@ diff /tmp/before.jsonl /tmp/after.jsonl     # must be empty on a session with no
 
 The same capture feeds iOS's `AttachReplayBench` (`apps/ios/README.md`).
 
-## `smoke:push` — a real notification, on demand
+## `smoke:push`: a real notification, on demand
 
 ```bash
 WD_APNS_KEY=/path/AuthKey_XXXX.p8 WD_APNS_KEY_ID=XXXX \
@@ -202,13 +213,13 @@ pnpm smoke:push <host> [sessionId]
 ```
 
 Push is the one gateway surface that cannot be tested by asking for it. Everything else answers a
-request; a notification only exists when a session decides to raise one — so "does tapping this open
+request; a notification only exists when a session decides to raise one, so "does tapping this open
 the right session" is observable only by accident, and duly went unobserved while every tap aborted
 the iOS app (`docs/GOTCHAS.md`, §APNs push).
 
 It builds the payload with **`buildPush`**, not a hand-written `aps` dictionary, and that is the
 point rather than a convenience. A hand-rolled payload carries no `sessionId`, so `PushPayload.init?`
-returns nil and the tap routes nowhere — which looks exactly like a broken deep link and is not one.
+returns nil and the tap routes nowhere, which looks exactly like a broken deep link and is not one.
 If you are testing routing, the payload has to be the one the forwarder really sends.
 
 **Three rules, each of which cost an invalid run.** They are about the *test*, not the gateway:
@@ -216,29 +227,29 @@ If you are testing routing, the payload has to be the one the forwarder really s
 - **Push at an idle session.** Every `turn_completed` carries `collapseId: t:<hash(sessionId)>`
   (`forwarder.ts`), so APNs **replaces** a session's notification rather than stacking it. A session
   with an agent attached fires a real push whenever a turn ends, which silently takes the place of
-  the one you sent — a tap then opens a payload you did not write, with a seq near the tail, and the
+  the one you sent, a tap then opens a payload you did not write, with a seq near the tail, and the
   correct landing reads as a bug. Observed: `focusSeq=11277` on a device that had been sent 2790.
 - **Force-quit the app first.** A warm attach has nothing to replay, so a deep link that lands
   correctly and one that ignores `seq` entirely are indistinguishable.
 - **Re-read `lastSeq` immediately before sending.** A dormant wake starts a fresh log
   (`parking.ts`: `this.watch(runner, isDormant(record) ? 0 : record.snapshot.seq)`), so a seq minted
-  minutes ago may now exceed `lastSeq` — which is the documented *nil* case and lands at the tail
+  minutes ago may now exceed `lastSeq`, which is the documented *nil* case and lands at the tail
   for the right reason.
 
 The payload stays byte-identical to the forwarder's on purpose, collapse id included; a probe that
 diverged from what really ships would not be testing the thing that ships.
 
 Needs an `apns`-configured gateway: one without it answers `/apns/devices` with 404 and keeps no
-registry. Credentials come from the environment and must match that gateway's own `apns` config —
+registry. Credentials come from the environment and must match that gateway's own `apns` config , 
 this script is deliberately not a second place that knows how to mint one. `WD_STATE_DIR` points at
 the gateway's state directory (default `/tmp/workerdeck-prod`), whose `apns-devices.json` is read so
 the push goes to whatever is actually registered.
 
 
-## `smoke:restart` — the restart, end to end, against a real engine
+## `smoke:restart`: the restart, end to end, against a real engine
 
 `packages/server/test/dormant.test.ts` drives a **fake** engine, so it proves the record survives
-and the routes behave — and cannot prove that a real `claude`/`codex` resume works, which is the
+and the routes behave, and cannot prove that a real `claude`/`codex` resume works, which is the
 whole feature. This is that half.
 
 ```bash
@@ -249,7 +260,7 @@ pnpm smoke:restart codex clear        # + a clear with no live child (codex only
 ```
 
 It spawns **its own gateway** on port 8791 with its own state dir and never touches an instance you
-are already running — on this machine the dev gateway usually hosts live sessions, and `ctrl-c` on
+are already running, on this machine the dev gateway usually hosts live sessions, and `ctrl-c` on
 it is indistinguishable from the test until afterwards.
 
 The load-bearing check is the last one: after the restart it asks the model for a word given before
@@ -268,7 +279,7 @@ Two things it found that the code's own comments did not say:
   says so, rather than racing it.
 
 The `clear` variant (codex only) is the negative case of the clear feature and **costs no model
-tokens**: it kills the gateway's app-server child (by pid, never `pgrep -f codex` — this smoke
+tokens**: it kills the gateway's app-server child (by pid, never `pgrep -f codex`, this smoke
 must not touch a session it did not create), types `/clear` into the childless session, and
 checks that the dormant record naming the cleared conversation is deleted from the state dir. It
 then restarts and asserts the session is not resurrected into what it threw away. Expect the row
@@ -278,9 +289,9 @@ stated one.
 
 ## `pnpm smoke:activity <host> start|update|end [sessionId]`
 
-A real Live Activity push. The device half cannot be tested any other way — push-to-start does not
+A real Live Activity push. The device half cannot be tested any other way, push-to-start does not
 work in the Simulator, and the gateway's own driver only fires on a real turn. `start` reads
 `apns-devices.json` and pushes to every `liveActivityStartToken`; `update` and `end` read
-`apns-activities.json`, which only has entries once the phone has reported an update token back —
+`apns-activities.json`, which only has entries once the phone has reported an update token back , 
 so the order is always start, wait a beat, then update. Same env vars and the same two 401s as
 `smoke:push`.

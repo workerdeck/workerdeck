@@ -498,6 +498,14 @@ export type CodexRunnerConfig = CreateSessionRequest & {
 
 type QueuedTurn = { input: AppServerUserInput[] }
 
+function steerUnsupported(error: unknown): boolean {
+  if (!(error instanceof JsonRpcError)) {
+    return false
+  }
+  // Measured against 0.153.4: an unknown method is a serde miss on the ClientRequest enum, -32600 with this message, never -32601.
+  return error.code === -32601 || (error.code === -32600 && error.message.includes('unknown variant `turn/steer`'))
+}
+
 function rateLimitWindowName(minutes: number | null | undefined): string | undefined {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
     return undefined
@@ -524,6 +532,9 @@ type ActiveTurn = {
   toolUseEmitted: Set<string>
   sectionIndex: Map<string, number>
   settled: boolean
+  steerGate: Promise<void>
+  openSteerGate: () => void
+  steerChain: Promise<void>
   resolve: (outcome: AppServerTurn) => void
   reject: (error: Error) => void
 }
@@ -567,6 +578,8 @@ export class CodexRunner implements Runner {
   #mcpStatus = new Map<string, { status: string; error?: string; failureReason?: string }>()
   #agents = new CodexAgentTracker()
   #clearedThreads = new Set<string>()
+  #cannotSteer = new WeakSet<AppServerConnection>()
+  #clearsPending = 0
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
     const mode = config.permissionMode ?? 'default'
@@ -735,8 +748,60 @@ export class CodexRunner implements Runner {
     } else {
       echo()
     }
+    this.#dispatch(input)
+  }
+
+  #dispatch(input: AppServerUserInput[]): void {
+    const active = this.#activeTurn
+    if (!active || !this.#steerable(active)) {
+      this.#enqueueTurn(input)
+      return
+    }
+    active.steerChain = active.steerChain.then(async () => {
+      await active.steerGate
+      await this.#steer(active, input)
+    })
+  }
+
+  #steerable(active: ActiveTurn): boolean {
+    if (active.settled || active.interrupted || this.#clearsPending > 0) {
+      return false
+    }
+    return !this.#connection || !this.#cannotSteer.has(this.#connection)
+  }
+
+  async #steer(active: ActiveTurn, input: AppServerUserInput[]): Promise<void> {
+    const connection = this.#connection
+    const threadId = this.#sdkSessionId
+    const turnId = active.turnId
+    if (!connection || !threadId || !turnId || active.settled || active.interrupted || this.#cannotSteer.has(connection)) {
+      this.#enqueueTurn(input)
+      return
+    }
+    try {
+      await connection.request('turn/steer', { threadId, expectedTurnId: turnId, input })
+    } catch (error) {
+      if (steerUnsupported(error)) {
+        this.#cannotSteer.add(connection)
+      }
+      this.#enqueueTurn(input)
+    }
+  }
+
+  #enqueueTurn(input: AppServerUserInput[]): void {
+    if (this.#closed) {
+      return
+    }
     this.#queue.push({ input })
     this.#scheduleTurn()
+  }
+
+  #adoptTurnId(active: ActiveTurn, turnId: string | undefined): void {
+    if (active.turnId || typeof turnId !== 'string' || !turnId) {
+      return
+    }
+    active.turnId = turnId
+    active.openSteerGate()
   }
 
   #buildInput(text: string, attachments: readonly AttachmentInput[]): AppServerUserInput[] {
@@ -814,7 +879,12 @@ export class CodexRunner implements Runner {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    const run = this.#turnChain.then(() => this.#clearNow())
+    this.#clearsPending += 1
+    const run = this.#turnChain
+      .then(() => this.#clearNow())
+      .finally(() => {
+        this.#clearsPending -= 1
+      })
     this.#turnChain = run.then(
       () => undefined,
       () => undefined,
@@ -997,7 +1067,7 @@ export class CodexRunner implements Runner {
         }
         if (error instanceof JsonRpcError) {
           throw new Error(
-            'codex app-server rejected initialize (capabilities.experimentalApi: true — required ' +
+            'codex app-server rejected initialize (capabilities.experimentalApi: true is required ' +
               'for the granular approval policy, and WorkerDeck has no non-experimental fallback): ' +
               error.message,
             { cause: error },
@@ -1158,7 +1228,7 @@ export class CodexRunner implements Runner {
       if (partialReason) {
         this.#emit({
           type: 'session_error',
-          message: `Resumed thread history is incomplete — older turns could not be loaded (${partialReason})`,
+          message: `Resumed thread history is incomplete: older turns could not be loaded (${partialReason})`,
         })
       }
       this.#replayTurns(turns)
@@ -1200,6 +1270,10 @@ export class CodexRunner implements Runner {
   }
 
   #newTurnState(): ActiveTurn {
+    let openSteerGate!: () => void
+    const steerGate = new Promise<void>((resolve) => {
+      openSteerGate = resolve
+    })
     return {
       nonce: randomUUID(),
       interrupted: false,
@@ -1215,6 +1289,9 @@ export class CodexRunner implements Runner {
       toolUseEmitted: new Set(),
       sectionIndex: new Map(),
       settled: false,
+      steerGate,
+      openSteerGate,
+      steerChain: Promise.resolve(),
       resolve: () => {},
       reject: () => {},
     }
@@ -1237,6 +1314,7 @@ export class CodexRunner implements Runner {
           return
         }
         active.settled = true
+        active.openSteerGate()
         resolve(turnResult)
       }
       active.reject = (error) => {
@@ -1244,6 +1322,7 @@ export class CodexRunner implements Runner {
           return
         }
         active.settled = true
+        active.openSteerGate()
         reject(error)
       }
     })
@@ -1274,7 +1353,7 @@ export class CodexRunner implements Runner {
           if (!started) {
             return
           }
-          active.turnId ??= started.id
+          this.#adoptTurnId(active, started.id)
           if (started.status && started.status !== 'inProgress') {
             active.resolve(started)
           }
@@ -1421,8 +1500,8 @@ export class CodexRunner implements Runner {
     'turn/started': (params) => {
       const active = this.#activeTurn
       const turn = (params as { turn?: AppServerTurn })?.turn
-      if (active && turn && !active.turnId) {
-        active.turnId = turn.id
+      if (active && turn) {
+        this.#adoptTurnId(active, turn.id)
       }
     },
     'turn/completed': (params) => {
@@ -1595,7 +1674,7 @@ export class CodexRunner implements Runner {
         requestId: request.id,
         behavior: 'deny',
         resolvedBy: 'policy',
-        message: 'Interactive questions are disabled for this session — choose the most reasonable option yourself and continue.',
+        message: 'Interactive questions are disabled for this session: choose the most reasonable option yourself and continue.',
       })
       return { answers: {} }
     }
@@ -1628,7 +1707,7 @@ export class CodexRunner implements Runner {
       } else {
         behavior = 'deny'
         resolvedBy = 'policy'
-        message = 'codex offered no plain accept for this request (only broader session/policy grants) — denied instead'
+        message = 'codex offered no plain accept for this request (only broader session/policy grants), denied instead'
         sent = pending.channel.deny(pending.params, false, pending.offered)
       }
     } else {
@@ -1811,7 +1890,7 @@ export class CodexRunner implements Runner {
         // neutrally: the one claim history cannot back is that the agent failed.
         this.#emitToolResult(
           id,
-          "(ran in its own thread — its work is not part of this thread's stored history)",
+          "(ran in its own thread, so its work is not part of this thread's stored history)",
           false,
           undefined,
           agent?.toolUseId ?? null,
@@ -1841,6 +1920,15 @@ export class CodexRunner implements Runner {
         if (record.status === 'running') {
           this.#agents.settle(record, 'failed')
           this.#emitToolResult(record.toolUseId, 'interrupted', true)
+        }
+        return
+      }
+      // The agent thread's own turn/completed is the richer signal and settles first when it
+      // arrives, but it is not guaranteed to reach a thread we never subscribed to.
+      if (item.kind === 'completed') {
+        if (record.status === 'running') {
+          this.#agents.settle(record, 'done')
+          this.#emitToolResult(record.toolUseId, '', false)
         }
         return
       }
