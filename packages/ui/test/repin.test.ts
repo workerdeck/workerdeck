@@ -4,7 +4,7 @@ import { REPIN_HOLD_MS, repinToBottom } from '../src/components/agent/use-transc
 
 // The send re-pin's contract against `use-stick-to-bottom`. The scenario that broke the
 // previous fix (`scrollToBottom('instant')` alone): the user scrolls up, sends, and one
-// trailing momentum wheel tick lands in the same task as the send — one frame before the
+// trailing momentum wheel tick lands in the same task as the send - one frame before the
 // library installs its own animation record. The library's `handleWheel` escape guard reads
 // `!state.animation?.ignoreEscapes`, so everything below is about what the state looks like
 // *synchronously after* the repin call, not after a frame.
@@ -28,7 +28,7 @@ function fakeStick(overrides: Partial<StickToBottomState> = {}) {
   const scrollToBottom = (options?: unknown) => {
     calls.push(options)
     // Mirror the library's synchronous entry: pin, wipe any prior animation, defer the
-    // real record behind a rAF (which this test never runs — that gap IS the bug).
+    // real record behind a rAF (which this test never runs - that gap IS the bug).
     state.isAtBottom = true
     state.animation = undefined
     return Promise.resolve(true)

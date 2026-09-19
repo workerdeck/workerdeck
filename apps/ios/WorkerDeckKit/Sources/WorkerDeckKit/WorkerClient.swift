@@ -26,7 +26,7 @@ public struct WorkerClientError: Error, LocalizedError, Equatable, Sendable {
 /// REST + WebSocket client for a workerdeck gateway.
 ///
 /// Swift port of `WorkerDeckClient` (packages/client/src/index.ts). The job
-/// queue surface (`/jobs`, `/queue`) is deliberately not mirrored yet — it is a
+/// queue surface (`/jobs`, `/queue`) is deliberately not mirrored yet - it is a
 /// later phase of the mobile plan.
 ///
 /// Auth is the header transport: a native client is not a browser, so it never
@@ -79,7 +79,7 @@ public struct WorkerClient: Sendable {
     return try decode(SessionResponse.self, from: data).session
   }
 
-  /// Rename a session — a gateway edit, so the dashboard and the VS Code
+  /// Rename a session - a gateway edit, so the dashboard and the VS Code
   /// extension see the same name. Never a local override: a title only this
   /// device knows is a title nobody else can search for.
   @discardableResult
@@ -97,7 +97,7 @@ public struct WorkerClient: Sendable {
 
   /// List the files in a session's scratch filesystem (deliverables the agent
   /// wrote; see the `file_delivered` event). 404s when the session's engine has
-  /// no file store — Claude-engine sessions write to the real disk instead.
+  /// no file store - Claude-engine sessions write to the real disk instead.
   public func listSessionFiles(sessionId: String) async throws -> [SessionFileInfo] {
     let data = try await call("GET", "/sessions/\(Self.encodeComponent(sessionId))/files")
     return try decode(ListSessionFilesResponse.self, from: data).files
@@ -118,7 +118,7 @@ public struct WorkerClient: Sendable {
     return data
   }
 
-  /// Direct download URL for a session file. Carries no headers — on an
+  /// Direct download URL for a session file. Carries no headers - on an
   /// authenticated server use `fetchSessionFile` instead.
   public func sessionFileURL(sessionId: String, path: String) throws -> URL {
     try makeURL("/sessions/\(Self.encodeComponent(sessionId))/files/\(Self.encodeFilePath(path))")
@@ -129,7 +129,7 @@ public struct WorkerClient: Sendable {
   /// Upload one file for a session, ahead of the message that will carry it.
   /// The returned attachment's `id` goes to `SessionHandle.send`.
   ///
-  /// The body is the raw bytes — there is no multipart here, which is why this is
+  /// The body is the raw bytes - there is no multipart here, which is why this is
   /// a plain upload task and not a hand-rolled form encoder.
   public func uploadAttachment(
     sessionId: String, name: String, mediaType: String, data: Data
@@ -190,7 +190,7 @@ public struct WorkerClient: Sendable {
     return try decode(McpServersResponse.self, from: data).servers
   }
 
-  /// Resolve a pending permission over REST — the counterpart of the WS
+  /// Resolve a pending permission over REST - the counterpart of the WS
   /// `permission_decision` command, for answering from a push notification or
   /// any context without a live attach. Throws when the request is unknown,
   /// already resolved, or expired.
@@ -206,14 +206,14 @@ public struct WorkerClient: Sendable {
   // MARK: - Profiles
 
   /// The profiles this caller may use, plus whether it may create new ones.
-  /// Servers predating profiles 404 here — catch and treat as none declared.
+  /// Servers predating profiles 404 here - catch and treat as none declared.
   public func listProfiles() async throws -> ListProfilesResponse {
     let data = try await call("GET", "/profiles")
     return try decode(ListProfilesResponse.self, from: data)
   }
 
   /// One profile plus a view-only snapshot of its config directory (settings,
-  /// skills, agents, commands — env var *names* only, never values).
+  /// skills, agents, commands - env var *names* only, never values).
   public func getProfile(name: String) async throws -> GetProfileResponse {
     let data = try await call("GET", "/profiles/\(Self.encodeComponent(name))")
     return try decode(GetProfileResponse.self, from: data)
@@ -222,7 +222,7 @@ public struct WorkerClient: Sendable {
   // MARK: - SDK sessions
 
   /// List an engine's on-disk sessions, for resume across server restarts.
-  /// Feed a result's `sessionId` to `CreateSessionRequest.resume` — under a
+  /// Feed a result's `sessionId` to `CreateSessionRequest.resume` - under a
   /// profile of the same engine. `profile` names whose store to list (claude →
   /// the Agent SDK store, codex → CODEX_HOME threads); nil, the server resolves
   /// it implicitly when it declares exactly one profile, else lists the Claude
@@ -248,7 +248,7 @@ public struct WorkerClient: Sendable {
   /// accepts writes.
   ///
   /// Throws a 404 `WorkerClientError` when the server has no host-file roots
-  /// configured — that is the normal answer, not a malfunction, and the caller
+  /// configured - that is the normal answer, not a malfunction, and the caller
   /// should treat it as "no file browser on this host" the same way it treats a
   /// pre-profiles server 404ing `/profiles`.
   public func listHostRoots() async throws -> ListHostRootsResponse {
@@ -263,7 +263,7 @@ public struct WorkerClient: Sendable {
     return try decode(ListHostDirResponse.self, from: data)
   }
 
-  /// Recursive fuzzy file search under one host directory — what backs `@file`
+  /// Recursive fuzzy file search under one host directory - what backs `@file`
   /// completion in the composer. Subsequence matching, filename hits first. Cheap
   /// enough to call per keystroke: the server skips build directories and bounds
   /// the walk, truncating rather than failing.
@@ -284,7 +284,7 @@ public struct WorkerClient: Sendable {
     return try decode(ReadHostFileResponse.self, from: data)
   }
 
-  /// Write one host file. A 409 means the file changed since it was read — the
+  /// Write one host file. A 409 means the file changed since it was read - the
   /// agent edits this same tree, so the edit has to be rebased, never forced.
   @discardableResult
   public func writeHostFile(_ request: WriteHostFileRequest) async throws -> WriteHostFileResponse {
@@ -292,7 +292,7 @@ public struct WorkerClient: Sendable {
     return try decode(WriteHostFileResponse.self, from: data)
   }
 
-  /// Fetch the bytes of a file this session's ENGINE produced — the `fileId` of
+  /// Fetch the bytes of a file this session's ENGINE produced - the `fileId` of
   /// a `file_produced` event (codex's generated images).
   ///
   /// Deliberately not `/fs/read`: this route needs no host-file roots declared
@@ -306,7 +306,7 @@ public struct WorkerClient: Sendable {
       "/sessions/\(Self.encodeComponent(sessionId))/produced/\(Self.encodeComponent(fileId))")
   }
 
-  /// The bytes behind a `ProjectIcon.image` — the session-scoped icon route.
+  /// The bytes behind a `ProjectIcon.image` - the session-scoped icon route.
   ///
   /// Session-scoped, taking **no path**: the gateway serves whatever its own
   /// discovery resolved for this session's cwd, so the fetch rides the same
@@ -318,7 +318,7 @@ public struct WorkerClient: Sendable {
   /// sessions in one project serve identical bytes, and the hash is on the
   /// wire precisely so a client fetches once per project.
   ///
-  /// A 404 is the uniform "no icon" — no project, a glyph-only project, or an
+  /// A 404 is the uniform "no icon" - no project, a glyph-only project, or an
   /// icon the gateway refused, deliberately indistinguishable (saying which
   /// would say *why* a path was refused). Treat it as "draw no image", never
   /// as an error worth reporting.
@@ -390,7 +390,7 @@ public struct WorkerClient: Sendable {
   /// Fetched rather than pointed at, for the reason `fetchAttachment` is: the
   /// gateway authenticates with a header, so a `UIImageView` aimed at the URL
   /// would render a 401. The route answers **raw bytes** with a `Content-Type`,
-  /// not JSON — base64 in a payload would double the memory and add a decode on
+  /// not JSON - base64 in a payload would double the memory and add a decode on
   /// the main thread for something `UIImage(data:)` already does.
   ///
   /// A 404 means "ask again after a fresh attach": a woken dormant session has a
@@ -495,7 +495,7 @@ public struct WorkerClient: Sendable {
 
   // MARK: - Percent encoding
 
-  /// `encodeURIComponent`'s unreserved set — anything else is escaped, so a
+  /// `encodeURIComponent`'s unreserved set - anything else is escaped, so a
   /// session id or profile name containing `/`, `?` or `#` can't break the route.
   private static let componentAllowed = CharacterSet(
     charactersIn:
@@ -505,7 +505,7 @@ public struct WorkerClient: Sendable {
     value.addingPercentEncoding(withAllowedCharacters: componentAllowed) ?? value
   }
 
-  /// Encode a file path per segment, preserving `/` — mirrors `sessionFileUrl`
+  /// Encode a file path per segment, preserving `/` - mirrors `sessionFileUrl`
   /// in the reference client (empty segments are dropped).
   static func encodeFilePath(_ path: String) -> String {
     path.split(separator: "/", omittingEmptySubsequences: true)

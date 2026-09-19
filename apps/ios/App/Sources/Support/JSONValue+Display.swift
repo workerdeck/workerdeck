@@ -3,7 +3,7 @@ import Foundation
 
 extension JSONValue {
   /// Pretty, key-sorted JSON for the expanded tool-call input. Sorted because the
-  /// decoded representation is an unordered dictionary — insertion order is gone
+  /// decoded representation is an unordered dictionary - insertion order is gone
   /// by the time the app sees it, so stable is the best available.
   var prettyJSON: String {
     let encoder = JSONEncoder()
@@ -16,7 +16,7 @@ extension JSONValue {
   ///
   /// Per-tool preferred keys first (Bash → `command`, Read/Edit/Write →
   /// `file_path`, …), then the first non-empty string field, then compact JSON.
-  /// Never nil for a non-empty input — a card with no summary reads as broken.
+  /// Never nil for a non-empty input - a card with no summary reads as broken.
   func toolInputSummary(toolName: String) -> String? {
     guard let object = objectValue else {
       if case .null = self { return nil }
@@ -36,7 +36,7 @@ extension JSONValue {
     return Fmt.oneLine(prettyJSON)
   }
 
-  /// The same field `toolInputSummary` picks, **whole** — no 140-character cap
+  /// The same field `toolInputSummary` picks, **whole** - no 140-character cap
   /// and newlines kept.
   ///
   /// The two exist because they answer different questions. A collapsed
@@ -45,7 +45,7 @@ extension JSONValue {
   /// run. A Bash approval reading `... | tee _docs/measurements/attach-parts-$(d…`
   /// hides the half of the pipeline that touches the filesystem, which is the
   /// half worth approving. Nothing bounds the height here because the prompt's
-  /// body scrolls (`PromptBodyScroll`) — that is what made showing it whole
+  /// body scrolls (`PromptBodyScroll`) - that is what made showing it whole
   /// affordable.
   func toolInputSubject(toolName: String) -> String? {
     guard let object = objectValue else {
@@ -84,7 +84,7 @@ extension JSONValue {
   }
 }
 
-/// SF Symbol per tool, with a generic fallback. Names only — no bundled assets.
+/// SF Symbol per tool, with a generic fallback. Names only - no bundled assets.
 enum ToolIcon {
   static func symbol(for toolName: String) -> String {
     switch toolName {

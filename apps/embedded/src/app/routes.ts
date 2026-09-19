@@ -9,7 +9,7 @@ export type AppRoutesDeps = {
   auth: CookieAuth
   state: AppState
   mcp: RequestHandler
-  // Absent in dev — Vite serves the SPA.
+  // Absent in dev - Vite serves the SPA.
   webRoot?: string
   agentConfig: () => AgentConfigResponse
 }

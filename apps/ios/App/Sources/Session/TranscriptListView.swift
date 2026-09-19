@@ -14,7 +14,7 @@ struct TranscriptListView: View {
   let revision: Int
   /// The catch-up seam: the item index the reader had read to, and the recap
   /// line describing what has arrived since. Drawn as a divider before that
-  /// item, with everything above it faded — the terminal renderer splices a row
+  /// item, with everything above it faded - the terminal renderer splices a row
   /// into its fold instead, and the two are deliberately separate: nothing
   /// under this renderer asks which variant it is in.
   var catchUp: (at: Int, label: String)? = nil
@@ -105,9 +105,9 @@ struct TranscriptListView: View {
 /// (`TerminalPlanner`'s `.recap`).
 ///
 /// The label sits **under** the rule rather than inside it, unlike the web's
-/// centred `— ※ recap: … —`: the recap is a sentence with counts and tool names
+/// centred `- ※ recap: … -`: the recap is a sentence with counts and tool names
 /// in it, the phone is 390pt wide, and a label boxed between two rules had to
-/// be clipped to "1 turn…" — which is the one thing this row exists to say.
+/// be clipped to "1 turn…" - which is the one thing this row exists to say.
 private struct RecapDivider: View {
   let label: String
 

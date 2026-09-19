@@ -28,7 +28,7 @@ extension SessionStatus {
     }
   }
 
-  /// Whether a turn is in flight — drives the spinner and the stop button.
+  /// Whether a turn is in flight - drives the spinner and the stop button.
   var isBusy: Bool {
     switch self {
     case .starting, .running, .awaitingApproval: return true
@@ -38,7 +38,7 @@ extension SessionStatus {
 }
 
 extension PermissionMode {
-  /// The names Claude Code itself uses. Notably `default` is **"Manual"** — the
+  /// The names Claude Code itself uses. Notably `default` is **"Manual"** - the
   /// wire value is `default`, but calling it that in the UI conflates a real mode
   /// (ask me every time) with "whatever the server picked", which is the one
   /// confusion the status bar exists to avoid.
@@ -53,7 +53,7 @@ extension PermissionMode {
     }
   }
 
-  /// The chip form, for the status bar — where the label shares a line with three
+  /// The chip form, for the status bar - where the label shares a line with three
   /// other things and "Bypass permissions" would eat half of it.
   var shortLabel: String {
     switch self {
@@ -66,17 +66,17 @@ extension PermissionMode {
     }
   }
 
-  /// What the mode actually does, for the picker — the same one-liners the CLI's
+  /// What the mode actually does, for the picker - the same one-liners the CLI's
   /// own mode selector shows.
   var summary: String {
     switch self {
     case .default: return "Always ask before making changes"
     case .acceptEdits: return "Automatically accept all file edits"
-    case .bypassPermissions: return "Skip every approval — the agent is unsupervised"
+    case .bypassPermissions: return "Skip every approval - the agent is unsupervised"
     case .plan: return "Create a plan before making changes"
     // The CLI's own definition, and the opposite of bypass: it never prompts,
     // and anything not already permitted is denied rather than allowed.
-    case .dontAsk: return "Never ask — deny anything not pre-approved"
+    case .dontAsk: return "Never ask - deny anything not pre-approved"
     case .auto: return "The agent handles permission decisions"
     }
   }
@@ -95,7 +95,7 @@ extension PermissionMode {
   }
 
   /// Icon colour in the picker. Distinct from `tint`, which is the chip's
-  /// severity ramp — here it is identity, so `default` gets a colour rather than
+  /// severity ramp - here it is identity, so `default` gets a colour rather than
   /// the chip's deliberately-quiet grey.
   var symbolTint: Color {
     switch self {
@@ -108,7 +108,7 @@ extension PermissionMode {
     }
   }
 
-  /// How much of the approval gate this mode gives away — the chip is the only
+  /// How much of the approval gate this mode gives away - the chip is the only
   /// place a bypassing session announces itself mid-run.
   var tint: Color {
     switch self {
@@ -126,7 +126,7 @@ extension Color {
   /// The protocol warns that `color` is *often* one of the CLI's own theme token
   /// names ('inactive', 'promptBorder', …) rather than a real color. The web
   /// dashboard passes it through only when `CSS.supports('color', …)` accepts it;
-  /// this is the same rule with the vocabulary UIKit can actually resolve —
+  /// this is the same rule with the vocabulary UIKit can actually resolve -
   /// `#rgb`/`#rrggbb`/`#rrggbbaa` and the handful of CSS basic color keywords the
   /// CLI themes use. Anything else is a token, and the caller falls back.
   init?(cliToken token: String) {

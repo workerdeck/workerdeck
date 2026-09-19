@@ -131,7 +131,7 @@ export function QuestionsField({ form }: { form: RunForm }) {
         <SelectContent>
           {QUESTION_BEHAVIORS.map((b) => (
             <SelectItem key={b.value} value={b.value}>
-              <SelectItemText>{`${b.label} — ${b.description}`}</SelectItemText>
+              <SelectItemText>{`${b.label} - ${b.description}`}</SelectItemText>
             </SelectItem>
           ))}
         </SelectContent>

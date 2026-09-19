@@ -18,12 +18,12 @@
 
 import type { TriggerConfig, TriggerPosition } from './types.ts'
 
-// Shared option type — everything in TriggerConfig except the keys each
+// Shared option type - everything in TriggerConfig except the keys each
 // factory sets by default.
 
 type TriggerPresetOptions = Omit<Partial<TriggerConfig>, 'char' | 'position' | 'mode'>
 
-// @mention — dropdown at any position
+// @mention - dropdown at any position
 
 export type MentionTriggerOptions = TriggerPresetOptions & {
   /** Override the trigger character. Defaults to `'@'`. */
@@ -48,14 +48,14 @@ export function mentionTrigger(opts: MentionTriggerOptions = {}): TriggerConfig 
   }
 }
 
-// /command — dropdown anywhere (opt into line-start-only with `position`)
+// /command - dropdown anywhere (opt into line-start-only with `position`)
 
 export type CommandTriggerOptions = TriggerPresetOptions & {
   /** Override the trigger character. Defaults to `'/'`. */
   char?: string
   /**
    * Where the command trigger is valid. Defaults to `'any'`, so commands fire
-   * anywhere a `/` follows whitespace — not just at the start of a line.
+   * anywhere a `/` follows whitespace - not just at the start of a line.
    * Set to `'start'` to restrict the dropdown to the very start of the input
    * or immediately after a newline (the classic slash-command behavior).
    */
@@ -83,7 +83,7 @@ export function commandTrigger(opts: CommandTriggerOptions = {}): TriggerConfig 
   }
 }
 
-// #hashtag — dropdown at any position, auto-resolve on space
+// #hashtag - dropdown at any position, auto-resolve on space
 
 export type HashtagTriggerOptions = TriggerPresetOptions & {
   /** Override the trigger character. Defaults to `'#'`. */
@@ -132,7 +132,7 @@ export function callbackTrigger(opts: CallbackTriggerOptions): TriggerConfig {
   }
 }
 
-// Launch trigger — fires onActivate and swallows the character
+// Launch trigger - fires onActivate and swallows the character
 
 export type LaunchTriggerOptions = Omit<Partial<TriggerConfig>, 'mode'> & {
   /** The trigger character. Required. */

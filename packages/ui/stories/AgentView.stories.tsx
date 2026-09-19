@@ -34,10 +34,10 @@ The system uses three core entities. Each is stored in its own table and linked 
 
 The root entity. Every other record points back here.
 
-- **id** — UUID v7 (time-sortable)
-- **email** — unique, indexed
-- **created_at** — \`timestamptz\`, defaults to \`now()\`
-- **role** — one of \`admin\`, \`member\`, \`viewer\`
+- **id** - UUID v7 (time-sortable)
+- **email** - unique, indexed
+- **created_at** - \`timestamptz\`, defaults to \`now()\`
+- **role** - one of \`admin\`, \`member\`, \`viewer\`
 
 ### Session
 
@@ -126,7 +126,7 @@ interface SessionEvent {
 
 - \`#sessions\` is a private \`Map\`, so iteration order is insertion order
 - \`create()\` is \`async\` because \`createRunner\` may need to spawn a process
-- The \`id\` is a \`randomUUID()\` — not a UUID v7 like the user model
+- The \`id\` is a \`randomUUID()\` - not a UUID v7 like the user model
 
 > **Note:** The registry does not persist sessions to disk by itself. The \`SnapshotStore\` is a separate seam that the dormancy timer writes through. This separation is deliberate: the registry is fast (in-memory), the store is durable (on-disk), and they compose rather than entangle.
 
@@ -169,7 +169,7 @@ They serve different purposes but share the same transcript infrastructure:
 The queue is a *scheduler*, not a *runner*:
 
 1. It accepts job requests and persists them
-2. It claims one at a time (\`claimNext\` is atomic — see \`packages/queue\`)
+2. It claims one at a time (\`claimNext\` is atomic - see \`packages/queue\`)
 3. It creates a session with the job's prompt and options
 4. It monitors the session until it settles
 5. It records the outcome and moves to the next job
@@ -197,7 +197,7 @@ The key constraint: **\`claimNext\` must be atomic.** Two workers calling it sim
   items.push({
     kind: 'user',
     id: 'u4',
-    text: 'Perfect, thanks. One more — are there any known gotchas with the event log?',
+    text: 'Perfect, thanks. One more - are there any known gotchas with the event log?',
   })
 
   items.push({
@@ -209,7 +209,7 @@ The key constraint: **\`claimNext\` must be atomic.** Two workers calling it sim
 
 1. **Sequence numbers are session-scoped, not global.** Two sessions can both have \`seq: 1\`. The unique key is \`(session_id, seq)\`, not \`seq\` alone.
 
-2. **\`tool_result\` events carry the tool's output, not the model's interpretation.** The model sees the result in its next turn's context, but the event log records what the tool *actually returned* — which can differ from what the model *says* it returned.
+2. **\`tool_result\` events carry the tool's output, not the model's interpretation.** The model sees the result in its next turn's context, but the event log records what the tool *actually returned* - which can differ from what the model *says* it returned.
 
 3. **Replay deduplication keys on \`uuid\`, not \`seq\`.** The SDK re-streams user messages on resume, and the reducer dedupes them by their uuid. If you synthesize events without unique uuids, the replay will silently drop duplicates.
 
@@ -217,7 +217,7 @@ The key constraint: **\`claimNext\` must be atomic.** Two workers calling it sim
 
 ---
 
-*These are all documented in \`docs/GOTCHAS.md\` — the canonical list of invariants that bite.*`,
+*These are all documented in \`docs/GOTCHAS.md\` - the canonical list of invariants that bite.*`,
   })
 
   return items
@@ -279,7 +279,7 @@ const meta: Meta<typeof Transcript> = {
     variant: {
       control: 'select',
       options: ['cards', 'terminal'],
-      description: 'Transcript variant — chat bubbles or terminal lines',
+      description: 'Transcript variant - chat bubbles or terminal lines',
     },
     density: {
       control: 'select',
@@ -288,7 +288,7 @@ const meta: Meta<typeof Transcript> = {
     },
     fontSize: {
       control: { type: 'range', min: 10, max: 20, step: 1 },
-      description: 'Base font size in px — drives everything',
+      description: 'Base font size in px - drives everything',
     },
     stickyPrompt: {
       control: 'boolean',

@@ -3,7 +3,7 @@ import WorkerDeckKit
 
 /// A workerdeck gateway this app can drive.
 ///
-/// `baseURL` is stored exactly as the user typed it — the server's *root*, e.g.
+/// `baseURL` is stored exactly as the user typed it - the server's *root*, e.g.
 /// `http://your-mac.tailnet-name.ts.net:8787`. The `/v1` API prefix is an
 /// implementation detail of the protocol, so `apiURL` appends it rather than
 /// making anyone remember it.
@@ -27,7 +27,7 @@ struct Host: Codable, Identifiable, Hashable, Sendable {
     var text = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
     while text.hasSuffix("/") { text.removeLast() }
     guard !text.isEmpty else { return nil }
-    // A bare `mac.tailnet.ts.net:8787` is a host:port, not a scheme — tailnet
+    // A bare `mac.tailnet.ts.net:8787` is a host:port, not a scheme - tailnet
     // gateways are plain http, so that is the sane default to assume.
     if !text.contains("://") { text = "http://" + text }
     if !text.hasSuffix("/v1") { text += "/v1" }
@@ -50,7 +50,7 @@ struct Host: Codable, Identifiable, Hashable, Sendable {
 
   /// A client for this gateway, or nil when the address does not parse.
   ///
-  /// Shared by `HostContext` and `PushCoordinator` — the latter needs a client
+  /// Shared by `HostContext` and `PushCoordinator` - the latter needs a client
   /// for a host that is *not* the selected one, because a push can name any
   /// gateway the app is registered with.
   func makeClient() -> WorkerClient? {
@@ -67,7 +67,7 @@ struct Host: Codable, Identifiable, Hashable, Sendable {
 
   /// Whether this gateway's address points at this device itself. Feeds only
   /// `SessionRow.local` in the shared list rules, where it gates the untagged
-  /// workspace-scope roots — and a phone has no open folders, so the scope is
+  /// workspace-scope roots - and a phone has no open folders, so the scope is
   /// permanently inert here. Computed honestly anyway rather than hardcoded, so
   /// the row means what the shared rules say it means.
   var isLoopback: Bool {

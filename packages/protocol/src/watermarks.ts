@@ -2,7 +2,7 @@ export type Watermark = {
   itemCount: number
   activity: number
   // Prose rows read (`SessionInfo.proseCount`). Optional because a mark stored before
-  // prose counting existed cannot say — see `unseenCount`, which reads that absence as
+  // prose counting existed cannot say - see `unseenCount`, which reads that absence as
   // "caught up" rather than badging a whole history the operator has already seen.
   prose?: number
   turns: number

@@ -48,7 +48,7 @@ export type TranscriptItem =
       name: string
       input: unknown
       parentToolUseId: string | null
-      // The event's own `ts`, never a receive time — replay-stable, stamped at creation only; absent reads as "no elapsed", never as the epoch.
+      // The event's own `ts`, never a receive time - replay-stable, stamped at creation only; absent reads as "no elapsed", never as the epoch.
       ts?: number
       status: 'running' | 'pending' | 'deferred' | 'settled' | 'failed'
       result?: {
@@ -142,7 +142,7 @@ const LOCAL_COMMAND_CAVEAT = '<local-command-caveat>'
 const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/
 const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
 // A message whose first text block is the deferred `!` flush is synthetic as a whole, but the block after it is
-// the person's own message. Only that shape earns the exemption — `<task-notification>` and the rest stay hidden.
+// the person's own message. Only that shape earns the exemption - `<task-notification>` and the rest stay hidden.
 function carriesCaveat(content: ApiMessage['content']): boolean {
   return contentToBlocks(content).some(
     (block) => block.type === 'text' && (block as { text: string }).text.trimStart().startsWith(LOCAL_COMMAND_CAVEAT),
@@ -229,11 +229,11 @@ function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[]
 }
 
 export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): TranscriptState {
-  // No event carries the engine — the snapshot is the only source.
+  // No event carries the engine - the snapshot is the only source.
   const engine = info.engine ?? state.engine
   return {
     ...state,
-    // With held state (reconnect, warm cache seed) the held status stands: any change since is a `status_changed` in the replay span — events stay the one authority.
+    // With held state (reconnect, warm cache seed) the held status stands: any change since is a `status_changed` in the replay span - events stay the one authority.
     status: state.lastSeq === 0 ? info.status : state.status,
     model: state.model ?? info.model,
     permissionMode: state.permissionMode ?? info.permissionMode,
@@ -526,7 +526,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           (item): item is Extract<TranscriptItem, { kind: 'thinking' }> => item.kind === 'thinking' && item.id === id,
         )
         const text = (existing?.text ?? '') + (delta.delta.thinking ?? '')
-        // Whitespace-only (encrypted) thinking creates no item — `turn_result` would finalize a permanent empty row; text rebuilds from `existing`, so skipping loses nothing.
+        // Whitespace-only (encrypted) thinking creates no item - `turn_result` would finalize a permanent empty row; text rebuilds from `existing`, so skipping loses nothing.
         if (text.trim() === '') {
           return base
         }

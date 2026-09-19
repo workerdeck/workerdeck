@@ -1,6 +1,6 @@
 import Foundation
 
-/// The work *under* a session row — the port of
+/// The work *under* a session row - the port of
 /// `packages/ui/src/components/agent/SessionSteps.tsx`.
 ///
 /// The rows themselves are SwiftUI's business; what lives here is everything the
@@ -27,7 +27,7 @@ public struct Step: Sendable, Equatable, Identifiable, Hashable {
     case failed
   }
 
-  /// The `tool_use` id — the identity, and the handle both destinations ride.
+  /// The `tool_use` id - the identity, and the handle both destinations ride.
   public let key: String
   public var id: String { key }
   /// ``subagentLabel``, never a spelling of its own.
@@ -35,7 +35,7 @@ public struct Step: Sendable, Equatable, Identifiable, Hashable {
   /// What one of these is called, for the disclosure's count.
   public let noun: String
   public let state: State
-  /// A trailing reading — a sub-agent's tool count. Nil draws nothing, because
+  /// A trailing reading - a sub-agent's tool count. Nil draws nothing, because
   /// `0 tools` beside a thinking agent reads as a stall.
   public let detail: String?
   /// The long reading, for accessibility and a long-press.
@@ -79,7 +79,7 @@ public func stepState(_ status: SubagentStatus) -> Step.State {
   }
 }
 
-/// How many of these are still going — the live half of the disclosure's count.
+/// How many of these are still going - the live half of the disclosure's count.
 public func runningSteps(_ steps: [Step]) -> Int {
   steps.filter { $0.state == .running }.count
 }
@@ -97,7 +97,7 @@ public func stepCountLabel(running: Int, total: Int) -> String {
   running > 0 && running < total ? "\(running)/\(total)" : "\(total)"
 }
 
-/// The same count spoken — what a screen reader and a tooltip get.
+/// The same count spoken - what a screen reader and a tooltip get.
 public func stepCountWords(running: Int, total: Int, noun: String = "agent") -> String {
   if running > 0 && running < total { return "\(running) of \(total) \(noun)s running" }
   return "\(total) \(noun)\(total == 1 ? "" : "s")"

@@ -95,7 +95,7 @@ struct CreateSessionView: View {
           }
         }
         // Present exactly when the record (or the chosen catalog row) offers
-        // efforts — never a control that silently does nothing.
+        // efforts - never a control that silently does nothing.
         if !model.effortOptions.isEmpty {
           Picker("Effort", selection: $model.reasoningEffort) {
             Text("Default").tag("")
@@ -201,7 +201,7 @@ struct CreateSessionView: View {
           modes: model.availableModes,
           current: model.permissionMode,
           defaultMode: model.selectedProfile?.defaults?.permissionMode ?? .default,
-          // Creating a session is exactly when bypass *can* be chosen — the CLI
+          // Creating a session is exactly when bypass *can* be chosen - the CLI
           // only refuses to switch into it later. A server that forbids it
           // outright says so when the request lands.
           canBypass: true,
@@ -217,7 +217,7 @@ struct CreateSessionView: View {
   }
 }
 
-/// Pick a stored SDK session to resume — the rows the sessions list's Resume
+/// Pick a stored SDK session to resume - the rows the sessions list's Resume
 /// tab draws, but scoped to this form: the cwd field's directory (blank lists
 /// the whole store) and the chosen profile's engine store. Picking one fills
 /// the id field (and adopts the thread's directory); both stay editable.
@@ -354,7 +354,7 @@ private struct ProfileLabel: View {
         .font(.caption2)
         .foregroundStyle(.secondary)
       // Greyed, never hidden: availability is display-only and the probe can
-      // be stale — the row stays selectable.
+      // be stale - the row stays selectable.
       if profile.isUnavailable {
         Text("unavailable")
           .font(.caption2)

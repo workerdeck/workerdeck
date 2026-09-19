@@ -5,7 +5,7 @@ import Observation
 /// Browsing state for the folder picker: the server's roots, plus a cache of the
 /// directories walked into.
 ///
-/// Directories only — a working directory is what is being chosen, so files are
+/// Directories only - a working directory is what is being chosen, so files are
 /// filtered out here rather than in the view. Symlinks are kept: the server
 /// reports them without resolving, and one pointing at a project directory is a
 /// perfectly good answer; entering it either lists or 404s, which is the same
@@ -38,7 +38,7 @@ final class FolderPickerModel {
 
   /// Canned state for `UIPreviewHarness`. Both fetches short-circuit on state
   /// that is already present, so a model built this way never reaches its client
-  /// — which is why the preview can hand it one pointed nowhere.
+  /// - which is why the preview can hand it one pointed nowhere.
   init(client: WorkerClient, roots: [HostFileRoot], listings: [String: [HostDirEntry]]) {
     self.client = client
     availability = .ready(roots)
@@ -53,7 +53,7 @@ final class FolderPickerModel {
       availability = .ready(response.roots)
     } catch let error as WorkerClientError {
       // A 404 is the normal answer from a gateway started without roots, not a
-      // failure — the form still accepts a typed path.
+      // failure - the form still accepts a typed path.
       availability = error.statusCode == 404 ? .unavailable : .failed(error.message)
     } catch {
       availability = .failed(error.localizedDescription)

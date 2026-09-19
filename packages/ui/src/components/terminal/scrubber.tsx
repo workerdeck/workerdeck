@@ -351,7 +351,7 @@ export function TerminalScrubber(props: TerminalScrubberProps) {
     setPeek(null)
   }, [props.items])
 
-  // Manual listener because it must `preventDefault` — React's root wheel listeners are passive.
+  // Manual listener because it must `preventDefault` - React's root wheel listeners are passive.
   useEffect(() => {
     if (!interactive) {
       return

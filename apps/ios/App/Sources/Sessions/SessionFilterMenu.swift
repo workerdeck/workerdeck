@@ -3,12 +3,12 @@ import SwiftUI
 
 /// The three facets plus the two layout choices. Search is `.searchable` on the
 /// list itself; everything else lives here, which is why the subset line above
-/// the list is unconditional — with this menu closed it is the only thing saying
+/// the list is unconditional - with this menu closed it is the only thing saying
 /// rows are hidden.
 ///
 /// **A view of its own, and `Equatable` over plain values.** It used to be a
-/// method on the list, which meant its body read `model.adapters` — a property
-/// *computed from the session rows* — so `@Observable` invalidated it on every
+/// method on the list, which meant its body read `model.adapters` - a property
+/// *computed from the session rows* - so `@Observable` invalidated it on every
 /// one of the 1.2s poll's refreshes, and an open dropdown closed itself as soon
 /// as anything moved. An unread badge ticking up was enough. Taking `hosts` and
 /// `adapters` as values means SwiftUI can see that a refresh which brought no
@@ -17,7 +17,7 @@ import SwiftUI
 ///
 /// The `Binding` is deliberately not in the `==`: two bindings are never equal
 /// and comparing them would defeat the whole thing. It is safe to leave out
-/// because the *values* it reads — `config` — are covered by `configSnapshot`.
+/// because the *values* it reads - `config` - are covered by `configSnapshot`.
 struct FilterMenu: View, Equatable {
   struct Gateway: Equatable, Identifiable {
     let id: UUID

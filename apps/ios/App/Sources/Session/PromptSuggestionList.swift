@@ -5,7 +5,7 @@ import SwiftUI
 /// the header and the composer.
 ///
 /// It is a screen-level popover rather than part of the composer's card, which is
-/// what lets it claim that space — `SessionView` hangs it in an overlay *under*
+/// what lets it claim that space - `SessionView` hangs it in an overlay *under*
 /// the bottom safe-area inset, so `safeAreaPadding()` alone lands it flush below
 /// the navigation bar and just above the input card, with no height to compute.
 ///
@@ -42,7 +42,7 @@ struct PromptSuggestionList: View {
 }
 
 /// One suggestion, in two lines: what you scan for on top, what tells two of them
-/// apart underneath — the file's path, the command's description.
+/// apart underneath - the file's path, the command's description.
 private struct SuggestionRow: View {
   let suggestion: PromptCompletionModel.Suggestion
 
@@ -116,7 +116,7 @@ private struct SuggestionRow: View {
 /// The floating stack's measured height, so the picker can stop just above it.
 /// The session screen's own height, read off the stack the transcript and the
 /// footer both live in. Beside `FooterHeight` because it is the same kind of
-/// thing — a geometry a sibling needs and cannot ask for — and because a prompt
+/// thing - a geometry a sibling needs and cannot ask for - and because a prompt
 /// capped at a fraction of the screen is measuring exactly the box this reports.
 struct ContainerHeight: PreferenceKey {
   static let defaultValue: CGFloat = 0

@@ -8,7 +8,7 @@ import Testing
 /// The web client can leave this untested because an expanded row is mounted
 /// and the browser measures it. Here the planner has to *predict* the expanded
 /// row, the layout takes every frame from that prediction, and a wrong one is a
-/// clipped or overlapping row — so the properties below are the whole safety
+/// clipped or overlapping row - so the properties below are the whole safety
 /// net: a plan that changes with expansion, a cached height that agrees with a
 /// cold one, and a row that is unaffected by a press somewhere else.
 @Suite("TerminalExpansion")
@@ -71,7 +71,7 @@ struct TerminalExpansionTests {
     var expansion = TerminalExpansion()
     #expect(expansion.apply(.toggle(key)) == true)
     let open = lines(rows[0], expansion)
-    // The summary, then each call's header and its result — and every line of it
+    // The summary, then each call's header and its result - and every line of it
     // washed, so eighty new lines read as one block.
     #expect(open.count > collapsed.count)
     #expect(open.allSatisfy { $0.inOpen })
@@ -85,7 +85,7 @@ struct TerminalExpansionTests {
     #expect(lines(rows[0], expansion) == collapsed)
   }
 
-  @Test("a run of one offers no run key — it is already drawn as the call")
+  @Test("a run of one offers no run key - it is already drawn as the call")
   func runOfOneHasNoOwnKey() {
     let rows = TerminalRows.build(items: [.toolCall(call("a", result: "x")), text("after")])
     guard case .block(.run(let block)) = rows[0] else {
@@ -149,7 +149,7 @@ struct TerminalExpansionTests {
     #expect(open.contains { $0.text.contains("show all") })
     #expect(open.last?.press == .expandFull(callId: "a"))
     #expect(!full.contains { $0.text.contains("show all") })
-    // Every planned line is one drawn line, expanded or not — the premise the
+    // Every planned line is one drawn line, expanded or not - the premise the
     // layout takes its frames from.
     #expect(full.count >= 400)
   }
@@ -272,7 +272,7 @@ extension TerminalExpansionTests {
 // MARK: - The fold, stated once
 
 extension TerminalExpansionTests {
-  /// `BlockCall.ownLine` is now the **single statement** of the fold — the rule
+  /// `BlockCall.ownLine` is now the **single statement** of the fold - the rule
   /// `redItemIndices` filters on and the planner draws by. It had been pinned
   /// only through the scrubber's thirty-eight tests, i.e. through one consumer;
   /// this is the truth table itself.
@@ -295,7 +295,7 @@ extension TerminalExpansionTests {
   func ownLineForCollapsedRun() {
     let run = (0..<4).map { TranscriptItem.toolCall(call("c\($0)", result: "x")) }
     // The summary line is what is drawn, and `runFailed` colours it by the last
-    // call — so the last call *is* the row's outcome and nothing else is on a
+    // call - so the last call *is* the row's outcome and nothing else is on a
     // line of its own.
     #expect(owned(run) == ["c3"])
   }
@@ -316,7 +316,7 @@ extension TerminalExpansionTests {
     ]
     // Closed: the header, and nothing of the sub-agent's own working.
     #expect(owned(items) == ["T"])
-    // Open: the header, and the *run* inside it — still folded, so still stood
+    // Open: the header, and the *run* inside it - still folded, so still stood
     // for by its last call. Two folds deep, and the rule holds at each.
     #expect(owned(items, TerminalExpansion(open: [.task("T")])) == ["T", "k1"])
     // Both open: every child on its own line.
@@ -326,7 +326,7 @@ extension TerminalExpansionTests {
 
   @Test("an orphan child keeps its own row, so it is drawn like any top-level call")
   func ownLineForOrphan() {
-    // Parent outside the slice — what a recap boundary and a compaction leave.
+    // Parent outside the slice - what a recap boundary and a compaction leave.
     #expect(owned([.toolCall(call("k0", parent: "gone", result: "x")), text("t")]) == ["k0"])
   }
 
@@ -342,7 +342,7 @@ extension TerminalExpansionTests {
       return
     }
     // `planTask` draws the summary and the children and never the task's own
-    // result, so `.call("T")` would be a key that opens nothing — the run-of-one
+    // result, so `.call("T")` would be a key that opens nothing - the run-of-one
     // trap in a second dialect, which is why `drawsResult` says so once.
     #expect(!expansionKeys(of: rows[0]).contains(.call("T")))
     #expect(expansionKeys(of: rows[0]).contains(.task("T")))
@@ -406,7 +406,7 @@ struct TerminalExpansionSubtreeTests {
     #expect(!expansion.isFetching(callId: "t3"))
   }
 
-  @Test("closing ONE result closes only that result — never its siblings")
+  @Test("closing ONE result closes only that result - never its siblings")
   func callKeepsItsSiblings() {
     // The subtree handed in is the whole block, so without the `.call` guard one
     // press would collapse every other result in the same run.
@@ -418,7 +418,7 @@ struct TerminalExpansionSubtreeTests {
     #expect(expansion.isFull(callId: "t2"))
   }
 
-  @Test("opening is unchanged — a press that opens takes nothing with it")
+  @Test("opening is unchanged - a press that opens takes nothing with it")
   func openingIsUntouched() {
     var expansion = TerminalExpansion()
     let opened = expansion.apply(.toggle(run), subtree: members.union([run]))

@@ -147,7 +147,7 @@ export function FileTree({ tree, search, activePath, onOpenFile, onCollapse, sty
                 />
                 {row.truncated ? (
                   <p className="truncate py-0.5 text-label text-fg-4" style={{ paddingLeft: (row.depth + 1) * INDENT + 22 }}>
-                    More entries than the server will return — use search.
+                    More entries than the server will return - use search.
                   </p>
                 ) : null}
               </li>

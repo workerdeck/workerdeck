@@ -78,7 +78,7 @@ export function resolveExisting(roots: HostFileRoots, requested: string): Resolv
   }
   let target
   try {
-    // realpath output cannot name a symlink, so lstat === stat modulo a race — and a swap inside the window then classifies as neither.
+    // realpath output cannot name a symlink, so lstat === stat modulo a race - and a swap inside the window then classifies as neither.
     target = lstatSync(canonical)
   } catch {
     return notFound()
@@ -134,7 +134,7 @@ export function resolveForWrite(roots: HostFileRoots, requested: string): Resolv
     return notFound()
   }
   const path = join(parent, base)
-  // Redundant by construction (basename() cannot smuggle a separator) — kept because this is the line an escape would have to cross.
+  // Redundant by construction (basename() cannot smuggle a separator) - kept because this is the line an escape would have to cross.
   if (!contained(root.canonical, path)) {
     return notFound()
   }

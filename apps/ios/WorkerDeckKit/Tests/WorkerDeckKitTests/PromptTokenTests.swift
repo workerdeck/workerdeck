@@ -38,7 +38,7 @@ struct PromptTokenTests {
     #expect(PromptTokens.active(in: "/comm")?.kind == .command)
     #expect(PromptTokens.active(in: "/comm")?.query == "comm")
     #expect(PromptTokens.active(in: "  /comm")?.kind == .command)
-    // The picker is an editing aid, so it opens mid-draft too — reaching for a
+    // The picker is an editing aid, so it opens mid-draft too - reaching for a
     // command halfway through a sentence should not mean typing the name by hand.
     #expect(PromptTokens.active(in: "run /comm")?.kind == .command)
     #expect(PromptTokens.active(in: "run /comm")?.query == "comm")
@@ -57,7 +57,7 @@ struct PromptTokenTests {
 
     // Completing is one thing; STYLING sent text is another. `$` is ordinary
     // prose far more often than it is a skill, and unlike `/` and `@` it is not
-    // syntax any engine parses — so scan() must leave every one of these alone.
+    // syntax any engine parses - so scan() must leave every one of these alone.
     #expect(PromptTokens.scan("echo $PATH and $5.00").isEmpty)
     #expect(PromptTokens.scan("$scratch-notes jot this down").isEmpty)
     // …while its neighbours still style.
@@ -67,8 +67,8 @@ struct PromptTokenTests {
   @Test func acceptingASkillReplacesTheTokenWithLiteralText() {
     let text = "please $scr"
     let token = PromptTokens.active(in: text)!
-    // `replace` writes the literal verbatim — prefix included, nothing appended
-    // — because what lands is prose the model reads, not a token to parse back.
+    // `replace` writes the literal verbatim - prefix included, nothing appended
+    // - because what lands is prose the model reads, not a token to parse back.
     let result = PromptTokens.replace(with: "$scratch-notes ", replacing: token, in: text)
     #expect(result.text == "please $scratch-notes ")
     #expect(result.text.distance(from: result.text.startIndex, to: result.cursor) == 22)
@@ -136,7 +136,7 @@ struct PromptTokenTests {
   @Test func doesNotStyleABareAtOrAPastedPath() {
     // Typing `@` opens the picker; an `@` sitting in a sent message is an at sign.
     #expect(PromptTokens.scan("just an @ sign").isEmpty)
-    // A path is not a command wherever it appears — which is the whole reason a
+    // A path is not a command wherever it appears - which is the whole reason a
     // command name may not contain a slash, now that position no longer rules it
     // out.
     #expect(PromptTokens.scan("/Users/atomic/projects is where it lives").isEmpty)

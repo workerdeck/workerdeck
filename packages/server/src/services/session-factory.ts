@@ -47,7 +47,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
     return (
       `permission mode '${mode}' is not supported by profile '${profile!.name}' ` +
-      `(engine '${engineOf(profile)}') — supported: ` +
+      `(engine '${engineOf(profile)}') - supported: ` +
       adapterFor(profile?.engine).capabilities.permissionModes.join(', ')
     )
   }
@@ -59,7 +59,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     if (!caps.sessionMcpServers && req.mcpServers && Object.keys(req.mcpServers).length > 0) {
       return (
         `profile '${name}' runs the ${engine} engine, whose MCP servers are declared ` +
-        'outside the session request — a request cannot add its own'
+        'outside the session request - a request cannot add its own'
       )
     }
     if (!caps.budgets && (req.maxTurns !== undefined || req.maxBudgetUsd !== undefined)) {
@@ -90,7 +90,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
     return (
       `profile '${profile.name}' does not grant: ${ungranted.join(', ')} ` +
-      `(granted: ${granted.join(', ') || 'none'}) — a request may narrow capabilities, not widen them`
+      `(granted: ${granted.join(', ') || 'none'}) - a request may narrow capabilities, not widen them`
     )
   }
 
@@ -163,7 +163,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
     const base = config.env ?? process.env
     const env = claudeSessionEnv(profile, base)
-    // A skipped pin returns `base` itself — leaving the config alone keeps an unset `env` unset, so the SDK spawns on process.env.
+    // A skipped pin returns `base` itself - leaving the config alone keeps an unset `env` unset, so the SDK spawns on process.env.
     return env === base ? config : { ...config, env }
   }
 
@@ -185,13 +185,13 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       profile && isProviderProfile(profile)
         ? // Non-null: startup refuses a provider profile when no factory was wired.
           await deps.createEngineRunner!({ config, profile, bridge: refs.bridge!, restore, id })
-        : // The in-repo adapters refuse `restore` themselves — neither binary can rebuild a parked session.
+        : // The in-repo adapters refuse `restore` themselves - neither binary can rebuild a parked session.
           await adapterFor(profile?.engine).createRunner({ config, profile, restore, id })
     const reported = runner.info().scope
     if (!sameScope(reported, config.scope)) {
       throw new Error(
         `runner for session ${runner.id} reports scope ${JSON.stringify(reported)}, ` +
-          `expected ${JSON.stringify(config.scope)} — echo config.scope from info()`,
+          `expected ${JSON.stringify(config.scope)} - echo config.scope from info()`,
       )
     }
     return runner
@@ -218,7 +218,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       return name !== undefined ? { ok: false, status: 400, error: 'no profiles are configured on this server' } : { ok: true }
     }
     // One profile needs no naming, and neither does a set that still carries the auto-detected
-    // `default` — otherwise choosing is the caller's, because a profile is a credential store.
+    // `default` - otherwise choosing is the caller's, because a profile is a credential store.
     const effective = name ?? (all.length === 1 ? all[0]!.name : all.find((p) => p.name === 'default')?.name)
     if (effective === undefined) {
       const available = all.map((p) => p.name).join(', ')
@@ -261,7 +261,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
           `[workerdeck] ${scope} are using claude.ai subscription credentials ` +
             "(apiKeySource 'oauth'), not an API key. That is only appropriate for personal, " +
             'single-user use of your own account. Unattended/scheduled or multi-user use ' +
-            "requires an API key under Anthropic's terms — set ANTHROPIC_API_KEY in the " +
+            "requires an API key under Anthropic's terms - set ANTHROPIC_API_KEY in the " +
             'server environment, or set requireApiKey: true to fail closed.',
         )
       }

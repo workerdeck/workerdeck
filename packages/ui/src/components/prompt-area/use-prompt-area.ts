@@ -88,7 +88,7 @@ type UsePromptAreaReturn = {
 const UNDO_DEBOUNCE_MS = 300
 
 // Shared default so an omitted `triggers` prop keeps a stable identity across
-// renders — a fresh [] would re-create renderSegmentsToDOM (and everything
+// renders - a fresh [] would re-create renderSegmentsToDOM (and everything
 // keyed on it) on every parent render.
 const NO_TRIGGERS: TriggerConfig[] = []
 
@@ -401,7 +401,7 @@ export function usePromptArea({
   // pending passive effects before rendering that keystroke's onChange. The
   // stale flush would compare an older render's `value` against the
   // lastRenderedValue that handleInput just advanced, read its own echo lag as
-  // an external change, and rewrite the editor to pre-keystroke content —
+  // an external change, and rewrite the editor to pre-keystroke content -
   // leaving the caret behind the character once the echo re-rendered it.
   // Inside the commit, `value` can never be older than lastRenderedValue.
   useLayoutEffect(() => {
@@ -423,7 +423,7 @@ export function usePromptArea({
     }
 
     // A rebuild churns the caret and the decorations, so skip it when the
-    // editor already shows exactly this content — e.g. a consumer echoed our
+    // editor already shows exactly this content - e.g. a consumer echoed our
     // onChange back re-chunked, or the DOM is split by decorations. Adopt the
     // value so the equality guard above short-circuits from here on.
     if (segmentsContentEqual(readSegmentsFromDOM(), value)) {
@@ -520,7 +520,7 @@ export function usePromptArea({
     // Native structural edits (e.g. a Backspace that deleted or merged a list
     // row) bypass applyEditResult, so rebuild ordered-list numbering here too.
     // handleInput fires on every keystroke, so gate on a genuine ordered-list
-    // run — this renumbers a real list (1,2,4 → 1,2,3) but leaves incidental
+    // run - this renumbers a real list (1,2,4 → 1,2,3) but leaves incidental
     // numeric prose ("1985. Born / 2020. Died") untouched.
     let nextSegments = segments
     let renumberedCursor: number | null = null
@@ -643,7 +643,7 @@ export function usePromptArea({
 
   const selectSuggestion = selectSuggestionInternal
 
-  // Handle key events — the numbered router and its chip-deletion helpers live in
+  // Handle key events - the numbered router and its chip-deletion helpers live in
   // use-prompt-area-keydown.ts.
 
   const handleKeyDown = usePromptAreaKeydown({

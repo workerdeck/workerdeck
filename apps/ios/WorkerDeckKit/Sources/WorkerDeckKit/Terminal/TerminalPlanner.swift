@@ -11,24 +11,24 @@ public enum TerminalPlanner {
 
   /// The lines a row draws, in whatever state `expansion` says it is in.
   ///
-  /// The expanded state is planned here rather than measured on screen — see
+  /// The expanded state is planned here rather than measured on screen - see
   /// `TerminalExpansion.swift` for why that inversion is forced on this
   /// renderer and not on the web one.
   ///
   /// **Called concurrently**, by `TerminalHeightBook.lineCounts`'s cold path
   /// (`DispatchQueue.concurrentPerform` over disjoint row indices). Everything
-  /// below it must stay a pure function of `(row, metrics, expansion)` — no
+  /// below it must stay a pure function of `(row, metrics, expansion)` - no
   /// memo, no shared formatter or regex, no static `var`. That holds today and
   /// nothing but this sentence pins it; a cache added here would make the
   /// parallel build racy with no test that could see it.
-  /// - Parameter frameParentId: set when these rows are a sub-agent's frame —
-  ///   the takeover — and it is the id everything in them was produced inside.
+  /// - Parameter frameParentId: set when these rows are a sub-agent's frame -
+  ///   the takeover - and it is the id everything in them was produced inside.
   ///   Only the `nested` inset reads it (the port of web `Transcript.tsx`'s
   ///   `nestedClass`): inside the frame those items *are* the top level, and
   ///   stepping every row in would draw a rule down the whole surface saying
   ///   "this happened somewhere else" about the only thing on screen. It flows
   ///   through the planner rather than being a view concern because `nested`
-  ///   spends cells, so it changes the wrap — and therefore the height.
+  ///   spends cells, so it changes the wrap - and therefore the height.
   public static func plan(
     _ row: TranscriptRow, metrics: TerminalMetrics,
     expansion: TerminalExpansion = TerminalExpansion(), frameParentId: String? = nil
@@ -82,7 +82,7 @@ public enum TerminalPlanner {
   }
 
   /// Is an item drawn stepped in behind the sub-agent rule? Its parent must
-  /// exist — and not be the frame the row is already inside.
+  /// exist - and not be the frame the row is already inside.
   static func isNested(_ parent: String?, frameParentId: String?) -> Bool {
     guard let parent else { return false }
     return parent != frameParentId
@@ -95,14 +95,14 @@ public enum TerminalPlanner {
   ///
   /// **A run of one is drawn as the call itself**, and this is a deliberate
   /// divergence from the web client, which summarises it as `Ran 1 tool · 1
-  /// roam-code`. The fold's entire justification is row-count compression — six
-  /// calls bury the sentence you came back to read — and at one call there is no
+  /// roam-code`. The fold's entire justification is row-count compression - six
+  /// calls bury the sentence you came back to read - and at one call there is no
   /// compression to be had: the summary occupies exactly the same single row
   /// while throwing away the tool's name, its input and its result preview. It
   /// is the same complaint that widened the fold's membership from shell-only
   /// ("a count for every gap it could not group, which is worse than not
   /// folding"); widening made it rarer without removing it. The block model is
-  /// untouched — this is a rendering rule, so keys, indices and
+  /// untouched - this is a rendering rule, so keys, indices and
   /// `rowIndex(forItem:)` all stay exactly as they were.
   static func planRun(
     _ block: TerminalRunBlock, metrics: TerminalMetrics, expansion: TerminalExpansion,
@@ -144,11 +144,11 @@ public enum TerminalPlanner {
   /// One row for a `Task` and everything its subagent produced.
   ///
   /// **Always collapsed when unmounted**, and that is load-bearing rather than
-  /// tidy: the live signal is *in* the collapsed line — the pulse, and a
-  /// climbing tool count — never an auto-expansion that would resize the row
+  /// tidy: the live signal is *in* the collapsed line - the pulse, and a
+  /// climbing tool count - never an auto-expansion that would resize the row
   /// under the reader.
   ///
-  /// **The press is the takeover, not the toggle** — see
+  /// **The press is the takeover, not the toggle** - see
   /// ``TermPress/openSubagent(taskId:)`` for the divergence from the web
   /// client (there the row toggles and the takeover is a hover action; a thumb
   /// gets one target, and it gets the deliberate move). The open state is
@@ -167,12 +167,12 @@ public enum TerminalPlanner {
 
     // Green means sub-agent, exactly as it does on the scrubber's rail (see
     // `TerminalScrubberView`, and the argument in `packages/ui`'s
-    // `terminal.css`): every other colour is already spoken for — blue is you,
+    // `terminal.css`): every other colour is already spoken for - blue is you,
     // white is the answer, red is an alarm, magenta is your bookmark, yellow is
     // the session waiting on you. The **body** takes it and the marker does
     // not: a green glyph already means "wrote to the workspace" on a settled
     // mutating tool, and one colour cannot mean two things in the same gutter.
-    // Failure still outranks it — an alarm is not a category.
+    // Failure still outranks it - an alarm is not a category.
     var lines = wrapBody(
       taskSummary(block.task, children), metrics: metrics,
       gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
@@ -183,7 +183,7 @@ public enum TerminalPlanner {
 
     // The brief leads the children for the same reason it leads the frame: the
     // instruction, then the work (web `TaskRow` draws `BriefRow` first). Flush
-    // under the header, as on the web — and absent entirely when the engine
+    // under the header, as on the web - and absent entirely when the engine
     // gave none, which is the codex case: no row, not an empty one.
     let childHasBrief = taskChildItems(block).contains {
       if case .user = $0 { return true } else { return false }
@@ -206,28 +206,28 @@ public enum TerminalPlanner {
     return lines
   }
 
-  /// How many wrapped lines of a sub-agent's brief the collapsed row shows —
+  /// How many wrapped lines of a sub-agent's brief the collapsed row shows -
   /// the web's `BRIEF_LINES`, and the same judgement: a brief runs to thousands
   /// of characters, and an uncapped one buries the work it was asking for under
   /// its own instructions. Four is enough to recognise the task and short
   /// enough that the agent's first line stays on screen beside it.
   ///
-  /// A **line** count, not a character budget — the divergence-from-the-web
+  /// A **line** count, not a character budget - the divergence-from-the-web
   /// that `ResultPreview.collapsed(_:cols:)` needed does not arise here,
   /// because both clients already clip the brief on wrapped lines (the web with
   /// `line-clamp`, cutting on the very lines `briefPx` counts).
   public static let briefLines = 4
 
-  /// **What the agent was asked** — the sub-agent's brief, clipped to
+  /// **What the agent was asked** - the sub-agent's brief, clipped to
   /// ``briefLines`` and pressable for the whole of it. The port of web
   /// `BriefRow` (`TerminalTranscript.tsx`), drawn in the same two places: the
   /// takeover frame's first row (`TranscriptRow.brief`) and the head of the
   /// inline task expansion (``planTask``), with **one** open state between them
-  /// (`ExpansionKey.brief`) where the web has two local `useState`s — this
+  /// (`ExpansionKey.brief`) where the web has two local `useState`s - this
   /// renderer's book must know every height, so the state lives beside the rows.
   ///
   /// The prompt's own marker in the sub-agent's colour, body dim: it is
-  /// somebody's instruction, one level in, and not the human's turn — which is
+  /// somebody's instruction, one level in, and not the human's turn - which is
   /// also why `promptRows` never indexes it.
   ///
   /// The clip is a slice of the **planner's own wrap**, so the collapsed and
@@ -235,7 +235,7 @@ public enum TerminalPlanner {
   /// every line they both show. Where the web's `line-clamp` fades the fourth
   /// line, a thumb needs a target that says what it does, so the clip is
   /// spelled the way a collapsed tool result spells it: a faint `… +N lines`
-  /// carrying the same press. An unclipped brief draws no press at all — a
+  /// carrying the same press. An unclipped brief draws no press at all - a
   /// target that visibly does nothing teaches the reader the theme is broken.
   static func planBrief(
     id: String, text: String, metrics: TerminalMetrics, expansion: TerminalExpansion,
@@ -283,7 +283,7 @@ public enum TerminalPlanner {
           gutter: TermGlyph.prompt, gutterTone: .dim, tone: .dim, band: .user, nested: nested,
           inOpen: inOpen)
       }
-      // One row per hard line, with the marker on the first only — a pasted
+      // One row per hard line, with the marker on the first only - a pasted
       // twenty-line prompt is one prompt, not twenty.
       let markerOnFirst = lines.isEmpty
       lines += wrapBody(
@@ -344,11 +344,11 @@ public enum TerminalPlanner {
   /// A tool call: its header, then either the diff it produced or a preview of
   /// its result.
   ///
-  /// **Three states, not two**, ported from the web client's `ToolRow` — and the
+  /// **Three states, not two**, ported from the web client's `ToolRow` - and the
   /// middle one is the reason the budget exists at all. Collapsed shows a few
   /// lines; open shows the output up to ``ResultPreview/expandedChars``; `full`
   /// lifts that budget. A tool result can be a hundred thousand characters (a
-  /// test run, a `find /`) and the whole of it lands in **one** virtual row —
+  /// test run, a `find /`) and the whole of it lands in **one** virtual row -
   /// the collection view recycles rows, so it cannot help with what is inside a
   /// single one. Here the guard bites harder than it does on the web, because
   /// every one of those lines is planned and wrapped before anything is drawn.
@@ -360,8 +360,8 @@ public enum TerminalPlanner {
     let busy = callBusy(call)
     let tone = toolTone(call)
     let openKey = ExpansionKey.call(call.id)
-    // Only a result has anything folded behind it. A call that produced none —
-    // and a file edit that produced only a patch, which is already drawn — must
+    // Only a result has anything folded behind it. A call that produced none -
+    // and a file edit that produced only a patch, which is already drawn - must
     // not advertise a press: a target that visibly does nothing when pressed is
     // worse than no target, because the reader concludes the whole theme is
     // broken rather than that this row is empty.
@@ -389,7 +389,7 @@ public enum TerminalPlanner {
       inOpen: wash)
 
     // The pictures first, under the header and above whatever the call said in
-    // words — the web client's order, and the one that reads right: a
+    // words - the web client's order, and the one that reads right: a
     // screenshot is the result, and the prose beside it is a caption.
     //
     // Planned in **every** state, collapsed and expanded alike. That is a
@@ -411,7 +411,7 @@ public enum TerminalPlanner {
       return lines
     }
 
-    // The checklist stands in for the result preview, and only while collapsed —
+    // The checklist stands in for the result preview, and only while collapsed -
     // opening the row is how you reach the prose underneath, exactly as a diff
     // gives way. Unlike the web client this is planned on the *same* condition
     // it is drawn on: here the plan is the height, so a checklist counted while
@@ -444,7 +444,7 @@ public enum TerminalPlanner {
       .components(separatedBy: "\n")
 
     // The replay delivered a head. `full` then means "fetch the rest" rather than
-    // "lift the clip", and the marker outlives the clip — a head short enough to
+    // "lift the clip", and the marker outlives the clip - a head short enough to
     // fit the open budget still is not the result.
     let truncated = call.result?.truncated == true
     let totalChars = call.result?.totalChars
@@ -459,17 +459,17 @@ public enum TerminalPlanner {
       if fetching {
         // Never a row that visibly does nothing: while the rest is in flight it
         // says so, and names the size, because at this size the honest answer is
-        // sometimes "don't". No press — a second one would open a second fetch.
+        // sometimes "don't". No press - a second one would open a second fetch.
         more = "… fetching \(TermFmt.grouped(totalChars ?? text.count)) chars"
       } else if truncated {
         more =
-          "… +\(TermFmt.grouped(max(0, (totalChars ?? text.count) - text.count))) chars — fetch the rest"
+          "… +\(TermFmt.grouped(max(0, (totalChars ?? text.count) - text.count))) chars - fetch the rest"
         morePress = .expandFull(callId: call.id)
       } else if hidden > 0 {
         // The affordance says what pressing it costs, because at this size the
         // honest answer is sometimes "don't".
         more =
-          "… +\(hidden) line\(hidden == 1 ? "" : "s") — show all \(TermFmt.grouped(text.count)) chars"
+          "… +\(hidden) line\(hidden == 1 ? "" : "s") - show all \(TermFmt.grouped(text.count)) chars"
         morePress = .expandFull(callId: call.id)
       }
     } else {
@@ -503,7 +503,7 @@ public enum TerminalPlanner {
   /// The lines hold a space rather than an empty string for the reason the
   /// result preview does: a trailing empty paragraph is a line fragment the
   /// text system may or may not produce, and the height claim cannot rest on
-  /// which. Nothing of them is visible — the box is drawn over them — but they
+  /// which. Nothing of them is visible - the box is drawn over them - but they
   /// are what makes `lines.count × line` the box's height by construction, so
   /// the placeholder, the picture and the failure notice are the same size and
   /// a fetch landing can never reflow the transcript.
@@ -543,7 +543,7 @@ public enum TerminalPlanner {
   // MARK: - Diffs
 
   /// A `FilePatch` with the **engine's own** line numbers. A patch whose hunks
-  /// all start at 0 is a preview of an edit that has not happened — this client
+  /// all start at 0 is a preview of an edit that has not happened - this client
   /// has never read the file, so the number column is dropped rather than
   /// invented.
   static func planDiff(
@@ -615,7 +615,7 @@ public enum TerminalPlanner {
 
   // MARK: - Markdown
 
-  /// Assistant prose, block by block, with one blank line between blocks — the
+  /// Assistant prose, block by block, with one blank line between blocks - the
   /// theme's only spacing.
   static func planMarkdown(
     _ source: String, metrics: TerminalMetrics, gutter: String, gutterTone: TermTone,
@@ -749,7 +749,7 @@ public enum TerminalPlanner {
           gutter: offset == 0 ? gutter : "", gutterTone: gutterTone, text: line,
           attributed: AttributedString(styled[start..<end]), tone: tone, columns: columns,
           indent: indent, bold: bold, nested: nested, press: press, inOpen: inOpen))
-      // The wrap consumes the line plus whatever separated it from the next —
+      // The wrap consumes the line plus whatever separated it from the next -
       // a newline, or the space a soft wrap fell on.
       consumed += line.count
       if consumed < plain.count { consumed += separatorLength(plain, at: consumed, next: line) }
@@ -773,7 +773,7 @@ public enum TerminalPlanner {
     return skipped
   }
 
-  /// A subagent's rows are stepped in behind a rule. Two cells, on the grid —
+  /// A subagent's rows are stepped in behind a rule. Two cells, on the grid -
   /// the web client spends 14px here (a 2px border plus 12px of padding), which
   /// is the one place its own `ch` rule is set aside; on a grid we own outright
   /// there is no reason to inherit that.

@@ -4,7 +4,7 @@ import type { ApnsRequest } from './client.ts'
 
 // The wire contract with `apps/ios/WorkerDeckKit/Sources/WorkerDeckActivity`. Every field name here
 // is decoded by name over there, and `packages/cli/test/live-activity.test.ts` writes the fixtures
-// that Swift test asserts against — rename a field on one side only and that test fails.
+// that Swift test asserts against - rename a field on one side only and that test fails.
 export type ActivityAttributes = {
   sessionId: string
   hostId?: string

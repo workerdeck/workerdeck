@@ -10,7 +10,7 @@ export type CliAuthOptions = {
   cookieName?: string
   // Fixed, never sliding: the auth hooks only see the request, so a renewed cookie has nowhere to ride back on.
   ttlMs?: number
-  // Attacker-writable on a directly exposed port, hence off by default — but behind TLS termination it must be on,
+  // Attacker-writable on a directly exposed port, hence off by default - but behind TLS termination it must be on,
   // or `Secure` is skipped and the Origin check computes `http://` where the browser says `https://`.
   trustProxy?: boolean
   allowedOrigins?: string[]
@@ -62,7 +62,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
   const enabled = secret !== undefined
   if (secret !== undefined && secret.length < MIN_SECRET_LENGTH) {
     throw new Error(
-      `createCliAuth: secret must be at least ${MIN_SECRET_LENGTH} characters — ` +
+      `createCliAuth: secret must be at least ${MIN_SECRET_LENGTH} characters - ` +
         'use a long random value, or leave it unset to run without auth on loopback',
     )
   }
@@ -239,7 +239,7 @@ export function createCliAuth(options: CliAuthOptions = {}): CliAuth {
     if (!enabled) {
       return openPrincipal
     }
-    // The secret is not ambient — the sender chose to attach it — so no Origin check applies, and a
+    // The secret is not ambient - the sender chose to attach it - so no Origin check applies, and a
     // present-but-wrong header is a rejection rather than a fall-through to the cookie.
     const provided = headerSecret(req) ?? querySecret(req)
     if (provided !== undefined) {

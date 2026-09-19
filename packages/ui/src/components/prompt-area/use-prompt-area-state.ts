@@ -35,11 +35,11 @@ export type UsePromptAreaStateOptions = {
 }
 
 export type PromptAreaBind = {
-  /** Ref to attach to PromptArea — gives access to imperative methods. */
+  /** Ref to attach to PromptArea - gives access to imperative methods. */
   ref: React.RefObject<PromptAreaHandle | null>
-  /** Current segment array — pass as `value` prop. */
+  /** Current segment array - pass as `value` prop. */
   value: Segment[]
-  /** Setter — pass as `onChange` prop. */
+  /** Setter - pass as `onChange` prop. */
   onChange: (segments: Segment[]) => void
 }
 
@@ -83,7 +83,7 @@ export function usePromptAreaState(options: UsePromptAreaStateOptions = {}): Pro
 
   const chips = useMemo(() => value.filter((seg): seg is ChipSegment => seg.type === 'chip'), [value])
 
-  // Bind object — safe to spread onto <PromptArea>
+  // Bind object - safe to spread onto <PromptArea>
   const bind = useMemo<PromptAreaBind>(() => ({ ref, value, onChange: setValue }), [value])
 
   const clear = useCallback(() => {

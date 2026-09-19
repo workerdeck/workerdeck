@@ -11,7 +11,7 @@ export function ProfilesView() {
       <Empty
         icon={<UsersRound />}
         title="No profile selected"
-        description="A profile is what a session runs as — its config directory and credentials, or a model provider."
+        description="A profile is what a session runs as - its config directory and credentials, or a model provider."
       />
     </div>
   )

@@ -2,7 +2,7 @@ import WorkerDeckKit
 import SwiftUI
 
 /// The app's home screen: every gateway's sessions in ONE list, with the gateway
-/// as a facet (filter/group/sort) rather than the frame — the model the VS Code
+/// as a facet (filter/group/sort) rather than the frame - the model the VS Code
 /// extension proved. Search, the three facets, group/sort, and the subset line
 /// all come from the shared rules in the kit (`SessionList.swift`); this view
 /// only renders what they derive. Owns the navigation stack for everything
@@ -71,7 +71,7 @@ struct SessionListView: View {
     .onChange(of: scenePhase) { _, phase in
       guard phase == .active else { return }
       // The token can change while the app is away, and a gateway restart forgets
-      // nothing — but a *first* launch after adding a host might have failed.
+      // nothing - but a *first* launch after adding a host might have failed.
       Task { await push.syncRegistrations() }
     }
     // Both an appear and a change: a cold launch from a notification sets the
@@ -160,7 +160,7 @@ struct SessionListView: View {
       .padding(.horizontal)
       .padding(.bottom, 8)
 
-      // A gateway that is unreachable or unauthorized is a visible state — but
+      // A gateway that is unreachable or unauthorized is a visible state - but
       // only when there is nothing else working. With one gateway down and
       // another serving happily, the down one is a fact about a machine, not a
       // problem with what is on screen, and a warning strip over a list that is
@@ -175,7 +175,7 @@ struct SessionListView: View {
         .padding(.bottom, 8)
       }
 
-      // The one "you are seeing a subset" signal — unconditional while it
+      // The one "you are seeing a subset" signal - unconditional while it
       // applies, because the controls doing the hiding live behind a menu.
       if model.tab == .live, let subset = model.subset {
         subsetLine(subset, model: model)
@@ -191,7 +191,7 @@ struct SessionListView: View {
     .onChange(of: model.tab) { _, _ in
       Task { await model.refreshCurrentTab() }
     }
-    // The icon badge mirrors the same summed count the list shows — rows unseen
+    // The icon badge mirrors the same summed count the list shows - rows unseen
     // over the sessions the filter is showing, never over hidden ones.
     .task(id: model.unseenTotal) {
       await model.syncAppBadge()
@@ -326,7 +326,7 @@ struct SessionListView: View {
   // Every non-navigating thing a row can do, in one builder, because the row
   // offers three ways in and they must not drift apart: the card's persistent
   // `···`, a long press, and (for the destructive half) a trailing swipe. Close
-  // and Remove are the same gesture wearing two meanings — see the swipe.
+  // and Remove are the same gesture wearing two meanings - see the swipe.
   @ViewBuilder
   private func rowActions(for row: SessionRow, model: SessionListModel) -> some View {
     Button {
@@ -377,8 +377,8 @@ struct SessionListView: View {
             : "Check the servers screen, or that the gateways are still running.")
       }
     } else if model.subset != nil {
-      // Rows exist; the filters hide them all. A different sentence — and a
-      // different way out — from "there are none".
+      // Rows exist; the filters hide them all. A different sentence - and a
+      // different way out - from "there are none".
       ContentUnavailableView {
         Label("No matches", systemImage: "line.3.horizontal.decrease.circle")
       } description: {
@@ -409,13 +409,13 @@ struct SessionListView: View {
     }
   }
 
-  /// One row per step, **agents first** and **all of them pressable** — the
+  /// One row per step, **agents first** and **all of them pressable** - the
   /// order and the kind both come from the kit's `sessionSteps`, which is the
   /// same derivation the dashboard and the extension draw from.
   ///
   /// Rows rather than a stack inside the session row: a full-width list row is
   /// a real thumb target where a line inside a two-line row is not, and it
-  /// keeps the promise the disclosure makes — every target here has its own
+  /// keeps the promise the disclosure makes - every target here has its own
   /// frame.
   ///
   /// **What a press means is what tells the two kinds apart**, and that is the
@@ -423,7 +423,7 @@ struct SessionListView: View {
   /// takeover. A *task* is a reference to a place in this transcript, so it
   /// opens the session and travels to that tool call's row (`reveal:`). A task
   /// used to be drawn inert here, on the argument that there was nowhere to
-  /// send it — but there always was, and a row that looks like a list item,
+  /// send it - but there always was, and a row that looks like a list item,
   /// sits in a list, and does nothing under a thumb is the worse lie. Both are
   /// `NavigationLink`s to the same case with different payloads, so this is one
   /// row shape with one destination type, not a variant branch inside a row.
@@ -437,7 +437,7 @@ struct SessionListView: View {
         if let route {
           NavigationLink(value: route) { SessionStepRow(step: step) }
         } else {
-          // No gateway id to route to — a shape this list has never actually
+          // No gateway id to route to - a shape this list has never actually
           // produced, but the row still draws rather than vanishing.
           SessionStepRow(step: step)
         }
@@ -450,7 +450,7 @@ struct SessionListView: View {
 
   @ViewBuilder
   private func resumeList(_ model: SessionListModel) -> some View {
-    // A gateway that failed has settled too — it just settled badly. Waiting for
+    // A gateway that failed has settled too - it just settled badly. Waiting for
     // `hasLoadedSdkSessions` on a host that will never set it leaves this tab
     // permanently blank, which was survivable only while a banner was there to
     // explain it. Now that one working gateway suppresses the banner, "loaded"
@@ -509,8 +509,8 @@ struct SessionListView: View {
 
   /// Every item carries an explicit `id`, and the filter menu's *content* is a
   /// view of its own. Both halves are load-bearing, and they fix a real bug: the
-  /// filter dropdown closed itself whenever anything in the list changed — an
-  /// unread badge ticking up was enough — so on a busy gateway it could not be
+  /// filter dropdown closed itself whenever anything in the list changed - an
+  /// unread badge ticking up was enough - so on a busy gateway it could not be
   /// used at all.
   ///
   /// The mechanism has two parts. The menu read `model.adapters`, which is
@@ -518,7 +518,7 @@ struct SessionListView: View {
   /// on every snapshot the 1.2s poll replaces: the menu's body was invalidated
   /// on each refresh whether or not the engine list had changed. And a
   /// `ToolbarItem` with no `id` is re-identified when the toolbar builder re-runs
-  /// — which tears down the presented menu rather than updating it.
+  /// - which tears down the presented menu rather than updating it.
   ///
   /// So: stable ids stop the teardown, and `FilterMenu` being `Equatable` over
   /// plain values (never the model) stops the body re-running when the poll
@@ -553,7 +553,7 @@ struct SessionListView: View {
     }
   }
 
-  /// New session — on which gateway is part of the question now, so with more
+  /// New session - on which gateway is part of the question now, so with more
   /// than one host the + is a menu naming them.
   @ViewBuilder
   private var addButton: some View {

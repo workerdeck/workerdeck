@@ -23,7 +23,7 @@ export function ContextDialog({ usage, engine, open, onOpenChange, className }: 
         <DialogBody>
           {!usage ? (
             <p className="py-6 text-center text-body-sm text-fg-4">
-              No reading yet — the context window is measured after a turn completes.
+              No reading yet - the context window is measured after a turn completes.
             </p>
           ) : (
             <>

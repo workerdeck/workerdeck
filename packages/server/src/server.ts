@@ -368,7 +368,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       return
     }
     // Starting a turn we have already promised to stop waiting for would make the drain unable to converge.
-    // Existing sessions stay fully controllable — including approvals, which is how an operator unblocks one.
+    // Existing sessions stay fully controllable - including approvals, which is how an operator unblocks one.
     if (draining && req.method === 'POST' && route.id === undefined) {
       json(res, 503, { error: 'server is shutting down' })
       return
@@ -502,8 +502,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         parking.close()
         registry.closeAll()
         shell?.killAll()
-        // `wss` is `noServer`, so `wss.close()` neither closes nor terminates clients — it waits for `clients` to
-        // empty — and `server.closeAllConnections()` does not reach upgraded sockets. Any attached session socket
+        // `wss` is `noServer`, so `wss.close()` neither closes nor terminates clients - it waits for `clients` to
+        // empty - and `server.closeAllConnections()` does not reach upgraded sockets. Any attached session socket
         // therefore keeps `server.close()`'s callback from ever firing. Send close frames, then force what lingers.
         for (const ws of wss.clients) {
           ws.close(1001, 'server shutting down')

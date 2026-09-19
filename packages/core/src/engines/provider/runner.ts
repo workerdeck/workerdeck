@@ -445,7 +445,7 @@ export class AiSdkRunner implements Runner {
       if (this.#closed) {
         throw new Error('session is closed')
       }
-      // Waiting cannot resolve parked external work — a bridged result is owed by a client that
+      // Waiting cannot resolve parked external work - a bridged result is owed by a client that
       // may answer in two days, and the messages it splices into are what a clear would drop.
       if (this.#pendingToolCalls.size > 0) {
         throw new Error('cannot clear context while tool calls are outstanding')

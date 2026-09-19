@@ -108,7 +108,7 @@ struct ProtocolDecodingTests {
     // a command the engine parses.
     #expect(skills[0].defaultPrompt == "Generate an image of")
     #expect(skills[0].shortDescription == "Make a picture")
-    // A skill listed without `enabled` is one codex considers live — defaulting
+    // A skill listed without `enabled` is one codex considers live - defaulting
     // to false would hide working skills.
     #expect(skills[1].enabled == false)
     #expect(skills[1].description == nil)
@@ -166,7 +166,7 @@ struct ProtocolDecodingTests {
     #expect(sessionTasks(info).isEmpty)
   }
 
-  /// A protocol-6 gateway sends no `skillsList` — that must read as "no skills
+  /// A protocol-6 gateway sends no `skillsList` - that must read as "no skills
   /// panel", not as a session whose whole capability record failed to decode.
   @Test func anOlderRecordWithoutSkillsListStillDecodes() throws {
     let json = #"""
@@ -213,7 +213,7 @@ struct ProtocolDecodingTests {
     #expect(svg.project?.icon == .image(mediaType: .svg, hash: "def456"))
   }
 
-  /// A newer gateway's icon vocabulary — a third arm, a new media type — must
+  /// A newer gateway's icon vocabulary - a third arm, a new media type - must
   /// degrade to "no icon", never fail the decode of the whole `SessionInfo`: a
   /// display declaration must not cost a session its row.
   @Test func anUnknownIconShapeDegradesToNoIconNotAFailedRow() throws {
@@ -227,7 +227,7 @@ struct ProtocolDecodingTests {
     #expect(unknownMedia.project?.icon == nil)
   }
 
-  /// An older gateway (or no `.workerdeck.json` at all — the wire cannot tell
+  /// An older gateway (or no `.workerdeck.json` at all - the wire cannot tell
   /// them apart and a client must not try): absent means "render the folder
   /// basename", exactly what this client drew before the field existed.
   @Test func aSessionWithoutAProjectStillDecodes() throws {

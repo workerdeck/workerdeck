@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// Claude's iOS app has nothing like this; the model is Claude Code's own `/mcp`
 /// picker, which is what someone driving a CLI session from a phone already knows.
-/// Its four levels are kept, and so is its grouping by scope — "which of my
+/// Its four levels are kept, and so is its grouping by scope - "which of my
 /// `.mcp.json` files is this one from" is most of the question when a server is
 /// misbehaving.
 ///
@@ -116,7 +116,7 @@ struct McpServersView: View {
   }
 
   /// Actions answer with the refreshed list, so one call updates every screen
-  /// under this stack — the detail view reads its server back out of `servers`.
+  /// under this stack - the detail view reads its server back out of `servers`.
   private func perform(_ name: String, _ action: McpServerActionRequest.Action) async {
     do {
       servers = try await act(name, action)
@@ -127,7 +127,7 @@ struct McpServersView: View {
   }
 }
 
-/// One row on the servers list: name, status dot, tool count — the CLI's line.
+/// One row on the servers list: name, status dot, tool count - the CLI's line.
 private struct McpServerRow: View {
   let server: McpServerStatusInfo
 
@@ -177,7 +177,7 @@ struct McpStatusDot: View {
 }
 
 /// One server: everything the CLI's server screen shows, then its three actions
-/// — where the engine has them. Codex reports rich status but exposes no
+/// - where the engine has them. Codex reports rich status but exposes no
 /// per-server action, so its screen is read-only.
 private struct McpServerDetailView: View {
   let server: McpServerStatusInfo
@@ -243,7 +243,7 @@ private struct McpServerDetailView: View {
         } footer: {
           // The CLI's own caveat, and the reason a disable is not destructive:
           // it is this session's view of the server, not an edit to a config file.
-          Text("Applies to this session only — your .mcp.json is untouched.")
+          Text("Applies to this session only - your .mcp.json is untouched.")
         }
       }
     }
@@ -355,7 +355,7 @@ private struct McpToolDetailView: View {
       }
       // Engine-dependent, and said as such: codex returns each tool's full JSON
       // Schema, the Agent SDK returns none. A real section where one exists, an
-      // explanation where it doesn't — never a silent gap.
+      // explanation where it doesn't - never a silent gap.
       if let schema = tool.inputSchema {
         Section("Parameters") {
           Text(schema.prettyJSON)
@@ -364,7 +364,7 @@ private struct McpToolDetailView: View {
         }
       } else {
         Section {
-          Text("Parameters are not reported by this engine — its status payload names and describes each tool but carries no input schema.")
+          Text("Parameters are not reported by this engine - its status payload names and describes each tool but carries no input schema.")
             .font(.caption)
             .foregroundStyle(.secondary)
         }

@@ -59,7 +59,7 @@ export function Splitter({
     }
   }
 
-  // Reached after `endDrag` — the second click of a double-click has already started a drag, and dblclick fires after pointerup.
+  // Reached after `endDrag` - the second click of a double-click has already started a drag, and dblclick fires after pointerup.
   const onDoubleClick = () => {
     if (defaultValue !== undefined) {
       onValueChange(clamp(defaultValue))

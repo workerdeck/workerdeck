@@ -53,7 +53,7 @@ export async function createAuthSessionStore(options: AuthSessionStoreOptions): 
     try {
       const { mode } = await stat(path)
       if ((mode & 0o077) !== 0) {
-        warn(`session file ${path} is readable by other users ` + `(mode ${(mode & 0o777).toString(8)}) — run: chmod 600 ${path}`)
+        warn(`session file ${path} is readable by other users ` + `(mode ${(mode & 0o777).toString(8)}) - run: chmod 600 ${path}`)
       }
     } catch {}
   } catch {

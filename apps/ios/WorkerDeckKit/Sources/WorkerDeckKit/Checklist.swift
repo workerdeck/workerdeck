@@ -17,7 +17,7 @@ public struct ChecklistItem: Decodable, Sendable, Equatable, Hashable {
   }
 }
 
-/// One row of the selected session's Tasks surface — the port of
+/// One row of the selected session's Tasks surface - the port of
 /// `packages/protocol/src/checklist.ts`.
 ///
 /// Two sources, one row shape: the engine's own checklist and the `Task` spawns
@@ -45,7 +45,7 @@ public struct SessionTask: Sendable, Equatable, Identifiable, Hashable {
   public let source: Source
   public let state: State
   public let detail: String?
-  /// The reveal handle — spawns only.
+  /// The reveal handle - spawns only.
   public let toolUseId: String?
 
   public init(
@@ -69,7 +69,7 @@ public struct TaskSummary: Sendable, Equatable {
 }
 
 /// Checklist first in the order the engine authored it, then spawns in dispatch
-/// order. Interleaving is impossible — a checklist item carries no time — and
+/// order. Interleaving is impossible - a checklist item carries no time - and
 /// the plan is the frame the spawned work sits inside.
 public func sessionTasks(checklist: [ChecklistItem]?, subagents: [SubagentInfo]?) -> [SessionTask] {
   let items = (checklist ?? []).enumerated().map { index, item in
@@ -112,7 +112,7 @@ func spawnState(_ status: SubagentStatus) -> SessionTask.State {
   }
 }
 
-/// `done` counts completions only — a failure is settled but is not progress.
+/// `done` counts completions only - a failure is settled but is not progress.
 public func taskSummary(_ tasks: [SessionTask]) -> TaskSummary {
   TaskSummary(
     total: tasks.count,

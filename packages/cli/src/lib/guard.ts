@@ -141,7 +141,7 @@ export async function runGuard(argv: string[]): Promise<number> {
     const parked = all.filter((s) => s.status === 'parked')
     if (parked.length > 0 && !values['allow-parked']) {
       reasons.push(
-        `${parked.length} parked session(s) — pass --allow-parked once the server ` +
+        `${parked.length} parked session(s) - pass --allow-parked once the server ` +
           'runs a durable SessionStore, or they are lost on restart',
       )
     }
@@ -157,14 +157,14 @@ export async function runGuard(argv: string[]): Promise<number> {
     }
     if ((stats?.queued ?? 0) > 0 && !values['allow-queued']) {
       reasons.push(
-        `${stats!.queued} job(s) queued — pass --allow-queued once the server runs a ` +
+        `${stats!.queued} job(s) queued - pass --allow-queued once the server runs a ` +
           'durable QueueAdapter, or they are lost on restart',
       )
     }
     if ((stats?.parked ?? 0) > 0 && values['allow-parked']) {
       notes.push(
         `${stats!.parked} parked job(s): their queue-side records are the QueueAdapter's, ` +
-          "not the SessionStore's — with the in-memory adapter they never finish",
+          "not the SessionStore's - with the in-memory adapter they never finish",
       )
     }
     return { reasons, notes, sessions: all.length, parked: parked.length }
@@ -195,7 +195,7 @@ export async function runGuard(argv: string[]): Promise<number> {
       return 0
     }
     if (Date.now() + intervalMs > deadline) {
-      report('busy — not safe to restart', result)
+      report('busy - not safe to restart', result)
       return 1
     }
     report(`busy, waiting up to ${Math.round((deadline - Date.now()) / 1000)}s`, result)

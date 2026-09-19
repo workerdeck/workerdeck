@@ -173,8 +173,8 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
                     }}
                   >
                     {truncated
-                      ? `… +${missing.toLocaleString()} chars — fetch the rest`
-                      : `… +${hidden} line${hidden === 1 ? '' : 's'} — show all ${text.length.toLocaleString()} chars`}
+                      ? `… +${missing.toLocaleString()} chars - fetch the rest`
+                      : `… +${hidden} line${hidden === 1 ? '' : 's'} - show all ${text.length.toLocaleString()} chars`}
                   </button>
                 ) : (
                   <>

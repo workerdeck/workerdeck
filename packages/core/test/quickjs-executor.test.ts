@@ -77,7 +77,7 @@ describe('QuickJsExecutor', () => {
     expect(hostFetch).toHaveBeenCalledOnce()
   })
 
-  it('blocks non-allowlisted hosts host-side — the guest never learns the policy', async () => {
+  it('blocks non-allowlisted hosts host-side - the guest never learns the policy', async () => {
     const hostFetch = vi.fn(async () => 'secret')
     const executor = new QuickJsExecutor({ engine, allowedHosts: ['ok.example'], hostFetch })
     const result = await executor.dispatch(

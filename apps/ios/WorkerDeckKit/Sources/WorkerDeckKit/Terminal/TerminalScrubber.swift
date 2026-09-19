@@ -1,30 +1,30 @@
 import Foundation
 
-/// The overview ruler — a port of `packages/ui/src/components/terminal/scrubber.tsx`.
+/// The overview ruler - a port of `packages/ui/src/components/terminal/scrubber.tsx`.
 ///
 /// **This is what the height book was built for.** A mark's position is its
 /// row's *pixel offset*, not its index, and almost every row a rail draws is
-/// unmounted — so the rail is only drawable at all because
+/// unmounted - so the rail is only drawable at all because
 /// ``TerminalHeightBook`` answers for rows that do not exist as views.
 ///
 /// The logic lives here rather than in a SwiftUI view for the reason the web
 /// client exports `buildClusters` and `railScale` for its tests alone: **both
 /// have shipped pure-logic bugs**. A live answer with no `turn_result` yet went
 /// unmarked for the whole two minutes it was the only thing worth navigating
-/// to, and a replayed history — which carries no turn rows at all — came back
+/// to, and a replayed history - which carries no turn rows at all - came back
 /// with an empty response lane. Neither is visible in a screenshot.
 ///
 /// Two rules that are bugs if dropped, both called out in the phase-2 plan:
 /// ``railScale``'s denominator is `max(totalSize, viewportHeight)` and never
-/// `totalSize` alone, and **a mark's item index is not its row index** — every
+/// `totalSize` alone, and **a mark's item index is not its row index** - every
 /// one of them goes through ``TerminalRows/rowIndex(forItem:)``.
 
 // MARK: - Vocabulary
 
 /// Which column of the rail a mark sits in.
 ///
-/// The two lanes are **channels, not classes**: left is what went *in* — your
-/// prompts, and the sub-agents you dispatched — and right is what came *out* —
+/// The two lanes are **channels, not classes**: left is what went *in* - your
+/// prompts, and the sub-agents you dispatched - and right is what came *out* -
 /// each turn's answer, and everything that went wrong producing one. That is the
 /// question a reader actually asks of a rail ("where did I say something",
 /// "where did it go wrong"), and it puts every failure in one column instead of
@@ -44,12 +44,12 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     switch self {
     // Delegated work is input: a sub-agent runs because you asked for it, and
     // its stretch of the transcript is *your* dispatch rather than the session's
-    // answer. It is also a folded `Task`'s one honest signal on the rail —
+    // answer. It is also a folded `Task`'s one honest signal on the rail -
     // collapsed, sixty rows of somebody else's working are a single line.
     case .user, .subagent: return .left
     // Output, with the answers: a failed tool call is something the run
     // produced. It had been full-width on the argument that it is an alarm
-    // rather than a step — but "alarm" is not a lane, and half the failures
+    // rather than a step - but "alarm" is not a lane, and half the failures
     // sitting down the middle while `turnFailed` sat in the right lane meant no
     // single column answered "did anything go wrong".
     case .turn, .turnFailed, .toolFailed, .error: return .right
@@ -66,7 +66,7 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
     // Under `error`, which is the rank that actually does work: both are the
     // full lane, so a session error and a tool failure a pixel apart merge and
     // the error must keep the cluster. A failed tool call the model recovered
-    // from is routine in a way a session error is not — hence quieter here, and
+    // from is routine in a way a session error is not - hence quieter here, and
     // drawn at 55%. The one thing it outranks is `bookmark`, which loses its
     // magenta to a failure it sits beside.
     case .toolFailed: return 4
@@ -98,7 +98,7 @@ public enum ScrubberMarkKind: String, Equatable, Sendable, CaseIterable {
 
 public struct ScrubberMark: Equatable, Sendable {
   public var kind: ScrubberMarkKind
-  /// The jump anchor — for a turn mark, the paired response. `-1` for the recap
+  /// The jump anchor - for a turn mark, the paired response. `-1` for the recap
   /// seam and the pinned approval, which have no item.
   public var itemIndex: Int
   public var rowIndex: Int
@@ -121,7 +121,7 @@ public struct ScrubberMember: Equatable, Sendable {
 /// Members keep their own y: a dense transcript chain-merges a lane into one
 /// tall bar (six hundred prompts over a three-hundred-point rail *is* a solid
 /// stripe, exactly as VS Code draws dense decorations), and the bar answers the
-/// pointer by its **nearest member** — a press at the middle of the bar must not
+/// pointer by its **nearest member** - a press at the middle of the bar must not
 /// act on whichever mark happened to found the cluster.
 public struct ScrubberCluster: Equatable, Sendable {
   public var lane: ScrubberLane
@@ -140,7 +140,7 @@ public struct ScrubberCluster: Equatable, Sendable {
   }
 }
 
-/// A stretch of the rail that is **ground rather than a point** — painted under
+/// A stretch of the rail that is **ground rather than a point** - painted under
 /// the marks, and inert.
 ///
 /// It exists because `.expanded` was a `ScrubberMarkKind` and needed three
@@ -148,7 +148,7 @@ public struct ScrubberCluster: Equatable, Sendable {
 /// fractional rule (every other mark denotes an *item*, which may share its row;
 /// this one denotes the **row**), never merge (merging paints a cluster in its
 /// loudest member's colour, which is right for ticks a pixel apart and
-/// catastrophic for a band — an opened tool inside an opened run once swallowed
+/// catastrophic for a band - an opened tool inside an opened run once swallowed
 /// every prompt in the lane and turned the rail blue), and paint first (a band
 /// drawn in list order covers the very failures and prompts inside the part you
 /// opened). Three exemptions for one case is the type saying it is the wrong
@@ -157,7 +157,7 @@ public struct ScrubberCluster: Equatable, Sendable {
 ///
 /// A fourth thing falls out and was a latent bug: regions do not answer the
 /// finger. A band spans hundreds of points, so under ``ScrubberCluster``'s
-/// nearest-cluster arithmetic it tied with — and could beat — the marks inside
+/// nearest-cluster arithmetic it tied with - and could beat - the marks inside
 /// it, jumping the reader to the top of a region instead of to the prompt they
 /// pressed. A region is context for what surrounds it, never the thing you
 /// navigate to.
@@ -173,7 +173,7 @@ public enum ScrubberRegionKind: String, Equatable, Sendable {
   /// Every block you opened, banded over the rows it grew to.
   ///
   /// The **left** lane, because opening is something *you* did, which is what
-  /// that lane holds — the prompts you typed and the sub-agents you dispatched.
+  /// that lane holds - the prompts you typed and the sub-agents you dispatched.
   /// It is also the only way the rail can say that the tall stretch under your
   /// thumb is tall because you opened it rather than because the session
   /// produced that much.
@@ -188,7 +188,7 @@ public enum ScrubberRegionKind: String, Equatable, Sendable {
 
 /// What the rail draws: ground, then marks.
 ///
-/// The order is structural now rather than a `sorted(by:)` in the view — a
+/// The order is structural now rather than a `sorted(by:)` in the view - a
 /// painter draws ``regions`` and then ``clusters``, and cannot get it wrong.
 public struct ScrubberRail: Equatable, Sendable {
   public var regions: [ScrubberRegion]
@@ -207,29 +207,29 @@ public struct ScrubberRecap: Equatable, Sendable {
 }
 
 /// Everything the rail is built from. `rows` and `book` are passed whole rather
-/// than as closures — this is Swift and both are values — which also makes the
+/// than as closures - this is Swift and both are values - which also makes the
 /// "an item index is not a row index" rule impossible to route around.
 public struct ScrubberInput {
   public var items: [TranscriptItem]
   public var rows: TerminalRows
   public var book: TerminalHeightBook
   public var pendingApprovals: [PermissionRequest]
-  /// Bookmarked transcript item **ids** — the reader's own annotations, set by
+  /// Bookmarked transcript item **ids** - the reader's own annotations, set by
   /// the row's long-press menu and kept by the host (the app's `BookmarkModel`
   /// over the kit's `Bookmarks`), the same seam the web passes as
   /// `SessionPanelProps.bookmarks`. Ids rather than indices because an index is
   /// an artifact of one replay's coalescing and an id survives it; the id →
-  /// index translation happens in `scrubberMarks`, where the items are — the
+  /// index translation happens in `scrubberMarks`, where the items are - the
   /// port of web `TranscriptRows.tsx`'s `bookmarkIndexes`. An id not in `items`
   /// simply draws nothing, and that is what lets **one set ride every rail**:
   /// inside a takeover frame the same bookmarks resolve against the frame's own
-  /// items or stay off it, with no full-transcript index space to get wrong —
+  /// items or stay off it, with no full-transcript index space to get wrong -
   /// the hazard that kept the index-addressed version of this field out of
   /// frames entirely.
   public var bookmarks: [String]
   public var recap: ScrubberRecap?
   public var viewportHeight: CGFloat
-  /// What is open, because **what the rail marks depends on it** — see
+  /// What is open, because **what the rail marks depends on it** - see
   /// `redItemIndices`. The book is already built with the same value; this is
   /// the one rule that needs to read it rather than measure its effect.
   public var expansion: TerminalExpansion
@@ -239,8 +239,8 @@ public struct ScrubberInput {
   /// only items at the rail's own level, so that at the top a sub-agent's work
   /// is represented by the one band its `Task` row gets rather than by a second
   /// set of prompts and answers threaded through the rail. Inside a frame that
-  /// same test excluded *everything* — every item there has a parent by
-  /// construction — and the rail came out **mounted, banded, and marking
+  /// same test excluded *everything* - every item there has a parent by
+  /// construction - and the rail came out **mounted, banded, and marking
   /// nothing** on a hundred-tool agent. So the level is a parameter: `nil` at
   /// the top, the frame's id inside one. The port of web
   /// `TerminalScrubberProps.frameParentId` (`scrubber.tsx`).
@@ -252,12 +252,12 @@ public struct ScrubberInput {
     recap: ScrubberRecap? = nil, viewportHeight: CGFloat,
     // **No default.** The book is built with an expansion too, and a caller who
     // passed it there and omitted it here would get a rail quietly describing a
-    // transcript that is not on screen — marks for a fold nobody is looking at,
+    // transcript that is not on screen - marks for a fold nobody is looking at,
     // and none for the one they opened. Required, so the compiler asks.
     expansion: TerminalExpansion,
     // **No default, for the expansion's reason.** The rows and the book are
     // built from the frame's items, and a caller who framed them there and
-    // omitted the level here would get the empty rail back — mounted, banded,
+    // omitted the level here would get the empty rail back - mounted, banded,
     // and marking nothing. Required, so the compiler asks.
     frameParentId: String?
   ) {
@@ -278,11 +278,11 @@ public struct ScrubberInput {
 // MARK: - Scale
 
 /// The floor, not the height: a mark spans its row's actual extent at rail
-/// scale, so a one-line prompt is a tick and a hundred-line response is a bar —
+/// scale, so a one-line prompt is a tick and a hundred-line response is a bar -
 /// the rail is a map, and on a map a long answer looks long.
 public let scrubberMinMark: CGFloat = 2
 
-/// Rail points per content point — the one scale the marks and the viewport band
+/// Rail points per content point - the one scale the marks and the viewport band
 /// are both drawn at, so they cannot disagree about where a row sits.
 ///
 /// The denominator is `max(totalSize, viewportHeight)` and **never `totalSize`
@@ -290,7 +290,7 @@ public let scrubberMinMark: CGFloat = 2
 /// with 90 points of content in a 906-point window, `railH / totalSize` is ~10
 /// and the band comes out at 9,120 points inside a 906-point rail. The rail is
 /// positioned *inside* the scroller, so that overflow becomes real scrollable
-/// height — a short session grew ~8,000 points of empty space below it and the
+/// height - a short session grew ~8,000 points of empty space below it and the
 /// reader could scroll away from the only three rows there were.
 ///
 /// Clamped, the rail represents the **viewport** when everything fits (the band
@@ -302,7 +302,7 @@ public func railScale(railH: CGFloat, totalSize: CGFloat, viewportH: CGFloat) ->
 
 // MARK: - What the rail marks
 
-/// The transcript indices of tool calls **drawn red on a line of their own** —
+/// The transcript indices of tool calls **drawn red on a line of their own** -
 /// exactly what the rail paints a failure mark for.
 ///
 /// The rule is one sentence: *if it is red in the transcript, it is red on the
@@ -311,13 +311,13 @@ public func railScale(railH: CGFloat, totalSize: CGFloat, viewportH: CGFloat) ->
 /// It has been wrong in both directions. It began as "every failed call", which
 /// against a real session meant 178 calls, 9 failures, **8 of them recovered
 /// from inside their own run**, and nine alarms on a rail whose transcript
-/// reddened one row — a red mark beside nothing red sends a reader hunting for
+/// reddened one row - a red mark beside nothing red sends a reader hunting for
 /// damage that is not there. Narrowing it to each row's *outcome* fixed that and
 /// broke the other half: open a run and one of its calls is visibly red on its
 /// own line with nothing on the rail beside it.
 ///
 /// A fold is what reconciles them, and the fold is stated **once**, in
-/// ``BlockCall/ownLine`` — which is why this function is now four lines. It used
+/// ``BlockCall/ownLine`` - which is why this function is now four lines. It used
 /// to re-derive that rule here, from the same leaf predicates as the planner but
 /// by separate reasoning, in the same nested item/run/task switch that
 /// `expansionKeys` and `truncatedCallIds` also each carried a copy of. Four
@@ -329,7 +329,7 @@ public func railScale(railH: CGFloat, totalSize: CGFloat, viewportH: CGFloat) ->
 ///
 /// It is also why a frame needs no special case here: the web's `rowOutcome`
 /// map tests "is this call at the rail's level" and had to learn
-/// `frameParentId`, but this walks the rows it was handed — inside a takeover
+/// `frameParentId`, but this walks the rows it was handed - inside a takeover
 /// those are the frame's own fold, so what the frame reddens is already exactly
 /// what it marks.
 public func redItemIndices(rows: TerminalRows, expansion: TerminalExpansion) -> Set<Int> {
@@ -358,7 +358,7 @@ private struct ScrubberSegment {
 /// The response lane is anchored on **the answer, not the turn end**. Built from
 /// `turn_result` alone it was silently history-blind: a resumed session's
 /// backfill maps only user and assistant entries, so it carried no turn rows at
-/// all and the whole lane came back empty — while the prompt lane survived,
+/// all and the whole lane came back empty - while the prompt lane survived,
 /// which is what made it look like a rendering bug rather than a missing input.
 /// So a `turn_result` *decorates* a mark rather than conjuring it.
 public func buildScrubberRail(_ input: ScrubberInput, railH: CGFloat) -> ScrubberRail {
@@ -391,28 +391,28 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
     segment = ScrubberSegment()
   }
 
-  // Which top-level calls a sub-agent ran inside — by `parentToolUseId` and
+  // Which top-level calls a sub-agent ran inside - by `parentToolUseId` and
   // never by the spawning call's *name*: `Task` is the SDK's convention, not a
   // law (a background agent arrives as `Agent`), and an id that other items
   // demonstrably nest under IS a sub-agent whatever spawned it. The same
   // membership rule the fold uses, for the same reason. Inside a frame this
-  // finds only the frame's own id, which no frame item carries as its own — a
+  // finds only the frame's own id, which no frame item carries as its own - a
   // grandchild's parent is a frame *call* and `subagentItems` excludes
-  // grandchildren — so a frame's rail draws no band for itself.
+  // grandchildren - so a frame's rail draws no band for itself.
   var subagentParents: Set<String> = []
   for item in input.items {
     if let parent = parentToolUseId(of: item) { subagentParents.insert(parent) }
   }
 
-  // Which failures are on screen as failures — see `redItemIndices`.
+  // Which failures are on screen as failures - see `redItemIndices`.
   let red = redItemIndices(rows: input.rows, expansion: input.expansion)
 
   for (index, item) in input.items.enumerated() {
-    // The dispatch itself, at its row — the folded `Task` block, so the band
+    // The dispatch itself, at its row - the folded `Task` block, so the band
     // grows to the whole sub-agent area when it is opened and shrinks back to a
     // tick when it is closed. Deliberately outside the switch: a `Task` whose
     // own result errored earns a red tick in the response lane *and* this band
-    // in the input lane, which is the point of the two channels — one says a
+    // in the input lane, which is the point of the two channels - one says a
     // sub-agent ran here, the other says it came back broken.
     if case .toolCall(let call) = item, subagentParents.contains(call.id) {
       marks.append(
@@ -421,10 +421,10 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
     }
 
     switch item {
-    // Prompts at the rail's own level — `frameParentId`, nil at the top — like
+    // Prompts at the rail's own level - `frameParentId`, nil at the top - like
     // the answer check below: at the top a subagent's brief is a `user` item
     // too, and it would both paint a "you" mark for something nobody typed and
-    // close the segment mid-turn — mis-anchoring the response mark whenever a
+    // close the segment mid-turn - mis-anchoring the response mark whenever a
     // task runs between the prompt and the answer.
     case .user where parentToolUseId(of: item) == input.frameParentId:
       closeSegment()
@@ -440,7 +440,7 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
       marks.append(
         ScrubberMark(kind: .error, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
 
-    // **If it is red in the transcript, it is red on the rail** — the whole
+    // **If it is red in the transcript, it is red on the rail** - the whole
     // rule, and why this defers to `redItemIndices` rather than testing the
     // call. That function owns the fold-aware half; the disjunction inside
     // `callFailed` is unchanged, and both its spellings are still needed (an
@@ -455,7 +455,7 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
       if input.frameParentId != nil {
         // **Inside a frame every narration step is its own mark**, where the
         // conversation gets one per segment. The segment machinery has nothing
-        // to work with here — a sub-agent's stream carries no prompts and no
+        // to work with here - a sub-agent's stream carries no prompts and no
         // `turn_result`, so every step would fold into a single mark at the
         // final report, which is the one place a reader can already get to. An
         // agent's rail is a list of what it said on the way, and that is what
@@ -481,7 +481,7 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
 
   // Hosts hand bookmarks over as item ids (stable across replays); the mark
   // model positions by index, so the translation lives here, where the items
-  // are — mirroring web `TranscriptRows.tsx`. An id this transcript does not
+  // are - mirroring web `TranscriptRows.tsx`. An id this transcript does not
   // hold (a frame that doesn't contain it, a truncated replay) simply draws
   // nothing. Each resolved index still goes through `rowIndex(forItem:)` like
   // every other mark: the id names an *item*, and which row shows an item is a
@@ -506,20 +506,20 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
 
 /// Where a mark sits on the rail, and how tall it is.
 ///
-/// A mark's height is its row's, at rail scale, floored at the hit target — the
+/// A mark's height is its row's, at rail scale, floored at the hit target - the
 /// row the mark *anchors* (for a turn, the final response), which is where the
 /// reader lands and what they came to gauge the size of.
 ///
 /// EXCEPT an item that **shares** its row (a task block's absorbed child, a
 /// folded run's member): there the row's extent is mostly other items' work, and
-/// expanded it is the whole subagent area — one failed child of a hundred-call
+/// expanded it is the whole subagent area - one failed child of a hundred-call
 /// task used to paint a solid band down the entire rail. Such a mark is a tick
 /// at its fractional position within the row.
 ///
 /// The height book already reflects expansion (it is planned from the live
 /// `TerminalExpansion`), so collapsed the fraction rounds onto the row's one line
 /// and siblings merge exactly as before. The fraction is deliberately
-/// approximate — this renderer COULD compute a child's true line offset from the
+/// approximate - this renderer COULD compute a child's true line offset from the
 /// book, and using the same fraction as the web client instead is what keeps the
 /// two implementations one rule. Applied to every kind rather than per kind
 /// because a bookmark on an absorbed child has the identical bug; the recap mark
@@ -539,14 +539,14 @@ private func place(_ mark: ScrubberMark, input: ScrubberInput, scale: CGFloat, r
 /// Every block you opened, banded over the rows it grew to.
 ///
 /// The extent comes from the book, which is already built with this expansion,
-/// so a band is the opened height with no extra bookkeeping — and a *row's*
+/// so a band is the opened height with no extra bookkeeping - and a *row's*
 /// height, never an item's, which is what makes this a region and not a mark
 /// (see ``ScrubberRegion``).
 ///
 /// Asked through `expansionKeys`, **never a block's own key**: a block has more
 /// than one, and for two common shapes its own is not the one a press writes. A
 /// run of one is drawn as the call itself, so it toggles `.call` and its `.run`
-/// key does not exist at all — which is why expanding a lone top-level `Bash`
+/// key does not exist at all - which is why expanding a lone top-level `Bash`
 /// banded nothing. A call opened *inside* an already-open run toggles its own
 /// key too. One row can hold several of these; it is one band either way,
 /// because it is one row.
@@ -607,7 +607,7 @@ private func clusterMarks(
     }
   }
 
-  // The approval is not an item — the prompt renders below the transcript — so
+  // The approval is not an item - the prompt renders below the transcript - so
   // its mark pins at the rail's foot, where the prompt is.
   if !input.pendingApprovals.isEmpty {
     clusters.append(
@@ -621,13 +621,13 @@ private func clusterMarks(
 // MARK: - The peek
 
 /// What the peek says, as data. The strings live here for the reason every
-/// string in this theme does — and because the row a peek describes is usually
+/// string in this theme does - and because the row a peek describes is usually
 /// unmounted, so there is nothing on screen to read them off.
 public struct ScrubberPeek: Equatable, Sendable {
   public struct Line: Equatable, Sendable {
     public var text: String
     public var tone: TermTone
-    /// Clipped to a couple of lines by the view — a peek is a glance, not a row.
+    /// Clipped to a couple of lines by the view - a peek is a glance, not a row.
     public var excerpt: Bool
 
     public init(text: String, tone: TermTone, excerpt: Bool = false) {
@@ -711,7 +711,7 @@ public func scrubberPeek(
   let alarm = mark.kind == .error || mark.kind == .toolFailed
   let prefix = mark.kind == .user ? "\(TermGlyph.prompt) " : ""
   lines.append(.init(text: prefix + excerptText(item), tone: alarm ? .red : .fg, excerpt: true))
-  // Which tool failed is rarely the question — `Bash(pnpm test)` is what you
+  // Which tool failed is rarely the question - `Bash(pnpm test)` is what you
   // already expected to see. The first non-blank line of what it said back is
   // the thing worth peeking at.
   if mark.kind == .toolFailed, case .toolCall(let call) = item,

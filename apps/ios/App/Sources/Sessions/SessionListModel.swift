@@ -3,11 +3,11 @@ import Foundation
 import Observation
 import UserNotifications
 
-/// Every configured gateway's sessions in one model — the phone's counterpart of
+/// Every configured gateway's sessions in one model - the phone's counterpart of
 /// the VS Code extension's `SessionsModel`. The gateway is a *facet* of the one
 /// list (filter/group/sort), never the frame: rows come from all hosts at once,
 /// and a host that is unreachable or unauthorized is a visible state beside the
-/// list, not a broken screen — on a tailnet the usual failure is "VPN dropped",
+/// list, not a broken screen - on a tailnet the usual failure is "VPN dropped",
 /// not "the data is gone".
 ///
 /// The derived chain (`rows` → `filtered` → `groups`, plus `subset`) is the
@@ -33,7 +33,7 @@ final class SessionListModel {
     case failed(String)
   }
 
-  /// What one gateway last answered. Sessions survive a failed refresh — the
+  /// What one gateway last answered. Sessions survive a failed refresh - the
   /// probe says the reading is stale, the rows say what was true last time.
   struct HostSnapshot {
     var probe: Probe = .pending
@@ -43,7 +43,7 @@ final class SessionListModel {
   }
 
   var tab: Tab = .live
-  /// How the list is filtered, grouped and sorted — persisted, so the phone
+  /// How the list is filtered, grouped and sorted - persisted, so the phone
   /// keeps the reader's layout the way the webview keeps its `bridge.setState`.
   var config: ViewConfig {
     didSet { persistConfig() }
@@ -51,7 +51,7 @@ final class SessionListModel {
   private(set) var snapshots: [UUID: HostSnapshot] = [:]
   private(set) var hasLoaded = false
   /// Project icon bytes, keyed by content hash and shared across every gateway
-  /// in the list — see `ProjectIconLoader`. Held here because this is where the
+  /// in the list - see `ProjectIconLoader`. Held here because this is where the
   /// per-gateway clients live and where new rows arrive.
   let projectIcons = ProjectIconLoader()
 
@@ -122,7 +122,7 @@ final class SessionListModel {
           snapshots[id, default: HostSnapshot()].probe = .connected
           // Most recently active first; a session that never emitted an event
           // sorts by creation instead of falling to the bottom. (The shared sort
-          // re-orders anyway — this keeps recency as the preserved input order.)
+          // re-orders anyway - this keeps recency as the preserved input order.)
           snapshots[id, default: HostSnapshot()].sessions = sessions.sorted {
             ($0.lastActivityAt ?? $0.createdAt) > ($1.lastActivityAt ?? $1.createdAt)
           }
@@ -139,7 +139,7 @@ final class SessionListModel {
   /// Ask for any project icon this list needs and does not have.
   ///
   /// Driven off `snapshots` rather than `rows` for the plain reason that these
-  /// are keyed by the gateway's `UUID`, which is what `context(for:)` wants —
+  /// are keyed by the gateway's `UUID`, which is what `context(for:)` wants -
   /// `SessionRow.hostId` is that id stringified for the shared view model.
   /// Cheap on the common path: a walk that finds every hash already known.
   private func ensureProjectIcons() {
@@ -222,7 +222,7 @@ final class SessionListModel {
 
   var groups: [SessionGroup] { groupRows(filtered, config: config) }
 
-  /// The one "you are seeing a subset" signal — nil when nothing is hidden.
+  /// The one "you are seeing a subset" signal - nil when nothing is hidden.
   var subset: SubsetSummary? {
     subsetSummary(config: config, scope: nil, shown: filtered.count, total: rows.count)
   }
@@ -255,7 +255,7 @@ final class SessionListModel {
       || hostStore.hosts.contains { snapshots[$0.id] == nil }
   }
 
-  /// Every gateway has answered, and every one of them failed — the only state
+  /// Every gateway has answered, and every one of them failed - the only state
   /// that earns the trouble strip. One gateway down beside one that works is a
   /// fact about a machine, not a problem with the list on screen.
   var allGatewaysDown: Bool {
@@ -264,7 +264,7 @@ final class SessionListModel {
 
   // MARK: - App icon badge
 
-  /// Rows unseen, summed over the sessions the filter is *showing* — the VS Code
+  /// Rows unseen, summed over the sessions the filter is *showing* - the VS Code
   /// rule: a badge counting rows in hidden sessions sends you looking for
   /// something that isn't there.
   var unseenTotal: Int {
@@ -272,7 +272,7 @@ final class SessionListModel {
   }
 
   /// Stamp `unseenTotal` on the app icon. Fails silently when the badge
-  /// permission was declined — the in-app badges still work.
+  /// permission was declined - the in-app badges still work.
   func syncAppBadge() async {
     try? await UNUserNotificationCenter.current().setBadgeCount(unseenTotal)
   }
@@ -285,7 +285,7 @@ final class SessionListModel {
     else { return }
     do {
       try await client.deleteSession(id: row.info.id)
-      // Its mark is noise now — and would count the whole history as read if
+      // Its mark is noise now - and would count the whole history as read if
       // the same id ever reappeared.
       unread.forget(host: hostId, sessionId: row.info.id)
       await refresh()
@@ -296,7 +296,7 @@ final class SessionListModel {
 
   /// Rename a session on its gateway.
   ///
-  /// `PATCH /sessions/:id`, never a local override — the dashboard and the VS
+  /// `PATCH /sessions/:id`, never a local override - the dashboard and the VS
   /// Code extension read the same `meta.title`, and a name only this phone knew
   /// would be a name nobody else could search for. An empty string clears the
   /// override, restoring the title the gateway derives.

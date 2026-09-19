@@ -152,7 +152,7 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     visibilityChanged: () => {
       markSeen()
-      // The mark is written from the last poll, so refresh and mark once more — with `force`, the panel being already hidden.
+      // The mark is written from the last poll, so refresh and mark once more - with `force`, the panel being already hidden.
       void model.refresh().then(() => markSeen(true))
     },
   })
@@ -249,7 +249,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Host Mode runs the server where the workspace is. `extensionKind` alone cannot express that:
   // a local window has no remote extension host to be `Workspace` relative to, so it reports `UI`
   // and gating on `Workspace` refuses every ordinary window. The one host that must not start a
-  // server is a UI-side copy while a remote is attached — there the workspace is the other machine.
+  // server is a UI-side copy while a remote is attached - there the workspace is the other machine.
   const uiSideOfRemote = vscode.env.remoteName !== undefined && context.extension.extensionKind === vscode.ExtensionKind.UI
   const hostSupervisor = uiSideOfRemote
     ? undefined
@@ -259,14 +259,14 @@ export function activate(context: vscode.ExtensionContext): void {
     hostStatus.update(hostSupervisor.state)
     void hostSupervisor.sync()
   }
-  // The badge counts gateways, so it follows the model as well as the supervisor — and it renders
+  // The badge counts gateways, so it follows the model as well as the supervisor - and it renders
   // once here because a window with no supervisor (the UI side of a remote) still has gateways.
   model.onDidChange(() => hostStatus.render())
   hostStatus.render()
   const requireHost = (): HostSupervisor | undefined => {
     if (!hostSupervisor) {
       void vscode.window.showInformationMessage(
-        `WorkerDeck: Host Mode runs where the workspace is — on ${vscode.env.remoteName ?? 'the remote'}, not in this local window.`,
+        `WorkerDeck: Host Mode runs where the workspace is - on ${vscode.env.remoteName ?? 'the remote'}, not in this local window.`,
       )
     }
     return hostSupervisor
@@ -425,11 +425,11 @@ export function activate(context: vscode.ExtensionContext): void {
   )
 }
 
-// The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts — this QuickPick is its native stand-in.
+// The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts - this QuickPick is its native stand-in.
 async function pickSkill(panel: SessionPanelProvider, vitals: SessionVitals | undefined): Promise<void> {
   const skills = vitals?.skills
   if (!skills) {
-    void vscode.window.showInformationMessage('WorkerDeck: skills are listed once the session connects — send a message first.')
+    void vscode.window.showInformationMessage('WorkerDeck: skills are listed once the session connects - send a message first.')
     return
   }
   if (skills.length === 0) {
@@ -439,7 +439,7 @@ async function pickSkill(panel: SessionPanelProvider, vitals: SessionVitals | un
   const picked = await vscode.window.showQuickPick(
     skills.map((s) => ({
       label: s.displayName ?? s.name,
-      description: [s.scope, s.enabled ? undefined : 'disabled'].filter(Boolean).join(' — '),
+      description: [s.scope, s.enabled ? undefined : 'disabled'].filter(Boolean).join(' - '),
       detail: s.shortDescription ?? s.description?.split('\n')[0],
       skill: s,
       // A skill the session reported but disabled stays visible and unpickable, like an ungrantable permission mode.

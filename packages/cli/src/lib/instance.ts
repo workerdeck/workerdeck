@@ -56,7 +56,7 @@ export function createHostGuard(allowedHosts: Set<string> | null): (req: Incomin
 }
 
 // The order here is the contract: auth endpoints first (they are how a browser gets a session at all), then the APNs
-// route, then assets — ungated, being the app's own code — and documents last, the one place the auth decision is made.
+// route, then assets - ungated, being the app's own code - and documents last, the one place the auth decision is made.
 function createFallback(
   auth: CliAuth,
   webRoot: string | undefined,
@@ -150,13 +150,13 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
   if (config.allowedHosts === null && !config.hostAuthenticates && !auth.enabled) {
     throw new Error(
       'refusing to serve: the resolved config expects auth but no shared secret was ' +
-        'materialized — this instance would be open while believing itself authenticated',
+        'materialized - this instance would be open while believing itself authenticated',
     )
   }
   // Sibling of the assert above: CORS on an open gateway lets any allowlisted page drive it with no credential.
   if (config.corsOrigins.length > 0 && !config.hostAuthenticates && !auth.enabled) {
     throw new Error(
-      'refusing to serve: corsOrigins is set but this instance has no auth — ' +
+      'refusing to serve: corsOrigins is set but this instance has no auth - ' +
         'a cross-origin page could drive it with no credential. Set --auth-key.',
     )
   }
@@ -260,22 +260,22 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
       line('  auth: the config file supplies its own `authenticate`')
     } else if (generated?.source === 'created') {
       line(`  auth: generated key  ${generated.key}`)
-      line(`        stored in ${generated.path} — later starts reuse it without printing it`)
+      line(`        stored in ${generated.path} - later starts reuse it without printing it`)
     } else if (generated?.source === 'ephemeral') {
       line(`  auth: generated key  ${generated.key}`)
-      line('        ephemeral — no state dir to keep it, so the next start mints a new one')
+      line('        ephemeral - no state dir to keep it, so the next start mints a new one')
     } else if (generated?.source === 'stored') {
       line(`  auth: shared key from ${generated.path}`)
     } else if (auth.enabled) {
-      line('  auth: shared key — browsers sign in, services send a header')
+      line('  auth: shared key - browsers sign in, services send a header')
     } else {
-      line('  NO AUTH — anyone who can reach this port gets a session')
+      line('  NO AUTH - anyone who can reach this port gets a session')
     }
     if (!config.web) {
-      line('  dashboard: off — bare gateway, /v1 and /auth only')
+      line('  dashboard: off - bare gateway, /v1 and /auth only')
     }
     if (!config.keepAwake) {
-      line('  keep-awake: off — this machine may sleep mid-turn')
+      line('  keep-awake: off - this machine may sleep mid-turn')
     }
     if (config.corsOrigins.length) {
       line(`  cors: ${config.corsOrigins.join(', ')} may call /v1 (still key-gated)`)
@@ -283,13 +283,13 @@ export async function startInstance(config: ResolvedConfig, options: { quiet?: b
     line(
       config.stateDir
         ? `  parked sessions persist in ${join(config.stateDir, 'parked')}`
-        : '  parked sessions are in memory only — a restart drops them',
+        : '  parked sessions are in memory only - a restart drops them',
     )
     if (apns) {
       const count = apns.deviceCount()
       const cards = apns.activity.count()
       line(
-        `  push: APNs forwarder on ${config.apns?.topic} — ` +
+        `  push: APNs forwarder on ${config.apns?.topic} - ` +
           `${count === 0 ? 'no devices registered yet' : `${count} device(s)`}` +
           `${cards === 0 ? '' : `, ${cards} live card(s)`}`,
       )

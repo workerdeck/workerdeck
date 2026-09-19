@@ -1,6 +1,6 @@
 import Foundation
 
-/// Every row's height and offset, for a given row list at a given cell —
+/// Every row's height and offset, for a given row list at a given cell -
 /// the table a virtualizer indexes.
 ///
 /// This is what makes the rest of the theme possible. A scrubber draws marks at
@@ -19,7 +19,7 @@ public struct TerminalHeightBook: Sendable {
 
   /// Per row, its height **including the blank line above it**. The gap is part
   /// of the row rather than a separate item because a virtualizer measures one
-  /// element per row — a standalone blank would be a row of its own, and every
+  /// element per row - a standalone blank would be a row of its own, and every
   /// index would be off by however many blanks preceded it.
   private let heights: [CGFloat]
   /// Running offsets, `offsets[i]` = top of row `i`. One longer than `heights`,
@@ -28,7 +28,7 @@ public struct TerminalHeightBook: Sendable {
 
   /// - Parameter frameParentId: the sub-agent frame these rows live in, when
   ///   they are a takeover's. It must reach the book because `nested` spends
-  ///   cells, so suppressing it inside the frame changes the wrap — and the
+  ///   cells, so suppressing it inside the frame changes the wrap - and the
   ///   lines drawn must be as tall as the height reserved, which means the book
   ///   and ``TerminalPlanner`` read the same value. A cache passed here must be
   ///   private to this frame: the plan cache keys on row and expansion alone.
@@ -56,14 +56,14 @@ public struct TerminalHeightBook: Sendable {
 
   /// Below this many cache misses, plan on the calling thread. Spinning up
   /// worker threads costs more than it saves for the case this is called in
-  /// almost every time — a streamed delta, where exactly one row missed.
+  /// almost every time - a streamed delta, where exactly one row missed.
   private static let parallelPlanThreshold = 256
 
   /// Every row's line count: cache hits taken first, and the misses planned in
   /// parallel when there are enough of them to pay for it.
   ///
   /// The **cold** build is why this exists. Every other path through here is
-  /// warm by construction — a delta re-plans one row — but the first build of a
+  /// warm by construction - a delta re-plans one row - but the first build of a
   /// freshly attached session plans every row of its whole history, and that is
   /// the one moment the reader is staring at a blank screen waiting for it.
   /// Planning is pure and rows are independent, so it is embarrassingly
@@ -75,7 +75,7 @@ public struct TerminalHeightBook: Sendable {
     let count = rows.count
     guard count > 0 else { return [] }
 
-    // The subset a row can read, computed once per row and outside any lock —
+    // The subset a row can read, computed once per row and outside any lock -
     // free while nothing is open, which is the overwhelmingly common case.
     let subsets: [TerminalExpansion] =
       expansion.isEmpty
@@ -101,7 +101,7 @@ public struct TerminalHeightBook: Sendable {
     }()
 
     if misses.count >= parallelPlanThreshold {
-      // Disjoint indices, one writer each, no shared mutable state — the plan
+      // Disjoint indices, one writer each, no shared mutable state - the plan
       // is a pure function of the row, the metrics and the subset. The cache is
       // deliberately *not* touched in here: it takes a lock, and a lock held
       // around the planning is the parallelism given straight back.
@@ -147,7 +147,7 @@ public struct TerminalHeightBook: Sendable {
     return index < offsets.count ? offsets[index] : totalHeight
   }
 
-  /// Which row covers this content offset. Binary search — a scroll event must
+  /// Which row covers this content offset. Binary search - a scroll event must
   /// not walk the transcript.
   public func rowIndex(atOffset offset: CGFloat) -> Int {
     guard !heights.isEmpty else { return 0 }
@@ -178,7 +178,7 @@ public final class TerminalPlanCache: @unchecked Sendable {
     var row: TranscriptRow
     /// Only the part of the expansion *this row* can read. Keying the whole
     /// epoch on the expansion instead would re-plan the entire transcript on
-    /// every tap — at `terminalStress`'s sixteen thousand rows, a rotation's
+    /// every tap - at `terminalStress`'s sixteen thousand rows, a rotation's
     /// worth of work for one finger.
     var expansion: TerminalExpansion
     var lines: Int
@@ -247,7 +247,7 @@ public final class TerminalPlanCache: @unchecked Sendable {
 
 /// A box that carries a non-`Sendable` value across a `concurrentPerform`
 /// closure. Sound only because the writes inside are to disjoint indices of a
-/// buffer that outlives the call — `concurrentPerform` does not return until
+/// buffer that outlives the call - `concurrentPerform` does not return until
 /// every iteration has finished.
 private struct UncheckedSendable<Value>: @unchecked Sendable {
   let value: Value

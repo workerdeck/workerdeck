@@ -3,7 +3,7 @@ import type { Doc } from '../lib/api.ts'
 
 export type DocEditorProps = {
   doc: Doc
-  // Must resolve with the document the server now holds — see `save` below.
+  // Must resolve with the document the server now holds - see `save` below.
   onSave: (patch: { title?: string; body?: string }) => Promise<Doc>
   onReload: () => void
 }

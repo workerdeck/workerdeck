@@ -36,11 +36,11 @@ function inputs(overrides: Partial<Parameters<typeof planAttach>[0]> = {}) {
 }
 
 describe('attachSeedToken', () => {
-  it('changes when the resync counter bumps — the retry must not look already-seeded', () => {
+  it('changes when the resync counter bumps - the retry must not look already-seeded', () => {
     expect(attachSeedToken(1, KEY)).not.toBe(attachSeedToken(0, KEY))
   })
 
-  it('changes when the key changes — a session switch must re-seed', () => {
+  it('changes when the key changes - a session switch must re-seed', () => {
     expect(attachSeedToken(0, 'identity s2')).not.toBe(attachSeedToken(0, KEY))
   })
 })
@@ -55,7 +55,7 @@ describe('planAttach', () => {
     expect(plan.seedToken).toBe(attachSeedToken(0, KEY))
   })
 
-  it('ignores a racing cache write when already seeded — afterSeq derives from the held object, never a second read', () => {
+  it('ignores a racing cache write when already seeded - afterSeq derives from the held object, never a second read', () => {
     const current = held(7)
     const plan = planAttach(inputs({ current, warm: held(50) }))
     expect(plan.held).toBe(current)

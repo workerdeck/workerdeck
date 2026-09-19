@@ -18,7 +18,7 @@ export const claudeAdapter: EngineAdapter = {
       return {
         available: false,
         reason:
-          `no usable Claude credentials for this profile's environment — log in under its ` +
+          `no usable Claude credentials for this profile's environment - log in under its ` +
           `config dir (CLAUDE_CONFIG_DIR=${profile.configDir ?? '~/.claude'} claude auth login) ` +
           'or set ANTHROPIC_API_KEY',
       }

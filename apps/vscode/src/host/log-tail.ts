@@ -6,7 +6,7 @@ import * as vscode from 'vscode'
 const POLL_MS = 1000
 const BACKLOG_BYTES = 64 * 1024
 
-// The server writes to a file rather than a pipe, because it has to outlive this window — so the
+// The server writes to a file rather than a pipe, because it has to outlive this window - so the
 // Output channel is fed by tailing that file. It is also what lets a window show the log of a
 // server it merely *adopted*, which a pipe from our own child could never do.
 export class LogTail implements vscode.Disposable {

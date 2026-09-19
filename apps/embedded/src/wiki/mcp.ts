@@ -22,7 +22,7 @@ export function createWikiMcp(db: WikiDb, state: AppState, users: readonly User[
     {
       name: 'wiki',
       description:
-        'The signed-in user’s wiki — list, read, write and rename documents — plus who they are, ' +
+        'The signed-in user’s wiki - list, read, write and rename documents - plus who they are, ' +
         'what they have open, and how to navigate them to a document.',
       version: '1.0.0',
       // Descriptions here are written for the model, not for the length linter.

@@ -251,7 +251,7 @@ struct WorkerClientTests {
     #expect(listing.entries.map(\.type) == [.dir, .file, .symlink, .other])
     #expect(listing.entries[1].bytes == 8)
     // A category this build has never heard of degrades to `.other` rather than
-    // failing the whole listing — the server may be newer than the app.
+    // failing the whole listing - the server may be newer than the app.
     #expect(listing.entries[3].name == "sock")
   }
 
@@ -267,7 +267,7 @@ struct WorkerClientTests {
     let client = makeStubClient()
 
     #expect(try await client.readHostFile(path: "/repo/a.txt").text == "hi")
-    // base64 is the server saying "this is not text" — the editor must not treat
+    // base64 is the server saying "this is not text" - the editor must not treat
     // the payload as content it can round-trip.
     #expect(try await client.readHostFile(path: "/repo/blob.bin").text == nil)
   }

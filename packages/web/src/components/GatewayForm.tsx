@@ -92,7 +92,7 @@ export function CreateGatewayDialog({
       }}
     >
       <DialogContent>
-        <DialogHeader title="Add gateway" description="A workerdeck gateway you run — typically over Tailscale." />
+        <DialogHeader title="Add gateway" description="A workerdeck gateway you run - typically over Tailscale." />
         <DialogBody>
           <GatewayFields
             host={draft}

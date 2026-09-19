@@ -59,7 +59,7 @@ export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
   })
 }
 
-// Env var VALUES are never read into this snapshot — names only.
+// Env var VALUES are never read into this snapshot - names only.
 export function readProfileConfig(profile: ProfileInfo): ProfileConfigSnapshot {
   const dir = profile.configDir
   if (!dir) {

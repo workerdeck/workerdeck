@@ -46,7 +46,7 @@ export async function handleExecutionResult(
     const info = owner === undefined ? undefined : (registry.get(owner)?.info() ?? (await parking.get(owner))?.info)
     const profile = info?.profile
     // Indistinguishable from an unknown id on purpose: whether an execution exists elsewhere is not this caller's business.
-    // A vanished session (`info === undefined`) refuses too — nobody passed canSee, and submitResult would disclose the owner id.
+    // A vanished session (`info === undefined`) refuses too - nobody passed canSee, and submitResult would disclose the owner id.
     const refused =
       owner === undefined ||
       info === undefined ||

@@ -9,22 +9,22 @@ import WorkerDeckKit
 /// changes about the web client's design.
 ///
 /// **There is no hover.** On the web a pointer resting on a mark opens the peek
-/// and a drag scrubs, and the two are separate — the peek is *dismissed* the
+/// and a drag scrubs, and the two are separate - the peek is *dismissed* the
 /// moment a drag starts. A finger has no resting state, so the peek would be
 /// unreachable under that rule. Here a drag scrubs **and** peeks what it is
 /// passing, which is what a scrubber is for; a clean press with no travel is a
 /// jump on a mark and a scroll-to-here on the ground, exactly as on the web.
 ///
-/// **Twelve points is not a touch target.** The paint is the theme's 12 — the
+/// **Twelve points is not a touch target.** The paint is the theme's 12 - the
 /// one place the `ch` rule is set aside, because the rail is chrome beside the
-/// grid rather than a column of text — and the *hit area* is wider than the
+/// grid rather than a column of text - and the *hit area* is wider than the
 /// paint. Not the full 44 the HIG asks for a discrete control: this strip sits
 /// over the transcript's right edge, which is where a right thumb scrolls, and
 /// taking 44 points of that away costs more than the rail gains.
 ///
 /// It is a `Canvas` and not a view per mark for the reason the rail exists at
 /// all: a long session merges into hundreds of clusters, and this repaints on
-/// every scroll tick. Hit-testing is arithmetic over the same clusters — there
+/// every scroll tick. Hit-testing is arithmetic over the same clusters - there
 /// are no views to hit.
 struct TerminalScrubberView: View {
   let input: ScrubberInput
@@ -46,7 +46,7 @@ struct TerminalScrubberView: View {
   var body: some View {
     // Full width, with only the strip at the trailing edge answering touches.
     //
-    // The obvious shape — a 28-point view holding everything — cannot lay the
+    // The obvious shape - a 28-point view holding everything - cannot lay the
     // peek out: the panel is wider than its container, so its position comes out
     // of overflow arithmetic and it hangs off the screen. Here the peek is a HUD
     // in the transcript's own coordinate space, where "beside the rail, never
@@ -76,7 +76,7 @@ struct TerminalScrubberView: View {
         // Its own view, and that is a performance decision rather than tidiness:
         // the band is the only thing here that changes with the scroll offset,
         // and observation is per view body. Read the offset in *this* body and
-        // every scroll tick would rebuild every cluster — O(session) work per
+        // every scroll tick would rebuild every cluster - O(session) work per
         // frame of a fling, for output that only changes when content does. The
         // web client reaches the same place with a `useMemo`.
         ScrubberBandView(
@@ -85,11 +85,11 @@ struct TerminalScrubberView: View {
           .allowsHitTesting(false)
 
         // The peek and the strip that answers the finger, last so they are on
-        // top — and in a child view for the reason the band is, one step
+        // top - and in a child view for the reason the band is, one step
         // further. Observation invalidates a whole body, and `peek`/`dragging`
         // are written from **every** `onChanged`: held here, a single drag
-        // re-ran `buildScrubberRail` — `scrubberMarks` + `redItemIndices` +
-        // `expandedRegions`, O(items + calls) — once per touch event, over the
+        // re-ran `buildScrubberRail` - `scrubberMarks` + `redItemIndices` +
+        // `expandedRegions`, O(items + calls) - once per touch event, over the
         // whole transcript, during the exact gesture the rail exists for. The
         // clusters it needs are already computed; the touch state that changes
         // sixty times a second now lives beside them rather than above them.
@@ -104,7 +104,7 @@ struct TerminalScrubberView: View {
   // MARK: - Paint
 
   private func draw(_ rail: ScrubberRail, in context: inout GraphicsContext) {
-    // Ground first, marks over it — and that order is the type's now, not a
+    // Ground first, marks over it - and that order is the type's now, not a
     // `sorted(by:)` here. A band drawn in list order covered the very marks it
     // contains, and the failures and prompts inside the part you opened are
     // exactly what you still need to see.
@@ -112,7 +112,7 @@ struct TerminalScrubberView: View {
       let rect = CGRect(
         x: laneX(region.lane), y: region.y, width: laneW(region.lane), height: region.h)
       switch region.kind {
-      // Yellow, matching the wash the opened rows themselves carry — the rail
+      // Yellow, matching the wash the opened rows themselves carry - the rail
       // and the region are saying the same thing and should say it in the same
       // colour. Kept very low, because it washes whole regions: at band strength
       // an opened run shouts louder than anything inside it.
@@ -128,7 +128,7 @@ struct TerminalScrubberView: View {
       // Green, because every other colour on this rail is spoken for and none of
       // them means "somebody else's working": blue is you, white is the answer,
       // red is an alarm, magenta is your bookmark, yellow is the session waiting
-      // on you. An extent like the two beside it — collapsed a tick, expanded
+      // on you. An extent like the two beside it - collapsed a tick, expanded
       // the band the sub-agent covers.
       case .subagent: twoTone(rect, TerminalPalette.color(.green), in: &context)
       case .turn: twoTone(rect, TerminalPalette.color(.fg), in: &context)
@@ -139,15 +139,15 @@ struct TerminalScrubberView: View {
       case .toolFailed:
         // 55%, and this is the one thing keeping the rail readable. A session
         // error is rare and a turn failure rarer; a tool that failed and was
-        // recovered from is routine — a grep that matched nothing, a build fixed
-        // on the second go — and at full strength a normal working session
+        // recovered from is routine - a grep that matched nothing, a build fixed
+        // on the second go - and at full strength a normal working session
         // paints the rail solid red, at which point the two failures that
         // actually ended something stop standing out.
         context.fill(Path(rect), with: .color(TerminalPalette.color(.red).opacity(0.55)))
       case .bookmark:
         context.fill(Path(rect), with: .color(TerminalPalette.color(.magenta)))
       case .approval:
-        // Drawn outside the canvas so it can pulse — see `approvalMark`.
+        // Drawn outside the canvas so it can pulse - see `approvalMark`.
         break
       case .recap:
         // A dashed hairline centred in its box.
@@ -163,7 +163,7 @@ struct TerminalScrubberView: View {
 
   }
 
-  /// A lane mark is two-tone: the first 2 points — the mark's own anchor — at
+  /// A lane mark is two-tone: the first 2 points - the mark's own anchor - at
   /// full strength, the rest of the row's extent a 25% tail, so a long answer
   /// reads as long without a tall solid bar shouting over the rail.
   private func twoTone(_ rect: CGRect, _ color: Color, in context: inout GraphicsContext) {
@@ -179,7 +179,7 @@ struct TerminalScrubberView: View {
   /// The waiting approval, pulsing.
   ///
   /// A view rather than a canvas fill, because a canvas is drawn once per body
-  /// evaluation and a clock read inside one does not animate — the same reason
+  /// evaluation and a clock read inside one does not animate - the same reason
   /// the transcript's working glyph is a `TimelineView`. Off under Reduce
   /// Motion, where the mark simply stands: it is yellow and full-width either
   /// way, which is the signal.
@@ -211,7 +211,7 @@ struct TerminalScrubberView: View {
   }
 }
 
-/// The peek and the gesture — everything whose state changes under a finger.
+/// The peek and the gesture - everything whose state changes under a finger.
 ///
 /// Its own view purely so that touch state does not invalidate the body that
 /// builds the rail. It re-derives nothing: the clusters are handed in, and what
@@ -219,7 +219,7 @@ struct TerminalScrubberView: View {
 ///
 /// Regions are deliberately not passed. A region is ground rather than a point,
 /// and it does not answer the finger: a band spans hundreds of points, so under
-/// the nearest-cluster arithmetic below it tied with — and could beat — the very
+/// the nearest-cluster arithmetic below it tied with - and could beat - the very
 /// marks inside it, jumping the reader to the top of a region instead of to the
 /// prompt they pressed.
 private struct ScrubberTouchLayer: View {
@@ -271,7 +271,7 @@ private struct ScrubberTouchLayer: View {
 
   // MARK: - The peek
 
-  /// Height without measuring, from the strings and the line — the same claim
+  /// Height without measuring, from the strings and the line - the same claim
   /// the whole theme makes. A measured panel would need a layout pass before it
   /// could be positioned, and it is positioned while a finger is moving.
   private func peekHeight(_ content: ScrubberPeek) -> CGFloat {
@@ -305,9 +305,9 @@ private struct ScrubberTouchLayer: View {
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
     .overlay(
       RoundedRectangle(cornerRadius: 4).stroke(TerminalPalette.color(.faint).opacity(0.4)))
-    // Beside the mark, clamped into the rail — a peek near either end would
+    // Beside the mark, clamped into the rail - a peek near either end would
     // otherwise hang off the transcript.
-    // Beside the rail, and clamped into it vertically — a peek near either end
+    // Beside the rail, and clamped into it vertically - a peek near either end
     // would otherwise hang off the transcript. The height is computed rather
     // than measured because this is positioned while a finger is moving, and a
     // measured panel needs a layout pass before it can be placed.
@@ -338,7 +338,7 @@ private struct ScrubberTouchLayer: View {
         peek = nil
         guard !wasDragging else { return }
         // A clean press: on a mark it is a jump, on the ground a scroll to
-        // here — scrollbar semantics.
+        // here - scrollbar semantics.
         if let cluster = cluster(at: value.location, clusters: clusters),
           let mark = cluster.nearestMember(to: value.location.y)
         {
@@ -346,7 +346,7 @@ private struct ScrubberTouchLayer: View {
         } else if let cluster = cluster(at: value.location, clusters: clusters),
           cluster.kind == .approval
         {
-          // The approval has no member to resolve to — the prompt is below the
+          // The approval has no member to resolve to - the prompt is below the
           // transcript, so the bottom is where it lives.
           scroll.scrollToBottom()
         } else {
@@ -361,7 +361,7 @@ private struct ScrubberTouchLayer: View {
     // Content space, not a row: a rail drag is continuous and a row is not, so
     // snapping to row boundaries would turn a hundred-line answer into a dead
     // zone the transcript jumps across. Centred on the finger, the way a
-    // scrollbar drag reads — the point you are holding is the middle of what you
+    // scrollbar drag reads - the point you are holding is the middle of what you
     // are looking at, not its top edge.
     scroll.scrollTo(contentOffset: fraction * input.totalSize - scroll.viewportHeight / 2)
   }
@@ -369,7 +369,7 @@ private struct ScrubberTouchLayer: View {
   /// Which cluster is under a touch. Arithmetic, not hit-testing: the marks are
   /// painted into one canvas and there are no views to ask.
   private func cluster(at point: CGPoint, clusters: [ScrubberCluster]) -> ScrubberCluster? {
-    // The touch's x in rail space — the hit area is wider than the paint, so a
+    // The touch's x in rail space - the hit area is wider than the paint, so a
     // press left of the rail still resolves, and to the lane it is nearest.
     // The gesture rides the hit strip, so its x is already strip-local: the
     // strip's trailing edge is the rail's, and the rail is its last 12 points.
@@ -406,7 +406,7 @@ private struct ScrubberTouchLayer: View {
   }
 }
 
-/// The viewport band — where you are.
+/// The viewport band - where you are.
 ///
 /// Separated from the rail because it is the one part that follows the scroll,
 /// and observation invalidates a whole body: drawn together, every scroll tick

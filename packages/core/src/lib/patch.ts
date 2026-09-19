@@ -2,7 +2,7 @@ import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 
 const MAX_PATCH_LINES = 400
 
-// `@@ -oldStart,oldLines +newStart,newLines @@` — an absent count means 1 (a single-line hunk).
+// `@@ -oldStart,oldLines +newStart,newLines @@` - an absent count means 1 (a single-line hunk).
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/
 
 function capHunks(hunks: PatchHunk[]): { hunks: PatchHunk[]; truncated?: boolean } {

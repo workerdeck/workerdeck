@@ -100,7 +100,7 @@ export function SessionsSidebar() {
           <button
             key={row.info.id}
             type="button"
-            title={`${sessionLabel(row.info)} — ${row.state}`}
+            title={`${sessionLabel(row.info)} - ${row.state}`}
             aria-label={sessionLabel(row.info)}
             onClick={() => open(row)}
             className={cn(
@@ -141,7 +141,7 @@ export function SessionsSidebar() {
               const handle = client.attach(row.info.id, { reconnect: false })
               const done = setTimeout(() => {
                 handle.detach()
-                toast.error('Clear failed — the gateway did not answer')
+                toast.error('Clear failed - the gateway did not answer')
               }, 5_000)
               handle.on('attached', () => {
                 handle.clearContext()
@@ -149,7 +149,7 @@ export function SessionsSidebar() {
                 setTimeout(() => {
                   clearTimeout(done)
                   handle.detach()
-                  toast.success('Context cleared — the previous conversation stays resumable')
+                  toast.success('Context cleared - the previous conversation stays resumable')
                   void refresh()
                 }, 150)
               })

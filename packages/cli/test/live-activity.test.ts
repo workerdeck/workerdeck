@@ -153,7 +153,7 @@ describe('live activity projection', () => {
     expect(state.expiresAtMs).toBe(1_757_765_230_000)
   })
 
-  it('never sets a decision — that field is the phone’s, and a push is what clears it', () => {
+  it('never sets a decision - that field is the phone’s, and a push is what clears it', () => {
     expect(projectContentState({ info: session(), startedAtMs: STARTED }).decision).toBeNull()
   })
 

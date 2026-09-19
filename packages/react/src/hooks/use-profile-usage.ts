@@ -26,7 +26,7 @@ export function useProfileUsage(
   const [nonce, setNonce] = useState(0)
   const refresh = useCallback(() => setNonce((n) => n + 1), [])
 
-  // A previous profile's reading is another account's plan, not a stale view of this one — so switch to what we last
+  // A previous profile's reading is another account's plan, not a stale view of this one - so switch to what we last
   // knew about *this* profile rather than to nothing. Blanking here is what made a session switch fall back on the
   // newly-attached session's own replayed numbers, which is the usage-reverts report.
   useEffect(() => setUsage(cacheKey ? readProfileUsageCache(cacheKey) : undefined), [cacheKey])

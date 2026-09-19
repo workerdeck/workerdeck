@@ -83,7 +83,7 @@ describe('parseProjectTrustEntries', () => {
     expect(entries?.get('/a')).toBe('trusted')
   })
 
-  it('parses multi-line arrays elsewhere — even ones whose strings look like trust entries', () => {
+  it('parses multi-line arrays elsewhere - even ones whose strings look like trust entries', () => {
     const entries = parseProjectTrustEntries(
       '[mcp_servers.x]\nargs = [\n  "-y",\n  "[projects.\\"/evil\\"]",\n  "trust_level = \\"trusted\\"",\n]\n' +
         '[projects."/a"]\ntrust_level = "trusted"\n',
@@ -110,7 +110,7 @@ describe('parseProjectTrustEntries', () => {
     expect(parseProjectTrustEntries('[[projects."/a"]]\ntrust_level = "trusted"\n')).toBeUndefined()
   })
 
-  it('refuses multi-line strings anywhere — where a line reader starts lying', () => {
+  it('refuses multi-line strings anywhere - where a line reader starts lying', () => {
     expect(parseProjectTrustEntries('[mcp_servers.x]\nnote = """\n[projects."/a"]\n"""\n')).toBeUndefined()
     expect(parseProjectTrustEntries("[a]\nnote = '''\ntext\n'''\n")).toBeUndefined()
   })
@@ -156,7 +156,7 @@ describe('untrustedProjectNotice', () => {
     expect(untrustedProjectNotice({ cwd: proj, codexHome: home })).toBeDefined()
   })
 
-  it('notices when the home config is absent — knowably no trust entries', () => {
+  it('notices when the home config is absent - knowably no trust entries', () => {
     const proj = tempDir()
     projectConfig(proj)
     const home = join(tempDir(), 'no-such-home')
@@ -174,7 +174,7 @@ describe('untrustedProjectNotice', () => {
     expect(untrustedProjectNotice({ cwd: proj, codexHome: broken })).toBeUndefined()
   })
 
-  it('inherits trust from the git root across the chain — and discovers ancestor configs', () => {
+  it('inherits trust from the git root across the chain - and discovers ancestor configs', () => {
     const root = tempDir()
     mkdirSync(join(root, '.git'))
     const rootConfig = projectConfig(root)

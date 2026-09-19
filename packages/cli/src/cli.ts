@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { ConfigError, loadConfigFile, parseArgs, resolveInstanceConfig } from './config.ts'
 import { startInstance } from './lib/instance.ts'
 
-const HELP = `workerdeck — run a workerdeck instance: session gateway + dashboard, one port.
+const HELP = `workerdeck - run a workerdeck instance: session gateway + dashboard, one port.
 
 Usage
   workerdeck [options]
@@ -30,8 +30,8 @@ Options
       --allowed-host <name> extra Host header accepted when running without auth
                             (repeatable; loopback names are always accepted)
       --insecure-host <name>
-                            bind host that may serve without auth — no key demanded,
-                            none generated — and, while unauthenticated, also
+                            bind host that may serve without auth - no key demanded,
+                            none generated - and, while unauthenticated, also
                             accepted as a Host header (repeatable; config:
                             insecureHosts). Names the host alone, no port.
       --profile <name=dir>  Claude config dir a session may run under (repeatable). Declared
@@ -39,7 +39,7 @@ Options
       --profile-root <path> directory a profile created at runtime may point its config dir at
                             (repeatable; default: your home directory). Narrow this to pin
                             exactly which credential stores the dashboard may reach for.
-      --no-profile-store    refuse runtime profile management entirely — /v1/profiles stays
+      --no-profile-store    refuse runtime profile management entirely - /v1/profiles stays
                             read-only and profiles come from --profile and the config file
                             alone. Profiles created at runtime are stored in
                             <state-dir>/profiles.json, so --no-parking-store implies this.
@@ -62,7 +62,7 @@ Options
       --approval-timeout <d>
                             how long a permission prompt or a question may wait for
                             an answer before the engine denies it (300000, 30s, 5m;
-                            config: approvalTimeoutMs). Default 'none' — a prompt
+                            config: approvalTimeoutMs). Default 'none' - a prompt
                             waits as long as the session lives. A session may
                             override it per request.
       --state-dir <path>    where parked sessions are persisted
@@ -74,11 +74,11 @@ Options
       --cors-origin <o>     browser origin allowed to call /v1 cross-origin, for a
                             dashboard served elsewhere (repeatable, exact origin, no
                             wildcard; config: corsOrigins). Refused without auth. The
-                            key is still required — this only permits the call.
+                            key is still required - this only permits the call.
       --no-keep-awake       don't hold the machine awake while a session is waiting
                             on it (config: keepAwake: false). By default a turn in
                             flight, or a session blocked on an approval, blocks idle
-                            sleep — a laptop sleeping mid-turn drops the socket and
+                            sleep - a laptop sleeping mid-turn drops the socket and
                             burns the turn. The screen is never kept on, and the
                             lock releases the moment nothing is waiting.
       --no-web              don't serve the web dashboard (config: web: false).
@@ -90,8 +90,8 @@ Options
   -v, --version             print the version
 
 Config file
-  Options that cannot fit on a command line — \`authenticate\`, \`buildRunnerConfig\`,
-  \`createEngineRunner\` are functions — live in workerdeck.config.mjs, which
+  Options that cannot fit on a command line - \`authenticate\`, \`buildRunnerConfig\`,
+  \`createEngineRunner\` are functions - live in workerdeck.config.mjs, which
   default-exports the createWorkerServer options (or a function returning them).
   Flags and env override it. Supplying your own \`authenticate\` turns the built-in
   shared-secret auth off entirely.
@@ -155,16 +155,16 @@ async function main(argv: string[]): Promise<number> {
   }
 
   // A second signal must always be able to kill a shutdown that is taking too long. That used to work only by
-  // accident — the second call re-entered `instance.close()` and got an immediate callback out of an already-closed
-  // http server — so it evaporated the moment close stopped being idempotent-by-luck. Make it a real path.
+  // accident - the second call re-entered `instance.close()` and got an immediate callback out of an already-closed
+  // http server - so it evaporated the moment close stopped being idempotent-by-luck. Make it a real path.
   let shuttingDown = false
   const shutdown = (signal: string): void => {
     if (shuttingDown) {
-      process.stdout.write(`\n[workerdeck] ${signal} again — terminating now\n`)
+      process.stdout.write(`\n[workerdeck] ${signal} again - terminating now\n`)
       process.exit(130)
     }
     shuttingDown = true
-    line(`\n[workerdeck] ${signal} — shutting down (press again to stop now)`)
+    line(`\n[workerdeck] ${signal} - shutting down (press again to stop now)`)
     instance
       .drain({
         onProgress: (report) => {
@@ -173,10 +173,10 @@ async function main(argv: string[]): Promise<number> {
           }
           // Named, not waited for: nothing about shutting down answers a permission prompt.
           for (const id of report.awaitingHuman) {
-            line(`[workerdeck] session ${id} is waiting on an approval — not waiting for it`)
+            line(`[workerdeck] session ${id} is waiting on an approval - not waiting for it`)
           }
           if (report.timedOut) {
-            line(`[workerdeck] ${report.working.length} session(s) still running — stopping anyway`)
+            line(`[workerdeck] ${report.working.length} session(s) still running - stopping anyway`)
           } else if (report.working.length === 0) {
             line('[workerdeck] all turns finished')
           }

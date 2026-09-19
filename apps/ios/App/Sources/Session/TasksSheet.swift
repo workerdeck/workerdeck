@@ -1,7 +1,7 @@
 import WorkerDeckKit
 import SwiftUI
 
-/// The selected session's tasks — the engine's checklist and the `Task` spawns
+/// The selected session's tasks - the engine's checklist and the `Task` spawns
 /// that have no agent behind them.
 ///
 /// This is where tasks live now. They used to hang under the session card
@@ -10,7 +10,7 @@ import SwiftUI
 /// sub-agents are running) and tasks came here, to the session they belong to.
 struct TasksSheet: View {
   let tasks: [SessionTask]
-  /// Nil where the transcript cannot be travelled to — the cards renderer has no
+  /// Nil where the transcript cannot be travelled to - the cards renderer has no
   /// row model to land on, so a spawn is inert there rather than lying.
   let onReveal: ((String) -> Void)?
 

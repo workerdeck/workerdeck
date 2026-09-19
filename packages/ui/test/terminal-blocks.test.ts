@@ -75,7 +75,7 @@ describe('terminalBlocks', () => {
     expect(grown.key).toBe(`run:${items[0]!.id}`)
   })
 
-  it('gives one block per item with fold off — the cards variant’s row list', () => {
+  it('gives one block per item with fold off - the cards variant’s row list', () => {
     const items = [tool('Bash'), tool('Read'), tool('Bash')]
     expect(shape(terminalBlocks(items, 0, false))).toEqual(['tool_call', 'tool_call', 'tool_call'])
   })
@@ -194,7 +194,7 @@ describe('terminalBlocks · task absorption', () => {
     expect(grown.key).toBe(early.key)
   })
 
-  it('does not absorb at all with fold off — the cards variant’s row list', () => {
+  it('does not absorb at all with fold off - the cards variant’s row list', () => {
     const items = [task('A'), tool('Read', 'A')]
     expect(shape(terminalBlocks(items, 0, false))).toEqual(['tool_call', 'tool_call'])
   })
@@ -205,7 +205,7 @@ describe('terminalBlocks · task absorption', () => {
     expect(blocks[0]).toMatchObject({ index: 1, childIndices: [2] })
   })
 
-  it('spaces a task block as a tool call — flush with the calls of its turn', () => {
+  it('spaces a task block as a tool call - flush with the calls of its turn', () => {
     const blocks = terminalBlocks([text('on it'), task('A'), tool('Read', 'A'), tool('Bash')])
     expect(blocks).toHaveLength(3)
     expect(blockNeedsBlank(blocks[0]!, blocks[1]!)).toBe(true) // answer → task
@@ -241,7 +241,7 @@ describe('subagentItems', () => {
     ])
   })
 
-  it('excludes the spawning Task call itself — that is the frame, not a row in it', () => {
+  it('excludes the spawning Task call itself - that is the frame, not a row in it', () => {
     const items = [task('T1'), tool('Grep', 'T1')]
     const framed = subagentItems(items, 'T1')
     expect(framed.some((i) => i.id === 'T1')).toBe(false)

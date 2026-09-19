@@ -52,7 +52,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
 
   const loadSdkSessions = async () => {
     if (!form.cwd.trim()) {
-      toast.error('Set a working directory first — resumable sessions are listed per project')
+      toast.error('Set a working directory first - resumable sessions are listed per project')
       return
     }
     setLoadingSdk(true)

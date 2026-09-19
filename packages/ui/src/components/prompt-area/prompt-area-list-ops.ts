@@ -1,6 +1,6 @@
 /**
  * List auto-formatting logic for the PromptArea component.
- * Pure — no DOM dependencies, fully testable in Node.
+ * Pure - no DOM dependencies, fully testable in Node.
  */
 import type { Segment } from './types.ts'
 import { replaceTextRange, segmentsToPlainText } from './prompt-area-engine.ts'
@@ -26,7 +26,7 @@ export type ListContext = {
 }
 
 /**
- * Parsed shape of a single list line — the SINGLE source of truth for what
+ * Parsed shape of a single list line - the SINGLE source of truth for what
  * counts as a list line (both `getListContext` and the renumber engine derive
  * from this, so the bullet/number regexes live in exactly one place).
  *
@@ -127,7 +127,7 @@ export function autoFormatListPrefix(segments: Segment[], cursorPos: number): { 
 }
 
 /**
- * Handles Enter key in a list line — continues the list or exits.
+ * Handles Enter key in a list line - continues the list or exits.
  */
 export function insertListContinuation(segments: Segment[], cursorPos: number): { segments: Segment[]; cursorOffset: number } | null {
   const plainText = segmentsToPlainText(segments)
@@ -186,8 +186,8 @@ function getPrevListLineLevel(text: string, lineStart: number): number | null {
 /**
  * Indents a list item by one level (adds 2 spaces before the prefix), capped at
  * one level deeper than the line above. An item can only nest under a preceding
- * sibling, so the first item of a list — or an item already one level below its
- * parent — cannot indent further (returns null). This keeps sub-items visually
+ * sibling, so the first item of a list - or an item already one level below its
+ * parent - cannot indent further (returns null). This keeps sub-items visually
  * connected to a parent instead of drifting arbitrarily deep.
  */
 export function indentListItem(segments: Segment[], cursorPos: number): { segments: Segment[]; cursorOffset: number } | null {
@@ -259,8 +259,8 @@ function swapListPrefixLine(line: string, markdownEnabled: boolean): string {
 /**
  * Returns the set of line indices that sit inside a *balanced* fenced code
  * block (a ```…``` pair), so their leading "- "/"• " markers are preserved
- * verbatim. An unterminated (unpaired) fence marker is NOT protective — its
- * following lines still normalize — so a stray "```" in prose does not silently
+ * verbatim. An unterminated (unpaired) fence marker is NOT protective - its
+ * following lines still normalize - so a stray "```" in prose does not silently
  * suppress bullet normalization for the rest of the text.
  */
 function fenceProtectedLineIndices(lines: string[]): Set<number> {
@@ -351,12 +351,12 @@ export function normalizeListPrefixes(segments: Segment[], markdownEnabled: bool
 export type NumberEdit = { oldStart: number; oldEnd: number; newText: string }
 
 /**
- * Whether the text holds a genuine ordered-list run worth renumbering — a run
+ * Whether the text holds a genuine ordered-list run worth renumbering - a run
  * of 2+ consecutive same-level numbered lines that either starts at 1 or is
  * already a contiguous `n, n+1, …` sequence. Used to gate the paste path so a
  * copied list fragment (`3. 4. 5.` → renumber, or a broken `1. 1. 1.`) is
  * rebuilt, while incidental numeric-leading prose that `parseListLine` would
- * otherwise treat as a list — `1985. Born / 2020. Died`, `5. / 10. / 15.` — is
+ * otherwise treat as a list - `1985. Born / 2020. Died`, `5. / 10. / 15.` - is
  * left untouched.
  */
 export function hasOrderedListRun(text: string): boolean {
@@ -395,7 +395,7 @@ export function hasOrderedListRun(text: string): boolean {
  * Recomputes ordered-list numbering across the whole text. Returns the new text
  * plus the list of changed digit runs (ascending by `oldStart`) for cursor
  * remapping. When nothing changes, returns the SAME text reference and an empty
- * `edits` array — the no-op guard that keeps this off the typing hot path.
+ * `edits` array - the no-op guard that keeps this off the typing hot path.
  */
 export function renumberOrderedListLines(text: string): { text: string; edits: NumberEdit[] } {
   // Cheap pre-gate: with no ordered-list line there is nothing to renumber, so

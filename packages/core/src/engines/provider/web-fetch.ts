@@ -142,7 +142,7 @@ function parseUrl(raw: string): URL | undefined {
   }
 }
 
-// Resolution happens here and again inside fetch — a DNS-rebinding TOCTOU this tier accepts;
+// Resolution happens here and again inside fetch - a DNS-rebinding TOCTOU this tier accepts;
 // operators who need pinning supply `fetchImpl` with a pinned agent.
 async function denyReason(url: URL, allowedHosts: string[] | undefined): Promise<string | null> {
   const host = url.hostname.toLowerCase()

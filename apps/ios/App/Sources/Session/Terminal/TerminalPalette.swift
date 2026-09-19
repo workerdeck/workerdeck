@@ -6,18 +6,18 @@ import WorkerDeckKit
 ///
 /// Ported value-for-value from `packages/ui/src/styles/terminal.css`, so a
 /// session read on the phone and the same session read in the dashboard are the
-/// same colours — which matters more than it sounds: the tones carry meaning
+/// same colours - which matters more than it sounds: the tones carry meaning
 /// (green is "this changed the workspace", yellow is "waiting on you"), and a
 /// client that shaded them differently would be saying something different.
 ///
 /// Resolved through `UIColor(dynamicProvider:)` rather than an asset catalog
-/// because these are not brand colours to be tweaked by a designer — they are
+/// because these are not brand colours to be tweaked by a designer - they are
 /// the ANSI-ish vocabulary of the theme, and they belong beside the code that
 /// draws with them.
 ///
 /// Every token is a **`UIColor` first** and a SwiftUI `Color` derived from it.
-/// The terminal transcript draws by hand now — a text run, a gutter and a band
-/// per line, all in UIKit — and a token that existed only as a `Color` would
+/// The terminal transcript draws by hand now - a text run, a gutter and a band
+/// per line, all in UIKit - and a token that existed only as a `Color` would
 /// have to be bridged at every draw, on the hottest path there is.
 enum TerminalPalette {
   static func color(_ tone: TermTone) -> Color { Color(uiColor: uiColor(tone)) }
@@ -35,7 +35,7 @@ enum TerminalPalette {
     case .dim: return dynamic(dark: 0x8a_8a_8a, light: 0x6b_6b_6b)
     // One step down again: hints, "+N", rules.
     case .faint: return dynamic(dark: 0x6a_6a_6a, light: 0x8d_8d_8d)
-    // The working pulse — the brand coral, and the only place it appears.
+    // The working pulse - the brand coral, and the only place it appears.
     case .mark: return dynamic(dark: 0xd9_77_57, light: 0xbf_5b_3d)
     case .blue: return dynamic(dark: 0xaf_b9_fe, light: 0x0a_66_c2)
     case .green: return dynamic(dark: 0x4e_c9_a0, light: 0x16_79_4a)
@@ -65,12 +65,12 @@ enum TerminalPalette {
   /// The wash behind an **open** block, so eighty lines that appeared at once
   /// read as one block rather than as the transcript having grown. The web
   /// client's `--term-row-hover`, which is where a pointer-driven surface also
-  /// spends it — there is no hover here, so it is free.
+  /// spends it - there is no hover here, so it is free.
   ///
   /// **Yellow**, not neutral, and it is the theme's one deliberate reuse of that
   /// tone for something other than "waiting on you". The argument is that an
   /// open block *is* a state the reader put the transcript into, and it wants
-  /// the same colour as the mark that says so on the rail — one thing, two
+  /// the same colour as the mark that says so on the rail - one thing, two
   /// surfaces, one spelling. Kept very low so it reads as a tint on the ground
   /// rather than as a highlight: this washes whole regions, and at band strength
   /// an opened run would shout louder than anything inside it.
@@ -84,12 +84,12 @@ enum TerminalPalette {
 
   /// Behind a line a press would act on. Deliberately below the open wash
   /// (0.05/0.04) and the bands (0.04/0.05): this is a hint about what a finger
-  /// can do, not a state the row is in, and a transcript is mostly pressable —
+  /// can do, not a state the row is in, and a transcript is mostly pressable -
   /// at band strength every second row would be washed and the ones that carry
   /// real meaning would stop standing out.
   static var uiPressable: UIColor { dynamicAlpha(dark: 0.028, light: 0.024) }
 
-  /// The composer's glyph-button **cell** — the raised square a `+`, `\u{2715}`, `!` or an
+  /// The composer's glyph-button **cell** - the raised square a `+`, `\u{2715}`, `!` or an
   /// armed `\u{21B5}` stands in. Concrete colours rather than an alpha on the ground:
   /// this is a control sitting on the composer's own opaque bar, and a wash
   /// tuned against the transcript would vanish against it.
@@ -107,7 +107,7 @@ enum TerminalPalette {
   static var pressedCell: Color { Color(uiColor: uiPressedCell) }
 
   /// The rule drawn *inside* a nested row's padding, so the indent stays exactly
-  /// two cells — a border would be layout, and would take every subagent row
+  /// two cells - a border would be layout, and would take every subagent row
   /// half a character off the column its parent sits on.
   static var uiNestedRule: UIColor {
     dynamic(dark: 0x6a_6a_6a, light: 0x8d_8d_8d).withAlphaComponent(0.5)

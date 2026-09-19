@@ -5,7 +5,7 @@ import SwiftUI
 /// grouped by where they came from, with a detail screen each.
 ///
 /// The framing matters more here than in most sheets. A skill is **not** a
-/// command — the model decides to use one by reading its description, and there
+/// command - the model decides to use one by reading its description, and there
 /// is no wire syntax that invokes it. So this is a *discovery* screen, and the
 /// one action it offers ("Use this skill") is honest about being a drafting
 /// aid: it types a message into the composer for the operator to edit and send.
@@ -57,7 +57,7 @@ struct SkillsView: View {
     } .listStyle(.insetGrouped)
   }
 
-  /// Closest first — the project you are in, then your own, then whatever the
+  /// Closest first - the project you are in, then your own, then whatever the
   /// host or an admin put there.
   private var scopes: [String] {
     let order = ["repo", "user", "system", "admin"]
@@ -130,7 +130,7 @@ private struct SkillDetailView: View {
           Button("Use this skill") { onUse(skill) }
         } footer: {
           Text(
-            "Writes an opening message into the composer for you to edit — it isn’t sent, and "
+            "Writes an opening message into the composer for you to edit - it isn’t sent, and "
               + "there is no command that runs a skill directly.")
         }
       }

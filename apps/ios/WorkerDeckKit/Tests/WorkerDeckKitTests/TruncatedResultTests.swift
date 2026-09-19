@@ -9,7 +9,7 @@ import Testing
 /// states, and it is what makes this feature honest beside the rest of the
 /// replay-rule family: truncation is *not* fold-equal. A truncated attach
 /// differs from a full one in the result's text and its three markers and
-/// **nowhere else**, and hydration restores exact equality — so a row that has
+/// **nowhere else**, and hydration restores exact equality - so a row that has
 /// been fetched is indistinguishable from one that was never cut, which is what
 /// lets every renderer carry a branch for one state rather than two.
 @Suite("Truncated tool results")
@@ -66,7 +66,7 @@ struct TruncatedResultTests {
     ].reduce(TranscriptState.initial, applyEvent)
     #expect(result(truncated, "t1")?.truncated == true)
     #expect(result(truncated, "t1")?.totalChars == 641_003)
-    // The seq of the event it arrived on — the only thing that can name it to
+    // The seq of the event it arrived on - the only thing that can name it to
     // the fetch route.
     #expect(result(truncated, "t1")?.sourceSeq == 2)
 
@@ -90,7 +90,7 @@ struct TruncatedResultTests {
     ].reduce(TranscriptState.initial, applyEvent)
 
     #expect(cut != full)
-    // Hydration restores exact equality — the whole claim of this feature.
+    // Hydration restores exact equality - the whole claim of this feature.
     #expect(hydrateToolResult(cut, toolUseId: "t1", text: whole) == full)
   }
 
@@ -100,7 +100,7 @@ struct TruncatedResultTests {
       callEvent(1, id: "t1"), resultEvent(2, id: "t1", text: "head", truncated: true, totalChars: 99),
     ].reduce(TranscriptState.initial, applyEvent)
 
-    // An id that is not here — a press answered after a `/clear`.
+    // An id that is not here - a press answered after a `/clear`.
     #expect(hydrateToolResult(cut, toolUseId: "nope", text: "x") == cut)
     // And a result that was never a head: a second answer must not overwrite a
     // whole result with whatever a stale fetch returned.
@@ -117,7 +117,7 @@ struct TruncatedResultTests {
     let held = head.joined(separator: "\n").count
     let cut = ResultPreview.collapsed(head, cols: 40, totalChars: 641_003)
     // Computed from the head this would say "+241 chars" where the truth is
-    // 640,844 — and the wrong string is a different row height.
+    // 640,844 - and the wrong string is a different row height.
     let counted = Int(cut.more?.filter(\.isNumber) ?? "") ?? 0
     #expect(counted > 600_000)
     #expect(held < 1_000)
@@ -127,7 +127,7 @@ struct TruncatedResultTests {
   @Test("a head that fits the line budget still says there is more")
   func aShortHeadStillOffersTheRest() {
     // Four short lines: nothing is clipped, so the line count is zero and the
-    // old rule would have drawn no affordance at all — a row silently claiming
+    // old rule would have drawn no affordance at all - a row silently claiming
     // to be the whole of a 90,000-character result.
     let head = ["one", "two", "three", "four"]
     #expect(ResultPreview.collapsed(head, cols: 80).more == nil)
@@ -187,7 +187,7 @@ struct TruncatedResultTests {
     var waiting = TerminalExpansion()
     waiting.beginFetch(callId: "t1")
     waiting.finishFetch(callId: "t1")
-    // One step, so the row goes from "fetching" straight to the whole result —
+    // One step, so the row goes from "fetching" straight to the whole result -
     // lifting the budget first would show 8,000 characters of head and then
     // replace them, which is a flash, not a state.
     #expect(waiting.isFull(callId: "t1"))
@@ -213,7 +213,7 @@ struct TruncatedResultTests {
 
   @Test("a row reads only its own share of what is pending")
   func subsetCarriesPending() {
-    // Separated by prose, or the fold would make the two calls one run row —
+    // Separated by prose, or the fold would make the two calls one run row -
     // which is a different (and already tested) shape.
     let rows = TerminalRows.build(items: [
       .toolCall(head("t1")),

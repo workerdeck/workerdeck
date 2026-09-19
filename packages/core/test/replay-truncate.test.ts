@@ -30,7 +30,7 @@ describe('truncateResultBlocks', () => {
     expect(block.total_chars).toBe(big.length)
   })
 
-  it('cuts blocks individually — a big result beside two small ones', () => {
+  it('cuts blocks individually - a big result beside two small ones', () => {
     const event = truncateResultBlocks(resultEvent(1, [toolResult('a', 'short'), toolResult('b', big), toolResult('c', 'also short')]))
     const blocks = (event as { message: { content: Array<Record<string, unknown>> } }).message.content
     expect(blocks[0]).toEqual(toolResult('a', 'short'))
@@ -38,7 +38,7 @@ describe('truncateResultBlocks', () => {
     expect(blocks[2]).toEqual(toolResult('c', 'also short'))
   })
 
-  it('preserves the content SHAPE — a block list stays a block list', () => {
+  it('preserves the content SHAPE - a block list stays a block list', () => {
     const event = truncateResultBlocks(resultEvent(1, [toolResult('a', [{ type: 'text', text: big }])]))
     const block = (event as { message: { content: Array<Record<string, unknown>> } }).message.content[0]!
     expect(Array.isArray(block.content)).toBe(true)
@@ -64,7 +64,7 @@ describe('replaySlice', () => {
     resultEvent(3, [toolResult('b', big)]),
   ]
 
-  it('does not mutate the stored log — parking and the fetch route read it', () => {
+  it('does not mutate the stored log - parking and the fetch route read it', () => {
     const events = log()
     replaySlice(events, { afterSeq: 0, truncateResults: true })
     const first = events[0] as unknown as { message: { content: Array<{ content: string }> } }
@@ -76,7 +76,7 @@ describe('replaySlice', () => {
     expect(replaySlice(events, { afterSeq: 0 })).toEqual(events)
   })
 
-  it('truncates the HIGHEST-SEQ event too — a session ending on a `find /`', () => {
+  it('truncates the HIGHEST-SEQ event too - a session ending on a `find /`', () => {
     const out = replaySlice(log(), { afterSeq: 0, truncateResults: true, coalesceReplay: true })
     const last = out[out.length - 1] as unknown as {
       seq: number

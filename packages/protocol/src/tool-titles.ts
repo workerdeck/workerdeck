@@ -2,7 +2,7 @@ export const TOOL_TITLE_MAX_CHARS = 64
 
 // Capability tools the sandbox grants and the synthetic names the codex adapter invents: wire
 // names with no public vocabulary behind them. An engine's own tool names (`Bash`, `Read`,
-// `Task`) are deliberately absent — those are the CLI's published names and users read them.
+// `Task`) are deliberately absent - those are the CLI's published names and users read them.
 export const BUILTIN_TOOL_TITLES: Record<string, string> = {
   fs_read: 'Reading a file',
   fs_write: 'Writing a file',

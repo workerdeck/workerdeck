@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
 import type { Doc } from '../shared.ts'
 
-// Every query takes a `userId` and every WHERE clause carries it — a second check on a different question to the
+// Every query takes a `userId` and every WHERE clause carries it - a second check on a different question to the
 // gateway's session scoping, never a substitute for it.
 export type WikiDb = {
   listDocs(userId: string): Doc[]

@@ -14,13 +14,13 @@ import WorkerDeckKit
 ///
 /// Every name on the right was validated against this machine's
 /// `CoreGlyphs.bundle/symbol_order.plist` (8,302 symbols), because a guessed SF
-/// Symbol name is not a compile error — it renders **nothing**, silently, and
+/// Symbol name is not a compile error - it renders **nothing**, silently, and
 /// looks like a layout bug rather than a typo.
 ///
 /// That validation cannot cover the other half, though: this Mac's catalog is
 /// newer than the app's iOS 17 floor, so a name valid here may be absent on a
 /// phone (`arrow.trianglehead.branch` needs iOS 18). Hence `projectSymbol` asks
-/// **UIKit at runtime** rather than trusting the table — `UIImage(systemName:)`
+/// **UIKit at runtime** rather than trusting the table - `UIImage(systemName:)`
 /// answers nil for a symbol this OS does not have, which turns an
 /// unrepresentable glyph into the folder fallback instead of a hole. It is the
 /// same fallback an unmapped-but-well-formed name gets, which is the behaviour
@@ -144,7 +144,7 @@ private let lucideToSFSymbol: [String: String] = [
   "zap": "bolt",]
 
 /// The SF Symbol for a lucide glyph name, or `folder` when this build cannot
-/// draw it — unmapped, or mapped to a symbol this OS is too old to have.
+/// draw it - unmapped, or mapped to a symbol this OS is too old to have.
 ///
 /// `folder` is the fallback rather than nothing because the row reserves no
 /// space for an icon: drawing nothing is fine, but a *project* that has gone to
@@ -156,18 +156,18 @@ func projectSymbol(forLucideName name: String) -> String {
   return symbol
 }
 
-/// A project's icon at list-row size — the render side of protocol's
+/// A project's icon at list-row size - the render side of protocol's
 /// `ProjectIcon`.
 ///
 /// The two arms behave differently on purpose. A **glyph** takes the row's
 /// colour, because it is a symbol in a line of text and SF Symbols are drawn
 /// with the foreground style like any other. An **image** cannot: it is
 /// somebody's brand mark, and tinting it would be misrepresenting it. That
-/// asymmetry is the same one the web clients hit — an `<img>`-embedded SVG is
-/// its own document and `currentColor` never reaches it — arrived at here from
+/// asymmetry is the same one the web clients hit - an `<img>`-embedded SVG is
+/// its own document and `currentColor` never reaches it - arrived at here from
 /// the opposite direction and landing in the same place.
 ///
-/// A declared image whose bytes have not arrived (or cannot be decoded — see
+/// A declared image whose bytes have not arrived (or cannot be decoded - see
 /// `ProjectIconLoader` on SVG) draws **nothing** rather than a placeholder box:
 /// the project's name is already on the row, and a box that becomes a picture a
 /// beat later is more movement than the picture is worth.

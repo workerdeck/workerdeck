@@ -32,7 +32,7 @@ export function ProfileSelect({
             <SelectItem key={p.name} value={p.name}>
               <SelectItemText>
                 <span className={p.available === false ? 'text-fg-4' : undefined} title={p.unavailableReason}>
-                  {p.description ? `${p.name} — ${p.description}` : p.name}
+                  {p.description ? `${p.name} - ${p.description}` : p.name}
                   {p.available === false ? ' (unavailable)' : ''}
                 </span>
               </SelectItemText>

@@ -1,4 +1,4 @@
-// What an attach is made of on the wire. No API key, no cost — it attaches to a session that already exists.
+// What an attach is made of on the wire. No API key, no cost - it attaches to a session that already exists.
 // Run it before calling any new replay rule finished: this keeps text and non-text parts apart, which is the
 // measurement `truncateResults` shipped without (`docs/GOTCHAS.md` §Attach replay).
 //
@@ -149,6 +149,6 @@ function finish(): void {
 }
 
 setTimeout(() => {
-  console.log('TIMEOUT — the session never reached its lastSeq')
+  console.log('TIMEOUT - the session never reached its lastSeq')
   finish()
 }, 60_000)

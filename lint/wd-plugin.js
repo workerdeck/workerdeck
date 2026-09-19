@@ -53,7 +53,7 @@ const noStackedJsdoc = {
           if (/^\s*$/.test(between)) {
             context.report({
               loc: cur.loc,
-              message: 'Stacked doc comments: two /** */ blocks on one declaration — merge them or delete the stale one.',
+              message: 'Stacked doc comments: two /** */ blocks on one declaration - merge them or delete the stale one.',
             })
           }
         }
@@ -97,7 +97,7 @@ const maxCommentLines = {
           if (runStart && runEnd && runEnd.loc.end.line - runStart.loc.start.line + 1 > MAX_COMMENT_LINES) {
             context.report({
               loc: runStart.loc,
-              message: `Comment block exceeds ${MAX_COMMENT_LINES} lines — move the story to docs/ and keep the invariant sentence here.`,
+              message: `Comment block exceeds ${MAX_COMMENT_LINES} lines - move the story to docs/ and keep the invariant sentence here.`,
             })
           }
           runStart = undefined

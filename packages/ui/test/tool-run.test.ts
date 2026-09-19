@@ -123,7 +123,7 @@ const said: TranscriptItem = {
 }
 
 describe('taskBrief', () => {
-  it('is the call’s prompt — the one place the engine puts the instruction', () => {
+  it('is the call’s prompt - the one place the engine puts the instruction', () => {
     expect(taskBrief(taskCall({ input: { prompt: 'Find every caller of parseRoute.' } }))).toBe('Find every caller of parseRoute.')
   })
 
@@ -203,7 +203,7 @@ describe('taskFailed', () => {
     expect(taskFailed(taskCall())).toBe(false)
   })
 
-  it('does not colour on a child’s failure — the agent’s outcome is the claim', () => {
+  it('does not colour on a child’s failure - the agent’s outcome is the claim', () => {
     const children = [{ ...call('Read', 'task-1'), status: 'failed' as const }]
     expect(taskFailed(taskCall())).toBe(false)
     expect(children).toHaveLength(1)

@@ -36,7 +36,7 @@ struct RecapTests {
     #expect(summary.toolNames == ["Read"])
   }
 
-  @Test("a boundary past the end is clamped, not rejected — a transcript can shrink")
+  @Test("a boundary past the end is clamped, not rejected - a transcript can shrink")
   func clampsBoundary() {
     let summary = summarizeSince(items: [text("a")], from: 99)
     #expect(!summary.any)
@@ -96,7 +96,7 @@ struct RecapTests {
     #expect(line == "1 turn · 1 tool call (Bash) · 1 file · 1 error · 2 approvals waiting")
   }
 
-  @Test("an approval waiting is news on its own — nothing else has to have happened")
+  @Test("an approval waiting is news on its own - nothing else has to have happened")
   func pendingAlone() {
     #expect(recapLine(summarizeSince(items: [], from: 0, pendingApprovals: 1)) == "1 approval waiting")
   }

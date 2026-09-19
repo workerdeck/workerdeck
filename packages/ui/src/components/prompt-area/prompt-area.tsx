@@ -277,7 +277,7 @@ export function PromptArea({
     ) : null
 
   // Typography (font-size/line-height) lives on the container, not the editor, so
-  // it cascades to the editor AND the placeholder overlays — and a consumer can
+  // it cascades to the editor AND the placeholder overlays - and a consumer can
   // override all three at once via `className` (e.g. `text-base leading-6`).
   return (
     <div className={cn('prompt-area-container relative text-sm leading-relaxed', className)}>
@@ -316,7 +316,7 @@ export function PromptArea({
           onBlur={handleBlurCombined}
         />
 
-        {/* Overflow gradient indicator – visible when auto-grow is collapsed and content is clipped */}
+        {/* Overflow gradient indicator - visible when auto-grow is collapsed and content is clipped */}
         {autoGrow && hasOverflow && !isFocused && (
           <div
             aria-hidden="true"

@@ -31,7 +31,7 @@ describe('profile usage cache', () => {
     expect(readProfileUsageCache('k')?.five_hour.info.utilization).toBe(86)
   })
 
-  // A gateway that answers without a usage block has not told us the plan is empty — it has told us nothing. Letting
+  // A gateway that answers without a usage block has not told us the plan is empty - it has told us nothing. Letting
   // that blank the cache would put the session's own (possibly days-old) replayed reading back on screen.
   it('never lets an absent reading erase what we already knew', () => {
     writeProfileUsageCache('k', usage(86, 5_000))

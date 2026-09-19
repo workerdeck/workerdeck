@@ -240,7 +240,7 @@ function serializeNode(node: Node, depth: number): string {
       return `\n\n${serializeList(node, depth)}\n\n`
     }
     case 'LI': {
-      // A stray <li> outside a list wrapper — emit its content as a line.
+      // A stray <li> outside a list wrapper - emit its content as a line.
       return `${serializeChildren(node, depth).trim()}\n`
     }
     case 'PRE': {
@@ -284,7 +284,7 @@ function normalizeOutput(markdown: string): string {
 /**
  * Converts an HTML string to markdown source text. Returns '' for empty or
  * body-less input. Block markdown (headings, lists, quotes, fences, tables,
- * links) is emitted as literal markdown text — that is the editor's intended
+ * links) is emitted as literal markdown text - that is the editor's intended
  * display; only `*`/`**`/`***` and bare URLs get visually decorated inline.
  */
 export function htmlToMarkdown(html: string): string {

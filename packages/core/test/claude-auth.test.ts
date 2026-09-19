@@ -20,7 +20,7 @@ describe('checkClaudeAuth', () => {
     await expect(checkClaudeAuth({}, { executable })).resolves.toBe('logged_in')
   })
 
-  it('trusts the JSON over the exit code — 2.1.217 exits 1 on logged out', async () => {
+  it('trusts the JSON over the exit code - 2.1.217 exits 1 on logged out', async () => {
     const executable = fixture('logged-out.sh', `echo '{"loggedIn": false, "authMethod": "none"}'\nexit 1`)
     await expect(checkClaudeAuth({}, { executable })).resolves.toBe('logged_out')
   })
@@ -37,7 +37,7 @@ describe('checkClaudeAuth', () => {
   it("is 'unknown' for output that is not this CLI's contract", async () => {
     const garbage = fixture('garbage.sh', `echo 'Usage: claude [options]'\nexit 2`)
     await expect(checkClaudeAuth({}, { executable: garbage })).resolves.toBe('unknown')
-    // parseable JSON, but no loggedIn boolean — a future shape, not a logout
+    // parseable JSON, but no loggedIn boolean - a future shape, not a logout
     const reshaped = fixture('reshaped.sh', `echo '{"status": "ok"}'`)
     await expect(checkClaudeAuth({}, { executable: reshaped })).resolves.toBe('unknown')
   })

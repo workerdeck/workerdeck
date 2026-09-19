@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import WorkerDeckKit
 
-/// The prompt of the turn you are reading, held at the top of the scroller —
+/// The prompt of the turn you are reading, held at the top of the scroller -
 /// the CLI's own affordance, and the web client's `stickyPrompt`.
 ///
 /// **One line, and the prompt's first line.** Not the row: a pasted twenty-line
@@ -16,7 +16,7 @@ import WorkerDeckKit
 /// head, a sentinel `IntersectionObserver` to know when it stuck, and the
 /// compositor doing pin and push-off, because a JS-written pin trails the
 /// compositor and wobbles. None of that machinery is available or needed on
-/// this renderer — the height book knows the pixel offset of every row,
+/// this renderer - the height book knows the pixel offset of every row,
 /// mounted or not, so "which prompt am I under" is a binary search and "how far
 /// has the next one pushed this one off" is a subtraction. This is the height
 /// book's fourth payoff, after the scrubber, the exact `estimateSize` and the
@@ -34,7 +34,7 @@ import WorkerDeckKit
 ///   the same geometry, so it lands on the column its own row sits on. A
 ///   separate header with its own text arrangement drifts by a fraction of a
 ///   cell, which reads as the font being wrong. So the line stays on the grid,
-///   at the grid's own *y*, and the only chrome is a rule under it — the strip
+///   at the grid's own *y*, and the only chrome is a rule under it - the strip
 ///   has to hand over to the next one without moving the line a pixel, and air
 ///   above it is exactly what would move it.
 struct TerminalStickyPromptView: View {
@@ -54,13 +54,13 @@ struct TerminalStickyPromptView: View {
   /// transcript and it only changes when the fold does.
   let promptRows: [Int]
   /// Take me to that prompt. The one thing a header naming a place can do
-  /// honestly — and it goes through the row model, like every other jump.
+  /// honestly - and it goes through the row model, like every other jump.
   let onJumpToRow: (Int) -> Void
 
   /// The rule under the line, and the only thing the strip carries beyond the
   /// line itself.
   ///
-  /// **There is deliberately no air above the line.** There was — 5pt of it —
+  /// **There is deliberately no air above the line.** There was - 5pt of it -
   /// and it put the pinned copy 5pt below where the real line sits at the
   /// moment of hand-off, so every takeover jumped the line down by exactly that
   /// padding. The lift out is continuous, which is why only the arrival
@@ -70,7 +70,7 @@ struct TerminalStickyPromptView: View {
   private static let rule: CGFloat = 1
 
   /// Line plus rule, and it must equal the `VStack`'s own height or `.clipped()`
-  /// eats the difference — which is what used to happen to the rule: the strip
+  /// eats the difference - which is what used to happen to the rule: the strip
   /// measured `line + 10` while the stack drew `line + 11`, so the hairline was
   /// cut off every frame and had never once been seen.
   private var stripHeight: CGFloat { metrics.line + Self.rule }
@@ -84,7 +84,7 @@ struct TerminalStickyPromptView: View {
         // A rule, not a shadow or a box: the strip has to end somewhere, and a
         // hairline is how this theme says so everywhere else. With the air gone
         // it is the whole of what separates the held line from the moving text
-        // under it, so it has to actually be drawn — see `stripHeight`.
+        // under it, so it has to actually be drawn - see `stripHeight`.
         Rectangle()
           .fill(TerminalPalette.nestedRule)
           .frame(height: Self.rule)
@@ -105,7 +105,7 @@ struct TerminalStickyPromptView: View {
   }
 
   /// The arithmetic is `StickyPrompt.resolve`, in the kit, where a test can
-  /// drive it — this view only draws what it returns. The strip's own height
+  /// drive it - this view only draws what it returns. The strip's own height
   /// goes in, not the grid line: the hand-off has to be measured against what
   /// is on screen, the rule included.
   private var pinned: (line: TermLine, offset: CGFloat, row: Int)? {
@@ -123,7 +123,7 @@ struct TerminalStickyPromptView: View {
 ///
 /// A `UIViewRepresentable` around the same backdrop/gutter/body triple a row
 /// cell uses, because the whole claim of the sticky prompt is that it is *the
-/// same line* — a second renderer would be a second set of column arithmetic,
+/// same line* - a second renderer would be a second set of column arithmetic,
 /// and the drift would be a fraction of a cell.
 struct TerminalLineStrip: UIViewRepresentable {
   let line: TermLine

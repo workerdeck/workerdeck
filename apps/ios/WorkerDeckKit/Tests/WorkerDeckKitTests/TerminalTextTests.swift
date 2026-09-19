@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The strings and the wrapping — a port of `packages/ui/test/tool-run.test.ts`,
+/// The strings and the wrapping - a port of `packages/ui/test/tool-run.test.ts`,
 /// `result-preview.test.ts` and the `textLines` half of the height audit.
 ///
 /// These are tested rather than eyeballed because in this theme the string *is*
@@ -61,7 +61,7 @@ struct TerminalTextTests {
       call("Read"), call("mcp__roam_code__x"), call("mcp__roam_code__y"),
       call("mcp__roam_code__z"), call("Bash"), call("Bash"),
     ]
-    // Count descending, then alphabetical — load-bearing rather than tidy: an
+    // Count descending, then alphabetical - load-bearing rather than tidy: an
     // unstable order would remeasure the row for nothing.
     #expect(runSummary(run, busy: false) == "Ran 6 tools · 3 roam-code, 2 shell, 1 read")
   }
@@ -136,7 +136,7 @@ struct TerminalTextTests {
 
   @Test("the line budget yields to the character budget")
   func charBudgetWinsWithinFourLines() {
-    // Four lines that together blow the character budget must stop early —
+    // Four lines that together blow the character budget must stop early -
     // otherwise "4 lines" silently means 1,200 characters. One 300-character
     // line already spends three quarters of the budget, so the second is
     // refused and three lines stay hidden.
@@ -156,14 +156,14 @@ struct TerminalTextTests {
   @Test("a word moves to its own line before it fills any")
   func wordMovesFirst() {
     // "ab " then a 25-cell word at cols 10: the word starts a new line, then
-    // fills — 1 + 3, not 3.
+    // fills - 1 + 3, not 3.
     #expect(TerminalCells.textLines("ab " + String(repeating: "a", count: 25), cols: 10).lines == 4)
   }
 
   @Test("trailing spaces hang rather than forcing a wrap")
   func spacesHang() {
     // Preserved spaces hang at the end of a line (CSS Text 3, and what every
-    // terminal does). Asserted with spaces that push well past the column —
+    // terminal does). Asserted with spaces that push well past the column -
     // a run that merely fits would prove nothing.
     #expect(TerminalCells.textLines("abc" + String(repeating: " ", count: 40), cols: 10).lines == 1)
   }

@@ -67,7 +67,7 @@ export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage
           return
         }
       } else {
-        // A bare listing spans every project on the host, so it filters after listing — which is why the paging is applied here too.
+        // A bare listing spans every project on the host, so it filters after listing - which is why the paging is applied here too.
         json(res, 200, { sdkSessions: withinRoots(await lister({}), roots, limit, offset) })
         return
       }

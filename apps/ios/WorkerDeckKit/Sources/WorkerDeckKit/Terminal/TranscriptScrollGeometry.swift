@@ -1,7 +1,7 @@
 import Foundation
 
 // A scroll view's vertical range in content-offset space: `top` shows the first point of
-// content under the top inset, `bottom` the last point above the bottom inset — or `top`
+// content under the top inset, `bottom` the last point above the bottom inset - or `top`
 // again when the content is shorter than the frame.
 public struct TranscriptScrollGeometry: Equatable, Sendable {
   public var contentHeight: CGFloat
@@ -26,7 +26,7 @@ public struct TranscriptScrollGeometry: Equatable, Sendable {
 
   // A jump decides the pin from where it lands, not from where it left: landing within
   // `threshold` of the bottom *is* going to the bottom. Never while the transcript is still
-  // filling — that bottom is only the bottom of what has arrived so far, and a pin taken there
+  // filling - that bottom is only the bottom of what has arrived so far, and a pin taken there
   // is dragged down by everything that lands after it.
   public func pinsAfterJump(to offset: CGFloat, threshold: CGFloat, complete: Bool) -> Bool {
     complete && offset >= bottom - threshold

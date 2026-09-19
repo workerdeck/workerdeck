@@ -118,7 +118,7 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
       json(res, 400, { error: 'not a regular file' })
       return
     }
-    // Advisory pre-check only — the authoritative cap is on the bytes actually read, since the file can grow before the open.
+    // Advisory pre-check only - the authoritative cap is on the bytes actually read, since the file can grow before the open.
     let modifiedAt = 0
     try {
       const stats = lstatSync(resolved.path)
@@ -192,7 +192,7 @@ export async function handleHostFiles(ctx: ServerContext, req: IncomingMessage, 
     }
     const existing = current.ok ? current.data : null
     if (existing && !body.expectedHash) {
-      json(res, 409, { error: 'file exists — pass expectedHash to overwrite it' })
+      json(res, 409, { error: 'file exists - pass expectedHash to overwrite it' })
       return
     }
     if (existing && hashBytes(existing) !== body.expectedHash) {

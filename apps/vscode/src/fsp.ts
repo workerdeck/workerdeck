@@ -44,7 +44,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
           return statOf(entry)
         }
       } catch {
-        // Parent unlistable (e.g. path IS a root) — fall through.
+        // Parent unlistable (e.g. path IS a root) - fall through.
       }
     }
     try {
@@ -99,7 +99,7 @@ export class WorkerdeckFileSystem implements vscode.FileSystemProvider, vscode.D
     } catch (err) {
       if (err instanceof WorkerDeckError && err.status === 409) {
         throw vscode.FileSystemError.NoPermissions(
-          `${uri.path} changed on the gateway (likely the agent) — close and re-open the file to take that version, or copy your edits first`,
+          `${uri.path} changed on the gateway (likely the agent) - close and re-open the file to take that version, or copy your edits first`,
         )
       }
       throw toFsError(err, uri)

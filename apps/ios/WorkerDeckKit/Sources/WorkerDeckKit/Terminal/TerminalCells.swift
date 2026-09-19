@@ -1,11 +1,11 @@
 import Foundation
 
-/// How wide a string is in character cells, and where it wraps — the half of
+/// How wide a string is in character cells, and where it wraps - the half of
 /// `packages/ui/src/components/terminal/height.ts` that knows about text.
 ///
 /// The terminal theme's premise is one cell and one line height, so a row's
 /// height is derivable from its string with no layout pass at all. That is only
-/// honest if this file agrees with what the renderer draws — which on iOS it
+/// honest if this file agrees with what the renderer draws - which on iOS it
 /// does **by construction**: the renderer draws the lines this file returns,
 /// rather than handing the string to the text system and hoping it wraps the
 /// same way. See ``wrapped(_:cols:)``.
@@ -24,10 +24,10 @@ public enum TerminalCells {
   /// The surface sets `tab-size: 2`; a tab advances to the next 2-cell stop.
   public static let tabSize = 2
 
-  /// Break *after* these when the next character is not a digit — which keeps
+  /// Break *after* these when the next character is not a digit - which keeps
   /// `protocol-0.16.0` together while still breaking a long hyphenated phrase.
   /// `?` is included because it is where real browsers break long URLs.
-  private static let breakAfter: Set<Character> = ["-", "–", "—", "?"]
+  private static let breakAfter: Set<Character> = ["-", "-", "-", "?"]
 
   /// East Asian Wide / Fullwidth blocks, inclusive.
   private static let wideRanges: [ClosedRange<UInt32>] = [
@@ -74,7 +74,7 @@ public enum TerminalCells {
   ///
   /// Consecutive spaces coalesce into one token; each wide or pictographic
   /// cluster is its **own** word token, because a break may fall between any two
-  /// of them. The ASCII fast path is not a different rule — it is the same rule
+  /// of them. The ASCII fast path is not a different rule - it is the same rule
   /// without the grapheme walk, which measured as a full second of a thirty-
   /// second scroll sweep over a four-thousand-item transcript.
   private static func tokenize(_ line: String, startColumn: Int) -> [Token] {
@@ -234,7 +234,7 @@ public enum TerminalCells {
     return (max(1, total), exact)
   }
 
-  /// The rendered lines themselves — what the row **draws**.
+  /// The rendered lines themselves - what the row **draws**.
   ///
   /// This is the iOS port's one real divergence from the web client, and it is a
   /// simplification rather than a compromise. On the web the browser wraps and

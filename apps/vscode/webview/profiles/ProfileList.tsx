@@ -21,7 +21,7 @@ export function ProfileList({
         title="No profiles yet"
         description={
           <>
-            A profile is one credential set — a Claude config dir, a Codex home. Add one with <Key>+</Key> above.
+            A profile is one credential set - a Claude config dir, a Codex home. Add one with <Key>+</Key> above.
           </>
         }
       />

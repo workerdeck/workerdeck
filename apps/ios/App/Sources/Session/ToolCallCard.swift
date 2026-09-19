@@ -4,7 +4,7 @@ import SwiftUI
 /// A tool call: icon, name, one-line input summary and a status chip when
 /// collapsed; full input and result when expanded.
 ///
-/// The chip is derived from `status`, never from "does it have a result yet" — a
+/// The chip is derived from `status`, never from "does it have a result yet" - a
 /// pending or deferred call has no result and is not the same as a running one.
 struct ToolCallCard: View {
   let call: ToolCallItem
@@ -19,13 +19,13 @@ struct ToolCallCard: View {
   @State private var fetching = false
 
   /// The host path this call says it wrote, when the engine reported one. Only
-  /// `savedPath` — a file the agent merely *read* is not a produced file and
+  /// `savedPath` - a file the agent merely *read* is not a produced file and
   /// has no route to fetch it from.
   private var producedPath: String? {
     call.input["savedPath"]?.stringValue
   }
 
-  /// What the row is missing, counted from `totalChars` — it holds the head, so
+  /// What the row is missing, counted from `totalChars` - it holds the head, so
   /// counting from the text in hand would be counting the wrong number.
   private func missingChars(_ result: ToolCallResult) -> String {
     TermFmt.grouped(max(0, (result.totalChars ?? result.text.count) - result.text.count))
@@ -126,7 +126,7 @@ struct ToolCallCard: View {
       if let result = call.result, !result.text.isEmpty {
         MonospacedBlock(
           title: result.isError ? "Error" : "Result", text: result.text, isError: result.isError)
-        // The replay delivered a head. Saying so — and offering the rest — is
+        // The replay delivered a head. Saying so - and offering the rest - is
         // not optional: this renderer would otherwise present eight thousand
         // characters as the whole result, which is the one thing the truncating
         // attach must never cause. The fetched text lands in transcript state,
@@ -139,7 +139,7 @@ struct ToolCallCard: View {
             Text(
               fetching
                 ? "Fetching \(missingChars(result)) more characters…"
-                : "… +\(missingChars(result)) characters — fetch the rest"
+                : "… +\(missingChars(result)) characters - fetch the rest"
             )
             .font(.caption)
             .foregroundStyle(.secondary)

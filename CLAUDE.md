@@ -23,7 +23,8 @@ doc for whatever you are about to touch:
   every file in the repo, prose and code alike: **no em or en dashes, anywhere**, enforced over
   changed files by `pnpm lint:changed`. Its § Comments is the rule most often broken
   by pattern-matching on neighbouring code, because the tree still carries pre-rule drift:
-  **avoid comments entirely, and prefer `//` over `/**`.**
+  **avoid comments entirely, and prefer `//` over `/**`.** If the dash ban fires, run
+  **`pnpm fix:dashes`** (`--all` for the whole tree); never hand-punctuate a backlog.
 - `docs/RELEASING.md` - the wrapup checklist, the publish flow, and the release ledger.
 - `CONTRIBUTING.md` §Out of scope - non-goals (don't relitigate): serverless hosting, multi-tenant
   SaaS, claude.ai auth. There is no roadmap doc; what's next lives in `_docs/`.

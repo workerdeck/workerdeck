@@ -25,7 +25,7 @@ final class CreateSessionModel {
   var resume: String
   var forkSession = false
   /// The stored session the resume picker chose, kept only so `buildRequest`
-  /// can carry its title — a resumed session is otherwise titleless, because
+  /// can carry its title - a resumed session is otherwise titleless, because
   /// the derived fallback reads a first prompt that a resume never sends.
   /// Ignored the moment the id field stops matching it (a hand-edited id must
   /// not inherit another thread's title).
@@ -34,7 +34,7 @@ final class CreateSessionModel {
   var reasoningEffort: String = ""
 
   private(set) var profiles: [ProfileInfo] = []
-  /// Set when `/profiles` 404s — a server predating profiles, not an error.
+  /// Set when `/profiles` 404s - a server predating profiles, not an error.
   private(set) var profilesUnavailable = false
   private(set) var isLoadingProfiles = false
   private(set) var isSubmitting = false
@@ -45,12 +45,12 @@ final class CreateSessionModel {
   init(seed: CreateSessionSeed, client: WorkerClient) {
     cwd = seed.cwd
     resume = seed.resume ?? ""
-    // Resuming defaults to continuing, not forking — forking is the deliberate
+    // Resuming defaults to continuing, not forking - forking is the deliberate
     // choice ("keep the original intact"), so it stays opt-in.
     self.client = client
   }
 
-  /// The gateway this form posts to, for the folder picker — which browses the
+  /// The gateway this form posts to, for the folder picker - which browses the
   /// same host filesystem an open session does, only from the roots down rather
   /// than from a cwd that doesn't exist yet.
   var fileClient: WorkerClient { client }
@@ -65,14 +65,14 @@ final class CreateSessionModel {
     selectedProfile?.resolvedEngine ?? .claude
   }
 
-  /// The capability record the form renders around — the server-stamped copy
+  /// The capability record the form renders around - the server-stamped copy
   /// when present, else the engine's static default. Never branch on the
   /// engine name for an affordance this record answers.
   var capabilities: EngineCapabilities {
     selectedProfile?.resolvedCapabilities ?? engine.defaultCapabilities
   }
 
-  /// Only the modes this engine understands, in the record's order — offering
+  /// Only the modes this engine understands, in the record's order - offering
   /// the rest would just produce a server-side rejection.
   var availableModes: [PermissionMode] { capabilities.permissionModes }
 
@@ -90,7 +90,7 @@ final class CreateSessionModel {
 
   /// Reasoning efforts offerable right now: the chosen catalog row's list when
   /// it declares one, else the record's engine-wide set. Empty hides the
-  /// control — never a picker that does nothing.
+  /// control - never a picker that does nothing.
   var effortOptions: [String] {
     let trimmed = model.trimmingCharacters(in: .whitespaces)
     if !trimmed.isEmpty, let row = claudeModels.first(where: { $0.matches(trimmed) }),
@@ -113,7 +113,7 @@ final class CreateSessionModel {
     return claudeModels.first { $0.matches(trimmed) }?.displayName ?? trimmed
   }
 
-  /// Hidden when the server offers exactly one profile — there is no choice to make.
+  /// Hidden when the server offers exactly one profile - there is no choice to make.
   var showsProfilePicker: Bool { profiles.count > 1 }
 
   var canSubmit: Bool {
@@ -137,7 +137,7 @@ final class CreateSessionModel {
   }
 
   /// Adopt the profile's declared defaults, and snap out-of-range choices back
-  /// to the capability record's coercion targets — a sticky mode or effort from
+  /// to the capability record's coercion targets - a sticky mode or effort from
   /// another engine must not survive into a request this one would 400.
   func applyProfileDefaults() {
     guard let profile = selectedProfile else { return }
@@ -170,7 +170,7 @@ final class CreateSessionModel {
   }
 
   /// Adopt a picked stored session: id into the resume field, and its recorded
-  /// directory into cwd — the thread lives there, and resuming it under another
+  /// directory into cwd - the thread lives there, and resuming it under another
   /// root is a deliberate act (the field stays editable), not a default.
   func adoptStoredSession(_ summary: SdkSessionSummary) {
     resume = summary.sessionId
@@ -217,7 +217,7 @@ final class CreateSessionModel {
       profile: profilesUnavailable ? nil : profileName,
       prompt: trimmedPrompt.isEmpty ? nil : trimmedPrompt,
       permissionMode: permissionMode,
-      // Picking bypass up front also pre-authorizes switching back to it later —
+      // Picking bypass up front also pre-authorizes switching back to it later -
       // without this the mode can be set once and never re-enabled mid-session.
       allowDangerouslySkipPermissions: permissionMode == .bypassPermissions ? true : nil,
       // Fields the record forswears are omitted, not sent-and-refused: the

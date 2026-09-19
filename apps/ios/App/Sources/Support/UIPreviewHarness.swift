@@ -45,7 +45,7 @@ enum UIPreview: String {
   }
 }
 
-/// The live list itself — the card, its disclosure, and the step rows that hang
+/// The live list itself - the card, its disclosure, and the step rows that hang
 /// under an open one.
 ///
 /// The phone's answer to the dashboard's `Sessions/SessionItem` `TheList` story,
@@ -78,7 +78,7 @@ private struct SessionsPreview: View {
   }
 
   private static func route(for row: SessionRow, step: Step? = nil) -> SessionRoute {
-    // The app's own rule, called rather than restated — see `SessionRoute.step`.
+    // The app's own rule, called rather than restated - see `SessionRoute.step`.
     guard let step else { return .session(hostId: hostId, sessionId: row.info.id) }
     return .step(hostId: hostId, sessionId: row.info.id, step: step)
   }
@@ -170,7 +170,7 @@ private struct SessionsPreview: View {
 /// The sessions list's second line, in every project state it has.
 ///
 /// The claim being checked is not "does this look right" but **"does each rule
-/// actually fire"** — the project replacing a path, the relative half appearing
+/// actually fire"** - the project replacing a path, the relative half appearing
 /// and disappearing, a glyph this build cannot map falling back to a folder
 /// rather than a hole, and an SVG (which Apple cannot decode from bytes at all)
 /// degrading to the name rather than to a gap. Every one of those needs a
@@ -201,7 +201,7 @@ private struct ProjectsPreview: View {
   /// did not".
   ///
   /// Deliberately drawn **oversized and then put through the row's own
-  /// `fittedToProjectGlyphBox()`** — the same call `ProjectIconLoader` makes on
+  /// `fittedToProjectGlyphBox()`** - the same call `ProjectIconLoader` makes on
   /// the way in. This fixture stands in for the loader, so it has to honour the
   /// loader's contract: the row draws this glyph *inside* a `Text` run, where
   /// there is no `.frame` to constrain a picture, so whatever arrives is what
@@ -240,7 +240,7 @@ private struct ProjectsPreview: View {
           cwd: "/Users/you/projects/workerdeck/packages/ui", project: wd),
         image: Self.pngBytes),
       Case(
-        caption: "bytes not in yet — no hole, no placeholder box",
+        caption: "bytes not in yet - no hole, no placeholder box",
         session: Self.session(
           id: "3", title: "Waiting on its icon",
           cwd: "/Users/you/projects/workerdeck/packages/web", project: wd)),
@@ -266,25 +266,25 @@ private struct ProjectsPreview: View {
             name: "Zigby", root: "/Users/you/projects/zigby",
             icon: .glyph(name: "some-icon-shipped-last-tuesday")))),
       Case(
-        caption: "cwd NOT under root (a symlinked start) — name alone, never a wrong path",
+        caption: "cwd NOT under root (a symlinked start) - name alone, never a wrong path",
         session: Self.session(
           id: "7", title: "Through a symlink", cwd: "/tmp/deck-link/packages/ui",
           project: ProjectInfo(name: "WorkerDeck", root: "/private/tmp/deck", icon: nil))),
       Case(
-        caption: "no .workerdeck.json anywhere above it — the folder name, no path",
+        caption: "no .workerdeck.json anywhere above it - the folder name, no path",
         session: Self.session(
           id: "8", title: "Launch preparation",
           cwd: "/Users/you/projects/atomic/services/gtm")),
       // The three states of the ring, side by side: the ramp is the claim, and
       // one screenshot of one percentage cannot show a ramp. The last row also
-      // has no reading at all — the case the ring must draw *nothing* for.
+      // has no reading at all - the case the ring must draw *nothing* for.
       Case(
         caption: "context ring: comfortable",
         session: Self.session(
           id: "9", title: "Room to work", cwd: "/Users/you/projects/workerdeck",
           project: wd, context: 34, cost: 0.42)),
       Case(
-        caption: "context ring: filling up (past 80, where a ring turns — a bar turns at 70)",
+        caption: "context ring: filling up (past 80, where a ring turns - a bar turns at 70)",
         session: Self.session(
           id: "10", title: "Getting long", cwd: "/Users/you/projects/workerdeck",
           project: wd, status: .running, context: 84, cost: 3.10)),
@@ -294,7 +294,7 @@ private struct ProjectsPreview: View {
           id: "11", title: "Almost full", cwd: "/Users/you/projects/workerdeck",
           project: wd, status: .awaitingApproval, pending: 2, context: 96, cost: 12.80)),
       Case(
-        caption: "no reading at all — draws NO ring, never an empty one",
+        caption: "no reading at all - draws NO ring, never an empty one",
         session: Self.session(
           id: "12", title: "Never run", cwd: "/Users/you/projects/workerdeck", project: wd)),
     ]
@@ -321,7 +321,7 @@ private struct ProjectsPreview: View {
 /// *alignment* one: `\u{276F}`, `+` and `\u{2715}` occupy the same cell, and the typed line
 /// must start on the same column whichever of them is standing. A screenshot of
 /// one state cannot show that; a column of them can.
-/// Every step-row rule on one screen — see `UIPREVIEW=steps` in the switch below.
+/// Every step-row rule on one screen - see `UIPREVIEW=steps` in the switch below.
 private struct StepsPreview: View {
   private static func sub(
     _ id: String, agent: String?, description: String?, status: SubagentStatus,
@@ -334,7 +334,7 @@ private struct StepsPreview: View {
 
   /// Deliberately interleaved on the wire: the fixture only proves the sort if
   /// the input is out of order. Dispatch order here is task, agent, task,
-  /// agent, agent, task — and the screen must read agents first, each group
+  /// agent, agent, task - and the screen must read agents first, each group
   /// still in the order it arrived.
   private static var session: SessionInfo {
     SessionInfo(
@@ -356,7 +356,7 @@ private struct StepsPreview: View {
 
   var body: some View {
     let steps = sessionSteps(Self.session)
-    // Inside a stack, and each row is the `NavigationLink` the list gives it —
+    // Inside a stack, and each row is the `NavigationLink` the list gives it -
     // a bare `SessionStepRow` is a *simpler* composition than the app ships, and
     // where a press goes is half of what these rows are for. The destination
     // prints the route, so "the press landed on this step" and "the press opened
@@ -379,7 +379,7 @@ private struct StepsPreview: View {
             """
             Expected, top to bottom: Explore (green, spinner, 7) · Plan (RED, alarm, 2) · \
             general-purpose (green, tick, no count). The three untyped records in the fixture \
-            draw nothing at all — they are tasks, and tasks live in the session's own Tasks \
+            draw nothing at all - they are tasks, and tasks live in the session's own Tasks \
             sheet. No row's own marker is an arrow: the trailing chevron is the list's, and \
             every row here pushes its agent.
             """)
@@ -458,7 +458,7 @@ private struct ComposerPreview: View {
 /// The terminal transcript with its overflow gate reported on screen.
 ///
 /// The audit is the one thing that can catch a cell model disagreeing with real
-/// text layout, and it is worthless unless somebody looks at it — so the preview
+/// text layout, and it is worthless unless somebody looks at it - so the preview
 /// that exists for looking at things shows it.
 private struct TerminalAuditPreview: View {
   let items: [TranscriptItem]
@@ -467,7 +467,7 @@ private struct TerminalAuditPreview: View {
   /// pass, which is the only thing that can show a planned line and a drawn
   /// line parting company.
   var expandAll = false
-  /// Render one sub-agent's frame instead of the conversation — the takeover's
+  /// Render one sub-agent's frame instead of the conversation - the takeover's
   /// transcript, from the same fixture. The id must be a `Task` in `items`.
   var frame: String? = nil
   /// Catch-up mode's boundary, in item space, with the bar under the transcript
@@ -475,7 +475,7 @@ private struct TerminalAuditPreview: View {
   var catchUpAt: Int? = nil
   @State private var verdict = "auditing…"
   @State private var scroll = TranscriptScrollModel()
-  /// Mutable, so "dismiss" really removes the seam here too — the preview is
+  /// Mutable, so "dismiss" really removes the seam here too - the preview is
   /// where the refold gets looked at.
   @State private var catchUp: Int?
   @State private var recapRow: Int?
@@ -489,8 +489,8 @@ private struct TerminalAuditPreview: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Color.black)
-      // `onAudit`/`expandAll` are `#if DEBUG` on the view — the audit is a dev
-      // gate, not shipped surface — so the Release build has to construct it
+      // `onAudit`/`expandAll` are `#if DEBUG` on the view - the audit is a dev
+      // gate, not shipped surface - so the Release build has to construct it
       // without them. `deploy.sh --release` is what found this: nothing had
       // ever compiled this file optimized.
       #if DEBUG
@@ -585,8 +585,8 @@ private struct PromptsPreview: View {
   }
 
   /// The one approval whose subject is prose. Worth a fixture of its own
-  /// because every part of the card changes shape for it — heading, body and
-  /// all three verbs — and because the plan's markdown is the only place this
+  /// because every part of the card changes shape for it - heading, body and
+  /// all three verbs - and because the plan's markdown is the only place this
   /// theme's block vocabulary is drawn outside the transcript.
   private static var planRequest: PermissionRequest {
     request(
@@ -600,7 +600,7 @@ private struct PromptsPreview: View {
           pass runs on every input event.
 
           1. Pass `markdown={false}` at all three `Composer → PromptArea` sites
-          2. Keep URL tinting — it never rewrites the text
+          2. Keep URL tinting - it never rewrites the text
           3. Pin the behaviour with a paste test
 
           ```ts
@@ -615,20 +615,20 @@ private struct PromptsPreview: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
-        caption("Question — three long options, body capped at 260")
+        caption("Question - three long options, body capped at 260")
         TerminalQuestionPromptView(
           request: Self.questionRequest,
           questions: parseUserQuestions(Self.questionRequest),
           maxBodyHeight: 260,
           onAnswer: { _ in }, onDismiss: {})
 
-        caption("Permission — a command worth reading whole, body capped at 200")
+        caption("Permission - a command worth reading whole, body capped at 200")
         TerminalPermissionPromptView(
           request: Self.permissionRequest,
           maxBodyHeight: 200,
           onAllow: {}, onDeny: { _, _ in })
 
-        caption("Plan — approve / keep planning, markdown body capped at 300")
+        caption("Plan - approve / keep planning, markdown body capped at 300")
         TerminalPermissionPromptView(
           request: Self.planRequest,
           maxBodyHeight: 300,
@@ -664,13 +664,13 @@ struct UIPreviewHarness: View {
   /// Editing a fixture and watching it land is the whole point of this screen.
   @HotReloaded private var hot
 
-  /// Exactly what a live gateway sends, copied off the wire — alias values, the
+  /// Exactly what a live gateway sends, copied off the wire - alias values, the
   /// CLI's own short display names, and the version in the description. Plus one
   /// non-primary row, which this CLI doesn't currently report but the picker has
   /// to be able to group.
 
   /// Canned transcript for the `terminal` preview. Shaped to exercise the folds
-  /// rather than to look plausible — a fixture where every tool call is adjacent
+  /// rather than to look plausible - a fixture where every tool call is adjacent
   /// and every subagent tidy would pass whatever the row model did.
   static let terminalItems: [TranscriptItem] = {
     func call(
@@ -687,7 +687,7 @@ struct UIPreviewHarness: View {
     return [
       .user(
         id: "u1",
-        text: "Port the terminal theme to the phone — virtualized, deterministic heights, the lot.",
+        text: "Port the terminal theme to the phone - virtualized, deterministic heights, the lot.",
         attachments: nil, parentToolUseId: nil),
       .thinking(
         id: "th1",
@@ -699,8 +699,8 @@ struct UIPreviewHarness: View {
         text: """
           I'll start by mapping both sides. Two things decide the shape:
 
-          - **the fold** — a run of calls is one row, a `Task` is one row
-          - **the cell** — one measured advance, one whole-point line
+          - **the fold** - a run of calls is one row, a `Task` is one row
+          - **the cell** - one measured advance, one whole-point line
 
           Then `height.ts` becomes a *planner* rather than a predictor.
           """,
@@ -710,10 +710,10 @@ struct UIPreviewHarness: View {
       call("c1", "Bash", ["command": .string("swift build")], result: "Build complete! (0.72s)"),
       call("c2", "Grep", ["pattern": .string("isLines")], result: "", isError: true),
       call("c3", "Read", ["file_path": .string("/src/height.ts")], result: "740 lines"),
-      // A Task whose children interleave with a second Task's — the case an
+      // A Task whose children interleave with a second Task's - the case an
       // adjacency rule gets wrong. t1 carries a `prompt` long enough to clip,
       // so the takeover frame and the inline expansion both show the brief
-      // behind its `… +N lines` press; t2 deliberately has none — the codex
+      // behind its `… +N lines` press; t2 deliberately has none - the codex
       // case, whose spawn message is encrypted on the wire, and whose frame
       // must open with no brief row rather than an empty one.
       call(
@@ -726,7 +726,7 @@ struct UIPreviewHarness: View {
             transcript-rows.ts, and write down: which strings are load-bearing for heights, \
             where the fold's membership rule diverges from adjacency, and what the expansion \
             model assumes about mounted rows. List every file a Swift port would touch, and \
-            flag anything that relies on the browser measuring text — those are the pieces \
+            flag anything that relies on the browser measuring text - those are the pieces \
             the phone has to plan instead.
             """),
         ], status: .running),
@@ -739,7 +739,7 @@ struct UIPreviewHarness: View {
         parentToolUseId: nil),
       // Both preview budgets: a minified blob (one line, thirty thousand chars)
       // is the case a line-only budget silently kept whole. Deliberately NOT
-      // adjacent to another call — a folded run would collapse the very preview
+      // adjacent to another call - a folded run would collapse the very preview
       // this fixture exists to show.
       call(
         "c4", "mcp__roam_code__search", ["query": .string("terminalBlocks")],
@@ -767,7 +767,7 @@ struct UIPreviewHarness: View {
           ])),
       .assistantText(
         id: "a2",
-        text: "Heights are exact by construction now — the planner wraps, the row draws what it returned.",
+        text: "Heights are exact by construction now - the planner wraps, the row draws what it returned.",
         streaming: false, parentToolUseId: nil),
       .turnResult(
         id: "tr1", subtype: "success", isError: false, durationMs: 94_300,
@@ -871,7 +871,7 @@ struct UIPreviewHarness: View {
               status: "allowed", rateLimitType: "seven_day", utilization: 17,
               resetsAt: Date().timeIntervalSince1970 + 4 * 86_400 + 3 * 3600),
             updatedAt: (Date().timeIntervalSince1970 - 42 * 60) * 1000),
-          // The tracker's inferred 0% after a reset it watched pass — dated by
+          // The tracker's inferred 0% after a reset it watched pass - dated by
           // the reading it replaced, and the row must say so rather than "ago".
           UsageWindowRow(
             key: "seven_day_fable",
@@ -932,7 +932,7 @@ struct UIPreviewHarness: View {
         modes: [.default, .acceptEdits, .plan, .auto, .bypassPermissions, .dontAsk],
         current: .acceptEdits, defaultMode: .default, canBypass: false, onSelect: { _ in })
     case .empty:
-      // Every density at once — what this screen does as the space runs out is
+      // Every density at once - what this screen does as the space runs out is
       // the whole reason it has more than one form.
       ScrollView {
         VStack(spacing: 26) {
@@ -953,7 +953,7 @@ struct UIPreviewHarness: View {
       // The two terminal prompts against the case that broke them: a question
       // with three long options and a permission whose subject is a Bash command
       // nobody would want clipped. Both are given a deliberately mean
-      // `maxBodyHeight` so the scroll is exercised on a big simulator too —
+      // `maxBodyHeight` so the scroll is exercised on a big simulator too -
       // what must be true on screen is that the action row is visible in every
       // one of them, which is the entire bug.
       PromptsPreview()
@@ -962,7 +962,7 @@ struct UIPreviewHarness: View {
       // The step rows under a session card, which the list only ever shows a
       // couple of at a time and never all four states at once. This is the
       // phone's answer to the dashboard's selection stories: the claim is not
-      // "does this look right" but **"does each rule fire"** — agents above
+      // "does this look right" but **"does each rule fire"** - agents above
       // tasks whatever order they arrived in, a failed agent drawing an alarm
       // rather than a checkmark, a task's neutral dot where an agent gets a
       // tick, green for the kind and red for the failure that outranks it, and
@@ -980,7 +980,7 @@ struct UIPreviewHarness: View {
     case .composer:
       // Every state the gutter cell has, stacked, because the whole point of
       // that cell is that its three occupants must not move the text beside
-      // them — and the only way to see that is to see them above one another.
+      // them - and the only way to see that is to see them above one another.
       ComposerPreview()
     case .addMedia:
       // Presented over something, because a detent sheet has no shape on its own.
@@ -1009,8 +1009,8 @@ struct UIPreviewHarness: View {
     case .subagent:
       // The takeover's frame over the same fixture: `t1` is the running
       // `Explore` agent whose children interleave with `t2`'s. What must be
-      // true on screen: only t1's rows (k1, k3), un-stepped — inside the frame
-      // they are the top level — the rail present and marking the *frame's*
+      // true on screen: only t1's rows (k1, k3), un-stepped - inside the frame
+      // they are the top level - the rail present and marking the *frame's*
       // own work (its `frameParentId` is t1, so the level tests pass for
       // exactly these items), no sticky prompt, and the audit still reading ✔
       // against the frame's own plan at the rail-narrowed width.
@@ -1021,7 +1021,7 @@ struct UIPreviewHarness: View {
       // so the seam splices there. What must be true on screen: the rows above
       // the `※ recap:` line drawn faded, the ones below at full strength, the
       // rail carrying a mark at the seam, and the bar under the transcript
-      // counting the rest — pressing "jump" lands on the seam, "dismiss" makes
+      // counting the rest - pressing "jump" lands on the seam, "dismiss" makes
       // every trace of it go away in one refold.
       TerminalAuditPreview(items: Self.terminalItems, catchUpAt: 4)
 
@@ -1043,15 +1043,15 @@ struct UIPreviewHarness: View {
 
     case .terminalOpen:
       // The same fixture with every block open. Expansion is the one thing this
-      // renderer has to *predict* that the web client never does — there, an
-      // expanded row is mounted and the browser measures it — so it needs the
+      // renderer has to *predict* that the web client never does - there, an
+      // expanded row is mounted and the browser measures it - so it needs the
       // same treatment the collapsed plan gets: real text, real layout, and the
       // audit reading out on top.
       TerminalAuditPreview(items: Self.terminalItems, expandAll: true)
 
     case .markdown:
       // Every block type on one screen, plus the two streaming frontiers that
-      // matter (an open fence, a bare bullet) — the shapes a turn passes
+      // matter (an open fence, a bare bullet) - the shapes a turn passes
       // through while the model is still typing.
       ScrollView {
         MarkdownText(
@@ -1069,7 +1069,7 @@ struct UIPreviewHarness: View {
                - keep prose as the fallback
             3. Render it
 
-            > Streaming is the design constraint — a block must render in its
+            > Streaming is the design constraint - a block must render in its
             > final shape from its first character.
 
             ---

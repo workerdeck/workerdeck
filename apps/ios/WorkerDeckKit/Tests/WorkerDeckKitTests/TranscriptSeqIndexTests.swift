@@ -49,7 +49,7 @@ struct TranscriptSeqIndexTests {
   @Test("a seq older than anything held lands on the top of what there is")
   func olderThanRetained() {
     // The gateway's retention dropped the head of the session, so the transcript
-    // starts at seq 40 — a notification about seq 3 can only offer the first row.
+    // starts at seq 40 - a notification about seq 3 can only offer the first row.
     let index = index([(40, 1), (44, 1)])
     #expect(index.item(forSeq: 3) == 0)
   }
@@ -134,7 +134,7 @@ struct TranscriptSeqIndexTests {
     #expect(built.item(forSeq: 1) == 0)
     // seq 5 is step 2, the second appending event.
     #expect(built.item(forSeq: 5) == 1)
-    // seq 4 appended nothing (it is not even an event) — round up to step 2's.
+    // seq 4 appended nothing (it is not even an event) - round up to step 2's.
     #expect(built.item(forSeq: 4) == 1)
     #expect(built.item(forSeq: 997) == 249)
   }
@@ -154,7 +154,7 @@ struct DeepLinkSeqSurvivesTests {
 
   @Test("a push that sat on a lock screen across a wake is refused")
   func staleAcrossWake() {
-    // The wake renumbers the log, so the payload's seq now names some unrelated row —
+    // The wake renumbers the log, so the payload's seq now names some unrelated row -
     // the failure the counts cannot see, because a small seq is a plausible one.
     #expect(!deepLinkSeqSurvives(pushEpoch: nil, sessionEpoch: 1))
     #expect(!deepLinkSeqSurvives(pushEpoch: 1, sessionEpoch: 2))

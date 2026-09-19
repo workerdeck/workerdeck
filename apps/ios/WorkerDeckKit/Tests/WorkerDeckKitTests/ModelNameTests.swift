@@ -26,7 +26,7 @@ struct ModelNameTests {
     #expect(friendlyModel("sonoma-2") == "Sonoma 2")
   }
 
-  @Test("nothing in, nothing out — and an id it cannot parse comes back whole")
+  @Test("nothing in, nothing out - and an id it cannot parse comes back whole")
   func degenerate() {
     #expect(friendlyModel(nil) == nil)
     #expect(friendlyModel("") == nil)

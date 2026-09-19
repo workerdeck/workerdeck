@@ -3,7 +3,7 @@ import Foundation
 /// The human-readable label a tool row shows instead of its wire name.
 ///
 /// Mirrors `@workerdeck/protocol`'s `tool-titles.ts`. A title is only ever
-/// *declared* — by an MCP server, or by the built-in table below — and never
+/// *declared* - by an MCP server, or by the built-in table below - and never
 /// invented from the wire name: a name nothing has a title for is shown as it
 /// came off the wire, because a guessed sentence is worse than a symbol the
 /// reader can search for.
@@ -12,7 +12,7 @@ public enum ToolTitles {
 
   /// Capability tools the sandbox grants and the synthetic names the codex
   /// adapter invents: wire names with no public vocabulary behind them. An
-  /// engine's own tool names (`Bash`, `Read`, `Task`) are deliberately absent —
+  /// engine's own tool names (`Bash`, `Read`, `Task`) are deliberately absent -
   /// those are the CLI's published names and users read them.
   public static let builtin: [String: String] = [
     "fs_read": "Reading a file",

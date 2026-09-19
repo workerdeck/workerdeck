@@ -20,7 +20,7 @@ export function flattenHostTree(root: string, dirs: ReadonlyMap<string, HostDirS
     return rows
   }
   // An explicit stack rather than recursion. Depth is bounded by how many directories the user has
-  // expanded, not by tree size, so this is a small risk — but it is the user's clicks that set the
+  // expanded, not by tree size, so this is a small risk - but it is the user's clicks that set the
   // bound, and an expanded chain deep enough to exhaust the call stack should still just render.
   const stack: { entries: readonly HostDirEntry[]; index: number; depth: number }[] = [{ entries: rootState.entries, index: 0, depth: 0 }]
   while (stack.length > 0) {

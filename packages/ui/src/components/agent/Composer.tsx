@@ -46,7 +46,7 @@ export interface ComposerProps {
   skills?: SkillInfo[]
   onSearchFiles?: (query: string, options: { signal: AbortSignal }) => Promise<ComposerFileMatch[]>
   // Shell mode: `!` as the first character turns the composer into a host shell prompt. Omit to leave the
-  // mode off entirely — the gateway only offers it to an operator on a session whose engine reaches a host cwd.
+  // mode off entirely - the gateway only offers it to an operator on a session whose engine reaches a host cwd.
   onShellCommand?: (command: string) => void
   attachments?: UseAttachmentsResult
   toolbar?: ReactNode
@@ -544,7 +544,7 @@ function AttachmentChip({ item, onRetry, onRemove }: { item: StagedAttachment; o
   const terminal = useTranscriptVariant() === 'terminal'
   const round = terminal ? '' : 'rounded-md'
   return (
-    <div className="group relative shrink-0" title={failed ? `${item.name} — ${item.error}` : `${item.name} · ${formatBytes(item.bytes)}`}>
+    <div className="group relative shrink-0" title={failed ? `${item.name} - ${item.error}` : `${item.name} · ${formatBytes(item.bytes)}`}>
       <div
         className={cn(
           'flex size-14 items-center justify-center overflow-hidden bg-surface',

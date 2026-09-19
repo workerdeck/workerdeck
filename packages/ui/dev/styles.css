@@ -2,7 +2,7 @@
 @import '../src/styles/theme.css';
 
 /* Scan this package's own source for classnames (an external consumer points
- * this at node_modules/@workerdeck/ui — see the README). */
+ * this at node_modules/@workerdeck/ui - see the README). */
 @source '../src';
 @source '../node_modules/streamdown/dist';
 
@@ -17,7 +17,7 @@
 /*
  * The working mark, in the playground only.
  *
- * `--term-mark` is the product's coral everywhere it ships — it is the brand
+ * `--term-mark` is the product's coral everywhere it ships - it is the brand
  * mark's own colour, and the pulse in the gutter is that mark animating. Here it
  * is the palette under evaluation instead, so the demo can be looked at as one
  * colour scheme rather than a coral spinner over a blue transcript. Scoped to
@@ -33,8 +33,8 @@
 /*
  * The character-cell overlay.
  *
- * Two repeating gradients at exactly one cell — `1ch` across, `--term-line`
- * down — laid over the transcript. It is the only honest check that the theme
+ * Two repeating gradients at exactly one cell - `1ch` across, `--term-line`
+ * down - laid over the transcript. It is the only honest check that the theme
  * is on the grid: text that sits on the lines everywhere except one row is a
  * fractional metric or a stray padding, and it is invisible until you draw the
  * cells and look.

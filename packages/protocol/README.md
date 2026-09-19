@@ -1,7 +1,7 @@
 # @workerdeck/protocol
 
 The WorkerDeck wire protocol: typed session events, commands, and REST shapes shared by the
-server and every client. Dependency-free, browser-safe. This protocol is the product boundary —
+server and every client. Dependency-free, browser-safe. This protocol is the product boundary -
 versioned from day one.
 
 Part of [WorkerDeck](https://github.com/workerdeck/workerdeck), the web-controlled
@@ -40,7 +40,7 @@ ws.onmessage = ({ data }) => {
     throw new Error('protocol mismatch')
   }
   if (frame.type === 'event' && frame.event.type === 'assistant_message') {
-    render(frame.event.message) // ApiMessage — plain Anthropic content blocks
+    render(frame.event.message) // ApiMessage - plain Anthropic content blocks
   }
 }
 
@@ -53,7 +53,7 @@ server reports it in the `attached` (and `queue_attached`) frame so clients can 
 
 ## At a glance
 
-**Events (server → client)** — `system_init`, `status_changed`, `capabilities`, `model_changed`,
+**Events (server → client)** - `system_init`, `status_changed`, `capabilities`, `model_changed`,
 `permission_mode_changed`, `context_usage`, `rate_limit`, `assistant_message`, `user_message`,
 `stream_delta`, `turn_result`, `tool_titles` (human-readable labels for tool calls the client
 cannot name on its own), `permission_requested`, `permission_resolved`,
@@ -61,27 +61,27 @@ cannot name on its own), `permission_requested`, `permission_resolved`,
 correlated by `executionId`), `file_delivered`, `sdk_event` (forward-compatible passthrough for
 unmodeled SDK messages), `session_error`, `session_closed`.
 
-**Commands (client → server)** — `user_message`, `permission_decision`, `interrupt`,
+**Commands (client → server)** - `user_message`, `permission_decision`, `interrupt`,
 `set_permission_mode`, `set_model`, `tool_call_result` (answering a bridged execution), `close`.
 
-**Other server frames** — `attached`, `event`, `tool_call_request` / `tool_call_canceled` (the
+**Other server frames** - `attached`, `event`, `tool_call_request` / `tool_call_canceled` (the
 browser tool bridge: the server asks an attached client to run a *sandboxed* tool call), and
 `protocol_error`.
 
-**REST shapes** — `CreateSessionRequest` / `SessionInfo` and their response wrappers,
+**REST shapes** - `CreateSessionRequest` / `SessionInfo` and their response wrappers,
 `ResolvePermissionRequest` (the REST counterpart of `permission_decision`),
 `SdkSessionSummary` for listing the Agent SDK's on-disk sessions to offer resume,
 `ProfileInfo` for what a session may run as, `ListSessionFilesResponse` for a session's
 deliverables, and `SubmitExecutionResultRequest` for delivering a deferred execution's result.
 
-**Job queue** — `CreateJobRequest` / `JobInfo` / `JobEvent` (including `job_parked` /
+**Job queue** - `CreateJobRequest` / `JobInfo` / `JobEvent` (including `job_parked` /
 `job_resumed`) / `QueueStats` and the `QueueServerFrame` union for the one-way queue WebSocket,
 used when the server mounts the
 [`@workerdeck/queue`](https://www.npmjs.com/package/@workerdeck/queue) routes.
 
 Two engines ride this one protocol: `SessionInfo.engine` says which (`claude` or `provider`), and
-`supportsPermissionMode(engine, mode)` — a real runtime export, the single source of truth for the
-restriction — is what create forms filter with and the gateway rejects with.
+`supportsPermissionMode(engine, mode)` - a real runtime export, the single source of truth for the
+restriction - is what create forms filter with and the gateway rejects with.
 
 Forward compatibility is deliberate: unknown content blocks fall back to `UnknownBlock`, unions
 the SDK may grow (`apiKeySource`, rate-limit fields) stay `string`, and unmodeled SDK messages
@@ -94,23 +94,23 @@ ride through as `sdk_event` rather than breaking older clients.
 - **This package owns rules, not just shapes.** `transcriptActivity` is the row-count both the
   reducer renders by and the runners report as `activityCount`; `transcriptContent` is the
   does-it-mutate-items rule behind `conversation_reset`'s replay (the runner skips content below
-  the latest reset, and it must skip exactly what the reducer would have cleared — note it is
+  the latest reset, and it must skip exactly what the reducer would have cleared - note it is
   broader than `transcriptActivity() > 0`: deltas and tool results count zero rows and still
   mutate items); `session-list.ts` is the sessions list view model; `watermarks.ts` is the unread
   model. They live here because a client that filtered or counted differently would announce work
-  it is hiding. Change one, change every consumer — including the Swift mirror in
+  it is hiding. Change one, change every consumer - including the Swift mirror in
   `apps/ios/WorkerDeckKit`.
 - **`activityCount` is monotonic across a `conversation_reset`.** It is an unread *cursor*
-  diffed against stored monotonic watermarks, not an item count — resetting it to the fresh row
+  diffed against stored monotonic watermarks, not an item count - resetting it to the fresh row
   count would leave every stored mark above it and that session's badge silently dead. After a
   `/clear` it deliberately exceeds the rendered row count.
 - **`ENGINE_CAPABILITIES` is pinned by identity, and is a *fallback*.** A server that reports its
   own record wins; this table is what a client uses when talking to one that doesn't. Editing a
   value here is a cross-client change, not a local one.
 - **Capability records describe the engine, not the deployment.** A `true` means the engine can do
-  it, never that this session is allowed to — grants and policy live on the profile and the request.
+  it, never that this session is allowed to - grants and policy live on the profile and the request.
 
 ## License
 
-MIT © Tobias Strebitzer —
+MIT © Tobias Strebitzer -
 [LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE)

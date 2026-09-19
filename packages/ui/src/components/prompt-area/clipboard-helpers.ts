@@ -19,7 +19,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * corresponding node kind encountered during a depth-first walk.
  */
 type FragmentVisitor = {
-  /** A text node — receives its text content (may be empty). */
+  /** A text node - receives its text content (may be empty). */
   onText: (text: string) => void
   /** A chip element (has `data-chip-trigger`). */
   onChip: (node: HTMLElement) => void
@@ -191,7 +191,7 @@ export function insertSegmentsAtCursor(currentSegments: Segment[], pastedSegment
       insertOnce()
       result.push(seg)
     } else {
-      // Cursor falls inside this text segment — split it.
+      // Cursor falls inside this text segment - split it.
       const splitAt = cursorOffset - offset
       const before = seg.text.slice(0, splitAt)
       const after = seg.text.slice(splitAt)

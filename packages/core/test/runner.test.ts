@@ -75,7 +75,7 @@ describe('SessionRunner', () => {
 
     const types = events.map((e) => e.type)
     expect(types).toEqual([
-      'status_changed', // idle — no initial prompt, accepting input
+      'status_changed', // idle - no initial prompt, accepting input
       'system_init',
       'status_changed', // running
       'assistant_message',
@@ -858,7 +858,7 @@ describe('status after a turn ends under a standing approval', () => {
     askApproval(harness, 'creq-a')
     expect(runner.status).toBe('awaiting_approval')
 
-    // The turn ends while the approval stands — what an interrupt does.
+    // The turn ends while the approval stands - what an interrupt does.
     harness.emit(resultMessage)
     await tick()
     expect(runner.status).toBe('awaiting_approval')
@@ -884,7 +884,7 @@ describe('status after a turn ends under a standing approval', () => {
     expect(runner.status).toBe('idle')
   })
 
-  it('still resumes to running when the turn did not end — the common case', async () => {
+  it('still resumes to running when the turn did not end - the common case', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)

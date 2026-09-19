@@ -16,7 +16,7 @@ export function apiUrl(host: HostUrl): string | undefined {
     text += '/v1'
   }
   try {
-    // Validation only — the string, not the URL object, is what we keep.
+    // Validation only - the string, not the URL object, is what we keep.
     new URL(text)
   } catch {
     return undefined

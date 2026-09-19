@@ -78,7 +78,7 @@ export async function loadApnsKey(keyFile: string): Promise<KeyObject> {
   }
   if (key.asymmetricKeyType !== 'ec') {
     throw new Error(
-      `apns: ${keyFile} is a ${key.asymmetricKeyType ?? 'unknown'} key, not EC — an APNs auth ` +
+      `apns: ${keyFile} is a ${key.asymmetricKeyType ?? 'unknown'} key, not EC - an APNs auth ` +
         'key is the .p8 downloaded from Keys in the developer portal, not a certificate',
     )
   }

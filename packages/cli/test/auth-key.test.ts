@@ -33,7 +33,7 @@ describe('materializeAuthKey', () => {
     expect((await readFile(join(dir, 'auth-key'), 'utf8')).trim()).toBe(result.key)
   })
 
-  it('reuses the stored key on a later launch — a restart must not un-pair clients', async () => {
+  it('reuses the stored key on a later launch - a restart must not un-pair clients', async () => {
     const dir = await tempStateDir()
     const first = await materializeAuthKey(dir)
     const second = await materializeAuthKey(dir)
@@ -62,7 +62,7 @@ describe('materializeAuthKey', () => {
     expect(result.key).toMatch(HEX_48)
   })
 
-  it('regenerates over non-printable garbage — both transports need one clean line', async () => {
+  it('regenerates over non-printable garbage - both transports need one clean line', async () => {
     const dir = await tempStateDir()
     await writeFile(join(dir, 'auth-key'), Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]))
     expect((await materializeAuthKey(dir)).source).toBe('created')
@@ -76,7 +76,7 @@ describe('materializeAuthKey', () => {
     expect(((await stat(path)).mode & 0o777).toString(8)).toBe('600')
   })
 
-  it('warns — but still serves — when the stored key is readable by others', async () => {
+  it('warns - but still serves - when the stored key is readable by others', async () => {
     const dir = await tempStateDir()
     const first = await materializeAuthKey(dir)
     await chmod(first.path!, 0o644)

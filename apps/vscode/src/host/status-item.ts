@@ -17,7 +17,7 @@ export class HostStatusItem implements vscode.Disposable {
   #state: HostState = { kind: 'disabled' }
 
   constructor(rows: () => GatewayRow[]) {
-    // 53 — above the subagent and unread badges: this one is about the machine, not any session.
+    // 53 - above the subagent and unread badges: this one is about the machine, not any session.
     this.#item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 53)
     this.#item.command = 'workerdeck.host.actions'
     this.#rows = rows
@@ -61,13 +61,13 @@ export class HostStatusItem implements vscode.Disposable {
     this.#item.color = connected === rows.length && rows.length > 0 ? new vscode.ThemeColor('charts.blue') : undefined
     tip.appendMarkdown(`**${connected} of ${rows.length} gateway${rows.length === 1 ? '' : 's'} connected**\n\n`)
     for (const row of rows) {
-      tip.appendMarkdown(`- ${row.name} — ${PROBE_LABEL[row.probe]}\n`)
+      tip.appendMarkdown(`- ${row.name} - ${PROBE_LABEL[row.probe]}\n`)
     }
-    tip.appendMarkdown('\n**Host Mode** — ')
+    tip.appendMarkdown('\n**Host Mode** - ')
     if (state.kind === 'running') {
       tip.appendMarkdown(`serving [${state.url}](${state.url})\n\n`)
       tip.appendMarkdown(
-        state.owned ? `Started by VS Code (pid ${state.pid ?? '?'}).` : 'Started outside VS Code — this window will not stop it.',
+        state.owned ? `Started by VS Code (pid ${state.pid ?? '?'}).` : 'Started outside VS Code - this window will not stop it.',
       )
     } else {
       tip.appendMarkdown(state.kind === 'disabled' ? 'off for this window.' : 'the server is not running.')

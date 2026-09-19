@@ -182,7 +182,7 @@ describe('resolveInstanceConfig', () => {
     expect(config.options.allowedCwdRoots).toEqual([resolve('/tmp/a'), resolve('/tmp/b')])
   })
 
-  it('leaves hostFiles unset when nothing narrows it — the server inherits the cwd roots', () => {
+  it('leaves hostFiles unset when nothing narrows it - the server inherits the cwd roots', () => {
     const config = resolveInstanceConfig(parseArgs(['--cwd-root', '/tmp/a']), noConfig, {})
     expect(config.options.allowedCwdRoots).toEqual([resolve('/tmp/a')])
     expect(config.options.hostFiles).toBeUndefined()
@@ -243,7 +243,7 @@ describe('insecureHosts', () => {
     expect(upperEntry.allowedHosts?.has('toby')).toBe(true)
   })
 
-  it('matches the bind host literally — a declaration is not a wildcard', () => {
+  it('matches the bind host literally - a declaration is not a wildcard', () => {
     const config = resolveInstanceConfig(parseArgs(['--host', '0.0.0.0']), withInsecure(['toby']), {})
     expect(config.generateAuthKey).toBe(true)
     expect(config.allowedHosts).toBeNull()

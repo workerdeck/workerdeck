@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Add/edit form for one gateway. The same view for both — `Host` carries its own
+/// Add/edit form for one gateway. The same view for both - `Host` carries its own
 /// id, so "new" is just a `Host()` with empty fields.
 struct HostEditorView: View {
   @Environment(\.dismiss) private var dismiss
@@ -21,7 +21,7 @@ struct HostEditorView: View {
         TextField("Name", text: $draft.name)
           .textInputAutocapitalization(.words)
       } footer: {
-        Text("Optional — the address is used when this is blank.")
+        Text("Optional - the address is used when this is blank.")
       }
 
       Section {

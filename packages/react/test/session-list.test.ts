@@ -148,7 +148,7 @@ describe('scope', () => {
     expect(inScope(row({ info: info({ cwd: 'C:\\work\\alpha\\pkg' }) }), scope)).toBe(true)
   })
 
-  it('is inert — not merely empty — with no scope at all', () => {
+  it('is inert - not merely empty - with no scope at all', () => {
     expect(scopeActive(config(), undefined)).toBe(false)
     expect(filterRows([local, remote], config({ scoped: true })).length).toBe(2)
   })
@@ -238,7 +238,7 @@ describe('project facet', () => {
   })
   const nowhere = row({ info: info({ id: 'n1', cwd: '' }) })
 
-  it('keys by root per gateway — a name is not a key and a remote twin is not this project', () => {
+  it('keys by root per gateway - a name is not a key and a remote twin is not this project', () => {
     expect(projectKey(declaredUi)).toBe(projectKey(declaredWeb))
     expect(projectKey(declaredUi)).not.toBe(projectKey(remoteTwin))
     expect(projectKey(undeclared)).toBe('mac:/work/alpha')

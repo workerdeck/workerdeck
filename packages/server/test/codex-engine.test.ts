@@ -357,7 +357,7 @@ describe('codex engine over the gateway', () => {
         },
       ],
       createEngineRunner: () => {
-        throw new Error('unreachable — the 400 must precede assembly')
+        throw new Error('unreachable - the 400 must precede assembly')
       },
     })
     const { port } = await running.listen(0, '127.0.0.1')
@@ -381,7 +381,7 @@ describe('codex engine over the gateway', () => {
       engines: { codex: adapter },
       createEngineRunner: ({ config }) => {
         providerConfig = config as SessionRunnerConfig
-        throw new Error('assembled far enough — the strip already happened')
+        throw new Error('assembled far enough - the strip already happened')
       },
     })
     const { port } = await running.listen(0, '127.0.0.1')
@@ -414,7 +414,7 @@ describe('codex engine over the gateway', () => {
       engines: { codex: adapter },
       createEngineRunner: ({ config }) => {
         providerConfig = config as SessionRunnerConfig
-        throw new Error('assembled far enough — the default is already on the config')
+        throw new Error('assembled far enough - the default is already on the config')
       },
     })
     const { port } = await running.listen(0, '127.0.0.1')
@@ -601,7 +601,7 @@ describe('availability', () => {
     expect(codexList).toHaveBeenCalledTimes(1)
   })
 
-  it("leaves 'unknown' unstamped — a probe that couldn't run proves nothing", async () => {
+  it("leaves 'unknown' unstamped - a probe that couldn't run proves nothing", async () => {
     const { adapter } = fakeCodexAdapter({ probe: () => ({ available: 'unknown' }) })
     running = createWorkerServer({
       allowUnauthenticated: true,

@@ -161,7 +161,7 @@ export class HostSupervisor implements vscode.Disposable {
       return false
     }
     if (result === 'unauthorized') {
-      const message = `something else is serving ${url} with a different auth key — change \`workerdeck.host.port\` or stop it first.`
+      const message = `something else is serving ${url} with a different auth key - change \`workerdeck.host.port\` or stop it first.`
       this.#set({ kind: 'error', message })
       return true
     }
@@ -262,7 +262,7 @@ export class HostSupervisor implements vscode.Disposable {
         return
       }
       if (result === 'unauthorized') {
-        this.#set({ kind: 'error', message: `${url} answered with a different auth key — stop whatever else is on that port.` })
+        this.#set({ kind: 'error', message: `${url} answered with a different auth key - stop whatever else is on that port.` })
         return
       }
       if (exited !== undefined) {
@@ -270,7 +270,7 @@ export class HostSupervisor implements vscode.Disposable {
         if (await this.#adopt(settings)) {
           return
         }
-        this.#set({ kind: 'error', message: `the server exited with code ${exited ?? 'null'} — see the server log.` })
+        this.#set({ kind: 'error', message: `the server exited with code ${exited ?? 'null'} - see the server log.` })
         void this.#reportFailure()
         return
       }
@@ -286,7 +286,7 @@ export class HostSupervisor implements vscode.Disposable {
     if (pid === undefined) {
       if (this.#state.kind === 'running') {
         void vscode.window.showWarningMessage(
-          'WorkerDeck: this server was not started by VS Code. Stop it where you started it — VS Code will not kill a process it does not own.',
+          'WorkerDeck: this server was not started by VS Code. Stop it where you started it - VS Code will not kill a process it does not own.',
         )
         return false
       }
@@ -400,7 +400,7 @@ export class HostSupervisor implements vscode.Disposable {
     }
     void vscode.window
       .showWarningMessage(
-        `WorkerDeck is serving on ${settings.bindAddress}:${settings.port} — reachable from other machines.${keyed ? ' It is protected by a generated auth key.' : ''}`,
+        `WorkerDeck is serving on ${settings.bindAddress}:${settings.port} - reachable from other machines.${keyed ? ' It is protected by a generated auth key.' : ''}`,
         'Copy Auth Key',
       )
       .then(async (answer) => {

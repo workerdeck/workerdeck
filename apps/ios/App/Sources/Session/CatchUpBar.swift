@@ -1,7 +1,7 @@
 import SwiftUI
 import WorkerDeckKit
 
-/// "N new rows since you were last here — jump / dismiss", above the composer.
+/// "N new rows since you were last here - jump / dismiss", above the composer.
 ///
 /// The mirror of the web `SessionPanel`'s catch-up bar, and it sits in the
 /// floating stack rather than in the transcript for the reason every control
@@ -9,7 +9,7 @@ import WorkerDeckKit
 /// moment they want it. The *seam* is in the transcript; this is the way back
 /// to it.
 ///
-/// One line, two words of action, and no icon button — the whole point of the
+/// One line, two words of action, and no icon button - the whole point of the
 /// feature is that it costs the reader nothing to ignore. How long "away" was
 /// is on the seam itself (`· last here 42m`), not here: the bar has one line
 /// and the phone's is narrow enough that a second clause truncated the first.

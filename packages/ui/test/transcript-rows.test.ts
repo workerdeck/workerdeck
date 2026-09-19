@@ -141,7 +141,7 @@ describe('positionInRow', () => {
     expect(positionInRow(rows, 7)).toEqual({ ordinal: 1, count: 2 })
   })
 
-  it('gives a single-child task a position too — the row is still shared', () => {
+  it('gives a single-child task a position too - the row is still shared', () => {
     const rows = buildRows(TRANSCRIPTS.contiguousTask!)
     expect(positionInRow(rows, 2)).toEqual({ ordinal: 0, count: 2 })
     expect(positionInRow(rows, 3)).toEqual({ ordinal: 1, count: 2 })
@@ -170,7 +170,7 @@ describe('positionInRow', () => {
     expect(positionInRow(rows, 999)).toBeUndefined()
   })
 
-  it('survives a recap splice — positions come from row contents, not indices', () => {
+  it('survives a recap splice - positions come from row contents, not indices', () => {
     const items = TRANSCRIPTS.parallel!
     for (let boundary = 1; boundary < items.length; boundary++) {
       const rows = buildRows(items, boundary)
@@ -222,20 +222,20 @@ describe('task block height', () => {
     expect(blockHeight(block, m).px).toBe(m.line)
   })
 
-  it('wraps like the renderer will — the collapsed row is not clamped to one line', () => {
+  it('wraps like the renderer will - the collapsed row is not clamped to one line', () => {
     const block = taskBlockOf([task('A', { description: 'x'.repeat(60) }), tool('Read', 'A')])
     // `Task(` + 60 + `)` is a 66-cell token: break-word gives it its own two lines at 48 columns.
     expect(blockHeight(block, m).px).toBe(2 * m.line)
   })
 
-  it('is never cached against the task item — children change under it', () => {
+  it('is never cached against the task item - children change under it', () => {
     const narrow = createHeightEpoch(152, 8, 18) // 17 columns
     const call = task('A', { description: 'x' })
     const one = taskBlockOf([call, tool('Read', 'A')])
     const grown = taskBlockOf([call, ...Array.from({ length: 10 }, () => tool('Read', 'A'))])
     expect(narrow.cache.get(call)).toBeUndefined()
-    const before = estimateBlockPx(one, narrow) // `Task(x) · 1 tool` — one line
-    const after = estimateBlockPx(grown, narrow) // `Task(x) · 10 tools` — wraps
+    const before = estimateBlockPx(one, narrow) // `Task(x) · 1 tool` - one line
+    const after = estimateBlockPx(grown, narrow) // `Task(x) · 10 tools` - wraps
     expect(narrow.cache.get(call)).toBeUndefined()
     expect(before).toBe(18)
     expect(after).toBe(36)

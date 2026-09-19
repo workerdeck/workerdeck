@@ -3,7 +3,7 @@ import WorkerDeckKit
 
 /// The terminal transcript: folded rows, computed heights, virtualized scroll.
 ///
-/// This is the composition point and deliberately thin — every decision it looks
+/// This is the composition point and deliberately thin - every decision it looks
 /// like it is making has already been made somewhere testable. What lines a row
 /// draws is `TerminalPlanner`'s; how tall it is is `TerminalHeightBook`'s; where
 /// the reader is is `VirtualizedTranscriptView`'s. What is left here is the one
@@ -12,26 +12,26 @@ import WorkerDeckKit
 /// what every height is computed against.
 struct TerminalTranscriptView: View {
   let items: [TranscriptItem]
-  /// What the rail pins at its foot. Not an item — the prompt renders below the
-  /// transcript — so it cannot be derived from `items`.
+  /// What the rail pins at its foot. Not an item - the prompt renders below the
+  /// transcript - so it cannot be derived from `items`.
   var pendingApprovals: [PermissionRequest] = []
-  /// Bumped on every applied event, streamed deltas included — `items.count`
+  /// Bumped on every applied event, streamed deltas included - `items.count`
   /// does not change while text streams into the last row, so it cannot be the
   /// only change signal.
   let revision: Int
   let scroll: TranscriptScrollModel
   /// Which transcript **item** to open on, rather than the tail. Set by a deep
-  /// link from a tapped notification and nothing else — see
+  /// link from a tapped notification and nothing else - see
   /// `TranscriptSeqIndex`. In item space, because that is the only space the
   /// caller can speak: rows are a fold of items and only this view holds one.
   var focusItem: TranscriptFocusTarget?
-  /// Render **only** the work one sub-agent did — the takeover's frame, the
+  /// Render **only** the work one sub-agent did - the takeover's frame, the
   /// `parentToolUseId` everything shown was produced inside. Membership is
   /// `subagentItems` (the kit's port of web `blocks.ts`), applied here so the
   /// row build and the empty surface describe the same items.
   ///
   /// Three of this view's features are switched off whenever it is set, and the
-  /// gate lives here — mirroring web `Transcript.tsx`'s `frame` prop — rather
+  /// gate lives here - mirroring web `Transcript.tsx`'s `frame` prop - rather
   /// than at the call site on purpose: every one of them is keyed to a
   /// **full-transcript item index**, so a caller that passed a frame and any of
   /// them together would not be making a strange choice, it would be making an
@@ -39,46 +39,46 @@ struct TerminalTranscriptView: View {
   /// view already constructs its model recap-free; stated here so a future
   /// recap seam knows it must stay out of frames), the sticky prompt, and the
   /// deep-link focus. The **scrubber stays**, and the distinction is the point:
-  /// everything the rail consumes — the items, the rows, the book — is the
+  /// everything the rail consumes - the items, the rows, the book - is the
   /// frame's own here (`model.items`), so inside a takeover it marks that
   /// agent's narration steps and failures, which is what makes a long run
   /// navigable. Host **bookmarks** ride in unchanged, and can only because they
   /// are item *ids*: each resolves against the frame's own items or is absent
-  /// from them and draws nothing (`ScrubberInput.bookmarks`) — the
+  /// from them and draws nothing (`ScrubberInput.bookmarks`) - the
   /// full-transcript index space that once had to stay out of frames no longer
   /// exists on this seam. What stays is everything that makes a long stream
-  /// readable — the fold, the height book, the follow pin, the expansion
+  /// readable - the fold, the height book, the follow pin, the expansion
   /// presses.
   var frame: String? = nil
   /// The catch-up boundary in **item** space: how much of this transcript had
   /// been read when the screen was opened. Fixed by the caller (`SessionView`
-  /// reads the watermark once, at mount), and ignored inside a frame — a
+  /// reads the watermark once, at mount), and ignored inside a frame - a
   /// sub-agent's rows are a filtered list, so a full-transcript index means
   /// nothing there. `nil` is catch-up mode off, or a session never visited.
   var catchUpAt: Int? = nil
-  /// When the reader was last here (epoch ms) — the tail of the seam's line.
+  /// When the reader was last here (epoch ms) - the tail of the seam's line.
   var catchUpSince: Double? = nil
   /// Set when the reader dismisses the seam. A callback rather than a binding
   /// the caller mutates into `catchUpAt`, because the model owns the refold and
   /// this is the host learning the bar should go away.
   var onRecapRows: ((Int?) -> Void)? = nil
-  /// Bookmarked transcript item ids — membership and persistence are the
+  /// Bookmarked transcript item ids - membership and persistence are the
   /// host's (`SessionView` over `BookmarkModel`), exactly the web
   /// `SessionPanel`'s `bookmarks` seam. Ids, so the same set is valid at the
   /// top level and inside a takeover frame.
   var bookmarks: [String] = []
-  /// Toggle a bookmark by item id, from the row's long-press menu. Absent —
-  /// the preview harness — the menu offers no bookmark action at all, the
+  /// Toggle a bookmark by item id, from the row's long-press menu. Absent -
+  /// the preview harness - the menu offers no bookmark action at all, the
   /// web's missing-`BookmarkProvider` contract.
   var onToggleBookmark: ((String) -> Void)? = nil
   /// Raise the sub-agent takeover from a `Task` row's press. Absent, the press
-  /// falls back to the inline toggle (see `TerminalTranscriptModel.press`) —
+  /// falls back to the inline toggle (see `TerminalTranscriptModel.press`) -
   /// and it is deliberately absent inside a frame, as on the web: no takeover
   /// from a takeover.
   var onOpenSubagent: ((String) -> Void)? = nil
   #if DEBUG
     /// Receives the overflow audit's verdict after each refold. Wired only by
-    /// the preview harness — a gate nobody reads is a gate that has never run.
+    /// the preview harness - a gate nobody reads is a gate that has never run.
     var onAudit: ((TerminalAudit.Report) -> Void)?
     /// Open every block on mount, for the preview that checks the expanded plan
     /// against real layout rather than against its author's arithmetic.
@@ -87,16 +87,16 @@ struct TerminalTranscriptView: View {
 
   /// The phone's cell. Larger than the desktop's 13pt because a transcript read
   /// at arm's length is read at arm's length; still a whole number of points,
-  /// which is the theme's one non-negotiable — a fractional line puts every
+  /// which is the theme's one non-negotiable - a fractional line puts every
   /// second row on a half-pixel and the text visibly softens.
 
   @State private var model: TerminalTranscriptModel?
   /// How a press asks for the rest of a truncated result. Nil outside a live
-  /// session (the preview harness), and the press is then a no-op — which is
+  /// session (the preview harness), and the press is then a no-op - which is
   /// correct there, since nothing truncated a replay nobody asked for.
   @Environment(\.toolResultFetcher) private var fetchToolResult
   /// How a row's image boxes get their bytes. Nil outside a live session, and
-  /// the boxes then rest on their placeholder — correct there, since nothing
+  /// the boxes then rest on their placeholder - correct there, since nothing
   /// refs a replay nobody asked for.
   @Environment(\.terminalImageLoader) private var imageLoader
 
@@ -111,7 +111,7 @@ struct TerminalTranscriptView: View {
       let bleed = typography.cell
       // The rail is spent before the planner sees the width, exactly like the
       // bleed. It is an *overlay*, so a row wrapped to the full screen would
-      // have its last column drawn underneath it — which is the same silent
+      // have its last column drawn underneath it - which is the same silent
       // clipping the audit exists to catch, except the audit would not see it:
       // the line fits its planned column, the column is simply covered. Spent
       // unconditionally: a frame draws the rail too now, so it pays the same
@@ -123,7 +123,7 @@ struct TerminalTranscriptView: View {
           VirtualizedTranscriptView(
             rows: model.rows, book: model.book, metrics: metrics, expansion: model.expansion,
             scroll: scroll, reveal: model.reveal,
-            // Converted here and nowhere else — an item index is not a row
+            // Converted here and nowhere else - an item index is not a row
             // index, and `rowIndex(forItem:)` is the only thing that knows the
             // difference (a folded run of tool calls is one row for many items).
             // Gated out of a frame: the target is a full-transcript item index,
@@ -148,13 +148,13 @@ struct TerminalTranscriptView: View {
                 onPress: {
                   model.press(
                     $0, row: index, fetch: fetchToolResult,
-                    // No takeover from a takeover — web passes
+                    // No takeover from a takeover - web passes
                     // `onOpenSubagent={frame ? undefined : onOpenSubagent}`.
                     openSubagent: frame == nil ? onOpenSubagent : nil)
                 })
             },
             // Which item the long-press addresses is the kit's rule
-            // (`TranscriptRow.bookmarkItemId` — the row's own head item), and
+            // (`TranscriptRow.bookmarkItemId` - the row's own head item), and
             // the active state is read here, at present time, from the same
             // `bookmarks` value the rail below draws: one source, so the menu
             // can never say "Bookmark" about a row wearing the mark.
@@ -176,7 +176,7 @@ struct TerminalTranscriptView: View {
           // the same reason the rail is one: it is proposed the transcript's
           // size, and it must sit in the transcript's own coordinate space or
           // the line lands off the column every row below it sits on.
-          // Not in a frame: its pins are full-transcript row indices — and a
+          // Not in a frame: its pins are full-transcript row indices - and a
           // sub-agent's brief is not a prompt, so a frame has nothing to pin.
           .overlay(alignment: .top) {
             if frame == nil {
@@ -188,13 +188,13 @@ struct TerminalTranscriptView: View {
             }
           }
           // The rail replaces the scrollbar rather than sitting beside it. An
-          // overlay, so it is proposed the transcript's size — and it must be,
+          // overlay, so it is proposed the transcript's size - and it must be,
           // because rail space and content space are the same fraction.
           // In a frame too: the rail rides the frame's OWN items and fold
           // (`model.items` is the frame's list there), so it marks the
           // sub-agent's steps and failures at the frame's own offsets. Host
           // bookmarks ride in as ids and resolve against those items or not at
-          // all — see `frame`'s doc.
+          // all - see `frame`'s doc.
           .overlay(alignment: .trailing) {
             TerminalScrubberView(
               input: ScrubberInput(
@@ -215,11 +215,11 @@ struct TerminalTranscriptView: View {
                 // and the same call is red on its own line once it is.
                 expansion: model.expansion,
                 // What "top level" means to the mark rules: nil at the top, the
-                // frame's id inside one — a frame's every item has a parent, and
+                // frame's id inside one - a frame's every item has a parent, and
                 // the fixed test marked nothing on a hundred-tool agent.
                 frameParentId: frame),
               scroll: scroll, typography: typography,
-              // Through the row model, never by arithmetic — a mark's item index
+              // Through the row model, never by arithmetic - a mark's item index
               // is not its row index, and `buildScrubberClusters` has already
               // done that conversion.
               onJumpToRow: { scroll.scrollToRow($0, anchor: .top, animated: true) })
@@ -239,20 +239,20 @@ struct TerminalTranscriptView: View {
         let model = model ?? TerminalTranscriptModel(metrics: metrics, frameParentId: frame)
         // Told rather than constructed with, so the seam does not depend on
         // whether the host had read its watermark by the time this model was
-        // built — and so "dismiss" is the same one line, clearing it. A frame
+        // built - and so "dismiss" is the same one line, clearing it. A frame
         // never carries one: its rows are a filtered list, and the boundary is
         // a full-transcript index.
         model.setRecap(at: frame == nil ? catchUpAt : nil, since: catchUpSince)
         // The frame's own item list, decided once here so the fold, the empty
         // surface and the presses all describe the same items. The spawning
-        // call rides beside it — it is not a frame member (`subagentItems`
+        // call rides beside it - it is not a frame member (`subagentItems`
         // excludes it: that is the frame, not a row in it), but its `prompt` is
         // the brief the frame's rows open with.
         let visible = frame.map { subagentItems(items, parentToolUseId: $0) } ?? items
         model.update(
           items: visible, metrics: metrics, pendingApprovals: pendingApprovals.count,
           frameTask: frame.flatMap { subagentTask(items, id: $0) })
-        // What the bar above the composer is drawn from — including "the fold
+        // What the bar above the composer is drawn from - including "the fold
         // spliced no seam", which is how a boundary with nothing after it stops
         // claiming there is something to jump to.
         onRecapRows?(model.recapRow)
@@ -263,7 +263,7 @@ struct TerminalTranscriptView: View {
         #if DEBUG
           // The gate, run wherever a transcript is actually on screen. A line
           // that renders wider than the column it was planned for is clipped
-          // silently, which is worse than a wrong height — nothing about it
+          // silently, which is worse than a wrong height - nothing about it
           // looks wrong.
           if let onAudit {
             // Both states, because the gate can only check lines it was given
@@ -305,8 +305,8 @@ struct TerminalTranscriptView: View {
   private struct TranscriptEpoch: Equatable {
     var revision: Int
     var width: CGFloat
-    /// Dismissing the catch-up seam changes the fold and nothing else — no
-    /// event, no rotation — so without it here the row above the seam would
+    /// Dismissing the catch-up seam changes the fold and nothing else - no
+    /// event, no rotation - so without it here the row above the seam would
     /// stay faded until the next thing the agent said.
     var catchUp: Bool
   }

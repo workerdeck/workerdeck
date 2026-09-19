@@ -226,13 +226,13 @@ export function withHostTools(context: ToolContext, hostTools: Record<string, Ho
     const executes = typeof (hostTool as { execute?: unknown }).execute === 'function'
     if (trust === 'sandboxed' && executes) {
       throw new Error(
-        `${kind} '${name}' is declared sandboxed but has an \`execute\` — it would run in ` +
+        `${kind} '${name}' is declared sandboxed but has an \`execute\` - it would run in ` +
           'this process with full authority. Drop `execute` so it rides the ToolExecutor seam.',
       )
     }
     if (trust === 'authoritative' && !executes) {
       throw new Error(
-        `${kind} '${name}' is declared authoritative but has no \`execute\` — nothing would ` +
+        `${kind} '${name}' is declared authoritative but has no \`execute\` - nothing would ` +
           'ever answer its calls and the turn would stall.',
       )
     }

@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The sessions-list view model — a port of `packages/react/test/session-list.test.ts`.
+/// The sessions-list view model - a port of `packages/react/test/session-list.test.ts`.
 /// These are the rules, not one client's preferences: the VS Code sidebar (whose
 /// activity-bar badge counts the *same* rows the list shows), the dashboard, and
 /// this app derive their list from them.
@@ -50,7 +50,7 @@ struct SessionListTests {
       toolUseId: "toolu_2", agentType: nil, description: "check the config", status: .done,
       startedAt: 1_000, toolCount: 1)
     #expect(!isAgentRecord(described))
-    // Whitespace is not an identity — trimmed to empty is the same as absent.
+    // Whitespace is not an identity - trimmed to empty is the same as absent.
     let blank = SubagentInfo(
       toolUseId: "toolu_3", agentType: "  ", description: "check the config", status: .done,
       startedAt: 1_000, toolCount: 1)
@@ -58,7 +58,7 @@ struct SessionListTests {
   }
 
   /// The label the phone's agent line prints, and the dashboard's `StepRow`
-  /// beside it — one spelling across the clients, including both fallbacks.
+  /// beside it - one spelling across the clients, including both fallbacks.
   @Test("a sub-agent's line reads agent · description, and degrades in that order")
   func subagentLabelSpelling() {
     #expect(subagentLabel(agent(.running)) == "Explore · find the auth check")
@@ -83,7 +83,7 @@ struct SessionListTests {
   // MARK: - sessionState
 
   @Test func promotesAPendingApprovalOverTheRawStatus() {
-    // The rollup can still say `running` while a request waits — the thing a
+    // The rollup can still say `running` while a request waits - the thing a
     // person filters on is "does this need me", not what the engine calls it.
     #expect(sessionState(info(status: .running, pendingPermissionCount: 1)) == .attention)
     #expect(sessionState(info(status: .awaitingApproval)) == .attention)
@@ -112,8 +112,8 @@ struct SessionListTests {
   }
 
   @Test func aTerminalStatusOutranksAStaleRunningRecord() {
-    // Should be unreachable — `session_closed` settles every record, the process
-    // hosting them being gone — but a stale one must never read `working`.
+    // Should be unreachable - `session_closed` settles every record, the process
+    // hosting them being gone - but a stale one must never read `working`.
     #expect(sessionState(info(status: .closed, subagents: [agent(.running)])) == .ended)
     #expect(sessionState(info(status: .failed, subagents: [agent(.running)])) == .ended)
   }
@@ -147,7 +147,7 @@ struct SessionListTests {
     #expect(find("pi") == ["b2"])
     #expect(find("codex") == ["b2"])
     #expect(find("a1") == ["a1"])
-    // An id is matched by prefix only — a hex soup matching mid-string would
+    // An id is matched by prefix only - a hex soup matching mid-string would
     // surface rows nobody was looking for.
     #expect(find("1") == [])
   }
@@ -196,7 +196,7 @@ struct SessionListTests {
 
   @Test func isInertNotMerelyEmptyWithNoScopeAtAll() {
     // This is what lets `scoped` default to on: with nothing open it hides
-    // nothing, so it is a default rather than a filter someone has to find —
+    // nothing, so it is a default rather than a filter someone has to find -
     // and on a phone, where no folder is ever open, it is permanently inert.
     let local = row(info: info(cwd: "/work/alpha"))
     let remote = row(hostId: "pi", local: false, info: info(cwd: "/work/alpha"))
@@ -208,7 +208,7 @@ struct SessionListTests {
 
   @Test func ordersGroupsByFacetRankEvenWhenRowsSortByName() {
     // Grouping by state and sorting by name must still lead with "Needs
-    // attention" — groups follow the facet's own worst-first order.
+    // attention" - groups follow the facet's own worst-first order.
     let attention = row(
       info: info(id: "x", status: .awaitingApproval, title: "Zebra", lastActivityAt: 5))
     let idle = row(info: info(id: "y", title: "Apple", lastActivityAt: 9))
@@ -309,7 +309,7 @@ struct SessionListTests {
     row(info: info(id: "p2", cwd: "/work/deck/packages/web", project: deckProject))
   }
   private var undeclared: SessionRow { row(info: info(id: "u1", cwd: "/work/alpha")) }
-  /// The identical root on another gateway — another machine's directory
+  /// The identical root on another gateway - another machine's directory
   /// wearing the same word.
   private var remoteTwin: SessionRow {
     row(

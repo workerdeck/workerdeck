@@ -5,7 +5,7 @@ import Foundation
 /// A push-to-start card is created, handled and possibly ended in a background launch that lasts a
 /// second or two, with no debugger attached and no console reachable. Whether a card never arrived
 /// or arrived and was ended by this app is invisible from the lock screen and unknowable from
-/// `Activity.activities` after the fact — so each decision writes a line here instead.
+/// `Activity.activities` after the fact - so each decision writes a line here instead.
 enum ActivityTrail {
   private static let key = "bi.atomic.workerdeck.ios.activityTrail"
   private static let limit = 40

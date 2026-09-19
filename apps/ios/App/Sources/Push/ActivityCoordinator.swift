@@ -7,7 +7,7 @@ import WorkerDeckKit
 /// Everything Live Activity on the app's side: the push-to-start token, the per-card update tokens,
 /// and ending cards the gateway can no longer speak for.
 ///
-/// The gateway *raises* cards; this never does. That is the whole point of push-to-start — a turn
+/// The gateway *raises* cards; this never does. That is the whole point of push-to-start - a turn
 /// begun from the web dashboard has to reach a phone whose app is not running, and only APNs can do
 /// that. What the app owns is the two tokens and the reconcile.
 @MainActor
@@ -42,7 +42,7 @@ final class ActivityCoordinator {
 
   /// Both switches have to be on: the system's, and the reader's. iOS owns the first (Settings ▸
   /// WorkerDeck ▸ Live Activities) and this app owns the second, but they mean the same thing to
-  /// the gateway — no start token, no card.
+  /// the gateway - no start token, no card.
   private var enabled: Bool {
     ActivityAuthorizationInfo().areActivitiesEnabled && (settings?.liveActivitiesEnabled ?? true)
   }
@@ -52,7 +52,7 @@ final class ActivityCoordinator {
     guard enabled else {
       // Registering a start token the phone will ignore burns the gateway's push budget on cards
       // that never appear. Clearing it is what stops the next one being raised; ending the live
-      // ones is what clears the ones already on screen — the gateway learns they are gone from the
+      // ones is what clears the ones already on screen - the gateway learns they are gone from the
       // detach that `watchState` fires, so it stops pushing updates into nothing.
       await clearStartToken()
       await endEveryCard()
@@ -112,8 +112,8 @@ final class ActivityCoordinator {
   // Everything below that touches an `Activity` is **nonisolated**, and that is not a style choice.
   // `Activity` is not `Sendable` and ActivityKit's methods are nonisolated, so handling one on the
   // main actor makes every call into it a Swift 6 "sending" error. The rule that falls out is a good
-  // one anyway: the activity stays in the nonisolated world, and only Strings — session ids, host
-  // ids, hex tokens — ever cross onto the actor that holds this object's state.
+  // one anyway: the activity stays in the nonisolated world, and only Strings - session ids, host
+  // ids, hex tokens - ever cross onto the actor that holds this object's state.
 
   private nonisolated func watchActivities() {
     Task { [weak self] in
@@ -123,7 +123,7 @@ final class ActivityCoordinator {
     }
   }
 
-  /// Cards that already existed when the app launched — a background wake for a push-to-start
+  /// Cards that already existed when the app launched - a background wake for a push-to-start
   /// arrives with the activity already made.
   private nonisolated func adoptRunning() {
     Task { [weak self] in
@@ -235,7 +235,7 @@ final class ActivityCoordinator {
 
   /// Ends cards the gateway can no longer speak for: a wiped state dir, a host the user deleted, a
   /// session that finished while the phone was offline. Run on every foreground, because a card
-  /// that outlives its turn is worse than no card — it claims work is happening that is not.
+  /// that outlives its turn is worse than no card - it claims work is happening that is not.
   nonisolated func reconcile() async {
     for activity in Activity<SessionActivityAttributes>.activities where activity.activityState == .active {
       let attributes = activity.attributes

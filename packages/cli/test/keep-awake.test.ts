@@ -97,13 +97,13 @@ describe('driveWakeLock', () => {
     source.emit('status_changed')
     expect(seen.at(-1)).toBe(true)
 
-    // Removed from the registry with no release of its own — the recompute is what frees the machine.
+    // Removed from the registry with no release of its own - the recompute is what frees the machine.
     source.sessions.length = 0
     source.emit('session_closed')
     expect(seen.at(-1)).toBe(false)
   })
 
-  it('ignores the traffic of a turn — only transitions recompute', () => {
+  it('ignores the traffic of a turn - only transitions recompute', () => {
     const source = fakeSource()
     const seen: boolean[] = []
     driveWakeLock(source, { set: (v) => void seen.push(v) })

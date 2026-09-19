@@ -5,8 +5,8 @@ import WorkerDeckKit
 /// Fetches the pictures a tool result carried, one box at a time, as the reader
 /// scrolls them into view.
 ///
-/// The replay delivers those pictures as addresses rather than bytes — measured,
-/// 91% of all tool-result payload was base64 that no client rendered — so the
+/// The replay delivers those pictures as addresses rather than bytes - measured,
+/// 91% of all tool-result payload was base64 that no client rendered - so the
 /// bytes are paid for exactly once, by exactly the reader looking at them.
 ///
 /// **The collection view is the visibility system.** A cell is told to load in
@@ -40,7 +40,7 @@ final class TerminalImageLoader {
   /// Start a fetch for this box unless its answer is already known.
   ///
   /// Returns the task so the cell can cancel it when the row leaves the screen.
-  /// `nil` means there is nothing to wait for — cached, already failed, or no
+  /// `nil` means there is nothing to wait for - cached, already failed, or no
   /// fetcher wired (the preview harness, where nothing asked for refs).
   func load(_ box: TermImageBox, onSettle: @escaping (TerminalImageState) -> Void)
     -> Task<Void, Never>?
@@ -52,7 +52,7 @@ final class TerminalImageLoader {
       guard !Task.isCancelled, let self else { return }
       guard let data, let image = UIImage(data: data) else {
         // Undecodable is a failure like any other: the box says so and keeps
-        // its size. It must never collapse — a row that changed height because
+        // its size. It must never collapse - a row that changed height because
         // a network call failed is the reflow this whole design exists to
         // prevent.
         self.failed.insert(key)
@@ -64,7 +64,7 @@ final class TerminalImageLoader {
   }
 }
 
-/// The three things a box can be showing. All the same height — see
+/// The three things a box can be showing. All the same height - see
 /// `TermImage`.
 enum TerminalImageState {
   case placeholder
@@ -73,8 +73,8 @@ enum TerminalImageState {
 }
 
 /// Reaches the row cells deep inside the transcript, for the same reason the
-/// produced-image loader does. Absent outside a live session — a preview
-/// harness has nothing to fetch from — and boxes then rest on their placeholder,
+/// produced-image loader does. Absent outside a live session - a preview
+/// harness has nothing to fetch from - and boxes then rest on their placeholder,
 /// which is correct: nothing refs a replay nobody asked for.
 private struct TerminalImageLoaderKey: EnvironmentKey {
   static let defaultValue: TerminalImageLoader? = nil

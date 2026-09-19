@@ -2,7 +2,7 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The unread model — a port of `packages/react/test/watermarks.test.ts`.
+/// The unread model - a port of `packages/react/test/watermarks.test.ts`.
 @Suite("Watermarks")
 struct WatermarksTests {
   /// An in-memory store standing in for UserDefaults, counting writes.
@@ -27,7 +27,7 @@ struct WatermarksTests {
   // MARK: - mark
 
   @Test func neverWalksAMarkBackwards() {
-    // A transcript that shrank — a compaction, or a fresh attach mid-replay —
+    // A transcript that shrank - a compaction, or a fresh attach mid-replay -
     // must not resurrect rows the user already read.
     let box = StoreBox()
     let marks = Watermarks(store: box.seam)
@@ -69,7 +69,7 @@ struct WatermarksTests {
     marks.mark(hostId: "mac", sessionId: "a", activity: 3, now: 1_000)
     marks.forget(hostId: "mac", sessionId: "a")
     #expect(marks.get(hostId: "mac", sessionId: "a") == nil)
-    // A forget for something absent must not write — it would churn storage on
+    // A forget for something absent must not write - it would churn storage on
     // every poll that sees a session already gone.
     let before = box.writes
     marks.forget(hostId: "mac", sessionId: "a")
@@ -91,7 +91,7 @@ struct WatermarksTests {
   }
 
   @Test func isZeroForASessionNeverVisited() {
-    // "Never opened" is not "unread" — a badge counting every session's whole
+    // "Never opened" is not "unread" - a badge counting every session's whole
     // history on first launch is noise on the one day it should be quiet.
     #expect(unseenCount(mark: nil, activityCount: 900, turns: nil) == 0)
   }

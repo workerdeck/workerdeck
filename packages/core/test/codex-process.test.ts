@@ -54,7 +54,7 @@ describe('CodexRunner: process contract, usage and rate limits', () => {
     expect(texts[1]).toBe('what is this?')
 
     // A delta across close(), not a total: a promptless session also opens a throwaway probe
-    // connection. Snapshot and assert back to back — no await for that close to slip through.
+    // connection. Snapshot and assert back to back - no await for that close to slip through.
     const closedBefore = peer.closed()
     runner.close()
     expect(existsSync(image.path!)).toBe(false)

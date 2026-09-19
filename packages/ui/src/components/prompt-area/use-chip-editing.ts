@@ -80,7 +80,7 @@ export function useChipEditing({
 
   // The chip node currently edited via `reopenOnChipClick`, kept in lockstep with
   // `editingChip`/`activeTrigger`. Answers "is THIS exact element the open one" by
-  // reference identity — trigger+value cannot distinguish two chips sharing a value.
+  // reference identity - trigger+value cannot distinguish two chips sharing a value.
   const openChipNode = useRef<HTMLElement | null>(null)
 
   // Set by `handleMouseDown` when the mousedown landed on `openChipNode.current`;
@@ -88,7 +88,7 @@ export function useChipEditing({
   // "toggle closed". A real mousedown on the editor root rather than a
   // `dismissTrigger` flag: bubbling reaches the root before `document`, where
   // TriggerPopover's outside-click dismiss listens and would clear `openChipNode`
-  // first — and it stays scoped to this node, so an unrelated dismiss cannot poison
+  // first - and it stays scoped to this node, so an unrelated dismiss cannot poison
   // a later click on the same chip.
   const suppressReopenChip = useRef<HTMLElement | null>(null)
 
@@ -106,7 +106,7 @@ export function useChipEditing({
 
       let node: Node | null = target
       while (node && node !== editor) {
-        // Check for URL link click — only navigate on Cmd/Ctrl+Click;
+        // Check for URL link click - only navigate on Cmd/Ctrl+Click;
         // plain click just positions the cursor for editing.
         if (isLinkElement(node)) {
           if (e.metaKey || e.ctrlKey) {
@@ -137,12 +137,12 @@ export function useChipEditing({
           if (chip) {
             // Native chip-click dropdown: reopen this trigger's suggestions
             // anchored to the chip so the selection can replace it in place.
-            // Gated on `!disabled` — a disabled composer must not accept edits
+            // Gated on `!disabled` - a disabled composer must not accept edits
             // through any path, including this one.
             const config = triggers.find((t) => t.char === chip.trigger)
             // A click on THIS exact chip element while its own dropdown was
             // open just closed it (see `suppressReopenChip` and
-            // `handleMouseDown`) — treat that as a toggle-close, not a reopen.
+            // `handleMouseDown`) - treat that as a toggle-close, not a reopen.
             const wasOpenForThisChip = suppressReopenChip.current === node
             suppressReopenChip.current = null
             if (!disabled && !wasOpenForThisChip && config?.reopenOnChipClick && config.mode === 'dropdown' && config.onSearch) {
@@ -212,7 +212,7 @@ export function useChipEditing({
       }
       const editor = editorRef.current
       if (editor && !disabled) {
-        // Re-verify the click-time index still holds the same chip — the
+        // Re-verify the click-time index still holds the same chip - the
         // model may have shifted (external value update, undo/redo) while
         // the dropdown was open. If it moved, recover ONLY when exactly one
         // chip in the document now matches trigger+value: with duplicates,
@@ -258,7 +258,7 @@ export function useChipEditing({
           renderSegmentsToDOM(newSegments)
 
           // Same value + display text + data: treat as a no-op confirmation
-          // rather than a destructive delete+add — onChipDelete is
+          // rather than a destructive delete+add - onChipDelete is
           // documented as firing on backspace/forward-delete, not on
           // re-confirming the already-selected suggestion.
           const unchanged =
@@ -271,7 +271,7 @@ export function useChipEditing({
           }
 
           // +1 when a space was inserted, matching resolveChip's own
-          // "+1 accounts for the trailing space after the chip" placement —
+          // "+1 accounts for the trailing space after the chip" placement -
           // landing exactly at the chip's end would put the caret at the
           // same bare element boundary the inserted space exists to avoid.
           const caretOffset = segmentsToPlainText(newSegments.slice(0, segIdx + 1)).length + (insertedSpace ? 1 : 0)

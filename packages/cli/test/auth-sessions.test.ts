@@ -78,7 +78,7 @@ describe('createAuthSessionStore', () => {
     expect([...(store.initial ?? [])]).toEqual([['ok', { expiresAt }]])
   })
 
-  it('warns once — not per write — when the directory cannot be written', async () => {
+  it('warns once - not per write - when the directory cannot be written', async () => {
     const dir = await stateDir()
     const warnings: string[] = []
     // A file where the state dir should be: mkdir/writeFile both fail.

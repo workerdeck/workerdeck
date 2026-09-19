@@ -28,7 +28,7 @@ function reduce(state: TranscriptState, action: SessionEvent | AttachedFrame | S
 
 export type ConnectionState = 'live' | 'reconnecting' | 'offline'
 
-// Three failed attempts is ~3.5s of backoff — past a blip; the iOS client hardcodes the same threshold.
+// Three failed attempts is ~3.5s of backoff - past a blip; the iOS client hardcodes the same threshold.
 const OFFLINE_AFTER_ATTEMPTS = 3
 
 export function initialReplayTarget(frame: AttachedFrame): number | undefined {
@@ -188,7 +188,7 @@ export function useClaudeSession(
   const models = useProfileModelFallback(client, sessionId, state)
 
   const connected = connection === 'live'
-  // Derived at render, not in an effect, so the reveal lands in the same commit as the replay's final event — an effect is one visible frame late.
+  // Derived at render, not in an effect, so the reveal lands in the same commit as the replay's final event - an effect is one visible frame late.
   const replaying = replayTarget !== undefined && state.lastSeq < replayTarget
   const reconnectNow = useCallback(() => handleRef.current?.reconnectNow(), [])
 

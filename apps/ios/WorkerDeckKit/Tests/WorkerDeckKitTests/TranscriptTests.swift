@@ -411,7 +411,7 @@ struct TranscriptTests {
 
   /// The event's own `ts`, never receipt time: a replay delivers yesterday's
   /// reading in milliseconds, and a receipt-time stamp would date it "just now"
-  /// — exactly the staleness the freshness line exists to expose.
+  /// - exactly the staleness the freshness line exists to expose.
   @Test func rateLimitStampsTheEventsOwnTime() {
     var state = applyEvent(
       .initial,
@@ -420,7 +420,7 @@ struct TranscriptTests {
         body: .rateLimit(
           RateLimitInfo(status: "allowed", rateLimitType: "five_hour", utilization: 20))))
     #expect(state.rateLimitsUpdatedAt == 111)
-    // A reading naming no window changes nothing — the stamp included.
+    // A reading naming no window changes nothing - the stamp included.
     state = applyEvent(
       state, SessionEvent(seq: 2, ts: 222, body: .rateLimit(RateLimitInfo(status: "allowed"))))
     #expect(state.rateLimitsUpdatedAt == 111)
@@ -516,7 +516,7 @@ struct TranscriptTests {
     #expect(state.cwd == "/tmp/p")
     #expect(state.defaultModel == "claude-opus-5")
 
-    // A reset without a new id keeps the known one; resets stack — only what
+    // A reset without a new id keeps the known one; resets stack - only what
     // came after the latest remains.
     let again = reduce(
       [
@@ -614,7 +614,7 @@ struct TranscriptTests {
   }
 }
 
-/// The replay hold — what stops a session opening in a flicker of its own
+/// The replay hold - what stops a session opening in a flicker of its own
 /// history. See `ReplayHold.swift`; the rules are the web client's.
 @Suite("ReplayHold")
 struct ReplayHoldTests {
@@ -656,7 +656,7 @@ struct ReplayHoldTests {
   @Test("a replay still arriving extends past the old flat deadline")
   func progressExtendsTheDeadline() {
     // The bug this fixes: a flat 1.5s from the attach fired on exactly the
-    // sessions the hold exists for — a big transcript replayed over a tailnet.
+    // sessions the hold exists for - a big transcript replayed over a tailnet.
     var hold = ReplayHold(target: 5000, now: 0)
     for t in stride(from: 1.0, through: 6.0, by: 1.0) {
       hold.advance(to: Int(t) * 500, now: t)
@@ -665,7 +665,7 @@ struct ReplayHoldTests {
     #expect(!hold.landed)
   }
 
-  @Test("a stalled replay gives up — a blank screen forever is the worse failure")
+  @Test("a stalled replay gives up - a blank screen forever is the worse failure")
   func stallGivesUp() {
     var hold = ReplayHold(target: 5000, now: 0)
     hold.advance(to: 400, now: 1.0)

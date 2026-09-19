@@ -23,7 +23,7 @@ protocol WebSocketConnecting: AnyObject, Sendable {
 /// Bridges `URLSessionWebSocketTask`'s delegate callbacks into `open()`.
 ///
 /// A per-task delegate (`URLSessionTask.delegate`) is used so this works with an
-/// injected session — including `URLSession.shared`, which has no delegate of
+/// injected session - including `URLSession.shared`, which has no delegate of
 /// its own.
 private final class WebSocketOpenObserver: NSObject, URLSessionWebSocketDelegate, @unchecked
   Sendable
@@ -102,7 +102,7 @@ final class URLSessionWebSocketTransport: WebSocketConnecting {
     task.resume()
     // Safety net: if the delegate never reports the upgrade (a proxy or a stack
     // that doesn't deliver `didOpenWithProtocol`), proceed optimistically rather
-    // than hang — outbound frames are buffered by URLSession until the socket is
+    // than hang - outbound frames are buffered by URLSession until the socket is
     // live anyway, and a truly dead socket still surfaces on the first receive.
     let fallback = Task { [observer] in
       try? await Task.sleep(for: .seconds(5))
@@ -140,7 +140,7 @@ final class URLSessionWebSocketTransport: WebSocketConnecting {
 /// Swift port of `SessionHandle` (packages/client/src/index.ts), shaped for
 /// SwiftUI: main-actor isolated, with a single-consumer `AsyncStream` of events.
 ///
-/// The handle keeps itself alive while its socket is open — call `detach()` when
+/// The handle keeps itself alive while its socket is open - call `detach()` when
 /// the view goes away, or `closeSession()` to terminate the session too.
 @MainActor
 public final class SessionHandle {
@@ -156,14 +156,14 @@ public final class SessionHandle {
     /// A connection attempt failed and another is scheduled; the value is how many
     /// have failed in a row (1 for the first). Reset to 0 by a successful open.
     ///
-    /// The handle never gives up, so "offline" is not a state it can report —
+    /// The handle never gives up, so "offline" is not a state it can report -
     /// but a UI can tell a blip from an outage by how far this has climbed, which
     /// is the only honest distinction available.
     case reconnectAttempt(Int)
     /// The server rejected a command frame. The socket stays up.
     case protocolError(String)
     /// The server speaks a different `PROTOCOL_VERSION` than `WorkerProtocol.version`.
-    /// A warning, not a disconnect — decoding is lenient by design.
+    /// A warning, not a disconnect - decoding is lenient by design.
     case protocolMismatch(serverVersion: Int)
   }
 
@@ -214,7 +214,7 @@ public final class SessionHandle {
 
   /// Send a user turn, optionally naming attachments uploaded ahead of it with
   /// `WorkerClient.uploadAttachment` (ids in the order they should reach the
-  /// model). An unknown id fails the command — the server refuses to send a
+  /// model). An unknown id fails the command - the server refuses to send a
   /// message that quietly lost its picture.
   public func send(_ text: String, attachmentIds: [String]? = nil) {
     enqueue(
@@ -240,7 +240,7 @@ public final class SessionHandle {
   }
 
   /// Start a fresh conversation in the same session. The old one is not
-  /// deleted — it stays resumable — and the server echoes a
+  /// deleted - it stays resumable - and the server echoes a
   /// `conversation_reset` event, which is what empties the transcript.
   public func clearContext() {
     enqueue(.clearContext)
@@ -292,7 +292,7 @@ public final class SessionHandle {
     continuation.finish()
   }
 
-  /// Reconnect immediately instead of waiting out the backoff — what the app
+  /// Reconnect immediately instead of waiting out the backoff - what the app
   /// calls when it returns to the foreground or the network path changes.
   /// No-op while connected or after `detach()`.
   public func reconnectNow() {
@@ -347,7 +347,7 @@ public final class SessionHandle {
         handle(frame: try await socket.receive())
       }
     } catch {
-      // Any failure — handshake, receive, or cancellation — is a disconnect.
+      // Any failure - handshake, receive, or cancellation - is a disconnect.
     }
     connected = false
     current?.close()
@@ -382,7 +382,7 @@ public final class SessionHandle {
       continuation.yield(.event(event))
     case .toolCallRequest(let request):
       // This client hosts no sandbox. Answer immediately rather than let the
-      // server's watchdog expire the call — the failure is fed to the model as
+      // server's watchdog expire the call - the failure is fed to the model as
       // tool output, so the agent adapts instead of stalling.
       enqueue(
         .toolCallError(
@@ -397,7 +397,7 @@ public final class SessionHandle {
     case .protocolError(let message):
       continuation.yield(.protocolError(message))
     case .unknown:
-      // A frame type this mirror doesn't model — ignore, never an error.
+      // A frame type this mirror doesn't model - ignore, never an error.
       break
     }
   }
@@ -411,7 +411,7 @@ public final class SessionHandle {
   }
 
   /// Drains the outbox through the socket one frame at a time. Everything goes
-  /// through the outbox — even while connected — so command order survives the
+  /// through the outbox - even while connected - so command order survives the
   /// hop onto the socket's async send.
   private func flushOutbox() {
     guard !flushing, connected, let socket else { return }

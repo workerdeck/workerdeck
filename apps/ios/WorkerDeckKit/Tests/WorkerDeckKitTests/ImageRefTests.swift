@@ -58,7 +58,7 @@ struct ImageRefTests {
   @Test("a gateway that never heard of image_ref decodes exactly as before")
   func toleratesAbsence() throws {
     // The compatibility claim, asserted rather than argued: an old gateway, or
-    // a socket that did not ask, sends these — and a raw base64 image part is
+    // a socket that did not ask, sends these - and a raw base64 image part is
     // still dropped on arrival, never folded into state.
     let block = try decodeBlock(
       """
@@ -154,7 +154,7 @@ struct ImageRefTests {
     #expect(plan(images: 1).count == none + TermImage.boxLines)
     #expect(plan(images: 3).count == none + 3 * TermImage.boxLines)
 
-    // The address rides the box's **first** line and nowhere else — the lines
+    // The address rides the box's **first** line and nowhere else - the lines
     // after it merely reserve the grid, which is what the cell places the one
     // picture over.
     let lines = plan(images: 2)
@@ -169,7 +169,7 @@ struct ImageRefTests {
     #expect(heads[0].key != heads[1].key)
   }
 
-  @Test("the box is the same size expanded — a deliberate divergence")
+  @Test("the box is the same size expanded - a deliberate divergence")
   func boxDoesNotGrowOnExpansion() {
     // The web client mounts an expanded row and measures it, so an image there
     // may reveal its intrinsic size. Here nothing self-measures: the planner

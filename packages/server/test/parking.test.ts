@@ -314,7 +314,7 @@ describe('deferred execution: parking and result ingestion', () => {
   })
 })
 
-// Two servers over one directory, sequentially — the only way a file store is ever legal.
+// Two servers over one directory, sequentially - the only way a file store is ever legal.
 describe('deferred execution: durability across a restart', () => {
   let dir: string
   afterEach(async () => {
@@ -450,7 +450,7 @@ describe('deferred execution: durability across a restart', () => {
     await backdateDeadline(session.id)
 
     const second = await withStore(0)
-    // The settle is what this asserts, and it lands a tick after the resume that triggers it —
+    // The settle is what this asserts, and it lands a tick after the resume that triggers it -
     // waiting only for the runner leaves the assertion racing the sweep on a loaded runner.
     await vi.waitFor(
       () =>

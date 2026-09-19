@@ -17,7 +17,7 @@ import { perfSweep } from './perf-audit.ts'
 import { cn } from '../src/lib/utils.ts'
 
 const PROMPTS = [
-  { key: 'none', label: '—' },
+  { key: 'none', label: '-' },
   { key: 'edit', label: 'edit approval' },
   { key: 'bash', label: 'bash approval' },
   { key: 'ask', label: 'questions' },
@@ -117,7 +117,7 @@ export function App() {
       )
     reply(1, 'Working on it.')
     reply(2, 'Reading the files that matter, then the two rules underneath them.')
-    reply(3, 'Done — the change is in `packages/ui`, and the reason is in the header comment.')
+    reply(3, 'Done - the change is in `packages/ui`, and the reason is in the header comment.')
   }
   const [attachmentCount, setAttachmentCount] = useState(0)
   const stagedAttachments = useMemo(() => {
@@ -158,7 +158,7 @@ export function App() {
       const scroller = surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div')
       return scroller ? perfSweep(scroller, { step }) : undefined
     }
-    // `__wdPinTrace`: samples the gap to the bottom every frame for `ms` — 0 is pinned, anything else is the reply streaming off screen.
+    // `__wdPinTrace`: samples the gap to the bottom every frame for `ms` - 0 is pinned, anything else is the reply streaming off screen.
     w.__wdPinTrace = (ms = 2000) => {
       const scroller = () =>
         surface.current?.querySelector<HTMLElement>('[data-slot="conversation"] > div') ??
@@ -409,7 +409,7 @@ export function App() {
           {report ? (
             <p className={`text-label ${report.violations.length ? 'text-danger' : 'text-success'}`}>
               {report.violations.length
-                ? `${report.violations.length} off-grid of ${report.checked}: ${report.violations[0]!.kind} by ${report.violations[0]!.by}px — ${report.violations[0]!.text}`
+                ? `${report.violations.length} off-grid of ${report.checked}: ${report.violations[0]!.kind} by ${report.violations[0]!.by}px - ${report.violations[0]!.text}`
                 : `${report.checked} nodes on a ${report.line}px grid`}
             </p>
           ) : null}

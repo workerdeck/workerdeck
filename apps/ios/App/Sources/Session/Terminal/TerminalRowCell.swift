@@ -12,7 +12,7 @@ import WorkerDeckKit
 ///
 /// Three rules hold it together, and each is a silent failure if broken.
 ///
-/// 1. **The gutter is a separate column, and it is not text.** Not for layout —
+/// 1. **The gutter is a separate column, and it is not text.** Not for layout -
 ///    for what lands on the clipboard. `●`, `⎿` and a diff's line numbers are
 ///    scaffolding the reader did not type and does not want pasted into a
 ///    commit message, so they are *drawn*, never part of the run. The column
@@ -24,12 +24,12 @@ import WorkerDeckKit
 ///    `minimumLineHeight == maximumLineHeight == metrics.line`, its head indent
 ///    set to where its body column starts. So N planned lines are N line
 ///    fragments of exactly `line` points, and the height the book handed the
-///    layout is the height the text actually occupies — by construction, not by
+///    layout is the height the text actually occupies - by construction, not by
 ///    agreement. `TerminalRowCell.measuredHeight` is the gate that proves it
 ///    (see `TerminalAudit.measureHeights`).
 ///
 /// 3. **Nothing here decides anything.** Where a line breaks, what it says, what
-///    a tap on it does — all of that is already in the plan. This puts it on
+///    a tap on it does - all of that is already in the plan. This puts it on
 ///    screen at the cell it was measured against.
 final class TerminalRowCell: UICollectionViewCell {
   private let backdrop = BackdropView()
@@ -44,11 +44,11 @@ final class TerminalRowCell: UICollectionViewCell {
   private var imageTasks: [Task<Void, Never>] = []
   private weak var imageLoader: TerminalImageLoader?
   private var press: ((TermPress) -> Void)?
-  /// How much text was selected when the finger went down — see `handleTap`.
+  /// How much text was selected when the finger went down - see `handleTap`.
   private var selectionAtTouchDown = 0
   /// Was the transcript already moving when the finger went down, and where was
   /// it? Both are read in `handleTap` to tell a press from the tap that merely
-  /// stopped a scroll — see the comment there.
+  /// stopped a scroll - see the comment there.
   private var scrollWasMovingAtTouchDown = false
   private var contentOffsetAtTouchDown: CGPoint = .zero
   private var lines: [TermLine] = []
@@ -60,8 +60,8 @@ final class TerminalRowCell: UICollectionViewCell {
   private var topInset: CGFloat = 0
   private var pulseTimer: Timer?
 
-  /// Whether the body's text run can be selected. Off for a *copy* of a row —
-  /// the sticky prompt — where a selection would land somewhere the reader
+  /// Whether the body's text run can be selected. Off for a *copy* of a row -
+  /// the sticky prompt - where a selection would land somewhere the reader
   /// cannot see and would swallow the tap that takes them to the real one.
   var bodyIsSelectable: Bool {
     get { body.isSelectable }
@@ -69,7 +69,7 @@ final class TerminalRowCell: UICollectionViewCell {
   }
 
   /// Is a text selection standing in this row right now? Read by the context
-  /// menu's gate the way `handleTap` reads it: a selection owns the gesture —
+  /// menu's gate the way `handleTap` reads it: a selection owns the gesture -
   /// its grabbers and its own edit menu are what a reader who selected text is
   /// reaching for, and a second menu lifting the row out from under them would
   /// fight both.
@@ -107,7 +107,7 @@ final class TerminalRowCell: UICollectionViewCell {
 
   // MARK: - Configure
 
-  /// - Parameter read: this row sits above the catch-up seam — the reader had
+  /// - Parameter read: this row sits above the catch-up seam - the reader had
   ///   already seen it. Drawn at the web client's own 45%, and on the whole
   ///   cell rather than per line, because "already read" is a fact about the
   ///   row, not about any glyph in it.
@@ -140,7 +140,7 @@ final class TerminalRowCell: UICollectionViewCell {
   override func prepareForReuse() {
     super.prepareForReuse()
     // A recycled cell that kept the last row's fade would draw unread work as
-    // read — the one direction of that mistake nobody would notice.
+    // read - the one direction of that mistake nobody would notice.
     contentView.alpha = 1
     stopPulse()
     cancelImageLoads()
@@ -170,7 +170,7 @@ final class TerminalRowCell: UICollectionViewCell {
     }
   }
 
-  /// Fire the fetches for whatever this row is showing — called from
+  /// Fire the fetches for whatever this row is showing - called from
   /// `willDisplay`, which is the collection view answering "is this on screen"
   /// so nothing here has to.
   func beginImageLoads() {
@@ -190,7 +190,7 @@ final class TerminalRowCell: UICollectionViewCell {
   }
 
   /// Off the window is off the clock, and it is what stops a recycled-away cell
-  /// leaving a timer running against the runloop for the rest of the session —
+  /// leaving a timer running against the runloop for the rest of the session -
   /// `prepareForReuse` covers the recycling case and nothing covers this one.
   override func didMoveToWindow() {
     super.didMoveToWindow()
@@ -239,7 +239,7 @@ final class TerminalRowCell: UICollectionViewCell {
   }
 
   /// What the text system says this row's body actually occupies. The claim the
-  /// audit checks against `lines.count × metrics.line` — see rule 2 above.
+  /// audit checks against `lines.count × metrics.line` - see rule 2 above.
   var measuredHeight: CGFloat {
     body.sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height
   }
@@ -258,7 +258,7 @@ final class TerminalRowCell: UICollectionViewCell {
     // `allowableMovement` alone does not catch this, and the reason is worth
     // keeping: a tap recognizer measures movement in **window** coordinates,
     // and during momentum scrolling the finger is perfectly still while the
-    // content slides beneath it. Zero movement, so the tap recognizes — and
+    // content slides beneath it. Zero movement, so the tap recognizes - and
     // whatever happened to arrive under the thumb got pressed. UIKit solves
     // this for `UIControl`s inside a scroll view (`delaysContentTouches`), but
     // a recognizer on a cell is outside that machinery, so the policy has to be
@@ -275,8 +275,8 @@ final class TerminalRowCell: UICollectionViewCell {
     guard !lines.isEmpty else { return }
     let point = recognizer.location(in: contentView)
     // Clamped rather than bounds-checked, which is the row's whole hit-target
-    // story: a one-line block is `metrics.line` tall — around 19pt, well under
-    // anyone's thumb — and the blank line `gapAbove` puts above it is dead
+    // story: a one-line block is `metrics.line` tall - around 19pt, well under
+    // anyone's thumb - and the blank line `gapAbove` puts above it is dead
     // space belonging to no one. Clamping hands that space to the row it
     // separates from the block above, roughly doubling the target for exactly
     // the rows that are hardest to hit, and costs nothing anywhere else: an
@@ -304,7 +304,7 @@ extension TerminalRowCell {
 }
 
 extension TerminalRowCell: UIGestureRecognizerDelegate {
-  /// Snapshot the selection — and the scroll — before anything can act on this
+  /// Snapshot the selection - and the scroll - before anything can act on this
   /// touch. Read at touch-down because both are gone by the time the tap fires:
   /// the text view may have cleared the selection, and touching a decelerating
   /// scroll view stops it, so `isDecelerating` is false again a moment later.
@@ -321,7 +321,7 @@ extension TerminalRowCell: UIGestureRecognizerDelegate {
   /// Beside the text view's recognizers, never instead of them: selection
   /// within a row still works, and a plain tap now reaches the row on the first
   /// press rather than the second.
-  /// Beside the text view's recognizers — but never beside the scroll view's
+  /// Beside the text view's recognizers - but never beside the scroll view's
   /// pan. Sharing with the pan was the other half of pressing rows while
   /// scrolling, and nothing here needs to run during a drag.
   func gestureRecognizer(
@@ -333,14 +333,14 @@ extension TerminalRowCell: UIGestureRecognizerDelegate {
 // MARK: - Geometry
 
 /// Where a planned line's columns land, in points. One spelling, because the
-/// backdrop, the gutter and the text run must agree to the point — three
+/// backdrop, the gutter and the text run must agree to the point - three
 /// arithmetics would be three answers and the misalignment would be a fraction
 /// of a cell, which reads as the font being wrong rather than as a bug.
 struct TerminalRowGeometry {
   var metrics: TerminalMetrics
   /// One cell of air at each edge, so the gutter marker is not flush against
   /// the screen. Spent *inside* the band, which therefore still runs full width
-  /// — a wash that stopped short of the edge would read as a box, which is the
+  /// - a wash that stopped short of the edge would read as a box, which is the
   /// thing this theme exists not to have.
   var bleed: CGFloat
 
@@ -365,7 +365,7 @@ struct TerminalRowGeometry {
 
 // MARK: - The text run
 
-/// The planner's lines as one attributed string — the piece that makes the body
+/// The planner's lines as one attributed string - the piece that makes the body
 /// selectable without giving up the grid.
 enum TerminalTextRun {
   /// The paragraph style a planned line is drawn under.
@@ -458,7 +458,7 @@ extension UIFont {
 // MARK: - The three views
 
 extension TerminalRowCell {
-  /// The bands, the open wash and the nested rule — everything behind the text.
+  /// The bands, the open wash and the nested rule - everything behind the text.
   ///
   /// Drawn rather than stacked as subviews because there is one of each *per
   /// line*, and an expanded result is fifty lines: fifty background views per
@@ -503,7 +503,7 @@ extension TerminalRowCell {
         // *and* wear nothing else: a tool call's preview rows are pressable
         // too, but they already sit in the output band, and a second wash on
         // top would say "these are two targets" when the block is one. So it
-        // marks the summary lines — the folded run, the task, the tool header —
+        // marks the summary lines - the folded run, the task, the tool header -
         // which are precisely the one-line rows that are hardest to find and to
         // hit. There is no hover on a phone, so this is the only affordance
         // there can be.
@@ -522,7 +522,7 @@ extension TerminalRowCell {
   /// The gutter column: markers, drawn, never selectable.
   ///
   /// Drawn under the same paragraph style as the body, which is the whole
-  /// reason the two sit on one baseline — a marker positioned by its own
+  /// reason the two sit on one baseline - a marker positioned by its own
   /// arithmetic would drift against the text beside it as the face changed.
   final class GutterView: UIView {
     private var lines: [TermLine] = []
@@ -570,7 +570,7 @@ extension TerminalRowCell {
       }
     }
 
-    /// The working marker: the brand mark's own pulse, `⋄ ◇ ◈ ◆` at 150ms — one
+    /// The working marker: the brand mark's own pulse, `⋄ ◇ ◈ ◆` at 150ms - one
     /// cycle is 0.6s, the clock in `icon-loading.svg`, so the transcript's
     /// working row and the brand mark beat together. It rests on `◆` under
     /// Reduce Motion, which is free: the last frame *is* the mark.
@@ -589,16 +589,16 @@ extension TerminalRowCell {
   ///
   /// **Its height never changes.** The frame is `box.lines × line` in all three
   /// states, set by the cell from the plan, so nothing here can reflow the
-  /// transcript — which is the whole reason images are drawn in a fixed box
+  /// transcript - which is the whole reason images are drawn in a fixed box
   /// rather than at their intrinsic size. `.scaleAspectFit` is what that costs:
   /// a wide screenshot letterboxes.
   ///
   /// Pointer-transparent throughout, so a tap on the picture is a tap on the
-  /// block — the theme's rule that every line a block drew is one target, and
+  /// block - the theme's rule that every line a block drew is one target, and
   /// the image is not an exception to it.
   final class ImageBoxView: UIView {
     let box: TermImageBox
-    /// Which planned line this box starts on — the cell's own arithmetic reads
+    /// Which planned line this box starts on - the cell's own arithmetic reads
     /// it back to place the frame.
     let lineIndex: Int
     private let label = UILabel()
@@ -687,7 +687,7 @@ extension TerminalRowCell {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    /// Everything the system offers on a selection except what would edit it —
+    /// Everything the system offers on a selection except what would edit it -
     /// this run is a rendering of somebody's session, not a document.
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
       action == #selector(copy(_:)) || action == #selector(selectAll(_:))

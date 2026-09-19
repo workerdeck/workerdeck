@@ -51,7 +51,7 @@ describe('the compaction boundary', () => {
     expect(itemHeight(compaction(null, 'c1', { preTokens: 148_000, postTokens: 32_000 }), m).exact).toBe(true)
   })
 
-  it('folds as its own block — it never joins a tool run or swallows a neighbour', () => {
+  it('folds as its own block - it never joins a tool run or swallows a neighbour', () => {
     const blocks = terminalBlocks([text('before'), compaction(), text('after', 'a2')])
     expect(blocks).toHaveLength(3)
     expect(blocks[1]).toMatchObject({ key: 'compaction:c1' })

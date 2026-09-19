@@ -5,7 +5,7 @@ import Testing
 
 /// What the fold and the height book cost at a size no one will hit by accident.
 ///
-/// Not a benchmark — a guard. The refold runs on **every applied event**,
+/// Not a benchmark - a guard. The refold runs on **every applied event**,
 /// streamed deltas included, and a transcript is append-only and unbounded, so
 /// an O(n) cost per token is a session that gets slower all afternoon and a bug
 /// nobody can point at. The cache exists to make the warm path proportional to
@@ -68,14 +68,14 @@ struct TerminalPerfTests {
     }
     let fold = milliseconds { _ = TerminalRows.build(items: next) }
 
-    // The warm path still walks the row array — that is the sum, and it is
+    // The warm path still walks the row array - that is the sum, and it is
     // cheap. What it must NOT do is re-wrap 16,000 rows' text, which is the
     // difference the cache buys.
     //
     // The ratio against `cold` is the weaker of the two claims now that a cold
     // build plans its misses in parallel (`TerminalHeightBook.lineCounts`): the
     // headroom this used to enjoy was partly the serial planner's, so the bound
-    // is `<` rather than the old `/3`. The sharper claim is the second one — a
+    // is `<` rather than the old `/3`. The sharper claim is the second one - a
     // warm build is a **fold plus a walk of equality checks**, so it must stay
     // within a small multiple of the fold it already had to do. Re-planning
     // even a fraction of sixteen thousand rows leaves that behind immediately.
@@ -95,7 +95,7 @@ struct TerminalPerfTests {
       let rows = TerminalRows.build(items: large)
       _ = TerminalHeightBook(rows: rows, metrics: metrics)
     }
-    // Four times the work, well under ten times the time — the fold's two
+    // Four times the work, well under ten times the time - the fold's two
     // pre-passes are hash lookups, and anything quadratic in there (a scan per
     // item looking for children, say) would show up here long before a user hit
     // it.

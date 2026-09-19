@@ -1,7 +1,7 @@
 # @workerdeck/react
 
 Headless React layer for WorkerDeck: the `useClaudeSession` hook plus a pure transcript
-reducer. No styling opinion — bring your own rendering, or use
+reducer. No styling opinion - bring your own rendering, or use
 [`@workerdeck/ui`](https://www.npmjs.com/package/@workerdeck/ui), the styled layer on top.
 
 Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). It sits between
@@ -48,12 +48,12 @@ function Panel({ sessionId }: { sessionId: string }) {
 }
 ```
 
-The hook attaches on mount, detaches on unmount, and survives reconnects — the underlying handle
+The hook attaches on mount, detaches on unmount, and survives reconnects - the underlying handle
 replays from the last seen seq, and the reducer ignores anything it has already applied.
 
 ### The transcript reducer, standalone
 
-The state machine is framework-free and exported directly — usable in tests, workers, or any
+The state machine is framework-free and exported directly - usable in tests, workers, or any
 non-React consumer of the event stream:
 
 ```ts
@@ -71,23 +71,23 @@ stream doesn't carry yet; events stay authoritative once they arrive.
 
 `TranscriptState` is everything a session panel needs to render:
 
-- `items` — the ordered transcript: `user`, `assistant_text` (with a `streaming` flag),
+- `items` - the ordered transcript: `user`, `assistant_text` (with a `streaming` flag),
   `thinking`, `tool_call` (input + eventual result), `turn_result`, and `notice` items.
   Streaming deltas accumulate in-place and are superseded by the full assistant message.
-- `pendingApprovals` — permission requests awaiting an approve/deny decision.
+- `pendingApprovals` - permission requests awaiting an approve/deny decision.
 - `status` / `statusDetail`, `model`, `cwd`, `sdkSessionId`, `permissionMode`.
-- `models` and `commands` — what the session can switch to / accepts (from `capabilities`).
-- `capabilities` — **the engine's capability record**, always present: the runner-reported copy
+- `models` and `commands` - what the session can switch to / accepts (from `capabilities`).
+- `capabilities` - **the engine's capability record**, always present: the runner-reported copy
   from the attach snapshot, else the protocol's static default for the engine. Render affordances
   from this rather than switching on the engine name; an absent capability means the control is
   *hidden*, never one that silently does nothing.
-- `session` — the whole attach snapshot, for the facts no event carries (profile, `apiKeySource`,
+- `session` - the whole attach snapshot, for the facts no event carries (profile, `apiKeySource`,
   `canBypassPermissions`, `createdAt`).
-- `contextUsage`, `rateLimits` (keyed by window; absent for API-key sessions — render nothing,
+- `contextUsage`, `rateLimits` (keyed by window; absent for API-key sessions - render nothing,
   not 0%) with `rateLimitsUpdatedAt`, `totalCostUsd` (session-cumulative), and `lastSeq` for
   replay dedupe.
 
-The reducer is pure and immutable: same events in, same state out — which is also how it is
+The reducer is pure and immutable: same events in, same state out - which is also how it is
 unit-tested. Keep rendering logic out of it. `rateLimitWindows(state)` and `scanPromptTokens(text)`
 are the other pure helpers here, for the same reason: ordered usage windows and `@file` /
 `/command` token recognition are string-and-shape work every client needs and every client should
@@ -106,7 +106,7 @@ const attachments = useAttachments(client, sessionId, {
   engine: state.engine,
 })
 // `@file` search rooted at the session's cwd. `available` is false when the
-// gateway serves no host files — don't advertise what isn't there.
+// gateway serves no host files - don't advertise what isn't there.
 const files = useHostFileSearch(client, state.cwd)
 
 attachments.add(pickedFiles) // uploads start immediately
@@ -124,13 +124,13 @@ demand):
 ```tsx
 const { handle } = useClaudeSession(client, sessionId)
 const { executions } = useToolCallHost(handle, {
-  tools: ['eval_script'], // allowlist — anything else the server asks for is refused
+  tools: ['eval_script'], // allowlist - anything else the server asks for is refused
   timeoutMs: 15_000,
   fetchText: (url) => myGatedFetch(url), // omit and the guest has no network at all
 })
 ```
 
-The host must ride **the hook's own `handle`** — the server bridges each call to the first attached
+The host must ride **the hook's own `handle`** - the server bridges each call to the first attached
 client, so a second, separately-created handle would sit idle while the real one gets the requests.
 `createToolCallHost` is the same logic without React. Results returned from a tab are untrusted
 input by construction: fine for the user's own data, never a source of server-authoritative state.
@@ -146,12 +146,12 @@ input by construction: fine for the user's own data, never a source of server-au
 
 - **`result.images` is the same idea for pictures, and it is set only when there are any.** The
   hook also attaches with `imageRefs`, so a `tool_result`'s base64 images arrive as addresses and
-  the reducer records `{ partIndex, mediaType, bytes, sourceSeq }` per picture — absent, never
+  the reducer records `{ partIndex, mediaType, bytes, sourceSeq }` per picture - absent, never
   empty, because an item that gained a field is an item every renderer re-measures (on iOS
   `ToolCallItem` is `Equatable` and half the row-plan cache key). Each entry carries its **own**
   `sourceSeq`: the result-level one is cleared by text hydration, and a reader who pressed "show
   everything" must still be able to load the screenshot. Raw base64 parts are still dropped on
-  arrival, as they always were — folding them into state would pin megabytes inside the transcript
+  arrival, as they always were - folding them into state would pin megabytes inside the transcript
   cache.
 
 - **Companions must ride the hook's own `handle`.** The server's tool bridge asks the *first
@@ -159,12 +159,12 @@ input by construction: fine for the user's own data, never a source of server-au
   will never be asked anything. `useAttachments`, `useHostFileSearch` and `useToolCallHost` all
   take the handle you already have.
 - **`TranscriptState.capabilities` is always populated**, engine record or protocol default. Render
-  every surface from it rather than branching on the engine name — that is what makes one component
+  every surface from it rather than branching on the engine name - that is what makes one component
   correct for all three engines.
 - **`useToolCallHost` refuses tool names outside its allow-list** (default `['eval_script']`). It is
   a grant, not a filter: every name you add is one this tab will execute on the gateway's say-so.
 - **`useOpenFiles` keeps `content` (disk) and `draft` (edits) apart, and `/fs/write` is conditional
-  always.** A 409 is a *choice* to offer the user — reload, keep mine, dismiss — never a toast, and
+  always.** A 409 is a *choice* to offer the user - reload, keep mine, dismiss - never a toast, and
   nothing but `revert` or an explicit reload may discard a draft.
 - **The recap is counted, never written.** `summarizeSince` returns numbers because generating
   prose would spend a turn on a summary nobody asked for, and would be worst exactly where it
@@ -172,7 +172,7 @@ input by construction: fine for the user's own data, never a source of server-au
 - **Detached transcripts stay warm by default.** `useClaudeSession` keeps a bounded, module-scope
   cache of the last few transcripts it held, so switching back to a session paints in the mount
   frame and re-attaches with `afterSeq`, replaying only what it missed. Entries are keyed by the
-  client's `identityKey` — gateway base URL plus auth headers — never the session id alone (a
+  client's `identityKey` - gateway base URL plus auth headers - never the session id alone (a
   session id is unique only within one gateway), and a cached `afterSeq` pointed at a log the
   server no longer has (a dormant rebuild, a restart) is detected off the attach frame
   (`staleAttach`) and discarded with a full resync, because that attach would otherwise deliver
@@ -182,5 +182,5 @@ input by construction: fine for the user's own data, never a source of server-au
 
 ## License
 
-MIT © Tobias Strebitzer — see
+MIT © Tobias Strebitzer - see
 [LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE).

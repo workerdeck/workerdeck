@@ -170,7 +170,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
             <AlertDialogContent>
               <AlertDialogTitle>Close this session?</AlertDialogTitle>
               <AlertDialogDescription>
-                The run is terminated on the server. You can pick it up later from “Resume a previous session” — the transcript is kept by
+                The run is terminated on the server. You can pick it up later from “Resume a previous session” - the transcript is kept by
                 the engine, not by the gateway.
               </AlertDialogDescription>
               <div className="mt-4 flex justify-end gap-2">

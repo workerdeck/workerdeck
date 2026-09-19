@@ -5,13 +5,13 @@ import SwiftUI
 ///
 /// Answering is an *allow* with a rewritten input: the original input plus an
 /// `answers` map keyed by question text, each value the chosen label (multi-select
-/// comma-joined) — the shape the CLI expects, mirroring the web dashboard's
+/// comma-joined) - the shape the CLI expects, mirroring the web dashboard's
 /// `QuestionPrompt`. The first option is the model's recommended one and is
 /// pre-selected for single-choice questions.
 struct QuestionPromptView: View {
   let request: PermissionRequest
   let questions: [UserQuestion]
-  /// How tall the scrolling body may get — see `PromptBodyScroll`. Three
+  /// How tall the scrolling body may get - see `PromptBodyScroll`. Three
   /// questions with four described options each is a screen and a half, and
   /// without this the Answer button was below the bottom edge.
   let maxBodyHeight: CGFloat
@@ -60,7 +60,7 @@ struct QuestionPromptView: View {
       }
     }
     // Same rule as the permission prompt: this card is the panel, not something
-    // nested inside one. Blue rather than orange — a question is not a warning.
+    // nested inside one. Blue rather than orange - a question is not a warning.
     .padding(14)
     .glassPanel(cornerRadius: 20, tint: .blue)
     .onAppear(perform: preselectRecommended)
@@ -123,7 +123,7 @@ struct QuestionPromptView: View {
           }
           if isSelected, let preview = option.preview, !preview.isEmpty {
             // Whole: a preview is the reason to pick this option, and the
-            // scroll — not a line limit — is what bounds the prompt now.
+            // scroll - not a line limit - is what bounds the prompt now.
             Text(preview)
               .font(.caption2.monospaced())
               .foregroundStyle(.secondary)

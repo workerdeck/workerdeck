@@ -16,14 +16,14 @@ public enum SessionActivityAction: Sendable, Equatable {
 
 /// The seam between the intent and the app that can actually answer it.
 ///
-/// The intents below are compiled into **both** the app and the widget extension — the extension
+/// The intents below are compiled into **both** the app and the widget extension - the extension
 /// needs the symbols to build `Button(intent:)`, the app needs them to perform. Only the app
 /// installs a handler, from `application(_:didFinishLaunchingWithOptions:)`: that runs on a
 /// scene-less background launch, where the SwiftUI `.task` never does.
 ///
 /// If the handler is nil the intent is being performed somewhere that cannot reach a gateway
-/// credential, and saying so is the only honest outcome. It should not happen — a
-/// `LiveActivityIntent` is performed by the app process — but a silent no-op on a tapped button
+/// credential, and saying so is the only honest outcome. It should not happen - a
+/// `LiveActivityIntent` is performed by the app process - but a silent no-op on a tapped button
 /// would be indistinguishable from an approval that vanished.
 @MainActor
 public enum SessionActivityActions {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// The box a tool result's image is drawn in, and the words drawn in it before
-/// the bytes arrive — the port of `packages/ui/src/components/terminal/image-box.ts`.
+/// the bytes arrive - the port of `packages/ui/src/components/terminal/image-box.ts`.
 ///
 /// Its own module, and pure, for `ResultPreview`'s reason with a constant
 /// standing where a string stood: the planner reserves these lines and the cell
@@ -13,9 +13,9 @@ import Foundation
 /// the renderer draws the lines it returned, so a row whose height depended on
 /// pixels nobody has fetched yet could not be planned at all. A box that does
 /// not depend on what is inside it is exact by definition, at the cost of some
-/// letterboxing — which is why `TerminalAudit` needs no new claim for it.
+/// letterboxing - which is why `TerminalAudit` needs no new claim for it.
 public enum TermImage {
-  /// Whole lines per image. 12, the same constant the web client uses — ≈ 240px
+  /// Whole lines per image. 12, the same constant the web client uses - ≈ 240px
   /// at an 18pt line: big enough that a screenshot is legible as *what it is*
   /// (the whole reason images became visible at all), small enough that a call
   /// returning four of them is not a screenful.
@@ -23,7 +23,7 @@ public enum TermImage {
 
   /// What the box says before the fetch lands.
   ///
-  /// `bytes` is the decoded size the gateway stamped on the reference — this
+  /// `bytes` is the decoded size the gateway stamped on the reference - this
   /// client holds no bytes at all until it asks for them, the same reason
   /// `total_chars` rides beside a truncated head. `TermFmt.bytes` rather than a
   /// spelling of its own: the theme says "336.0 KB" everywhere else.
@@ -31,7 +31,7 @@ public enum TermImage {
     "image · \(TermFmt.bytes(bytes))"
   }
 
-  /// What it says when the fetch failed — a stale address after a dormant wake
+  /// What it says when the fetch failed - a stale address after a dormant wake
   /// (the route 404s rather than serving another call's pixels), a gateway too
   /// old to know the route, a dropped tailnet.
   ///

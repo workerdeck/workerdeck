@@ -102,7 +102,7 @@ type Token = { kind: 'word' | 'space'; w: number; exact: boolean }
 const TAB_SIZE = 2
 
 // Break after these unless a digit follows; `?` is here because Chrome breaks long URLs after it (verified against real break rects).
-const BREAK_AFTER = new Set(['-', '–', '—', '?'])
+const BREAK_AFTER = new Set(['-', '-', '-', '?'])
 
 const PLAIN_ASCII = /^[\x20-\x7e]*$/
 
@@ -181,7 +181,7 @@ function tokenize(line: string): Token[] {
     const { w, exact } = clusterCells(segment)
     const cp = segment.codePointAt(0) ?? 0
     if (isWide(cp) || PICTOGRAPHIC.test(segment)) {
-      // Each wide cluster is its own token — a break may fall between any two.
+      // Each wide cluster is its own token - a break may fall between any two.
       flushWord()
       tokens.push({ kind: 'word', w, exact })
       col += w

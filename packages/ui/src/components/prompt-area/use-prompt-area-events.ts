@@ -165,9 +165,9 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
       }
 
       // When markdown mode is on, prefer the richest clipboard flavor:
-      //   1. text/markdown — some apps (e.g. Slack) hand out markdown directly,
+      //   1. text/markdown - some apps (e.g. Slack) hand out markdown directly,
       //      preserving nested lists that their text/plain flattens.
-      //   2. text/html     — convert web/Notion/Docs/GitHub HTML to markdown.
+      //   2. text/html     - convert web/Notion/Docs/GitHub HTML to markdown.
       // Otherwise (markdown off, or neither present) fall back to plain text.
       let text = ''
       if (markdownEnabled) {
@@ -180,7 +180,7 @@ export function usePromptAreaEvents(deps: EventHandlerDeps): PromptAreaEventHand
         } else {
           const html = e.clipboardData.getData('text/html')
           // A converter failure (e.g. stack overflow on pathologically deep
-          // nesting) must not drop the paste — leave text empty so the
+          // nesting) must not drop the paste - leave text empty so the
           // text/plain fallback below still runs.
           if (html) {
             try {

@@ -1,4 +1,4 @@
-// Extension-host bundle. The webview bundle is Vite's job (vite.config.ts) —
+// Extension-host bundle. The webview bundle is Vite's job (vite.config.ts) -
 // this one is Node-side only: TreeView, FSP, the bridge's real fetch/ws.
 import esbuild from 'esbuild'
 
@@ -17,7 +17,7 @@ const options = {
   target: 'node18',
   sourcemap: true,
   // Resolve workspace deps to their TS source, same as every dev entry in the
-  // repo — dev never builds packages.
+  // repo - dev never builds packages.
   conditions: ['@workerdeck/source'],
   external: [
     'vscode',

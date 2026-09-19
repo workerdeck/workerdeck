@@ -95,7 +95,7 @@ function tryLoad(file: string, root: string): Omit<Resolution, 'expiresAt'> | un
   } catch {
     return undefined
   }
-  // A symlinked project file is skipped, not followed — the agent writes this tree.
+  // A symlinked project file is skipped, not followed - the agent writes this tree.
   if (!stat.isFile() || stat.size > MAX_PROJECT_FILE_BYTES) {
     return undefined
   }

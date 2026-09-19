@@ -220,7 +220,7 @@ describe('profile management', () => {
     expect(outside.status).toBe(403)
     expect(((await outside.json()) as { error: string }).error).toMatch(/codexHome is outside the allowed roots/)
 
-    // No CODEX_HOME names no credential store of its own — it runs on the server's own environment.
+    // No CODEX_HOME names no credential store of its own - it runs on the server's own environment.
     const inherited = await post(port, { name: 'codex-env', engine: 'codex' })
     expect(inherited.status).toBe(200)
   })

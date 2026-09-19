@@ -29,7 +29,7 @@ class ResumableRunner implements Runner {
 
   readonly sent: string[] = []
 
-  // Both real engines name their session and send `prompt` unconditionally on start — the behaviour under test.
+  // Both real engines name their session and send `prompt` unconditionally on start - the behaviour under test.
   async start(): Promise<void> {
     this.#sdkSessionId = this.config.resume ?? 'engine-session-1'
     if (this.config.prompt) {
@@ -336,7 +336,7 @@ describe('sessions that survive a restart', () => {
     expect(woken.info().title).toBe('Summarize the repo')
   })
 
-  it('writes nothing for an engine that cannot resume — it would come back empty', async () => {
+  it('writes nothing for an engine that cannot resume - it would come back empty', async () => {
     const store = await stateDir().then((dir) => createFileSessionStore({ dir }))
     const gateway = await startGateway(store)
     const session = await create(gateway.base, 'plain')

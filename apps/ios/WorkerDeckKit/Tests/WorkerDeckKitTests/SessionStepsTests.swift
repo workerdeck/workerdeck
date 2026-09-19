@@ -3,12 +3,12 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The steps under a session row — the port of
+/// The steps under a session row - the port of
 /// `packages/ui/test/session-steps.test.ts`.
 ///
 /// Steps are sub-agents only: an untyped record is a task, and tasks live in
 /// the selected session's own surface. The phone's list re-derived this inline
-/// and got it wrong — a `failed` agent drew a checkmark because the only branch
+/// and got it wrong - a `failed` agent drew a checkmark because the only branch
 /// was on `running`.
 @Suite("SessionSteps")
 struct SessionStepsTests {
@@ -69,7 +69,7 @@ struct SessionStepsTests {
     let steps = sessionSteps(
       info(subagents: [
         agent("a1"),
-        // A blank `agentType` is not an agent — the trimming rule.
+        // A blank `agentType` is not an agent - the trimming rule.
         SubagentInfo(
           toolUseId: "a2", agentType: "   ", description: "hm", status: .done, startedAt: 1,
           toolCount: 0),
@@ -127,7 +127,7 @@ struct SessionStepsTests {
   }
 
   /// The two spellings of one count. The phone had a hand-rolled copy of this
-  /// on the row's chip beside `StepToggle`'s — one derivation now.
+  /// on the row's chip beside `StepToggle`'s - one derivation now.
   @Test("the count reads live while any are running and settles to a total")
   func countSpellings() {
     #expect(stepCountLabel(running: 1, total: 3) == "1/3")
@@ -152,7 +152,7 @@ struct SessionStepsTests {
       id: "s2", status: .idle, cwd: "/work", createdAt: 1, lastSeq: 0, pendingPermissionCount: 0,
       meta: ["jobId": .string("job-1")])
     #expect(isJobRun(job))
-    // The key must be a *string* — a number there is somebody else's metadata.
+    // The key must be a *string* - a number there is somebody else's metadata.
     let notAJob = SessionInfo(
       id: "s3", status: .idle, cwd: "/work", createdAt: 1, lastSeq: 0, pendingPermissionCount: 0,
       meta: ["jobId": .number(7)])

@@ -173,7 +173,7 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
     if (info.capabilities?.clearContext) {
       items.push({
         label: '$(clear-all) Clear context',
-        detail: 'Start a fresh conversation — the old one stays resumable',
+        detail: 'Start a fresh conversation - the old one stays resumable',
         run: () => this.#clearSession(hostId, sessionId),
       })
     }
@@ -226,7 +226,7 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
         modal: true,
         detail:
           'The session keeps running and starts a fresh conversation. The old one is not ' +
-          'deleted — it stays resumable from "Resume a previous session".',
+          'deleted - it stays resumable from "Resume a previous session".',
       },
       'Clear context',
     )
@@ -245,7 +245,7 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
     try {
       await client.updateSession(sessionId, { title: title.trim() || null })
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: rename failed — ${err instanceof Error ? err.message : String(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: rename failed - ${err instanceof Error ? err.message : String(err)}`)
     }
     await this.#model.refresh()
   }
@@ -271,7 +271,7 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
     try {
       await client.deleteSession(sessionId)
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: delete failed — ${err instanceof Error ? err.message : String(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: delete failed - ${err instanceof Error ? err.message : String(err)}`)
     }
     await this.#delegate.clearPanelIfActive(sessionId)
     await this.#model.refresh()

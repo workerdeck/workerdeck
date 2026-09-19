@@ -6,7 +6,7 @@ import { subagentItems, type ToolCallItem } from '../terminal/blocks.ts'
 // The sub-agent frame machine: which agent frame is on screen, how it is entered (a host
 // `openSubagent` request or a Task row in the transcript), how it is left (Escape, the strip's
 // Back, or the host withdrawing), and what the transcript reveals on the way out. The frame
-// round-trips through the host's URL — the anti-loop rules live in GOTCHAS ("The sub-agent
+// round-trips through the host's URL - the anti-loop rules live in GOTCHAS ("The sub-agent
 // frame round-trips through the URL"); here they mean: entry keys on the nonce alone, and the
 // report is deduped through a ref, so an echo of our own report is inert on arrival.
 export function useSubagentFrame(options: {
@@ -51,7 +51,7 @@ export function useSubagentFrame(options: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSubagentNonce])
 
-  // A reveal targets the root transcript, so it closes whatever frame is open — without the
+  // A reveal targets the root transcript, so it closes whatever frame is open - without the
   // return reveal, which would fight the requested one.
   const revealNonce = reveal?.nonce
   useEffect(() => {

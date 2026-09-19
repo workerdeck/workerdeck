@@ -2,7 +2,7 @@ import type { CreateSessionRequest } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import type { AuthContext } from '../services/auth.ts'
 
-// The one create-validation ladder, run by both create doors — `POST /sessions` and the
+// The one create-validation ladder, run by both create doors - `POST /sessions` and the
 // `session` block of `POST /jobs`. The scope design claims the two are indistinguishable, so
 // the order and the refusals have to come from a single place rather than two copies that can
 // drift. Mutates `req`: strips inert fields and pins the resolved profile name.

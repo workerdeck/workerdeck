@@ -64,7 +64,7 @@ agentConfig = {
 const { port: bound } = await gateway.server.listen(port, host).catch((error: unknown) => {
   if ((error as { code?: string }).code === 'EADDRINUSE') {
     console.error(
-      `\n  Port ${port} is already in use — something else is listening on ${host}:${port}.\n` +
+      `\n  Port ${port} is already in use - something else is listening on ${host}:${port}.\n` +
         `  Find it with:  lsof -nP -iTCP:${port} -sTCP:LISTEN\n` +
         `  Or pick another:  PORT=${port + 1} pnpm dev\n`,
     )

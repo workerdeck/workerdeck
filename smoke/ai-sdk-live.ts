@@ -1,4 +1,4 @@
-// pnpm smoke:live [provider] [model-id]   — spends tokens, never part of `pnpm test`.
+// pnpm smoke:live [provider] [model-id]   - spends tokens, never part of `pnpm test`.
 //
 // The park → host-execute → message-state-replay loop against a real provider: what the fake-model unit tests cannot
 // validate is real tool-call payload shapes and provider event drift.
@@ -27,7 +27,7 @@ const runner = new AiSdkRunner({
   languageModel: factory(modelId),
   instructions:
     'You evaluate sales leads. Use the eval_script tool to compute answers from files in the ' +
-    'sandbox VFS — never guess numbers. The sandbox exposes vfs.read(path), vfs.write(path, text), ' +
+    'sandbox VFS - never guess numbers. The sandbox exposes vfs.read(path), vfs.write(path, text), ' +
     'and vfs.list(dir). The value of the last expression in your script is returned to you.',
   tools: {
     eval_script: tool({
@@ -96,7 +96,7 @@ while (!completed && Date.now() < deadline) {
       limits: { timeoutMs: 5000 },
     })
     if (dispatch.status !== 'settled') {
-      console.log('   dispatch is pending (deferred backend) — not expected for QuickJS')
+      console.log('   dispatch is pending (deferred backend) - not expected for QuickJS')
       continue
     }
     const result = dispatch.result
@@ -108,7 +108,7 @@ while (!completed && Date.now() < deadline) {
       runner.resolveToolCall(call.toolCallId, { type: 'json', value: result.output })
     } else {
       console.log(`   ⚠️  sandbox failed (${result.reason}): ${result.error}`)
-      // Feed the failure back so the model can adapt — this path is worth seeing.
+      // Feed the failure back so the model can adapt - this path is worth seeing.
       runner.resolveToolCall(call.toolCallId, { type: 'text', value: `${result.reason}: ${result.error}` }, { isError: true })
     }
   }
@@ -129,7 +129,7 @@ console.log(`  VFS after the run: ${JSON.stringify(vfs.snapshot())}`)
 // 4173 / 12 = 347.75 -> 348. The model must have run code to know this.
 console.log('\nExpected answer: 348 (4173 / 12, rounded)')
 if (executions === 0) {
-  console.error('\n⚠️  The model answered WITHOUT calling the tool — the loop was never exercised.\n')
+  console.error('\n⚠️  The model answered WITHOUT calling the tool - the loop was never exercised.\n')
   process.exit(1)
 }
 console.log('\n✅ Live loop exercised: park → sandbox execute → message-state replay → completion.\n')

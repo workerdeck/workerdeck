@@ -2,19 +2,19 @@ import WorkerDeckKit
 import SwiftUI
 
 /// Renders `@file` and `/command` tokens the way the CLI writes them: monospace
-/// and tinted, no background — a bubble already has one, and a second fill inside
+/// and tinted, no background - a bubble already has one, and a second fill inside
 /// it reads as a button.
 ///
 /// The recognition rules are `PromptTokens` in the kit, where they are unit-tested
 /// and shared with the composer, so a token looks the same while it is being typed
 /// and after it is sent. This file only decides what the styling *is*.
 enum PromptTokenStyle {
-  /// Style a plain, unparsed string — user messages, which are literal text.
+  /// Style a plain, unparsed string - user messages, which are literal text.
   static func styled(_ text: String) -> AttributedString {
     apply(to: AttributedString(text))
   }
 
-  /// Style an already-parsed string — assistant prose, after inline markdown.
+  /// Style an already-parsed string - assistant prose, after inline markdown.
   ///
   /// Scanning happens over the *rendered* characters rather than the source, so
   /// offsets survive markdown having eaten its own syntax (`**bold**` → `bold`).
@@ -39,13 +39,13 @@ enum PromptTokenStyle {
   /// middle of a sentence shouldn't outweigh it.
   static let font: Font = .system(.callout, design: .monospaced)
 
-  /// Two tokens, two meanings — a file is a reference, a command is an action —
+  /// Two tokens, two meanings - a file is a reference, a command is an action -
   /// so they are told apart by hue rather than by shape alone.
   static func color(_ kind: PromptToken.Kind) -> Color {
     switch kind {
     case .file: return .accentColor
     case .command: return .purple
-    // Unreachable from `scan` (which skips skills — `$` is ordinary prose too
+    // Unreachable from `scan` (which skips skills - `$` is ordinary prose too
     // often to colour on sight) but the draft editor styles the token it is
     // completing, and a distinct colour there says "this is not a command".
     case .skill: return .orange

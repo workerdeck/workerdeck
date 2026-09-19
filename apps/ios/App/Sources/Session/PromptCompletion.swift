@@ -4,14 +4,14 @@ import Observation
 
 /// Drives the suggestion list under the composer, for all three prompt tokens.
 ///
-/// The text half — finding and replacing a token — is `PromptTokens` in
+/// The text half - finding and replacing a token - is `PromptTokens` in
 /// `WorkerDeckKit`, where it can be unit-tested; this is the part that needs a
 /// client, a clock, and the session's capabilities.
 ///
 /// The three behave nothing alike, which is why they share a model rather than a
 /// code path. `/commands` arrive with the `capabilities` event and `$skills`
 /// with the `skills` event, so filtering both is local, synchronous and
-/// complete — and they stay separate keys because codex itself separates them.
+/// complete - and they stay separate keys because codex itself separates them.
 /// `@files` are a search
 /// against the host filesystem: debounced and single-flight, so a fast typist
 /// makes one request rather than eight, and a gateway without host files answers
@@ -23,7 +23,7 @@ final class PromptCompletionModel {
   enum Suggestion: Identifiable, Equatable {
     case file(HostFileMatch)
     case command(SlashCommandInfo)
-    /// A skill, offered under `$` — codex's own sigil. Resolves to prose, not
+    /// A skill, offered under `$` - codex's own sigil. Resolves to prose, not
     /// to a token: see `SkillInfo`, no engine parses `$skillname` as syntax.
     case skill(SkillInfo)
 
@@ -35,7 +35,7 @@ final class PromptCompletionModel {
       }
     }
 
-    /// What replaces the token — without its prefix, which `PromptTokens` adds.
+    /// What replaces the token - without its prefix, which `PromptTokens` adds.
     /// For a skill this is the whole literal, prefix included (there is none).
     var value: String {
       switch self {
@@ -46,7 +46,7 @@ final class PromptCompletionModel {
     }
 
     /// What a picked skill types: the engine's own suggested opener where it
-    /// declared one, otherwise `$name` — codex's native way of referring to a
+    /// declared one, otherwise `$name` - codex's native way of referring to a
     /// skill in prompt text (its `skill-creator` documents `Use $skill-x at
     /// /path/to/skill-x to …`, and its bundled prompts read "Use $pdf to …").
     /// Always ends in a space, so the caret lands ready for the rest.
@@ -58,13 +58,13 @@ final class PromptCompletionModel {
   }
 
   private(set) var suggestions: [Suggestion] = []
-  /// True while a token is active — the composer shows the list only then.
+  /// True while a token is active - the composer shows the list only then.
   private(set) var isActive = false
 
   /// Slash commands from `capabilities`; empty until that event lands.
   var commands: [SlashCommandInfo] = []
   /// Skills from the `skills` event; empty until that lands (for codex, on the
-  /// session's first turn — listing needs a live child).
+  /// session's first turn - listing needs a live child).
   var skills: [SkillInfo] = []
   /// Host-file search, absent until the session's cwd is known.
   var scope: HostFileScope? {
@@ -138,7 +138,7 @@ final class PromptCompletionModel {
   // MARK: - The three halves
 
   /// Local and immediate. Matches on the command name, its aliases, and the bare
-  /// name of a namespaced one — typing "wrapup" should find "dev:wrapup".
+  /// name of a namespaced one - typing "wrapup" should find "dev:wrapup".
   private func showCommands(matching query: String) {
     task?.cancel()
     task = nil
@@ -152,7 +152,7 @@ final class PromptCompletionModel {
       .map(Suggestion.command)
   }
 
-  /// Local and immediate, like commands — but its own list under its own key.
+  /// Local and immediate, like commands - but its own list under its own key.
   /// `$` is codex's sigil for skills; `/` stays the CLI's commands.
   private func showSkills(matching query: String) {
     task?.cancel()
@@ -186,7 +186,7 @@ final class PromptCompletionModel {
         suggestions = response.matches.map(Suggestion.file)
       } catch let error as WorkerClientError where error.statusCode == 404 {
         // No host files on this gateway (or the cwd isn't under a root). Stop
-        // asking — the answer will not change while this session is open.
+        // asking - the answer will not change while this session is open.
         filesUnsupported = true
         cancel()
       } catch {

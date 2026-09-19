@@ -284,7 +284,7 @@ function SessionRowItem({
           {onClearContext && info.capabilities?.clearContext ? (
             <RowAction
               label="Clear context"
-              title="Clear the conversation — the session keeps running and the old conversation stays resumable"
+              title="Clear the conversation - the session keeps running and the old conversation stays resumable"
               onClick={() => onClearContext(row)}
             >
               <Eraser className="size-3 text-fg-3" />

@@ -13,8 +13,8 @@ function chip(display: string, value = display): Segment {
 // The value-sync effect uses segmentsContentEqual to decide whether the
 // contentEditable already shows the incoming value: equal means "adopt, don't
 // rebuild" (a rebuild churns the caret), unequal means a genuine external
-// change that must render. A DOM read arrives re-chunked — decorations split
-// text nodes and each <br> reads back as its own "\n" segment — so equality
+// change that must render. A DOM read arrives re-chunked - decorations split
+// text nodes and each <br> reads back as its own "\n" segment - so equality
 // must ignore segmentation while never ignoring content.
 describe('segmentsContentEqual', () => {
   it('treats a decoration-split DOM read as equal to the merged model', () => {

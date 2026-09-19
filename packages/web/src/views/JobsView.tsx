@@ -58,7 +58,7 @@ export function QueueStatsStrip({ stats }: { stats: QueueStats }) {
       ) : null}
       {stats.paused ? (
         <Badge variant="warning" dot>
-          Paused — daily budget exhausted
+          Paused - daily budget exhausted
         </Badge>
       ) : null}
     </div>
@@ -122,7 +122,7 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
       <RunFormFields
         form={form}
         sessions={sessions}
-        promptLabel="Prompt (the task — runs unattended)"
+        promptLabel="Prompt (the task - runs unattended)"
         extras={<QuestionsField form={form} />}
         actions={
           <>
@@ -179,7 +179,7 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
         </label>
       )}
       <p className="text-label text-fg-4">
-        Unattended runs still surface permission prompts — the job&apos;s page is read-only, so answer them from the session itself, or pick
+        Unattended runs still surface permission prompts - the job&apos;s page is read-only, so answer them from the session itself, or pick
         a mode that doesn&apos;t ask. Unanswered prompts deny after the server&apos;s timeout. With Questions set to Ask, webhook deliveries
         carry the full question so a controller can answer via <code className="font-mono">POST /sessions/:id/permissions/:requestId</code>.
       </p>
@@ -221,7 +221,7 @@ export function JobsView() {
           <p className="text-body-sm text-fg-3">The server has no job queue configured.</p>
           <p className="max-w-md text-label text-fg-4">
             Pass <code className="font-mono">queue: {'{ maxConcurrency, … }'}</code> to{' '}
-            <code className="font-mono">createWorkerServer</code> — the dev server enables it by default.
+            <code className="font-mono">createWorkerServer</code> - the dev server enables it by default.
           </p>
         </>
       ) : (

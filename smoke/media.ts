@@ -1,4 +1,4 @@
-// pnpm smoke:media [image|pdf|text] [--engine codex]   — spends tokens, never part of `pnpm test`.
+// pnpm smoke:media [image|pdf|text] [--engine codex]   - spends tokens, never part of `pnpm test`.
 //
 // generated file → POST /sessions/:id/attachments → user_message(attachmentIds) → Runner → CLI → the model actually
 // describing what it was shown. The fakes in `pnpm test` prove the server builds the right content blocks but not that
@@ -6,7 +6,7 @@
 //
 // The refusal is a case too, and both halves are read off `ENGINE_CAPABILITIES[engine].attachments` rather than a
 // hard-coded engine name: a kind the record forswears must be refused with 415 and a message naming the engine, and
-// one it claims must reach the model — so a record change needs no edit here.
+// one it claims must reach the model - so a record change needs no edit here.
 //
 // The files are generated, not committed, so the repo carries no binaries and the magic words cannot leak into the
 // prompt.
@@ -60,7 +60,7 @@ function solidPng(size: number, [r, g, b]: [number, number, number]): Buffer {
   ])
 }
 
-// A one-page PDF showing `text`. Offsets are computed as the objects are laid out — a hand-guessed xref is the usual
+// A one-page PDF showing `text`. Offsets are computed as the objects are laid out - a hand-guessed xref is the usual
 // reason a minimal PDF is rejected.
 function onePagePdf(text: string): Buffer {
   const stream = `BT /F1 36 Tf 60 500 Td (${text}) Tj ET`
@@ -139,7 +139,7 @@ if (cases.length === 0) {
 
 const ACCEPTED: readonly string[] = ENGINE_CAPABILITIES[ENGINE as 'claude'].attachments
 
-// A single declared profile is implicit on create, so the codex leg sends no profile name — but the profile must
+// A single declared profile is implicit on create, so the codex leg sends no profile name - but the profile must
 // exist: the engine is a property of it, not of the request.
 const server = createWorkerServer({
   allowUnauthenticated: true,
@@ -152,13 +152,13 @@ const client = new WorkerDeckClient({
   WebSocketImpl: WebSocket as unknown as typeof globalThis.WebSocket,
 })
 
-console.log(`\nAttachment smoke — real ${ENGINE} engine on 127.0.0.1:${port}`)
+console.log(`\nAttachment smoke - real ${ENGINE} engine on 127.0.0.1:${port}`)
 console.log(`accepts: ${ACCEPTED.join(', ')}`)
 console.log('='.repeat(60))
 
 const session = await client.createSession({
   cwd: '/tmp',
-  // The cheap model of each lineup — this smoke tests the wire, not the model.
+  // The cheap model of each lineup - this smoke tests the wire, not the model.
   ...(ENGINE === 'codex' ? { model: 'gpt-5.6-luna' } : {}),
 })
 const handle = client.attach(session.id)
@@ -200,7 +200,7 @@ async function ask(prompt: string, attachmentIds: string[]): Promise<string> {
   })
 }
 
-// Raw `fetch` rather than `client.uploadAttachment`, which throws the status away — and the status is half the claim:
+// Raw `fetch` rather than `client.uploadAttachment`, which throws the status away - and the status is half the claim:
 // 415 says "wrong kind", 400/500 says the route failed to cope.
 async function expectRefused(testCase: Case): Promise<string | null> {
   const url = `http://127.0.0.1:${port}/v1/sessions/${session.id}/attachments?name=${encodeURIComponent(testCase.name)}`
@@ -224,7 +224,7 @@ let failures = 0
 for (const testCase of cases) {
   const refuses = !ACCEPTED.includes(testCase.kind)
   process.stdout.write(
-    `\n${testCase.kind.padEnd(6)} ${testCase.name} (${testCase.data.length} bytes) ` + `${refuses ? '— expected refusal ' : ''}... `,
+    `\n${testCase.kind.padEnd(6)} ${testCase.name} (${testCase.data.length} bytes) ` + `${refuses ? '- expected refusal ' : ''}... `,
   )
   try {
     if (refuses) {

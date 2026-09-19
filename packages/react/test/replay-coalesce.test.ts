@@ -92,7 +92,7 @@ describe('replay coalescing is unobservable', () => {
     expect(fold(coalesce(full))).toEqual(fold(full))
   })
 
-  it('never drops the highest-seq event — the replay hold depends on it', () => {
+  it('never drops the highest-seq event - the replay hold depends on it', () => {
     for (const tail of [
       usage(9),
       { type: 'rate_limit', info: limit('five_hour', 9) } as SessionEventBody,
@@ -105,7 +105,7 @@ describe('replay coalescing is unobservable', () => {
     }
   })
 
-  it('leaves transcript content strictly alone — the fold is order-dependent', () => {
+  it('leaves transcript content strictly alone - the fold is order-dependent', () => {
     const full = seqd([
       { type: 'user_message', message: { role: 'user', content: 'hi' }, parentToolUseId: null },
       {

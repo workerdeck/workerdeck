@@ -3,30 +3,30 @@ import Foundation
 /// What a press opens, as a type rather than a string.
 ///
 /// It was `String`, and that was a trap with a name: a block already carries a
-/// `key` — its **row identity**, produced by the fold and mirrored in
-/// `packages/ui`'s `blocks.ts`, used for diffing and for the plan cache — and
+/// `key` - its **row identity**, produced by the fold and mirrored in
+/// `packages/ui`'s `blocks.ts`, used for diffing and for the plan cache - and
 /// those two namespaces coincide for only two of the five shapes a block can
 /// take. A `.item` tool call's row key is `toolCall:<id>` while what opens it is
 /// `call:<id>`; a run of one is *drawn as the call* (see
 /// ``TerminalPlanner/planRun``), so its `run:<id>` opens nothing at all. The
-/// obvious call — `expansion.isOpen(block.key)` — was therefore wrong more often
+/// obvious call - `expansion.isOpen(block.key)` - was therefore wrong more often
 /// than it was right, and it cost a real bug: an expanded lone `Bash` banded
 /// nothing on the rail.
 ///
 /// Typed, that call no longer compiles. Row keys stay `String` (web parity is
 /// untouched), and ``expansionKeys(of:)-4ubvz`` is the only producer of these.
 public enum ExpansionKey: Hashable, Sendable {
-  /// A folded run's summary line, by its first call's id — stable as the run
+  /// A folded run's summary line, by its first call's id - stable as the run
   /// grows, the same anchor the fold keys the block by.
   case run(String)
   /// A folded `Task` header, by the task call's id.
   case task(String)
   /// One tool call's result.
   case call(String)
-  /// A sub-agent's brief — the spawning call's `prompt`, by the task's id.
+  /// A sub-agent's brief - the spawning call's `prompt`, by the task's id.
   /// Clipped to ``TerminalPlanner/briefLines`` when closed, the whole
-  /// instruction when open. One key serves both places the brief draws — the
-  /// frame's first row and the inline task expansion — because they are the
+  /// instruction when open. One key serves both places the brief draws - the
+  /// frame's first row and the inline task expansion - because they are the
   /// same row about the same task; on the web the twin state is component-local
   /// `useState` in `BriefRow`, which this renderer cannot afford (a height the
   /// book does not know is a frame the layout gets wrong).
@@ -34,7 +34,7 @@ public enum ExpansionKey: Hashable, Sendable {
 }
 
 extension ExpansionKey: CustomStringConvertible {
-  /// The old wire spelling, kept for messages and for a deterministic sort —
+  /// The old wire spelling, kept for messages and for a deterministic sort -
   /// never for identity, which is the case itself.
   public var description: String {
     switch self {
@@ -50,21 +50,21 @@ extension ExpansionKey: CustomStringConvertible {
 ///
 /// The web client keeps this in component-local `useState` and gets away with
 /// it: an expanded row is mounted, and the browser measures what it draws. This
-/// renderer refuses to do that — every frame comes from `TerminalHeightBook`,
+/// renderer refuses to do that - every frame comes from `TerminalHeightBook`,
 /// so **a height the book does not know about is a frame the layout gets
 /// wrong**, and the row is clipped or overlaps its neighbour.
 ///
 /// **The divergence is decided and permanent**, and is written up on the other
 /// side too (`packages/ui/src/components/terminal/height.ts`, first invariant):
 /// closing it in either direction costs one client its central simplification.
-/// It is also the *reason* the rail here can be expansion-aware — a band over
+/// It is also the *reason* the rail here can be expansion-aware - a band over
 /// the region you opened, a failed member of an open run marking on its own
-/// line — and the web rail cannot. Two clients, one rule, different amounts of
+/// line - and the web rail cannot. Two clients, one rule, different amounts of
 /// it visible.
 ///
 /// So expansion lives beside the rows and is fed into the planner. That
 /// deliberately relaxes `TerminalPlan.swift`'s first invariant ("only the
-/// collapsed state is ever planned") — the relaxation is the whole feature, and
+/// collapsed state is ever planned") - the relaxation is the whole feature, and
 /// it is why the budgets in ``ResultPreview/expandedChars`` exist rather than
 /// letting an expanded row render a hundred thousand characters into a single
 /// virtual row.
@@ -72,17 +72,17 @@ extension ExpansionKey: CustomStringConvertible {
 /// ``full`` and ``pending`` are **call ids, not keys**, and that is the shape of
 /// the thing rather than a shortcut: there is no such state as a fully-expanded
 /// run. It also deletes the prefix surgery that used to turn one key into
-/// another — a `String(key.dropFirst("full:".count))` in two files, which is
+/// another - a `String(key.dropFirst("full:".count))` in two files, which is
 /// exactly the sort of thing a type is for.
 ///
 /// ``pending`` is the third state, and it exists because a truncated result's
 /// press cannot be answered synchronously: the replay delivered a head, so "show
 /// everything" is a network round trip. Planning from `total_chars` was the
-/// alternative and is refused — it invents a line count for text nobody has
+/// alternative and is refused - it invents a line count for text nobody has
 /// seen and then corrects it by thousands of points mid-scroll, which is the
 /// estimate-and-correct model this renderer was built not to be. So the press
 /// enters `pending`, the planner draws a line saying what is in flight, and the
-/// fetched text arrives as a **mutation of the item** — one row misses the plan
+/// fetched text arrives as a **mutation of the item** - one row misses the plan
 /// cache, one row re-plans, and the planner is never asked about text it does
 /// not have.
 public struct TerminalExpansion: Equatable, Sendable {
@@ -111,7 +111,7 @@ public struct TerminalExpansion: Equatable, Sendable {
   public func isFetching(callId: String) -> Bool { pending.contains(callId) }
 
   /// The reader pressed "fetch the rest". Returns `true` when this is a new
-  /// request — the caller starts the fetch on that, so a second press on a row
+  /// request - the caller starts the fetch on that, so a second press on a row
   /// already waiting does not open a second connection.
   @discardableResult
   public mutating func beginFetch(callId: String) -> Bool {
@@ -125,20 +125,20 @@ public struct TerminalExpansion: Equatable, Sendable {
   ///
   /// An id the reader closed in the meantime is **not** promoted: closing forgets
   /// the request, and re-opening should not reveal a result the reader has since
-  /// walked away from. The hydrated text is untouched either way — it lives on
+  /// walked away from. The hydrated text is untouched either way - it lives on
   /// the item, not here.
   public mutating func finishFetch(callId: String) {
     guard pending.remove(callId) != nil else { return }
     full.insert(callId)
   }
 
-  /// Apply a press. Returns `true` when it *opened* something — the caller uses
+  /// Apply a press. Returns `true` when it *opened* something - the caller uses
   /// that to decide whether the reader needs bringing back to the row's first
   /// line, which is a one-directional courtesy: a row already in view never
   /// moves, and closing one never scrolls.
   /// - Parameter subtree: every key inside the block this press landed on
   ///   (`expansionKeys(of:)`). Used only when a **container** closes, and then
-  ///   it closes with it — see ``close(_:subtree:)``. Passing nothing keeps the
+  ///   it closes with it - see ``close(_:subtree:)``. Passing nothing keeps the
   ///   old behaviour, which is what the audit and the tests that predate this
   ///   want.
   @discardableResult
@@ -161,13 +161,13 @@ public struct TerminalExpansion: Equatable, Sendable {
     }
   }
 
-  /// Close a row, and — for a container — everything inside it.
+  /// Close a row, and - for a container - everything inside it.
   ///
   /// **Collapsing a chain of tool calls collapses the chain.** Without this the
   /// keys of the rows it hides stay in ``open``, so re-opening the run hands
   /// back a screen the reader collapsed precisely to be rid of: six results,
-  /// each in full. The web client gets this for free and by accident — its
-  /// expansion is component-local `useState` and dies with the unmounted row —
+  /// each in full. The web client gets this for free and by accident - its
+  /// expansion is component-local `useState` and dies with the unmounted row -
   /// and this renderer holds expansion beside the rows on purpose (a height the
   /// book does not know is a frame the layout gets wrong), so it has to say the
   /// same thing out loud.
@@ -179,7 +179,7 @@ public struct TerminalExpansion: Equatable, Sendable {
   /// A `.call` never takes a subtree with it, and that guard is load-bearing
   /// rather than defensive: the subtree handed in is the whole **block**, so a
   /// call closing "its" subtree would close every sibling result in the same
-  /// run — one press collapsing five rows nobody touched. A `.brief` is a leaf
+  /// run - one press collapsing five rows nobody touched. A `.brief` is a leaf
   /// for the same reason: inline, its subtree is the whole task block.
   private mutating func close(_ key: ExpansionKey, subtree: Set<ExpansionKey>) {
     var closing: Set<ExpansionKey> = [key]
@@ -191,7 +191,7 @@ public struct TerminalExpansion: Equatable, Sendable {
     // Closing forgets that the budget was lifted: re-opening a
     // hundred-thousand-character result straight into its unclipped form would
     // undo the layout guard for a reader who has since scrolled a thousand rows
-    // away and forgotten they ever asked. And it forgets a fetch in flight — the
+    // away and forgotten they ever asked. And it forgets a fetch in flight - the
     // bytes may still land, and are hydrated onto the item and kept, but this
     // reader is no longer waiting for them.
     for closed in closing {
@@ -203,7 +203,7 @@ public struct TerminalExpansion: Equatable, Sendable {
 
   /// Everything a row list could open, all at once.
   ///
-  /// Nobody presses this into being — it is the **audit's** input. The overflow
+  /// Nobody presses this into being - it is the **audit's** input. The overflow
   /// gate can only check lines it was given, and until expansion existed every
   /// line it was given was a collapsed one; a summary that wraps correctly says
   /// nothing about the fifty result lines hiding behind it. Planning is pure, so
@@ -219,7 +219,7 @@ public struct TerminalExpansion: Equatable, Sendable {
       guard case .block(let block) = row else { continue }
       expansion.open.formUnion(expansionKeys(of: block))
       for drawn in blockCalls(in: block) where drawn.drawsResult {
-        // A truncated result has no full state to plan — the text is a head — so
+        // A truncated result has no full state to plan - the text is a head - so
         // it lands in `pending`, which is the state a reader who pressed it
         // really sees. Auditing a `full` state whose text was never delivered
         // would be auditing a screen nobody can reach.
@@ -270,7 +270,7 @@ public enum TermPress: Equatable, Sendable {
   ///
   /// **Divergence from the web client, deliberately.** There the takeover is a
   /// hover *action* (`OpenSubagentAction`, the `⤢` in the row's overlay) and
-  /// the row's press keeps meaning expand/collapse — a pointer can serve two
+  /// the row's press keeps meaning expand/collapse - a pointer can serve two
   /// intents on one 19px row. A thumb cannot: a second target inside a
   /// one-line row is a coin toss, so on the phone the `Task` row's one press is
   /// the deliberate move, and the inline expansion gives way to the surface
@@ -285,27 +285,27 @@ public enum TermPress: Equatable, Sendable {
 /// A tool call a block draws, and how.
 public struct BlockCall: Equatable, Sendable {
   public var call: ToolCallItem
-  /// Its transcript index — never derivable by arithmetic, because a run folded
+  /// Its transcript index - never derivable by arithmetic, because a run folded
   /// across an absorbed gap has no `[index, index + count)` coverage.
   public var index: Int
   /// Is this call drawn **on a line of its own**, rather than stood for by a
   /// summary above it?
   ///
   /// This is the fold, expressed once. A lone call is its own row. A run of one
-  /// is drawn as the call. A run of many draws a summary line collapsed — whose
-  /// outcome, and so whose colour, is its **last** call — and every member on
+  /// is drawn as the call. A run of many draws a summary line collapsed - whose
+  /// outcome, and so whose colour, is its **last** call - and every member on
   /// its own line when open. A `Task` header is always drawn (coloured by its
   /// own result, never a child's) and its children only once it is open.
   ///
   /// It is what ``redItemIndices(rows:expansion:)`` filters on, which is the
   /// whole of *"if it is red in the transcript, it is red on the rail"*.
   public var ownLine: Bool
-  /// Is this call planned through ``TerminalPlanner/planToolCall`` — and so does
+  /// Is this call planned through ``TerminalPlanner/planToolCall`` - and so does
   /// it have a result, and keys that open one?
   ///
   /// False for exactly one thing: a `Task`'s **own** header call. `planTask`
   /// draws its summary and its children and never its own result, so a
-  /// `.call(taskId)` key opens nothing — which is the run-of-one trap in a
+  /// `.call(taskId)` key opens nothing - which is the run-of-one trap in a
   /// second dialect, and the reason it is stated here rather than left to each
   /// caller to remember. It is *not* the same question as ``ownLine``: the
   /// header is always drawn (it is what `taskFailed` reddens), it simply has no
@@ -315,8 +315,8 @@ public struct BlockCall: Equatable, Sendable {
 
 /// Every tool call a block holds, in draw order, walked **once**.
 ///
-/// This walk was written four times — here, in `expansionKeys`, in what used to
-/// be `truncatedCallIds`, and in `redItemIndices` — with the same nested
+/// This walk was written four times - here, in `expansionKeys`, in what used to
+/// be `truncatedCallIds`, and in `redItemIndices` - with the same nested
 /// item/run/task switch and the same task-children-as-leaves inner switch in
 /// each. Four copies is four places to find a new block shape, and the one rule
 /// the rail advertises (*"if it is red in the transcript, it is red on the
@@ -341,7 +341,7 @@ public func blockCalls(
       // A run of one is drawn as the call itself, so its member is on a line of
       // its own with no key to open. Otherwise: open, every member draws;
       // collapsed, only the summary does, and the summary *is* the run's last
-      // call — `runFailed` colours it by exactly that.
+      // call - `runFailed` colours it by exactly that.
       let open = run.expansionKey.map(expansion.isOpen) ?? true
       let last = run.run.count - 1
       for (ordinal, call) in run.run.enumerated() {
@@ -365,7 +365,7 @@ public func blockCalls(
     // always drawn.
     out.append(
       BlockCall(call: task.task, index: task.index, ownLine: true, drawsResult: false))
-    // A child is only on screen — and so only ever on a line of its own — once
+    // A child is only on screen - and so only ever on a line of its own - once
     // the task is open.
     let open = expansion.isOpen(task.expansionKey)
     for child in task.children { walk(child, containerDrawn: open) }
@@ -375,7 +375,7 @@ public func blockCalls(
 
 /// Every expansion key a block could open, its nested children included.
 ///
-/// O(children), which for all but a folded `Task` is O(1) — and it is only ever
+/// O(children), which for all but a folded `Task` is O(1) - and it is only ever
 /// reached when something is actually open (see ``TerminalExpansion/subset(for:)``).
 public func expansionKeys(of row: TranscriptRow) -> Set<ExpansionKey> {
   switch row {
@@ -389,7 +389,7 @@ public func expansionKeys(of block: TerminalBlock) -> Set<ExpansionKey> {
   expansionKeys(of: block, calls: blockCalls(in: block))
 }
 
-/// The same, for a caller that has already walked the block — `subset(for:)` is
+/// The same, for a caller that has already walked the block - `subset(for:)` is
 /// on the plan cache's hot path and walked it twice.
 func expansionKeys(of block: TerminalBlock, calls: [BlockCall]) -> Set<ExpansionKey> {
   var keys: Set<ExpansionKey> = []
@@ -399,7 +399,7 @@ func expansionKeys(of block: TerminalBlock, calls: [BlockCall]) -> Set<Expansion
     if let key = run.expansionKey { keys.insert(key) }
   case .task(let task):
     keys.insert(task.expansionKey)
-    // The inline brief, when the engine gave one — same key as the frame's
+    // The inline brief, when the engine gave one - same key as the frame's
     // first row, and its presence here is what scopes a brief toggle's re-plan
     // to this one row (`subset(for:)` reads these keys).
     if taskBrief(task.task) != nil { keys.insert(.brief(task.task.id)) }

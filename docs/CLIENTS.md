@@ -10,9 +10,9 @@ the VS Code extension, published to the **Visual Studio Marketplace** as
 as a run artifact; `pnpm install:local` side-loads a local build. A workspace member like any package (esbuild for the extension host,
 Vite for the webview, both from `@workerdeck/source`), importing `client`/`react`/`ui`/
 `protocol` and **never** `core`/`server`. The webview runs an *unmodified* `WorkerDeckClient`
-+ `SessionPanel` (root entry — no Monaco; VS Code is the workspace): its `fetchImpl`/
++ `SessionPanel` (root entry - no Monaco; VS Code is the workspace): its `fetchImpl`/
 `WebSocketImpl` are postMessage shims, executed on the extension-host side with Node fetch /
-`ws` plus the gateway's `Authorization: Bearer` header — keys stay in `SecretStorage`, the
+`ws` plus the gateway's `Authorization: Bearer` header - keys stay in `SecretStorage`, the
 webview CSP has no external `connect-src`, and the bridge refuses URLs not belonging to a
 registered gateway.
 
@@ -29,38 +29,38 @@ buys the whole newer surface. Raise the two together or not at all.
 It runs the panel with `transcriptVariant: 'terminal'`, `focusComposerOnClick` (dead-space
 clicks land in the input; controls and drag-selections keep their meaning) and **at the
 editor's own cell**: `terminalMetrics` is resolved host-side from `editor.fontSize` /
-`editor.lineHeight` (the same three readings VS Code makes of the latter — 0 automatic, <8 a
-multiplier, else pixels — rounded, because a fractional cell puts every other row on a
+`editor.lineHeight` (the same three readings VS Code makes of the latter - 0 automatic, <8 a
+multiplier, else pixels - rounded, because a fractional cell puts every other row on a
 half-pixel), overridable per `workerdeck.terminal.fontSize`/`.lineHeight`, so the panel, the
 editor and the integrated terminal draw at one size. Everything the first paint needs is
-stamped on `#root` — variant, density, cell, affordances — and a change to any of them, or to
+stamped on `#root` - variant, density, cell, affordances - and a change to any of them, or to
 the two `editor.*` keys, re-renders the panel through the same `reloadWebview()` the dev
 reloader uses. The webview repoints `--cw-font-mono` at `--vscode-editor-font-family`
 unconditionally, which is what makes "the agent panel is in my editor font" true under a theme
 that is monospace by construction; `workerdeck.fontFamily` survives for the `cards` variant,
 where the *sans* token is what the transcript reads in, and is stamped on `<html>` by
-`webviewHtml` because it must be right on the first paint. The **panel alone** opts in — the
+`webviewHtml` because it must be right on the first paint. The **panel alone** opts in - the
 sidebar and section views are workbench UI and follow `--vscode-font-family`, which is the
 webview baseline `styles.css` sets.
 
 ### The status bar
 
 The window status bar is the panel's bar, and each of its badges is its own boolean
-setting (`workerdeck.statusBar.*`), read per render so a change is just a re-render — usage is
+setting (`workerdeck.statusBar.*`), read per render so a change is just a re-render - usage is
 three of them now (`sessionUsage`/`weeklyUsage` on, `modelUsage` off, over protocol's lanes),
 and a lane with no window hides rather than showing a dash. A running session colours its
 status badge via the **foreground** (`charts.blue`), not a background: VS Code accepts only
 `statusBarItem.errorBackground`/`warningBackground` and silently ignores anything else, and
 both are alarm colours for a session that is merely working. Model
-and mode are bar items too, opening **QuickPicks** — a `StatusBarItem` has one command and
+and mode are bar items too, opening **QuickPicks** - a `StatusBarItem` has one command and
 no dropdown, so command → QuickPick is the only shape VS Code offers (and the one its own
 language-mode item uses); the panel's `onControls` setters are what they drive.
 
-The panel's `onOpenPanel` requests all land somewhere native — none are dropped. The four
+The panel's `onOpenPanel` requests all land somewhere native - none are dropped. The four
 section kinds focus their views; **`skills`** opens a QuickPick (also
 `workerdeck.useSkill`) fed from `vitals.skills`, and picking one posts `wd-use-skill` so the
 webview inserts the same `skillPrompt(...)` text web's SkillsDialog would, through the
-controls' `insertComposerText` — a disabled skill stays visible and unpickable, like an
+controls' `insertComposerText` - a disabled skill stays visible and unpickable, like an
 ungrantable permission mode; **`files`** runs `workerdeck.openProjectFolder`, the existing
 `workerdeck://` mount of the active session's cwd, rather than growing a webview file
 browser.
@@ -69,14 +69,14 @@ browser.
 
 One live attach per session, owned by the panel: sidebar/status
 bar/notifications read REST rollups (`pendingPermissionCount`) or tap frames already flowing
-through the bridge — never a second attach. A Cmd/Ctrl-clicked path in the transcript goes
+through the bridge - never a second attach. A Cmd/Ctrl-clicked path in the transcript goes
 through `webview/paths.ts`, which is a named module because the rule earned one: a match must
 start at a **token boundary** (unanchored, `@_docs/BACKLOG.md` matched the *suffix* `/BACKLOG.md`
 and the host confidently opened at the filesystem root) and a *relative* path must end in a
 filename-with-extension, or the modifier underlines `and/or`. Resolution against the session
-cwd is host-side, in POSIX arithmetic — the cwd is the *gateway's*, so a Windows host joining
+cwd is host-side, in POSIX arithmetic - the cwd is the *gateway's*, so a Windows host joining
 it with `\` builds a path neither side has seen. Remote gateways mount as a `workerdeck://`
-FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename —
+FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename -
 no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
 by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole
 Remote SSH story.
@@ -87,87 +87,87 @@ Remote SSH story.
 screens.** That is the navigation rule, and it is what the sidebar was rebuilt around: a
 pushed screen left the native title still reading SESSIONS over a form, its `+` still
 navigating sideways with no history, and a back chevron the extension had drawn itself.
-So chrome is VS Code's — `view.title` plus title actions gated on a `setContext` key (a
+So chrome is VS Code's - `view.title` plus title actions gated on a `setContext` key (a
 stateful title button doesn't exist, so an open/closed toggle is *two* commands with
-opposite `when` clauses) — and everything that used to be a screen is either its own view
+opposite `when` clauses) - and everything that used to be a screen is either its own view
 or a native QuickPick.
 
 ### Host Mode: the extension as the server's supervisor
 
 **The extension never imports `core`/`server`; it supervises the published `workerdeck` CLI as a
 detached child process.** That is the dependency rule, and it earns its keep three more ways
-here. The server must **outlive the window** — in-process in the extension host, closing one
-window kills the sessions two other windows are watching — so the child is `detached`, `unref`ed,
+here. The server must **outlive the window** - in-process in the extension host, closing one
+window kills the sessions two other windows are watching - so the child is `detached`, `unref`ed,
 and writes to `<state-dir>/vscode-host.log` rather than a pipe, because a child writing to the
 closed pipe of a dead extension host dies with `EPIPE`. Credentials stay the operator's
 environment, resolved by the official SDK/CLI in a child spawned from VS Code's own
 (login-shell-resolved) env, which is also the PATH that has `claude` and `codex` on it. And
 bundling was measured, not guessed: `@openai/codex` is **275 MB** and the Agent SDK's platform
-package **190 MB**, per platform — a `.vsix` cannot carry that.
+package **190 MB**, per platform - a `.vsix` cannot carry that.
 
 So the binary is resolved, in order: `workerdeck.host.binaryPath` → `workerdeck` on PATH →
 `npx --yes workerdeck@<the extension's own version>`. The npx fallback is what makes "install the
 extension, hit Start" true with nothing else installed, and pinning it to the extension's version
-is what keeps the two on one `PROTOCOL_VERSION` — they release in lockstep. Its first run fetches
+is what keeps the two on one `PROTOCOL_VERSION` - they release in lockstep. Its first run fetches
 those hundreds of megabytes, so that path gets a **10-minute** ready timeout and a progress
 notification where the PATH path gets 30 seconds.
 
 **The port is the lock; there is no leader election across windows.** Every window probes the
 configured port on activation and on any `workerdeck.host.*` change, and adopts whatever already
-answers — a sibling window's server and one the operator started by hand in their own terminal
+answers - a sibling window's server and one the operator started by hand in their own terminal
 are the same case, which is the point. Only when nothing answers does a window spawn, and a lost
 race needs no coordination either: the loser gets `EADDRINUSE` and exits 1 within a second, which
 `#awaitReady` reads as "re-probe and adopt", not as a failure. `<state-dir>/vscode-host.json`
-is **not** the lock — it is only the ownership record, written after a successful probe and only
+is **not** the lock - it is only the ownership record, written after a successful probe and only
 by the window whose own child won the port, so that **Stop refuses to kill a server VS Code did
 not start**. A lock whose pid is gone is a crash leftover and is cleared on read.
 
-Stopping and restarting confirm against the same reading `workerdeck guard` uses — `starting`,
-`running`, `awaiting_approval`, plus any pending permission — in a modal that names the sessions
+Stopping and restarting confirm against the same reading `workerdeck guard` uses - `starting`,
+`running`, `awaiting_approval`, plus any pending permission - in a modal that names the sessions
 and says which are blocked on a human. `SIGTERM` is a *drain* in the CLI (turns in flight
 finish), so Stop sends one, waits 30s, sends a second (the CLI's own "stop now"), then `SIGKILL`;
 the signal goes to the **process group** (`-pid`), because on the npx path the server is a
 grandchild. Parked sessions survive all of it, which is what makes the prompt tolerable at all.
 
-The managed instance registers itself as a gateway (`workerdeck-managed`, "This machine") — the
+The managed instance registers itself as a gateway (`workerdeck-managed`, "This machine") - the
 one exception to **there is no implicit localhost gateway**, and marked `managed` so the Gateways
 view offers a gear to Host Mode's settings instead of the edit/remove pair; removing it means
 turning Host Mode off. Two security rules are not negotiable. Every `workerdeck.host.*` key is
 **`scope: "machine"`**, never `machine-overridable`: a workspace-scoped `bindAddress: "0.0.0.0"`
 in a cloned repo's `.vscode/settings.json` would silently expose an agent runner on the LAN. And
-the auth key — generated by the extension, kept in `SecretStorage` — reaches the child through
+the auth key - generated by the extension, kept in `SecretStorage` - reaches the child through
 **`WORKERDECK_AUTH_KEY` in its environment, never argv**, because `ps` is world-readable. A
 non-loopback bind forces a key whatever `requireAuthKey` says, and announces itself once with a
 Copy Auth Key action.
 
 Profiles are **not** Host Mode's business. `/v1/profiles` is a live CRUD surface on every
 gateway, so **WorkerDeck: Profiles** (`src/profiles.ts`) is a native multi-step QuickPick over the
-REST API — list, add (name → engine → config dir), change description/default model/default
-permission mode, delete — and it takes no restart and applies to **any** gateway in the list, not
+REST API - list, add (name → engine → config dir), change description/default model/default
+permission mode, delete - and it takes no restart and applies to **any** gateway in the list, not
 only the one this window started. That last point is why it beats the settings array it replaced:
 `workerdeck.host.profiles` could only ever configure the local server, and no settings file can
 write a config file on the Mac mini. The server draws the immutability line per *profile* rather
-than per source — `declaredGuard` refuses to edit anything the gateway's own config declared,
-while runtime profiles come back flagged `managed` — which is the same credential-mix-up rule the
+than per source - `declaredGuard` refuses to edit anything the gateway's own config declared,
+while runtime profiles come back flagged `managed` - which is the same credential-mix-up rule the
 CLI's `--profile` enforces, applied where it costs nothing. `workerdeck.host.configPath` survives
 as the escape hatch for what JSON cannot spell: a **provider** profile needs functions, so it is
 config-file-only by construction.
 
 **Profiles is also a view**, collapsed by default, sitting beside Gateways for the same reason
 Gateways is not a screen: a profile is a mode every session belongs to, so managing them sits
-beside the list permanently. It is the Gateways view's shape exactly — a list and nothing else,
+beside the list permanently. It is the Gateways view's shape exactly - a list and nothing else,
 `+` in the title, edit and delete on hover, every mutation a native flow on the host side, so the
 bridge carries a list and three verbs (`wd-add-profile`, `wd-edit-profile`, `wd-remove-profile`).
 A **declared** profile draws no buttons at all rather than offering two that answer 403, and the
 dot on each row is the gateway's credential probe: green available, red with the reason inline,
 grey not yet reported. The gateway name appears on a row only when more than one gateway has
-profiles — the same "facet, not frame" rule the Sessions view follows. `ProfilesModel` is
+profiles - the same "facet, not frame" rule the Sessions view follows. `ProfilesModel` is
 **not polled**, unlike `SessionsModel`: a profile changes when someone changes it, and the one
 reading that moves on its own is the credential probe on a ~60s server-side TTL, which the title's
 refresh action and becoming-visible both cover. A poll here would be a request per gateway per
 five seconds for nothing.
 
-Two details the flow earns. `~` is expanded **only for a loopback gateway** — it is this machine's
+Two details the flow earns. `~` is expanded **only for a loopback gateway** - it is this machine's
 home, which is the wrong home for every other gateway, so a remote one gets the path as typed and
 answers for itself if the directory is not there. And every write reports the gateway's own
 credential probe back (`available` / `unavailableReason`), because "does the directory I just
@@ -175,31 +175,31 @@ named have a login in it?" is the only question creating a profile really raises
 
 Host Mode runs the server **where the workspace is**, which `extensionKind` alone cannot express:
 a local window reports `UI` (having no remote host to be `Workspace` relative to), so the
-supervisor is refused only for the one host that really is the wrong machine — a UI-side copy
+supervisor is refused only for the one host that really is the wrong machine - a UI-side copy
 while a remote is attached (`env.remoteName !== undefined && extensionKind === UI`). The server
 log is tailed into a **WorkerDeck Server** Output channel rather than opened as a document, so it
 follows live and works for an adopted server as well as one this window started.
 
 The window status badge (`workerdeck.host.statusBar`) is **not** a Host Mode badge, despite the
-setting's name and the slot's history: it reads `X/Y` — gateways answering their probe over
-gateways that exist — and Host Mode's own counts in both halves *while it serves*, since the
+setting's name and the slot's history: it reads `X/Y` - gateways answering their probe over
+gateways that exist - and Host Mode's own counts in both halves *while it serves*, since the
 supervisor registers `This machine` on start and unregisters it on stop. A stopped host is
 therefore absent from the denominator rather than sitting in it as a permanent miss. A transient
 Host Mode state (`starting`, `stopping`, the error `$(warning)`) still outranks the count and
 takes the badge whole: those are short-lived, they are what the click acts on, and a count cannot
-say "starting". What the count replaced was `:8787` — the steady state used to show the port,
+say "starting". What the count replaced was `:8787` - the steady state used to show the port,
 which is the one thing about a running server you can already read off the tooltip, while
 "running" would have been true almost always and told you nothing. The badge also outlived its
 old hide-when-Host-Mode-is-disabled rule, because a window with only remote gateways still has a
 count worth drawing; it now hides only when there are no gateways at all. Clicking it opens the
-start/stop/restart/gateways/log QuickPick — a `StatusBarItem` has one command and no dropdown,
+start/stop/restart/gateways/log QuickPick - a `StatusBarItem` has one command and no dropdown,
 and that QuickPick is `workerdeck.host.actions`'s **only** entry point (`"when": false` keeps it
 out of the palette), which is why the gateway list the badge counts had to be added to it.
 
 ### The Sessions and Gateways views
 
-The Sessions view lists every gateway's sessions at once — gateway
-is a facet (filter/group/sort) beside adapter and state, not the frame — with search and
+The Sessions view lists every gateway's sessions at once - gateway
+is a facet (filter/group/sort) beside adapter and state, not the frame - with search and
 the facet dropdowns behind the title bar's **filter toggle** (`$(filter)`/`$(filter-filled)`;
 the *host* owns that boolean, since the key lives where commands do, and closing the bar
 never clears the filters). **Gateways are their own collapsible view**, not a screen: a
@@ -212,13 +212,13 @@ auth key, prefilled and backed out of with `QuickInputButtons.Back`), not a form
 draws over its own list. That is the navigation rule applied to the last place that broke it:
 the form was a screen, so the view needed a `+`/back pair of commands gated on a
 `gatewayFormOpen` context key, a retained webview so typing survived being hidden, and a
-round trip per keystroke's worth of state across the bridge — and the auth key had to be
+round trip per keystroke's worth of state across the bridge - and the auth key had to be
 *sent to the webview* to prefill an edit, because `SecretStorage` is host-side only. The
 native flow deletes all four: the key never leaves the host, the bridge carries a list and
 two verbs (`wd-edit-gateway`, `wd-remove-gateway`), and the URL is validated by `apiUrl` at
 the step that asks for it. The first gateway's URL arrives prefilled with
 `http://127.0.0.1:8787` and the name is derived from the URL's hostname, so adding this
-machine's gateway is three `enter`s — the same promise session creation makes.
+machine's gateway is three `enter`s - the same promise session creation makes.
 
 ### Creating a session, the poll & the `+` rule
 
@@ -227,21 +227,21 @@ Creating a session is a native multi-step QuickPick
 has nothing to ask and backed out of with `QuickInputButtons.Back`), which is what let the
 list become a list and nothing else. Every step arrives **pre-answered**, so the flow is
 three `enter`s: the folder from this window's open folders, which lead the candidates
-*unconditionally* now (the `local` test survives as the hint, not as a filter — a gateway on
+*unconditionally* now (the `local` test survives as the hint, not as a filter - a gateway on
 a LAN or tailnet address may well be this machine, and offering `~/projects` to someone
 sitting in `~/projects/ai/workerdeck` was the bug; a `workerdeck://` mount stays filtered to
 its own gateway, being positively another machine's directory rather than merely unverified);
 the model and the permission mode from **the session that adapter ran last**, read back off
 the gateway's session list rather than remembered at create time, because an operator who
 switched either one *mid-session* did it through the in-session pickers and a stored copy of
-what they asked for at creation would not know. Mode is a default and never a step — two
-questions is one too many for a flow whose point is that `enter` gets you a session — with
+what they asked for at creation would not know. Mode is a default and never a step - two
+questions is one too many for a flow whose point is that `enter` gets you a session - with
 `workerdeck.newSession.permissionMode` to pin it ("always start on Auto") and a clamp against
 the profile's own capability record, since a mode carried over from another engine would be
 refused by the gateway. The **first-prompt step is gone**: interactively you are about to be
 looking at a composer, and it was load-bearing for a real bug (a woken session re-ran
 `config.prompt`). The poll behind all of it is **ref-counted**
-(`SessionsModel.setWatching`) rather than gated on the sidebar alone — two independently
+(`SessionsModel.setWatching`) rather than gated on the sidebar alone - two independently
 collapsible views render it now, and gating on one leaves the other showing probes frozen
 at `pending`; the unread status-bar item holds a watcher of its own, unconditionally while
 it is enabled, because it is the one surface that must be live with nothing open. The `+`
@@ -254,13 +254,13 @@ for what the header can't do (clear a filter, widen a scope).
 **There is no activity-bar container.** The views are split across the two sidebars by
 default: **Sessions** into **Explorer**, beside the file tree (it is a workspace-level list,
 and it is where the `+` lives), and the other seven into a **`secondarySidebar` container
-titled "WorkerDeck"** — one tab, stacked vertically, Usage → Context → MCP Servers → Tasks →
+titled "WorkerDeck"** - one tab, stacked vertically, Usage → Context → MCP Servers → Tasks →
 Session Info → Profiles → Gateways. The five detail views are `when`-gated on `workerdeck.hasSession`:
 they are *about the thing you have open*, which is Outline and Timeline's shape. That gating
 reverses the earlier "views must not appear and disappear under the pointer" rule on
 purpose; Sessions, Profiles and Gateways stay ungated, which is what keeps both containers' shape
 stable. A view that *is* contributed cannot be disabled or collapsed through the API, so a
-section with nothing to say says it the only two ways that exist — the header's
+section with nothing to say says it the only two ways that exist - the header's
 `description` (`no session`, `not reported`, `not supported`) and an empty state in the body.
 `viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
 it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
@@ -269,7 +269,7 @@ not exist at all. That floor is the whole cost of the layout, and it is what wou
 extension off a Cursor/VSCodium built on an older base. Two things a contributed location
 cannot do: it cannot order a view against a *built-in* one (extension views append after
 `workbench.explorer.fileView`, so Sessions lands under the tree until someone drags it up),
-and it cannot beat a user's stored `views.customizations` — anyone who has already moved
+and it cannot beat a user's stored `views.customizations` - anyone who has already moved
 these views needs **View: Reset View Locations** before a new default is visible. Everything
 is only a default: any view drags to either sidebar or the panel, and `contextualTitle` is
 what names the container it lands in (VS Code otherwise auto-assigns the *source*
@@ -281,65 +281,65 @@ Unread therefore had to leave the container: a `view.badge` aggregates onto its
 **container's** icon, which is now Explorer's, next to a user's files. It is a **window
 status-bar item** (`UnreadStatusItem`, `workerdeck.statusBar.unread`), the same count summed
 over the sessions the **filter is
-showing** — the webview mirrors its view config to the host (`wd-view-config`, one-way;
+showing** - the webview mirrors its view config to the host (`wd-view-config`, one-way;
 the shared rules moved to `src/view-config.ts` so both sides filter identically), because a
 badge counting rows in hidden sessions sends you looking for something that isn't there.
-What it counts is **prose** — `SessionInfo.proseCount`, protocol's narrower door — so a
+What it counts is **prose** - `SessionInfo.proseCount`, protocol's narrower door - so a
 session grinding through forty tool calls shows nothing at all until it says something; the
 host reads it through protocol's `unseenCount` rather than the copy of that arithmetic it used
 to keep, which is how this badge and the dashboard's came to disagree in the first place.
 Two things the move bought: the count no longer needs the Sessions webview to have been
-resolved (`refreshUnread` is gated on **neither `#ready` nor `#view`** — gating on `#ready` is
+resolved (`refreshUnread` is gated on **neither `#ready` nor `#view`** - gating on `#ready` is
 how the count came to sit stale until the sidebar was next opened, reading a session in the
 panel moving its watermark with no model change announcing it, and gating on `#view` is what
 the old `view.badge` required; `#viewConfig` is restored from globalState for exactly that
 case), and sessions awaiting a human can *colour* it amber
 rather than only leading its tooltip. `SubagentStatusItem`
-(`workerdeck.statusBar.subagents`) sits beside it on the same argument — it is about *every*
+(`workerdeck.statusBar.subagents`) sits beside it on the same argument - it is about *every*
 session and is most worth showing when nothing is open, since a window with no panel up can be
-spending real money on six parallel agents — counted in the same pass over the same filtered
+spending real money on six parallel agents - counted in the same pass over the same filtered
 rows, hidden entirely at zero, and coloured on the **foreground** (`charts.blue`) because VS Code
 ignores every background but the two alarm ones. Either badge keeps the poll watcher alive:
 gating it on `unread` alone left someone who turned unread off watching a frozen count.
 
 ### The session card (`SessionItem`)
 
-The list is drawn as **inset rounded cards** (the Figma sidebar design) — and the card itself is
+The list is drawn as **inset rounded cards** (the Figma sidebar design) - and the card itself is
 now `packages/ui`'s **`SessionItem`**, which is why `SessionCard.tsx` is ~95 lines of props where
 it used to be ~380 of hand-kept markup. The card was born here (the dashboard had no sub-agent
 rows, no context ring and no vendor colour until they were lifted out of this webview) and for a
 while the two lists were two copies of one design, agreeing on the model and disagreeing on every
-measurement. Its prop is the whole **`row: SessionRow`** now, not `info` + `unseen` + `hostName` —
-the view model the shared card reads — plus `showProject`/`showGateway`; `SidebarApp` passes the
+measurement. Its prop is the whole **`row: SessionRow`** now, not `info` + `unseen` + `hostName` -
+the view model the shared card reads - plus `showProject`/`showGateway`; `SidebarApp` passes the
 row it already had, and `dev-preview` builds one.
 The card keeps the two rules this design reversed, deliberately. The **state glyph leads the
 title**: the earlier rule optimised for reading one row, this one for scanning twenty, and the
 glyph is what tells you which row to read. And **selection is the card's own fill** rather than a
 gutter bar, the card being an inset shape with air around it, which leaves the left edge to the
 glyph. Line two is the engine's mark and model in the **vendor's own colour**, then the **project**
-and gateway muted — the project having replaced the cwd basename in that slot, because the folder
+and gateway muted - the project having replaced the cwd basename in that slot, because the folder
 was only ever a proxy for the question the project name answers (`projectLabel` falls back to
-exactly that basename, so an undeclared project is byte-identical to what shipped) — and it closes
+exactly that basename, so an undeclared project is byte-identical to what shipped) - and it closes
 with the **age**, the one part of that identity run that keeps changing while you read it. Line
 one's own tail is the pair that changes while you *look*: the unread badge and the context ring.
 Grouping by project **suppresses it on the row** and
-hands the slot back to the basename — `ui`, `server`, `web` under one WorkerDeck heading, which
-is the one thing the header cannot say — exactly the rule `hostName` already followed one facet
+hands the slot back to the basename - `ui`, `server`, `web` under one WorkerDeck heading, which
+is the one thing the header cannot say - exactly the rule `hostName` already followed one facet
 over, and the answer to "what about the subdirectory". Icon bytes come from the host as a
 consequence rather than a preference: the webview CSP has no external `connect-src`, so an
 `<img src>` pointed at a gateway cannot load with or without a credential, and the host is
 where the gateway key lives anyway (`src/project-icons.ts`, keyed by the wire's
-`ProjectIcon.image.hash`, cached forever because a hash names its bytes — editing an icon
-arrives as a new key — and failures cached too, the route's 404 being the uniform "no icon"
+`ProjectIcon.image.hash`, cached forever because a hash names its bytes - editing an icon
+arrives as a new key - and failures cached too, the route's 404 being the uniform "no icon"
 and a retry one request per session per poll for a picture that is never coming), pushed as
 their own `wd-project-icons` message rather than on
 `SidebarState`: the state rides a 1.2s poll and an icon is hundreds of kilobytes that changes
 when someone edits a repo. That coral survives this webview's `--term-mark` repoint
 ("a single coral element in an otherwise theme-following surface looks like a stray token")
-because it is doing a different job — that rule retired coral from the *panel*, where it meant
+because it is doing a different job - that rule retired coral from the *panel*, where it meant
 "working" and competed with the editor's accent for a meaning the editor owns, while here it
 sits against Anthropic's mark and names the vendor. It is carried by the **mark and the model
-together** — neither alone identifies a vendor at 13px — which is why the class goes *on* the
+together** - neither alone identifies a vendor at 13px - which is why the class goes *on* the
 `EngineIcon`: it draws `fill="currentColor"` and carries its own `text-fg-3`, so a colour
 inherited from a wrapper loses to the svg's own class, and the mark sat muted beside a coral
 model from the day the cards shipped. **One token per vendor** (`--vendor-claude`,
@@ -351,13 +351,13 @@ colours, not hand-written classes, because `cn`'s tailwind-merge only *replaces*
 parse and the vendor class has to win against `EngineIcon`'s own `text-fg-3` rather than merely
 follow it in source order. The two vendors are **asymmetric, and that is the brands' doing rather than ours**:
 coral is Anthropic's accent, while OpenAI's guidelines forbid adding colour to the mark at all, so
-theirs is monochrome: **`#fff` on dark, `#373737` on light** — both sanctioned by that guidance,
+theirs is monochrome: **`#fff` on dark, `#373737` on light** - both sanctioned by that guidance,
 and the only kind of pair legible on both grounds (the light value is their near-black rather than
 `#000`, which also keeps a 12px mark from sitting harder than the `#1f1f1f` title above it) (a green was tried first and is simply wrong, however well it
 reads). That full contrast also decides **how far the colour reaches**: Anthropic's covers the mark
 *and* the model name, OpenAI's covers the **mark only** (`vendorMarkClass`/`vendorTextClass`), because a
 pure-white 11px model name is brighter than the session title above it and inverts the card's
-hierarchy to repeat something the mark has already said — which is also the most literal reading
+hierarchy to repeat something the mark has already said - which is also the most literal reading
 of "don't add any colors". Both lines also share **one 16px icon gutter** (`SessionItem`'s
 `Gutter`), because the two glyphs are different sizes: as plain flex children each line's text
 started at `icon + gap` and two pixels is invisible as a measurement and obvious as a
@@ -368,15 +368,15 @@ misalignment.
 What is left extension-shaped after the card moved out is exactly **two** things, and they are the
 two `SessionItem` takes as props. First, **the overflow is a native menu**: the two hover actions
 became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which posts
-`wd-session-menu`) opening a **QuickPick**, decided host-side off the polled model — a
+`wd-session-menu`) opening a **QuickPick**, decided host-side off the polled model - a
 popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
 stale between the poll and the press must not offer Stop for a finished session. That QuickPick
-is also where **Clear context** lives — the first Clear control on any client — gated on
+is also where **Clear context** lives - the first Clear control on any client - gated on
 `SessionInfo.capabilities.clearContext` (absent = false, so an older gateway simply does not offer
 it), sent as a session command over a transient attach exactly like Stop, and confirmed with copy
 that never says "deleted": the session keeps running, the conversation starts fresh, and the old
-one stays resumable from the resume picker. Second, **rename is a double-click on the title** —
-`SessionItem`'s default `renameOn`, and the editor's own feel — where the dashboard, spending its
+one stays resumable from the resume picker. Second, **rename is a double-click on the title** -
+`SessionItem`'s default `renameOn`, and the editor's own feel - where the dashboard, spending its
 row hover on three actions instead, drives the same editor from a pencil (`renameOn='external'`).
 The colours are not this file's business either: `styles.css` repoints `--row-hover` and
 `--row-selected` at `list.hoverBackground` / `list.activeSelectionBackground` and
@@ -392,7 +392,7 @@ file on disk, so the dev loop is `vite build --watch` plus `src/dev-reload.ts` r
 views in place. Vite's dep optimizer therefore never runs here, and none of its traps are
 inherited. The CSP has no external `connect-src`, but `img-src` does allow `http:`/`https:`, and
 that is the one hole: an inline transcript image loads directly only from a **keyless** gateway,
-header auth being unable to ride an `<img>` — the same trade the iOS client makes. Project icons
+header auth being unable to ride an `<img>` - the same trade the iOS client makes. Project icons
 are exempt because the host fetches their bytes and hands them over as data URLs. And
 `transcriptVariant` resolves **anything that is not `cards`** to `terminal` rather than matching
 `'terminal'` exactly, which is deliberate compatibility: a settings file still holding the retired
@@ -405,34 +405,34 @@ none of it ships.
 
 ### Sub-agents: expansion and the panel frame
 
-A session row **expands** to its sub-agents (`SessionInfo.subagents`) — `sessionSteps`,
+A session row **expands** to its sub-agents (`SessionInfo.subagents`) - `sessionSteps`,
 `StepToggle` and `StepRow`, which live in **`packages/ui`** (`SessionSteps.tsx`) rather than in
 this webview, that being exactly why the dashboard had none of them; a session's sub-agents are a
 protocol fact and a disclosure over them is a list affordance, so neither is extension-specific.
 The disclosure sits on the *second* line, since the first line's left edge belongs to the name you scan by, doubling as the
 count (`2 of 3 agents`, and it counts **sub-agents only** now, which is what makes the number
-answerable — it used to include tasks, so `7/9` could not say which was which); expansion is
+answerable - it used to include tasks, so `7/9` could not say which was which); expansion is
 row-local React state and unpersisted, and could not be a native twisty regardless, every view
 here being a webview. Pressing a child selects the session and **hands the panel over to that agent's own work**
 (`wd-select-session`'s `subagentToolUseId` → `wd-open-subagent` → `SessionPanel.openSubagent`),
-still **without focusing the composer** — and now for a stronger reason than before: while a
+still **without focusing the composer** - and now for a stronger reason than before: while a
 sub-agent is framed there *is* no composer. That chain was `revealToolUse` → `wd-reveal-tool-use`
 → `SessionPanel.reveal` and was repurposed wholesale rather than joined by a second one; revealing
 the row remains the honest fallback meaning for a surface that cannot frame, and `reveal` itself
 survives untouched for other callers. A **task** takes the other road: `wd-select-session`'s `revealToolUseId` → `panel.reveal` →
 **`wd-reveal-tool-use`** → `SessionPanel.reveal`, which stays on the conversation and travels to the
 row where that work was started and finished. A sibling field and a separate arm, not a flag,
-because the two go to different panel APIs — and conflating them is exactly how a task came to be
+because the two go to different panel APIs - and conflating them is exactly how a task came to be
 framed as an agent, selecting no items and drawing an **empty agent view**. Tasks no longer draw
 under the card at all (they are in the **Tasks** view, `sessionTasks`), so the reveal road's
 producer moved rather than its plumbing: the chain below is unchanged and now driven from that
 view. `panel.ts` holds them
-in a single `#pending` slot — one kind at a time, so asking for either withdraws the other and the
-mutual exclusion is structural rather than two queues clearing each other — flushed from
+in a single `#pending` slot - one kind at a time, so asking for either withdraws the other and the
+mutual exclusion is structural rather than two queues clearing each other - flushed from
 `#pushActive` with one strictly-increasing nonce (per-kind values never repeat, which is what keeps
 "asking twice means twice" true webview-side). Neither focuses the composer: both are requests to
 *read*.
-The panel reports back what it actually has framed — `SessionPanel`'s `onSubagentChange` →
+The panel reports back what it actually has framed - `SessionPanel`'s `onSubagentChange` →
 **`wd-subagent-open`** → `SessionsModel.setSelectedSubagent` → `SidebarState.selected
 .subagentToolUseId` → the card's `activeStepKey`, which draws the **secondary selection**: the
 framed agent's row goes blue and its session's card drops to grey. A *statement*, not the echo of
@@ -440,12 +440,12 @@ framed agent's row goes blue and its session's card drops to grey. A *statement*
 never asked for (a `Task` row pressed inside the transcript) and leaves them three ways, so a value
 inferred from our own requests would be wrong within one click. `setSelectedSubagent` is a setter of
 its own rather than another `setSelected`, because the two facts have different owners and
-lifetimes — the selected session is this window's and survives a reload via `ACTIVE_SESSION_KEY`,
+lifetimes - the selected session is this window's and survives a reload via `ACTIVE_SESSION_KEY`,
 the frame belongs to the panel and dies with it, which is also why the restore path deliberately
 seeds no `subagentToolUseId`. `wd-ready` clears it: a fresh webview has no frame by construction,
 and since the panel reports *changes* and is silent on mount, a panel disposed while framed and
 reloaded would otherwise never contradict the value the host still held. The sidebar matches
-`selected` on **host and session**, not on session alone — ids come from the engines, so two
+`selected` on **host and session**, not on session alone - ids come from the engines, so two
 gateways can issue the same one, and an id-only test lit the wrong card in exactly the
 multi-gateway case this window exists to make legible. The webview clears its request in the
 `wd-show-session` handler, because a request left standing across a session switch would frame one
@@ -458,27 +458,27 @@ id against another's items.
 That rule was written about the sidebar and section views, where pushed screens broke VS Code's
 native titles, `+` placement and back affordances, and the cure was to hand chrome back to the
 editor. The agent panel is a different view and still draws no header: the takeover changes no
-title, builds no navigation stack, and its strip is a line on the transcript's own grid — the same
+title, builds no navigation stack, and its strip is a line on the transcript's own grid - the same
 category as an expanded `Task` row, taken to the whole scroller, with one boolean way back. The
 strict reading ("never swap what a webview shows") has no implementable alternative here, there
 being no native transcript for the editor to own, so it cannot be what the rule means.
 
 ### Unread watermarks & the workspace-scope facet
 
-The cards carry it per session — an **unread badge** of messages since that session was last on
+The cards carry it per session - an **unread badge** of messages since that session was last on
 screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
 showing it**, and monotonic so a compaction can't resurrect read rows). Messages, from
 `SessionInfo.proseCount`: the badge answers *is there something to read*, so a
 session grinding through forty tool calls badges nothing until it speaks. `unseenCount` walks
 prose → rows → turns, the two lower rungs being what a gateway without the field can still
-say —
+say -
 rows (`activityCount`) because turns undercount badly (five tool calls in one turn is one turn)
 and `lastSeq` overcounts absurdly (every stream delta). The panel turns the same mark into catch-up. The window's open
 folders are a facet too, and the only one **on by default**: `workspaceScope()` turns them
-into scope roots, and a session is inside one only when the *gateway* could be — a `file:`
+into scope roots, and a session is inside one only when the *gateway* could be - a `file:`
 folder scopes loopback gateways alone (a remote gateway's identical-looking path is another
 machine's directory), a `workerdeck://<hostId>` mount scopes that gateway alone. Because it
-hides by default it says so — and in **one** place: a `SubsetLine` under the filter bar
+hides by default it says so - and in **one** place: a `SubsetLine` under the filter bar
 reading `12 of 30 · <cause>` with a single "Show all", rendered whether or not the bar is
 open (`subsetSummary` in `view-config.ts` is the rule). It replaced two competing signals,
 a dot on the funnel and a separate scope line, which between them never said how many rows
@@ -489,8 +489,8 @@ all folders" rather than the generic clear-filters dead end.
 ### Resume & dev reload
 
 **Resume** is the same QuickPick rails as create (`workerdeck.resumeSession`), diverging only
-at the last step: `listSdkSessions` for the chosen directory *and profile* — the engine store
-is per-engine, so another profile's ids mean nothing here — gated on the capability record's
+at the last step: `listSdkSessions` for the chosen directory *and profile* - the engine store
+is per-engine, so another profile's ids mean nothing here - gated on the capability record's
 `listSessions`, and a pick is the same create call with `resume` set and no first prompt (the
 engine replays the thread; a prompt on top would be an unasked-for turn). A session rename is a gateway edit
 (`PATCH /sessions/:id` → `meta.title`), never a local override, so every client sees the
@@ -500,12 +500,12 @@ re-renders the webviews in place, an extension-host rebuild reloads the window (
 cannot swap extension code in a live host).
 
 **A webview reload replaces the document but not the `WebviewView`**, so neither
-`resolveWebviewView` nor `onDidDispose` runs — anything keyed to the *document* has to be torn
+`resolveWebviewView` nor `onDidDispose` runs - anything keyed to the *document* has to be torn
 down in `WebviewHost.resetForReload()`, which the reloader calls before swapping the HTML.
 Transports are the case that bites, and it is worth understanding once: `webview/bridge.ts`
 allocates socket ids from a module-scope counter starting at 1, and the host routes purely on
 that id. Sockets that outlived a reload therefore answered to ids the fresh document had since
-handed to *other* sessions, and one session's transcript rows were delivered into another's —
+handed to *other* sessions, and one session's transcript rows were delivered into another's -
 nothing on the wire carries a session id, so no layer downstream could catch it. Note the
 teardown must also *latch* silence (`WebviewTransportHost` drops posts once disposed): a socket
 close is asynchronous, so its `close` event lands after `dispose()` returns and would otherwise
@@ -516,7 +516,7 @@ re-run on reload or they double-register.
 **the reference embedding**, and the thing to read before designing another
 one: a wiki SPA whose right-hand rail is a sandboxed agent, with the gateway inside the app's
 own server. Everything non-`/v1` (the `/api` wiki, the MCP endpoint, the built SPA) is served
-through the gateway's `fallback`, so it is **one port** — a tab cannot header a WS upgrade, so a
+through the gateway's `fallback`, so it is **one port** - a tab cannot header a WS upgrade, so a
 cookie is the only credential an attach can carry and a cookie is per-origin. An express app is
 a `(req, res)` handler, so the `fallback` can simply *be* one: no proxy hop, no second port, no
 WS upgrade to forward. It checks `/trpc` **before** handing off to express, because silkweave's
@@ -525,62 +525,62 @@ URLs that belong to it. `authenticate`
 turns the app's cookie into `{ scope: { user } }` and that is the *entire* ownership model: the
 SPA calls `listSessions()` with no filter, because a check the client performs is a check the
 client can skip. The agent runs the provider engine under `sandboxedProviderProfile()` raised
-exactly twice (`web_fetch`, the `wiki` MCP server) — no shell, no host FS, `eval_script` in an
+exactly twice (`web_fetch`, the `wiki` MCP server) - no shell, no host FS, `eval_script` in an
 in-process QuickJS guest with no network. The wiki's operations are **one silkweave action set**
 (`src/wiki/actions.ts`) projected onto two transports: `@silkweave/mcp`'s mountable
-`mcpTransport` for the agent, and `@silkweave/trpc`'s `trpcNode()` (5.1.0 — a `node:http`
+`mcpTransport` for the agent, and `@silkweave/trpc`'s `trpcNode()` (5.1.0 - a `node:http`
 handler, so it mounts on the gateway's own port rather than binding one) for the SPA, typed end
 to end via `InferTrpcRouter` with no codegen. That is the shape an app with many tools needs and
 the reason it was worth the dependency: `write_doc` and `PATCH /api/docs/:id` had been one
-operation spelled twice. **Identity resolves per adapter onto the same context key** — a
+operation spelled twice. **Identity resolves per adapter onto the same context key** - a
 per-session bearer token minted in `createEngineRunner` off `config.scope.user` (revoked in
-`onClose`) for MCP, the login cookie in `trpcNode`'s `authenticate` for the browser — so an
+`onClose`) for MCP, the login cookie in `trpcNode`'s `authenticate` for the browser - so an
 action's `run()` cannot tell which caller it serves, and no wiki tool takes a `userId` the model
 could choose. Below that, **every `WikiDb` query takes a `userId` and every WHERE clause carries
-it** — deliberate duplication of the gateway's session scoping rather than a substitute for it:
+it** - deliberate duplication of the gateway's session scoping rather than a substitute for it:
 the gateway decides who may *drive a session*, the db decides whose *documents* a call can
 reach, and an agent that talked its way into the wrong tool arguments must still come up empty.
 Two independent checks on two different questions is the whole reason both exist. It is also
-where the 404-not-403 rule lives — another user's document is a plain not-found, matching the
+where the 404-not-403 rule lives - another user's document is a plain not-found, matching the
 gateway's uniform disclosure for an out-of-scope session.
 `whoami`/`open_doc` are MCP-only: a shared action set is not an identical one, and the SPA
 knows what it is showing. The cookie makes `/trpc` CSRF-able, so `sameOrigin()` checks
-`Sec-Fetch-Site` (falling back to `Origin`) and **declines** rather than throws — a forged
+`Sec-Fetch-Site` (falling back to `Origin`) and **declines** rather than throws - a forged
 request falls through to a plain 401. **No operation depends on a field being absent**: `write_doc` (create when `id`
 was missing, overwrite when present) was split into `create_doc`/`update_doc` after a live model
 sent `id: " "` twenty times and every create tried to overwrite a document named `" "`.
-`z.string().min(1).optional()` is *not* the fix — a space has length 1, and a provider that marks
+`z.string().min(1).optional()` is *not* the fix - a space has length 1, and a provider that marks
 every property required leaves the model no way to omit anything. Optional strings are trimmed
 and blank-checked in `run` (`text()` in `wiki/actions.ts`), as a second layer under the split. **UI state is the app's, not the bridge's**
 (`src/app/state.ts`): "which doc am I looking at" and "open that one for me" travel as a
 server-held per-*user* record the tab `PUT`s on change plus an SSE stream of intents back down
-— `whoami` / `open_doc` are two more MCP tools over the same token. The tool bridge looks like
+- `whoami` / `open_doc` are two more MCP tools over the same token. The tool bridge looks like
 the natural home and is wrong twice: a bridged tool is by definition `sandboxed`, and the bridge
 asks the *first attached client*, so two tabs means an arbitrary one answers. `open_doc` reports
 `shown: false` when no tab was listening rather than claiming a navigation. Two gotchas it paid for in blood: the MCP
 client opens the SSE stream with `GET` and the stateless transport must answer **405**, not
 Express's default 404, or the whole connect fails; and a model told to omit an optional `id`
 sends `""` or `" "`, so no tool may infer its operation from an absent field. The MCP connect is
-`required: true` and the runner is built by `createProviderRunner` — this app is where both
-seams came from, and it was the thing dropping `ctx.id`. **Sessions survive a restart** — the
+`required: true` and the runner is built by `createProviderRunner` - this app is where both
+seams came from, and it was the thing dropping `ctx.id`. **Sessions survive a restart** - the
 fourth decision in `gateway.ts` worth reading: `parking: { store: createFileSessionStore(...),
 persistLive: true }`, which is the provider engine's only restart mechanism, plus the half that
-is easy to miss — the cookie secret is **persisted** (`auth/secret.ts`, `EMBEDDED_SECRET` else a
+is easy to miss - the cookie secret is **persisted** (`auth/secret.ts`, `EMBEDDED_SECRET` else a
 0600 file beside the database) rather than per-process, because a scoped session 404s for
 anyone else, so signing everyone out on boot would preserve every conversation and make each one
 unreachable. Storage is `node:sqlite`, one file,
 zero deps. **`.embedded/` is data, not build output, and nothing automated may delete it**:
 `pnpm clean` removes `dist` only, and wiping the wiki is the separate, explicit `pnpm reset`.
-That is not a tidiness rule — the two were once the same script, and it cost someone their
+That is not a tidiness rule - the two were once the same script, and it cost someone their
 documents. Under `parking.persistLive` the parked records in `.embedded/sessions` hold each
 session's whole transcript in plaintext, so they want the same protection as the database
 beside them. `EMBEDDED_MODEL` (default `gpt-5.6-luna`) is env, not a constant; there is **one**
-provider and one key, deliberately — the openai-compatible branch was removed because every
+provider and one key, deliberately - the openai-compatible branch was removed because every
 branch in a reference app is a branch a reader must hold that teaches nothing about embedding.
 The one thing still deferred upstream is an express-free
 `mcpTransport` mount; express stays here purely as a mounting mechanism for `/mcp` and the
 static SPA.
-- **`zod` stays on 3.x here while the rest of the monorepo is on 4.x — that is a pin, not a
+- **`zod` stays on 3.x here while the rest of the monorepo is on 4.x - that is a pin, not a
   straggler.** `@silkweave/core` peer-requires `zod ^3.25.0`, and this is the only package that
   depends on silkweave. Nothing in `apps/embedded` imports `zod` directly, so the version reads
   like dead weight a dependency sweep should bump; bumping it breaks the peer instead. Revisit
@@ -594,47 +594,47 @@ static SPA.
   embedding was broken only in the mode anyone reading it would run.
 ## `apps/ios`
 
-native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo — no
+native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo - no
 package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
-client and a port of the react transcript reducer — protocol or transcript changes must be
+client and a port of the react transcript reducer - protocol or transcript changes must be
 mirrored there (`WorkerProtocol.version` tracks `PROTOCOL_VERSION`); see `apps/ios/README.md`.
 `context_compacted` draws as an ordinary transcript item, not as a synthetic seam like the recap
 row: it has a uuid, so it is addressable and bookmarkable, and it nests inside a sub-agent's
 frame on `parentToolUseId`. It appends where `conversation_reset` empties, and leaves
-`contextUsage` alone — the engine reports post-compaction occupancy itself. It arrives twice
-under one id — `pending` while the engine summarises, settled when the boundary lands — so the
+`contextUsage` alone - the engine reports post-compaction occupancy itself. It arrives twice
+under one id - `pending` while the engine summarises, settled when the boundary lands - so the
 row says it is working and then says what it did (`docs/GOTCHAS.md`). `TermFmt.compaction` is
 Swift's own port of `compactionText`, pinned by `TerminalTextTests` because there is no module
 the two sides can share.
 The three agent-view preferences are mirrored too (`AppSettings.swift`): variant and density as
-environment values the rows read, and the font as one `fontDesign` on the session view — with
+environment values the rows read, and the font as one `fontDesign` on the session view - with
 the composer's `UITextView` told separately, since UIKit sits outside SwiftUI's font
 environment. `lines` is **gone**, replaced by a native Swift **terminal** renderer
 (`App/Sources/Session/Terminal/` over `WorkerDeckKit/.../Terminal/`); a stored `lines`
 preference migrates to it rather than falling back to cards, because someone who turned boxes
 off should keep them off. Density and font stay Cards-only here as everywhere. The port carries
-the rules across — the two folds, the row-covers-a-*membership* addressing, the cell/wrap model,
-the strings that *are* the heights — and inverts one thing deliberately: **the planner wraps and
+the rules across - the two folds, the row-covers-a-*membership* addressing, the cell/wrap model,
+the strings that *are* the heights - and inverts one thing deliberately: **the planner wraps and
 the renderer draws the lines it returned**, so a row's height is `lines.count × line` by
 definition rather than a prediction that can be 99% right. Nothing is estimated, so a
 `UICollectionView` with a custom layout takes every frame straight from the height book, and the
-pixel offset of an unmounted row — what a scrubber needs — is simply available. Two divergences
+pixel offset of an unmounted row - what a scrubber needs - is simply available. Two divergences
 from the web client are deliberate and tested as such: a **run of one draws the call**, not
 `Ran 1 tool · 1 read` (the fold's justification is row-count compression, and at one call there
 is none to be had while the name, input and result preview are all thrown away); and the
 result-preview character budget is **derived from the column count**, since 400 characters is
 "about four lines" at a hundred columns and thirteen lines at thirty. `TerminalAudit` is the
 gate that keeps the exactness claim honest, reported on screen by the `terminal`/`terminalStress`
-preview variants — a line wider than its planned column is clipped silently, which is worse than
+preview variants - a line wider than its planned column is clipped silently, which is worse than
 a wrong height.
 **Shell mode** is the one place the phone's composer diverges from the desktop's, and only where
 it must: `!` typed as the first character of an empty draft flips it, **refused in
 `shouldChangeTextIn` before it is inserted** (`RichTextEditor.onLeadingTrigger`) rather than
-cleared afterwards — `textViewDidChangeSelection` fires *before* `textViewDidChange`, so a parent
+cleared afterwards - `textViewDidChangeSelection` fires *before* `textViewDidChange`, so a parent
 that emptied the draft from `onEdit` had the character written straight back by
 `parent.text = view.text`, and on a shell prompt that meant `! ls` reaching `/bin/sh`. Suppressing
 at the insertion is also what the web's `launchTrigger` does, one layer up; the frame and the gutter glyph
-go magenta, and the way *out* is tapping that `!` rather than Escape — a phone has no Escape key,
+go magenta, and the way *out* is tapping that `!` rather than Escape - a phone has no Escape key,
 so the glyph that names the mode is also what undoes it. The `!` outranks `\u{2715}` in the gutter
 even mid-turn, because the mode is the louder fact and stop is one tap away again the moment you
 leave. The offer is per attach (`AttachedFrame.shell` → `TranscriptViewModel.canRunShell`) and the
@@ -642,36 +642,36 @@ mode is dropped if a reattach withdraws it, so a composer can never sit in a sta
 the gateway would refuse.
 
 **A phone has no hover, so a wash *is* the affordance**: `TerminalPalette.uiPressable`, drawn by
-`BackdropView` behind any line that carries a press **and wears nothing else** — no band, not
+`BackdropView` behind any line that carries a press **and wears nothing else** - no band, not
 `inOpen`. That carve-out is the design, not an optimisation: a tool call's preview rows are
 pressable too, but they already sit in the output band, and a second wash on top would read as
-"two targets" when the block is one. So what gets marked is the summary line — the folded run, the
+"two targets" when the block is one. So what gets marked is the summary line - the folded run, the
 task, the tool header. Strength is **0.028/0.024, deliberately below** the open wash (0.05/0.04)
 and the bands (0.04/0.05), because a transcript is mostly pressable and at band strength every
 second row would be washed and the rows carrying real meaning would stop standing out. If it ever
-reads as noise the next move is to mark **fewer rows, not to lighten it further** — the honest
+reads as noise the next move is to mark **fewer rows, not to lighten it further** - the honest
 alternative is marking only blocks that fold something and leaving a plain tool call bare.
 
 **The composer's glyphs are the same ruling, one step further.** `+`, `\u{2715}`, `!` and `\u{21B5}` are ASCII
 characters on the web and in the webview, bare until a pointer hovers them; on a thumb they read
 as *text that happens to be tappable*, which was the complaint. So on iOS a glyph stands in a
-**cell** — a 32pt rounded square, `TerminalPalette.uiCellFill` behind a `uiCellStroke` hairline,
-drawn by `TermGlyphButtonStyle` — and the cell washes with `uiPressedCell` while a finger is down.
+**cell** - a 32pt rounded square, `TerminalPalette.uiCellFill` behind a `uiCellStroke` hairline,
+drawn by `TermGlyphButtonStyle` - and the cell washes with `uiPressedCell` while a finger is down.
 That wash is **0.10/0.08, deliberately above** `uiPressable`: a 32pt square shows a fraction of a
 full-width row's area, and it is momentary rather than ambient.
 
 **The cell is drawn only while the button can act, and that is the whole state model.** A send
-with nothing to send has no cell at all — just the dim `\u{21B5}` — which is why nothing here uses a
+with nothing to send has no cell at all - just the dim `\u{21B5}` - which is why nothing here uses a
 disabled opacity: a greyed-out button still looks like a button, and an absent one cannot be
 misread. The resting `\u{276F}` is bare for the same reason, and it is a plain `Text` rather than a
 disabled button, because it is the gutter and not a control. Send is deliberately **not** tinted;
 the cell appearing *is* what armed means. Only the two tones that carry meaning survive on top of
-the cell — yellow for a running turn's stop, magenta for shell mode.
+the cell - yellow for a running turn's stop, magenta for shell mode.
 
 **Every number in that row comes from Figma, through one conversion.** The frames are
 `Prompt/Default`, `Prompt/Focus` and `Prompt/Dirty` on the `iOS` page of the WorkerDeck file
 (nodes `43:1965`, `43:1988`, `43:1997`), and the trap in them is that **their units are not
-points**: they are drawn over a 1170x2532 screenshot — an @3x capture of a 390pt phone — placed at
+points**: they are drawn over a 1170x2532 screenshot - an @3x capture of a 390pt phone - placed at
 585 units wide, so one design unit is two device pixels, or **two thirds of a point**. Reading the
 frames' numbers as points makes every one of them half again too large, which is exactly what the
 first attempt shipped. `TermComposerMetrics` applies the 2/3 once and keeps the raw frame numbers
@@ -680,7 +680,7 @@ are 5.33 against 8 at the bottom, and the 2-unit rule is 1.33pt.
 
 Two structural consequences of matching it. The rule is a **row of its own**, not an overlay: the
 frames give it an *outside* stroke, so an overlay ate the top padding and sat every cell 1.33pt
-high. And the terminal variant's `DraftStyle.containerInset` is now **zero on both axes** — the
+high. And the terminal variant's `DraftStyle.containerInset` is now **zero on both axes** - the
 field is one cell of a row that supplies every gap itself, so a horizontal inset pushed the typed
 line off the design's column and a vertical one made the row taller than the cell it is measured
 against, growing the whole bar. The card shape keeps its 12, because there the field *is* the
@@ -690,7 +690,7 @@ at one content-size category and wrong at every other.
 
 Also gone: the old promise that the gutter glyph sits on the column every transcript marker sits
 in. A 32pt cell centres its glyph at 21pt, and the frames accept that.
-`packages/ui/src/styles/terminal.css` is untouched either way — the web and the webview keep the
+`packages/ui/src/styles/terminal.css` is untouched either way - the web and the webview keep the
 bare glyph and their hover, and the grid audit's "one cell wide, one line tall" rule still governs
 there. `UIPREVIEW=composer` stacks all five glyph states.
 
@@ -699,26 +699,26 @@ own `contextMenuConfigurationForItemsAt`, not a per-cell interaction, so UIKit i
 recognizer per surface and coordinates it with the scroll instead of leaving a hand-added one to
 win that fight alone). It carries what the web puts in its hover overlay: the bookmark toggle and
 **Copy**, which had no home here at all. Two rules keep it honest. It addresses **the row's own
-head item**, never the touched line — `TermLine` deliberately erases where a line came from, and
+head item**, never the touched line - `TermLine` deliberately erases where a line came from, and
 its `press` is a verb rather than an address (nil on exactly the prose rows most worth marking),
 so per-line attribution would be a second answer to "what did this row draw", which is the drift
 this renderer exists to refuse; a folded run therefore bookmarks the call its row is named for.
-And Copy takes the row's **source** — an answer's raw markdown, a call's command — never its drawn
+And Copy takes the row's **source** - an answer's raw markdown, a call's command - never its drawn
 lines, since the body is already one selectable run and copying what is *visible* needs no menu.
 A standing text selection refuses the menu, the same deference `handleTap` pays it. The
 selection-long-press against the menu-long-press is the one interplay that still wants a device
-check: idb's synthetic input drives neither recognizer — under it the ordinary tap does not
-register either — but **XCUITest's input does reach this app** (`WorkerDeckAppUITests`, driven
+check: idb's synthetic input drives neither recognizer - under it the ordinary tap does not
+register either - but **XCUITest's input does reach this app** (`WorkerDeckAppUITests`, driven
 through testmanagerd, is what proves the session row's tap contract), so that is the tool for the
 next such check before a phone.
 Hit targets are the standing tension: a one-line block is `metrics.line` tall, ~19pt at the
 phone's 12pt cell against Apple's 44pt, and the grid forbids the obvious fix (a row is a whole
-number of lines, and a taller row is a different transcript). What is there is free — `handleTap`
+number of lines, and a taller row is a different transcript). What is there is free - `handleTap`
 **clamps** the line index instead of bounds-checking it, so the blank line `gapAbove` puts above a
 block, dead space belonging to nobody, becomes part of the row it separates and roughly doubles
 the target for exactly the rows hardest to hit. It is a partial answer by construction: two
 adjacent blocks with no gap between them get nothing. None of this is portable to `packages/ui`
-and should not be — a pointer is exact and a thumb is not, and `press.tsx`'s rules (refuse a press
+and should not be - a pointer is exact and a thumb is not, and `press.tsx`'s rules (refuse a press
 that travelled, refuse one with a selection standing) are the pointer's version of the same care.
 A **deep link lands on the row that triggered it** rather than at the tail: `TranscriptSeqIndex`
 (see `docs/GOTCHAS.md`) maps the push payload's `seq` to the first item appended at or after it,
@@ -726,52 +726,52 @@ and `resolveFocus()` is asked from the moment the replay hold lifts, settling **
 can lift on a stall, so a row can be found while the transcript is still filling; the kit's
 `deepLinkPlacement` then lands on it but marks it incomplete, and
 `TranscriptScrollGeometry.pinsAfterJump` refuses to re-arm the bottom pin from where such a jump
-lands — the bottom of a filling transcript is not the bottom, and a pin taken there dragged the
+lands - the bottom of a filling transcript is not the bottom, and a pin taken there dragged the
 reader to the tail with the rest of the replay (`docs/GOTCHAS.md`). A seq is only worth acting on
 in the log it was numbered in, so the payload carries `SessionInfo.epoch` beside it and
-`deepLinkSeqSurvives` drops the landing to the tail when the session has woken since — absent on
+`deepLinkSeqSurvives` drops the landing to the tail when the session has woken since - absent on
 either side means "same log" (`docs/GOTCHAS.md`). Two limits are permanent
-rather than debt. The **cards renderer ignores `seq`** — `TranscriptListView` has no row
+rather than debt. The **cards renderer ignores `seq`** - `TranscriptListView` has no row
 model to land on, so a deep link there opens at the tail as it always has; deliberate, the
 terminal theme being the default. And a **`seq` older than retention** lands on the top of what
 remains, which is the closest the transcript can get, untested against a real retention cut.
 The **row itself** mirrors the dashboard's (`packages/ui`'s `SessionBrowser`) rather than
-inventing a phone shape: two lines, not three — a state *glyph*, title, unread badge and the
+inventing a phone shape: two lines, not three - a state *glyph*, title, unread badge and the
 context ring on top; the engine's mark, one truncating run of model · project · gateway ·
 profile · cost, then the age and the step disclosure underneath, in that order. **State leads both
 lines**, in a 14pt cell the engine
-mark lands in underneath — it used to trail, and a trailing glyph has no fixed x, so a list of
+mark lands in underneath - it used to trail, and a trailing glyph has no fixed x, so a list of
 thirty gave the eye nothing to run down. The mark itself needed two new pieces the app had
 neither of: `engineMark` ported into the kit (`EngineMark.swift`, tested at its edges, because a
 row that drew OpenAI's mark beside a name the sidebar spells as Gemini's is worse than drawing no
-mark), and **real vector assets**, since SwiftUI has no path-data parser — generated into the
+mark), and **real vector assets**, since SwiftUI has no path-data parser - generated into the
 catalog from the very table the web draws inline by `apps/ios/scripts/gen-engine-marks.mjs`, as
 template images so `VendorPalette` (the `--vendor-*` hex pairs, ported the way `TerminalPalette`
 ports `terminal.css`) tints them. An unrecognised engine draws **nothing at all** rather than the
 web's placeholder dot: a dot earns its keep in a sidebar where two text columns share a gutter,
 and is a smudge in front of a phone row.
-`SessionItem.tsx` is the reference and this row owes it parity — it is a hand-mirror of the one
+`SessionItem.tsx` is the reference and this row owes it parity - it is a hand-mirror of the one
 drawing the product otherwise has (see `docs/PACKAGES.md` §`packages/ui`), so every rule it does
 not carry is drift. `UIPREVIEW=sessions` (`SessionsPreview`) is the phone's copy of the
 `Sessions/SessionItem` `TheList` story, same sessions in the same order, so the two can be put
 side by side; `SessionCardView` exists so that preview can draw the composition the list ships
-rather than the row alone — and its `onOpen` is **required** for that reason. The first version of
+rather than the row alone - and its `onOpen` is **required** for that reason. The first version of
 this row shipped a collision the preview could not show: `route` was optional, the preview passed
 none, so the card drew bare while the app wrapped it in a `NavigationLink` whose platform chevron
 landed under the badge and ring. A preview that omits what the list passes is a preview of a
 different composition; the card now has no optional that lets that happen twice.
 Four rules were off and are now ported. The **step disclosure sits on line two**, where the
 dashboard puts it, not centred on the row's trailing edge as a third column. The Figma frame
-(`SessionLists`, node `17-1156`) settles the trailing edge outright: **no per-row chevron** —
+(`SessionLists`, node `17-1156`) settles the trailing edge outright: **no per-row chevron** -
 line one ends with the ring, line two with the `ListDropdown`, and only the sub-items carry an
 arrow. So the row is a `Button` that appends its route to the stack's path (the push notification
 and create paths already navigate that way), not a `NavigationLink`: a link draws the chevron the
-design has no room for, and `navigationLinkIndicatorVisibility(.hidden)` — annotated iOS 17 via
-`@_alwaysEmitIntoClient` — is a **no-op on the iOS 18 runtime** (measured on the 18.5 simulator;
+design has no room for, and `navigationLinkIndicatorVisibility(.hidden)` - annotated iOS 17 via
+`@_alwaysEmitIntoClient` - is a **no-op on the iOS 18 runtime** (measured on the 18.5 simulator;
 only 26 honours it), so the modifier could not carry a 17.0 deployment target. A list-row button
 paints its label in the accent, which the card overrides to `.primary`; every other colour on the
-row is explicit already. The disclosure stays **outside** the row's button — a hand-rolled button
-inside the row's tap target is a coin toss under a thumb — as an `.overlay(alignment:
+row is explicit already. The disclosure stays **outside** the row's button - a hand-rolled button
+inside the row's tap target is a coin toss under a thumb - as an `.overlay(alignment:
 .bottomTrailing)` sibling in z-order, full row height for the thumb and bottom-aligned for the
 eye. It is laid out by **the same view drawn twice**: `StepDisclosure` sits `.hidden()` at the end
 of line two, reserving exactly its own width in the line's flow, and the overlaid button draws the
@@ -785,10 +785,10 @@ percentage and they turn in different places, so `meterSeverity` (80/95, neutral
 the kit and tested there, `ringTint` maps it, and `usageTint` (70/90, accent below) stays what a
 *bar* fills with. A ring that was accent-blue from 1% to 79% had spent the accent saying nothing.
 The **working spinner is tinted** (`text-info`) rather than left at the system's grey, and
-**parked is neutral** rather than purple — the dashboard spends no hue on a state that wants
+**parked is neutral** rather than purple - the dashboard spends no hue on a state that wants
 nothing. And a **running step draws a spinner**, the marker its own card already uses for the same
 fact, where it drew a static `circle.dotted`.
-The **`···` is drawn, and drawn persistently** — which is a divergence from the dashboard and *not*
+The **`···` is drawn, and drawn persistently** - which is a divergence from the dashboard and *not*
 one from the frame. The web reveals the same actions on hover; a phone has no hover, so the
 alternative to always-there is invisible, and the swipe and the long press are both only found by
 someone who already guessed they were there. It rides the trailing edge of line two beside the
@@ -796,30 +796,30 @@ disclosure, by the same hidden-copy trick, and its menu comes from **one builder
 (`rowActions(for:model:)`) shared with the long-press menu so the two cannot drift; the trailing
 swipe still spells Close/Remove for itself because a swipe button is a different drawing. The
 `Menu` is `.tint(Color.secondary)`: a menu paints its label in the accent, and on this row the
-accent is a *state* — a running step count wears it. It is pressed by `WorkerDeckAppUITests`,
+accent is a *state* - a running step count wears it. It is pressed by `WorkerDeckAppUITests`,
 asserting both halves (a menu came up **and** the list is still on screen), because a press that
 misses it opens the session and looks like a working app in a screenshot.
 Two other divergences are deliberate. The age stays `4m` against the web's `4m ago` (`Fmt.ago` is the app's
-one elapsed spelling). And there is **no selected-card fill** — the phone pushes where the sidebar
+one elapsed spelling). And there is **no selected-card fill** - the phone pushes where the sidebar
 selects, so there is no standing selection to draw and no `activeStepKey` to weaken it to grey.
 **The sub-agent takeover** is a real navigation push (`navigationDestination(item:)`), and the
 one thing that shaped it is a SwiftUI fact worth stating on its own: **a push cancels the covered
-view's `.task`**. Measured with a probe app on the simulator (iOS 26.5) — `onDisappear` fires at
+view's `.task`**. Measured with a probe app on the simulator (iOS 26.5) - `onDisappear` fires at
 the start of the push and the covered `.task` is cancelled ~0.5 s later, at the *end* of the
 animation. macOS does not do this, which is probably where the opposite assumption came from. The
-obvious shape — "push a destination that reads the already-attached state, the socket lives in
-`SessionView`'s `.task`" — would therefore have **detached the socket underneath the takeover**,
+obvious shape - "push a destination that reads the already-attached state, the socket lives in
+`SessionView`'s `.task`" - would therefore have **detached the socket underneath the takeover**,
 freezing the one surface built for watching an agent work, and replayed with a spinner on the way
 back. So the attach's lifetime moved into the view model as a **claim count**
 (`TranscriptViewModel.holdOpen()`): both views await it, the socket lives while any claim stands,
 and because the two appearances overlap in both directions the count never reaches zero across a
 push or a pop. Two things that used to hang off `onDisappear` ride the claim transitions instead
-— notification suppression and the unread truing-up — since under a push `onDisappear` now fires
+- notification suppression and the unread truing-up - since under a push `onDisappear` now fires
 *mid-session*, and the approval shown inside the takeover would otherwise ring the phone about
 itself. There is never a second attach and never a second reducer.
 The frame itself is the web's rule, ported: membership is the kit's `subagentItems`, and the
-component owns the same three gates the web transcript (`Transcript.tsx`/`TranscriptRows.tsx`) owns — recap, sticky prompt, and deep-link
-focus — because every one of them is keyed to a *full-transcript* index. **The scrubber stays**,
+component owns the same three gates the web transcript (`Transcript.tsx`/`TranscriptRows.tsx`) owns - recap, sticky prompt, and deep-link
+focus - because every one of them is keyed to a *full-transcript* index. **The scrubber stays**,
 riding the frame's own items and fold with the kit's `ScrubberInput.frameParentId` deciding what
 "top level" means (web `scrubber.tsx`, same rule: without it a frame's rail mounted, banded, and
 marked nothing), and inside a frame every narration step marks on its own where the conversation
@@ -827,22 +827,22 @@ gets one mark per segment. Host **bookmarks** ride in unchanged, and can only be
 addressed by **item id**: the seam was indices when this paragraph first said they would have to
 stay out, and an index means nothing at a level it was not taken at. An id is level-independent,
 so both screens pass the *same* set and inside a frame each id resolves against the frame's own
-items or draws nothing — the web `TranscriptRows.tsx` rule exactly. A bookmark set on a frame's
+items or draws nothing - the web `TranscriptRows.tsx` rule exactly. A bookmark set on a frame's
 child therefore shows at the frame's own offsets there, and on the `Task` row that absorbed it at
 top level. The
 composer goes and **the approvals stay** (`ApprovalPromptHost`, shared with the session screen), for
 the reason `docs/PACKAGES.md` records: a sub-agent's tool calls raise session-level permission
 requests, so hiding them deadlocks the agent you are watching. Entry from the transcript is
-`TermPress.openSubagent`, attached to the Task header — **a deliberate divergence**: the web keeps
+`TermPress.openSubagent`, attached to the Task header - **a deliberate divergence**: the web keeps
 the toggle on the press and puts the takeover in a hover action, and a thumb has no hover, so the
 one target goes to the deliberate move and inline task expansion gives way. `frameParentId` threads
 planner → height book → plan cache → audit rather than staying cosmetic, because suppressing the
 nested step inside a frame changes the wrap and therefore the height, and the book and the drawn
 plan must read the same value. A takeover asked for *before its Task exists* (the list knows the
 `toolUseId` from the rollup while the transcript is still replaying) is **held until the replay
-hold lifts** and only then resolved — so the phone never frames a mid-replay transcript, which is
+hold lifts** and only then resolved - so the phone never frames a mid-replay transcript, which is
 the risk `_docs/VERIFICATION-DEBT.md` records as unpaid on the web.
-**A sub-agent's brief leads its frame** — what the agent was asked, then what it did. The
+**A sub-agent's brief leads its frame** - what the agent was asked, then what it did. The
 instruction is never in the stream (the engine puts it in the spawning call's `prompt`), so both
 renderers splice it in as a synthetic first row, and it leads the inline task expansion as well as
 the takeover. **The clip is a shared rule and one constant per client with the same value**: four
@@ -851,19 +851,19 @@ char-vs-column divergence `ResultPreview` needed does not arise here. Two diverg
 forced by the model this renderer runs on: the affordance is **explicit** (`… +N lines` under the
 four, where the web fades the fourth) because a thumb needs a target that says what it does, and an
 *unclipped* brief carries no press at all; and the open state is `ExpansionKey.brief(taskId)` rather
-than component-local, because the height book must know every height — the frame row and the inline
+than component-local, because the height book must know every height - the frame row and the inline
 twin therefore share one state. Codex draws no brief row at all, enforced where the row is built
 rather than where it is drawn: its spawn message is encrypted on the wire, and there is nothing to
 show.
 Sub-agents are a count **and** a disclosure, and they are the **same target**: the count on the
-row's trailing edge *is* the control, with a chevron beside it saying which way it will go —
+row's trailing edge *is* the control, with a chevron beside it saying which way it will go -
 the frame's `ListDropdown`, drawn where the frame draws it. It reads `2/3` while some are still
 running and a bare total once they have settled (the two spellings `StepToggle` picks between),
 and it wears the accent while anything is live.
 
 It is a **sibling of the row's button, never a child**, and that part is not negotiable: a
 hand-rolled button inside the row's tap target is a coin toss under a thumb, because the row takes
-the tap. The row used to draw the count alone for exactly that reason — right about *nesting*, and
+the tap. The row used to draw the count alone for exactly that reason - right about *nesting*, and
 answered by not nesting rather than by refusing the disclosure, because "which agent" is a
 question the list can answer and the alternative is opening the session to find out.
 
@@ -873,41 +873,41 @@ control most rows never showed, and it asked the reader to find the disclosure s
 than on the thing being disclosed. A trailing control has nothing to line up with, so a session
 with no agents simply has no disclosure and its row runs full width. Expanded, each agent is its **own
 full-width row**, which is a real thumb target where a line inside a two-line row is not, and it
-pushes `SessionRoute.session(…, subagent:)` — the session with that agent already framed, the
+pushes `SessionRoute.session(…, subagent:)` - the session with that agent already framed, the
 phone's spelling of the dashboard's `?subagent=`. The rows come from the kit's `sessionSteps`
 (`SessionSteps.swift`, the port of `packages/ui`'s `SessionSteps.tsx`) and are **sub-agents only**:
 `isAgentRecord` decides membership, `SessionRoute.step` has one destination, and every step pushes
 its takeover.
 
 Tasks are the thing that is *not* here, and the omission is the design. They used to share this
-disclosure, which made one badge answer two questions and answer neither — so they moved to the
+disclosure, which made one badge answer two questions and answer neither - so they moved to the
 session's own **`TasksSheet`**, opened from the count on `SessionStatusBar` (a chip, because the app
 has no popovers: every status-line item is a case on `SessionView.Sheet` and a `.sheet(item:)`).
 Its rows come from `sessionTasks` (`Checklist.swift`), unifying the engine's checklist with the
 untyped spawns. `SessionRoute.session(…, reveal:)` survives and only changed caller: from inside the
 sheet the session is already open, so a spawn sets `focusTarget` directly (`toolCallItemIndex` → the
 same focus request a tapped notification rides, and so **terminal-renderer only**, since the cards
-renderer has no row model to land on — the sheet passes `onReveal: nil` there rather than drawing a
+renderer has no row model to land on - the sheet passes `onReveal: nil` there rather than drawing a
 press that cannot land).
 
 Three parity ports share one shape worth stating once: **the phone reuses the kit's rule and
-supplies its own drawing.** `TerminalTodos` (the `TodoWrite` checklist as the transcript draws it — the
+supplies its own drawing.** `TerminalTodos` (the `TodoWrite` checklist as the transcript draws it - the
 *wire* checklist is now `ChecklistItem` and reaches the phone as a field) and `PlanRequest` (is this
 approval a plan?) are ports of `todos.ts` and `plan-request.ts`, and each is the *single* predicate
 both of this client's renderers branch on, so the cards prompt and the terminal prompt can never
 disagree about what a plan is. The checklist diverges from the web in one place, and the divergence
 is the height model: the web counts todo rows whether or not the row is open, because its heights
 are the scrubber's estimate, while here the plan **is** the height, so a checklist counted while
-open would be a frame around lines nobody paints — it is therefore planned on exactly the condition
+open would be a frame around lines nobody paints - it is therefore planned on exactly the condition
 it is drawn on, the way a diff already was. A plan's markdown needs a third renderer
 (`TerminalPromptMarkdown`): the Cards one scales headings, which this grid cannot afford, and the
 planner has the right vocabulary but returns wrapped lines for a height book that a self-sizing
-prompt does not have — so the *rules* are copied from `planBlocks` (weight, never size) and the
+prompt does not have - so the *rules* are copied from `planBlocks` (weight, never size) and the
 wrapping deliberately is not. **Image paste** needs a `UITextView` subclass for a reason no amount
 of delegate work escapes: `shouldChangeTextIn` sees the text a paste produced and never the
 pasteboard it came from, so `paste(_:)` is the only place the clipboard is still whole. It takes
 the web's rule that the first image wins and short-circuits the text paste, and adds one the web
-has no say in — raw clipboard bytes over `UIPasteboard.image`, because a screenshot is PNG and the
+has no say in - raw clipboard bytes over `UIPasteboard.image`, because a screenshot is PNG and the
 API takes PNG, and decoding to re-encode as JPEG would be a lossy round trip on the single thing
 people paste into an agent most.
 
@@ -920,92 +920,92 @@ while its session is live and drops to the neutral badge once it settles, becaus
 on a finished session is a record rather than a call to look. The old third line spent a third of every row on a labelled `Idle`
 badge, which is the state you scan *past*; and the model was printed raw (`claude-opus-5`) where
 the other clients say `Opus 5`, so `friendlyModel` was ported into the kit
-(`ModelName.swift`, tested against the same examples the TS doc comment states) — the same
+(`ModelName.swift`, tested against the same examples the TS doc comment states) - the same
 person reads all three clients, and a model spelled two ways is the drift the shared view model
 exists to prevent. `ContextRing`/`RadialGauge`/`usageTint` moved out of the session screen into
 `App/Sources/Support/UsageGauges.swift` when the list started drawing them, and the ring takes a
 bare percentage rather than a usage record: the session screen holds a whole `ContextUsage` and a
 row holds the compact `ContextReading`, and the percentage is the one number both agree on. On a
-row it draws **without its inner label** — two digits inside a 14pt ring are unreadable at arm's
+row it draws **without its inner label** - two digits inside a 14pt ring are unreadable at arm's
 length, and across twenty rows the fill *is* the reading.
-`SessionList.swift` and `Watermarks.swift` are two more such mirrors — protocol's sessions-list
-view model and unread model — so the phone's list is **one list across every configured
+`SessionList.swift` and `Watermarks.swift` are two more such mirrors - protocol's sessions-list
+view model and unread model - so the phone's list is **one list across every configured
 gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset
 line, per-row unread and the app-icon badge summed over the rows the filter is *showing*. The
 scope filter is passed `nil` throughout: a phone has no open folders, so it is genuinely inert
 rather than hiding everything, and no fake scope is invented to fill the hole. Marks are only
-written while a session is on screen *and attached*, with a re-fetch-and-mark on disappear —
+written while a session is on screen *and attached*, with a re-fetch-and-mark on disappear -
 the same discipline as the extension's `visibilityChanged`, and the thing an unread badge
 silently dies of if you skip it. Rename is `PATCH /sessions/:id` (`UpdateSessionRequest`'s
-title is three-state on the wire — set, explicit null to clear, absent to leave alone — so it
+title is three-state on the wire - set, explicit null to clear, absent to leave alone - so it
 is a wrapper enum, not a `String?` that would collapse the last two).
-Zero third-party Swift deps — including for hot reload, where InjectionNext is wired in
+Zero third-party Swift deps - including for hot reload, where InjectionNext is wired in
 through its prebuilt bundle and a dozen lines of `HotReload.swift` rather than a package;
 auth is the header transport (no cookie machinery). Assistant text renders through
 The **prompts** (permission and `AskUserQuestion`) live in the footer, which is a
-`safeAreaInset` — sized to its content, with no scrolling of its own — so a prompt taller than
+`safeAreaInset` - sized to its content, with no scrolling of its own - so a prompt taller than
 the screen pushed its own action row past the bottom edge and could not be answered at all. The
 `lineLimit`s that used to sit on descriptions and previews were an attempt at the same problem
 and made it worse in the way that matters: they hid the text you needed *in order to choose*
 while still not bounding the height. So the shape is a capped, scrolling body with the actions
 pinned under it (`PromptBodyScroll`), the cap being half the *measured* container rather than a
-constant — one that fits an SE wastes half a Pro Max and one tuned for a Pro Max is the original
+constant - one that fits an SE wastes half a Pro Max and one tuned for a Pro Max is the original
 bug on an SE. Nothing is truncated any more, which is why `toolInputSubject` joins
 `toolInputSummary`: the summary's 140-character cap is right for a collapsed transcript row and
 wrong for an approval, where the string it clips is the command about to run. Under the terminal
-theme they are **their own views** rather than the Cards views restyled — one question at a time
+theme they are **their own views** rather than the Cards views restyled - one question at a time
 behind a chip strip, ending in a review step, which is bounded by construction where a stacked
-form is not; the numbering survives as *structure*, the web's `↑/↓ · 1–3 to choose` hint does
+form is not; the numbering survives as *structure*, the web's `↑/↓ · 1-3 to choose` hint does
 not, there being no keyboard here. `UIPREVIEW=prompts` is the gate, and the claim it tests is
-not "does this look right" but **"can it be answered"** — which is what caught the clipped
+not "does this look right" but **"can it be answered"** - which is what caught the clipped
 command. `TerminalTypography.session` is the cell all three terminal surfaces measure against,
 the web's `terminalMetrics` lesson stated once here.
 Two more mirrors landed with the `sessionState` fix: `SubagentInfo`/`SessionInfo.subagents` had
-**never been mirrored at all**, so the phone was not computing the bucket wrongly — it had no
+**never been mirrored at all**, so the phone was not computing the bucket wrongly - it had no
 field to compute it from, which is the more interesting half of why that bug survived the rule
 being written down. Sub-agents render now: `SessionSteps.swift` ports the shared step model,
 `SessionListView` draws the expandable step rows, and a step press lands in the takeover
-(`SubagentTakeoverView`) rather than inline expansion — no hover on a thumb.
+(`SubagentTakeoverView`) rather than inline expansion - no hover on a thumb.
 A **`Menu` in a toolbar closes when its item is re-identified**, and the sessions list's filter
-dropdown shut itself on every poll because of it — the menu read `model.adapters`, a property
+dropdown shut itself on every poll because of it - the menu read `model.adapters`, a property
 computed from the session rows, so `@Observable` invalidated it whenever a snapshot was
 replaced, and a `ToolbarItem` with no `id` is re-identified when the builder re-runs. Stable
 ids, plus a `FilterMenu` that is `Equatable` over plain values and never the model. Worth
 remembering as a shape, not an incident: any toolbar control whose body touches polled state
 wants both halves.
 `MarkdownBlocks` (headings, lists, quotes, rules, fences; tables stay literal, and anything
-unmodelled falls through as prose rather than being lost) — the classifier is **line-local by
+unmodelled falls through as prose rather than being lost) - the classifier is **line-local by
 design**, because the parser reruns on every streamed delta and a block that changed shape a
 token after it appeared would be worse than one that never rendered.
-**Live Activities** (iOS 18 floor, which is what sets it — push-to-start needs 17.2). One card per
+**Live Activities** (iOS 18 floor, which is what sets it - push-to-start needs 17.2). One card per
 **engaged** session (`running` or `awaiting_approval`), keyed by session id, raised by the CLI
 forwarder with a push-to-start, updated by push, ended shortly after the turn settles. An idle
 session gets no card: iOS stops accepting updates at 8 h and force-ends at 12 h, so a card that
 sits through an idle session dies before the moment it exists for. `SessionActivityAttributes` and
 its `ContentState` live in **`WorkerDeckActivity`**, a second SwiftPM target beside `WorkerDeckKit`
-— the app and the widget extension must compile the *same* type, and the extension should not link
+- the app and the widget extension must compile the *same* type, and the extension should not link
 the transcript reducer. It is deliberately not part of the kit for the same reason
 `DeviceRegistration` is not: this is a contract with the CLI's forwarder, not with
 `packages/protocol`. `packages/cli/test/live-activity.test.ts` writes the payload fixtures that
 `WorkerDeckActivityTests` decodes with the real types (`UPDATE_FIXTURES=1` to regenerate), which is
 the only place the two languages are made to agree.
-The extension (`Widgets/`) **draws and nothing else** — no credential, no network. A card's buttons
+The extension (`Widgets/`) **draws and nothing else** - no credential, no network. A card's buttons
 are `LiveActivityIntent`s, which the system performs by launching the *app* in the background, so
 approving reuses the same REST path a notification action takes and no Keychain group is shared
 with a second binary. `ActivityCoordinator` owns the push-to-start token (registered with every
 host, beside the APNs device token) and the per-card update tokens (reported to the one host named
 in the attributes, over `/apns/activities`), and reconciles on every foreground: a card whose
 session is no longer engaged, whose host is gone, or which 404s is ended. Everything is started
-from `AppDelegate`, never the SwiftUI `.task` — see `docs/GOTCHAS.md` §APNs for why, and for the
+from `AppDelegate`, never the SwiftUI `.task` - see `docs/GOTCHAS.md` §APNs for why, and for the
 five other things about this that bite.
 An `AskUserQuestion` gets real option buttons only when it is one question, single-select and ≤ 4
 options, and the card is still carrying the original tool input; otherwise it says "Answer in app".
 The answer is the original input rewritten with an `answers` object, exactly as
-`QuestionPromptView.submit` does it — which is why the input has to travel with the card at all: no
+`QuestionPromptView.submit` does it - which is why the input has to travel with the card at all: no
 REST route lists pending approvals.
 
 **When you change the app, push it to the phone**: `apps/ios/scripts/deploy.sh` (build +
-install + launch, over Wi-Fi, no cable) — the point is that Tobias can follow along on the real
+install + launch, over Wi-Fi, no cable) - the point is that Tobias can follow along on the real
 device rather than read about a simulator screenshot. Add `--no-launch` and it works on a
 locked phone; launching needs it unlocked, and the script says so rather than dumping
 CoreDevice errors. For a screen that needs a live session to render at all, the `UIPREVIEW`
@@ -1014,6 +1014,6 @@ harness renders it from canned data in the simulator. Both are documented in
 
 Dependency direction: `protocol ← core ← queue ← server ← cli`, `protocol ← client ← react ← ui ← web`,
 `sandbox` a leaf either side may use. The browser side (client/react/ui/apps) must never import
-core/server, the Agent SDK, or any model SDK; `client` must never devDep on `react` — that edge is
+core/server, the Agent SDK, or any model SDK; `client` must never devDep on `react` - that edge is
 the build-graph cycle turbo refuses.
 

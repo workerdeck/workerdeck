@@ -4,7 +4,7 @@ import './preview.css'
 
 // Theme is a toolbar global, not a story argument: half this package's tokens are
 // declared on `:root`, so a scoped wrapper would not theme a story. `surface` is the
-// same idea — a session card's fills were picked against the sidebar it ships on.
+// same idea - a session card's fills were picked against the sidebar it ships on.
 export const globalTypes = {
   theme: {
     description: 'Theme',

@@ -4,8 +4,8 @@ import { delimiter, join } from 'node:path'
 export type LaunchSpec = {
   command: string
   args: string[]
-  // npx may have to fetch the package — and its per-platform engine binaries are hundreds of
-  // megabytes — so the first run of that path is minutes, not seconds.
+  // npx may have to fetch the package - and its per-platform engine binaries are hundreds of
+  // megabytes - so the first run of that path is minutes, not seconds.
   readyTimeoutMs: number
   viaNpx: boolean
 }
@@ -25,7 +25,7 @@ function executable(path: string): boolean {
 }
 
 // VS Code resolves the user's login-shell environment for the extension host, so PATH here is the
-// PATH that also has `claude` and `codex` on it — the two binaries the server goes on to spawn.
+// PATH that also has `claude` and `codex` on it - the two binaries the server goes on to spawn.
 export function onPath(name: string): string | undefined {
   const extensions = process.platform === 'win32' ? WINDOWS_EXTENSIONS : ['']
   for (const dir of (process.env.PATH ?? '').split(delimiter).filter(Boolean)) {

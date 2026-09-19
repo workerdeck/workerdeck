@@ -9,7 +9,7 @@ import SwiftUI
 /// safe-area inset is sized to its content with no scrolling of its own. A
 /// prompt taller than the screen therefore neither scrolled nor shrank: it
 /// pushed its own Allow/Deny row off the bottom edge, where nothing could reach
-/// it. A long question was *unanswerable* — not awkward, unanswerable.
+/// it. A long question was *unanswerable* - not awkward, unanswerable.
 ///
 /// The `lineLimit`s that used to sit on descriptions and previews were an
 /// attempt at the same problem and made it worse in the one way that matters:
@@ -17,8 +17,8 @@ import SwiftUI
 /// total height, so six options ran off the screen *and* were each truncated.
 /// They are gone. The scroll is the height bound now, so nothing else has to be.
 ///
-/// A `ScrollView` is greedy along its scroll axis — proposed nothing, it takes
-/// everything — so it cannot simply be handed a `maxHeight` and asked to
+/// A `ScrollView` is greedy along its scroll axis - proposed nothing, it takes
+/// everything - so it cannot simply be handed a `maxHeight` and asked to
 /// shrink-wrap a short prompt. Measuring the content and pinning the scroller to
 /// `min(measured, cap)` is what makes a two-line prompt two lines tall and a
 /// forty-line prompt exactly the cap.

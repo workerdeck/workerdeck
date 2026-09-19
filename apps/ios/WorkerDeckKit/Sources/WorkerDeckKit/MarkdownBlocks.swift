@@ -5,7 +5,7 @@ import Foundation
 /// The split models what a phone transcript renders differently: fenced code,
 /// headings, lists, blockquotes, thematic breaks. Everything else stays `prose`
 /// and is rendered with inline markdown (bold/italic/code spans/links)
-/// preserving whitespace — prose is the fallback, never a failure, so a
+/// preserving whitespace - prose is the fallback, never a failure, so a
 /// construct this parser doesn't model degrades to exactly what the app
 /// shipped with rather than to lost text. Tables are deliberately in that
 /// bucket: a faithful column renderer is disproportionate here, and a
@@ -13,12 +13,12 @@ import Foundation
 /// literal one.
 public enum MarkdownBlock: Equatable, Sendable {
   case prose(String)
-  /// An ATX heading. `text` is the bare title — inline markdown inside it is
+  /// An ATX heading. `text` is the bare title - inline markdown inside it is
   /// the renderer's job. Setext headings (`Title` over `---`) are deliberately
   /// not modelled: under streaming a finished paragraph would snap into a
   /// heading a full line later, and models write ATX.
   case heading(level: Int, text: String)
-  /// A run of list items, ordered and unordered alike — each item carries its
+  /// A run of list items, ordered and unordered alike - each item carries its
   /// own marker, so a marker change mid-list doesn't need a block break.
   case list(items: [MarkdownListItem])
   /// A quote, flattened to one level: nested `>` markers are stripped rather
@@ -27,7 +27,7 @@ public enum MarkdownBlock: Equatable, Sendable {
   case blockquote(String)
   case thematicBreak
   /// A fenced block. `isClosed` is false while the closing fence hasn't arrived,
-  /// which during streaming is the common case — the block still renders.
+  /// which during streaming is the common case - the block still renders.
   case code(language: String?, text: String, isClosed: Bool)
 }
 
@@ -52,7 +52,7 @@ public struct MarkdownListItem: Equatable, Sendable {
 /// Streaming is the design constraint. Text arrives a token at a time, so every
 /// block must render in its final shape from its first character: an open fence
 /// is already code, a lone `-` is already a bullet, a lone `#` is already a
-/// (still empty) heading. The classifier is line-based on purpose — a line's
+/// (still empty) heading. The classifier is line-based on purpose - a line's
 /// kind is decided by its own leading characters, never by the line after it,
 /// so a prefix of the document parses the same as the document does. The one
 /// deliberate exception is `--` (prose until the third dash makes it a rule):
@@ -129,7 +129,7 @@ public enum MarkdownBlocks {
         continue
       }
 
-      // The fence check outranks everything, as it always has — including a
+      // The fence check outranks everything, as it always has - including a
       // fence indented inside a list item, which closes the list: nesting
       // blocks inside items isn't modelled, so the code block stands alone
       // and a following marker line starts a fresh list.
@@ -186,7 +186,7 @@ public enum MarkdownBlocks {
           // own alignment, not content.
           itemLines.append(line.drop(while: \.isWhitespace))
         } else {
-          // No lazy continuation into quotes — only `>` lines belong. Models
+          // No lazy continuation into quotes - only `>` lines belong. Models
           // prefix every quoted line, and the predictable reading beats the
           // CommonMark one where a quote silently swallows the paragraph
           // after it.
@@ -198,7 +198,7 @@ public enum MarkdownBlocks {
 
     if let open = fence {
       // Unterminated: the model is still typing, or stopped mid-block. Either
-      // way the content is code — emit it rather than dropping it.
+      // way the content is code - emit it rather than dropping it.
       blocks.append(.code(language: open.language, text: code.joined(separator: "\n"), isClosed: false))
     } else {
       flushAll()
@@ -264,7 +264,7 @@ public enum MarkdownBlocks {
       let after = rest.dropFirst()
       if after.isEmpty {
         // A bare `-` at the streaming frontier is a bullet about to get its
-        // text — rendering it as prose first and snapping to a bullet on the
+        // text - rendering it as prose first and snapping to a bullet on the
         // next token is the flicker this parser exists to avoid. (It is also
         // CommonMark's reading: an empty item.)
         return .listItem(indent: indent, ordinal: nil, rest: after)
@@ -295,7 +295,7 @@ public enum MarkdownBlocks {
 
     if indent <= 3, rest.first == ">" {
       var content = rest
-      // Strip every immediately nested marker — `> > deep` flattens to `deep`.
+      // Strip every immediately nested marker - `> > deep` flattens to `deep`.
       // Only one space per marker is eaten, so intentional indentation inside
       // a quote survives.
       while content.first == ">" {
@@ -309,7 +309,7 @@ public enum MarkdownBlocks {
   }
 
   /// The title after the hashes: trimmed, with CommonMark's optional closing
-  /// run stripped (`## Title ##` → `Title`) — but only when a space precedes
+  /// run stripped (`## Title ##` → `Title`) - but only when a space precedes
   /// it, so `# C#` keeps its sharp.
   private static func headingText(_ after: Substring) -> String {
     var text = after.trimmingCharacters(in: .whitespaces)
@@ -323,7 +323,7 @@ public enum MarkdownBlocks {
     return text
   }
 
-  /// Drop blank lines at both ends of a run — the blank line that separated
+  /// Drop blank lines at both ends of a run - the blank line that separated
   /// it from the neighbouring block is a separator, not content.
   private static func trimBlankEdges(_ lines: [Substring]) -> [Substring] {
     var slice = lines[...]
@@ -345,7 +345,7 @@ private struct Fence {
   let language: String?
 
   /// CommonMark, minus the parts that never appear in model output: up to three
-  /// leading spaces, three or more `` ` `` or `~`, and — for backtick fences —
+  /// leading spaces, three or more `` ` `` or `~`, and - for backtick fences -
   /// no backtick in the info string (that spelling is a code span, not a fence).
   init?(opening line: Substring) {
     var indent = 0
@@ -383,7 +383,7 @@ private struct Fence {
     return rest.dropFirst(run.count).allSatisfy(\.isWhitespace)
   }
 
-  /// Content keeps its own indentation, minus the fence's — a fence indented two
+  /// Content keeps its own indentation, minus the fence's - a fence indented two
   /// spaces inside a list item shouldn't push every line of code right.
   func stripIndent(from line: Substring) -> String {
     var dropped = 0

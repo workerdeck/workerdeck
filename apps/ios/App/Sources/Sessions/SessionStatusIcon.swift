@@ -2,7 +2,7 @@ import WorkerDeckKit
 import SwiftUI
 
 /// The session's state as one glyph, mirroring the dashboard's
-/// `SessionStatusIcon` — same vocabulary, same precedence.
+/// `SessionStatusIcon` - same vocabulary, same precedence.
 ///
 /// A glyph rather than the labelled `StatusBadge` this row used to carry: a
 /// badge spends a third of a line saying "Idle" for every idle session, and on a
@@ -13,7 +13,7 @@ import SwiftUI
 /// **It takes the whole `SessionInfo` and asks `sessionState`, rather than a bare
 /// status**, and the old signature is why: given only `(status, pendingCount)` it
 /// was *unable* to be right. `sessionState` folds in the arm no glyph can see for
-/// itself — a **background** sub-agent outlives its turn by design, so the turn
+/// itself - a **background** sub-agent outlives its turn by design, so the turn
 /// ends, `status` comes to rest at `.idle`, and the agent keeps working. Off the
 /// raw status this drew a moon on a row filed under the "Working" header.
 ///
@@ -77,7 +77,7 @@ struct SessionStatusIcon: View {
     // name: "Idle" would be a lie to a screen reader too, not just to the eye.
     let running = runningSubagents(session).count
     if state == .working, status != .running, status != .starting, running > 0 {
-      return "Working — \(running) sub-agent\(running == 1 ? "" : "s")"
+      return "Working - \(running) sub-agent\(running == 1 ? "" : "s")"
     }
     return status.label
   }

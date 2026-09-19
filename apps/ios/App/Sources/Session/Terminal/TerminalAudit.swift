@@ -7,7 +7,7 @@
   ///
   /// The planner decides where every line breaks by counting **cells**, and the
   /// renderer draws each line in a one-line box. That is only safe if a line's
-  /// real rendered width never exceeds the box it was planned for — otherwise
+  /// real rendered width never exceeds the box it was planned for - otherwise
   /// text is clipped silently, which is a worse failure than a wrong height,
   /// because nothing about it looks wrong.
   ///
@@ -15,7 +15,7 @@
   /// system actually advances, and a glyph the cell model calls two cells wide
   /// that the fallback face draws wider. `TerminalCells` already flags the
   /// second class as inexact; this measures both against real layout, which is
-  /// the only thing that can answer it — the web client makes the same call and
+  /// the only thing that can answer it - the web client makes the same call and
   /// puts its height audit in a browser rather than in jsdom.
   ///
   /// Debug-only, and deliberately not a unit test: a unit test would check the
@@ -42,7 +42,7 @@
       var findings: [Finding]
       /// How many rows had their drawn height measured, and how they came out.
       /// Zero means the height pass did not run, which is not the same as
-      /// passing — the summary says so.
+      /// passing - the summary says so.
       var heightsChecked = 0
       var heightFindings: [HeightFinding] = []
       /// The height pass stops after a cap (see `measureHeights`). Reported
@@ -109,7 +109,7 @@
     /// from the book are the frames the text fills. If any one of
     /// `lineFragmentPadding`, `textContainerInset`, the min/max line heights or
     /// the line-break mode is wrong, every row is off by a fraction and *nothing
-    /// looks wrong* — the text simply drifts against the gutter drawn beside it.
+    /// looks wrong* - the text simply drifts against the gutter drawn beside it.
     /// That is the same class of failure as a silently clipped line, so it
     /// belongs beside it, measured against real layout rather than asserted in a
     /// unit test.
@@ -161,7 +161,7 @@
           // deliberately lets preserved spaces *hang* past the last column
           // rather than forcing a break (CSS Text 3, and what every terminal
           // does), so a line ending in one is wider than its budget by design.
-          // Counting them found exactly one "overflow" per soft-wrapped line —
+          // Counting them found exactly one "overflow" per soft-wrapped line -
           // a gate that cries wolf on its own correct behaviour is a gate
           // people learn to ignore.
           let measured = String(line.text.reversed().drop { $0 == " " }.reversed())

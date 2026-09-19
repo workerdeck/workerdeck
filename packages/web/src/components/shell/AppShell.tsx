@@ -14,7 +14,7 @@ import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useUnseenTotal } from '@/hooks/useUnseen.ts'
 
 // The tab most likely to hold unread work is a background one, and a background tab shows
-// nothing but its title — so the aggregate unread lives there. Mounted at the shell, not the
+// nothing but its title - so the aggregate unread lives there. Mounted at the shell, not the
 // sessions section, so the poll loop (and the badge) stays live on every section.
 function useTitleBadge() {
   const { snapshots } = useSessions()

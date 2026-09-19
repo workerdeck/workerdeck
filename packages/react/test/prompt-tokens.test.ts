@@ -20,7 +20,7 @@ describe('scanPromptTokens', () => {
     expect(texts('(check @a.ts), then @b.ts!')).toEqual(['@a.ts', '@b.ts'])
   })
 
-  it('ignores an @ that is not at a word start — an email is not a mention', () => {
+  it('ignores an @ that is not at a word start - an email is not a mention', () => {
     expect(texts('mail tobias@atomic.bi about it')).toEqual([])
   })
 
@@ -29,7 +29,7 @@ describe('scanPromptTokens', () => {
     expect(texts('/dev:wrapup')).toEqual(['/dev:wrapup'])
   })
 
-  it('ignores a bare prefix — in a sent message that is just an at sign', () => {
+  it('ignores a bare prefix - in a sent message that is just an at sign', () => {
     expect(texts('a @ b / c')).toEqual([])
   })
 

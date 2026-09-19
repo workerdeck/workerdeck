@@ -46,7 +46,7 @@ export type TriggerPosition = 'start' | 'any'
  * - 'dropdown': Shows a popover with suggestions from `onSearch`
  * - 'callback': Inserts the char, then fires `onActivate` with the typed query
  * - 'launch': Fires `onActivate` on keydown and SUPPRESSES the char (it never
- *   enters the editor) — for opening an external surface (dialog, palette) where
+ *   enters the editor) - for opening an external surface (dialog, palette) where
  *   no in-editor text should appear. Honors `position` like the other modes.
  */
 export type TriggerMode = 'dropdown' | 'callback' | 'launch'
@@ -102,7 +102,7 @@ export type TriggerConfig = {
    * For 'dropdown' mode: opt a suggestion out of becoming a chip.
    *
    * Return a string and the trigger's range is replaced with that **plain,
-   * editable text** — the trigger character included — with the caret left at
+   * editable text** - the trigger character included - with the caret left at
    * its end. Return undefined and the suggestion resolves to a chip as usual,
    * so one dropdown can mix both kinds.
    *
@@ -239,7 +239,7 @@ export type PromptAreaProps = {
   /**
    * When markdown is on, the editor rewrites typed list markers (`- ` / `* `)
    * to a `•` bullet glyph in the model. Set to `false` to keep the original
-   * marker in the value/`onChange` text — needed when a host renders the output
+   * marker in the value/`onChange` text - needed when a host renders the output
    * as real markdown, where `•` is not a valid list marker. Default `true`.
    */
   normalizeBullets?: boolean
@@ -271,8 +271,8 @@ export type PromptAreaProps = {
    * the caret kept where the edit happened. Chips count as their
    * `trigger + displayText` length.
    *
-   * The cap applies to typing only. Paste is not capped — divert it via
-   * `onRawPaste` if needed — and the imperative `setText` / `appendText` also
+   * The cap applies to typing only. Paste is not capped - divert it via
+   * `onRawPaste` if needed - and the imperative `setText` / `appendText` also
    * bypass it, so a programmatic write can exceed the cap until the next
    * keystroke truncates.
    */
@@ -316,7 +316,7 @@ export type PromptAreaProps = {
   onBlur?: (e: React.FocusEvent<HTMLDivElement>) => void
   /**
    * Called at the start of a paste, before PromptArea reads the clipboard. Call
-   * `preventDefault()` to take over the paste completely — e.g. to divert large
+   * `preventDefault()` to take over the paste completely - e.g. to divert large
    * text or non-image files to an upload pipeline. The built-in segment/image
    * paste handling is skipped when the event's default is prevented.
    */

@@ -53,10 +53,10 @@ const mcpToolNames = Object.keys(mcp.tools)
 
 const INSTRUCTIONS =
   'You evaluate sales leads. Use the eval_script tool to compute answers from files in the ' +
-  'scratch filesystem — never guess numbers. Inside eval_script the sandbox exposes ' +
+  'scratch filesystem - never guess numbers. Inside eval_script the sandbox exposes ' +
   'vfs.read(path), vfs.write(path, text), and vfs.list(dir); the value of the last ' +
   'expression is returned to you. Use web_fetch to answer questions about a web page. ' +
-  'To hand a file to the user, write it with fs_write, then call deliver_file — the user ' +
+  'To hand a file to the user, write it with fs_write, then call deliver_file - the user ' +
   'gets a download card.' +
   (mcpToolNames.length > 0 ? ` For questions about public GitHub repositories, use the ${mcpToolNames.join(', ')} tools.` : '')
 
@@ -79,7 +79,7 @@ for (const [name, setup] of Object.entries(PROVIDERS)) {
 }
 
 if (profiles.length === 0) {
-  console.error('No ~/.claude config dir and no provider API keys found — nothing to serve.')
+  console.error('No ~/.claude config dir and no provider API keys found - nothing to serve.')
   process.exit(1)
 }
 
@@ -96,7 +96,7 @@ const { listen } = createWorkerServer({
       throw new Error(
         known.includes(providerId)
           ? `profile '${profile.name}' needs ${PROVIDERS[providerId]!.env} in the environment ` +
-              '(or the repo .env) — this dev server started without it, so it has no model factory ' +
+              '(or the repo .env) - this dev server started without it, so it has no model factory ' +
               `for '${providerId}'. Add the key and restart.`
           : `profile '${profile.name}' names provider '${providerId}', which this example does not ` +
               `wire. Known here: ${known.join(', ')}.`,
@@ -105,11 +105,11 @@ const { listen } = createWorkerServer({
     const modelId = config.model ?? profile.provider!.model
     if (!modelId) {
       throw new Error(
-        `profile '${profile.name}' declares no provider.model and the request named none — ` +
+        `profile '${profile.name}' declares no provider.model and the request named none - ` +
           'set a model on the profile (or pass one when creating the session).',
       )
     }
-    // On a rehydrated session the snapshot's filesystem wins — seeding here would undo what the parked turn wrote.
+    // On a rehydrated session the snapshot's filesystem wins - seeding here would undo what the parked turn wrote.
     const vfs = restore
       ? undefined
       : createVfs({
@@ -143,7 +143,7 @@ for (const p of profiles) {
 }
 const missing = Object.entries(PROVIDERS).filter(([, s]) => !process.env[s.env])
 for (const [name, setup] of missing) {
-  console.log(`[provider-example] no ${setup.env} — profile '${name}' not offered`)
+  console.log(`[provider-example] no ${setup.env} - profile '${name}' not offered`)
 }
 console.log(
   mcpToolNames.length > 0

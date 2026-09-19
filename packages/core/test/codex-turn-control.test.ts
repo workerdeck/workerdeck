@@ -84,7 +84,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     expect(runner.status).toBe('idle')
   })
 
-  it('treats a failed turn as a failed turn — turn/completed(status failed) with its error', async () => {
+  it('treats a failed turn as a failed turn - turn/completed(status failed) with its error', async () => {
     const peer = scriptedPeer()
     peer.respond('turn/start', () => {
       peer.emit('error', {
@@ -110,7 +110,7 @@ describe('CodexRunner: interrupt, resume, child death and mode changes', () => {
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
   })
 
-  it('namespaces item ids per turn — one long-lived child never publishes colliding ids', async () => {
+  it('namespaces item ids per turn - one long-lived child never publishes colliding ids', async () => {
     const peer = scriptedPeer()
     const answer = (text: string) => (emit: (m: string, p: unknown) => void, turnId: string) => {
       emit('item/started', {

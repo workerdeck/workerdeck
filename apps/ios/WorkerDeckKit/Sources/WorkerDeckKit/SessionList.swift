@@ -4,7 +4,7 @@ import Foundation
 /// sorted, kept pure and separate from the views so every surface renders one
 /// derived list and nothing else decides what is visible.
 ///
-/// A line-by-line port of `packages/protocol/src/session-list.ts` — the
+/// A line-by-line port of `packages/protocol/src/session-list.ts` - the
 /// semantics are the contract, not the shape of the code. When the rules change
 /// there, they change here. More than one party has to agree: the VS Code
 /// sidebar (whose activity-bar badge counts the *same* rows the list shows), the
@@ -15,7 +15,7 @@ import Foundation
 
 // MARK: - State buckets
 
-/// Coarse lifecycle bucket — what a person actually filters on. Raw statuses are
+/// Coarse lifecycle bucket - what a person actually filters on. Raw statuses are
 /// too many and too engine-shaped ('starting' vs 'running' is not a decision).
 public enum SessionState: String, Codable, Sendable, Hashable, CaseIterable {
   case attention
@@ -23,7 +23,7 @@ public enum SessionState: String, Codable, Sendable, Hashable, CaseIterable {
   case idle
   case ended
 
-  /// Mirror of `STATE_ORDER` — worst first.
+  /// Mirror of `STATE_ORDER` - worst first.
   public static let order: [SessionState] = [.attention, .working, .idle, .ended]
 
   /// Mirror of `STATE_LABELS`.
@@ -44,12 +44,12 @@ public func sessionState(_ info: SessionInfo) -> SessionState {
   // Terminal statuses before the sub-agent arm, defensively: the gateway's
   // `session_closed` sweep settles every sub-agent record (the process hosting
   // them is gone), so a closed session carrying a `running` record should be
-  // unreachable — but a stale one must read `ended`, never `working`.
+  // unreachable - but a stale one must read `ended`, never `working`.
   if info.status == .failed || info.status == .closed { return .ended }
   if info.status == .running || info.status == .starting { return .working }
   // A *background* agent outlives its turn by design: the turn ends, `status`
   // comes to rest at idle, and the agent keeps working. Without this arm the
-  // row read Idle while an agent burned tokens — the status alone cannot carry
+  // row read Idle while an agent burned tokens - the status alone cannot carry
   // it, because the status is the *turn's*.
   if !runningSubagents(info).isEmpty { return .working }
   return .idle
@@ -57,7 +57,7 @@ public func sessionState(_ info: SessionInfo) -> SessionState {
 
 /// The sub-agents a list row draws as live.
 ///
-/// `sessionState` deliberately does **not** grow a `subagents` bucket — a fifth
+/// `sessionState` deliberately does **not** grow a `subagents` bucket - a fifth
 /// state would split `working` in two for every client that filters by it,
 /// including the ones that have not shipped this yet. Instead `working`
 /// *counts* them: a synchronous `Task` keeps the turn in flight so the status
@@ -73,7 +73,7 @@ public func runningSubagents(_ info: SessionInfo) -> [SubagentInfo] {
 /// The mirror of protocol's `subagentLabel`, and the reason it is shared: the
 /// dashboard, the extension and this app render the same records, and two
 /// spellings would be two answers to "which agent is this". Falls back to the
-/// bare type, then to a generic word — a row with no label reads as a bug, and
+/// bare type, then to a generic word - a row with no label reads as a bug, and
 /// an engine may send neither field.
 public func subagentLabel(_ sub: SubagentInfo) -> String {
   let agent = sub.agentType?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -91,7 +91,7 @@ public func subagentLabel(_ sub: SubagentInfo) -> String {
 ///
 /// The tracker opens a record for every spawner call and for any nested event
 /// whose parent it has not seen, so the list holds two different things wearing
-/// one shape. One carries a `subagent_type` — a delegated agent with an identity
+/// one shape. One carries a `subagent_type` - a delegated agent with an identity
 /// (`Explore`), whose own work is worth a surface of its own. The other carries
 /// only a description, and there is no agent there to open.
 ///
@@ -139,10 +139,10 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
   /// `.workerdeck.json` renames every session at once and must not empty a
   /// saved filter). TS keeps this field *optional* so a stored config
   /// predating it keeps filtering; here the lenient decode below carries that
-  /// rule — absent decodes to empty, and empty means no filter.
+  /// rule - absent decodes to empty, and empty means no filter.
   public var projects: [String]
   /// Show only sessions inside the host's own folders. Inert where there is no
-  /// such notion (no folder open — which on a phone is always), which is why it
+  /// such notion (no folder open - which on a phone is always), which is why it
   /// can default on.
   public var scoped: Bool
   public var groupBy: GroupBy
@@ -179,7 +179,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     states = rawStates.compactMap { SessionState(rawValue: $0) }
     // Absent must mean "no filter", never "filter by nothing": a config
     // persisted before the project facet existed has no such key, and failing
-    // — or filtering — here would empty the list for everyone who upgraded.
+    // - or filtering - here would empty the list for everyone who upgraded.
     projects = try c.decodeIfPresent([String].self, forKey: .projects) ?? []
     scoped = try c.decodeIfPresent(Bool.self, forKey: .scoped) ?? true
     groupBy =
@@ -213,7 +213,7 @@ public struct ScopeRoot: Sendable, Equatable {
   }
 }
 
-/// The host's own folders — the sessions list's intrinsic scope. A phone has no
+/// The host's own folders - the sessions list's intrinsic scope. A phone has no
 /// open folders, so on iOS this is always nil and the scope filter is inert.
 public struct WorkspaceScope: Sendable, Equatable {
   public var label: String
@@ -231,7 +231,7 @@ public struct WorkspaceScope: Sendable, Equatable {
 public struct SessionRow: Sendable, Equatable, Identifiable {
   public var hostId: String
   public var hostName: String
-  /// Its gateway is loopback — its cwds are paths on this machine.
+  /// Its gateway is loopback - its cwds are paths on this machine.
   public var local: Bool
   public var adapter: String
   public var state: SessionState
@@ -271,13 +271,13 @@ public struct SessionGroup: Sendable, Equatable, Identifiable {
   }
 }
 
-/// The adapters actually present, for the filter chips — derived rather than
+/// The adapters actually present, for the filter chips - derived rather than
 /// enumerated, so a new engine needs no change here.
 public func adaptersOf(_ rows: [SessionRow]) -> [String] {
   Array(Set(rows.map(\.adapter))).sorted()
 }
 
-/// One entry of the project filter control — a pair because the two halves
+/// One entry of the project filter control - a pair because the two halves
 /// differ: the *key* is what `ViewConfig.projects` holds (gateway-qualified
 /// root, so a rename regroups nothing) and the *label* is what a person picks
 /// by.
@@ -293,10 +293,10 @@ public struct ProjectOption: Sendable, Equatable, Hashable, Identifiable {
   }
 }
 
-/// The projects actually present, for the filter control — derived like
+/// The projects actually present, for the filter control - derived like
 /// `adaptersOf`, so nothing needs enumerating. Sorted by label
 /// case-insensitively, deduped by key. Two projects with the same name on two
-/// gateways therefore stay two entries wearing one word — which is honest:
+/// gateways therefore stay two entries wearing one word - which is honest:
 /// they really are two different directories, and the alternative is a filter
 /// that silently selects both.
 public func projectsOf(_ rows: [SessionRow]) -> [ProjectOption] {
@@ -329,23 +329,23 @@ public func sessionLabel(_ info: SessionInfo) -> String {
 /// The root and not the name, because a name is not a key (two repos can both
 /// be called "api", and a rename must regroup nothing); qualified by gateway,
 /// because a remote gateway's identical-looking path is another machine's
-/// directory — the same rule `ScopeRoot` states. The cwd fallback is what
+/// directory - the same rule `ScopeRoot` states. The cwd fallback is what
 /// makes grouping by project useful before anyone has written a
 /// `.workerdeck.json`: undeclared sessions group by their folder, and a
 /// session in `packages/ui` joins its repo's group the moment the file
 /// exists. Sessions with no cwd at all (a filesystem-less engine) share one
-/// per-gateway bucket — see `projectLabel`.
+/// per-gateway bucket - see `projectLabel`.
 public func projectKey(_ row: SessionRow) -> String {
   "\(row.hostId):\(normalizePath(row.info.project?.root ?? row.info.cwd))"
 }
 
 /// What a project group (or a row's project slot) is called: the declared
-/// name, else the cwd's basename — the exact string this client rendered
+/// name, else the cwd's basename - the exact string this client rendered
 /// before the feature existed, so an undeclared project looks like today.
 /// "No project" is only ever the no-cwd case (a sandboxed provider session),
 /// where there is no folder to name.
 ///
-/// Takes the bare `SessionInfo` — the mirror of TS narrowing its parameter to
+/// Takes the bare `SessionInfo` - the mirror of TS narrowing its parameter to
 /// `Pick<SessionRow, 'info'>`: a cell holding only the info must not invent
 /// the rest of a row to name it, and two spellings of this string would put
 /// the list and its group headers on different names.
@@ -359,7 +359,7 @@ public func projectLabel(_ info: SessionInfo) -> String {
   return dir.isEmpty ? "No project" : dir
 }
 
-/// Where inside its project a session actually sits — the cwd with the project
+/// Where inside its project a session actually sits - the cwd with the project
 /// root taken off the front, or nil when it sits at the root, has no declared
 /// project, or has no cwd at all. Mirrors `projectSubpath` in
 /// `packages/protocol/src/session-list.ts`.
@@ -370,7 +370,7 @@ public func projectLabel(_ info: SessionInfo) -> String {
 /// which *part* of the project a session is in, and that is what tells two
 /// sessions in one repo apart.
 ///
-/// Nil at the root is deliberate and callers must draw nothing — not a "."​, not
+/// Nil at the root is deliberate and callers must draw nothing - not a "."​, not
 /// the name again. Nil is also the honest answer when the cwd is not under the
 /// root at all, which is not paranoia: `root` is the gateway's **realpath'd**
 /// directory while `cwd` is the path as given, so a session started through a
@@ -387,13 +387,13 @@ public func projectSubpath(_ info: SessionInfo) -> String? {
   return relative.isEmpty ? nil : relative
 }
 
-/// This session is a job run — the queue created it, and `JobInfo.sessionId`
+/// This session is a job run - the queue created it, and `JobInfo.sessionId`
 /// points at it. A 1:1 mirror of protocol's `isJobRun`.
 ///
 /// A job run is an ordinary registry session in every other respect, which is
 /// what makes it worth spelling once: a client that renders jobs on their own
 /// surface should not list them again among the sessions, and a client with no
-/// jobs surface — **the extension, this app** — should, or they would be
+/// jobs surface - **the extension, this app** - should, or they would be
 /// invisible. The phone has no jobs surface, so nothing here filters on it; it
 /// is mirrored so that the day one appears, "should the list show these" is a
 /// decision already made rather than one rediscovered. The queue stamps
@@ -412,7 +412,7 @@ private func matchesSearch(_ row: SessionRow, needle: String) -> Bool {
     || (row.info.project?.name.lowercased().contains(needle) ?? false)
     || row.hostName.lowercased().contains(needle)
     || row.adapter.lowercased().contains(needle)
-    // An id is matched by prefix only — a hex soup matching mid-string would
+    // An id is matched by prefix only - a hex soup matching mid-string would
     // surface rows nobody was looking for.
     || row.info.id.hasPrefix(needle)
 }
@@ -446,7 +446,7 @@ public func inScope(_ row: SessionRow, scope: WorkspaceScope) -> Bool {
   }
 }
 
-/// Whether the scope filter is actually hiding anything — it is inert with no
+/// Whether the scope filter is actually hiding anything - it is inert with no
 /// folder open, and that is the difference between a default and a filter.
 public func scopeActive(_ config: ViewConfig, scope: WorkspaceScope?) -> Bool {
   config.scoped && scope != nil
@@ -511,7 +511,7 @@ private func byRecency(_ a: SessionRow, _ b: SessionRow) -> ComparisonResult {
 private func compare(_ a: SessionRow, _ b: SessionRow, sortBy: SortBy) -> ComparisonResult {
   if sortBy == .recent { return byRecency(a, b) }
   if sortBy == .name {
-    // TS localeCompare with sensitivity 'base' — case- and diacritic-insensitive.
+    // TS localeCompare with sensitivity 'base' - case- and diacritic-insensitive.
     let order = sessionLabel(a.info).compare(
       sessionLabel(b.info), options: [.caseInsensitive, .diacriticInsensitive])
     return order == .orderedSame ? byRecency(a, b) : order
@@ -538,7 +538,7 @@ private func stableSorted(_ rows: [SessionRow], sortBy: SortBy) -> [SessionRow] 
 }
 
 /// The list as rendered: filtered, grouped, and sorted within each group. Groups
-/// themselves come out in the sort's own order — grouping by state and sorting
+/// themselves come out in the sort's own order - grouping by state and sorting
 /// by name should still put "Needs attention" first, so groups are ordered by
 /// their facet rank, never by the row sort.
 public func groupRows(_ rows: [SessionRow], config: ViewConfig) -> [SessionGroup] {
@@ -572,11 +572,11 @@ public func groupRows(_ rows: [SessionRow], config: ViewConfig) -> [SessionGroup
 
 // MARK: - Subset summary
 
-/// What the list is hiding, and why — the one "you are seeing a subset" signal:
+/// What the list is hiding, and why - the one "you are seeing a subset" signal:
 /// absent when nothing is hidden, and otherwise naming every cause, so the line
 /// is never "12 of 30" with no way to guess why. Search is a cause like any
-/// other: its box is visible, but the *consequence* of it — rows gone from the
-/// list — is the thing being reported, and leaving it out would make the
+/// other: its box is visible, but the *consequence* of it - rows gone from the
+/// list - is the thing being reported, and leaving it out would make the
 /// arithmetic wrong.
 public struct SubsetSummary: Sendable, Equatable {
   public var shown: Int
@@ -612,7 +612,7 @@ public func subsetSummary(
 ///
 /// The distinction an empty list turns on: "this project has no sessions" wants
 /// a different sentence, and a different way out, from "your filters match
-/// none". Scope is excluded because it is on by default — it is the state, not a
+/// none". Scope is excluded because it is on by default - it is the state, not a
 /// choice someone made.
 public func hasFacetFilter(_ config: ViewConfig) -> Bool {
   !config.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

@@ -1,10 +1,10 @@
 ---
 title: Deployment
-description: Hosting realities — no serverless, single-host sessions, mandatory auth hook, and clamping client requests.
+description: Hosting realities - no serverless, single-host sessions, mandatory auth hook, and clamping client requests.
 order: 7
 ---
 
-## No serverless — and why
+## No serverless - and why
 
 A CLI engine runs as a **long-running subprocess with filesystem state**.
 Edge/serverless functions cannot host this. Realistic targets:
@@ -23,21 +23,21 @@ Sessions are single-host in V1. Transcripts live on the server's local disk (the
 and resume works across process restarts **on the same host**: pass `resume: sdkSessionId` on
 `CreateSessionRequest`, and the server backfills the prior transcript as `replay: true` events.
 `GET /v1/sdk-sessions?dir=…` lists an engine's on-disk sessions so hosts can offer "resume" after
-a restart — pass `profile=…` to list a specific profile's store (a codex profile lists its
+a restart - pass `profile=…` to list a specific profile's store (a codex profile lists its
 CODEX_HOME threads; codex resumes replay history the same way).
-`dir` names **one** project directory (and its worktrees), not everything beneath it —
+`dir` names **one** project directory (and its worktrees), not everything beneath it -
 so a client with no directory in hand should omit it and let the server apply `allowedCwdRoots`. Note the two ids: `SessionInfo.id` is the server-assigned id; `sdkSessionId` is the
-Agent SDK's — the one you feed back as `resume`.
+Agent SDK's - the one you feed back as `resume`.
 
 Multi-host session storage is still on the roadmap: the bundled `SessionStore` implementations
 are both single-process (see below). If you need the queue to span hosts, the `QueueAdapter` seam
-is the supported path — see [Job queue](/workerdeck/docs/guides/job-queue/).
+is the supported path - see [Job queue](/workerdeck/docs/guides/job-queue/).
 
 ## Restarts, parked sessions, and the deploy guard
 
 A session parked on a deferred execution lives in a `SessionStore`. The default one is in-memory:
 the park survives a client disconnect, not a restart. Since a park can legitimately last days,
-a deploy that restarts the process is how parked work actually gets lost — so point it at the
+a deploy that restarts the process is how parked work actually gets lost - so point it at the
 bundled file store:
 
 ```ts
@@ -88,7 +88,7 @@ session that no job is left waiting on, so the guard says so rather than pretend
 ## The auth hook is mandatory
 
 `createWorkerServer` **refuses to start** without an `authenticate` hook unless you explicitly
-pass `allowUnauthenticated: true` — an opt-in for loopback dev only. Never expose an
+pass `allowUnauthenticated: true` - an opt-in for loopback dev only. Never expose an
 unauthenticated worker: whoever reaches it can run tool-wielding sessions in your checkouts.
 
 ```ts
@@ -98,26 +98,26 @@ const worker = createWorkerServer({
 ```
 
 Return a truthy principal to accept, null/undefined to reject with 401. The hook covers every
-route, including WebSocket upgrades (sessions WS and queue WS). Browsers cannot set WS headers —
+route, including WebSocket upgrades (sessions WS and queue WS). Browsers cannot set WS headers -
 use a ticket query param (`buildWsUrl` on the client) or cookies for socket auth.
 
 Anthropic credentials are a separate concern entirely: the server implements no Anthropic auth;
 the SDK/CLI resolves credentials from the operator's environment. For services, set
 `ANTHROPIC_API_KEY` and consider `requireApiKey: true` to fail closed on subscription
-credentials — see [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
+credentials - see [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
 
 ## Clamp what clients may request
 
 The server trusts its host app: `CreateSessionRequest` accepts `mcpServers`, tool policy, model,
 and more. Three levers keep that safe:
 
-- **`allowedCwdRoots`** — session `cwd` (and job `session.cwd`) must resolve inside one of these
+- **`allowedCwdRoots`** - session `cwd` (and job `session.cwd`) must resolve inside one of these
   roots. `/sdk-sessions` follows the same policy: a `dir` must be inside the roots, and a listing
   without one is filtered down to the sessions whose `cwd` is. Strongly recommended.
-- **`buildRunnerConfig`** — map/patch every incoming `CreateSessionRequest` (client sessions and
+- **`buildRunnerConfig`** - map/patch every incoming `CreateSessionRequest` (client sessions and
   queue jobs alike) into the actual runner config: inject `env`, strip or override
   `mcpServers`, force `allowedTools`/`disallowedTools`, pin `permissionMode`.
-- **Your `authenticate` hook** — decide who may create sessions at all.
+- **Your `authenticate` hook** - decide who may create sessions at all.
 
 ```ts
 const worker = createWorkerServer({

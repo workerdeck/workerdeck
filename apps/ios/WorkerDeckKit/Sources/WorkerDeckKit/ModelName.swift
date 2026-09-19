@@ -1,6 +1,6 @@
 import Foundation
 
-/// The name a person says, from a wire model id — a 1:1 port of
+/// The name a person says, from a wire model id - a 1:1 port of
 /// `friendlyModel` in `packages/ui/src/lib/format.ts`.
 ///
 /// - `claude-opus-5[1m]` → "Opus 5"
@@ -17,10 +17,10 @@ import Foundation
 /// reach it, and this is a rule with edges.
 ///
 /// Three kinds of token after the family, because vendors mix them freely: a
-/// **version** (`5`, `4-5`, `5.6` — joined with dots, since Anthropic splits
+/// **version** (`5`, `4-5`, `5.6` - joined with dots, since Anthropic splits
 /// what OpenAI writes as one token), a **code name or tier** (`luna`, `codex`,
-/// `pro`, `mini` — kept and capitalised, since it is often the only thing
-/// telling two models apart), and a **snapshot date** (`20251001` — dropped; it
+/// `pro`, `mini` - kept and capitalised, since it is often the only thing
+/// telling two models apart), and a **snapshot date** (`20251001` - dropped; it
 /// is a build, not a version).
 public func friendlyModel(_ id: String?) -> String? {
   guard let id, !id.isEmpty else { return nil }
@@ -69,7 +69,7 @@ private let modelFamilies: [String: ModelFamily] = [
   "grok": ModelFamily(name: "Grok"),
 ]
 
-/// `o3`, `o4` — a letter `o` followed by digits and nothing else.
+/// `o3`, `o4` - a letter `o` followed by digits and nothing else.
 private func isReasoningSeries(_ token: String) -> Bool {
   guard token.first == "o", token.count > 1 else { return false }
   return token.dropFirst().allSatisfy(\.isNumber)
@@ -80,7 +80,7 @@ private func isSnapshotDate(_ token: String) -> Bool {
   token.count == 8 && token.allSatisfy(\.isNumber)
 }
 
-/// `5`, `4`, `5.6` — digits with at most one dot between them.
+/// `5`, `4`, `5.6` - digits with at most one dot between them.
 private func isVersion(_ token: String) -> Bool {
   var seenDot = false
   var digits = 0

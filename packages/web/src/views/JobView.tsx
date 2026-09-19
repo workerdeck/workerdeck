@@ -63,7 +63,7 @@ export function JobView() {
             {job.sessionId ? 'This job’s session is no longer on the gateway.' : 'This job never got as far as a session.'}
           </p>
           <p className="max-w-md text-label text-fg-4">
-            The queue keeps the job record — status, usage, error — but the transcript lives with the session, and that one has been closed
+            The queue keeps the job record - status, usage, error - but the transcript lives with the session, and that one has been closed
             or swept.
           </p>
         </div>
@@ -134,7 +134,7 @@ function JobHeader({ job, onChanged, actions }: { job: JobInfo; onChanged: () =>
         {job.maxAttempts !== undefined && job.maxAttempts > 1 ? (
           <span className="shrink-0">
             attempt {job.attempt ?? 1}/{job.maxAttempts}
-            {job.status === 'queued' && job.nextRunAt !== undefined && job.nextRunAt > Date.now() ? ' — retry pending' : ''}
+            {job.status === 'queued' && job.nextRunAt !== undefined && job.nextRunAt > Date.now() ? ' - retry pending' : ''}
           </span>
         ) : null}
         {job.usage.tokens > 0 ? <span className="shrink-0">{formatTokens(job.usage.tokens)} tok</span> : null}

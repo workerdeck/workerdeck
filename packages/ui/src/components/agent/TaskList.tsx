@@ -7,7 +7,7 @@ import { cn } from '../../lib/utils.ts'
 export interface TaskListProps {
   tasks: readonly SessionTask[]
   showCompleted: boolean
-  // Absent where the toggle lives outside this list — VS Code puts it in the view's title bar.
+  // Absent where the toggle lives outside this list - VS Code puts it in the view's title bar.
   onShowCompletedChange?: (showCompleted: boolean) => void
   onSelectTask?: (task: SessionTask) => void
   className?: string
@@ -36,7 +36,7 @@ export function TaskList({ tasks, showCompleted, onShowCompletedChange, onSelect
       </div>
       {shown.length === 0 ? (
         <p className="py-6 text-center text-body-sm text-fg-4">
-          {tasks.length === 0 ? 'No tasks yet — a checklist appears once the agent plans one.' : `${hidden} completed, all hidden.`}
+          {tasks.length === 0 ? 'No tasks yet - a checklist appears once the agent plans one.' : `${hidden} completed, all hidden.`}
         </p>
       ) : (
         <div className="flex flex-col">

@@ -31,7 +31,7 @@ describe('staleReplaySeqs', () => {
     expect(staleReplaySeqs(events, 0)).toEqual(new Set([1]))
   })
 
-  it('never marks the highest-seq event stale — the replay hold depends on it', () => {
+  it('never marks the highest-seq event stale - the replay hold depends on it', () => {
     const events = seqd([usage(1), usage(2), usage(3)])
     expect(staleReplaySeqs(events, 0).has(events.at(-1)!.seq)).toBe(false)
   })
@@ -45,7 +45,7 @@ describe('staleReplaySeqs', () => {
     expect(staleReplaySeqs(events, 0).size).toBe(0)
   })
 
-  it('honours afterSeq — an event outside the replay window suppresses nothing', () => {
+  it('honours afterSeq - an event outside the replay window suppresses nothing', () => {
     const events = seqd([usage(1), usage(2), usage(3)])
     // Replaying only seq 3: seq 1 and 2 are out of scope, not stale.
     expect(staleReplaySeqs(events, 2).size).toBe(0)

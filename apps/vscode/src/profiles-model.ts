@@ -20,7 +20,7 @@ export class ProfilesModel implements vscode.Disposable {
   }
 
   // Not polled, unlike sessions: a profile changes when someone changes it, and the one reading that
-  // does move on its own — the gateway's credential probe — is on a ~60s server-side TTL that a
+  // does move on its own - the gateway's credential probe - is on a ~60s server-side TTL that a
   // refresh action covers. A poll here would be a request per gateway per five seconds for nothing.
   async refresh(): Promise<void> {
     if (this.#refreshing) {

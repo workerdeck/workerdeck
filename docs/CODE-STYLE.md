@@ -58,10 +58,18 @@ only where a dash is genuinely what you want. The character reads as machine-wri
 project's prose is one of its products.
 
 `scripts/lint-changed.mjs` enforces it over **changed files of every text type**, not just the
-ones oxlint can parse: most of the existing backlog is markdown and Swift, which no JS linter
-sees. It is a ratchet, the same shape as the comment rules above, because the backlog is large
-and gets swept separately. A line where the character is genuinely data rather than prose, a
-fixture quoting an engine's own output, say, can carry `wd-em-dash-ok` to opt out.
+ones oxlint can parse: most of the backlog was markdown and Swift, which no JS linter sees.
+A line where the character is genuinely data rather than prose, a fixture quoting an engine's
+own output, say, can carry `wd-em-dash-ok` to opt out, and both the check and the fixer skip it.
+
+**Never hand-punctuate a backlog. Run `pnpm fix:dashes`.** It rewrites every offending line to
+the plain `-` this rule already sanctions, over your changed files by default and over the whole
+tree with `--all`. The tree was swept that way on 2026-09-19: 4248 lines in 480 files, verified
+green against typecheck, `pnpm test`, `pnpm build`, `pnpm lint` and all 523 `swift test` cases in
+`WorkerDeckKit`. Because source strings and the tests asserting on them move together, a global
+rewrite stays consistent; the only genuine exception is text that must match something outside
+the repo, which is what the opt-out marker is for. Picking a nicer comma or colon by hand is
+welcome while you are writing, but it is never worth a sweep of its own.
 
 En dashes get the same treatment for the same reason. A numeric range takes `to` or a hyphen.
 

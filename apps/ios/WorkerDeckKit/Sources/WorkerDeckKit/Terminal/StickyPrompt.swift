@@ -1,7 +1,7 @@
 import Foundation
 
 /// Which prompt is held at the top of the scroller, and how far the next one has
-/// pushed it off — the arithmetic behind the web client's `stickyPrompt`.
+/// pushed it off - the arithmetic behind the web client's `stickyPrompt`.
 ///
 /// **One line, and the prompt's first line.** Not the row: a pasted twenty-line
 /// prompt pinned whole covers the very answer being read. The planner already
@@ -9,7 +9,7 @@ import Foundation
 /// twenty), so the first planned line is exactly the right thing to lift.
 ///
 /// **Why this is arithmetic here and machinery on the web.** There the pin is
-/// the browser's — a lane per turn, an absolutely positioned head, a sentinel
+/// the browser's - a lane per turn, an absolutely positioned head, a sentinel
 /// `IntersectionObserver` to know when it stuck, and the compositor doing pin
 /// and push-off, because a JS-written pin trails the compositor and wobbles.
 /// This renderer knows the pixel offset of every row, mounted or not, so "which
@@ -23,7 +23,7 @@ import Foundation
 public enum StickyPrompt {
   /// What to draw at the top edge, or `nil` for nothing.
   public struct Pin: Equatable, Sendable {
-    /// The row the pinned line came from — the caller plans it.
+    /// The row the pinned line came from - the caller plans it.
     public var row: Int
     /// How far to lift the line, `0` while it is fully pinned and negative
     /// while the next prompt is pushing it out. Never below `-line`.
@@ -59,7 +59,7 @@ public enum StickyPrompt {
     // a row belongs to the row (see `TerminalHeightBook`), so a prompt's frame
     // begins one line before its text does, and the strip in between is
     // visually the *previous* turn's. Searching by frame hands over a line
-    // early — which showed up as the new prompt's row being "found" while its
+    // early - which showed up as the new prompt's row being "found" while its
     // own blank line was still at the top edge, and the pin vanishing for a
     // line rather than being lifted out.
     let contentTop = { (row: Int) in
@@ -79,7 +79,7 @@ public enum StickyPrompt {
     return Pin(row: index, offset: max(-strip, distance - strip))
   }
 
-  /// Binary search — a scroll event must not walk the transcript.
+  /// Binary search - a scroll event must not walk the transcript.
   static func lastPrompt(
     _ promptRows: [Int], atOrAbove offset: CGFloat, contentTop: (Int) -> CGFloat
   ) -> Int? {

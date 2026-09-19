@@ -7,7 +7,7 @@ import Testing
 ///
 /// The web client strips inline syntax with a regex chain so that `**bold**` is
 /// measured as the four characters the browser draws. We instead render once and
-/// measure the result, which removes the class of bug entirely — but only if the
+/// measure the result, which removes the class of bug entirely - but only if the
 /// styled run and the plain string really are the same characters at the same
 /// offsets. That is what this suite pins down.
 @Suite("TerminalMarkdown")
@@ -34,7 +34,7 @@ struct TerminalMarkdownTests {
 
   @Test("every styled slice holds exactly its line's characters")
   func slicesStayInStep() {
-    // If these ever drift, a bolded word lands on the wrong line — silently, and
+    // If these ever drift, a bolded word lands on the wrong line - silently, and
     // only for text that wraps.
     let source = "the **quick** brown fox jumps over the lazy dog and then some more"
     let lines = TerminalPlanner.inlineBody(source, metrics: metrics, tone: .fg)

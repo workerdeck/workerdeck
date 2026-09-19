@@ -77,12 +77,12 @@ describe('hydration', () => {
     expect(hydrateToolResult(cut, 'call-1', big)).toEqual(fold(log()))
   })
 
-  it('leaves an unknown id, and an untruncated row, alone — by identity', () => {
+  it('leaves an unknown id, and an untruncated row, alone - by identity', () => {
     expect(hydrateToolResult(cut, 'call-404', 'whatever')).toBe(cut)
     expect(hydrateToolResult(cut, 'call-2', 'whatever')).toBe(cut)
   })
 
-  it('survives later events — the row is hydrated, not re-cut', () => {
+  it('survives later events - the row is hydrated, not re-cut', () => {
     const hydrated = hydrateToolResult(cut, 'call-1', big)
     const after = applyEvent(hydrated, {
       seq: 3,

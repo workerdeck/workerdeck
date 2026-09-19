@@ -389,7 +389,7 @@ describe('session scope', () => {
     })
     const { port } = await running.listen(0, '127.0.0.1')
     const base = `http://127.0.0.1:${port}/v1`
-    // Submitted BY bob, so plain tag-match would admit him — only the policy says no, which is the discrimination under test.
+    // Submitted BY bob, so plain tag-match would admit him - only the policy says no, which is the discrimination under test.
     const res = await fetch(`${base}/jobs`, {
       method: 'POST',
       ...as('bob-a'),

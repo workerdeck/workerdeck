@@ -260,7 +260,7 @@ export type AppServerConnection = {
   notify(method: string, params?: unknown): void
   onNotification(handler: (method: string, params: unknown) => void): void
   onRequest(handler: (method: string, params: unknown, id: string | number) => Promise<unknown>): void
-  // Fires once when the child exits or the pipe breaks — never on close().
+  // Fires once when the child exits or the pipe breaks - never on close().
   onClose(handler: (message: string) => void): void
   close(): void
 }

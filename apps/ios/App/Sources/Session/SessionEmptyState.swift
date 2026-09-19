@@ -4,25 +4,25 @@ import SwiftUI
 /// What a session shows before it has said anything: where the agent is sitting,
 /// and what the composer accepts beyond prose.
 ///
-/// **It gives way rather than pushing.** The screen it decorates shrinks a lot —
-/// the keyboard takes half of it, landscape takes most of the rest — and the
+/// **It gives way rather than pushing.** The screen it decorates shrinks a lot -
+/// the keyboard takes half of it, landscape takes most of the rest - and the
 /// composer must never end up underneath either. So it is sized from the height
 /// it is actually given and sheds its parts in order of how little they say: the
 /// icon first, then the path, then the hints. Below that it renders nothing at
 /// all, which is the correct amount of decoration for a screen with no room.
 ///
 /// Deliberately no project name: the navigation bar already carries it. And no
-/// brand mark — the mark's geometry is inlined in four places already, and the
+/// brand mark - the mark's geometry is inlined in four places already, and the
 /// README asks that they stay identical.
 struct SessionEmptyState: View {
   let cwd: String?
-  /// Whether `/command` completion is live yet — the CLI reports its commands a
+  /// Whether `/command` completion is live yet - the CLI reports its commands a
   /// beat after the session starts, and promising a feature that isn't wired up
   /// yet is worse than not mentioning it.
   let hasCommands: Bool
   /// Whether the engine has reported skills the `/` popover can offer. Its own
-  /// flag, not a variant of `hasCommands`: what `/` does differs — a command is
-  /// submitted, a skill is typed for you to edit — and an engine can have one
+  /// flag, not a variant of `hasCommands`: what `/` does differs - a command is
+  /// submitted, a skill is typed for you to edit - and an engine can have one
   /// without the other.
   var hasSkills: Bool = false
   let canBrowseFiles: Bool
@@ -92,9 +92,9 @@ struct SessionEmptyState: View {
   private var hints: [Hint] {
     // No resumed-thread caveat any more: every engine that resumes now replays
     // its history into the transcript (`resumeBackfill`), so a resumed session
-    // doesn't reach this empty state — its history is on screen.
+    // doesn't reach this empty state - its history is on screen.
     var hints = [Hint(symbol: "text.bubble", text: "Tell me what to do")]
-    // Two keys, two hints — different features, not two spellings of one. `$` is
+    // Two keys, two hints - different features, not two spellings of one. `$` is
     // codex's own sigil for skills; `/` stays the CLI's commands.
     if hasCommands {
       hints.append(Hint(symbol: "slash.circle", text: "Type / for the CLI's slash commands."))

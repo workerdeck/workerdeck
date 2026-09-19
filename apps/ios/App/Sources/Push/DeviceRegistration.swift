@@ -8,7 +8,7 @@ import WorkerDeckKit
 /// `packages/server`, so it is not part of the protocol `WorkerDeckKit` mirrors.
 /// Keeping it out here keeps the kit an honest mirror.
 enum DeviceRegistration {
-  /// What a gateway is told. `hostId` is opaque to the server — it stores the
+  /// What a gateway is told. `hostId` is opaque to the server - it stores the
   /// string and echoes it back in every push, which is what lets an install with
   /// two gateways tell which one woke it.
   struct Body: Encodable {
@@ -18,10 +18,10 @@ enum DeviceRegistration {
     let bundleId: String
     let platform = "ios"
     /// Three-state, and the gateway reads it that way: absent leaves whatever it has, an explicit
-    /// null clears it. Always encoded here — this build always knows its own answer, and "no start
+    /// null clears it. Always encoded here - this build always knows its own answer, and "no start
     /// token" is a real answer meaning Live Activities are off.
     let liveActivityStartToken: String?
-    /// The event allowlist (`AppSettings.notifyEvents`). Three-state on the gateway the same way —
+    /// The event allowlist (`AppSettings.notifyEvents`). Three-state on the gateway the same way -
     /// but always sent, because an empty array is this app's "no alerts" and must not read as
     /// "leave it alone".
     let notify: [String]
@@ -44,7 +44,7 @@ enum DeviceRegistration {
 
   enum Outcome: Sendable {
     case registered
-    /// The gateway has no push forwarder. A normal state, not a failure — most
+    /// The gateway has no push forwarder. A normal state, not a failure - most
     /// instances will never configure one.
     case unsupported
   }
@@ -68,7 +68,7 @@ enum DeviceRegistration {
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
     // 404 is the contract. 405 is what a gateway built before that contract was
     // enforced answers: with no forwarder configured the path went unclaimed and
-    // the dashboard's SPA catch-all — which serves GET and HEAD only — replied
+    // the dashboard's SPA catch-all - which serves GET and HEAD only - replied
     // for it. Both mean the same thing here, and treating 405 as a failure made
     // every push-less gateway a permanent error the app retried forever.
     if status == 404 || status == 405 { return .unsupported }

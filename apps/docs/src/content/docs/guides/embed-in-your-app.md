@@ -1,6 +1,6 @@
 ---
 title: Embed WorkerDeck in your app
-description: Put a sandboxed agent inside your own product — gateway in your server, sessions owned by your users, your data reached over MCP.
+description: Put a sandboxed agent inside your own product - gateway in your server, sessions owned by your users, your data reached over MCP.
 order: 1
 ---
 
@@ -8,7 +8,7 @@ This is the guide for putting an agent **inside a product you already have**: yo
 login, your users, your data. The agent is a feature of your app, not a tool your operators run.
 
 If instead you want to point a UI at a gateway somebody else runs, you want
-[Embedding the UI](/workerdeck/docs/guides/embedding/) — a different, smaller job.
+[Embedding the UI](/workerdeck/docs/guides/embedding/) - a different, smaller job.
 
 The reference implementation for everything below is
 [`apps/embedded`](https://github.com/workerdeck/workerdeck/tree/master/apps/embedded): a wiki SPA
@@ -31,7 +31,7 @@ Decide this first, because it determines the whole layout: **the gateway and you
 an origin.**
 
 The tab drives a session over a WebSocket. A browser cannot put an `Authorization` header on a
-WebSocket upgrade — the API simply has no such argument — so the only credential a tab can present
+WebSocket upgrade - the API simply has no such argument - so the only credential a tab can present
 on an attach is a cookie, and a cookie is per-origin. Put the gateway on `:8081` and your app's
 login stops authenticating the agent socket.
 
@@ -45,7 +45,7 @@ there is no second server to forward upgrades to.
 ```ts
 import { createWorkerServer } from '@workerdeck/server'
 
-const app = express()          // your API, your static SPA — unchanged
+const app = express()          // your API, your static SPA - unchanged
 app.get('/api/docs', …)
 
 const worker = createWorkerServer({
@@ -60,7 +60,7 @@ await worker.listen(8788, '127.0.0.1')
 
 ## 3. Authenticate with your app's own session
 
-`authenticate` receives the raw request and returns a **principal** — any object you like — or
+`authenticate` receives the raw request and returns a **principal** - any object you like - or
 `null` to reject with 401. It is called for REST calls and for WebSocket upgrades, so this is the
 one place your app's login meets the gateway.
 
@@ -69,7 +69,7 @@ authenticate: (req) => {
   const user = myCookieAuth.resolve(req)   // your existing session cookie
   if (!user) return null
   return {
-    scope: { user: user.id },              // §4 — the whole ownership model
+    scope: { user: user.id },              // §4 - the whole ownership model
     allowedProfiles: ['wiki-agent'],       // this principal may use exactly this profile
   }
 },
@@ -84,7 +84,7 @@ your hooks verbatim.
 | `allowedProfiles` | which profiles it may create sessions on |
 | `operator` | access to gateway-wide surfaces (`/fs/*`, `/queue`, `/sdk-sessions`) |
 
-Do expensive work here — a database lookup, a token exchange — and hang the result on the
+Do expensive work here - a database lookup, a token exchange - and hang the result on the
 principal. It runs once per request; the authorization predicate in §4 runs per *row*.
 
 **Checkpoint:** a request without your cookie gets 401.
@@ -96,7 +96,7 @@ enforces them; **you** decide what they mean. "user" is one app's vocabulary; th
 "tenant" or "workspace".
 
 The default rule is: every key the principal pins must match. So `scope: { user: 'alice' }` sees
-alice's sessions and nothing else — enforced at the session routes, the list, the WebSocket attach
+alice's sessions and nothing else - enforced at the session routes, the list, the WebSocket attach
 (*before* the wake, so nobody rebuilds a runner for a caller about to get a 404), deferred-execution
 results, and the job routes.
 
@@ -107,7 +107,7 @@ const { sessions } = await client.listSessions()   // already only this user's
 ```
 
 That is the point. A check the client performs is a check the client can skip. If the default rule
-is not yours, supply `authorizeSession(principal, session)` — but keep it synchronous, because it
+is not yours, supply `authorizeSession(principal, session)` - but keep it synchronous, because it
 runs for every row of every list.
 
 Two things worth internalising:
@@ -122,8 +122,8 @@ Two things worth internalising:
 
 ## 5. Give the agent a model
 
-An embedded agent almost always wants the **provider engine** — any AI SDK model, no CLI
-subprocess, no host filesystem — under a profile whose floor is nothing:
+An embedded agent almost always wants the **provider engine** - any AI SDK model, no CLI
+subprocess, no host filesystem - under a profile whose floor is nothing:
 
 ```ts
 import { sandboxedProviderProfile } from '@workerdeck/server'
@@ -140,7 +140,7 @@ const profile = sandboxedProviderProfile(
 ```
 
 `capabilities: []` and `mcpServers: []` mean *nothing*; leaving them **absent** means "whatever the
-host wired". The empty arrays are load-bearing — do not normalise one into the other.
+host wired". The empty arrays are load-bearing - do not normalise one into the other.
 
 Then build the runner. `createProviderRunner` handles the four obligations that are invisible in
 the types (forward `restore`, adopt `id`, seed the VFS only when *not* restoring, dispose on close):
@@ -175,7 +175,7 @@ and know what each costs:
 | `deliver_file` | hand a scratch file to the user as a download | a surface your app must actually have |
 | an MCP server | your data (§7) | exactly what that server exposes |
 
-Where sandboxed code runs is a real decision, not a default — the trade is laid out in
+Where sandboxed code runs is a real decision, not a default - the trade is laid out in
 [Engines and executors](/workerdeck/docs/reference/engines-and-executors/). The short version: run
 it in-process when the data the loop reasons over is in your database; bridge it to the tab when
 the data is *there* and you would rather not receive it.
@@ -202,39 +202,39 @@ Four rules here, each of which cost the reference app real time:
 1. **Identity rides the transport, never a tool argument.** A `userId` parameter is something the
    model can choose. A per-session bearer token minted in `createEngineRunner` is not.
 2. **`required: true`.** Without it a failed connect produces a session that reports perfectly
-   healthy and quietly has no tools — the agent apologises its way through every request that
+   healthy and quietly has no tools - the agent apologises its way through every request that
    needed them, with one line in a log nobody is reading. Hand the *connection* over as `mcp`
    (not just `mcp.tools`) and a profile naming a server that didn't connect refuses to build.
 3. **A stateless MCP server must answer `GET` with 405.** The client opens the SSE stream with a
    `GET` before it sends anything; under a framework's default 404 the whole connect fails with an
    error naming neither the method nor the route.
-4. **Dispose in `onClose`** — which also runs when a session *parks*. A token that outlives its
+4. **Dispose in `onClose`** - which also runs when a session *parks*. A token that outlives its
    session is a credential nobody is tracking.
 
 **Checkpoint:** `GET /v1/sessions/:id/mcp` lists your server as `connected`, with its tools.
 
 ### One action set, two callers
 
-If your app's own API and your agent's tools are the same operations — and they usually are — write
+If your app's own API and your agent's tools are the same operations - and they usually are - write
 them once. The reference app does exactly this with
 [silkweave](https://www.silkweave.dev): an operation is a name, a Zod schema and a function, and
 two adapters project the same set onto MCP (the agent) and tRPC (the SPA, typed end to end with no
 codegen). At five operations that is tidy; at fifty it is the difference between one implementation
-and two that drift — the app had `write_doc` and `PATCH /api/docs/:id` as one operation spelled
+and two that drift - the app had `write_doc` and `PATCH /api/docs/:id` as one operation spelled
 twice before this.
 
 Three things make it work, and they generalise beyond any one toolkit:
 
 - **Identity resolves per adapter and lands in the same place.** The agent arrives with a
   per-session bearer token; the browser arrives with your login cookie. Both must become the same
-  thing by the time the function runs, so the function cannot tell — and must not care — which
+  thing by the time the function runs, so the function cannot tell - and must not care - which
   caller it is serving. In silkweave that is the context's `auth` key, set by the MCP mount and by
   `trpcNode`'s `authenticate` hook.
 - **Mount, don't bind.** An adapter that starts its own server puts your API on another origin and
   breaks §1. You want the one that hands back a handler for the server you already have
   (`trpcNode()`, as of silkweave 5.1.0).
 - **A shared set is not an identical one.** Keep the operations where the two callers genuinely
-  differ on one side only — `whoami` and "navigate the user to this document" are agent tools; your
+  differ on one side only - `whoami` and "navigate the user to this document" are agent tools; your
   SPA knows what it is showing.
 
 One cost to budget for: a cookie-authenticated RPC endpoint is **CSRF-able**, and that guard is
@@ -248,13 +248,13 @@ yours. Check `Sec-Fetch-Site` (falling back to `Origin`) before you resolve the 
   client={client}                       // ONE client per gateway
   key={sessionId}                       // remount by key; never by moving it in the tree
   sessionId={sessionId}
-  transcriptVariant="terminal"          // the CLI's own form — right for a narrow rail
+  transcriptVariant="terminal"          // the CLI's own form - right for a narrow rail
   controlsSurface="status"              // model + mode into the panel's own status bar
   onVitals={(v) => setVitals(v)}        // live readings for your own chrome
 />
 ```
 
-`baseUrl: '/v1'` — same origin, so the cookie rides both the REST calls and the socket, and there
+`baseUrl: '/v1'` - same origin, so the cookie rides both the REST calls and the socket, and there
 is no key in the tab.
 
 The panel owns the session's **one** attach. Anything else that wants live values reads them
@@ -268,11 +268,11 @@ change: a remount drops the attach and the whole transcript.
 They don't, for two reasons:
 
 - a bridged tool is by definition `sandboxed`, and
-- the bridge asks the **first attached client** — with two tabs open, an arbitrary one answers.
+- the bridge asks the **first attached client** - with two tabs open, an arbitrary one answers.
 
 Hold that state server-side, per user, and stream intents back down (SSE is plenty). Every tab then
 agrees, and an agent working while the tab is shut still leaves the user in the right place. Report
-honestly when nothing was listening — `shown: false` beats claiming a navigation that didn't happen.
+honestly when nothing was listening - `shown: false` beats claiming a navigation that didn't happen.
 
 This is app architecture, not a missing feature, and it is the one thing on this page WorkerDeck
 should *not* solve for you.
@@ -287,7 +287,7 @@ should *not* solve for you.
 
   A durable store alone is not enough, and this is the trap: `park()` only fires for a session
   *resting on deferred executions*, so an ordinary conversation never parks and a store on its own
-  saves nothing. `persistLive` is what covers the ordinary case — the runner's snapshot is written
+  saves nothing. `persistLive` is what covers the ordinary case - the runner's snapshot is written
   through after every turn, and a restart rebuilds from it lazily, on first attach. It is off by
   default because it writes the session's whole transcript to that store, in plaintext.
 
@@ -303,9 +303,9 @@ should *not* solve for you.
 - **Two tabs.** Both can attach; both can send. The bridge asks the first. Decide whether that is
   fine (it usually is) or whether your UI should say so.
 - **Prompt injection through tool results.** A fetched page, a document another user shared, an MCP
-  result — all of it is untrusted input that reaches the model as text. Grants are the mitigation:
+  result - all of it is untrusted input that reaches the model as text. Grants are the mitigation:
   an agent that cannot delete cannot be talked into deleting. Say so in the system prompt too, but
   do not rely on it.
 - **A destructive tool with no approval channel.** The provider engine's capability record says
-  `interactiveApprovals: false` — there is nothing to gate a delete behind. The honest options are
+  `interactiveApprovals: false` - there is nothing to gate a delete behind. The honest options are
   to grant it or not.

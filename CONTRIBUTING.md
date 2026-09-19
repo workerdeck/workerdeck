@@ -12,13 +12,13 @@ pnpm dev:web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to 
 ```
 
 `pnpm dev:server` is the real `workerdeck` CLI pointed at
-[`examples/dev-server.config.mjs`](examples/dev-server.config.mjs) — there is no separate dev
+[`examples/dev-server.config.mjs`](examples/dev-server.config.mjs) - there is no separate dev
 entry point, so what you develop against and what `npx workerdeck` ships are one code path.
 Edit that config directly; flags still win (`pnpm dev:server --port 9000`). The dashboard is the
 one thing that must be compiled, so the script builds it first (`pnpm dashboard`, turbo-cached);
 run `pnpm dev:web` alongside when you want HMR.
 
-To reach the gateway from another device — a phone on the same Tailscale network, say — set
+To reach the gateway from another device - a phone on the same Tailscale network, say - set
 `WD_DEV_HOST` in your shell and both dev scripts bind and target it:
 
 ```bash
@@ -42,10 +42,10 @@ Take a new one rather than reusing these: shadowing a running dev server is sile
 symptom is a page that looks stale rather than an error.
 
 Auth off loopback is not optional: anyone who can reach the port would get a Claude Code
-session. Pass `--auth-key <secret>`, or let the CLI generate one — printed once, kept in the
+session. Pass `--auth-key <secret>`, or let the CLI generate one - printed once, kept in the
 state dir, reused on later starts. Native clients send it as `Authorization: Bearer <key>`;
 browsers post it once at the login page and ride a cookie. To genuinely serve without auth on a
-trusted network, declare the bind host (`--insecure-host <name>`, config `insecureHosts`) — the
+trusted network, declare the bind host (`--insecure-host <name>`, config `insecureHosts`) - the
 declared name doubles as an accepted Host header.
 
 Nothing else needs building: apps and tests resolve packages straight to TypeScript source
@@ -58,7 +58,7 @@ pnpm test        # vitest
 pnpm lint        # oxlint
 ```
 
-`pnpm test` uses fakes throughout — a fake `queryFn` for the Claude runner, a real HTTP+WS
+`pnpm test` uses fakes throughout - a fake `queryFn` for the Claude runner, a real HTTP+WS
 integration suite for the server, a fake runner for the queue. It spawns no CLI and spends no
 tokens. The real-SDK smokes in `smoke/` do cost tokens and deliberately never run in `pnpm test`;
 if you change a permission path or a CLI control request, run one anyway, because the fake harness
@@ -67,7 +67,7 @@ cannot validate those payloads.
 ## Before you open a PR
 
 Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the package map and the dependency rule,
-and skim the relevant headings of [`docs/GOTCHAS.md`](docs/GOTCHAS.md) — it documents the
+and skim the relevant headings of [`docs/GOTCHAS.md`](docs/GOTCHAS.md) - it documents the
 invariants that bite, which is usually the difference between a patch that works and a patch that
 looks like it works.
 
@@ -101,12 +101,12 @@ Policy enforcement lives in configuration (`requireApiKey`, the one-time subscri
 
 ## Out of scope
 
-Settled non-goals — please don't open PRs re-litigating them: serverless hosting (the SDK spawns a
+Settled non-goals - please don't open PRs re-litigating them: serverless hosting (the SDK spawns a
 long-running subprocess with filesystem state), multi-tenant SaaS, and claude.ai authentication.
 
 **Scoped embedding is not multi-tenant SaaS**, and the distinction is worth stating rather than
 leaving to inference. `CreateSessionRequest.scope` plus `authorizeSession` let a gateway embedded
-in one app keep its end users out of each other's sessions — one gateway, one trust domain, one
+in one app keep its end users out of each other's sessions - one gateway, one trust domain, one
 operator, with sessions belonging to something narrower than the gateway. What stays a non-goal is
 mutually-distrusting customers sharing infrastructure: the host's own edge is the authorization
 boundary, and scope is defense in depth behind it. See
@@ -114,4 +114,4 @@ boundary, and scope is defense in depth behind it. See
 
 ## Security
 
-Don't file security issues as public GitHub issues — see [SECURITY.md](SECURITY.md).
+Don't file security issues as public GitHub issues - see [SECURITY.md](SECURITY.md).

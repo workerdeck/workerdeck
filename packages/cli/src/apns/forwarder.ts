@@ -20,7 +20,7 @@ export type ApnsForwarder = {
     update: (sessionId: string, state: ActivityContentState, options: { urgent: boolean }) => void
     end: (sessionId: string, state: ActivityContentState) => void
     // Every card this gateway raised, ended. Run on boot against what the last process left behind,
-    // and again on a graceful close — a card whose gateway is gone has no other way to learn it.
+    // and again on a graceful close - a card whose gateway is gone has no other way to learn it.
     endAll: (headline: string) => Promise<void>
     count: () => number
   }
@@ -52,8 +52,8 @@ function collapseKey(sessionId: string): string {
   return createHash('sha256').update(sessionId).digest('base64url').slice(0, 32)
 }
 
-// One banner per session per kind. Every type collapses — a session that errors five times should
-// occupy one line on the lock screen, not five — but each kind keeps its own key, because an
+// One banner per session per kind. Every type collapses - a session that errors five times should
+// occupy one line on the lock screen, not five - but each kind keeps its own key, because an
 // arriving approval replacing a "Turn finished" for the same session would be different news
 // silently overwritten rather than a repeat folded away.
 const COLLAPSE_PREFIX: Record<SessionNotificationType, string> = {
@@ -66,16 +66,16 @@ const COLLAPSE_PREFIX: Record<SessionNotificationType, string> = {
 function titleFor(notification: SessionNotification, name: string): string {
   switch (notification.type) {
     case 'permission_requested': {
-      return `Approval needed — ${name}`
+      return `Approval needed - ${name}`
     }
     case 'turn_completed': {
-      return notification.result?.isError === true ? `Turn failed — ${name}` : name
+      return notification.result?.isError === true ? `Turn failed - ${name}` : name
     }
     case 'session_error': {
-      return `Session error — ${name}`
+      return `Session error - ${name}`
     }
     case 'session_closed': {
-      return `Session ended — ${name}`
+      return `Session ended - ${name}`
     }
     default: {
       return name
@@ -104,7 +104,7 @@ function bodyFor(notification: SessionNotification): string {
   }
 }
 
-// The payload carries routing only — never transcript text — and `requestId` is what a lock-screen Approve has to POST to.
+// The payload carries routing only - never transcript text - and `requestId` is what a lock-screen Approve has to POST to.
 export function buildPush(notification: SessionNotification, hostId: string | undefined): Omit<ApnsRequest, 'deviceToken' | 'environment'> {
   const permission = notification.type === 'permission_requested'
   const name = label(notification.session)

@@ -4,7 +4,7 @@ import SwiftUI
 /// The model and permission-mode pickers, as sheets rather than menus.
 ///
 /// A `Menu` is rendered by UIKit and gives you a title, a subtitle and an image
-/// per row and nothing else — no descriptions worth reading, no coloured icons,
+/// per row and nothing else - no descriptions worth reading, no coloured icons,
 /// no styled DEFAULT tag. Both of these are choices worth a moment's reading, so
 /// they get a screen. Deliberately shaped like Claude Code's own selectors: a
 /// title, a close button, and one rounded card of rows.
@@ -12,7 +12,7 @@ private struct SelectionSheet<Content: View, Trailing: View>: View {
   let title: String
   /// The card. One rounded group of rows.
   @ViewBuilder let content: Content
-  /// Anything below it, already carrying its own background — the model picker's
+  /// Anything below it, already carrying its own background - the model picker's
   /// "More models" group.
   @ViewBuilder let trailing: Trailing
 
@@ -67,7 +67,7 @@ private struct SelectionSheet<Content: View, Trailing: View>: View {
 }
 
 /// One row of a selection sheet: optional icon, name, what it does, and the two
-/// markers — a checkmark for what is in force, DEFAULT for what the session
+/// markers - a checkmark for what is in force, DEFAULT for what the session
 /// started on. They are independent: the default is often not the current choice.
 private struct SelectionRow: View {
   let title: String
@@ -77,7 +77,7 @@ private struct SelectionRow: View {
   let isSelected: Bool
   let isDefault: Bool
   var showsDivider: Bool
-  /// Offered but not switchable — greyed and inert, with `summary` saying why.
+  /// Offered but not switchable - greyed and inert, with `summary` saying why.
   var isDisabled = false
   let action: () -> Void
 
@@ -138,7 +138,7 @@ private struct SelectionRow: View {
 
 /// Pick the model this session answers with.
 ///
-/// Every row is a real model the CLI reports — the CLI's own `default` row ("use
+/// Every row is a real model the CLI reports - the CLI's own `default` row ("use
 /// whatever I'd pick") is dropped server-side, because it is a choice rather than
 /// a model: a session running on it reports something else, so the row could
 /// never be checked and the status bar would name it wrongly.
@@ -163,7 +163,7 @@ struct ModelPickerSheet: View {
   var body: some View {
     SelectionSheet(title: "Select model") {
       if models.isEmpty {
-        // Before `capabilities` lands there is nothing to list — and nothing to
+        // Before `capabilities` lands there is nothing to list - and nothing to
         // pick either, since every id here comes from the CLI.
         Text("This session hasn't reported its models yet.")
           .font(.subheadline)
@@ -208,11 +208,11 @@ struct ModelPickerSheet: View {
 ///
 /// `bypassPermissions` is always last and often unusable: the CLI refuses to
 /// switch into it unless the session was *spawned* for it, so a session that
-/// didn't ask up front can never gain it. It is shown greyed rather than hidden —
+/// didn't ask up front can never gain it. It is shown greyed rather than hidden -
 /// "you can't have this here" is a more useful answer than a row that silently
 /// isn't there, and the reason is spelled out where its description would be.
 struct ModePickerSheet: View {
-  /// Only the modes this session's engine implements — the caller filters.
+  /// Only the modes this session's engine implements - the caller filters.
   let modes: [PermissionMode]
   let current: PermissionMode?
   let defaultMode: PermissionMode?

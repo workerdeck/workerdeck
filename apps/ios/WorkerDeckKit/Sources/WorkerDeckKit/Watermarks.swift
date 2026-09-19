@@ -1,8 +1,8 @@
 import Foundation
 
-/// "What had you seen, and when" — per session, across relaunches.
+/// "What had you seen, and when" - per session, across relaunches.
 ///
-/// A line-by-line port of `packages/protocol/src/watermarks.ts` — the semantics
+/// A line-by-line port of `packages/protocol/src/watermarks.ts` - the semantics
 /// are the contract, not the shape of the code. When the rules change there
 /// (monotonicity, the once-a-minute touch, the 30-day prune, the rows-not-turns
 /// arithmetic), they change here.
@@ -19,11 +19,11 @@ import Foundation
 public struct Watermark: Codable, Sendable, Equatable {
   /// Transcript rows seen (the reducer's `items.count`).
   public var itemCount: Int
-  /// Rows the gateway had counted (`SessionInfo.activityCount`) — the same unit
+  /// Rows the gateway had counted (`SessionInfo.activityCount`) - the same unit
   /// as `itemCount`, but from the rollup, so it is knowable for a session this
   /// client is not showing.
   public var activity: Int
-  /// Prose rows seen (`SessionInfo.proseCount`) — the badge's unit. Optional
+  /// Prose rows seen (`SessionInfo.proseCount`) - the badge's unit. Optional
   /// because a mark stored before prose counting existed cannot say; see
   /// `unseenCount`, which reads that absence as "caught up" rather than
   /// badging a whole history the operator has already read.
@@ -43,10 +43,10 @@ public struct Watermark: Codable, Sendable, Equatable {
   }
 }
 
-/// Where the marks are kept — a seam rather than a dependency, exactly like the
+/// Where the marks are kept - a seam rather than a dependency, exactly like the
 /// TS `WatermarkStore`: VS Code backs it with `globalState`, the dashboard with
 /// `localStorage`, this app with `UserDefaults`, and none of them belongs here.
-/// Reads happen once at construction; writes are whole-map and may be deferred —
+/// Reads happen once at construction; writes are whole-map and may be deferred -
 /// nothing here awaits them.
 public struct WatermarkStore {
   public var read: () -> [String: Watermark]?
@@ -61,7 +61,7 @@ public struct WatermarkStore {
   }
 }
 
-/// Entries older than this are dropped on write — a session deleted months ago
+/// Entries older than this are dropped on write - a session deleted months ago
 /// should not keep a row in storage forever.
 private let maxAgeMs: Double = 30 * 24 * 60 * 60 * 1000
 
@@ -131,7 +131,7 @@ public final class Watermarks {
     return true
   }
 
-  /// Forget a session — it was deleted, and its mark is now noise. A forget for
+  /// Forget a session - it was deleted, and its mark is now noise. A forget for
   /// something absent must not write: it would churn storage on every poll that
   /// sees a session already gone.
   public func forget(hostId: String, sessionId: String) {
@@ -153,13 +153,13 @@ public final class Watermarks {
 ///
 /// The unit is the best one the pair can agree on: **prose** the human has not
 /// read (`proseCount`, scored by protocol's `transcriptProse`), else rows, else
-/// turns. Prose is what the badge is *for* — a session that tool-loops for a
+/// turns. Prose is what the badge is *for* - a session that tool-loops for a
 /// minute is working, not talking, and a count that ticks 6, 7, 8 through it is
 /// noise. Rows stay the rung below for a gateway too old to report prose (turns
-/// undercount badly — five tool calls in one turn is one turn — and a stream
+/// undercount badly - five tool calls in one turn is one turn - and a stream
 /// sequence overcounts absurdly).
 ///
-/// A session never visited returns 0 — "never opened" is not "unread", and a
+/// A session never visited returns 0 - "never opened" is not "unread", and a
 /// badge that counted every session's whole history on first launch would be
 /// noise on the one day it should be quiet.
 public func unseenCount(mark: Watermark?, proseCount: Int?, activityCount: Int?, turns: Int?)

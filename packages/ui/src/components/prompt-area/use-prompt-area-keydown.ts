@@ -373,7 +373,7 @@ export function usePromptAreaKeydown({
       }
 
       // 1.75 Launch triggers: a trigger with mode 'launch' fires onActivate on
-      // keydown and suppresses the char so it never enters the editor — for
+      // keydown and suppresses the char so it never enters the editor - for
       // opening an external surface (dialog, palette). The DOM read is gated on
       // the typed key actually matching a launch char, so it stays off the hot
       // path. insertChip still inserts a chip at the cursor if the consumer
@@ -406,7 +406,7 @@ export function usePromptAreaKeydown({
       // 2. Trigger dropdown navigation. Gated on the dropdown actually being
       // ON SCREEN, which matches TriggerPopover's own render condition
       // (non-empty suggestions, OR loading/error/emptyMessage) rather than
-      // just `suggestions.length > 0` — otherwise a popover left open in a
+      // just `suggestions.length > 0` - otherwise a popover left open in a
       // loading/empty state (e.g. right after a chip-click reopen, before its
       // empty-query search resolves) lets Enter fall through to onSubmit and
       // Escape fall through to onEscape while still visibly on screen.
@@ -499,7 +499,7 @@ export function usePromptAreaKeydown({
       }
 
       // 3. Enter without Shift (skipping IME): under `submitOnEnter` it submits
-      // *unconditionally* — the send key must not turn into "another bullet" because
+      // *unconditionally* - the send key must not turn into "another bullet" because
       // of what the line above starts with; list continuation lives on Shift+Enter
       // (branch 2.8). Without `submitOnEnter`, Enter is the newline key and continues.
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {

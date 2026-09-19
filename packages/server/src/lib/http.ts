@@ -56,7 +56,7 @@ export function hashBytes(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-// Decoding never fails in Node — invalid bytes become U+FFFD — so a round trip is the only honest test.
+// Decoding never fails in Node - invalid bytes become U+FFFD - so a round trip is the only honest test.
 export function asUtf8(bytes: Buffer): string | null {
   const text = bytes.toString('utf8')
   return Buffer.from(text, 'utf8').equals(bytes) ? text : null

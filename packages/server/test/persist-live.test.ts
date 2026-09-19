@@ -184,7 +184,7 @@ describe('live sessions that survive a restart', () => {
     expect(replayed.every((event) => event.seq > 0)).toBe(true)
   })
 
-  it('keeps the record on wake — consuming it would lose a session nobody typed into', async () => {
+  it('keeps the record on wake - consuming it would lose a session nobody typed into', async () => {
     const dir = await stateDir()
     const first = await startGateway(createFileSessionStore({ dir }))
     const session = await create(first.base)

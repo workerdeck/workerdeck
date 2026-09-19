@@ -10,7 +10,7 @@ enum Fmt {
     elapsed(seconds: now.timeIntervalSince1970 - epochMs / 1000)
   }
 
-  /// "in 42m" / "in 3h 10m" — for a rate-limit window reset (epoch **seconds**).
+  /// "in 42m" / "in 3h 10m" - for a rate-limit window reset (epoch **seconds**).
   static func until(epochSeconds: Double, now: Date = Date()) -> String? {
     let remaining = epochSeconds - now.timeIntervalSince1970
     guard remaining > 0 else { return nil }
@@ -32,7 +32,7 @@ enum Fmt {
   /// A *turn's* cost, at the precision the protocol reports it: "$0.0142".
   ///
   /// Deliberately not the web's `formatCost`, which rounds to cents and floors
-  /// at `<$0.01` — most single turns cost less than a cent, and a column of
+  /// at `<$0.01` - most single turns cost less than a cent, and a column of
   /// `<$0.01` says nothing. For a **session total**, where the three clients sit
   /// side by side and are compared, use `TermFmt.cost`, which *is* that port.
   static func cost(_ usd: Double) -> String {
@@ -81,8 +81,8 @@ enum Fmt {
   }
 
   /// Human label for a rate-limit window key ('five_hour' → "5h",
-  /// 'seven_day_opus' → "7d opus"). The per-model suffix is open — the CLI adds
-  /// buckets as plans gain them — so it is rewritten rather than enumerated.
+  /// 'seven_day_opus' → "7d opus"). The per-model suffix is open - the CLI adds
+  /// buckets as plans gain them - so it is rewritten rather than enumerated.
   static func rateLimitWindow(_ key: String) -> String {
     switch key {
     case "five_hour": return "5h"
@@ -110,7 +110,7 @@ enum Fmt {
     }
   }
 
-  /// How long a rate-limit window is, in seconds — the denominator behind the
+  /// How long a rate-limit window is, in seconds - the denominator behind the
   /// pace marker. Derived from the key rather than reported: the CLI sends a
   /// reset time and a percentage, never a duration. Unknown for a window whose
   /// key doesn't say (the marker is then simply not drawn).
@@ -126,7 +126,7 @@ enum Fmt {
     return "Resets " + until
   }
 
-  /// "8 secs ago" / "3 mins ago" — the usage sheet's freshness line, which is
+  /// "8 secs ago" / "3 mins ago" - the usage sheet's freshness line, which is
   /// finer-grained than `ago` (a poll that just landed should say so).
   static func agoPrecise(_ date: Date, now: Date = Date()) -> String {
     let seconds = max(0, now.timeIntervalSince(date))

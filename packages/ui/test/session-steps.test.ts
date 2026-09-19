@@ -43,7 +43,7 @@ describe('sessionSteps', () => {
     expect(pressed).toEqual(['a', 'b'])
   })
 
-  it('leaves untyped records out entirely — they are tasks, and tasks are not steps', () => {
+  it('leaves untyped records out entirely - they are tasks, and tasks are not steps', () => {
     const info = {
       subagents: [
         sub({ toolUseId: 't1', description: 'first task' }),

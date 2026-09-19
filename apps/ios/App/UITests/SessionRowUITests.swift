@@ -26,7 +26,7 @@ final class SessionRowUITests: XCTestCase {
 
   // The overflow control's whole failure mode is silent: a press that misses it
   // opens the session instead, and a screenshot of the pushed screen looks like
-  // a screenshot of a working app. So the claim is both halves — the menu came
+  // a screenshot of a working app. So the claim is both halves - the menu came
   // up AND the list is still what we are looking at.
   @MainActor
   func testOverflowOpensAMenuInsteadOfTheSession() throws {
@@ -44,7 +44,7 @@ final class SessionRowUITests: XCTestCase {
     XCTAssertTrue(app.navigationBars["Sessions"].exists, "the overflow pushed the row")
   }
 
-  // A step frames its agent, and an untyped record is not a step at all — it is
+  // A step frames its agent, and an untyped record is not a step at all - it is
   // a task, and tasks live in the session's own sheet. Both halves are invisible
   // from the outside: an id that frames nothing selects no items (the web's
   // 0.21.0 bug), and a task still drawn here would push a route to a screen

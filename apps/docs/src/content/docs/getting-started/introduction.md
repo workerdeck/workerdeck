@@ -4,8 +4,8 @@ description: What WorkerDeck is, why it exists, and what it deliberately does no
 order: 1
 ---
 
-WorkerDeck runs a **close-to-real coding agent session** programmatically — Claude Code, OpenAI
-Codex, or any model provider — and exposes it as something you can **watch, steer, and embed**.
+WorkerDeck runs a **close-to-real coding agent session** programmatically - Claude Code, OpenAI
+Codex, or any model provider - and exposes it as something you can **watch, steer, and embed**.
 
 It comes in two shapes. `npx workerdeck` is a
 [turnkey instance](/workerdeck/docs/getting-started/run-an-instance/): gateway plus the full
@@ -17,7 +17,7 @@ more clients of the same gateway, built from this repo.
 
 ## Why it exists
 
-A coding agent is a terminal program. Its SDK — or its binary — lets you run the same engine from
+A coding agent is a terminal program. Its SDK - or its binary - lets you run the same engine from
 Node, but it hands you a raw message stream with no hosting layer: no server your web app can
 talk to, no wire protocol, no way to render a transcript or approve a tool call from a browser.
 WorkerDeck adds exactly that missing layer:
@@ -32,12 +32,12 @@ WorkerDeck adds exactly that missing layer:
 A session created here behaves like the agent's own CLI launched in the same directory:
 
 - the same skills,
-- the same project instructions (`CLAUDE.md`, `AGENTS.md` — whatever that engine reads),
+- the same project instructions (`CLAUDE.md`, `AGENTS.md` - whatever that engine reads),
 - the same MCP config surface,
 - the same permission system.
 
 For a Claude session, passing `settingSources: ['user', 'project']` at create time is what picks
-up the target repo's skills and `CLAUDE.md` — a prompt can then be plain text or a skill
+up the target repo's skills and `CLAUDE.md` - a prompt can then be plain text or a skill
 invocation like `/verify-content 42`.
 
 ## Three engines, one protocol
@@ -45,19 +45,19 @@ invocation like `/verify-content 42`.
 A [profile](/workerdeck/docs/guides/profiles/) decides what a session runs as, including which
 **engine** it runs on:
 
-- **`claude`** (the default) — Claude Code via the Agent SDK, everything described above: a real
+- **`claude`** (the default) - Claude Code via the Agent SDK, everything described above: a real
   CLI process against a real checkout, with the full permission system.
-- **`codex`** — OpenAI Codex, the local codex binary driven over its `app-server` JSON-RPC
+- **`codex`** - OpenAI Codex, the local codex binary driven over its `app-server` JSON-RPC
   surface the same way the Agent SDK drives the Claude CLI, streaming token-by-token. The
   binary resolves its own auth (`codex login` in your terminal), and permission modes map onto
   codex's own sandbox. Its ask channels ride the **same permission surface** as Claude's, with one
   difference the request carries honestly: a codex command approval is usually an *escalation
   after the sandbox already refused*, not a gate before execution. Two things it has that a Claude
   session doesn't: **skills** (listed from `~/.codex/skills`, offered under `/` as a typing aid
-  rather than as commands — codex has no slash commands, and a skill is something the model
+  rather than as commands - codex has no slash commands, and a skill is something the model
   chooses from its description) and **generated images**, which the runner announces as produced
   files so the gateway can serve them without any host-filesystem grant.
-- **`provider`** — a model-agnostic engine over the [AI SDK](https://ai-sdk.dev), for any provider
+- **`provider`** - a model-agnostic engine over the [AI SDK](https://ai-sdk.dev), for any provider
   it supports, assembled by your own server hook. No CLI process and no config directory, and no
   ambient authority either: tools are capability-scoped, the filesystem is an in-memory scratch
   VFS, and untrusted code runs in a QuickJS sandbox that can execute **in the user's own browser
@@ -65,18 +65,18 @@ A [profile](/workerdeck/docs/guides/profiles/) decides what a session runs as, i
 
 Every engine declares a **capability record** (approvals, modes, resume, telemetry, attachments,
 reasoning efforts) that clients render around, and ships a **model catalog** with each release,
-so `GET /profiles` answers a create form from the first request — including whether the
+so `GET /profiles` answers a create form from the first request - including whether the
 profile's credentials currently probe as usable. All engines implement one `Runner` interface
 and speak the same protocol, so the client, the React layer, the panel and the job queue are
 unchanged either way. One worker can serve all three.
 
 ## Beyond the live session
 
-- [**Permissions**](/workerdeck/docs/guides/permissions/) — a tool call the session's mode
+- [**Permissions**](/workerdeck/docs/guides/permissions/) - a tool call the session's mode
   doesn't cover becomes a pending approval, and the tool blocks until a client decides.
-- [**Job queue**](/workerdeck/docs/guides/job-queue/) — unattended one-shot runs with bounded
+- [**Job queue**](/workerdeck/docs/guides/job-queue/) - unattended one-shot runs with bounded
   concurrency, token budgets, retries, a watchdog, and webhooks.
-- **Deferred execution** — a session can *park* on work nothing here is doing (a batch job, a
+- **Deferred execution** - a session can *park* on work nothing here is doing (a batch job, a
   human approving on Monday) and resume days later, mid-turn, as itself. See
   [job queue](/workerdeck/docs/guides/job-queue/#deferred-execution) and
   [deployment](/workerdeck/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).
@@ -89,7 +89,7 @@ Ten libraries, one instance, one dependency rule:
 | --- | --- |
 | `workerdeck` | The turnkey instance: gateway + dashboard on one port, shared-secret auth, durable parking, restart guard. |
 | `@workerdeck/protocol` | The wire protocol: session events, commands, REST shapes. Dependency-free, browser-safe. The product boundary. |
-| `@workerdeck/core` | The engines, as adapters — `SessionRunner` (Agent SDK), `CodexRunner` (the codex binary over JSON-RPC) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
+| `@workerdeck/core` | The engines, as adapters - `SessionRunner` (Agent SDK), `CodexRunner` (the codex binary over JSON-RPC) and `AiSdkRunner` (any provider) behind one `Runner` interface. No transport. |
 | `@workerdeck/sandbox` | The untrusted-code boundary: a QuickJS-NG WASM guest with interpreter-enforced limits. Runs server-side or in a tab. |
 | `@workerdeck/queue` | Job queue: one-shot unattended runs with concurrency limits, token budgets, and webhooks. |
 | `@workerdeck/server` | HTTP + WebSocket gateway: session registry, pluggable auth hook, profiles, optional job routes. |
@@ -108,26 +108,26 @@ The browser side never imports the server side; the protocol is the only bridge.
 - **Sessions are single-host.** Transcripts live on the server's local disk (the engine's own
   default); resume works across process restarts on the same host. Parked sessions survive a
   restart with the bundled file store, and live *provider* sessions do too with
-  `parking.persistLive` — but one directory serves one process.
+  `parking.persistLive` - but one directory serves one process.
 - **The server trusts its host app.** For CLI engines `CreateSessionRequest` accepts `mcpServers`
   and tool policy; gate session creation behind your own auth and use `allowedCwdRoots` +
   `buildRunnerConfig` to clamp what clients may request. Provider sessions are tighter by
-  construction — MCP is declared on the profile, never by the caller. To put sessions in front of
+  construction - MCP is declared on the profile, never by the caller. To put sessions in front of
   your own end users, `scope` + `authorizeSession` keep them out of each other's sessions, but
   your own edge stays the authorization boundary. See
   [Deployment](/workerdeck/docs/guides/deployment/) and
   [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/).
 - **No model-provider auth of its own.** Credentials are resolved by the official SDK/CLI from
-  the operator's environment — see [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
+  the operator's environment - see [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
 
 ## Where to go next
 
-- [Run an instance](/workerdeck/docs/getting-started/run-an-instance/) — `npx workerdeck`,
+- [Run an instance](/workerdeck/docs/getting-started/run-an-instance/) - `npx workerdeck`,
   the flags, and the config file.
-- [Quickstart](/workerdeck/docs/getting-started/quickstart/) — the workspace from source, a
+- [Quickstart](/workerdeck/docs/getting-started/quickstart/) - the workspace from source, a
   first session, a minimal embed.
-- [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/) — the gateway
+- [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/) - the gateway
   inside your own server, in front of your own users.
-- [Embedding the UI](/workerdeck/docs/guides/embedding/) — put the panel in your own app.
-- [Permissions](/workerdeck/docs/guides/permissions/) — the sharp edge that makes it safe to
+- [Embedding the UI](/workerdeck/docs/guides/embedding/) - put the panel in your own app.
+- [Permissions](/workerdeck/docs/guides/permissions/) - the sharp edge that makes it safe to
   point at a real checkout.

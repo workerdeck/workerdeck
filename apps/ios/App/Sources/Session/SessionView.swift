@@ -4,7 +4,7 @@ import WorkerDeckKit
 import SwiftUI
 
 /// The live session: one `SessionHandle`, one `TranscriptState`, and the two
-/// bands over them — the transcript, and the floating glass stack (status bar,
+/// bands over them - the transcript, and the floating glass stack (status bar,
 /// approval, composer) that rides above its bottom edge.
 ///
 /// Nothing is docked. The navigation bar and the bottom stack are both
@@ -29,10 +29,10 @@ struct SessionView: View {
   @Environment(AppSettings.self) private var settings
   @Environment(BookmarkModel.self) private var bookmarks
 
-  /// The gateway this session belongs to — the watermark key's first half.
+  /// The gateway this session belongs to - the watermark key's first half.
   private let hostId: UUID
   /// The event a tapped notification was about, when this screen was opened by
-  /// one. Resolved to a row once the replay hold lifts — see `focusTarget`.
+  /// one. Resolved to a row once the replay hold lifts - see `focusTarget`.
   private let focusSeq: Int?
   /// The log that `focusSeq` was numbered in, when the notification named one. A dormant
   /// wake renumbers the log, so a seq kept across one is not the row it says it is.
@@ -52,12 +52,12 @@ struct SessionView: View {
   @State private var sheet: Sheet?
   @State private var showCloseConfirmation = false
   @State private var showClearConfirmation = false
-  /// Lives as long as the view: both halves of it arrive late and independently —
-  /// the command list with `capabilities`, the file scope with the cwd — and a
+  /// Lives as long as the view: both halves of it arrive late and independently -
+  /// the command list with `capabilities`, the file scope with the cwd - and a
   /// model rebuilt under the composer would drop the draft's suggestion state.
   @State private var completion = PromptCompletionModel()
   /// Owns the share sheet for files tapped in the transcript. The details sheet
-  /// has its own — a sheet can't raise another sheet from underneath itself.
+  /// has its own - a sheet can't raise another sheet from underneath itself.
   @State private var downloader = FileDownloader()
   /// The caret, and whether the keyboard is up. Here rather than in the composer
   /// because the picker overlay edits the same draft it does.
@@ -66,24 +66,24 @@ struct SessionView: View {
   /// attach, because the gateway's offer is re-made there and may not come back.
   @State private var isShellMode = false
   @State private var isComposerFocused = false
-  /// How much of the bottom the floating stack occupies — the picker sits on top
+  /// How much of the bottom the floating stack occupies - the picker sits on top
   /// of it, so it needs the number the layout actually produced.
   @State private var footerHeight: CGFloat = 0
   /// The session screen's own height, so a prompt can be capped as a fraction of
   /// it. Measured rather than assumed: a constant that fits an iPhone SE wastes
   /// half a Pro Max, and one tuned for a Pro Max reproduces the bug the cap
-  /// exists to fix — a prompt taller than the screen whose buttons are off it.
+  /// exists to fix - a prompt taller than the screen whose buttons are off it.
   @State private var containerHeight: CGFloat = 0
   /// The terminal transcript's scroll handle. Held here rather than inside the
-  /// transcript because the surfaces that want to drive it — a scrubber, the
-  /// catch-up jump — sit beside the transcript, not in it.
+  /// transcript because the surfaces that want to drive it - a scrubber, the
+  /// catch-up jump - sit beside the transcript, not in it.
   @State private var transcriptScroll = TranscriptScrollModel()
   /// Files staged for the next message. Outlives the composer's focus and is
   /// cleared on send; uploads start as soon as something is picked.
   @State private var attachments = ComposerAttachmentStore()
   /// Fetches (and caches) transcript thumbnails, which need the auth header.
   @State private var attachmentLoader = AttachmentLoader()
-  /// Fetches (and caches) pictures the engine produced on the host — codex's
+  /// Fetches (and caches) pictures the engine produced on the host - codex's
   /// generated images, which arrive as a path and never as bytes.
   @State private var producedImages = ProducedImageLoader()
   /// The pictures a *tool result* carried, fetched by address rather than
@@ -102,23 +102,23 @@ struct SessionView: View {
   /// normal case and means the tail.
   @State private var focusTarget: TerminalTranscriptView.TranscriptFocusTarget?
   /// Whether the question has been asked. Separate from the answer, because
-  /// "the seq could not be placed" is a settled outcome too — retrying it on
+  /// "the seq could not be placed" is a settled outcome too - retrying it on
   /// every later event is how a deep link turns into a transcript that jumps
   /// under the reader minutes after they arrived.
   @State private var focusResolved = false
-  /// The reveal's equivalent, settling for the same reasons — see `resolveReveal()`.
+  /// The reveal's equivalent, settling for the same reasons - see `resolveReveal()`.
   @State private var revealResolved = false
 
   /// The sub-agent takeover: which `Task` call's work the pushed screen is
   /// showing, or nil for the conversation. The `navigationDestination(item:)`
-  /// binding — set by a `Task` row's press or a resolved route request, cleared
+  /// binding - set by a `Task` row's press or a resolved route request, cleared
   /// by the pop.
   @State private var subagentId: String?
   /// A takeover asked for by the route (the sessions list's agent line), held
   /// until the attach replay has landed. The list knows the `toolUseId` from
   /// `SessionInfo.subagents` while the transcript is still filling in, and a
   /// frame opened over a half-replayed transcript would answer "not in this
-  /// transcript" about an agent that simply has not arrived — so the request
+  /// transcript" about an agent that simply has not arrived - so the request
   /// waits out the same hold the transcript does. See `resolveTakeover()`.
   @State private var pendingSubagent: String?
 
@@ -127,14 +127,14 @@ struct SessionView: View {
   ///
   /// **Seeded once, in `onAppear`, and deliberately not in `init`**: the mark
   /// lives in an `@Environment` model, which an initializer cannot reach. That
-  /// is safe rather than lucky — `markSeen` refuses to write until the attach
+  /// is safe rather than lucky - `markSeen` refuses to write until the attach
   /// snapshot has landed, which is well after the first body pass, so nothing
   /// has moved the mark by the time this reads it. Cleared by "dismiss" and by
   /// sending, which is the reader saying they are caught up.
   @State private var catchUp: CatchUpMark?
   @State private var catchUpSeeded = false
   /// The seam's row in the terminal fold, reported back by the transcript. Nil
-  /// means no seam was spliced — nothing arrived while the reader was away —
+  /// means no seam was spliced - nothing arrived while the reader was away -
   /// and the bar then draws nothing rather than offering a jump to a row that
   /// does not exist.
   @State private var recapRow: Int?
@@ -197,7 +197,7 @@ struct SessionView: View {
         }
       }
         // Tapping the transcript puts the keyboard away. Simultaneous, so a tap
-        // that lands on a tool card still expands it — dismissing on the way is
+        // that lands on a tool card still expands it - dismissing on the way is
         // what you'd want there too.
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
         .safeAreaInset(edge: .bottom, spacing: 0) { measuredFooter }
@@ -238,15 +238,15 @@ struct SessionView: View {
         }
         // The notification claim and the unread truing-up ride the model's
         // presence transitions, not this view's appear/disappear. This view's
-        // `onDisappear` fires when the takeover is *pushed over it* — the
-        // session is still on screen, wearing its sub-agent's frame — and
+        // `onDisappear` fires when the takeover is *pushed over it* - the
+        // session is still on screen, wearing its sub-agent's frame - and
         // releasing there would let the very approval being shown in the
         // takeover bang the phone. The transitions fire exactly on "came on
         // screen" / "left the screen", whichever of the two views is doing the
         // showing. Set before `holdOpen()` takes the first claim.
         //
         // Captures pieces, never `self`: the model holds this closure, and a
-        // capture of the view struct carries the model back into it — a cycle
+        // capture of the view struct carries the model back into it - a cycle
         // that would leak every visited session's whole reduced state. The
         // release arm inlines `finalizeSeen` for the same reason.
         vm.onScreenPresence = { [weak vm, push, unread, hostId] visible in
@@ -266,8 +266,8 @@ struct SessionView: View {
         }
         await vm.holdOpen()
       }
-      // A reattach that no longer offers a shell — a restarted gateway with the flag
-      // dropped, or a resume onto a sandboxed engine — must not leave the composer in a
+      // A reattach that no longer offers a shell - a restarted gateway with the flag
+      // dropped, or a resume onto a sandboxed engine - must not leave the composer in a
       // mode whose commands would be refused.
       .onChange(of: vm.canRunShell) { _, offered in
         if !offered { isShellMode = false }
@@ -275,7 +275,7 @@ struct SessionView: View {
       .onChange(of: scenePhase) { _, phase in
         if phase == .active { vm.reconnectNow() }
         // Backgrounding stops this session being "on screen": that is exactly
-        // when its notifications become useful again — and when the watermark
+        // when its notifications become useful again - and when the watermark
         // stops moving, after one truing-up of what *was* visible.
         push.visibleSessionId = phase == .active ? vm.sessionId : nil
         if phase != .active { finalizeSeen() }
@@ -286,7 +286,7 @@ struct SessionView: View {
         catchUp = settings.catchUpMode ? unread.since(host: hostId, sessionId: vm.sessionId) : nil
       }
       // The unread watermark, written **only while this session is genuinely on
-      // screen** — this view visible and showing it. A mark from anywhere else
+      // screen** - this view visible and showing it. A mark from anywhere else
       // is how an unread badge silently stops working.
       .task(id: SeenKey(revision: vm.revision, attached: vm.session != nil)) {
         markSeen()
@@ -299,12 +299,12 @@ struct SessionView: View {
         resolveTakeover()
       }
       // The cwd arrives with the session snapshot, which lands after this view
-      // does — and changes on a resume into a different directory.
+      // does - and changes on a resume into a different directory.
       .task(id: vm.cwd) {
         completion.scope = vm.hostFiles
       }
       // Slash commands come from `capabilities`, which the server sends once the
-      // engine is up — later than the first draft keystroke, in a cold session.
+      // engine is up - later than the first draft keystroke, in a cold session.
       .task(id: vm.state.commands) {
         completion.commands = vm.state.commands ?? []
       }
@@ -413,14 +413,14 @@ struct SessionView: View {
         Button("Cancel", role: .cancel) {}
       } message: {
         // Not destructive-red, and the copy says why: the old conversation is
-        // not deleted — it stays resumable, same wording as the other clients.
+        // not deleted - it stays resumable, same wording as the other clients.
         Text("The session keeps running and starts a fresh conversation. The old one stays resumable.")
       }
       // The sub-agent takeover: a push, not a cover, so the way back is the
       // navigation bar everyone already knows. Deliberately **not a second
       // attach**: the destination captures this screen's own `vm` and reads the
       // same reduced state, holding its own screen claim (`holdOpen`) so the
-      // socket outlives the push — this view's `.task` is cancelled about half
+      // socket outlives the push - this view's `.task` is cancelled about half
       // a second in, at the end of the push animation.
       //
       // The environment values the transcript rows read are re-applied here:
@@ -449,14 +449,14 @@ struct SessionView: View {
     subagentId = taskId
   }
 
-  /// Open the takeover a route asked for — the sessions list's agent line —
+  /// Open the takeover a route asked for - the sessions list's agent line -
   /// once the attach replay has landed.
   ///
   /// Held rather than pushed immediately: the list speaks `SubagentInfo`, which
   /// it knows before this screen has replayed a single event, and a frame over
   /// a half-replayed transcript would honestly-but-wrongly say "not in this
   /// transcript" about an agent that has not arrived yet. Once the hold lifts
-  /// the takeover opens **whether or not the `Task` call is present** — the
+  /// the takeover opens **whether or not the `Task` call is present** - the
   /// missing-task state is the takeover's own honest line, never a refused
   /// navigation, exactly as the web never auto-exits a frame it cannot fill.
   /// Rides the same per-event task as `resolveFocus()` and settles the same
@@ -475,7 +475,7 @@ struct SessionView: View {
   /// is where a tap wanted to land, and a later event re-deciding it would drag
   /// the reader somewhere they never asked to go. An unanswerable seq (an event
   /// the gateway's retention dropped, or one that produced no row) leaves the
-  /// target nil, which is today's behaviour — the tail.
+  /// target nil, which is today's behaviour - the tail.
   ///
   /// Only the terminal renderer honours it; the cards renderer has no row model
   /// to land on, and a deep link there opens at the tail as it always has.
@@ -504,7 +504,7 @@ struct SessionView: View {
   ///
   /// This is the other half of the agent/task split. An agent step pushes the
   /// takeover (`resolveTakeover()`); a task has no agent behind it and so no
-  /// frame — framing its id would select no items and draw an empty screen.
+  /// frame - framing its id would select no items and draw an empty screen.
   /// What a task *does* have is a place: the spawning call's own row, sitting
   /// in this session's transcript. So the press opens the session and travels
   /// there, which is exactly the journey a tapped notification already makes.
@@ -512,7 +512,7 @@ struct SessionView: View {
   /// `toolCallItemIndex` → `focusTarget` → the view's own item→row fold.
   ///
   /// `focusSeq` and `revealToolUseId` both write `focusTarget` and are never
-  /// both set — a route comes from a notification or from a step, not both —
+  /// both set - a route comes from a notification or from a step, not both -
   /// and each settles once, so neither can drag the reader after they arrive.
   ///
   /// **Terminal renderer only**, deliberately and out loud: the cards renderer
@@ -539,7 +539,7 @@ struct SessionView: View {
   // MARK: - Catch-up
 
   /// What the cards renderer draws its seam from. Nil whenever there is nothing
-  /// new — the same test the terminal fold makes, spelled here because that
+  /// new - the same test the terminal fold makes, spelled here because that
   /// renderer folds nothing and so cannot report back.
   private var cardsCatchUp: (at: Int, label: String)? {
     guard let catchUp, catchUp.itemCount > 0, catchUp.itemCount < vm.state.items.count,
@@ -552,7 +552,7 @@ struct SessionView: View {
   }
 
   /// How many rows arrived while the reader was away. Rows, not prose: this is
-  /// the transcript's own count and the bar sits over the transcript — the
+  /// the transcript's own count and the bar sits over the transcript - the
   /// sessions list badges prose, and the two answer different questions.
   private var newRowCount: Int {
     guard let catchUp else { return 0 }
@@ -565,7 +565,7 @@ struct SessionView: View {
     settings.transcriptVariant.isTerminal ? recapRow != nil : cardsCatchUp != nil
   }
 
-  /// "N new rows since you were last here — jump / dismiss", above the composer.
+  /// "N new rows since you were last here - jump / dismiss", above the composer.
   /// Not in the transcript: it is a control, and a control that scrolls away is
   /// one the reader cannot use at the moment they want it.
   @ViewBuilder private var catchUpBar: (some View)? {
@@ -591,7 +591,7 @@ struct SessionView: View {
 
   // MARK: - Unread watermark
 
-  /// Record what is on screen as read — but only while it really is on screen.
+  /// Record what is on screen as read - but only while it really is on screen.
   ///
   /// `itemCount` is the rows this transcript has rendered; `activity`/`turns`
   /// come from the attach snapshot, the freshest rollup this screen holds (the
@@ -604,7 +604,7 @@ struct SessionView: View {
       host: hostId, sessionId: vm.sessionId, itemCount: vm.state.items.count, info: info)
   }
 
-  /// Leaving (or backgrounding) trues the mark up once — the VS Code panel's
+  /// Leaving (or backgrounding) trues the mark up once - the VS Code panel's
   /// `visibilityChanged` discipline. The in-view marks ran off the attach
   /// snapshot's `activityCount`, so anything the rollup counted since would
   /// read as unread even though it was on screen. Refresh and mark once more;
@@ -627,7 +627,7 @@ struct SessionView: View {
     // In `terminal` the composer is *docked*: edge to edge, flush with the
     // bottom, its own opaque bar. So the gutter that makes the rest of the stack
     // float moves onto the floating items themselves rather than wrapping
-    // everything — padding the whole footer would inset the very thing that must
+    // everything - padding the whole footer would inset the very thing that must
     // not be.
     let docked = settings.transcriptVariant.isTerminal
     let gutter: CGFloat = 12
@@ -655,7 +655,7 @@ struct SessionView: View {
       // The picker gets the screen while it is open: it is a list you are reading,
       // and the status bar is not something you consult mid-completion.
       if !isPickerOpen {
-        // Edge to edge in the terminal shape — it draws its own surface and its
+        // Edge to edge in the terminal shape - it draws its own surface and its
         // own hairline, so a gutter would make it a card again.
         statusBar
       }
@@ -698,7 +698,7 @@ struct SessionView: View {
   ///
   /// Not `Color.clear`. The hold is bounded by the *stated* end of the replay,
   /// which is right, and on a long session over a phone's network that is
-  /// seconds — and a blank screen for seconds is indistinguishable from a
+  /// seconds - and a blank screen for seconds is indistinguishable from a
   /// session that failed to open. The counter is the same pair the hold itself
   /// runs on, so it cannot drift from what is actually being waited for.
   @ViewBuilder private var replayPlaceholder: some View {
@@ -718,13 +718,13 @@ struct SessionView: View {
   }
 
   /// Shown until the session says something. A `ZStack` sibling for the same
-  /// reason the picker is one — an overlay on the `ScrollView` would be sized to
-  /// its (empty) content — and it steps aside the moment a completion list opens.
+  /// reason the picker is one - an overlay on the `ScrollView` would be sized to
+  /// its (empty) content - and it steps aside the moment a completion list opens.
   @ViewBuilder
   private var emptyState: some View {
     // `!vm.replaying` is not belt and braces: the hold holds the reduced *state*,
     // so while it stands `items` is legitimately empty and this drew itself
-    // underneath the placeholder — "Tell me what to do" behind a spinner, on
+    // underneath the placeholder - "Tell me what to do" behind a spinner, on
     // every open of every session with any history at all.
     if vm.state.items.isEmpty, !isPickerOpen, !vm.replaying {
       // Measured, not assumed. The area left over is the screen minus the
@@ -742,7 +742,7 @@ struct SessionView: View {
             canBrowseFiles: completion.hasFileSearch,
             // Belt and braces: the reader already reports a smaller box when the
             // keyboard pushes the safe area up, but whether it does depends on
-            // how SwiftUI resolves this stack — and a panel that overlaps the
+            // how SwiftUI resolves this stack - and a panel that overlaps the
             // composer is the exact failure being fixed. Focus is a fact we
             // hold, so it caps the budget regardless.
             availableHeight: isComposerFocused
@@ -810,7 +810,7 @@ struct SessionView: View {
       return
     }
     // `/mcp` is answered here rather than sent. The CLI's own `/mcp` is an
-    // interactive picker, not a prompt — forwarding it would spend a turn on a
+    // interactive picker, not a prompt - forwarding it would spend a turn on a
     // model reading the words "/mcp", so the app opens its own screens instead.
     // Only where the capability exists: elsewhere it is ordinary message text,
     // like any other slash command on an engine without them.
@@ -826,7 +826,7 @@ struct SessionView: View {
     dismissCatchUp()
     vm.send(draft, attachmentIds: attachments.readyIds)
     // The bytes are the server's now, and the echoed event carries the
-    // references — so the staging area empties rather than being re-sent.
+    // references - so the staging area empties rather than being re-sent.
     attachments.clear()
     draft = ""
     selection = NSRange(location: 0, length: 0)
@@ -841,7 +841,7 @@ struct SessionView: View {
   private var acceptedKinds: Set<String> { Set(vm.capabilities.attachments) }
 
   /// What the Files picker offers. The full set keeps today's open door
-  /// (`.item` — anything, gateway refuses the rest with a clear message); a
+  /// (`.item` - anything, gateway refuses the rest with a clear message); a
   /// narrower record narrows the browsing too, so most refusals never happen.
   private var importableTypes: [UTType] {
     let kinds = acceptedKinds
@@ -861,7 +861,7 @@ struct SessionView: View {
     }
   }
 
-  /// Photos hands back bytes plus the type it stored them as — usually HEIC on an
+  /// Photos hands back bytes plus the type it stored them as - usually HEIC on an
   /// iPhone, which no model accepts, so everything goes through the normalizer.
   private func loadPhoto(_ item: PhotosPickerItem) {
     Task {
@@ -891,7 +891,7 @@ struct SessionView: View {
     }
     let mediaType = AttachmentNormalizer.mediaType(for: url)
     // A kind the capability record forswears is refused here, with the engine
-    // named — before an upload the gateway would 415. A kind this build can't
+    // named - before an upload the gateway would 415. A kind this build can't
     // classify still goes through: the gateway's vocabulary is authoritative.
     if let kind = AttachmentNormalizer.kind(of: mediaType), !acceptedKinds.contains(kind) {
       attachments.errorText =
@@ -947,7 +947,7 @@ struct SessionView: View {
 
   /// The request at the head of the queue, with its position when there is one.
   ///
-  /// Only one prompt is ever on screen — an approval cannot be deferred, so a
+  /// Only one prompt is ever on screen - an approval cannot be deferred, so a
   /// stack of them would be a stack of things you must answer in order anyway,
   /// and two tinted cards over a composer is unreadable on a phone. What was
   /// missing is that the queue existed at all: answering one made a second
@@ -984,13 +984,13 @@ struct SessionView: View {
   ///
   /// **Half the screen**, and the half is the whole argument. A prompt is
   /// something you answer *about* the transcript, so leaving the transcript
-  /// visible is not decoration — the question is usually "should it run this",
+  /// visible is not decoration - the question is usually "should it run this",
   /// and the evidence is the rows above. It is also what keeps the composer
   /// reachable: deciding sometimes means typing a reason first, and a prompt
   /// that owned the screen would make you dismiss it to do that.
   ///
   /// The floor matters more than the fraction. Before the container has been
-  /// measured — the first frame, and any frame where the geometry is zero — an
+  /// measured - the first frame, and any frame where the geometry is zero - an
   /// uncapped `0` would collapse the prompt to nothing, so it falls back to a
   /// height that fits a question and its actions rather than to "unbounded",
   /// which is the bug this whole cap replaces.
@@ -1005,7 +1005,7 @@ struct SessionView: View {
   /// becomes stop). What is left is what you reach for rarely.
   @ToolbarContentBuilder
   private var toolbarMenu: some ToolbarContent {
-    // Only once the cwd is known — the browser is rooted at it, so there is
+    // Only once the cwd is known - the browser is rooted at it, so there is
     // nothing to open before then.
     if vm.hostFiles != nil {
       ToolbarItem(placement: .topBarTrailing) {
@@ -1016,7 +1016,7 @@ struct SessionView: View {
     }
     ToolbarItem(placement: .topBarTrailing) {
       Menu {
-        // Three questions, three screens — and each one is also reachable by
+        // Three questions, three screens - and each one is also reachable by
         // tapping the thing that summarises it on the status bar. Screens the
         // capability record forswears are absent, not present-and-empty.
         if vm.capabilities.contextUsage {
@@ -1031,7 +1031,7 @@ struct SessionView: View {
         }
         // On the capability alone, like the MCP entry. Codex answers
         // `skills/list` only over a live child, so before the first turn there
-        // is no list yet — but hiding the entry until then made the sheet's own
+        // is no list yet - but hiding the entry until then made the sheet's own
         // explanation of that unreachable, which read as a missing feature.
         if vm.capabilities.skillsList {
           Button("Skills", systemImage: "sparkles") { sheet = .skills }
@@ -1056,7 +1056,7 @@ struct SessionView: View {
   /// Type a skill's opening message into the composer and close the sheet.
   ///
   /// Drafting, not running: there is no engine call that invokes a skill, so
-  /// this is the only honest thing the button can do — and the operator still
+  /// this is the only honest thing the button can do - and the operator still
   /// edits and sends it.
   private func draftSkill(_ skill: SkillInfo) {
     let separator = draft.isEmpty || draft.hasSuffix(" ") ? "" : " "
@@ -1064,7 +1064,7 @@ struct SessionView: View {
     sheet = nil
   }
 
-  /// Only the modes this session's capability record declares — the rest
+  /// Only the modes this session's capability record declares - the rest
   /// would be rejected server-side.
   private var permissionModes: [PermissionMode] {
     vm.capabilities.permissionModes

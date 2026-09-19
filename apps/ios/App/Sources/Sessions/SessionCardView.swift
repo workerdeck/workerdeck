@@ -5,7 +5,7 @@ import SwiftUI
 /// the step count that opens it.
 ///
 /// Internal, and a view rather than a method on the list, so `UIPREVIEW=sessions`
-/// can draw the composition the list actually ships — the disclosure's placement
+/// can draw the composition the list actually ships - the disclosure's placement
 /// is the thing that needed looking at, and a preview of the row alone cannot
 /// show it.
 struct SessionCardView<MenuContent: View>: View {
@@ -41,7 +41,7 @@ struct SessionCardView<MenuContent: View>: View {
   // Persistent, not revealed: the dashboard hides the same actions behind hover
   // and a phone has no hover, so the frame's always-there spelling is the mobile
   // treatment rather than a difference to reconcile away. It duplicates the
-  // swipes on purpose — a swipe is only found by someone who already guessed.
+  // swipes on purpose - a swipe is only found by someone who already guessed.
   private var overflow: some View {
     Menu {
       menu()
@@ -52,7 +52,7 @@ struct SessionCardView<MenuContent: View>: View {
         .contentShape(Rectangle())
     }
     // A `Menu` paints its label in the accent colour, and on this row the accent
-    // is a *state* — a running step count wears it. An always-present control
+    // is a *state* - a running step count wears it. An always-present control
     // wearing the same blue reads as something happening on every row.
     .tint(Color.secondary)
     .accessibilityLabel("Session actions")

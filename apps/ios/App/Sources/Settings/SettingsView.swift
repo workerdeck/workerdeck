@@ -4,7 +4,7 @@ import WorkerDeckActivity
 /// App-wide preferences.
 ///
 /// Presented as a sheet from the session list, so the settings that shape every
-/// transcript are reachable without being inside one — they are not a property of
+/// transcript are reachable without being inside one - they are not a property of
 /// the session you happen to have open.
 struct SettingsView: View {
   @Environment(AppSettings.self) private var settings
@@ -27,7 +27,7 @@ struct SettingsView: View {
         }
         // Density and font are Cards-only: Terminal has one line height and is
         // monospace by construction, so neither choice has anything to change
-        // there. Disabled rather than hidden — the row stays in place so picking
+        // there. Disabled rather than hidden - the row stays in place so picking
         // Terminal and back doesn't reflow the form, but a control that changes
         // nothing is worse than an absent one, hence the footer saying so.
         Picker("Density", selection: $settings.transcriptDensity) {
@@ -78,7 +78,7 @@ struct SettingsView: View {
         Text("Notifications")
       } footer: {
         Text(
-          "The gateway sends only what is ticked here, so an event you turn off never reaches the phone at all. Approvals and questions are the ones that actually need you — a session with several tool calls waiting collapses into a single banner showing the newest. Session ended is off by default: it fires whenever a session goes away, which across a few open sessions is most of the noise."
+          "The gateway sends only what is ticked here, so an event you turn off never reaches the phone at all. Approvals and questions are the ones that actually need you - a session with several tool calls waiting collapses into a single banner showing the newest. Session ended is off by default: it fires whenever a session goes away, which across a few open sessions is most of the noise."
         )
       }
 
@@ -92,7 +92,7 @@ struct SettingsView: View {
         Text("Live Activities")
       } footer: {
         Text(
-          "A running session shows a card on the lock screen and in the Dynamic Island. Turning them off withholds the token a gateway needs to raise one and ends any card already showing. Deny always works. Approve is the one that can let an agent write to your machine, and unlike a notification's Approve, iOS cannot ask for Face ID first — so by default it waits until the phone is unlocked."
+          "A running session shows a card on the lock screen and in the Dynamic Island. Turning them off withholds the token a gateway needs to raise one and ends any card already showing. Deny always works. Approve is the one that can let an agent write to your machine, and unlike a notification's Approve, iOS cannot ask for Face ID first - so by default it waits until the phone is unlocked."
         )
       }
 
@@ -120,7 +120,7 @@ struct SettingsView: View {
           Text("Live Activities (debug)")
         } footer: {
           Text(
-            "Starts a card locally, with no gateway and no APNs — the only way to see these layouts in the Simulator, and the cheapest way to check on a device that a card's buttons run their intent in the app process."
+            "Starts a card locally, with no gateway and no APNs - the only way to see these layouts in the Simulator, and the cheapest way to check on a device that a card's buttons run their intent in the app process."
           )
         }
       #endif
@@ -142,7 +142,7 @@ struct SettingsView: View {
     }
   }
 
-  /// Says what each choice does rather than naming it twice — "Cards" and
+  /// Says what each choice does rather than naming it twice - "Cards" and
   /// "Terminal" mean nothing until you've seen both.
   private var explanation: String {
     let style =

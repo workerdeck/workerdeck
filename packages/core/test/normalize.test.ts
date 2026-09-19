@@ -19,7 +19,7 @@ describe('modelOptionsFromSdk', () => {
     { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku' },
   ]
 
-  it("drops the CLI's 'default' row — it is a choice, not a model", () => {
+  it("drops the CLI's 'default' row - it is a choice, not a model", () => {
     expect(modelOptionsFromSdk(reported).map((m) => m.value)).not.toContain('default')
   })
 

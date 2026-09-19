@@ -12,7 +12,7 @@ export const NOTIFY_EVENTS: readonly SessionNotificationType[] = [
   'session_closed',
 ]
 
-// A session closing is bookkeeping, not news — it fires whenever a tab goes away — so it is out of
+// A session closing is bookkeeping, not news - it fires whenever a tab goes away - so it is out of
 // the default. The other three are what someone is actually waiting on. A device that says nothing
 // gets this; `[]` is how a device says "no alerts at all" without giving up its token.
 export const DEFAULT_NOTIFY: readonly SessionNotificationType[] = ['permission_requested', 'turn_completed', 'session_error']
@@ -26,7 +26,7 @@ export type DeviceRecord = {
   platform?: string
   // The Live Activity push-to-start token: device-level like the alert token, and the only way a
   // gateway can raise a card on a phone whose app is not running. Absent means this device cannot
-  // be started at — an older app, or Live Activities switched off in Settings.
+  // be started at - an older app, or Live Activities switched off in Settings.
   liveActivityStartToken?: string
   // Which notification types this device wants. Absent means `DEFAULT_NOTIFY`; an explicit empty
   // array means none. Per-device rather than per-gateway because a phone and an iPad watching the
@@ -199,8 +199,8 @@ export function createDeviceRoute(
     const optionalString = (value: unknown): string | undefined =>
       typeof value === 'string' && value.length > 0 && value.length <= 200 ? value : undefined
 
-    // Omitted leaves whatever is on record — an older app that never sends the field must not erase
-    // it — while an explicit null is how the app says Live Activities were switched off.
+    // Omitted leaves whatever is on record - an older app that never sends the field must not erase
+    // it - while an explicit null is how the app says Live Activities were switched off.
     const startTokenGiven = Object.hasOwn(body, 'liveActivityStartToken')
     const startToken = body.liveActivityStartToken
     if (startTokenGiven && startToken !== null && (typeof startToken !== 'string' || !TOKEN_PATTERN.test(startToken))) {

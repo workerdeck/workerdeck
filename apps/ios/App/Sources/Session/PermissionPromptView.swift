@@ -8,14 +8,14 @@ import SwiftUI
 ///
 /// **A plan is the same three outcomes wearing different words.** `ExitPlanMode`
 /// arrives on this channel, but what is being approved is prose, so the tool
-/// row — icon, name, input summary — gives way to the plan itself rendered as
+/// row - icon, name, input summary - gives way to the plan itself rendered as
 /// markdown, and every verb changes: "Approve plan", "Keep planning", "Stop the
 /// turn". Nothing about the wiring differs, and that is deliberate: a plan
 /// approval that took a second path would be a second place for the deny
 /// message to get lost.
 struct PermissionPromptView: View {
   let request: PermissionRequest
-  /// How tall the scrolling body may get — see `PromptBodyScroll`. Without it
+  /// How tall the scrolling body may get - see `PromptBodyScroll`. Without it
   /// this card pushed its own buttons off the bottom of the screen.
   let maxBodyHeight: CGFloat
   let onAllow: () -> Void
@@ -26,7 +26,7 @@ struct PermissionPromptView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      // The body scrolls, the actions do not — whatever the tool call's length,
+      // The body scrolls, the actions do not - whatever the tool call's length,
       // the thing that ends the prompt is on screen. See `PromptBodyScroll`.
       PromptBodyScroll(maxHeight: maxBodyHeight) {
         VStack(alignment: .leading, spacing: 10) {
@@ -57,7 +57,7 @@ struct PermissionPromptView: View {
               Text(request.toolName)
                 .font(.caption.weight(.medium))
               // Shown whole. This carried `lineLimit(2)`, which for a Bash
-              // approval hid most of the command being approved — the one string
+              // approval hid most of the command being approved - the one string
               // the decision actually rests on.
               if let summary = request.input.toolInputSubject(toolName: request.toolName) {
                 Text(summary)
@@ -83,7 +83,7 @@ struct PermissionPromptView: View {
           .controlSize(.small)
       }
     }
-    // The orange card IS the floating panel — it needs a real surface, because
+    // The orange card IS the floating panel - it needs a real surface, because
     // it sits over a scrolling transcript. Nesting it inside a neutral glass
     // panel drew two rounded rectangles for one prompt.
     .padding(14)
@@ -104,7 +104,7 @@ struct PermissionPromptView: View {
     }
   }
 
-  /// The plan's markdown when this approval is one — the single predicate both
+  /// The plan's markdown when this approval is one - the single predicate both
   /// prompt renderers branch on, so neither can invent its own idea of a plan.
   private var plan: String? { PlanRequest.plan(from: request) }
 }

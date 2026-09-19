@@ -1,5 +1,5 @@
 /*
- * @workerdeck/ui theme — design tokens + Tailwind v4 theme mapping.
+ * @workerdeck/ui theme - design tokens + Tailwind v4 theme mapping.
  *
  * Consumer wiring (the app's tailwind entry CSS):
  *
@@ -7,7 +7,7 @@
  *   @import '@workerdeck/ui/theme.css';
  *   @source '../node_modules/@workerdeck/ui';   (or the package src path in a monorepo)
  *
- * Do NOT import tailwindcss here — the consumer owns that. Theme switching is driven by
+ * Do NOT import tailwindcss here - the consumer owns that. Theme switching is driven by
  * <html data-theme="light|dark"> (set it before first paint to avoid a flash).
  *
  * Two tiers: a raw palette swapped by [data-theme], then `@theme inline` mapping raw
@@ -15,7 +15,7 @@
  * data-theme re-themes with zero JS).
  */
 
-/* The terminal theme's geometry and palette — see the file's own header. Its
+/* The terminal theme's geometry and palette - see the file's own header. Its
  * tokens are deliberately independent of the app palette below: a terminal
  * looks like a terminal wherever it is embedded. First, because `@import` is
  * only valid ahead of rules. */
@@ -37,8 +37,8 @@
      survive an unknown host surface, and it bought that at the cost of a hover
      that read differently on every one of them; the design draws one hover, so
      this is one colour. The hazard the alpha was guarding against is real and
-     has a name — `--bg-surface-hover` on the dark sidebar landed one step of
-     255 from the sidebar itself, so the state did not exist — and the guard
+     has a name - `--bg-surface-hover` on the dark sidebar landed one step of
+     255 from the sidebar itself, so the state did not exist - and the guard
      against it now is that both flat values are picked against the sidebar
      fills we actually ship (`--sidebar`), and that the extension repoints all
      three at `--vscode-list-*` rather than inheriting them.
@@ -51,13 +51,13 @@
      shape the design gives selection there. Light is a tint carrying dark text;
      dark is VS Code's `list.activeSelectionBackground` carrying light text.
 
-     `--row-selected-weak` is the **secondary** selection — "this card holds what
+     `--row-selected-weak` is the **secondary** selection - "this card holds what
      you are looking at, but the thing you are looking at is one row inside it".
      It exists because a session card and its sub-agents are two selections at
      two grains, and the blue can only mean one of them: when a sub-agent is
      open, the blue belongs to that step and the card drops to this. It is VS
      Code's `list.inactiveSelectionBackground`, which is the same idea one
-     surface over — selected, but not the thing with focus. Distinct from
+     surface over - selected, but not the thing with focus. Distinct from
      `--row-hover` on purpose: a card that answered the pointer and a card
      holding the open agent are different claims, and a list that painted them
      the same colour would be lying about one of them. */
@@ -92,7 +92,7 @@
    * This is the one place a brand colour is allowed in the product, and it earns
    * it by doing a job nothing else on the row does: the list already spends blue
    * on running, amber on waiting, red on failed and muted on idle, so none of
-   * those can also say *whose engine this is* — and the mark alone is a 12px
+   * those can also say *whose engine this is* - and the mark alone is a 12px
    * silhouette.
    *
    * Two values per vendor, because that glyph has to hold against both grounds:
@@ -100,7 +100,7 @@
    *
    * **OpenAI's is monochrome, and that is their rule rather than our taste**:
    * their guidelines forbid adding colour to the mark, so it is pure white on
-   * dark and a near-black on light — both sanctioned, and the only kind of pair
+   * dark and a near-black on light - both sanctioned, and the only kind of pair
    * legible on both grounds. A green was tried first and is wrong, however well
    * it reads. Near-black rather than `#000` because pure black would sit *harder*
    * than the session title above it, so the mark would out-weigh the name it is
@@ -109,7 +109,7 @@
    * That makes the two vendors asymmetric, which is the honest outcome: coral is
    * Anthropic's brand and monochrome is OpenAI's, so a rule that gave both an
    * accent would misrepresent one of them. It also means OpenAI's token is at
-   * full contrast, which is why only the **mark** wears it — see
+   * full contrast, which is why only the **mark** wears it - see
    * `vendorTextClass` in `EngineIcon.tsx`.
    *
    * A third vendor is two declarations here and one map entry there. */
@@ -117,13 +117,13 @@
   --vendor-openai: #373737;
 
   /* ---------- Accent ----------
-   * VS Code blue (`#0078d4`) — the product's primary. It is the *same* hue in
+   * VS Code blue (`#0078d4`) - the product's primary. It is the *same* hue in
    * both themes rather than the inverse of the canvas: a primary that flips
    * from near-black to near-white is a contrast device, not a brand colour, and
    * WorkerDeck now shares an editor's visual language.
    *
    * Not to be confused with the brand's live green (`docs/assets/BRAND.md`),
-   * which stays what it is — a *signal*, not a primary. */
+   * which stays what it is - a *signal*, not a primary. */
   --accent: #0078d4;
   --accent-hover: #106ebe;
   --accent-dim: #6ca9d8;
@@ -151,7 +151,7 @@
   --shine: #dcdcdc;
   --frame-shadow: var(--shadow-xs);
 
-  /* The overview rail's bookmark magenta — the app palette has no magenta,
+  /* The overview rail's bookmark magenta - the app palette has no magenta,
      and every other colour on the rail is already spoken for. */
   --wd-scrub-bookmark: #8b3a8b;
 
@@ -167,7 +167,7 @@
   --accent-tint: var(--accent-bg);
   --accent-fg: #ffffff;
   --warn: var(--warning);
-  /* Focus ring is the accent, as in an editor — the comment below already said
+  /* Focus ring is the accent, as in an editor - the comment below already said
    * "accent-derived"; before the blue it was indistinguishable from fg-1. */
   --ring: var(--accent);
 }
@@ -210,7 +210,7 @@
 
   /* ---------- Accent ----------
    * The same blue as light. `--accent` stays `#0078d4` because it is a *fill*
-   * carrying white text (4.6:1) — the brighter `#3794ff` would drop that to
+   * carrying white text (4.6:1) - the brighter `#3794ff` would drop that to
    * 2.9:1. The bright one is the hover and the ring, where nothing sits on top
    * of it and the extra lift is what a dark canvas needs. */
   --accent: #0078d4;
@@ -240,7 +240,7 @@
   --shine: #303030;
   --frame-shadow: 0 4px 24px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.45);
 
-  /* See the light block — lifted for the dark ground. */
+  /* See the light block - lifted for the dark ground. */
   --wd-scrub-bookmark: #c586c0;
   --wd-shell-accent: #c586c0;
 
@@ -250,15 +250,15 @@
   --text: var(--fg-1);
   --text-muted: var(--fg-3);
   --accent-tint: var(--accent-bg);
-  /* White on the blue fill in both themes — the accent no longer inverts. */
+  /* White on the blue fill in both themes - the accent no longer inverts. */
   --accent-fg: #ffffff;
   --warn: var(--warning);
-  /* Focus ring is the accent, as in an editor — the comment below already said
+  /* Focus ring is the accent, as in an editor - the comment below already said
    * "accent-derived"; before the blue it was indistinguishable from fg-1. */
   --ring: var(--accent);
 }
 
-/* Theme-independent tokens — type tracking, easing, fonts.
+/* Theme-independent tokens - type tracking, easing, fonts.
  * Hosts get real fonts by importing @fontsource/inter + @fontsource/jetbrains-mono;
  * the stacks below degrade gracefully without them. */
 :root {
@@ -303,7 +303,7 @@
  * transcript and its composer render monospace and read as part of the terminal
  * rather than as a web app beside one. The mono token itself is left alone: code
  * was already mono, and pointing both at the same stack is what makes the two
- * indistinguishable — which is the point.
+ * indistinguishable - which is the point.
  *
  * A subtree rule rather than `:root`, and deliberately: this is the *agent
  * panel's* preference, not the app's. A host's sidebar, dialogs and lists keep
@@ -314,7 +314,7 @@
 [data-agent-font='mono'] {
   --cw-font-sans: var(--cw-font-mono);
   /* Tailwind's `font-sans` utility reads `--font-sans`, whose `:root` value is
-     `var(--cw-font-sans)` — and a `var()` inside a custom property is resolved
+     `var(--cw-font-sans)` - and a `var()` inside a custom property is resolved
      against the element that DECLARED it, not the one that inherits it. So
      repointing `--cw-font-sans` here leaves `--font-sans` still holding the sans
      stack it computed at `:root`. Both have to move. */
@@ -324,7 +324,7 @@
      and every descendant inherits that *resolved* stack. Nothing under here
      re-reads the token, so the subtree has to be told directly.
      (VS Code's webview gets away with tokens alone only because its override
-     sits on `html` — the same element `:root` declares them on.) */
+     sits on `html` - the same element `:root` declares them on.) */
   font-family: var(--cw-font-mono);
 }
 
@@ -356,7 +356,7 @@
   --color-badge-fg: var(--badge-fg);
   /* Named code-bg (not code) so it can't shadow the --text-code font-size token:
      with a --color-code defined, `text-code` would resolve to the color namespace
-     and paint text in the code *background* color — invisible in both themes. */
+     and paint text in the code *background* color - invisible in both themes. */
   --color-code-bg: var(--bg-code);
   --color-border-light: var(--border-light);
   --color-border-strong: var(--border-strong);
@@ -395,7 +395,7 @@
   --font-sans: var(--cw-font-sans);
   --font-mono: var(--cw-font-mono);
 
-  /* Type scale — size + line-height. Display sizes carry tight tracking. */
+  /* Type scale - size + line-height. Display sizes carry tight tracking. */
   --text-display-xl: 2.5rem;
   --text-display-xl--line-height: 3rem;
   --text-display-xl--letter-spacing: -0.02em;
@@ -421,7 +421,7 @@
   --text-label: 0.75rem;
   --text-label--line-height: 1rem;
   --text-label--letter-spacing: 0.02em;
-  /* 11px. The step rows under a session card, and nothing else yet — a size
+  /* 11px. The step rows under a session card, and nothing else yet - a size
      below `label` exists so a list *inside* a row can be visibly subordinate to
      it without dropping to a weight nobody can read. Tracking goes NEGATIVE
      here where `label` goes positive: `label` is a small-caps-ish UI word that
@@ -432,7 +432,7 @@
   --text-code: 0.84375rem;
   --text-code--line-height: 1.375rem;
 
-  /* Radii — 6px is the workhorse. */
+  /* Radii - 6px is the workhorse. */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -494,8 +494,8 @@
  * (utilities live in a layer; unlayered rules always win over layered ones).
  *
  * `--wd-font-size` is set on the session panel root by the `fontSize` prop.
- * When present it drives all text in the cards variant — body text, headings,
- * code, tables — through one value. When absent the fallback `var(--text-body-sm)`
+ * When present it drives all text in the cards variant - body text, headings,
+ * code, tables - through one value. When absent the fallback `var(--text-body-sm)`
  * resolves to the same `0.8125rem` the utility class used to set.
  *
  * Streamdown ships `rem`-based heading sizes (text-3xl … text-sm) that resolve
@@ -504,7 +504,7 @@
  * cards-mode assistant output; the terminal theme renders headings as weight-only
  * (no size change) through its own components and is unaffected.
  *
- * The heading scale mirrors Streamdown's hierarchy but at a tighter range — its
+ * The heading scale mirrors Streamdown's hierarchy but at a tighter range - its
  * 30 → 14 px span (h1 → h6) sits inside a 13px body, so the ratio is condensed:
  * h1 at 1.5em, descending to h6 at 1em.
  */
@@ -552,7 +552,7 @@
   font-size: inherit;
 }
 /* Table, cells, and headers: Streamdown puts `text-sm` (rem) on td/th directly,
-   so overriding the table alone is not enough — the cell class wins. */
+   so overriding the table alone is not enough - the cell class wins. */
 [data-slot='message-content'] table {
   font-size: 0.95em;
 }
@@ -636,15 +636,15 @@
  * The replay hold's placeholder, revealed only if the wait is long enough to be
  * worth mentioning.
  *
- * The hold hides the transcript while the attach replay lands — typically ~0.5s
- * — and an unconditional "Loading…" line inside it is *worse than nothing*: it
+ * The hold hides the transcript while the attach replay lands - typically ~0.5s
+ * - and an unconditional "Loading…" line inside it is *worse than nothing*: it
  * appears and vanishes within half a second, so the flicker the hold exists to
  * remove comes straight back as a blinking line at the top of the panel. The
  * hold is the fix; announcing it is the regression.
  *
  * So the placeholder starts transparent and fades in only after a delay longer
- * than a healthy attach takes. A normal open paints it **never** — the element
- * unmounts while still at `opacity: 0` — and only a genuinely slow attach (a
+ * than a healthy attach takes. A normal open paints it **never** - the element
+ * unmounts while still at `opacity: 0` - and only a genuinely slow attach (a
  * cold gateway, a huge log) ever shows a line, which is exactly when a reader
  * needs to be told something is happening rather than assume the panel is dead.
  *
@@ -725,9 +725,9 @@
  *
  * The same lane/head/sentinel mechanism as the terminal theme's pinned prompt
  * (terminal.css scopes its rules under `[data-terminal]`; these key on the
- * lane's own `data-sticky-lane='cards'` value) — but the head's CONTENT is
+ * lane's own `data-sticky-lane='cards'` value) - but the head's CONTENT is
  * different in kind, and that is the whole design. The terminal head is the
- * row rendered again, clipped to one line — exact, because that theme is a
+ * row rendered again, clipped to one line - exact, because that theme is a
  * monospace grid. A proportional message card clipped by height is a sliced
  * bubble, so the cards head never renders the Message component at all:
  * `StickyPromptLane` (Transcript.tsx) hands it the prompt as one run of plain
@@ -738,7 +738,7 @@
  * ConversationContent's centred, padded column (`max-w` + `mx-auto` + `px-4`)
  * and spans it edge to edge, so the bar's text starts on the same left edge
  * as the response paragraphs and the ellipsis lands on the column's right
- * edge — no max-width or inline padding repeated here. The bar carries no
+ * edge - no max-width or inline padding repeated here. The bar carries no
  * gap class either (the measured row keeps it): it is not an overlay of the
  * row's first line, so it has no in-flow y to match, and the 1st prompt (no
  * gap) and every later one (pt-4/pt-2) share these rules unchanged. */
@@ -747,7 +747,7 @@
   pointer-events: none;
 }
 
-/* The head's own strip: the full lane, out of flow — see terminal.css for why
+/* The head's own strip: the full lane, out of flow - see terminal.css for why
    sticky confinement wants the border box, not a cancelled margin box. */
 [data-sticky-lane='cards'] > [data-sticky-headlane] {
   position: absolute;
@@ -785,7 +785,7 @@
 /* ── Overview scrubber (cards variant) ──────────────────────────────────────
  *
  * The proportional rail (`components/agent/Scrubber.tsx`): same geometry as the
- * terminal rail — 12px, two 6px lanes plus full width — and the same palette
+ * terminal rail - 12px, two 6px lanes plus full width - and the same palette
  * mapped onto the app tokens. It is an annotation rail, never a scrollbar: the
  * container takes no pointer events, so the native scrollbar keeps working
  * straight through the paint. */

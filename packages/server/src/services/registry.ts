@@ -14,7 +14,7 @@ export class SessionRegistry {
     this.#options = options
   }
 
-  // `onRegister` for a caller that only has the built server — an embedding host, or the CLI. Replays what is already
+  // `onRegister` for a caller that only has the built server - an embedding host, or the CLI. Replays what is already
   // registered so a late observer cannot miss a session, which is the whole difference from reading the option.
   observe(listener: (runner: Runner) => void): () => void {
     this.#observers.add(listener)

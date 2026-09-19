@@ -10,7 +10,7 @@ describe('transcriptActivity', () => {
       uuid: 'u1',
     }) as SessionEventBody
 
-  it('counts one row per content block — five tool calls are five rows, not one message', () => {
+  it('counts one row per content block - five tool calls are five rows, not one message', () => {
     expect(
       transcriptActivity(
         assistant([
@@ -136,12 +136,12 @@ describe('transcriptProse', () => {
       totalCostUsd: 0,
     }) as SessionEventBody
 
-  it('scores the paragraph and none of the work around it — the whole point of the badge', () => {
+  it('scores the paragraph and none of the work around it - the whole point of the badge', () => {
     const message = assistant([
       { type: 'thinking', thinking: 'hmm' },
       { type: 'tool_use', id: 't1', name: 'Bash', input: {} },
       { type: 'tool_use', id: 't2', name: 'Bash', input: {} },
-      { type: 'text', text: 'Done — the build passes.' },
+      { type: 'text', text: 'Done - the build passes.' },
     ])
     expect(transcriptActivity(message)).toBe(4)
     expect(transcriptProse(message)).toBe(1)

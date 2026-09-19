@@ -14,8 +14,8 @@ import SwiftUI
 /// hand-drawn arrow would be a second, quieter chevron disagreeing with the
 /// real one two points to its right.
 ///
-/// Green means sub-agent across this product — the rule the transcript's own
-/// Task row already follows (`TerminalPlanner`: `failed ? .red : .green`) — so
+/// Green means sub-agent across this product - the rule the transcript's own
+/// Task row already follows (`TerminalPlanner`: `failed ? .red : .green`) - so
 /// spending the accent on "running" here would say something different from the
 /// transcript about the same agent. Failure still outranks it: an alarm is not
 /// a category.

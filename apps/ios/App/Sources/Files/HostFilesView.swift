@@ -6,7 +6,7 @@ import SwiftUI
 /// Scoped to the session on purpose, and rooted at its `cwd`: there is no roots
 /// list and no way up, because the useful question on a phone is "what is in this
 /// project", not "what does this gateway expose". The server's roots still decide
-/// what is *allowed* — this only decides what is offered.
+/// what is *allowed* - this only decides what is offered.
 ///
 /// Deliberately not the same thing as `SessionFilesSection`, which lists one
 /// session's in-memory deliverables. This reads the operator's real disk,
@@ -76,7 +76,7 @@ struct HostFilesView: View {
   }
 }
 
-/// One directory. Pushed per level, so the navigation stack *is* the path — and
+/// One directory. Pushed per level, so the navigation stack *is* the path - and
 /// since the stack starts at the cwd, there is nowhere above it to go.
 private struct HostDirectoryView: View {
   let model: HostFilesModel
@@ -94,7 +94,7 @@ private struct HostDirectoryView: View {
           row(entry)
         }
         if listing.truncated == true {
-          Text("Listing truncated — this directory has more entries than the server returns.")
+          Text("Listing truncated - this directory has more entries than the server returns.")
             .font(.caption)
             .foregroundStyle(.secondary)
         }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The terminal dev loop: build once, open an Extension Development Host on this extension, and
-// keep rebuilding into `dist/` while it runs — `src/dev-reload.ts` picks the rebuild up.
+// keep rebuilding into `dist/` while it runs - `src/dev-reload.ts` picks the rebuild up.
 //
 //   node scripts/dev-host.mjs [folder-to-open]   # defaults to the repo root
 //
@@ -19,13 +19,13 @@ function run(cmd, args, opts = {}) {
 }
 
 if (run('pnpm', ['run', 'build']).status !== 0) {
-  console.error('build failed — not launching')
+  console.error('build failed - not launching')
   process.exit(1)
 }
 
 const code = spawnSync('code', ['--version'], { stdio: 'ignore' })
 if (code.status !== 0) {
-  console.error("the `code` CLI is not on PATH — in VS Code run: Shell Command: Install 'code' command in PATH")
+  console.error("the `code` CLI is not on PATH - in VS Code run: Shell Command: Install 'code' command in PATH")
   process.exit(1)
 }
 
@@ -35,5 +35,5 @@ spawn('code', [`--extensionDevelopmentPath=${extensionDir}`, '--new-window', tar
   detached: true,
 }).unref()
 
-console.log('watching for changes — edit and the dev host reloads itself (ctrl-c to stop)')
+console.log('watching for changes - edit and the dev host reloads itself (ctrl-c to stop)')
 spawn('pnpm', ['run', 'dev'], { stdio: 'inherit', cwd: extensionDir })

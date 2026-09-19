@@ -34,7 +34,7 @@ function held(lastSeq: number, createdAt = 1_000): TranscriptState {
 }
 
 describe('staleAttach', () => {
-  it('is never stale on a full replay — resetting and applying it heals everything', () => {
+  it('is never stale on a full replay - resetting and applying it heals everything', () => {
     expect(staleAttach(frame(0, info({ lastSeq: 12 })), held(500))).toBe(false)
   })
 
@@ -233,7 +233,7 @@ describe('warm attach over the wire', () => {
     expect(warm.state().status).toBe(full.state().status)
   }, 15_000)
 
-  it('a stale afterSeq delivers nothing — and staleAttach catches it', async () => {
+  it('a stale afterSeq delivers nothing - and staleAttach catches it', async () => {
     const client = await start()
     const session = await client.createSession({ cwd: '/tmp/project' })
     const writer = client.attach(session.id)

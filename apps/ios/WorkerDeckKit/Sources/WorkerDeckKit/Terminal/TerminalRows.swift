@@ -1,12 +1,12 @@
 import Foundation
 
 /// The rows the transcript actually draws, and the arithmetic every jump goes
-/// through — a port of `packages/ui/src/components/agent/transcript-rows.ts`.
+/// through - a port of `packages/ui/src/components/agent/transcript-rows.ts`.
 ///
 /// A row is **not** a range of transcript indices. A `Task` row absorbs children
 /// that interleave arbitrarily with everything else, and a run can fold across
-/// an absorbed gap, so a row covers a *membership*. Anything positional —
-/// a scrubber mark, the catch-up jump, a bookmark, "reveal this sub-agent" —
+/// an absorbed gap, so a row covers a *membership*. Anything positional -
+/// a scrubber mark, the catch-up jump, a bookmark, "reveal this sub-agent" -
 /// must resolve through ``rowIndex(forItem:)`` and never by arithmetic.
 
 /// Where an item sits inside a row shared with other items: its 0-based ordinal
@@ -26,7 +26,7 @@ public struct RowPosition: Equatable, Sendable {
 public enum TranscriptRow: Equatable, Sendable {
   case block(TerminalBlock)
   case recap(label: String)
-  /// **What this agent was asked** — the takeover frame's first row, spliced
+  /// **What this agent was asked** - the takeover frame's first row, spliced
   /// ahead of the fold exactly as the web splices `{ key: 'brief', text }`
   /// (`transcript-rows.ts`). Synthetic of necessity: the instruction is the
   /// spawning call's `prompt` and the engine never emits it as an item, so no
@@ -43,7 +43,7 @@ public enum TranscriptRow: Equatable, Sendable {
     }
   }
 
-  /// The seam's own label, when this row is one. `nil` for every other row —
+  /// The seam's own label, when this row is one. `nil` for every other row -
   /// the caller asks a row what it says rather than re-deriving the recap it
   /// was folded with.
   public var recapLabel: String? {
@@ -52,7 +52,7 @@ public enum TranscriptRow: Equatable, Sendable {
   }
 
   /// The item a row is *spaced as*. The recap row has none, so it always gets a
-  /// blank line on either side — and the brief row likewise: the instruction is
+  /// blank line on either side - and the brief row likewise: the instruction is
   /// not part of the work's own spacing run.
   public var spacingItem: TranscriptItem? {
     switch self {
@@ -65,7 +65,7 @@ public enum TranscriptRow: Equatable, Sendable {
 /// A built row list plus the two lookup tables that make it navigable.
 ///
 /// Built once per items change and held by the view model, rather than the
-/// web client's `WeakMap` cache — a Swift array is a value, so there is no
+/// web client's `WeakMap` cache - a Swift array is a value, so there is no
 /// identity to hang a cache on, and computing both tables is one pass.
 public struct TerminalRows: Equatable, Sendable {
   public var rows: [TranscriptRow]
@@ -130,15 +130,15 @@ public struct TerminalRows: Equatable, Sendable {
   /// Fold a transcript into rows, optionally splicing the catch-up seam.
   ///
   /// Each side of the boundary folds **separately**, which is what stops a run's
-  /// count from spanning "what you already read" — the count under the seam
+  /// count from spanning "what you already read" - the count under the seam
   /// describes only what is new.
   /// - Parameter frameTask: the spawning call, when these items are a
-  ///   sub-agent's frame — the takeover. Its brief leads the rows, because a
+  ///   sub-agent's frame - the takeover. Its brief leads the rows, because a
   ///   frame without its instruction is half a transcript. **No `prompt`, no
   ///   row**: codex's spawn message is encrypted on the wire, and an empty
   ///   brief row would assert we know what we don't. (A frame never carries a
-  ///   recap — `TerminalTranscriptView` constructs its frame model
-  ///   boundary-free — so the brief leads whichever path builds the rows.)
+  ///   recap - `TerminalTranscriptView` constructs its frame model
+  ///   boundary-free - so the brief leads whichever path builds the rows.)
   public static func build(
     items: [TranscriptItem], recapAt boundary: Int? = nil, recapLabel: String = "",
     fold: Bool = true, frameTask: ToolCallItem? = nil
@@ -148,7 +148,7 @@ public struct TerminalRows: Equatable, Sendable {
     // first row; a **background** agent forwards nothing (measured: eight of
     // them, not one `user` item with a parent), and those are exactly the runs
     // a takeover is opened on. Splicing unconditionally would draw one
-    // instruction twice — see `taskBrief`.
+    // instruction twice - see `taskBrief`.
     let streamHasBrief = items.contains { if case .user = $0 { return true } else { return false } }
     let lead: [TranscriptRow] =
       streamHasBrief
@@ -188,14 +188,14 @@ public struct TerminalRows: Equatable, Sendable {
     return best
   }
 
-  /// Where an item sits inside a row that holds MORE than itself — a task
+  /// Where an item sits inside a row that holds MORE than itself - a task
   /// block's absorbed child, or a member of a folded run of two or more. `nil`
   /// for everything else, including a row's own head item and a singleton run:
   /// there the row's extent IS the item's, and a mark spanning it is honest.
   ///
   /// The scrubber is the consumer: a mark for a shared-row item anchors at
   /// `ordinal / count` of the row's height instead of inheriting an extent that
-  /// is mostly other items' work — expanded, one failed child of a hundred-call
+  /// is mostly other items' work - expanded, one failed child of a hundred-call
   /// task painted a solid band down the whole rail.
   public func position(forItem itemIndex: Int) -> RowPosition? { positions[itemIndex] }
 
@@ -247,7 +247,7 @@ extension TerminalRows {
 // MARK: - The long-press menu
 
 extension TranscriptRow {
-  /// The item a long-press on this row bookmarks: **the row's own head item** —
+  /// The item a long-press on this row bookmarks: **the row's own head item** -
   /// the same item the row is keyed by (`run:<id>` / `task:<id>`), sorted at
   /// (`starts`) and spaced as. The two synthetic rows (the catch-up seam, the
   /// takeover's brief) stand for no item and bookmark nothing.
@@ -258,13 +258,13 @@ extension TranscriptRow {
   /// resolves a *line* from the touch, a line cannot be attributed back to an
   /// item: `TermLine` deliberately erases where a line came from (the renderer
   /// "is handed lines and nothing else"), and its `press` is a verb, not an
-  /// address — nil on exactly the rows most worth marking, since prose carries
+  /// address - nil on exactly the rows most worth marking, since prose carries
   /// no press at all. Re-deriving the attribution outside the planner would be
   /// a second answer to "what did this row draw", the drift this renderer
   /// exists to refuse; teaching the plan per-line identity would buy precision
   /// the rail cannot show (collapsed, every member's mark rounds onto the same
-  /// row). So the row is the unit of address — as it already is for the tap,
-  /// which presses the whole block from any of its lines — and a run of many
+  /// row). So the row is the unit of address - as it already is for the tap,
+  /// which presses the whole block from any of its lines - and a run of many
   /// bookmarks the call its row is named for.
   public var bookmarkItemId: String? {
     switch self {
@@ -280,13 +280,13 @@ extension TranscriptRow {
   }
 
   /// What the menu's Copy puts on the clipboard: the row's *source*, never its
-  /// drawn lines — the raw markdown of an answer, the command a tool ran, the
+  /// drawn lines - the raw markdown of an answer, the command a tool ran, the
   /// prompt as it was typed. The body is already one selectable text run, so
   /// copying what is visible needs no menu; what the menu buys is the text the
   /// theme does not draw verbatim. The tool-call rule is the web `ToolRow`'s
   /// (`items.tsx`): the command when the input has one, else the result text,
   /// else nothing. A run summary and a task header are counts over other rows'
-  /// content, so they offer nothing rather than inventing a concatenation —
+  /// content, so they offer nothing rather than inventing a concatenation -
   /// with the run-of-one exception the planner already draws: that row *is* the
   /// call, so it copies as the call.
   public var copyText: String? {
@@ -310,7 +310,7 @@ private func itemCopyText(_ item: TranscriptItem) -> String? {
   case .user(_, let text, _, _):
     return text.isEmpty ? nil : text
   case .assistantText(_, let text, let streaming, _):
-    // Not while streaming — the web hides its copy action there too: the text
+    // Not while streaming - the web hides its copy action there too: the text
     // in hand is a moment of the message, not the message.
     return streaming || text.isEmpty ? nil : text
   case .thinking(_, let text, _):

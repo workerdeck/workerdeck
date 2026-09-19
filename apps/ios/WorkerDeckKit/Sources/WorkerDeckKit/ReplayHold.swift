@@ -1,6 +1,6 @@
 import Foundation
 
-/// Opening a session without the flicker — a port of the `replaying` half of
+/// Opening a session without the flicker - a port of the `replaying` half of
 /// `packages/react/src/hooks/use-session.ts`.
 ///
 /// The problem is not scroll position. An attach replays a session's whole
@@ -35,7 +35,7 @@ public func initialReplayTarget(_ frame: AttachedFrame) -> Int? {
 /// How long the hold tolerates **no progress** before giving up and revealing
 /// whatever has arrived.
 ///
-/// This was `replayHoldMaxSeconds`, a flat 1.5s from the attach — the web
+/// This was `replayHoldMaxSeconds`, a flat 1.5s from the attach - the web
 /// client's `REPLAY_HOLD_MAX_MS`, and the web client is usually talking to
 /// localhost. A phone on a tailnet replaying thousands of events does not finish
 /// in 1.5s, so the flat deadline fired on exactly the sessions the hold exists
@@ -54,7 +54,7 @@ public let replayHoldCeilingSeconds: TimeInterval = 20
 ///
 /// **Why extending the deadline on progress is not the quiet-window heuristic
 /// this design refuses.** That refusal is about detecting the *end* of the
-/// replay by arrival timing — reveal once N ms have passed quietly — which is
+/// replay by arrival timing - reveal once N ms have passed quietly - which is
 /// wrong because a burst with a gap in it reveals early and a fast replay
 /// reveals late. Nothing here decides the end: the end is still the stated
 /// `target`, and the hold still ends on the exact event that reaches it. This
@@ -94,7 +94,7 @@ public struct ReplayHold: Sendable, Equatable {
     return true
   }
 
-  /// When the hold gives up if nothing more arrives — the earlier of the stall
+  /// When the hold gives up if nothing more arrives - the earlier of the stall
   /// deadline and the absolute ceiling.
   public var deadline: TimeInterval {
     min(progressedAt + replayHoldStallSeconds, startedAt + replayHoldCeilingSeconds)

@@ -281,7 +281,7 @@ describe('deferred execution: park and rehydrate', () => {
     expect(h.runner.park()).toBeUndefined()
   })
 
-  it('snapshots an idle session without ending it — the case park() refuses', async () => {
+  it('snapshots an idle session without ending it - the case park() refuses', async () => {
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
       doStream: [streamText('hi there'), streamText('and again')],
@@ -343,7 +343,7 @@ describe('deferred execution: park and rehydrate', () => {
     let leg = 0
     const model = new MockLanguageModelV3({
       modelId: 'mock-1',
-      // Leg 0 stalls until interrupted; a second leg — which must not happen — answers
+      // Leg 0 stalls until interrupted; a second leg - which must not happen - answers
       // immediately and is unmissable.
       doStream: (options) => (leg++ === 0 ? stall(options) : Promise.resolve(streamText('SHOULD NOT HAPPEN'))),
     })

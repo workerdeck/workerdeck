@@ -1,5 +1,5 @@
 // Shared MockLanguageModelV3 stream builders. Every AI-SDK-engine suite needs the same
-// three shapes — a text turn, a tool-call turn, a doGenerate reply — and five of them used
+// three shapes - a text turn, a tool-call turn, a doGenerate reply - and five of them used
 // to carry their own copy under five different names.
 import { convertArrayToReadableStream } from 'ai/test'
 
@@ -31,7 +31,7 @@ export function streamCall(toolCallId: string, toolName: string, input: unknown)
   return streamCalls([{ id: toolCallId, tool: toolName, input }])
 }
 
-// A turn that ends in a batch of tool calls — the parking suites depend on multi-call turns.
+// A turn that ends in a batch of tool calls - the parking suites depend on multi-call turns.
 export function streamCalls(calls: Array<{ id: string; tool: string; input: unknown }>) {
   return {
     stream: convertArrayToReadableStream([
@@ -47,7 +47,7 @@ export function streamCalls(calls: Array<{ id: string; tool: string; input: unkn
   }
 }
 
-// The doGenerate form of a text reply — the web_fetch digest pass is generate, not stream.
+// The doGenerate form of a text reply - the web_fetch digest pass is generate, not stream.
 export function generateText(text: string) {
   return {
     content: [{ type: 'text' as const, text }],

@@ -52,7 +52,7 @@ describe('createHostGuard', () => {
       expect(guard(req('[::1]:8787'))).toBe(true)
     })
 
-    it('rejects a rebound public name — the whole point of the guard', () => {
+    it('rejects a rebound public name - the whole point of the guard', () => {
       // The connection really does arrive on 127.0.0.1; the Host header is the part the attacker cannot forge.
       expect(guard(req('attacker.example:8787'))).toBe(false)
     })
@@ -61,7 +61,7 @@ describe('createHostGuard', () => {
       expect(guard(req('a b c'))).toBe(false)
     })
 
-    it('allows a missing Host — not a browser, so not a rebinding victim', () => {
+    it('allows a missing Host - not a browser, so not a rebinding victim', () => {
       expect(guard(req(undefined))).toBe(true)
     })
 

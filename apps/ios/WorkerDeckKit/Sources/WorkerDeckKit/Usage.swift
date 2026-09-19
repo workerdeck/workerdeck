@@ -1,13 +1,13 @@
 import Foundation
 
-/// The plan-usage rules both sides must agree on — a hand mirror of
+/// The plan-usage rules both sides must agree on - a hand mirror of
 /// `packages/protocol/src/usage.ts`. The semantics are the contract, not the
 /// shape of the code: when that file changes, this one changes. Tests mirror
 /// `packages/react/test/usage.test.ts`.
 
 /// The transcript's own reading: the reducer's per-window map plus its **one**
 /// clock for the whole map (the `ts` of the newest `rate_limit` event of any
-/// window — see `TranscriptState.rateLimitsUpdatedAt`).
+/// window - see `TranscriptState.rateLimitsUpdatedAt`).
 public struct SessionUsage: Sendable, Equatable {
   public let rateLimits: [String: RateLimitInfo]?
   public let updatedAt: Double?
@@ -24,7 +24,7 @@ public struct SessionUsage: Sendable, Equatable {
 /// Deliberately **not** a timestamp comparison. The session side carries one
 /// scalar clock for its whole map, so this session's morning `five_hour` is
 /// dated by the afternoon's `seven_day` event and would beat a genuinely
-/// fresher profile entry — while the tracker, fed by event `ts` from every
+/// fresher profile entry - while the tracker, fed by event `ts` from every
 /// session on the profile, is never behind what one transcript holds. The
 /// session half is coverage, not correctness: the tracker's memory is empty
 /// after a gateway restart, and a session with no profile has no account state
@@ -44,10 +44,10 @@ public func mergeUsage(_ session: SessionUsage, _ profile: ProfileUsage?) -> Pro
 public struct UsageWindowRow: Sendable, Equatable, Identifiable {
   public let key: String
   public let info: RateLimitInfo
-  /// Epoch ms; 0 means the reading came from a transcript with no clock —
+  /// Epoch ms; 0 means the reading came from a transcript with no clock -
   /// render no freshness line, not a date in 1970.
   public let updatedAt: Double
-  /// See `ProfileUsageWindow.inferredReset` — say so, never infer locally.
+  /// See `ProfileUsageWindow.inferredReset` - say so, never infer locally.
   public let inferredReset: Bool
 
   public var id: String { key }
@@ -63,7 +63,7 @@ public struct UsageWindowRow: Sendable, Equatable, Identifiable {
 
 /// Reading order for the meters: the session window, the weekly window, then
 /// whichever per-model weeklies exist, sorted by key. A window with no
-/// `utilization` is unknown, not zero — dropped entirely rather than drawn as
+/// `utilization` is unknown, not zero - dropped entirely rather than drawn as
 /// an empty bar that reads as "plenty left".
 public func orderUsageWindows(_ usage: ProfileUsage?) -> [UsageWindowRow] {
   let all = (usage ?? [:])
@@ -84,7 +84,7 @@ public func usageInfos(_ usage: ProfileUsage?) -> [String: RateLimitInfo]? {
   return usage.mapValues(\.info)
 }
 
-/// How alarming a meter's reading is — the port of `meterSeverity` in
+/// How alarming a meter's reading is - the port of `meterSeverity` in
 /// `packages/ui/src/lib/status.ts`.
 ///
 /// The web draws two ramps off one percentage and they are deliberately not the

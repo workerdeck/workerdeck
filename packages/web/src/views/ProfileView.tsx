@@ -143,7 +143,7 @@ export function ProfileView() {
               </CardContent>
             </Card>
 
-            {/* Absent means nothing has reported — unknown, never 0% — so the card stays away rather than drawing empty bars. */}
+            {/* Absent means nothing has reported - unknown, never 0% - so the card stays away rather than drawing empty bars. */}
             {usageWindows.length > 0 ? (
               <Card>
                 <CardHeader>
@@ -162,10 +162,10 @@ export function ProfileView() {
                 </CardHeader>
                 <CardContent className="flex flex-col divide-y divide-border">
                   <DetailRow label="Capabilities">
-                    <Chips items={profile.session?.capabilities ?? []} empty="not declared — whatever the server wired" />
+                    <Chips items={profile.session?.capabilities ?? []} empty="not declared - whatever the server wired" />
                   </DetailRow>
                   <DetailRow label="MCP servers">
-                    <Chips items={profile.session?.mcpServers ?? []} empty="not declared — every connected server" />
+                    <Chips items={profile.session?.mcpServers ?? []} empty="not declared - every connected server" />
                   </DetailRow>
                   <DetailRow label="Instructions">
                     {profile.session?.instructions ? (
@@ -196,7 +196,7 @@ export function ProfileView() {
                         <span className="font-mono text-label">
                           {config.settings.permissionRules
                             ? `${config.settings.permissionRules.allow} allow · ${config.settings.permissionRules.ask} ask · ${config.settings.permissionRules.deny} deny`
-                            : '—'}
+                            : '-'}
                         </span>
                       </DetailRow>
                       <DetailRow label="Env vars (names only)">
@@ -232,7 +232,7 @@ export function ProfileView() {
             <p className="text-label text-fg-4">
               {profile.managed
                 ? 'Stored on the server and editable here. '
-                : 'View only — this profile is declared in the server options. '}
+                : 'View only - this profile is declared in the server options. '}
               Other profile configuration lives on the server (the <code className="font-mono">profiles</code> option; for Claude profiles,
               the config directory itself, e.g. via VSCode). Provider credentials are resolved from the server&apos;s environment and never
               leave it.

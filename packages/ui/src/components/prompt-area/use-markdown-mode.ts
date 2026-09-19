@@ -37,7 +37,7 @@ import { useCallback, useMemo, useState } from 'react'
  */
 export type PromptAreaMode = 'markdown' | 'plain'
 
-/** Returns the other mode. Pure — handy for building custom toggles. */
+/** Returns the other mode. Pure - handy for building custom toggles. */
 export function oppositeMode(mode: PromptAreaMode): PromptAreaMode {
   return mode === 'markdown' ? 'plain' : 'markdown'
 }
@@ -47,7 +47,7 @@ export type UseMarkdownModeOptions = {
   initialMode?: PromptAreaMode
   /**
    * Controlled mode. When provided, the hook mirrors this value and never owns
-   * its own state — drive changes through `onModeChange`.
+   * its own state - drive changes through `onModeChange`.
    */
   mode?: PromptAreaMode
   /** Called with the next mode whenever `toggle`/`setMode` change it. */
@@ -57,7 +57,7 @@ export type UseMarkdownModeOptions = {
 export type MarkdownModeState = {
   /** The active mode. */
   mode: PromptAreaMode
-  /** `true` in markdown mode — spread onto `<PromptArea markdown={markdown} />`. */
+  /** `true` in markdown mode - spread onto `<PromptArea markdown={markdown} />`. */
   markdown: boolean
   /** `true` in plain-text mode (the inverse of `markdown`). */
   isPlainText: boolean

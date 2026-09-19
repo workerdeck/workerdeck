@@ -7,7 +7,7 @@ import Testing
 /// forwarder sends.
 ///
 /// The fixtures in `Fixtures/` are whole APNs payloads, written by
-/// `packages/cli/test/live-activity.test.ts` — running that test with
+/// `packages/cli/test/live-activity.test.ts` - running that test with
 /// `UPDATE_FIXTURES=1` rewrites them. Decoding them here with the real types is
 /// the only place the two languages are made to agree; a forwarder change that
 /// renames a field fails on this side.
@@ -100,7 +100,7 @@ struct SessionActivityTests {
     #expect(request.choices.count <= SessionActivityLimits.choices)
     #expect(request.choices.first?.label == "Shared Keychain group")
     // Without the original input there is nothing to rewrite, so the card would
-    // have to fall back to "Answer in app" — the buttons depend on this field.
+    // have to fall back to "Answer in app" - the buttons depend on this field.
     let inputJSON = try #require(request.inputJSON)
     #expect(inputJSON.contains("\"header\":\"Auth method\""))
   }

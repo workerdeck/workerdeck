@@ -69,7 +69,7 @@ export function App({
   const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const controls = useRef<SessionControls | undefined>(undefined)
   // Switching sessions remounts the panel and React flushes the new `onControls` on its own schedule, which can be
-  // after a `wd-focus-composer` lands — so the request is recorded and retried rather than fired at whatever is mounted.
+  // after a `wd-focus-composer` lands - so the request is recorded and retried rather than fired at whatever is mounted.
   const focusWanted = useRef(false)
   const tryFocus = () => {
     if (!focusWanted.current || !controls.current) {
@@ -188,7 +188,7 @@ export function App({
     }
   }, [])
 
-  // Called unconditionally (hooks rule) — the empty key never accumulates entries because toggle
+  // Called unconditionally (hooks rule) - the empty key never accumulates entries because toggle
   // is only reachable from a mounted panel.
   const { bookmarks, toggle: toggleBookmark } = useBookmarks(shown ? `${shown.baseUrl}#${shown.sessionId}` : '')
 

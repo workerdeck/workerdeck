@@ -7,12 +7,12 @@ import Testing
 /// replay rather than a synthetic one.
 ///
 /// Written for `_docs/improvements/ios-session-load-time.md`: opening a session
-/// takes 2–3s on the phone and under 50ms in VS Code, and the note's first
+/// takes 2-3s on the phone and under 50ms in VS Code, and the note's first
 /// instruction is to measure before designing. The two candidate costs that are
 /// pure and therefore measurable off-device are **JSON decode** (`ServerFrame`,
 /// once per frame, on the main actor in `SessionHandle`) and the **reducer
-/// fold** (`applyEvent`, once per event). Everything else — socket, actor hops,
-/// the cold plan — needs the app.
+/// fold** (`applyEvent`, once per event). Everything else - socket, actor hops,
+/// the cold plan - needs the app.
 ///
 /// Opt-in, because it needs a capture:
 ///
@@ -26,7 +26,7 @@ struct AttachReplayBenchTests {
   @Test("decode + fold over a captured replay")
   func replayCost() throws {
     guard let path = ProcessInfo.processInfo.environment["WD_ATTACH_CAPTURE"] else {
-      print("[bench] skipped — set WD_ATTACH_CAPTURE to a capture from `pnpm smoke:attach --capture`")
+      print("[bench] skipped - set WD_ATTACH_CAPTURE to a capture from `pnpm smoke:attach --capture`")
       return
     }
     let text = try String(contentsOfFile: path, encoding: .utf8)
@@ -61,8 +61,8 @@ struct AttachReplayBenchTests {
 }
 
 /// The other half of the same question, and the one the pure benchmark above
-/// cannot answer: what the **live pipeline** costs — socket receive, JSON
-/// decode, and the main-actor hop per frame — as `SessionHandle` actually runs
+/// cannot answer: what the **live pipeline** costs - socket receive, JSON
+/// decode, and the main-actor hop per frame - as `SessionHandle` actually runs
 /// it, one `await task.receive()` at a time.
 ///
 /// Opt-in against a real gateway, because there is nothing to simulate here:
@@ -79,7 +79,7 @@ struct AttachPipelineBenchTests {
     guard let host = env["WD_ATTACH_HOST"], let sessionId = env["WD_ATTACH_SESSION"],
       let base = URL(string: "http://\(host)/v1")
     else {
-      print("[bench] skipped — set WD_ATTACH_HOST and WD_ATTACH_SESSION")
+      print("[bench] skipped - set WD_ATTACH_HOST and WD_ATTACH_SESSION")
       return
     }
     let client = WorkerClient(baseURL: base, authKey: env["WD_ATTACH_KEY"])

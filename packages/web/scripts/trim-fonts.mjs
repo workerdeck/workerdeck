@@ -3,7 +3,7 @@
 // @fontsource ships every face as both .woff2 and .woff, and vite copies both
 // into dist/. The generated @font-face lists woff2 first, so on any browser that
 // can run this dashboard (React 19, ES2022, WebAssembly) the .woff files are
-// never requested — they are ~700 KB of download that exists only for browsers
+// never requested - they are ~700 KB of download that exists only for browsers
 // that could not render the app anyway.
 //
 // Done here rather than in the consumer so the published package and every

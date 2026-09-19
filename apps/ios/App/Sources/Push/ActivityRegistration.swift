@@ -21,7 +21,7 @@ enum ActivityRegistration {
 
   enum Outcome: Sendable {
     case attached
-    /// This gateway did not raise that card — a second host the app tried because the attributes
+    /// This gateway did not raise that card - a second host the app tried because the attributes
     /// carried no `hostId`. The app forgets the token rather than retrying.
     case unknown
     case unsupported
@@ -51,8 +51,8 @@ enum ActivityRegistration {
 
     let (data, response) = try await URLSession.shared.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    // 404 means either "no forwarder" or "not my card". Both end the same way for the caller — stop
-    // asking this host — so they are not worth telling apart, and 405 is the pre-contract gateway
+    // 404 means either "no forwarder" or "not my card". Both end the same way for the caller - stop
+    // asking this host - so they are not worth telling apart, and 405 is the pre-contract gateway
     // whose SPA catch-all answered for an unclaimed path (see DeviceRegistration).
     if status == 404 || status == 405 { return method == "POST" ? .unknown : .unsupported }
     guard (200..<300).contains(status) else {

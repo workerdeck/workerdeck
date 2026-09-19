@@ -2,7 +2,7 @@ import Foundation
 
 /// Pure transcript state machine over the wire-protocol event stream.
 ///
-/// A line-by-line port of `packages/react/src/transcript.ts` — the semantics are
+/// A line-by-line port of `packages/react/src/transcript.ts` - the semantics are
 /// the contract, not the shape of the code. When the reducer changes there, it
 /// changes here. UI-free on purpose: `applyEvent` is a pure function so it can be
 /// unit-tested and driven from anywhere (a store, a preview, a replay harness).
@@ -24,10 +24,10 @@ public enum TranscriptItemKind: String, Sendable, Equatable {
 
 /// Lifecycle of a tool call.
 ///
-/// - `running` — the model called it; execution has not been reported
-/// - `pending` — dispatched to an executor (bridged to this client, queued)
-/// - `deferred` — parked beyond this turn; may outlive the session's liveness
-/// - `settled` / `failed` — terminal
+/// - `running` - the model called it; execution has not been reported
+/// - `pending` - dispatched to an executor (bridged to this client, queued)
+/// - `deferred` - parked beyond this turn; may outlive the session's liveness
+/// - `settled` / `failed` - terminal
 ///
 /// Derive UI from this, not from `result` being present: a pending or deferred
 /// call has no result yet and is not the same as a running one.
@@ -43,7 +43,7 @@ public enum ToolCallStatus: String, Sendable, Equatable {
 ///
 /// Mirrors the react reducer's `result.images` entry. The bytes are one
 /// `WorkerClient.toolResultImage` call away, and are paid for by exactly the
-/// reader who scrolls the row into view — measured, 91% of all tool-result
+/// reader who scrolls the row into view - measured, 91% of all tool-result
 /// payload was base64 no client rendered.
 public struct ToolResultImageRef: Sendable, Equatable {
   public var partIndex: Int
@@ -73,18 +73,18 @@ public struct ToolCallResult: Sendable, Equatable {
   /// rest is one fetch away (`WorkerClient.toolResult`, keyed by ``sourceSeq``).
   ///
   /// The three fields below are set **only** when that happened, so every other
-  /// result stays byte-identical to what it was — which matters here more than
+  /// result stays byte-identical to what it was - which matters here more than
   /// on the web: `ToolCallItem` is `Equatable` and is half the plan cache's key,
   /// so an always-present field would miss the cache on every row.
   public var truncated: Bool
   /// The untruncated length. Set iff ``truncated``; what a row must count from,
   /// since it holds the head.
   public var totalChars: Int?
-  /// The `seq` of the event this result arrived on — the only thing that can
+  /// The `seq` of the event this result arrived on - the only thing that can
   /// name it to the fetch route. The item is what the UI holds, so without this
   /// the press has nothing to ask for.
   public var sourceSeq: Int?
-  /// The pictures this result carried, as addresses rather than bytes — set
+  /// The pictures this result carried, as addresses rather than bytes - set
   /// **only** when the replay delivered `image_ref` parts, so a result with no
   /// image stays byte-identical to what it was before this existed. `nil` and
   /// empty are not the same thing here for the reason above: this type is
@@ -92,7 +92,7 @@ public struct ToolCallResult: Sendable, Equatable {
   /// would be a new value for every row in the transcript.
   ///
   /// Raw base64 `image` parts are still dropped on arrival, as they always
-  /// were — folding them in would pin megabytes inside `TranscriptState`.
+  /// were - folding them in would pin megabytes inside `TranscriptState`.
   public var images: [ToolResultImageRef]?
 
   public init(
@@ -192,7 +192,7 @@ public enum NoticeLevel: String, Sendable, Equatable {
 
 public enum TranscriptItem: Sendable, Equatable, Identifiable {
   /// `parentToolUseId` is set only when this prompt is a *subagent's brief*
-  /// rather than something a person typed — it arrives as a real, non-synthetic
+  /// rather than something a person typed - it arrives as a real, non-synthetic
   /// user message with a parent. Unstamped it renders in the main thread as a
   /// prompt row, which is the one row in a transcript that must never be wrong
   /// about who said it. Defaulted rather than required (unlike the other kinds)
@@ -213,7 +213,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
   /// lives.
   case fileDelivered(id: String, path: String, bytes: Int, description: String?)
   /// The engine summarised earlier turns to fit the window (`context_compacted`).
-  /// A boundary, not a reset — everything before it is still here.
+  /// A boundary, not a reset - everything before it is still here.
   case compaction(CompactionItem)
 
   public var id: String {
@@ -259,16 +259,16 @@ public struct TranscriptState: Sendable, Equatable {
   /// Slash commands the CLI accepts (from the `capabilities` event).
   public var commands: [SlashCommandInfo]?
   /// Skills the engine can reach (from the `skills` event), replaced whole each
-  /// time. Absent until the engine has enumerated them — codex probes the list
+  /// time. Absent until the engine has enumerated them - codex probes the list
   /// over a scratch connection at start, so it usually lands before the first
   /// turn, but the probe is async and can fail. Gate the affordance on
   /// this being non-nil, not on `skillsList` alone: the flag says the engine
-  /// *can* answer, this says it *has*. Not commands — see `SkillInfo`.
+  /// *can* answer, this says it *has*. Not commands - see `SkillInfo`.
   public var skills: [SkillInfo]?
   /// The engine's task checklist. Live where ``session`` is frozen at attach.
   public var checklist: [ChecklistItem]?
   /// Titles declared for tool wire names (from `tool_titles`), merged as they
-  /// arrive. Only what a client cannot derive — `ToolTitles.title(for:titles:)`
+  /// arrive. Only what a client cannot derive - `ToolTitles.title(for:titles:)`
   /// folds the built-in table in on top of this.
   public var toolTitles: [String: String]?
   /// Files the engine wrote on the host (from `file_produced`), keyed by the
@@ -276,7 +276,7 @@ public struct TranscriptState: Sendable, Equatable {
   /// up here to turn that path into a fetchable id.
   public var producedFiles: [String: ProducedFile]?
   /// What this session's default model resolves to (from `capabilities`).
-  /// Known before the first turn, which `model` is not — a promptless session
+  /// Known before the first turn, which `model` is not - a promptless session
   /// has no `system_init` until it is spoken to.
   public var defaultModel: String?
   /// Seeded from `system_init`, updated on `permission_mode_changed`.
@@ -284,9 +284,9 @@ public struct TranscriptState: Sendable, Equatable {
   /// Latest context-window snapshot; absent until the first turn completes.
   public var contextUsage: ContextUsage?
   /// Latest rate-limit snapshot per window ('five_hour', 'seven_day', ...).
-  /// Absent for API-key sessions — render nothing, not 0%.
+  /// Absent for API-key sessions - render nothing, not 0%.
   public var rateLimits: [String: RateLimitInfo]?
-  /// The `ts` of the newest `rate_limit` event, whatever its window — **one**
+  /// The `ts` of the newest `rate_limit` event, whatever its window - **one**
   /// clock for the whole map, which is why `mergeUsage` never compares it
   /// against the profile tracker's per-window stamps. Event time, never receipt
   /// time: a replay delivers yesterday's reading in milliseconds, and dating it
@@ -353,7 +353,7 @@ private let streamingThinkingId = "streaming-thinking"
 /// One id was right while one thread streamed at a time, and it is not: a
 /// subagent streams concurrently with the thread that spawned it, and three
 /// parallel `Task`s stream three ways at once. Under one id every delta lands in
-/// the same item — a row welding several agents' half-sentences together — and
+/// the same item - a row welding several agents' half-sentences together - and
 /// the first finished message wipes all of them, including the ones still being
 /// written. The main thread keeps the bare id so nothing that keys off it moves.
 /// (Mirrors the react reducer's `streamingTextId`/`streamingThinkingId`.)
@@ -362,7 +362,7 @@ private func streamId(_ base: String, _ parentToolUseId: String?) -> String {
   return "\(base):\(parentToolUseId)"
 }
 
-/// Is this an in-flight stream — anyone's? The turn's end finalizes every one of
+/// Is this an in-flight stream - anyone's? The turn's end finalizes every one of
 /// them: a subagent interrupted mid-sentence has the same unrecoverable text as
 /// the main thread.
 private func isStreaming(_ id: String, _ base: String) -> Bool {
@@ -430,7 +430,7 @@ func executionOutputText(_ output: ToolExecutionOutput) -> String {
   }
 }
 
-/// `JSON.stringify` for a `JSONValue`. Object keys are emitted sorted — the
+/// `JSON.stringify` for a `JSONValue`. Object keys are emitted sorted - the
 /// decoded representation is an unordered dictionary, so insertion order (which
 /// JS would preserve) no longer exists by the time we get here.
 func jsonStringify(_ value: JSONValue) -> String {
@@ -481,7 +481,7 @@ private func jsonQuote(_ text: String) -> String {
 
 /// Seed transcript state from the attach snapshot (the `attached` frame's SessionInfo).
 /// A promptless session emits no `system_init` until its first message, so fields like
-/// `permissionMode` and `model` would otherwise stay empty — fill only what events
+/// `permissionMode` and `model` would otherwise stay empty - fill only what events
 /// haven't set yet; the event stream stays authoritative.
 public func seedFromSessionInfo(_ state: TranscriptState, _ info: SessionInfo) -> TranscriptState {
   var next = state
@@ -491,7 +491,7 @@ public func seedFromSessionInfo(_ state: TranscriptState, _ info: SessionInfo) -
   next.permissionMode = state.permissionMode ?? info.permissionMode
   next.cwd = state.cwd ?? info.cwd
   next.sdkSessionId = state.sdkSessionId ?? info.sdkSessionId
-  // Never changes for a live session, and no event carries it — the snapshot is
+  // Never changes for a live session, and no event carries it - the snapshot is
   // the only source, so take it whenever it is present.
   next.engine = info.engine ?? state.engine
   return next
@@ -506,7 +506,7 @@ public func seedFromSessionInfo(_ state: TranscriptState, _ info: SessionInfo) -
 /// indistinguishable from one that was never cut, so every renderer needs a
 /// branch for one state rather than two.
 ///
-/// Keyed on `toolUseId` — the id the row already holds. An unknown id, or a
+/// Keyed on `toolUseId` - the id the row already holds. An unknown id, or a
 /// result that was never truncated, returns the state unchanged: a press
 /// answered after a `/clear` must not resurrect a row.
 public func hydrateToolResult(
@@ -533,7 +533,7 @@ public func hydrateToolResult(
   return next
 }
 
-/// The session's own windows in reading order — the merge fold with no profile
+/// The session's own windows in reading order - the merge fold with no profile
 /// side. What a caller holding no gateway account state renders. (Mirrors the
 /// react reducer's `rateLimitWindows`.)
 public func rateLimitWindows(_ state: TranscriptState) -> [UsageWindowRow] {
@@ -586,7 +586,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
 
   case .fileProduced(let file):
     // Keyed by PATH, because the lookup a card does is "here is the savedPath
-    // in my tool input — is there anything to fetch?".
+    // in my tool input - is there anything to fetch?".
     next.producedFiles = (next.producedFiles ?? [:]).merging([file.path: file]) { _, new in new }
 
   case .modelChanged(let model):
@@ -615,9 +615,9 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     // Same session, fresh conversation (/clear, plan-mode exit). Only
     // conversation-scoped state resets: the items, the context reading (the
     // runner re-polls a fresh one), the checklist, and the engine session id
-    // when the event names the new one. Session-scoped state survives — models/commands/
+    // when the event names the new one. Session-scoped state survives - models/commands/
     // skills, produced files, rate limits and plan, cwd, model, permission
-    // mode, cumulative cost — and so do pending approvals: the runner still
+    // mode, cumulative cost - and so do pending approvals: the runner still
     // holds them. (Mirrors the react reducer's conversation_reset case.)
     next.items = []
     next.contextUsage = nil
@@ -646,7 +646,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
             sourceSeq: truncated ? event.seq : nil,
             images: toolResult.content?.imageRefs(sourceSeq: event.seq))
           // The engine's own hunks, carried on the message rather than parsed
-          // out of the result text — which is why this client needs no diff
+          // out of the result text - which is why this client needs no diff
           // parser and cannot get the line numbers wrong.
           if let patch = payload.patch { updated.patch = patch }
           return updated
@@ -673,7 +673,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
                 text: trimmed(element.body)))
           }
         } else if payload.synthetic != true || carriesCaveat(payload.message.content) {
-          // References, not bytes — the view fetches each one to render it.
+          // References, not bytes - the view fetches each one to render it.
           items = upsert(
             items,
             .user(
@@ -695,7 +695,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     let streamingThought = streamId(streamingThinkingId, payload.parentToolUseId)
     var streamedThinking = streamedText(
       next.items, kind: .thinking, id: streamingThought)
-    // The full message supersedes any in-flight streamed text/thinking — this
+    // The full message supersedes any in-flight streamed text/thinking - this
     // agent's, and only this agent's. A subagent's finished message must not
     // wipe the sentence its parent is still writing.
     var items = next.items.filter { item in
@@ -753,7 +753,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
       // The same guard the finalized block gets, and for the same reason: a
       // thinking_delta can carry no visible text at all (encrypted reasoning
       // looks like an empty `thinking` on this channel), and a thinking item
-      // with a blank body renders as a bare marker with nothing after it —
+      // with a blank body renders as a bare marker with nothing after it -
       // which then outlives its turn, because turnResult finalizes whatever is
       // still streaming under a stable id. Skipping costs nothing: the text is
       // rebuilt from `existing` on every delta, so the first one that carries
@@ -769,14 +769,14 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   case .turnResult(let payload):
     // totalCostUsd is session-cumulative on each SDK result message.
     next.totalCostUsd = payload.totalCostUsd
-    // The turn is over: whatever is still streaming is this turn's final text —
+    // The turn is over: whatever is still streaming is this turn's final text -
     // an interrupted or failed turn never sends the assistant_message that
     // normally supersedes it. Finalize it under a stable id, or the *next*
     // turn's message wipes it and the next turn's deltas append to it.
     // (Mirrors the react reducer's turn_result case.)
     next.items = next.items.map { item in
       switch item {
-      // Every agent's, not just the main thread's — and the stable id carries
+      // Every agent's, not just the main thread's - and the stable id carries
       // the agent for the same reason the streaming one does: two agents
       // finalizing on one `turn_result` would otherwise collide on a single id,
       // and `upsert` keys by id.
@@ -849,7 +849,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
       .notice(id: "closed-\(event.seq)", level: .info, text: "Session closed (\(reason))"))
 
   case .sdkEvent, .unknown:
-    // Nothing to render — but lastSeq still advances, so a replay resumes past it.
+    // Nothing to render - but lastSeq still advances, so a replay resumes past it.
     break
   }
 
@@ -868,7 +868,7 @@ private func localCommandElements(_ text: String) -> [(stream: String, body: Str
 }
 
 /// A message whose first text block is the deferred `!` flush is synthetic as a whole, but
-/// the block after it is the person's own message. Only that shape earns the exemption —
+/// the block after it is the person's own message. Only that shape earns the exemption -
 /// `<task-notification>` and the rest stay hidden.
 private func carriesCaveat(_ content: MessageContent) -> Bool {
   content.asBlocks.contains { block in
@@ -879,7 +879,7 @@ private func carriesCaveat(_ content: MessageContent) -> Bool {
   }
 }
 
-/// JS-`trimStart()`-equivalent — only the leading side, so a prefix test matches.
+/// JS-`trimStart()`-equivalent - only the leading side, so a prefix test matches.
 private func leadingWhitespaceTrimmed(_ value: String) -> String {
   String(value.drop(while: { $0.isWhitespace }))
 }

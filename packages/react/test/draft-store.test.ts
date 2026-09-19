@@ -39,7 +39,7 @@ describe('draft store', () => {
     expect(readDraft('never')).toBe('')
   })
 
-  // An empty draft is the absence of one — keeping the row would evict a real draft under the cap.
+  // An empty draft is the absence of one - keeping the row would evict a real draft under the cap.
   it('forgets a draft that was cleared or emptied', () => {
     writeDraft('a', 'typed')
     writeDraft('a', '')
@@ -55,7 +55,7 @@ describe('draft store', () => {
     writeDraft('a', 'unsent')
     expect(backing.size).toBeGreaterThan(0)
 
-    // A genuinely fresh module, which is what a document swap gives you — not just a cleared map.
+    // A genuinely fresh module, which is what a document swap gives you - not just a cleared map.
     vi.resetModules()
     const reloaded = await import('../src/lib/draft-store.ts')
     expect(reloaded.readDraft('a')).toBe('unsent')

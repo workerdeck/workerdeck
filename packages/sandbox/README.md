@@ -2,7 +2,7 @@
 
 Execution sandbox for untrusted, LLM-generated scripts: a QuickJS-NG guest compiled to
 WebAssembly, an in-memory scratch filesystem, and a hardened by-value host bridge. Deny-by-default
-— the guest has no filesystem, network, timers, or host access except the capabilities you grant.
+- the guest has no filesystem, network, timers, or host access except the capabilities you grant.
 
 Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). Leaf package: it
 depends on neither `core`/`server` nor any model SDK, so the same guest engine runs server-side
@@ -17,7 +17,7 @@ npm install @workerdeck/sandbox @jitl/quickjs-ng-wasmfile-release-asyncify
 The WASM engine variant is injected rather than bundled, so you pick the build that fits your
 target: `@jitl/quickjs-ng-wasmfile-release-asyncify` on the server,
 `@jitl/quickjs-singlefile-browser-release-asyncify` in the browser (no separate `.wasm` fetch).
-Use an **asyncify** variant — it lets guest code `await` a host function.
+Use an **asyncify** variant - it lets guest code `await` a host function.
 
 ## Usage
 
@@ -65,13 +65,13 @@ Absent by construction: `process`, `require`, `fetch`, `XMLHttpRequest`, `setTim
 ## Limits
 
 `memoryLimitBytes` (default 64 MiB) caps the QuickJS allocator, and `timeoutMs` (default 5000) is
-enforced by an interrupt handler that runs between bytecode operations — so an infinite loop is
+enforced by an interrupt handler that runs between bytecode operations - so an infinite loop is
 preempted in-thread, with no worker and no cross-origin isolation. Each call gets a fresh runtime
 and context; nothing carries over between runs.
 
 **The deadline does not cover time spent inside your host functions.** The interpreter is not
 executing while a host call is in flight, so put an independent timeout on every capability you
-grant — especially `fetchText`.
+grant - especially `fetchText`.
 
 ## Security model
 
@@ -93,7 +93,7 @@ construct for the guest, and give every capability its own timeout.
 - **The engine variant is injected, never imported here.** The browser single-file build and the
   server WASM-file build are different artifacts; only the host knows which side it is on.
 - **The deadline preempts between bytecode ops, on whichever thread the guest runs.** In a tab
-  that is the UI thread unless you supply your own `execute` running the same engine in a Worker —
+  that is the UI thread unless you supply your own `execute` running the same engine in a Worker -
   a time-boxed evaluation still blocks paint while it runs.
 - **Guest results are untrusted input.** Whatever the sandbox returns was produced by the party you
   sandboxed against, which is the whole reason it may be bridged to a browser at all.

@@ -96,7 +96,7 @@ describe('runScript', () => {
   })
 
   // The outer timeout must exceed the guest deadline below, or vitest's 5s default decides the outcome instead of the memory cap
-  // under test — which flaked on CI about every other run. Big chunks reach the cap in few iterations; only the result shape is asserted.
+  // under test - which flaked on CI about every other run. Big chunks reach the cap in few iterations; only the result shape is asserted.
   it('red team: runaway allocation hits the memory cap as a failed result, not a host crash', async () => {
     const result = await runScript(await engine(), {
       script: 'const a = []; while (true) { a.push(new Uint8Array(512 * 1024)) }',
@@ -107,7 +107,7 @@ describe('runScript', () => {
     expect((result as { reason: string }).reason).toBe('oom')
   }, 20_000)
 
-  it('red team: network is deny-by-default — fetchText without a grant throws in-guest', async () => {
+  it('red team: network is deny-by-default - fetchText without a grant throws in-guest', async () => {
     const result = await runScript(await engine(), {
       script: 'try { fetchText("https://example.com") } catch (e) { "denied: " + e.message }',
     })
@@ -115,7 +115,7 @@ describe('runScript', () => {
     expect((result as { value: string }).value).toContain('denied:')
   })
 
-  it('red team: no ambient authority — timers, fs, and module escape hatches are absent', async () => {
+  it('red team: no ambient authority - timers, fs, and module escape hatches are absent', async () => {
     const result = await runScript(await engine(), {
       script: `JSON.stringify([
         typeof setTimeout, typeof setInterval, typeof XMLHttpRequest,

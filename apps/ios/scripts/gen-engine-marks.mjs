@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Regenerate the engine-mark imagesets from `packages/ui`'s `EngineIcon.tsx` — generated so the
+// Regenerate the engine-mark imagesets from `packages/ui`'s `EngineIcon.tsx` - generated so the
 // two can never drift, checked in because Xcode compiles the catalog with no node in that build,
 // and written as *template* images so `VendorPalette` tints them. See `docs/CLIENTS.md`
 // §`apps/ios`.
@@ -15,7 +15,7 @@ const src = readFileSync(join(root, 'packages/ui/src/components/agent/EngineIcon
 const table = src.slice(src.indexOf('const PATHS'), src.indexOf('\n}\n', src.indexOf('const PATHS')))
 const marks = [...table.matchAll(/(\w+): \{\s*title: '([^']+)',\s*d: '([^']+)',/g)].map(([, key, title, d]) => ({ key, title, d }))
 if (marks.length === 0) {
-  throw new Error('no marks parsed — did PATHS change shape?')
+  throw new Error('no marks parsed - did PATHS change shape?')
 }
 
 const catalog = join(root, 'apps/ios/App/Assets.xcassets')

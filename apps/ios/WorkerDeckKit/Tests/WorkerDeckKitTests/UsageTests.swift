@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// Mirror of `packages/react/test/usage.test.ts` — the merge is a shared
+/// Mirror of `packages/react/test/usage.test.ts` - the merge is a shared
 /// protocol rule, so the two suites must keep agreeing.
 @Suite("Usage rules")
 struct UsageTests {
@@ -36,7 +36,7 @@ struct UsageTests {
   /// Unconditional, deliberately not a timestamp comparison: the session's
   /// `updatedAt` is ONE scalar for its whole map (the ts of the newest
   /// `rate_limit` event of any window), so comparing it against a per-window
-  /// profile stamp compares different things — and the gateway's tracker folds
+  /// profile stamp compares different things - and the gateway's tracker folds
   /// in every session's events, so it is never behind.
   @Test func prefersTheProfileReadingEvenWhenTheSessionStateLooksNewer() {
     let profile: ProfileUsage = ["five_hour": ProfileUsageWindow(info: info(70), updatedAt: 5_000)]
@@ -89,7 +89,7 @@ struct UsageTests {
         == ["five_hour", "seven_day", "seven_day_fable", "seven_day_sonnet"])
   }
 
-  /// A window with no utilization is unknown, not zero — dropped, never 0%.
+  /// A window with no utilization is unknown, not zero - dropped, never 0%.
   @Test func dropsWindowsWithoutAUtilizationReading() {
     let usage: ProfileUsage = [
       "five_hour": ProfileUsageWindow(info: info(nil), updatedAt: 1),
@@ -113,7 +113,7 @@ struct UsageTests {
 
   // MARK: - Wire shape
 
-  /// `ProfileInfo.usage` off the `/profiles` route — the account reading the
+  /// `ProfileInfo.usage` off the `/profiles` route - the account reading the
   /// merge prefers.
   @Test func profileUsageDecodesOffTheProfilesRoute() throws {
     let json = #"""
@@ -130,7 +130,7 @@ struct UsageTests {
     #expect(profile.usage?["seven_day"]?.inferredReset == true)
   }
 
-  /// A profile without the field is a gateway predating it — unknown, never 0%.
+  /// A profile without the field is a gateway predating it - unknown, never 0%.
   @Test func aProfileWithoutUsageStillDecodes() throws {
     let profile = try JSONDecoder().decode(
       ProfileInfo.self, from: Data(#"{"name":"personal"}"#.utf8))

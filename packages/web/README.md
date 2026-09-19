@@ -6,11 +6,11 @@ reason, attachments, `@file` and `/command` completion, and panels for session i
 usage, MCP servers and the project tree), jobs, profiles, settings. TanStack Router, React 19,
 Tailwind v4.
 
-This package ships static files and **no runtime dependencies** — React, the router and the rest
+This package ships static files and **no runtime dependencies** - React, the router and the rest
 are compiled into `dist/`, not installed by you.
 
 > Most people want [`workerdeck`](https://www.npmjs.com/package/workerdeck) instead:
-> `npx workerdeck` serves this dashboard *and* the gateway on one port, already wired — it
+> `npx workerdeck` serves this dashboard *and* the gateway on one port, already wired - it
 > depends on this package to do it. Reach for this one directly when you want to serve the
 > dashboard from your own host.
 
@@ -26,7 +26,7 @@ import express from 'express'
 import { dashboardDir, dashboardIndexHtml } from '@workerdeck/web'
 
 const app = express()
-// Hashed filenames — safe to cache forever.
+// Hashed filenames - safe to cache forever.
 app.use('/assets', express.static(`${dashboardDir}/assets`, { immutable: true, maxAge: '1y' }))
 // Hash history: every route is `#/…`, so only the entry document is requested.
 app.get('*', (_req, res) => res.sendFile(dashboardIndexHtml, {
@@ -42,7 +42,7 @@ app.get('*', (_req, res) => res.sendFile(dashboardIndexHtml, {
    `location.origin`. This is not just convenience: a browser cannot set headers on a WebSocket
    handshake, so a same-origin cookie is the only credential a tab can present when it attaches to
    a session. Split the origins and you need a proxy that stamps credentials server-side.
-3. **No SPA rewrite rules needed** — hash history means the server only ever serves `index.html`.
+3. **No SPA rewrite rules needed** - hash history means the server only ever serves `index.html`.
 
 Cache headers matter: hashed assets `immutable`, `index.html` `no-cache`.
 
@@ -68,6 +68,6 @@ MIT
   the router and Tailwind are compiled into `dist/`, which is why every one of them is a devDep and
   the package has zero runtime dependencies.
 - **`primaryClient()` marks what is not yet per-gateway.** Jobs, profiles and the create form's
-  pickers all answer from one gateway while the sessions list spans them all — the accessor exists
+  pickers all answer from one gateway while the sessions list spans them all - the accessor exists
   to make that visible rather than to hide it.
 

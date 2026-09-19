@@ -45,7 +45,7 @@ describe('textLines', () => {
     expect(textLines('anything', -5)).toEqual({ lines: 1, exact: false })
   })
 
-  it('flags CJK as inexact — its advance is not one cell', () => {
+  it('flags CJK as inexact - its advance is not one cell', () => {
     const cjk = textLines('日本語のテキスト', 80)
     expect(cjk.exact).toBe(false)
   })

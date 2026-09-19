@@ -33,7 +33,7 @@ export function LoginView({ onSignedIn }: { onSignedIn: (user: User) => void }) 
       <div className="w-full max-w-sm">
         <h1 className="text-xl font-semibold text-fg-1">Wiki</h1>
         <p className="mt-1 text-sm text-fg-3">
-          A demo of an embedded agent. Pick a user — each has their own documents and their own agent sessions.
+          A demo of an embedded agent. Pick a user - each has their own documents and their own agent sessions.
         </p>
         <div className="mt-6 flex flex-col gap-2">
           {users.map((user) => (

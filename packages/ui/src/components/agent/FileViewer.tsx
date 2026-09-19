@@ -93,7 +93,7 @@ export function FileViewer({
               <span className="text-label text-fg-4">Saving…</span>
             </>
           ) : !canWrite ? (
-            <span className="text-label text-fg-4">Read-only — this gateway doesn’t allow writes.</span>
+            <span className="text-label text-fg-4">Read-only - this gateway doesn’t allow writes.</span>
           ) : (
             <>
               <span className="text-label text-fg-3">Unsaved changes</span>

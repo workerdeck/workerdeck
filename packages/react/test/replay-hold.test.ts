@@ -26,7 +26,7 @@ describe('initialReplayTarget', () => {
     expect(initialReplayTarget(frame(0, 0))).toBeUndefined()
   })
 
-  it('never holds a reconnect — the reader is already looking at the transcript', () => {
+  it('never holds a reconnect - the reader is already looking at the transcript', () => {
     expect(initialReplayTarget(frame(17, 42))).toBeUndefined()
     expect(initialReplayTarget(frame(1, 900))).toBeUndefined()
   })

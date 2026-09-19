@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The sticky prompt — which turn's prompt is held at the top, and the hand-off
+/// The sticky prompt - which turn's prompt is held at the top, and the hand-off
 /// as the next one arrives.
 ///
 /// The whole feature is this arithmetic; the view draws what it returns. That
@@ -36,8 +36,8 @@ struct StickyPromptTests {
 
   @Test("a subagent's brief is not the human's prompt")
   func subagentBriefIsNotAPrompt() {
-    // It really is a `user_message` on the wire — which is why it once rendered
-    // with the human's own `❯` — but it is the parent agent talking to its
+    // It really is a `user_message` on the wire - which is why it once rendered
+    // with the human's own `❯` - but it is the parent agent talking to its
     // child. A turn is a thing a person started.
     let rows = TerminalRows.build(items: [
       user("u0", "do the thing"),
@@ -104,12 +104,12 @@ struct StickyPromptTests {
     #expect(pin?.offset == -metrics.line / 2)
 
     // At its content edge: the new prompt's own line is at the top, so nothing
-    // is pinned — `noPinWhileVisible`'s rule, arrived at from the other side.
+    // is pinned - `noPinWhileVisible`'s rule, arrived at from the other side.
     pin = StickyPrompt.resolve(
       promptRows: prompts, rows: rows, book: heights, top: contentEdge, line: metrics.line)
     #expect(pin == nil)
 
-    // And one line *earlier* — inside the blank line above the new prompt —
+    // And one line *earlier* - inside the blank line above the new prompt -
     // the old one is still fully pinned. That strip is the previous turn's, and
     // reading the frame offset instead of the content offset handed over here.
     pin = StickyPrompt.resolve(
@@ -130,7 +130,7 @@ struct StickyPromptTests {
     let strip = metrics.line + 10
     let contentEdge = heights.offset(at: next) + (rows.gapBefore(next) ? metrics.line : 0)
 
-    // A grid line out — inside the strip's height, so the lift has begun.
+    // A grid line out - inside the strip's height, so the lift has begun.
     let pin = StickyPrompt.resolve(
       promptRows: prompts, rows: rows, book: heights, top: contentEdge - metrics.line,
       line: metrics.line, stripHeight: strip)

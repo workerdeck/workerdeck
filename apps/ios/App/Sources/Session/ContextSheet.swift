@@ -3,7 +3,7 @@ import SwiftUI
 
 /// What is in the model's context window right now, category by category.
 ///
-/// One of three sheets the status bar and the toolbar menu open — context, usage
+/// One of three sheets the status bar and the toolbar menu open - context, usage
 /// and session info were a single "Session details" list, which meant scrolling
 /// past two answers to reach the third. They are different questions asked at
 /// different moments, so they are different screens.
@@ -64,7 +64,7 @@ private struct CategoryRow: View {
   let maxTokens: Int
 
   /// The protocol's `color` is *usually* a CLI theme token rather than a real
-  /// color, so it is honoured only when it parses — same rule as the dashboard.
+  /// color, so it is honoured only when it parses - same rule as the dashboard.
   private var tint: Color { Color(cliToken: category.color) ?? .accentColor }
 
   var body: some View {

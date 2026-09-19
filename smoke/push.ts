@@ -1,7 +1,7 @@
-// pnpm smoke:push <host> [sessionId] [seq]     — a real push to whatever the gateway's own registry holds.
+// pnpm smoke:push <host> [sessionId] [seq]     - a real push to whatever the gateway's own registry holds.
 //
 // Needs an `apns`-configured gateway: without one there is no `/apns/devices` route and no registry to read.
-// `[seq]` is what makes the deep link testable — the default is the session's tail, where a client that lands on the
+// `[seq]` is what makes the deep link testable - the default is the session's tail, where a client that lands on the
 // right row is indistinguishable from one that ignores `seq` and scrolls to the bottom. `docs/GOTCHAS.md` §APNs push
 // has the two ways this 401s.
 import { readFile } from 'node:fs/promises'
@@ -51,7 +51,7 @@ if (!listed.ok) {
   console.error(
     `GET /v1/sessions -> ${listed.status}. ` +
       (listed.status === 401
-        ? "Set WD_AUTH_KEY to the gateway's <state-dir>/auth-key — and check the host is spelled\n" +
+        ? "Set WD_AUTH_KEY to the gateway's <state-dir>/auth-key - and check the host is spelled\n" +
           'the way the gateway was started: the Host-header guard also answers 401.'
         : ''),
   )
@@ -69,8 +69,8 @@ if (session === undefined) {
 const registry = JSON.parse(await readFile(`${stateDir}/apns-devices.json`, 'utf8')) as Registry
 const seq = wantedSeq === undefined ? session.lastSeq : Number(wantedSeq)
 console.log(
-  `session ${session.id} — seq ${seq}${seq === session.lastSeq ? ' (the tail)' : ` of ${session.lastSeq}`}` +
-    ` — ${registry.devices.length} device(s) registered`,
+  `session ${session.id} - seq ${seq}${seq === session.lastSeq ? ' (the tail)' : ` of ${session.lastSeq}`}` +
+    ` - ${registry.devices.length} device(s) registered`,
 )
 
 const key = await loadApnsKey(keyFile)
@@ -86,8 +86,8 @@ for (const device of registry.devices) {
       ts: Date.now(),
       preview:
         wantedSeq === undefined
-          ? 'smoke:push — tapping this should open this session.'
-          : `smoke:push — tapping this should land on seq ${seq}, not at the bottom.`,
+          ? 'smoke:push - tapping this should open this session.'
+          : `smoke:push - tapping this should land on seq ${seq}, not at the bottom.`,
       result: { isError: false, durationMs: 1, numTurns: 1, totalCostUsd: 0 },
     },
     device.hostId,

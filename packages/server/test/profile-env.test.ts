@@ -88,7 +88,7 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     expect(harness.captured.options?.env).toEqual({ SOME: 'x' })
   })
 
-  it('pins a non-default dir — that is real credential isolation', async () => {
+  it('pins a non-default dir - that is real credential isolation', async () => {
     const harness = captureHarness()
     const iso = temp('cw-iso-')
     running = createWorkerServer({
@@ -251,7 +251,7 @@ describe('requireAvailableProfile', () => {
     })
   })
 
-  it("lets the same create through when the option is off — the probe can't close a door", async () => {
+  it("lets the same create through when the option is off - the probe can't close a door", async () => {
     running = withProbe(false, 'logged_out')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { port } = await running.listen(0, '127.0.0.1')
@@ -264,7 +264,7 @@ describe('requireAvailableProfile', () => {
     expect((await createSession(port, 'iso')).status).toBe(201)
   })
 
-  it("allows a profile whose probe couldn't run — unknown is not unavailable", async () => {
+  it("allows a profile whose probe couldn't run - unknown is not unavailable", async () => {
     running = withProbe(true, 'unknown')
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port, 'iso')).status).toBe(201)

@@ -6,7 +6,7 @@ export type AttachmentInput = MessageAttachment & {
 
 export type AttachmentKind = 'image' | 'document' | 'text'
 
-// The four the Anthropic API accepts; image/heic — what an iPhone shoots — is not one, and
+// The four the Anthropic API accepts; image/heic - what an iPhone shoots - is not one, and
 // clients transcode before upload.
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 

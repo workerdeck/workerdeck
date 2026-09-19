@@ -58,7 +58,7 @@ export function parseSessionRoute(basePath: string, url: string): SessionRoute |
     return { id: decodeURIComponent(parts[0]!), resultSeq: seq }
   }
   if (parts.length <= 3 && parts[1] === 'mcp') {
-    // MCP server names are opaque and may contain ':' (plugin:gtm:gtm) — one segment, decoded whole.
+    // MCP server names are opaque and may contain ':' (plugin:gtm:gtm) - one segment, decoded whole.
     return {
       id: decodeURIComponent(parts[0]!),
       mcp: true,

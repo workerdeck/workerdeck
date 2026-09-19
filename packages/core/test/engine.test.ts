@@ -471,7 +471,7 @@ describe('connectMcpTools', () => {
     expect(connection.servers[0]!.error).toBeTruthy()
   }, 20_000)
 
-  it("rejects with `required` — an embedder's own server failing is not a degraded session", async () => {
+  it("rejects with `required` - an embedder's own server failing is not a degraded session", async () => {
     await expect(connectMcpTools({ broken: { type: 'http', url: 'http://127.0.0.1:1/mcp' } }, { required: true })).rejects.toThrow(
       /MCP server 'broken' failed to connect/,
     )

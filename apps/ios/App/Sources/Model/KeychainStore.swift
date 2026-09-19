@@ -5,7 +5,7 @@ import Security
 ///
 /// The host list carries auth keys, so it belongs in the Keychain rather than
 /// UserDefaults or a plist in the container. It is stored as a *single* JSON blob
-/// (one item, not one per host) — adding or editing a host is then one atomic
+/// (one item, not one per host) - adding or editing a host is then one atomic
 /// write, and there is no partial state to reconcile on launch.
 enum KeychainStore {
   static func load(service: String, account: String) -> Data? {

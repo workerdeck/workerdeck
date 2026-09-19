@@ -47,7 +47,7 @@ function statusForeground(status: string | undefined): vscode.ThemeColor | undef
 
 function contextTooltip(usage: ContextUsage): vscode.MarkdownString {
   const md = new vscode.MarkdownString()
-  md.appendMarkdown(`**Context** — ${usage.percentage.toFixed(0)}% of the window\n\n`)
+  md.appendMarkdown(`**Context** - ${usage.percentage.toFixed(0)}% of the window\n\n`)
   for (const category of usage.categories) {
     md.appendMarkdown(`- ${category.name}: \`${formatTokens(category.tokens)}\`\n`)
   }
@@ -59,7 +59,7 @@ function usageTooltip(rateLimits: Record<string, RateLimitInfo>, now: number, up
   const md = new vscode.MarkdownString()
   md.appendMarkdown('**Plan usage**\n\n')
   for (const [key, info] of Object.entries(rateLimits)) {
-    const pct = info.utilization !== undefined ? `${info.utilization.toFixed(1)}%` : '—'
+    const pct = info.utilization !== undefined ? `${info.utilization.toFixed(1)}%` : '-'
     md.appendMarkdown(`- ${windowLabel(key)}: \`${pct}\``)
     if (info.resetsAt !== undefined) {
       md.appendMarkdown(` · resets in ${formatCountdown(info.resetsAt * 1000, now)}`)
@@ -89,7 +89,7 @@ export class UnreadStatusItem implements vscode.Disposable {
   #waiting = 0
 
   constructor() {
-    // 51 — one above the session group (50…44), so it sits leftmost in the Left cluster.
+    // 51 - one above the session group (50…44), so it sits leftmost in the Left cluster.
     this.#item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 51)
     this.#item.command = 'workerdeck.sessions.focus'
   }
@@ -130,7 +130,7 @@ export class SubagentStatusItem implements vscode.Disposable {
   #sessions = 0
 
   constructor() {
-    // 52 — outside the session group and above unread; this signal is the rarer one.
+    // 52 - outside the session group and above unread; this signal is the rarer one.
     this.#item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 52)
     this.#item.command = 'workerdeck.sessions.focus'
     this.#item.color = new vscode.ThemeColor('charts.blue')
@@ -265,7 +265,7 @@ export class SessionStatusBar implements vscode.Disposable {
       }
       const pct = window.info.utilization
       // No made-up 0%: the CLI omits utilization on some updates.
-      const reading = pct !== undefined ? `${pct.toFixed(0)}%` : '—'
+      const reading = pct !== undefined ? `${pct.toFixed(0)}%` : '-'
       item.text = `$(pulse) ${windowLabel(window.key)} ${reading}`
       item.backgroundColor = severityBackground(window.info.status === 'rejected' ? 'error' : meterSeverity(pct))
       item.tooltip = usageTooltip(rateLimits ?? {}, now, vitals?.rateLimitsUpdatedAt)

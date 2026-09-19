@@ -12,7 +12,7 @@ checkout.
 The runner's `canUseTool` hook promotes each tool call not covered by the permission mode into a
 **pending approval**: a `permission_requested` event carrying a `PermissionRequest` (tool name,
 input, display title/description, optional `expiresAt`). The tool blocks until a client resolves
-it — over the WebSocket (`permission_decision` command), over REST, or via the runner directly:
+it - over the WebSocket (`permission_decision` command), over REST, or via the runner directly:
 
 ```ts
 runner.subscribe((event) => {
@@ -26,13 +26,13 @@ Resolution emits `permission_resolved` with `resolvedBy: 'client' | 'timeout' | 
 
 Two rules to know:
 
-- **No deadline by default.** An unresolved request — a permission card or an AskUserQuestion —
+- **No deadline by default.** An unresolved request - a permission card or an AskUserQuestion -
   waits as long as the session lives. Give it a deadline gateway-wide with `approvalTimeoutMs` on
   `createWorkerServer` (CLI: `--approval-timeout 5m`), after which it is denied with
   `resolvedBy: 'timeout'`. A session overrides it per request with `approvalTimeoutMs` on
   `CreateSessionRequest`; `null` (or `0`) there means "never expire" even when the gateway sets one.
 - **Allowing must echo the tool input.** The SDK's `PermissionResult` requires `updatedInput` to
-  be a record on allow — the runner echoes the original input back for an unmodified allow. A
+  be a record on allow - the runner echoes the original input back for an unmodified allow. A
   client may instead pass a modified `updatedInput` to run the tool with edited arguments.
 
 Denials can carry a `message` (reason surfaced to the model) and `interrupt: true` to also stop
@@ -42,7 +42,7 @@ the running turn.
 
 `permissionMode` on `CreateSessionRequest` (changeable live via the `set_permission_mode`
 command): `default`, `acceptEdits`, `bypassPermissions`, `plan`, `dontAsk`, `auto`. Hosts choose
-per session — `dontAsk` for unattended runs of trusted, allowlisted-tool skills vs interactive
+per session - `dontAsk` for unattended runs of trusted, allowlisted-tool skills vs interactive
 approval for anything touching state.
 
 Two modes have extra conditions the CLI enforces:
@@ -50,23 +50,23 @@ Two modes have extra conditions the CLI enforces:
 - **`bypassPermissions`** can only be *switched on mid-session* if the CLI was spawned with the
   capability: set `allowDangerouslySkipPermissions: true` on `CreateSessionRequest` (implied
   when the session already starts in `bypassPermissions`). Without it the CLI rejects the
-  switch — the server relays that as a `protocol_error` frame, which `useClaudeSession`
+  switch - the server relays that as a `protocol_error` frame, which `useClaudeSession`
   surfaces via `onProtocolError` (the styled `SessionPanel` toasts it). This applies to jobs
   too: the dashboard's schedule form has an opt-in for it, off by default for unattended runs.
   Servers can forbid all of it with `disableBypassPermissions` on `createWorkerServer`:
   explicit bypass-mode requests get a 403, and the pre-authorization capability is silently
-  stripped (so UIs that request it by default keep working — the later switch attempt then
+  stripped (so UIs that request it by default keep working - the later switch attempt then
   fails with the CLI's own visible error).
 - **`auto`** (a model classifier approves/denies) is gated CLI-side: it needs a supporting
   model and plan, and can be disabled via the config dir's settings
   (`permissions.disableAutoMode`). When the gate denies, the CLI falls back to `default` or
-  rejects the switch — again surfaced as a `protocol_error`.
+  rejects the switch - again surfaced as a `protocol_error`.
 
 ## Tool allowlists and cwd clamping
 
 Sessions can be constrained with `allowedTools` / `disallowedTools` on `CreateSessionRequest`,
 and the server clamps where sessions may run with `allowedCwdRoots`. Use `buildRunnerConfig` on
-the server to enforce policy regardless of what clients request — see
+the server to enforce policy regardless of what clients request - see
 [Embedding the UI](/workerdeck/docs/guides/embedding/).
 
 ## The REST resolve endpoint
@@ -91,14 +91,14 @@ or
 
 The model's `AskUserQuestion` tool rides the same `canUseTool` path as any permission request.
 Answers go back as an allow with `updatedInput.answers`: question text mapped to the chosen
-option label(s), multi-select labels comma-joined — the shape the CLI's own UI uses. By the
+option label(s), multi-select labels comma-joined - the shape the CLI's own UI uses. By the
 tool's convention the first option of each question is the model's recommended choice.
 
 `questionBehavior` on `CreateSessionRequest` policy-resolves it for unattended runs:
 
-- **`'ask'`** (default) — a pending permission like any other. Interactive UIs render the
+- **`'ask'`** (default) - a pending permission like any other. Interactive UIs render the
   question form; under the [job queue](/workerdeck/docs/guides/job-queue/), webhooks carry
   the full request on `job_progress` so a remote controller can answer over the REST resolve
   endpoint.
-- **`'auto'`** — resolved immediately with each question's first (recommended) option.
-- **`'deny'`** — the tool is refused with guidance to decide autonomously.
+- **`'auto'`** - resolved immediately with each question's first (recommended) option.
+- **`'deny'`** - the tool is refused with guidance to decide autonomously.

@@ -123,7 +123,7 @@ struct MarkdownBlocksTests {
   }
 
   @Test func requiresASpaceAfterTheHashes() {
-    // `#hashtag` and `#42` are prose someone typed, not headings — a model
+    // `#hashtag` and `#42` are prose someone typed, not headings - a model
     // writing a heading never omits the space.
     #expect(MarkdownBlocks.parse("#hashtag") == [.prose("#hashtag")])
     #expect(MarkdownBlocks.parse("Fixes #42") == [.prose("Fixes #42")])
@@ -131,7 +131,7 @@ struct MarkdownBlocksTests {
 
   @Test func treatsBareHashesAsAHeadingStillArriving() {
     // The streaming frontier: the hashes land before the title. An empty
-    // heading renders as nothing and fills in — never as literal `##` that
+    // heading renders as nothing and fills in - never as literal `##` that
     // snaps into a heading a token later. The level may still deepen (`#` →
     // `##`), but the block never changes kind.
     #expect(MarkdownBlocks.parse("#") == [.heading(level: 1, text: "")])
@@ -141,7 +141,7 @@ struct MarkdownBlocksTests {
 
   @Test func stripsAClosingHashRunButNotAHashTheTitleEndsWith() {
     #expect(MarkdownBlocks.parse("## Title ##") == [.heading(level: 2, text: "Title")])
-    // The closing run must be preceded by a space — `C#` is the title.
+    // The closing run must be preceded by a space - `C#` is the title.
     #expect(MarkdownBlocks.parse("# C#") == [.heading(level: 1, text: "C#")])
   }
 
@@ -176,7 +176,7 @@ struct MarkdownBlocksTests {
   }
 
   @Test func aRuleAfterAParagraphIsARuleNotASetextHeading() {
-    // CommonMark would read this as a setext h2 — a paragraph that snaps into
+    // CommonMark would read this as a setext h2 - a paragraph that snaps into
     // a huge heading one full line later, the worst possible streaming shape.
     // Models write ATX headings and use `---` as a separator, so the separator
     // reading wins.
@@ -217,7 +217,7 @@ struct MarkdownBlocksTests {
   }
 
   @Test func keepsTheSourceOrdinals() {
-    // Renumbering would repair mistakes nobody made — models number correctly,
+    // Renumbering would repair mistakes nobody made - models number correctly,
     // and when one starts a list at 3 it means 3.
     let blocks = MarkdownBlocks.parse("1. a\n2. b\n7. c")
     #expect(blocks == [
@@ -278,7 +278,7 @@ struct MarkdownBlocksTests {
         MarkdownListItem(depth: 0, ordinal: nil, text: ""),
       ])
     ])
-    // Same for an ordered marker — `1.` alone is an empty item, and its empty
+    // Same for an ordered marker - `1.` alone is an empty item, and its empty
     // render happens to be the literal characters anyway.
     #expect(MarkdownBlocks.parse("1.") == [
       .list(items: [MarkdownListItem(depth: 0, ordinal: 1, text: "")])
@@ -307,7 +307,7 @@ struct MarkdownBlocksTests {
   }
 
   @Test func aBlockMarkerInterruptsAListInsteadOfContinuingIt() {
-    // Continuation only swallows plain text — a heading after a list is a
+    // Continuation only swallows plain text - a heading after a list is a
     // heading, exactly as it would be after a paragraph.
     let blocks = MarkdownBlocks.parse("- a\n# Next")
     #expect(blocks == [
@@ -317,8 +317,8 @@ struct MarkdownBlocksTests {
   }
 
   @Test func aBlankLineEndsTheListBlock() {
-    // A "loose" list becomes two blocks. The render is the same picture — the
-    // block gap stands in for the blank line — and it keeps the parser free of
+    // A "loose" list becomes two blocks. The render is the same picture - the
+    // block gap stands in for the blank line - and it keeps the parser free of
     // lookahead, which is what streaming needs.
     let blocks = MarkdownBlocks.parse("- a\n\n- b")
     #expect(blocks == [
@@ -388,7 +388,7 @@ struct MarkdownBlocksTests {
   }
 
   @Test func aPlainLineEndsTheQuote() {
-    // No lazy continuation into quotes — deliberately not CommonMark, where a
+    // No lazy continuation into quotes - deliberately not CommonMark, where a
     // quote silently swallows the paragraph under it. Models prefix every
     // quoted line, and the predictable reading wins.
     let blocks = MarkdownBlocks.parse("> q\nplain")
@@ -431,7 +431,7 @@ struct MarkdownBlocksTests {
   @Test func everyPrefixKeepsTheLatestCharacterOnScreen() {
     // The streaming guarantee, stated as an invariant rather than a case list:
     // cut the document anywhere, and the character just typed is in the parse
-    // — in the last block's text (or, on a fence line, its info string). A
+    // - in the last block's text (or, on a fence line, its info string). A
     // failure here is the exact bug this parser exists to prevent: a delta
     // that makes text vanish until more of it arrives.
     let doc = """

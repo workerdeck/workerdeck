@@ -170,7 +170,7 @@ async function pickFolder(deps: NewSessionDeps, adapter: AdapterChoice, current:
     }
   }
 
-  // An absent `/fs/*` route (host files not configured) is a 404 — a fine answer, not an error.
+  // An absent `/fs/*` route (host files not configured) is a 404 - a fine answer, not an error.
   const roots = await hostRoots(deps, host)
   const underRoot = (path: string) => roots.some((r) => path === r.path || path.startsWith(r.path.endsWith('/') ? r.path : `${r.path}/`))
 
@@ -301,7 +301,7 @@ async function browseGateway(deps: NewSessionDeps, host: WireHost, roots: readon
         client.listHostDir(dir!),
       )
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: cannot list ${dir} — ${message(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: cannot list ${dir} - ${message(err)}`)
       return undefined
     }
     const dirs = listing.entries.filter((e) => e.type === 'dir' || e.type === 'symlink')
@@ -360,7 +360,7 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   // request from "this id", the gateway filling an unset model from the profile.
   const preferred = previous?.model
   const isPreferred = (m: ModelOption) => preferred !== undefined && (m.value === preferred || m.resolvedModel === preferred)
-  // `value: undefined` is the sentinel row protocol assigns to clients — catalogs never carry one, and without it
+  // `value: undefined` is the sentinel row protocol assigns to clients - catalogs never carry one, and without it
   // the profile's own default is unreachable.
   type ModelItem = vscode.QuickPickItem & { value?: string }
   const fallbackRow: ModelItem = {
@@ -380,7 +380,7 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   ]
   const picked = await showPick(items, {
     title: 'New session: model',
-    placeHolder: `Model for this session — permission mode: ${modeLabel(mode)}`,
+    placeHolder: `Model for this session - permission mode: ${modeLabel(mode)}`,
     activeItem: items[models.findIndex(isPreferred)] ?? fallbackRow,
     step: 3,
     totalSteps: 3,
@@ -516,7 +516,7 @@ async function create(deps: NewSessionDeps, adapter: AdapterChoice, body: Create
     await deps.refresh()
     await deps.reveal(adapter.host.id, info.id)
   } catch (err) {
-    void vscode.window.showErrorMessage(`WorkerDeck: could not create the session — ${message(err)}`)
+    void vscode.window.showErrorMessage(`WorkerDeck: could not create the session - ${message(err)}`)
   }
 }
 

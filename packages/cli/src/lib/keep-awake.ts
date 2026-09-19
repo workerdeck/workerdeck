@@ -51,7 +51,7 @@ export type WakeSource = {
 }
 
 // Recomputed from the registry rather than counted up and down. A refcount has to be decremented on every exit path
-// a session can take — closed, failed, parked, evicted, drained — and one missed path pins the machine awake until
+// a session can take - closed, failed, parked, evicted, drained - and one missed path pins the machine awake until
 // the gateway stops. Derived state cannot leak that way, so the sweep below is insurance, not the mechanism.
 export function driveWakeLock(source: WakeSource, lock: Pick<WakeLock, 'set'>): void {
   const sync = (): void => lock.set(sessionsNeedTheMachine(source.list()))
@@ -89,7 +89,7 @@ export function createWakeLock(options: { pid?: number; onUnavailable?: (reason:
       return
     }
     child = spawned
-    // A missing binary is not an error — a box with neither tool must start and run normally — but stop trying.
+    // A missing binary is not an error - a box with neither tool must start and run normally - but stop trying.
     spawned.on('error', () => {
       if (child === spawned) {
         child = null

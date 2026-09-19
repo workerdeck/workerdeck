@@ -2,7 +2,7 @@
 @import '@workerdeck/ui/theme.css';
 
 /* Monorepo dev: scan the ui package's source for classnames. An app outside this
- * repo points these at node_modules instead — see the ui package README. */
+ * repo points these at node_modules instead - see the ui package README. */
 @source '../../../packages/ui/src';
 @source '../../../packages/ui/node_modules/streamdown/dist';
 

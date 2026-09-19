@@ -3,12 +3,12 @@ import Foundation
 import Observation
 
 /// The reader's bookmarks: the kit's `Bookmarks` (the web client's
-/// `workerdeck.bookmarks.v1` semantics — per-session item ids) backed by
+/// `workerdeck.bookmarks.v1` semantics - per-session item ids) backed by
 /// UserDefaults, wrapped so views re-derive when one is toggled.
 ///
 /// The shape is `UnreadModel`'s, deliberately: the rules live in the kit where
 /// `swift test` can reach them, and all that is iOS-shaped is where the map is
-/// kept and the `revision` counter — `Bookmarks` is not observable, so reading
+/// kept and the `revision` counter - `Bookmarks` is not observable, so reading
 /// a set through here is what lets the rail learn that a long-press just
 /// starred a row. Storage stays local to this phone, as the web's stays local
 /// to its browser: a bookmark is the reader's annotation, not the session's.

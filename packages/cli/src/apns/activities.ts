@@ -5,7 +5,7 @@ import type { ApnsEnvironment } from './client.ts'
 import { readBody, respondJson } from '../lib/http.ts'
 
 // `starting` is a card the gateway has asked APNs to raise but whose update token has not come
-// back yet. It is the state that forbids a second start for the same pair — that is how a phone
+// back yet. It is the state that forbids a second start for the same pair - that is how a phone
 // ends up with two cards for one session.
 export type ActivityPhase = 'starting' | 'live' | 'ending'
 

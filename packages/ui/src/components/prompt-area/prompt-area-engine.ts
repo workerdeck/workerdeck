@@ -77,7 +77,7 @@ export function truncateSegmentsToLength(segments: Segment[], maxLength: number)
  * in the editor model: a space, newline, or tab.
  *
  * Trigger detection, paste auto-resolution, and position validation all rely
- * on the *same* notion of a boundary — keeping it here prevents the three
+ * on the *same* notion of a boundary - keeping it here prevents the three
  * call sites from silently drifting apart (e.g. one handling tabs and the
  * others not).
  */
@@ -284,7 +284,7 @@ export function resolveChip(
  * The sibling of {@link resolveChip}, for suggestions that are a typing aid
  * rather than a token: what lands in the document is ordinary editable text the
  * user is expected to finish and change, and it must not look or behave like a
- * resolved chip — no immutability, no trigger character, nothing for a consumer
+ * resolved chip - no immutability, no trigger character, nothing for a consumer
  * to parse back out. The caret is left at the end of the inserted text so typing
  * continues from there.
  */
@@ -303,7 +303,7 @@ export function resolveText(
   for (const seg of segments) {
     if (seg.type === 'chip') {
       const chipEnd = offset + `${seg.trigger}${seg.displayText}`.length
-      // A trigger range can never overlap a chip — chips are atomic — so a chip
+      // A trigger range can never overlap a chip - chips are atomic - so a chip
       // is either wholly before or wholly after, and is kept either way.
       if (chipEnd <= triggerStart || offset >= triggerEnd) {
         newSegments.push(seg)
@@ -444,7 +444,7 @@ function splitTextByTriggerPatterns(text: string, triggerByChar: Map<string, Tri
           const query = text.slice(i + 1, end)
           if (query.length > 0) {
             // Treat both undefined and '' from onSelect as "no custom label"
-            // and fall back to the query — an empty displayText would render
+            // and fall back to the query - an empty displayText would render
             // a blank chip.
             const displayText = trigger.onSelect?.({ value: query, label: query }) || query
             segments.push({

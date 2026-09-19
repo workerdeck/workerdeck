@@ -22,11 +22,11 @@ export function startDevReload(context: vscode.ExtensionContext, views: readonly
     timer = undefined
     if (pendingHostReload) {
       pendingHostReload = false
-      output.appendLine('extension bundle changed — reloading the window')
+      output.appendLine('extension bundle changed - reloading the window')
       void vscode.commands.executeCommand('workbench.action.reloadWindow')
       return
     }
-    output.appendLine('webview bundle changed — re-rendering webviews')
+    output.appendLine('webview bundle changed - re-rendering webviews')
     for (const view of views) {
       view.reloadWebview()
     }

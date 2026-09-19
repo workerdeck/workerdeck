@@ -167,7 +167,7 @@ describe('per-profile plan usage on GET /profiles', () => {
     expect(usage?.five_hour?.updatedAt).toBe(t3)
   })
 
-  it('keeps profiles apart — a reading on one account says nothing about another', async () => {
+  it('keeps profiles apart - a reading on one account says nothing about another', async () => {
     const gateway = await startGateway()
     await create(gateway.base, 'plan-a')
     await create(gateway.base, 'plan-b')
@@ -220,7 +220,7 @@ describe('per-profile plan usage on GET /profiles', () => {
     expect(after?.five_hour?.inferredReset).toBeUndefined()
   })
 
-  it('leaves a reading without a reset time alone — there is nothing to infer from', async () => {
+  it('leaves a reading without a reset time alone - there is nothing to infer from', async () => {
     const gateway = await startGateway()
     await create(gateway.base, 'plan-a')
     const reportedAt = Date.now() - 3 * 86_400_000

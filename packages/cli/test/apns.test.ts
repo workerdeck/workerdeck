@@ -65,8 +65,8 @@ async function startFakeApns(
   const seen: Recorded[] = []
   const server = createServer()
   // `stream` is annotated because @types/node (26.x) builds `Http2Server`'s event map with
-  // `Pick<Http2SessionEventMap, 'stream'>` — the *generic* session map, whose stream is a bare
-  // `Http2Stream` — instead of `ServerHttp2SessionEventMap`, whose stream is the
+  // `Pick<Http2SessionEventMap, 'stream'>` - the *generic* session map, whose stream is a bare
+  // `Http2Stream` - instead of `ServerHttp2SessionEventMap`, whose stream is the
   // `ServerHttp2Stream` a server actually emits. Node's runtime is right; the types are not.
   server.on('stream', (stream: ServerHttp2Stream, headers) => {
     // Closing a server stream with an RST code errors the server's own stream object too, taking the test process down.
@@ -147,7 +147,7 @@ describe('apns client', () => {
     await new Promise((resolve) => fake.server.close(resolve))
   })
 
-  it('treats BadDeviceToken as dead too — it is the environment mismatch', async () => {
+  it('treats BadDeviceToken as dead too - it is the environment mismatch', async () => {
     const fake = await startFakeApns((_recorded, stream) => {
       stream.respond({ ':status': 400 })
       stream.end(JSON.stringify({ reason: 'BadDeviceToken' }))
@@ -338,9 +338,9 @@ describe('buildPush', () => {
     for (const key of keys) {
       expect(key!.length).toBeLessThanOrEqual(64)
     }
-    // Same kind, same session, twice — the second folds into the first.
+    // Same kind, same session, twice - the second folds into the first.
     expect(buildPush(notification({ type: 'session_error' }), undefined).collapseId).toBe(keys[2])
-    // Different session, same kind — never folded together.
+    // Different session, same kind - never folded together.
     expect(buildPush(notification({ type: 'session_error', sessionId: 'sess_2' }), undefined).collapseId).not.toBe(keys[2])
   })
 
@@ -352,7 +352,7 @@ describe('buildPush', () => {
   it('falls back to the cwd leaf when the session has no title', () => {
     const push = buildPush(notification({ type: 'session_error', preview: 'boom' }), undefined)
     const aps = (push.payload as { aps: { alert: { title: string; body: string } } }).aps
-    expect(aps.alert.title).toBe('Session error — workerdeck')
+    expect(aps.alert.title).toBe('Session error - workerdeck')
     expect(aps.alert.body).toBe('boom')
   })
 })

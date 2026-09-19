@@ -5,8 +5,8 @@ import UIKit
 /// Cheap inline markdown for assistant text.
 ///
 /// Only *inline* syntax is interpreted here (bold, italic, code spans, links)
-/// and whitespace is preserved. Block structure — headings, lists, quotes,
-/// fences, rules — is `MarkdownBlocks`' job; this is what renders the text
+/// and whitespace is preserved. Block structure - headings, lists, quotes,
+/// fences, rules - is `MarkdownBlocks`' job; this is what renders the text
 /// *inside* each block. `.inlineOnlyPreservingWhitespace` rather than full
 /// parsing because the full mode collapses whitespace and cannot be fed a
 /// half-streamed block; the block splitter exists so it never has to be.
@@ -20,7 +20,7 @@ enum Markdown {
     return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
   }
 
-  /// Inline markdown plus `@file`/`/command` tinting — the one pipeline every
+  /// Inline markdown plus `@file`/`/command` tinting - the one pipeline every
   /// block's text goes through, so a path in a bullet or a heading reads the
   /// same as one in a paragraph.
   static func styledInline(_ text: String) -> AttributedString {
@@ -30,10 +30,10 @@ enum Markdown {
 
 /// Assistant text with its block structure rendered: headings, lists, quotes,
 /// rules, and fenced code. Anything the splitter doesn't model (tables
-/// included — see `MarkdownBlocks`) arrives as prose and renders as it always
+/// included - see `MarkdownBlocks`) arrives as prose and renders as it always
 /// has: inline markdown, whitespace preserved.
 ///
-/// The blocks are re-parsed on every streamed delta. That is fine — the parser
+/// The blocks are re-parsed on every streamed delta. That is fine - the parser
 /// is a single pass over the text a turn has produced so far, far cheaper than
 /// the layout SwiftUI does with the result.
 struct MarkdownText: View {
@@ -66,11 +66,11 @@ struct MarkdownText: View {
     }
   }
 
-  /// Body text for every block — `.body`, what a chat bubble wants.
+  /// Body text for every block - `.body`, what a chat bubble wants.
   private var bodyFont: Font { .body }
 
   /// Transcript-scaled: an h1 in a chat bubble is a section label, not a page
-  /// title, so the ramp tops out at `.title2` and h4–h6 settle on emphasis
+  /// title, so the ramp tops out at `.title2` and h4-h6 settle on emphasis
   /// rather than shrinking below body text.
   private func headingFont(_ level: Int) -> Font {
     switch level {
@@ -151,7 +151,7 @@ private struct QuoteBlock: View {
 }
 
 /// A fenced block: language chip, copy button, and the code itself scrolling
-/// sideways rather than wrapping — wrapped code is unreadable, and a nested
+/// sideways rather than wrapping - wrapped code is unreadable, and a nested
 /// *vertical* scroll inside the transcript would steal the outer gesture.
 private struct CodeBlock: View {
   let language: String?

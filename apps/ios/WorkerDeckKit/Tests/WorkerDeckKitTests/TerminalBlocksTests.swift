@@ -2,7 +2,7 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The terminal transcript's two folds — a port of
+/// The terminal transcript's two folds - a port of
 /// `packages/ui/test/terminal-blocks.test.ts`.
 ///
 /// A run is built from adjacency, a task from membership. Keeping those apart is
@@ -67,7 +67,7 @@ struct TerminalBlocksTests {
   @Test("a subagent's call never folds with a top-level one")
   func parentSplitsARun() {
     // Both calls are consecutive in the stream, but one is drawn stepped in
-    // behind a rule — folding them would count rows that are not adjacent.
+    // behind a rule - folding them would count rows that are not adjacent.
     let blocks = terminalBlocks([
       .toolCall(call("a")), .toolCall(call("b", parent: "orphan")),
     ])
@@ -117,7 +117,7 @@ struct TerminalBlocksTests {
 
   @Test("an orphan child keeps its own row rather than vanishing")
   func orphanChildIsVisible() {
-    // The parent is outside the slice — what a recap boundary and a compaction
+    // The parent is outside the slice - what a recap boundary and a compaction
     // both leave behind. An unmapped item must be visible, never gone.
     let blocks = terminalBlocks([text("x"), .toolCall(call("c1", parent: "elsewhere"))])
     #expect(blocks.count == 2)

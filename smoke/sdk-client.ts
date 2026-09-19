@@ -1,8 +1,8 @@
-// pnpm smoke:sdk [provider] [model-id]   — spends tokens, never part of `pnpm test`.
+// pnpm smoke:sdk [provider] [model-id]   - spends tokens, never part of `pnpm test`.
 //
 // real model → AiSdkRunner on a real createWorkerServer → HTTP/WS → WorkerDeckClient → createToolCallHost executing in
 // a real QuickJS guest. `smoke:live` drives the runner in-process and `bridge-e2e.test.ts` drives the server+client
-// with a stubbed model; this is the combination neither covers — eval_script travels over the wire to the CLIENT's
+// with a stubbed model; this is the combination neither covers - eval_script travels over the wire to the CLIENT's
 // sandbox (the server has no QuickJS executor at all here) while the authoritative fs_* tools run server-side.
 import WebSocket from 'ws'
 import variant from '@jitl/quickjs-ng-wasmfile-release-asyncify'
@@ -36,7 +36,7 @@ const server = createWorkerServer({
     },
   ],
   bridge: { timeoutMs: 30_000 },
-  // Bridged results flow back through the server itself — the hub's onResult calls settleExecution. Nothing to wire.
+  // Bridged results flow back through the server itself - the hub's onResult calls settleExecution. Nothing to wire.
   createEngineRunner: ({ config, profile, bridge, restore }) => {
     // A rehydrated session brings its own filesystem back in the snapshot.
     const vfs = restore
@@ -56,7 +56,7 @@ const server = createWorkerServer({
       backend: 'browser',
       instructions:
         'You evaluate sales leads. Use the eval_script tool to compute answers from files in the ' +
-        'scratch filesystem — never guess numbers. Inside eval_script the sandbox exposes ' +
+        'scratch filesystem - never guess numbers. Inside eval_script the sandbox exposes ' +
         'vfs.read(path), vfs.write(path, text), and vfs.list(dir); the value of the last ' +
         'expression is returned to you. To hand a file to the user, write it with fs_write, ' +
         'then call deliver_file with its path.',
@@ -170,7 +170,7 @@ if (turn.type === 'turn_result' && turn.subtype !== 'success') {
 }
 
 if (clientExecutions === 0) {
-  fail('The model answered WITHOUT a bridged execution — the client sandbox was never exercised.')
+  fail('The model answered WITHOUT a bridged execution - the client sandbox was never exercised.')
 }
 const dispatched = events.filter((e) => e.type === 'execution_dispatched')
 const wrongBackend = dispatched.filter((e) => e.type === 'execution_dispatched' && e.backend !== 'browser')
@@ -181,7 +181,7 @@ if (wrongBackend.length > 0) {
 // 4173 / 12 = 347.75 → 348. Only computable by running code over the document.
 const finalText = turn.type === 'turn_result' ? (turn.result ?? '') : ''
 if (!finalText.includes('348')) {
-  fail(`The final answer does not contain 348 — got: ${finalText}`)
+  fail(`The final answer does not contain 348 - got: ${finalText}`)
 }
 
 // Usage must cover every leg of the parked turn.
@@ -208,11 +208,11 @@ if (deliveredEvent?.type === 'file_delivered') {
     fail(`Delivered path ${deliveredEvent.path} missing from GET /files: ${JSON.stringify(files)}`)
   }
   if (!downloaded.includes('348')) {
-    fail(`Downloaded ${deliveredEvent.path} does not contain 348 — got: ${downloaded}`)
+    fail(`Downloaded ${deliveredEvent.path} does not contain 348 - got: ${downloaded}`)
   }
   console.log(`✅ file_delivered + REST download round-tripped: ${deliveredEvent.path}`)
 } else if (report) {
-  console.log('⚠️  Model wrote the report but never called deliver_file — no download card.')
+  console.log('⚠️  Model wrote the report but never called deliver_file - no download card.')
 }
 
 console.log(`\nSession ${session.id}`)

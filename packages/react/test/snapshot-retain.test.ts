@@ -82,14 +82,14 @@ describe('snapshot retention is unobservable', () => {
     expect(full.length - thin.length).toBe(20 * 3)
   })
 
-  it('keeps the unread cursor bit-identical — a delta is worth zero rows', () => {
+  it('keeps the unread cursor bit-identical - a delta is worth zero rows', () => {
     const full = seqd([user('hi'), textDelta('par', 'd1'), textDelta('tial', 'd2'), assistantText('partial', 'a1'), turnEnd()])
     const count = (events: SessionEvent[]) => events.reduce((total, event) => total + transcriptActivity(event), 0)
     expect(count(retain(full))).toBe(count(full))
     expect(full.filter((e) => e.type === 'stream_delta').every((e) => transcriptActivity(e) === 0)).toBe(true)
   })
 
-  it('survives an interrupted turn — the catch path flushes what it produced', () => {
+  it('survives an interrupted turn - the catch path flushes what it produced', () => {
     const full = seqd([
       user('write me an essay'),
       textDelta('half an ', 'd1'),
@@ -165,7 +165,7 @@ describe('snapshot retention is unobservable', () => {
     })
   })
 
-  it('never drops the last event — the replay hold depends on it', () => {
+  it('never drops the last event - the replay hold depends on it', () => {
     const full = seqd([user('hi'), textDelta('a', 'd1'), assistantText('a', 'a1'), turnEnd()])
     const thin = retain(full)
     expect(thin.at(-1)?.seq).toBe(full.at(-1)?.seq)

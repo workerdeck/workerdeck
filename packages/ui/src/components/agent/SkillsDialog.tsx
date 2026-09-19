@@ -42,7 +42,7 @@ export function SkillsDialog({ skills, open, onOpenChange, onUse, className }: S
               ? skill.name !== (skill.displayName ?? skill.name)
                 ? skill.name
                 : undefined
-              : 'Capabilities the agent can choose to use. Not commands — the model picks them from their descriptions.'
+              : 'Capabilities the agent can choose to use. Not commands - the model picks them from their descriptions.'
           }
           actions={
             skill ? (
@@ -67,7 +67,7 @@ export function SkillsDialog({ skills, open, onOpenChange, onUse, className }: S
 
 function SkillList({ skills, onSelect }: { skills: SkillInfo[] | undefined; onSelect: (name: string) => void }) {
   if (!skills) {
-    return <p className="py-6 text-center text-body-sm text-fg-4">Skills are listed once the session connects — send a message first.</p>
+    return <p className="py-6 text-center text-body-sm text-fg-4">Skills are listed once the session connects - send a message first.</p>
   }
   if (skills.length === 0) {
     return <p className="py-6 text-center text-body-sm text-fg-4">This session found no skills.</p>
@@ -142,7 +142,7 @@ function SkillView({ skill, onUse, onUsed }: { skill: SkillInfo; onUse?: (skill:
             Use this skill
           </Button>
           <p className="mt-1.5 text-label text-fg-4">
-            Writes an opening message into the composer for you to edit — it isn’t sent, and there is no command that runs a skill directly.
+            Writes an opening message into the composer for you to edit - it isn’t sent, and there is no command that runs a skill directly.
           </p>
         </div>
       ) : null}

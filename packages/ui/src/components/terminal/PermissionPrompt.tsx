@@ -42,8 +42,8 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
       onCancel={() => setDenying(false)}
       placeholder={
         plan
-          ? 'What should change? (optional) — the agent keeps planning and reads this'
-          : 'Reason (optional) — the agent reads this and can try something else'
+          ? 'What should change? (optional) - the agent keeps planning and reads this'
+          : 'Reason (optional) - the agent reads this and can try something else'
       }
     />
   ) : undefined
@@ -51,7 +51,7 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
   const options = plan
     ? [
         { key: 'allow', label: 'Approve plan' },
-        { key: 'deny', label: 'Keep planning — tell it what to change', detail: reasonInput },
+        { key: 'deny', label: 'Keep planning - tell it what to change', detail: reasonInput },
         { key: 'stop', label: 'No, and stop the turn', danger: true },
       ]
     : [
@@ -116,7 +116,7 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
       <Hint>
         {denying
           ? 'Enter to send · Shift+Enter for a new line · Esc to go back'
-          : 'Enter to select · ↑/↓ to navigate · 1–3 to choose · Esc to cancel'}
+          : 'Enter to select · ↑/↓ to navigate · 1-3 to choose · Esc to cancel'}
       </Hint>
     </div>
   )

@@ -5,7 +5,7 @@ const KEY = 'workerdeck.bookmarks.v1'
 
 // Bookmarks are transcript item IDS, not indexes: an index is an artifact of one replay's
 // coalescing, an id survives it. Membership per session, stored flat so one key covers every
-// host — losing the map costs starred rows, nothing structural, hence readJson's swallow.
+// host - losing the map costs starred rows, nothing structural, hence readJson's swallow.
 type BookmarkMap = Record<string, string[]>
 
 function keyOf(hostId: string, sessionId: string): string {

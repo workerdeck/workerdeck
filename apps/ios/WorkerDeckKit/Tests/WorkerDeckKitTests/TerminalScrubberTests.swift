@@ -8,8 +8,8 @@ import Testing
 /// This suite exists because both of the bugs the web client's rail has shipped
 /// were pure-logic ones invisible in a screenshot: a live answer with no
 /// `turn_result` yet went unmarked for the whole two minutes it was the only
-/// thing worth navigating to, and a replayed history — which carries no turn
-/// rows at all — came back with an empty response lane.
+/// thing worth navigating to, and a replayed history - which carries no turn
+/// rows at all - came back with an empty response lane.
 @Suite("TerminalScrubber")
 struct TerminalScrubberTests {
   private func user(_ id: String, _ body: String = "do it", parent: String? = nil)
@@ -71,7 +71,7 @@ struct TerminalScrubberTests {
     // The bug this is: 90 points of content in a 906-point window made
     // `railH / totalSize` ≈ 10 and a 9,120-point band inside a 906-point rail.
     // The rail sits *inside* the scroller, so that overflow became real
-    // scrollable height — ~8,000 points of nothing under a three-row session.
+    // scrollable height - ~8,000 points of nothing under a three-row session.
     let scale = railScale(railH: 906, totalSize: 90, viewportH: 906)
     #expect(scale == 1)
     // The structural claim: the band can never exceed the rail, for any content.
@@ -105,7 +105,7 @@ struct TerminalScrubberTests {
   @Test("a replayed history carrying no turn rows still fills the response lane")
   func replayedHistoryIsMarked() {
     // A resumed session's backfill maps only user and assistant entries. Built
-    // from `turn_result` alone the whole lane came back empty — and the prompt
+    // from `turn_result` alone the whole lane came back empty - and the prompt
     // lane survived, which is what made it look like a rendering bug.
     let items = [user("u1"), say("a1"), user("u2"), say("a2")]
     let clusters = buildScrubberClusters(input(items), railH: 300)
@@ -171,7 +171,7 @@ struct TerminalScrubberTests {
 
   @Test("a session error keeps the colour when it merges with a tool failure")
   func loudestWinsTheMerge() {
-    // Both are the response lane, so a point apart they merge — and the rank
+    // Both are the response lane, so a point apart they merge - and the rank
     // that does the work is `error` over `toolFailed`.
     let items = [call("a", status: .failed), .notice(id: "n", level: .error, text: "bad")]
     let clusters = buildScrubberClusters(input(items, viewport: 4000), railH: 4)
@@ -210,14 +210,14 @@ struct TerminalScrubberTests {
     }
     #expect(approval.lane == .full)
     #expect(approval.y == 300 - scrubberMinMark)
-    // No item to derive a position from, so no members — the peek reads the
+    // No item to derive a position from, so no members - the peek reads the
     // request itself.
     #expect(approval.marks.isEmpty)
   }
 
   @Test("a bookmark id this transcript does not hold draws nothing")
   func bookmarksResolveById() {
-    // Ids, not indices — the seam's whole point. A mark from another frame's
+    // Ids, not indices - the seam's whole point. A mark from another frame's
     // items (or a truncated replay) is not an error, it is simply not here.
     let clusters = buildScrubberClusters(
       input([say("a")], bookmarks: ["a", "someone-elses-row"]), railH: 300)
@@ -255,7 +255,7 @@ struct TerminalScrubberTests {
   @Test("one bookmark set rides a frame's rail: its own items resolve, the host's stay out")
   func bookmarksInsideAFrameResolveAgainstItsOwnItems() {
     // What made index-addressed bookmarks impossible to pass into a takeover:
-    // index 2 means different items in the two spaces. Ids dissolve it — the
+    // index 2 means different items in the two spaces. Ids dissolve it - the
     // same set goes to both rails, and inside the frame each id either names a
     // frame item at the frame's own offsets or names nothing.
     let frameItems = [say("s1", parent: "T"), call("c1", parent: "T", result: "ok")]
@@ -320,8 +320,8 @@ struct TerminalScrubberTests {
 extension TerminalScrubberTests {
   @Test("a very long transcript builds its rail in one pass, and merges to a bounded rail")
   func denseRailStaysBounded() {
-    // The rail is rebuilt whenever the transcript changes — the same cadence
-    // the fold already pays — so it has to be one linear pass. And the *output*
+    // The rail is rebuilt whenever the transcript changes - the same cadence
+    // the fold already pays - so it has to be one linear pass. And the *output*
     // has to be bounded by the rail rather than by the session: a press scans
     // the clusters, and merging is what keeps that a rail's worth of work
     // instead of a session's.
@@ -366,7 +366,7 @@ extension TerminalScrubberTests {
     ]
   }
 
-  /// A folded run of four whose **last** call failed — the shape the rail still
+  /// A folded run of four whose **last** call failed - the shape the rail still
   /// marks, and therefore the shape the fractional anchor has to be tested on.
   /// It was a task's absorbed child until the outcome rule landed; the geometry
   /// under test is identical (a member of a row that covers a membership) and
@@ -384,7 +384,7 @@ extension TerminalScrubberTests {
 
   // MARK: - Red on screen, red on the rail
 
-  /// Eight calls with the failures in the *middle* — the shape Tobias opened,
+  /// Eight calls with the failures in the *middle* - the shape Tobias opened,
   /// and the one that has to behave differently collapsed and open.
   private var runWithMiddleFailures: [TranscriptItem] {
     var items: [TranscriptItem] = [user("u1")]
@@ -398,7 +398,7 @@ extension TerminalScrubberTests {
 
   @Test("collapsed, a run whose failures are all mid-chain marks nothing")
   func middleFailuresCollapsedAreSilent() {
-    // The summary line is coloured by `runFailed` — the LAST call — and that
+    // The summary line is coloured by `runFailed` - the LAST call - and that
     // call succeeded, so there is nothing red on screen to mark.
     let marks = kinds(buildScrubberClusters(input(runWithMiddleFailures), railH: 100))
     #expect(!marks.contains(.toolFailed))
@@ -412,7 +412,7 @@ extension TerminalScrubberTests {
     let clusters = buildScrubberClusters(input(runWithMiddleFailures, expansion: open), railH: 100)
     let failures = clusters.flatMap { $0.marks.map(\.mark) }.filter { $0.kind == .toolFailed }
     #expect(failures.count == 2)
-    // At the failures' own item indices — 1 is the first call, so c3 and c5.
+    // At the failures' own item indices - 1 is the first call, so c3 and c5.
     #expect(Set(failures.map(\.itemIndex)) == [4, 6])
   }
 
@@ -420,7 +420,7 @@ extension TerminalScrubberTests {
   func openTaskMarksItsFailedChildOnlyWhenTheRunIsOpen() {
     // Two folds deep, and the rule holds at each: opening the **task** reveals
     // its children as a folded *run*, whose summary line `runFailed` colours by
-    // its last call — which succeeded. So there is still nothing red, and still
+    // its last call - which succeeded. So there is still nothing red, and still
     // nothing to mark. This is the case that shows the rule is about what is
     // drawn rather than about nesting depth.
     let taskOnly = TerminalExpansion(open: [.task("T")])
@@ -428,7 +428,7 @@ extension TerminalScrubberTests {
       !kinds(buildScrubberClusters(input(taskWithOneFailedChild, expansion: taskOnly), railH: 100))
         .contains(.toolFailed))
 
-    // Open the run inside it and the Grep is red on its own line — so it marks.
+    // Open the run inside it and the Grep is red on its own line - so it marks.
     let both = TerminalExpansion(open: [.task("T"), .run("c0")])
     #expect(
       kinds(buildScrubberClusters(input(taskWithOneFailedChild, expansion: both), railH: 100))
@@ -438,7 +438,7 @@ extension TerminalScrubberTests {
   // MARK: - The expanded region
 
   /// `.expanded` was a `ScrubberMarkKind` and needed three exemptions from the
-  /// mark machinery inside an hour — skip the fractional rule, never merge,
+  /// mark machinery inside an hour - skip the fractional rule, never merge,
   /// paint first. It is a `ScrubberRegion` now, and these are the same claims
   /// made against a type that needs none of them.
 
@@ -458,7 +458,7 @@ extension TerminalScrubberTests {
   @Test("the expanded band spans the region it opened, not a tick at its start")
   func expandedSpansTheRegion() {
     // The bug this pins: a run block is addressed by its first member's index,
-    // and a member of a run longer than one carries a `RowPosition` — so under
+    // and a member of a run longer than one carries a `RowPosition` - so under
     // the mark machinery the band came out as a 2px tick at ordinal 0, a slim
     // marker where the opened region starts rather than a band over it. A region
     // is measured by its *row*, so the exemption is gone with the type.
@@ -484,10 +484,10 @@ extension TerminalScrubberTests {
     #expect(band.h > scrubberMinMark)
   }
 
-  @Test("a lone top-level call bands when opened — it has no run key at all")
+  @Test("a lone top-level call bands when opened - it has no run key at all")
   func loneCallBandsWhenOpened() {
     // The fold makes every top-level call a run block, usually of one, and
-    // `planRun` draws a run of one as the call itself — so the press writes
+    // `planRun` draws a run of one as the call itself - so the press writes
     // `.call(id)` and the block has no `.run` key to open. Asking `block.key`
     // meant expanding a lone `Bash` banded nothing at all; that call no longer
     // compiles, and this is the behaviour it used to get wrong.
@@ -501,7 +501,7 @@ extension TerminalScrubberTests {
   @Test("a tall band does not swallow the lane and repaint it")
   func tallBandDoesNotSwallowTheLane() {
     // Opening a tool *inside* an opened run made the row enormous, and a merged
-    // cluster grows to cover its members and takes the loudest one's colour — so
+    // cluster grows to cover its members and takes the loudest one's colour - so
     // the band absorbed every prompt in the lane and the whole rail went blue.
     // A region is not a point: it is not a cluster at all, so there is no merge
     // rule to exempt it from and no loudness that could win one.
@@ -516,7 +516,7 @@ extension TerminalScrubberTests {
 
     // Both prompts keep their own clusters and their own colour.
     #expect(rail.clusters.filter { $0.kind == .user }.count == 2)
-    // One row opened, one band — several keys inside it are still one region,
+    // One row opened, one band - several keys inside it are still one region,
     // because it is one row.
     #expect(rail.regions.count == 1)
     // And the band is not in the mark machinery at all: it is not a lane mate
@@ -531,7 +531,7 @@ extension TerminalScrubberTests {
   @Test("a failure the model recovered from inside its run earns no mark")
   func recoveredFailureIsNotMarked() {
     // The measured case: a `cd` to the wrong directory, retried and fixed two
-    // calls later. Against one real session this was 8 of 9 failures — the rail
+    // calls later. Against one real session this was 8 of 9 failures - the rail
     // showed nine alarms for a transcript that reddens one row.
     let items = [
       user("u1"),
@@ -548,13 +548,13 @@ extension TerminalScrubberTests {
     #expect(kinds(buildScrubberClusters(input(runEndingInFailure), railH: 100)).contains(.toolFailed))
   }
 
-  @Test("a lone failed call still marks — a run of one is its own outcome")
+  @Test("a lone failed call still marks - a run of one is its own outcome")
   func standaloneFailureIsMarked() {
     let items = [user("u1"), call("c0", result: "boom", error: true), say("a1")]
     #expect(kinds(buildScrubberClusters(input(items), railH: 100)).contains(.toolFailed))
   }
 
-  @Test("a sub-agent's failed child does not mark — the rail says what taskFailed says")
+  @Test("a sub-agent's failed child does not mark - the rail says what taskFailed says")
   func absorbedChildIsNotMarked() {
     // `taskFailed` already refuses to redden a `Task` for a child's failure: an
     // agent that ran a hundred calls, one of them a grep that matched nothing,
@@ -623,7 +623,7 @@ extension TerminalScrubberTests {
       Issue.record("expected a toolFailed cluster")
       return
     }
-    // One line, so the fraction rounds onto the row's own offset — the mark is
+    // One line, so the fraction rounds onto the row's own offset - the mark is
     // the hit target at the top of the task row, exactly as before.
     let rowIndex = collapsed.rows.rowIndex(forItem: 4)
     #expect(failed.h == scrubberMinMark)
@@ -635,7 +635,7 @@ extension TerminalScrubberTests {
           .rounded())
   }
 
-  @Test("a plain failed call still spans its own row — the rail stays a map")
+  @Test("a plain failed call still spans its own row - the rail stays a map")
   func singletonRunKeepsItsExtent() {
     // No answer in it: the response mark now shares the right lane with the
     // failure and would merge with it, hiding the very height under test.
@@ -655,7 +655,7 @@ extension TerminalScrubberTests {
 
   // MARK: - Channels
 
-  /// Every mark with the lane its cluster drew it in — clusters merge, so a
+  /// Every mark with the lane its cluster drew it in - clusters merge, so a
   /// cluster-level filter silently loses the quieter member.
   private func members(_ clusters: [ScrubberCluster]) -> [(lane: ScrubberLane, kind: ScrubberMarkKind, itemIndex: Int)] {
     clusters.flatMap { cluster in
@@ -663,7 +663,7 @@ extension TerminalScrubberTests {
     }
   }
 
-  @Test("failures all land in the response lane — one column answers 'did it go wrong'")
+  @Test("failures all land in the response lane - one column answers 'did it go wrong'")
   func failuresShareTheOutputChannel() {
     let items: [TranscriptItem] = [
       user("u1"), call("a", status: .failed), .notice(id: "n", level: .error, text: "bad"),
@@ -726,10 +726,10 @@ extension TerminalScrubberTests {
 extension TerminalScrubberTests {
   /// The takeover renders `subagentItems`, so EVERY item there has a parent.
   /// The rail's "top level only" tests then excluded all of them and it came
-  /// out mounted, banded, and marking nothing on a hundred-tool agent — which
+  /// out mounted, banded, and marking nothing on a hundred-tool agent - which
   /// is exactly the run that needs a rail. "Top level" is now the frame's level
   /// (`ScrubberInput.frameParentId`), mirroring web `scrubber.test.ts`'s
-  /// `inside a sub-agent frame` cases — plus the brief-row interaction, which
+  /// `inside a sub-agent frame` cases - plus the brief-row interaction, which
   /// is this client's own: the frame's rows open on a synthetic row no item
   /// maps to, and every mark must land past it.
   private func spawningTask(_ id: String) -> ToolCallItem {
@@ -746,7 +746,7 @@ extension TerminalScrubberTests {
   func frameMarksEveryStep() {
     // No prompts and no `turn_result` exist in a sub-agent's stream, so the
     // segment machinery would fold the lot into a single mark at the final
-    // report — the one place a reader can already reach.
+    // report - the one place a reader can already reach.
     let items = [
       say("s1", "looking", parent: "T1"),
       say("s2", "found it", parent: "T1"),
@@ -756,7 +756,7 @@ extension TerminalScrubberTests {
     let marks = buildScrubberClusters(scrub, railH: 300).flatMap { $0.marks }.map(\.mark)
     #expect(marks.map(\.kind) == [.turn, .turn, .turn])
     #expect(marks.map(\.itemIndex) == [0, 1, 2])
-    // The brief row leads the frame's rows and no item maps to it — the same
+    // The brief row leads the frame's rows and no item maps to it - the same
     // mechanism that keeps marks off the recap seam (a row with no index), so
     // every mark's row lands past it, at the offsets the book keeps for the
     // shifted rows.
@@ -766,8 +766,8 @@ extension TerminalScrubberTests {
 
   @Test("a frame marks a failure its own renderer reddens")
   func frameMarksItsOwnFailure() {
-    // No level test guards this one — `redItemIndices` reads the frame's own
-    // fold — but it is the second thing the web pins and the claim is the
+    // No level test guards this one - `redItemIndices` reads the frame's own
+    // fold - but it is the second thing the web pins and the claim is the
     // rail's whole rule: red in the transcript, red on the rail.
     let items = [
       say("s1", "trying", parent: "T1"),
@@ -797,7 +797,7 @@ extension TerminalScrubberTests {
 
   @Test("an opened brief row bands like any block you opened")
   func openedBriefBands() {
-    // The brief row is synthetic — no fold produces it — but opening it is
+    // The brief row is synthetic - no fold produces it - but opening it is
     // still opened height, and the region walk reads row-level keys so it is
     // not invisible to the rail. Closed, nothing bands.
     let items = [say("s1", "looking", parent: "T1")]

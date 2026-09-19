@@ -5,7 +5,7 @@ import Observation
 /// One session's window onto the host filesystem: the client, plus the working
 /// directory everything is scoped to.
 ///
-/// The server's `hostFiles.roots` remain the security boundary — this is a UI
+/// The server's `hostFiles.roots` remain the security boundary - this is a UI
 /// scope, not an enforcement one. What it buys is the right question: on a phone
 /// you want *this session's* project, not a root picker, and a session whose cwd
 /// the server does not expose should say so instead of offering somewhere else.
@@ -17,7 +17,7 @@ struct HostFileScope: Sendable {
 /// Browsing state for one session's working directory.
 ///
 /// The whole surface is optional server-side, and a 404 is the *normal* answer
-/// from a gateway started without `--fs-root` — so availability is a first-class
+/// from a gateway started without `--fs-root` - so availability is a first-class
 /// state rather than an error banner: the browser explains how to turn it on
 /// instead of looking broken.
 ///
@@ -34,7 +34,7 @@ final class HostFilesModel {
     /// The server exposes files, but not this session's working directory.
     case outsideRoots
     case ready(canWrite: Bool)
-    /// Reaching the server failed — distinct from the two above, which are answers.
+    /// Reaching the server failed - distinct from the two above, which are answers.
     case failed(String)
   }
 
@@ -60,7 +60,7 @@ final class HostFilesModel {
 
   /// Two questions in one pass: does this gateway serve files at all (`/fs/roots`),
   /// and is *this* session's directory one it will serve (the first listing)? They
-  /// have different answers and deserve different screens — "no file access" is a
+  /// have different answers and deserve different screens - "no file access" is a
   /// flag the operator can add, "outside the roots" is a path they'd have to widen.
   func load() async {
     if case .ready = availability { return }
@@ -89,7 +89,7 @@ final class HostFilesModel {
     }
   }
 
-  /// Fetch a directory, unless it is already cached. `force` re-fetches — the agent
+  /// Fetch a directory, unless it is already cached. `force` re-fetches - the agent
   /// is editing this tree, so a cached listing goes stale on its own.
   func loadDirectory(_ path: String, force: Bool = false) async {
     if !force, listings[path] != nil { return }
@@ -138,7 +138,7 @@ final class HostFileModel {
   var draft: String = ""
   private(set) var saving = false
   var errorMessage: String?
-  /// Set when the server refused the write because the file changed underneath —
+  /// Set when the server refused the write because the file changed underneath -
   /// worth its own message, since the fix is to reload rather than to retry.
   private(set) var conflict = false
 

@@ -248,7 +248,7 @@ describe('an instance that generates its own key', () => {
     expect((await fetch(`${base}/v1/sessions`, { headers: { 'x-workerdeck-key': key } })).status).toBe(200)
   })
 
-  it('reuses the stored key across restarts — clients stay paired', async () => {
+  it('reuses the stored key across restarts - clients stay paired', async () => {
     const first = await start(routable, bindLoopback)
     const key = (await readFile(join(first.stateDir!, 'auth-key'), 'utf8')).trim()
     await instance!.close()
@@ -395,7 +395,7 @@ describe('apns device route', () => {
     expect(res.status).toBe(401)
   })
 
-  it('404s when the instance has no forwarder — how the app learns not to ask', async () => {
+  it('404s when the instance has no forwarder - how the app learns not to ask', async () => {
     const { base } = await start(['--auth-key', SECRET])
     const res = await register(base, { token: TOKEN, environment: 'development' }, { authorization: `Bearer ${SECRET}` })
     // Exactly 404, never merely "not 200": this assertion used to be `not.toBe(200)`, which the buggy 405 passed happily.

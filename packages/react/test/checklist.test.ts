@@ -77,7 +77,7 @@ describe('sessionTasks', () => {
     expect(tasks.map((t) => t.key)).toEqual(['checklist:0', 'spawn:s1', 'spawn:s2'])
   })
 
-  it('excludes records that carry an agent type — those are sub-agents, not tasks', () => {
+  it('excludes records that carry an agent type - those are sub-agents, not tasks', () => {
     const tasks = sessionTasks(
       info({ subagents: [sub({ toolUseId: 'a', agentType: 'Explore' }), sub({ toolUseId: 't', description: 'a task' })] }),
     )

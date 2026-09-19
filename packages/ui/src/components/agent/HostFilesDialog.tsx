@@ -84,7 +84,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
       setFile({
         path: response.path,
         bytes: response.bytes,
-        content: response.encoding === 'utf8' ? response.content : '(binary file — not shown)',
+        content: response.encoding === 'utf8' ? response.content : '(binary file - not shown)',
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not read that file')
@@ -178,7 +178,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
                 </ul>
               )}
               {truncated && !matches ? (
-                <p className="text-label text-fg-4">More entries than the server will return — use the search box.</p>
+                <p className="text-label text-fg-4">More entries than the server will return - use the search box.</p>
               ) : null}
             </>
           )}

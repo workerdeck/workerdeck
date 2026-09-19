@@ -5,7 +5,7 @@ import Observation
 /// Everything scoped to one gateway: its client and its per-host preferences.
 ///
 /// Rebuilt wholesale when the selected host changes (`RootView` keys the subtree
-/// on the host id) — there is no migration path between two different servers.
+/// on the host id) - there is no migration path between two different servers.
 @MainActor
 @Observable
 final class HostContext {

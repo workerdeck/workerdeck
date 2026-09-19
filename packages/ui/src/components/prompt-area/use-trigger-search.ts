@@ -25,7 +25,7 @@ export function useTriggerSearch(): UseTriggerSearchReturn {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null)
 
-  // Version counter – belt-and-suspenders alongside AbortController
+  // Version counter - belt-and-suspenders alongside AbortController
   const searchVersion = useRef(0)
   const abortController = useRef<AbortController | null>(null)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

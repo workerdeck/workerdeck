@@ -5,8 +5,8 @@ import WorkerDeckKit
 /// Project icon bytes for the sessions list, keyed by the icon's own **content
 /// hash**.
 ///
-/// `SessionInfo.project` carries an *address* — media type, byte count, and a
-/// sha256 of the bytes — never the picture. The bytes come from
+/// `SessionInfo.project` carries an *address* - media type, byte count, and a
+/// sha256 of the bytes - never the picture. The bytes come from
 /// `GET /sessions/:id/project/icon`, which is session-scoped so the fetch rides
 /// the same authorization gate as every other session route.
 ///
@@ -14,7 +14,7 @@ import WorkerDeckKit
 /// the wire for: every session in one project serves identical bytes, so twelve
 /// rows of one repo cost one request. Two *different* projects that happen to
 /// declare the same file cost one between them, and so do two gateways serving
-/// the same checkout — content addressing makes both fall out rather than
+/// the same checkout - content addressing makes both fall out rather than
 /// needing a rule.
 ///
 /// **Cached for the life of the process, deliberately.** A hash names its bytes,
@@ -24,7 +24,7 @@ import WorkerDeckKit
 /// many distinct icons an operator has open.
 ///
 /// **A failure is cached as a failure.** The route's 404 is the uniform "no
-/// icon" — no project, a glyph-only project, or an icon the gateway refused —
+/// icon" - no project, a glyph-only project, or an icon the gateway refused -
 /// so retrying would be a request per session per poll for a picture that is
 /// never coming. `failed` is what keeps the miss as cheap as the hit.
 ///
@@ -38,25 +38,25 @@ import WorkerDeckKit
 /// reachable from bytes: `CGImageSourceCopyTypeIdentifiers()` lists 62 types and
 /// none is SVG (asset catalogs accept SVG, but that is a *compile-time*
 /// conversion of a file in the app bundle, not something a downloaded blob can
-/// use). Rendering one would take a third-party rasteriser — this app has
-/// **zero third-party Swift dependencies** and that is a standing rule — or an
+/// use). Rendering one would take a third-party rasteriser - this app has
+/// **zero third-party Swift dependencies** and that is a standing rule - or an
 /// offscreen `WKWebView` snapshot.
 ///
 /// So an SVG icon is fetched, fails to decode, and is cached as a failure like
 /// any other refusal: the project's **name still renders**, which is the same
 /// degradation as a gateway that refused the icon. Attempt-and-fail rather than
-/// skipping by media type on purpose — it costs one request per distinct icon
+/// skipping by media type on purpose - it costs one request per distinct icon
 /// for the life of the process, and it starts working by itself if Apple ever
 /// ships a decoder, where a hardcoded skip would need someone to notice.
 ///
 /// A repo that wants its mark on the phone should declare a **PNG**. The
-/// `WKWebView` route is viable if that is not good enough — the fetch is already
+/// `WKWebView` route is viable if that is not good enough - the fetch is already
 /// once-per-hash-forever, so it would be one offscreen render per distinct icon
-/// per launch rather than per row — but it is a real piece of machinery and has
+/// per launch rather than per row - but it is a real piece of machinery and has
 /// not been built.
 ///
-/// This is the third implementation of the same three-set structure — the VS
-/// Code extension host and the web `useProjectIcons` have the others — and they
+/// This is the third implementation of the same three-set structure - the VS
+/// Code extension host and the web `useProjectIcons` have the others - and they
 /// genuinely cannot be shared: the difference is the transport each client is
 /// allowed (a webview has no external `connect-src` at all and must be *handed*
 /// data URLs). One design, three homes, for a reason that lives below all of
@@ -111,7 +111,7 @@ final class ProjectIconLoader {
           // Stored **display-ready**, scaled once here rather than per render.
           // The row draws this glyph inline inside a `Text` run (see
           // `SessionRowView.projectIconText`), and a `Text(Image(uiImage:))`
-          // renders at the image's own point size — there is no `.frame` to
+          // renders at the image's own point size - there is no `.frame` to
           // constrain it, because it is a character in a line rather than a
           // view in a stack. A checked-in logo is whatever the repo committed,
           // so an unresized one would set a 512pt line. Once per fetch, keyed
@@ -126,7 +126,7 @@ final class ProjectIconLoader {
 }
 
 extension UIImage {
-  /// Aspect-fit into the 16pt box the project glyph occupies on a session row —
+  /// Aspect-fit into the 16pt box the project glyph occupies on a session row -
   /// the same box as the engine mark one column over.
   ///
   /// Aspect-**fit**, never fill: a declared icon is whatever the repo checked

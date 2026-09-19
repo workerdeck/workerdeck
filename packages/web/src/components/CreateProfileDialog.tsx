@@ -71,7 +71,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
         profile.session = session
       }
     } else if (isCodex) {
-      // Absent means the server's own CODEX_HOME, which is a real choice — do not send an empty string.
+      // Absent means the server's own CODEX_HOME, which is a real choice - do not send an empty string.
       if (codexHome.trim()) {
         profile.codexHome = codexHome.trim()
       }
@@ -108,13 +108,13 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="provider">
-                <SelectItemText>provider — model-agnostic engine</SelectItemText>
+                <SelectItemText>provider - model-agnostic engine</SelectItemText>
               </SelectItem>
               <SelectItem value="claude">
-                <SelectItemText>claude — Agent SDK + config dir</SelectItemText>
+                <SelectItemText>claude - Agent SDK + config dir</SelectItemText>
               </SelectItem>
               <SelectItem value="codex">
-                <SelectItemText>codex — app-server + CODEX_HOME</SelectItemText>
+                <SelectItemText>codex - app-server + CODEX_HOME</SelectItemText>
               </SelectItem>
             </SelectContent>
           </Select>
@@ -185,7 +185,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
             />
           </Field>
           <p className="text-label text-fg-4">
-            Leave capabilities and MCP servers empty to inherit whatever the server&apos;s engine factory wired — that factory is the
+            Leave capabilities and MCP servers empty to inherit whatever the server&apos;s engine factory wired - that factory is the
             ceiling either way, so a grant here can never exceed it. MCP servers are named, never configured: their transport config (and
             any credentials in it) stays on the server.
           </p>
@@ -203,7 +203,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
           </Field>
           <p className="text-label text-fg-4">
             This profile&apos;s <code className="font-mono">CODEX_HOME</code>. Must resolve inside the server&apos;s{' '}
-            <code className="font-mono">allowedConfigDirRoots</code> — a home directory is a credential store, so the server bounds which
+            <code className="font-mono">allowedConfigDirRoots</code> - a home directory is a credential store, so the server bounds which
             ones a managed profile may point at. Leave it empty to run on the server&apos;s own environment.
           </p>
         </>
@@ -219,7 +219,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
             />
           </Field>
           <p className="text-label text-fg-4">
-            Must resolve inside the server&apos;s <code className="font-mono">allowedConfigDirRoots</code> — a config directory is a
+            Must resolve inside the server&apos;s <code className="font-mono">allowedConfigDirRoots</code> - a config directory is a
             credential store, so the server bounds which ones a managed profile may point at.
           </p>
         </>
@@ -247,7 +247,7 @@ export function CreateProfileDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
-        <DialogHeader title="New profile" description="What a session runs as — a Claude config directory, or a model provider." />
+        <DialogHeader title="New profile" description="What a session runs as - a Claude config directory, or a model provider." />
         <DialogBody>
           {/* Remounted per opening so a cancelled draft does not come back. */}
           {open ? <CreateProfileForm onCreated={onCreated} /> : null}

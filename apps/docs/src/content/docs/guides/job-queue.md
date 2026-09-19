@@ -60,28 +60,28 @@ job_started → job_progress (per assistant message / permission request)
             → job_completed (always terminal)
 ```
 
-`job_submitted` goes to local observers and the queue WS only — the submitter already has the
+`job_submitted` goes to local observers and the queue WS only - the submitter already has the
 POST response. `job_progress` carries a `JobProgress` with a preview and, for
 `permission_requested`, the full request (including `AskUserQuestion` input) so webhook
-consumers can answer via `POST /v1/sessions/:sessionId/permissions/:requestId` — see
+consumers can answer via `POST /v1/sessions/:sessionId/permissions/:requestId` - see
 [Permissions](/workerdeck/docs/guides/permissions/) and `questionBehavior` for the
 unattended-run policies.
 
 ## Budgets, watchdog, retries, retention
 
-- **Per-session token limit** (`sessionTokenLimit` / per-job `maxTokens`) — counts input +
+- **Per-session token limit** (`sessionTokenLimit` / per-job `maxTokens`) - counts input +
   output + cache-creation + cache-read tokens; exceeding interrupts and fails the run.
-- **Daily token limit** (`dailyTokenLimit`) — a global budget per UTC day; once exhausted,
+- **Daily token limit** (`dailyTokenLimit`) - a global budget per UTC day; once exhausted,
   queued jobs are held (`paused: true` in stats) until rollover.
-- **Watchdog** (`maxJobDurationMs` / per-job `maxDurationMs`) — a wall-clock cap against stuck
+- **Watchdog** (`maxJobDurationMs` / per-job `maxDurationMs`) - a wall-clock cap against stuck
   CLIs, with a `killGraceMs` wind-down (default 5000 ms) before the run is force-finalized.
-- **Retries** — `attempts` on the request: failed (not canceled) runs re-queue until that many
+- **Retries** - `attempts` on the request: failed (not canceled) runs re-queue until that many
   attempts have been made, delayed by `retryDelayMs` (default 5000 ms), doubled each retry.
   `JobInfo.nextRunAt` says when the next attempt may start.
-- **Parked cap** (`maxParkedDurationMs`) — the bound on waiting rather than running. Time spent
+- **Parked cap** (`maxParkedDurationMs`) - the bound on waiting rather than running. Time spent
   parked on a deferred execution is excluded from the duration watchdog: a run waiting on a
   remote worker is not a stuck CLI.
-- **Retention** (`retention.maxAgeMs`) — a periodic sweep prunes terminal jobs; without it the
+- **Retention** (`retention.maxAgeMs`) - a periodic sweep prunes terminal jobs; without it the
   in-memory adapter grows unboundedly.
 
 ## The live queue stream
@@ -95,7 +95,7 @@ queueHandle.on('stats', (stats) => console.log(stats.running, 'running'))
 ```
 
 The stream is one-way (server to client): every job's lifecycle as it happens, plus refreshed
-stats after lifecycle changes. It has **no replay** — on (re)connect, re-list jobs and treat the
+stats after lifecycle changes. It has **no replay** - on (re)connect, re-list jobs and treat the
 stream as updates. Job mutations stay on REST.
 
 ## The QueueAdapter contract
@@ -104,19 +104,19 @@ Job state lives behind the `QueueAdapter` interface: `add`, `claimNext`, `get`, 
 `update`, `prune`, `addDailyTokens`/`dailyTokens`, and an optional `onWork` wakeup for shared
 backends. Two rules matter when implementing one:
 
-- `claimNext()` must be **atomic** across workers — two concurrent claims must never return the
-  same job — and must skip queued jobs whose `nextRunAt` is still in the future (retry backoff).
+- `claimNext()` must be **atomic** across workers - two concurrent claims must never return the
+  same job - and must skip queued jobs whose `nextRunAt` is still in the future (retry backoff).
 - Daily token counters live in the adapter (keyed by UTC `YYYY-MM-DD`), so budgets hold across
   multiple workers sharing a backend.
 
 The bundled `InMemoryQueueAdapter` is **single-process and non-persistent**: jobs and daily
 counters reset on restart. Back the queue with a shared store for anything beyond one trusted
-host. Note that `JobQueue` currently assumes the claiming process runs the job — multi-worker
+host. Note that `JobQueue` currently assumes the claiming process runs the job - multi-worker
 deployments need a claim-lease/heartbeat, and webhook ordering is per-process.
 
 ## Deferred execution
 
-A job whose run calls a tool nothing here can answer — a remote worker, a batch window, a human —
+A job whose run calls a tool nothing here can answer - a remote worker, a batch window, a human -
 does not sit and hold a slot. The session **parks**: its state is snapshotted, its runner is torn
 down, and the job goes `parked` (`job_parked`, with the `executionId` it waits on). It keeps no
 concurrency slot and burns no wall-clock budget, so the next queued job starts immediately.
@@ -129,17 +129,17 @@ curl -X POST $SERVER/v1/executions/$EXECUTION_ID/result \
   -d '{"status":"ok","output":{"type":"json","value":{"rows":128}}}'
 ```
 
-The session is rebuilt under its own id — same transcript, same `seq` numbering, mid-turn — the
+The session is rebuilt under its own id - same transcript, same `seq` numbering, mid-turn - the
 result goes into the agent loop, and the job returns to `running` (`job_resumed`) until its turn
 result completes it. `QueueStats.parked` counts the waiting runs; `JobInfo.parkedAt` /
 `parkedExecutionId` say what each one is waiting for.
 
 `parked` is not terminal anywhere: `claimNext` never claims one, retention never prunes one, and
-cancelling a parked job discards its snapshot so nothing can wake it. A `failed` result — or the
-execution watchdog's timeout — reaches the agent as ordinary tool output, which it adapts to,
+cancelling a parked job discards its snapshot so nothing can wake it. A `failed` result - or the
+execution watchdog's timeout - reaches the agent as ordinary tool output, which it adapts to,
 rather than failing the run. Wiring the executor side is in
 [the server reference](/workerdeck/docs/reference/server/).
 
-A park that may outlive the process needs a durable store —
+A park that may outlive the process needs a durable store -
 `parking: { store: createFileSessionStore({ dir }) }`, plus the restart guard, in
 [Deployment](/workerdeck/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).

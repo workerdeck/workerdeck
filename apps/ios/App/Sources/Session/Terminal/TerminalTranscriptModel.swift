@@ -5,8 +5,8 @@ import WorkerDeckKit
 /// Everything the terminal transcript needs to draw and to navigate: the folded
 /// rows, their heights, and where each one sits.
 ///
-/// It exists because all three are derived from the same two inputs — the
-/// transcript items and the cell — and deriving them in a view body would redo
+/// It exists because all three are derived from the same two inputs - the
+/// transcript items and the cell - and deriving them in a view body would redo
 /// the whole fold on every frame of a streaming turn. Held here, a delta
 /// re-plans the one row that changed (see `TerminalPlanCache`) and re-sums an
 /// array of doubles.
@@ -18,7 +18,7 @@ import WorkerDeckKit
 final class TerminalTranscriptModel {
   private(set) var rows = TerminalRows(rows: [])
   private(set) var book: TerminalHeightBook
-  /// Ascending row indices of the human's own prompts — what the sticky prompt
+  /// Ascending row indices of the human's own prompts - what the sticky prompt
   /// binary-searches. Cached with the fold rather than derived per scroll frame:
   /// it is a walk of the transcript and it changes only when the rows do.
   private(set) var promptRows: [Int] = []
@@ -26,8 +26,8 @@ final class TerminalTranscriptModel {
   /// Which blocks are open. Here rather than in a row view, and that is the
   /// whole design of this feature: a `UICollectionViewLayout` takes every frame
   /// from the height book, so a height the book does not know about is a frame
-  /// the layout gets wrong. Cell-local `@State` — which is what the web client
-  /// uses — would be exactly that. See `TerminalExpansion.swift`.
+  /// the layout gets wrong. Cell-local `@State` - which is what the web client
+  /// uses - would be exactly that. See `TerminalExpansion.swift`.
   private(set) var expansion = TerminalExpansion()
   /// The last row a press *opened*, for the scroll view to bring back into view
   /// if the expansion pushed its first line above the fold. Nonce-keyed because
@@ -35,15 +35,15 @@ final class TerminalTranscriptModel {
   private(set) var reveal: TranscriptRevealRequest?
   private var revealNonce = 0
 
-  /// The items these rows fold — the frame's own list when this model folds a
+  /// The items these rows fold - the frame's own list when this model folds a
   /// takeover. Readable because the scrubber's input must describe the same
   /// items the fold did: the rail's marks resolve through these rows, and a
   /// caller's unfolded list would be a second answer to "what is on screen".
   private(set) var items: [TranscriptItem] = []
 
   /// The catch-up seam: how many transcript items had already been read when
-  /// this session was opened. Fixed by the caller — a boundary that moved as
-  /// new rows arrived would be a boundary that never means anything — and
+  /// this session was opened. Fixed by the caller - a boundary that moved as
+  /// new rows arrived would be a boundary that never means anything - and
   /// settable only to `nil`, which is what "dismiss" does.
   ///
   /// Its **label** is not held beside it: the recap counts what has arrived
@@ -51,10 +51,10 @@ final class TerminalTranscriptModel {
   /// `summarizeSince`) and a turn that lands while the bar is up says so.
   private(set) var recapAt: Int?
   /// Where the seam sits in *row* space, for the rail's mark and for the rows
-  /// above it to be drawn as read. `nil` whenever the fold spliced no seam —
+  /// above it to be drawn as read. `nil` whenever the fold spliced no seam -
   /// including the case the boundary is set but nothing has happened since.
   private(set) var recapRow: Int?
-  /// When the reader was last here (epoch ms), which the seam's line ends with —
+  /// When the reader was last here (epoch ms), which the seam's line ends with -
   /// the web `RecapRow`'s `· last here 42m`. Held beside the boundary because it
   /// is the same fact: one mark, read once.
   private var recapSince: Double?
@@ -62,7 +62,7 @@ final class TerminalTranscriptModel {
   /// prompt renders below the transcript. Passed per update, like `frameTask`.
   private var pendingApprovals = 0
 
-  /// Set when this model folds a sub-agent's frame — the takeover. Constant for
+  /// Set when this model folds a sub-agent's frame - the takeover. Constant for
   /// the model's whole life (a takeover is one agent, remounted per open), which
   /// is what keeps the plan cache valid: the cache keys on row and expansion
   /// alone, so a frame id that changed under it would poison every height.
@@ -79,7 +79,7 @@ final class TerminalTranscriptModel {
 
   /// Refold and re-measure. Cheap by design: a streamed delta changes the last
   /// row, so the cache answers for every row above it.
-  /// - Parameter frameTask: the spawning call, when this model folds a frame —
+  /// - Parameter frameTask: the spawning call, when this model folds a frame -
   ///   its brief leads the rows (`TerminalRows.build`). Passed per update
   ///   rather than held: the call is an item of the *full* transcript, which
   ///   this model never sees, and only the caller that sliced the frame has it.
@@ -111,7 +111,7 @@ final class TerminalTranscriptModel {
     let rows = TerminalRows.build(
       items: items, recapAt: label == nil ? nil : recapAt, recapLabel: label ?? "",
       frameTask: frameTask)
-    // Nothing to do when neither the content nor the cell moved — this is called
+    // Nothing to do when neither the content nor the cell moved - this is called
     // from a view update, which fires for reasons that are not either.
     if !metricsChanged && !recapChanged && rows == self.rows { return }
 
@@ -124,7 +124,7 @@ final class TerminalTranscriptModel {
     cache.evict(keeping: rows)
   }
 
-  /// Where the catch-up seam goes, or `nil` for none — "dismiss", and a frame,
+  /// Where the catch-up seam goes, or `nil` for none - "dismiss", and a frame,
   /// which never carries one. Assignment only: the refold is `update`'s, which
   /// every caller runs in the same pass.
   func setRecap(at boundary: Int?, since: Double? = nil) {
@@ -134,15 +134,15 @@ final class TerminalTranscriptModel {
 
   /// A press on a line: open or close what it points at, then re-measure.
   ///
-  /// The rows are untouched — expansion is not a refold — so keys, indices and
+  /// The rows are untouched - expansion is not a refold - so keys, indices and
   /// `rowIndex(forItem:)` all stand, and the scroll view's escaped-regime anchor
   /// holds the reader still over the change for free.
   /// - Parameter fetch: how to ask for the rest of a truncated result. Absent
   ///   outside a live session, and the press then does nothing rather than
   ///   promising text nobody can deliver.
   /// - Parameter openSubagent: how a `Task` row's press raises the takeover.
-  ///   Absent — the preview harness, or any surface with no navigation stack to
-  ///   push — the press falls back to the inline toggle, so the target never
+  ///   Absent - the preview harness, or any surface with no navigation stack to
+  ///   push - the press falls back to the inline toggle, so the target never
   ///   visibly does nothing: the web draws no affordance when it has nowhere to
   ///   go, and here the press rides the plan, so the fallback is the view
   ///   layer's version of the same honesty.
@@ -159,7 +159,7 @@ final class TerminalTranscriptModel {
       return
     }
     // "Show everything" on a result the replay delivered as a head is a network
-    // round trip, so it does not lift a budget — it enters `pending`, the
+    // round trip, so it does not lift a budget - it enters `pending`, the
     // planner draws a line saying what is in flight, and the text arrives as a
     // mutation of the item (see `update`). Planning from `totalChars` instead
     // would invent a line count for text nobody has seen.
@@ -170,7 +170,7 @@ final class TerminalTranscriptModel {
       return
     }
     // The row's whole key set goes with the press, so closing a container closes
-    // what it contains — see `TerminalExpansion.close`. Computed here because
+    // what it contains - see `TerminalExpansion.close`. Computed here because
     // this is the only place that holds both the press and the rows it landed
     // on; it is one block's walk, on a press.
     let opened = expansion.apply(press, subtree: subtreeKeys(at: row))
@@ -180,7 +180,7 @@ final class TerminalTranscriptModel {
     reveal = TranscriptRevealRequest(row: row, nonce: revealNonce)
   }
 
-  /// Every expansion key inside the row at this index — a container's subtree,
+  /// Every expansion key inside the row at this index - a container's subtree,
   /// for the press that closes it. Empty for a recap seam or an out-of-range
   /// index, both of which open nothing.
   private func subtreeKeys(at row: Int) -> Set<ExpansionKey> {
@@ -212,8 +212,8 @@ final class TerminalTranscriptModel {
   ///
   /// Driven off the items rather than off the fetch's completion, which is what
   /// makes it self-healing: the hydration lands in transcript state, and any
-  /// path that puts the whole text on an item — a fetch, a re-attach without
-  /// truncation — resolves the row the same way.
+  /// path that puts the whole text on an item - a fetch, a re-attach without
+  /// truncation - resolves the row the same way.
   private func resolveFetched() {
     guard !expansion.pending.isEmpty else { return }
     for id in expansion.pending where truncatedCall(id) == nil {
@@ -232,7 +232,7 @@ final class TerminalTranscriptModel {
   /// transcript is megabytes of strings nobody is reading.
   func plan(at index: Int) -> [TermLine] {
     guard index >= 0, index < rows.count else { return [] }
-    // The **subset**, not the whole expansion — which is what the book planned
+    // The **subset**, not the whole expansion - which is what the book planned
     // this row's cached height from (`TerminalHeightBook.lineCounts`). Handing
     // the two a different value made "the lines drawn are as tall as the height
     // reserved" a claim that two derivations agree, resting on the planner
@@ -246,7 +246,7 @@ final class TerminalTranscriptModel {
 
   func gapAbove(_ index: Int) -> Bool { rows.gapBefore(index) }
 
-  /// Where a transcript item is on screen — through the row model, never by
+  /// Where a transcript item is on screen - through the row model, never by
   /// arithmetic. A folded run and an absorbed subagent child both break any
   /// index-to-row shortcut.
   func rowIndex(forItem index: Int) -> Int { rows.rowIndex(forItem: index) }

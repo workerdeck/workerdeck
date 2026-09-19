@@ -73,7 +73,7 @@ export function fakeHarness(models?: Array<Record<string, unknown>>) {
   return { emit, end, captured, interrupt, setModel, queryFn }
 }
 
-// A query that never yields — for suites where the claude sessions are only ever built.
+// A query that never yields - for suites where the claude sessions are only ever built.
 export function idleQuery(): Query {
   return {
     [Symbol.asyncIterator]() {
@@ -129,7 +129,7 @@ export function frameCollector(ws: WebSocket) {
   return { frames, waitFor }
 }
 
-// A Runner that does nothing but echo its config back through `info()` — scope and title
+// A Runner that does nothing but echo its config back through `info()` - scope and title
 // included, which is exactly what `buildRunner` and the scope suites assert on.
 export function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   let title: string | undefined

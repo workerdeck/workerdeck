@@ -85,7 +85,7 @@ function RateLimitMeter({ label, info, now }: { label: string; info: RateLimitIn
         <div className="flex min-w-36 flex-col gap-1 py-0.5">
           <div className="flex items-center justify-between gap-2">
             <span>{label} usage</span>
-            <span className="font-mono text-fg-3">{pct !== undefined ? `${pct.toFixed(1)}%` : '—'}</span>
+            <span className="font-mono text-fg-3">{pct !== undefined ? `${pct.toFixed(1)}%` : '-'}</span>
           </div>
           {resetsAtMs !== undefined ? (
             <div className="flex items-center justify-between gap-2">

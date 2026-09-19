@@ -97,7 +97,7 @@ describe('ancestorsWithin', () => {
     expect(ancestorsWithin('/p', '/p')).toEqual([])
   })
 
-  it('respects the path boundary — /src/app is not under /src/a', () => {
+  it('respects the path boundary - /src/app is not under /src/a', () => {
     expect(ancestorsWithin('/src/a', '/src/app/main.ts')).toEqual([])
   })
 

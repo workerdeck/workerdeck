@@ -56,7 +56,7 @@ describe('listCodexSessions', () => {
         data: [
           row({ id: 't1', name: 'My thread', gitInfo: { branch: 'main' } }),
           row({ id: 't2', preview: 'second', createdAt: 100, updatedAt: null }),
-          row({ id: 'gone', ephemeral: true }), // never materialized — not resumable
+          row({ id: 'gone', ephemeral: true }), // never materialized - not resumable
         ],
         nextCursor: null,
       },
@@ -88,8 +88,8 @@ describe('listCodexSessions', () => {
       },
       {
         sessionId: 't2',
-        summary: 'second', // no name — preview is the summary line
-        lastModified: 100_000, // no updatedAt — createdAt stands in
+        summary: 'second', // no name - preview is the summary line
+        lastModified: 100_000, // no updatedAt - createdAt stands in
         createdAt: 100_000,
         customTitle: undefined,
         firstPrompt: 'second',

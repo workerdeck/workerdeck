@@ -20,7 +20,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
-      # Side-loadable VS Code extension — not on the Marketplace yet, so the CI
+      # Side-loadable VS Code extension - not on the Marketplace yet, so the CI
       # artifact IS the distribution channel.
       - run: pnpm --filter workerdeck-vscode package
       - uses: actions/upload-artifact@v7

@@ -275,7 +275,7 @@ describe('CSRF: the Origin policy', () => {
     expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { cookie, host } }))).toBeNull()
   })
 
-  it('requires a matching Origin on the WS upgrade — the CORS-exempt path', async () => {
+  it('requires a matching Origin on the WS upgrade - the CORS-exempt path', async () => {
     const { auth, cookie, host } = await cookieAuth()
     const upgrade = { cookie, host, upgrade: 'websocket' }
     expect(await auth.authenticate(fakeReq({ headers: { ...upgrade, origin: `http://${host}` } }))).toBeTruthy()
@@ -376,7 +376,7 @@ describe('proxy trust', () => {
     expect(await bare.authenticate(makeReq(bareCookie))).toBeNull()
   })
 
-  it('keys the throttle on the last x-forwarded-for hop — the proxy-written one', async () => {
+  it('keys the throttle on the last x-forwarded-for hop - the proxy-written one', async () => {
     const base = await startHost(createCliAuth({ secret: SECRET, trustProxy: true, throttle: { maxFailuresPerIp: 1 } }))
     const attempt = (xff: string) =>
       request(`${base}/auth/login`, {
@@ -402,7 +402,7 @@ describe('throttling', () => {
       body: new URLSearchParams({ secret }).toString(),
     })
 
-  it('locks an IP out after repeated failures — even for the right secret — until the window passes', async () => {
+  it('locks an IP out after repeated failures - even for the right secret - until the window passes', async () => {
     const base = await startHost(createCliAuth({ secret: SECRET, throttle: { windowMs: 200, maxFailuresPerIp: 2 } }))
     expect((await jsonAttempt(base, 'wrong-one-111')).status).toBe(401)
     expect((await jsonAttempt(base, 'wrong-two-222')).status).toBe(401)

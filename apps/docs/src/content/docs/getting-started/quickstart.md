@@ -7,7 +7,7 @@ order: 3
 ## Prerequisites
 
 - Node ≥ 22 and pnpm.
-- Anthropic credentials in your environment — WorkerDeck implements no auth of its own; the
+- Anthropic credentials in your environment - WorkerDeck implements no auth of its own; the
   Agent SDK resolves whatever the operator's environment provides (`ANTHROPIC_API_KEY`,
   Bedrock/Vertex, or your own `claude login`). See
   [Auth & the providers' terms](/workerdeck/docs/guides/auth/).
@@ -30,28 +30,28 @@ pnpm web      # optional: vite dashboard on :5191 with HMR, proxying /v1 to the 
 ```
 
 `pnpm server` is the same `workerdeck` CLI as above, pointed at
-`examples/dev-server.config.mjs` — there is no separate dev entry point, so the thing you develop
+`examples/dev-server.config.mjs` - there is no separate dev entry point, so the thing you develop
 against and the thing you ship are one code path. Edit that config directly; flags still win
 (`pnpm server --port 9000`). It runs without auth, which the CLI only permits on loopback: bind
 a routable interface to reach it from another device (`pnpm server --host 0.0.0.0`) and the CLI
-generates an auth key for you — printed once, reused across restarts.
+generates an auth key for you - printed once, reused across restarts.
 
 ## Create a first session
 
 In the dashboard:
 
 1. Point the session at a project directory.
-2. Give it a prompt — plain text or a skill invocation like `/verify-content 42`.
+2. Give it a prompt - plain text or a skill invocation like `/verify-content 42`.
 3. Pick a permission mode, and watch the live transcript.
 
 Tool calls not covered by the permission mode surface as approve/deny cards; the tool blocks
 until you decide, for as long as that takes (`--approval-timeout` sets a deadline). Closed or restarted-away sessions
-can be resumed from the SDK's on-disk store ("Resume a previous session") — the server backfills
+can be resumed from the SDK's on-disk store ("Resume a previous session") - the server backfills
 the prior transcript as replay events.
 
 ## Minimal embed
 
-Server side — the host app supplies the authenticator; the worker has no auth story of its own:
+Server side - the host app supplies the authenticator; the worker has no auth story of its own:
 
 ```ts
 import { createWorkerServer } from '@workerdeck/server'
@@ -80,15 +80,15 @@ const session = await client.createSession({
 <SessionPanel client={client} sessionId={session.id} />
 ```
 
-`@workerdeck/ui` ships source styles that your app's Tailwind v4 build compiles — the wiring
+`@workerdeck/ui` ships source styles that your app's Tailwind v4 build compiles - the wiring
 (theme import, `@source` directives, theme attribute) is covered in
 [Embedding the UI](/workerdeck/docs/guides/embedding/).
 
 ## Next steps
 
-- [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/) — an agent inside
+- [Embed WorkerDeck in your app](/workerdeck/docs/guides/embed-in-your-app/) - an agent inside
   your own product: gateway in your server, sessions owned by your users.
-- [Embedding the UI](/workerdeck/docs/guides/embedding/) — the full options ladder, from styled
+- [Embedding the UI](/workerdeck/docs/guides/embedding/) - the full options ladder, from styled
   panel down to in-process `SessionRunner`.
-- [Permissions](/workerdeck/docs/guides/permissions/) — approvals, modes, tool allowlists.
-- [Job queue](/workerdeck/docs/guides/job-queue/) — unattended one-shot runs with webhooks.
+- [Permissions](/workerdeck/docs/guides/permissions/) - approvals, modes, tool allowlists.
+- [Job queue](/workerdeck/docs/guides/job-queue/) - unattended one-shot runs with webhooks.

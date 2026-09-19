@@ -61,7 +61,7 @@ describe('CodexRunner: turns, streaming and item mapping', () => {
     expect(context?.usage.totalTokens).toBe(USAGE_A.totalTokens)
   })
 
-  it('streams token deltas — text and reasoning with section breaks — suppressibly', async () => {
+  it('streams token deltas - text and reasoning with section breaks - suppressibly', async () => {
     const script = (emit: (m: string, p: unknown) => void, turnId: string) => {
       const base = { threadId: 'thread-1', turnId, itemId: 'item_0' }
       emit('item/reasoning/summaryTextDelta', { ...base, summaryIndex: 0, delta: 'First' })
@@ -387,7 +387,7 @@ describe('CodexRunner: turns, streaming and item mapping', () => {
     })
   })
 
-  it('leaves read-only alone — network_access is scoped to workspace-write', async () => {
+  it('leaves read-only alone - network_access is scoped to workspace-write', async () => {
     const peer = scriptedPeer()
     peer.respond('config/read', () => ({
       config: { sandbox_workspace_write: { writable_roots: [], network_access: true } },

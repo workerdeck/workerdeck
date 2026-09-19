@@ -44,7 +44,7 @@ export function WithActions({ actions, children, className }: { actions: ReactNo
 
 // Bookmarks are a host concern (which items, where they persist); the transcript only needs
 // membership and a toggle. A missing provider renders no action at all, so embeddings that
-// never wire bookmarks pay nothing — the same contract AffordanceContext has.
+// never wire bookmarks pay nothing - the same contract AffordanceContext has.
 export type BookmarkHandle = {
   has: (itemId: string) => boolean
   toggle: (itemId: string) => void

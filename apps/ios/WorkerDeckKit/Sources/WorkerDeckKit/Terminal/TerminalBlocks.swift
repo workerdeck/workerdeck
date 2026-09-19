@@ -1,6 +1,6 @@
 import Foundation
 
-/// The terminal transcript's block model — a port of
+/// The terminal transcript's block model - a port of
 /// `packages/ui/src/components/terminal/blocks.ts`.
 ///
 /// Two folds, and each is the CLI's own compression:
@@ -14,7 +14,7 @@ import Foundation
 /// The load-bearing difference between them: a run is built from **adjacency**,
 /// a task from **membership** (`parentToolUseId`), because parallel Tasks
 /// interleave in the stream. That is what broke the old row-model contract,
-/// where a row covered a contiguous `[index, index + len)` — read
+/// where a row covered a contiguous `[index, index + len)` - read
 /// ``TerminalRows/rowIndex(forItem:)`` before touching anything positional.
 
 // MARK: - Blocks
@@ -29,7 +29,7 @@ public struct TerminalItemBlock: Equatable, Sendable {
 public struct TerminalRunBlock: Equatable, Sendable {
   public var key: String
   public var run: [ToolCallItem]
-  /// Every member's global transcript index, in stream order — `childIndices`'
+  /// Every member's global transcript index, in stream order - `childIndices`'
   /// sibling, and needed for the same reason: a run folded across an absorbed
   /// gap has no `[index, index + count)` coverage, so a member's ordinal within
   /// the run (what the scrubber anchors a failure by) is unrecoverable from
@@ -37,7 +37,7 @@ public struct TerminalRunBlock: Equatable, Sendable {
   public var indices: [Int]
   public var index: Int
 
-  /// What a press on the summary line toggles — and **`nil` for a run of one**,
+  /// What a press on the summary line toggles - and **`nil` for a run of one**,
   /// which ``TerminalPlanner/planRun`` draws as the call itself, so there is no
   /// summary line and nothing for a `run:` key to open.
   ///
@@ -69,7 +69,7 @@ public enum TerminalLeafBlock: Equatable, Sendable {
     }
   }
 
-  /// The item this leaf is *spaced as* — what the blank-line rule reads.
+  /// The item this leaf is *spaced as* - what the blank-line rule reads.
   public var spacingItem: TranscriptItem? {
     switch self {
     case .item(let block): return block.item
@@ -87,7 +87,7 @@ public struct TerminalTaskBlock: Equatable, Sendable {
   public var childIndices: [Int]
   public var index: Int
 
-  /// What a press on the header line toggles. Always present — a `Task` is
+  /// What a press on the header line toggles. Always present - a `Task` is
   /// always drawn as a `Task`, whatever it holds.
   public var expansionKey: ExpansionKey { .task(task.id) }
 }
@@ -113,7 +113,7 @@ public enum TerminalBlock: Equatable, Sendable {
     }
   }
 
-  /// The item a block is *spaced as* — what the blank-line rule reads.
+  /// The item a block is *spaced as* - what the blank-line rule reads.
   public var spacingItem: TranscriptItem? {
     switch self {
     case .item(let block): return block.item
@@ -140,7 +140,7 @@ public func parentToolUseId(of item: TranscriptItem) -> String? {
 }
 
 /// **The frame membership rule**: the items one sub-agent produced, and nothing
-/// else — what the takeover renders instead of the whole conversation.
+/// else - what the takeover renders instead of the whole conversation.
 ///
 /// The port of `subagentItems` (`packages/ui/src/components/terminal/blocks.ts`),
 /// and one function rather than a filter at each call site for the reason stated
@@ -151,8 +151,8 @@ public func parentToolUseId(of item: TranscriptItem) -> String? {
 /// It picks up the brief (a `user` item *with* a parent), the thinking, the
 /// streamed text (stream ids are namespaced per sidechain, so a streaming item
 /// carries the parent like any other), every tool call with its result, and the
-/// final report. It excludes the spawning call itself — that is the frame, not a
-/// row in it — and every other agent's work.
+/// final report. It excludes the spawning call itself - that is the frame, not a
+/// row in it - and every other agent's work.
 ///
 /// The slice is safe to hand straight to ``terminalBlocks(items:offset:)`` at
 /// offset 0: nothing in it is top-level, so nothing absorbs, and consecutive
@@ -165,7 +165,7 @@ public func subagentItems(
   items.filter { parentToolUseId(of: $0) == parent }
 }
 
-/// The spawning call behind a frame, when the transcript holds it — the one
+/// The spawning call behind a frame, when the transcript holds it - the one
 /// item ``subagentItems(_:parentToolUseId:)`` deliberately excludes, looked up
 /// by the takeover for the strip and for the brief row the frame opens with.
 /// One function so the two callers cannot disagree about what "the task" is.
@@ -176,13 +176,13 @@ public func subagentTask(_ items: [TranscriptItem], id: String) -> ToolCallItem?
   return nil
 }
 
-/// **Where** a tool call sits in the transcript — the other half of the seam a
+/// **Where** a tool call sits in the transcript - the other half of the seam a
 /// sub-*task* press rides.
 ///
 /// A task step names a `tool_use` id with no agent behind it, so there is no
 /// frame to open: the press opens the session and travels to that call's own
 /// row. That journey is `toolUseId → item index → row index → scrollToRow`, and
-/// this is the first hop. The rest is already built —
+/// this is the first hop. The rest is already built -
 /// `TerminalTranscriptModel.rowIndex(forItem:)` converts, and the focus request
 /// the push-notification deep link uses does the scrolling.
 ///
@@ -208,7 +208,7 @@ public func toolCallItemIndex(_ items: [TranscriptItem], id: String) -> Int? {
 ///   - offset: the transcript index the slice starts at. The virtualized shell
 ///     folds each side of the catch-up boundary separately, which is what stops
 ///     a run's count from spanning "what you already read".
-///   - fold: `false` gives one block per item — the cards variant, which does no
+///   - fold: `false` gives one block per item - the cards variant, which does no
 ///     folding at all.
 public func terminalBlocks(
   _ items: [TranscriptItem], offset: Int = 0, fold: Bool = true
@@ -225,7 +225,7 @@ public func terminalBlocks(
     if case .toolCall(let call) = item, call.parentToolUseId == nil { topLevelCalls.insert(call.id) }
   }
 
-  // Pre-pass 2: membership, by parent id and never by adjacency — parallel
+  // Pre-pass 2: membership, by parent id and never by adjacency - parallel
   // subagents interleave, so the whole slice must be scanned before any block
   // is built.
   var childrenOf: [String: [(item: TranscriptItem, index: Int)]] = [:]
@@ -265,7 +265,7 @@ public func terminalBlocks(
 /// A run block is keyed by its **first** call, so the key stays stable as the
 /// run grows and the virtualizer keeps the measurement it already has. A `Task`
 /// row sitting between two runs does not match here, which is why a task breaks
-/// a run — right, since the task is not adjacent to what follows it on screen.
+/// a run - right, since the task is not adjacent to what follows it on screen.
 private func pushLeaf(_ out: inout [TerminalBlock], _ item: TranscriptItem, _ index: Int) {
   if case .toolCall(let call) = item {
     if case .run(var previous) = out.last, let first = previous.run.first,
@@ -286,8 +286,8 @@ private func pushLeaf(_ out: inout [TerminalBlock], _ item: TranscriptItem, _ in
 }
 
 /// A task's children can only ever be leaves: absorption is one level deep, so
-/// `pushLeaf` never produces a task here. A grandchild — whose parent is itself
-/// a subagent's call — is deliberately *not* absorbed and renders at top level,
+/// `pushLeaf` never produces a task here. A grandchild - whose parent is itself
+/// a subagent's call - is deliberately *not* absorbed and renders at top level,
 /// stepped in. An unmapped item must be visible, never gone.
 private func asLeaf(_ block: TerminalBlock) -> TerminalLeafBlock {
   switch block {
@@ -312,7 +312,7 @@ public func taskChildItems(_ block: TerminalTaskBlock) -> [TranscriptItem] {
 // MARK: - Blank lines
 
 /// The theme's only spacing rule: one blank line between blocks, except between
-/// two tool calls — a collapsed task or run sits flush with the tool rows of the
+/// two tool calls - a collapsed task or run sits flush with the tool rows of the
 /// same turn.
 public func needsBlank(_ previous: TranscriptItem, _ next: TranscriptItem) -> Bool {
   !(previous.kind == .toolCall && next.kind == .toolCall)

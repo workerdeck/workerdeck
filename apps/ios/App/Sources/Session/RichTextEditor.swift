@@ -6,8 +6,8 @@ import UIKit
 ///
 /// SwiftUI's `TextField`/`TextEditor` can do neither of the two things a prompt
 /// composer needs on this deployment target (17.0): render *part* of the draft
-/// differently, and say where the caret is. Both come from the same place —
-/// `UITextView` — so the bridge buys styled tokens and mid-message completion at
+/// differently, and say where the caret is. Both come from the same place -
+/// `UITextView` - so the bridge buys styled tokens and mid-message completion at
 /// once, rather than one at a time.
 ///
 /// Styling is applied to the `textStorage` rather than by replacing
@@ -21,14 +21,14 @@ struct RichTextEditor: UIViewRepresentable {
   var isEnabled = true
   /// Grows to this many lines of body text, then scrolls.
   var maxLines = 6
-  /// Text *and* caret, together, on every edit — deriving the caret from a
+  /// Text *and* caret, together, on every edit - deriving the caret from a
   /// separate `onChange` would race the text it belongs to.
   var onEdit: (String, NSRange) -> Void = { _, _ in }
   /// A paste carrying a picture. Returns **true** when it was taken as an
   /// attachment, which is also the instruction to drop the paste: a clipboard
   /// copied from a browser holds the image *and* its alt text, and inserting
   /// both would stage a photo and type a caption nobody asked for. The web
-  /// client's rule, ported — `use-prompt-area-events.ts` returns the moment it
+  /// client's rule, ported - `use-prompt-area-events.ts` returns the moment it
   /// finds an image, before it looks at a single text flavour.
   var onImagePaste: () -> Bool = { false }
   /// A character typed as the **first** one into an empty field, offered to the parent
@@ -38,7 +38,7 @@ struct RichTextEditor: UIViewRepresentable {
   /// It has to be refused *here* rather than cleared from `onEdit`, and that is the whole
   /// reason this hook exists. `textViewDidChangeSelection` fires before `textViewDidChange`
   /// on a keystroke, so a parent that emptied the draft from `onEdit` had it written
-  /// straight back by the `parent.text = view.text` below — the mode turned on and the
+  /// straight back by the `parent.text = view.text` below - the mode turned on and the
   /// character stayed, which on a shell prompt meant `! ls` reaching `/bin/sh`.
   var onLeadingTrigger: (String) -> Bool = { _ in false }
 
@@ -48,7 +48,7 @@ struct RichTextEditor: UIViewRepresentable {
   @Environment(\.transcriptFont) private var transcriptFont
   @Environment(\.transcriptVariant) private var transcriptVariant
 
-  /// This render's styling — a value, so nothing is left behind for the next
+  /// This render's styling - a value, so nothing is left behind for the next
   /// field to inherit.
   private var style: DraftStyle {
     DraftStyle(variant: transcriptVariant, font: transcriptFont)
@@ -57,7 +57,7 @@ struct RichTextEditor: UIViewRepresentable {
   /// The typeface, and the one place the variant outranks the preference.
   ///
   /// `transcriptFont` is a **Cards-only** setting everywhere else in the app,
-  /// because the terminal theme is monospace *by construction* — that is its
+  /// because the terminal theme is monospace *by construction* - that is its
   /// premise, not a preference expressed in it. The field had been following the
   /// preference regardless, so a terminal transcript drawn in a monospaced grid
   /// sat above a prompt typed in the system sans: the one row you author was the
@@ -130,7 +130,7 @@ struct RichTextEditor: UIViewRepresentable {
     }
   }
 
-  /// Height follows the content until it hits `maxLines`, then the view scrolls —
+  /// Height follows the content until it hits `maxLines`, then the view scrolls -
   /// the growing-composer behaviour `TextField(axis: .vertical)` gave for free.
   func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context)
     -> CGSize?
@@ -158,7 +158,7 @@ struct RichTextEditor: UIViewRepresentable {
   final class Coordinator: NSObject, UITextViewDelegate {
     var parent: RichTextEditor
     /// This field's styling, held here because the delegate below runs with
-    /// nothing in hand but the view — which is exactly what the process-wide
+    /// nothing in hand but the view - which is exactly what the process-wide
     /// statics used to be working around.
     var style = DraftStyle(variant: .cards, font: .regular)
     /// True while `updateUIView` is writing into the view. The delegate fires
@@ -207,7 +207,7 @@ struct RichTextEditor: UIViewRepresentable {
 
 /// The composer's text view, subclassed for one reason: a pasted picture.
 ///
-/// `UITextViewDelegate` has no paste hook — `shouldChangeTextIn` sees the text a
+/// `UITextViewDelegate` has no paste hook - `shouldChangeTextIn` sees the text a
 /// paste produced, never the pasteboard it came from, and by then the image is
 /// already gone. `paste(_:)` is the only place the clipboard is still whole.
 final class DraftTextView: UITextView {
@@ -222,7 +222,7 @@ final class DraftTextView: UITextView {
   /// Without this an image-only clipboard has no Paste item at all: a
   /// `UITextView` offers Paste when the pasteboard holds *text*, and a
   /// screenshot holds none. The check is `hasImages`, which is a detection
-  /// query and does not raise the system's paste prompt — the prompt belongs on
+  /// query and does not raise the system's paste prompt - the prompt belongs on
   /// the tap, not on the menu appearing.
   override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
     if action == #selector(paste(_:)), UIPasteboard.general.hasImages { return true }
@@ -235,7 +235,7 @@ final class DraftTextView: UITextView {
 ///
 /// **A value, derived from its two inputs.** `design` and `textStyle` were
 /// process-wide mutable statics, written by `RichTextEditor` during its own
-/// `makeUIView`/`updateUIView` and read by anyone — which is a cache of a
+/// `makeUIView`/`updateUIView` and read by anyone - which is a cache of a
 /// preference dressed as a constant, and it bit: the composer's placeholder read
 /// it during the same render pass and got the *previous* field's font, so the
 /// placeholder had to be re-derived from the variant by hand, which is two
@@ -244,7 +244,7 @@ final class DraftTextView: UITextView {
 ///
 /// Constructed from `(variant, font)`, so the placeholder and the field are the
 /// same derivation rather than two that have to agree, and threaded to the
-/// delegate through the coordinator — which is what the statics were really
+/// delegate through the coordinator - which is what the statics were really
 /// working around: `restyle` runs from a `UITextViewDelegate` with nothing in
 /// hand but the view.
 struct DraftStyle: Equatable {
@@ -252,7 +252,7 @@ struct DraftStyle: Equatable {
   var textStyle: UIFont.TextStyle
   var isTerminal: Bool
 
-  /// The one derivation. `variant` outranks `font` — see
+  /// The one derivation. `variant` outranks `font` - see
   /// `RichTextEditor.wantedDesign` for why the terminal theme is monospace by
   /// construction rather than by preference.
   init(variant: TranscriptVariant, font: TranscriptFont) {
@@ -261,9 +261,9 @@ struct DraftStyle: Equatable {
     isTerminal = variant.isTerminal
   }
 
-  /// The field's own padding. Two places have to agree with it — the text view,
+  /// The field's own padding. Two places have to agree with it - the text view,
   /// and the placeholder that has to land exactly where the first character will
-  /// — so it is derived here once rather than spelled twice.
+  /// - so it is derived here once rather than spelled twice.
   ///
   /// **No inset at all in the terminal shape.** There the field is one cell of a
   /// row that supplies every gap itself (`docked` and `TermComposerMetrics` set
@@ -277,7 +277,7 @@ struct DraftStyle: Equatable {
 
   /// Dynamic Type's body font in the chosen design. Built from the descriptor
   /// rather than `monospacedSystemFont(ofSize:)` so it keeps tracking the
-  /// content-size category — `adjustsFontForContentSizeCategory` needs a font
+  /// content-size category - `adjustsFontForContentSizeCategory` needs a font
   /// that came from a text style.
   var base: UIFont {
     let body = UIFont.preferredFont(forTextStyle: textStyle)
@@ -293,7 +293,7 @@ struct DraftStyle: Equatable {
   /// hardcoded what `lineTextUIStyle` happens to *be*: repoint that constant and
   /// the field and the glyphs both follow it (they derive from `base`) while the
   /// placeholder would silently keep the old size and stop
-  /// landing on the first character — the placeholder's one job, and the same
+  /// landing on the first character - the placeholder's one job, and the same
   /// two-spellings-of-one-rule this type was rewritten to end.
   var swiftUIFont: Font {
     let scale: Font.TextStyle =
@@ -325,7 +325,7 @@ struct DraftStyle: Equatable {
     ]
   }
 
-  /// Repaint the draft. Only *confirmed* tokens are styled — the word still being
+  /// Repaint the draft. Only *confirmed* tokens are styled - the word still being
   /// typed stays plain, so the composer doesn't flicker on every keystroke.
   func restyle(_ view: UITextView) {
     // Mid-composition (IME, dictation): the marked range carries its own

@@ -2,7 +2,7 @@ import Foundation
 
 /// Swift mirror of `@workerdeck/protocol` (packages/protocol/src/index.ts).
 ///
-/// Kept in lockstep with the TypeScript source of truth — when the wire protocol
+/// Kept in lockstep with the TypeScript source of truth - when the wire protocol
 /// changes there, `PROTOCOL_VERSION` bumps and this file must follow. Decoding is
 /// deliberately lenient: an event type (or a payload shape) this version doesn't
 /// model becomes `.unknown` instead of failing the stream, matching the protocol's
@@ -14,7 +14,7 @@ import Foundation
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against `AttachedFrame.protocolVersion`.
   public static let version = 1
-  /// Mirror of SHELL_COMMAND_MAX — the longest `!` command the gateway accepts.
+  /// Mirror of SHELL_COMMAND_MAX - the longest `!` command the gateway accepts.
   public static let shellCommandMax = 4000
 }
 
@@ -49,8 +49,8 @@ public struct ToolResultPart: Codable, Sendable, Equatable {
   /// heterogeneous array and a Swift enum per part kind would turn every fold
   /// below into a switch.
   ///
-  /// All optional, and that is the compatibility story: an old gateway — or a
-  /// socket that never asked (`WorkerClient.attach(imageRefs:)`) — sends parts
+  /// All optional, and that is the compatibility story: an old gateway - or a
+  /// socket that never asked (`WorkerClient.attach(imageRefs:)`) - sends parts
   /// that carry none of them, and a part with no `text` and no ref contributes
   /// nothing to ``ToolResultContent/joinedText`` exactly as the CLI's own
   /// `tool_reference` part already does. That is this rule family's safe
@@ -84,14 +84,14 @@ public struct ToolResultPart: Codable, Sendable, Equatable {
   }
 }
 
-/// How many bytes a base64 payload decodes to, without decoding it — the
+/// How many bytes a base64 payload decodes to, without decoding it - the
 /// phone's copy of protocol's `base64Bytes`.
 ///
 /// The projection itself happens on the **gateway**: a ref minted here would be
 /// an address with no route behind it, since only the gateway holds the stored
 /// log the fetch reads. This exists so the arithmetic the two clients agree on
 /// is written down once on this side too and can be pinned by a test against a
-/// real payload — the same reason `WorkerDeckKit` mirrors rules it does not
+/// real payload - the same reason `WorkerDeckKit` mirrors rules it does not
 /// drive.
 public func base64DecodedBytes(_ data: String) -> Int {
   let padding = data.hasSuffix("==") ? 2 : data.hasSuffix("=") ? 1 : 0
@@ -111,7 +111,7 @@ public enum ToolResultContent: Sendable, Equatable {
     }
   }
 
-  /// The `image_ref` addresses in this content, or `nil` when it holds none —
+  /// The `image_ref` addresses in this content, or `nil` when it holds none -
   /// which is the common case, and is why this is not an empty array: an absent
   /// field keeps the tool-call item byte-identical, and that item is
   /// `Equatable` and half the row-plan cache's key.
@@ -159,8 +159,8 @@ public struct ToolResultBlock: Sendable, Equatable {
   /// (protocol's `TOOL_RESULT_HEAD_CHARS`), and the whole thing is one fetch
   /// away (`WorkerClient.toolResult`).
   ///
-  /// It can only arrive on a socket that asked for it — see
-  /// `WorkerClient.attach(truncateResults:)` — which is why it is additive at
+  /// It can only arrive on a socket that asked for it - see
+  /// `WorkerClient.attach(truncateResults:)` - which is why it is additive at
   /// additively rather than by a version bump. Absent means the block is whole.
   public let truncated: Bool?
   /// How many characters the untruncated result had. Set iff `truncated`.
@@ -393,7 +393,7 @@ public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
   public let displayName: String
   public let description: String?
   /// Whether this belongs in a picker's main list rather than behind "more
-  /// models" — the newest model of each family. Grouped server-side so every
+  /// models" - the newest model of each family. Grouped server-side so every
   /// client splits the list identically; absent (an older server) reads as
   /// primary, which shows everything rather than hiding it.
   public let primary: Bool?
@@ -463,15 +463,15 @@ public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
   }
 }
 
-/// A skill the engine can decide to use — **not** a command.
+/// A skill the engine can decide to use - **not** a command.
 ///
 /// The distinction is why this is its own type. A slash command is wire syntax
 /// the CLI parses out of the message; a skill is a capability the model chooses
 /// from its description, and there is no `/skillname` any engine recognises. So
 /// a skill may be listed, and may be offered as a typing aid that inserts
-/// editable prose (`defaultPrompt`) — but never as a command chip.
+/// editable prose (`defaultPrompt`) - but never as a command chip.
 public struct SkillInfo: Decodable, Sendable, Equatable, Identifiable {
-  /// Directory name under the skills root — the identity the model refers to.
+  /// Directory name under the skills root - the identity the model refers to.
   public let name: String
   /// What the skill is for, as its own manifest states it. This is the text the
   /// MODEL selects on, so it is also the most honest thing to show a human.
@@ -479,9 +479,9 @@ public struct SkillInfo: Decodable, Sendable, Equatable, Identifiable {
   public let shortDescription: String?
   public let displayName: String?
   /// The engine's own suggested opening message. Inserted for the user to
-  /// finish and send — a draft, never something submitted on selection.
+  /// finish and send - a draft, never something submitted on selection.
   public let defaultPrompt: String?
-  /// 'user' | 'repo' | 'system' | 'admin' — kept as String, the set may grow.
+  /// 'user' | 'repo' | 'system' | 'admin' - kept as String, the set may grow.
   public let scope: String?
   /// False when the operator has it switched off: still listed, because
   /// "installed but off" is a different answer from "not installed".
@@ -522,7 +522,7 @@ public struct SkillInfo: Decodable, Sendable, Equatable, Identifiable {
 }
 
 /// One file an engine wrote on the host, from a `file_produced` event. Fetch it
-/// at `GET /sessions/:id/produced/:fileId` — no host-file roots to declare and
+/// at `GET /sessions/:id/produced/:fileId` - no host-file roots to declare and
 /// no byte cap, because the allowlist is "paths this session's runner reported
 /// producing" rather than "anywhere under a root".
 public struct ProducedFile: Sendable, Equatable, Identifiable {
@@ -571,7 +571,7 @@ public struct SlashCommandInfo: Decodable, Sendable, Equatable, Identifiable {
 public struct ContextUsageCategory: Decodable, Sendable, Equatable {
   public let name: String
   public let tokens: Int
-  /// Often a CLI theme token name ('inactive', ...), not a CSS color — validate before styling.
+  /// Often a CLI theme token name ('inactive', ...), not a CSS color - validate before styling.
   public let color: String
 
   public init(name: String, tokens: Int, color: String) {
@@ -585,7 +585,7 @@ public struct ContextUsage: Decodable, Sendable, Equatable {
   public let categories: [ContextUsageCategory]
   public let totalTokens: Int
   public let maxTokens: Int
-  /// Used share of the window, 0–100.
+  /// Used share of the window, 0-100.
   public let percentage: Double
   public let model: String?
 
@@ -611,7 +611,7 @@ public struct ContextUsage: Decodable, Sendable, Equatable {
 public struct ContextReading: Decodable, Sendable, Equatable {
   public let totalTokens: Int
   public let maxTokens: Int
-  /// Used share of the window, 0–100.
+  /// Used share of the window, 0-100.
   public let percentage: Double
 
   public init(totalTokens: Int, maxTokens: Int, percentage: Double) {
@@ -621,16 +621,16 @@ public struct ContextReading: Decodable, Sendable, Equatable {
   }
 }
 
-/// Emitted only for claude.ai subscription sessions — API-key sessions may never
+/// Emitted only for claude.ai subscription sessions - API-key sessions may never
 /// produce one, so clients must render nothing (not 0%) until data arrives.
 /// Codable rather than Decodable because it also rides inside `ProfileInfo`
 /// (via `ProfileUsage`), whose whole record is Codable.
 public struct RateLimitInfo: Codable, Sendable, Equatable {
-  /// 'allowed' | 'allowed_warning' | 'rejected' — kept as String, the SDK union may grow.
+  /// 'allowed' | 'allowed_warning' | 'rejected' - kept as String, the SDK union may grow.
   public let status: String
-  /// 'five_hour' | 'seven_day' | ... — kept as String, the SDK union may grow.
+  /// 'five_hour' | 'seven_day' | ... - kept as String, the SDK union may grow.
   public let rateLimitType: String?
-  /// Used share of the window, 0–100. Absent = unknown, never 0.
+  /// Used share of the window, 0-100. Absent = unknown, never 0.
   public let utilization: Double?
   /// Epoch **seconds** when the window resets.
   public let resetsAt: Double?
@@ -768,7 +768,7 @@ public struct PatchHunk: Codable, Sendable, Equatable {
   }
 }
 
-/// What a file-editing tool changed — the renderable half of an engine's edit
+/// What a file-editing tool changed - the renderable half of an engine's edit
 /// output, and deliberately only that half.
 ///
 /// The Claude SDK's `FileEditOutput` also carries `originalFile`, the entire
@@ -801,11 +801,11 @@ public struct UserMessageEvent: Decodable, Sendable, Equatable {
   /// True for tool results and other synthetic user-role messages.
   public let synthetic: Bool?
   /// Files sent with this message, by reference. `message` carries the typed text
-  /// alone — the bytes went to the model, not into the event log.
+  /// alone - the bytes went to the model, not into the event log.
   public let attachments: [MessageAttachment]?
   /// What a file-editing tool changed, when this message carries that tool's
-  /// result. Set by the runner from the engine's own structured output — never
-  /// derived by a client from the result text — and only when the message
+  /// result. Set by the runner from the engine's own structured output - never
+  /// derived by a client from the result text - and only when the message
   /// carries exactly one `tool_result` block, which is what both engines send.
   /// With two, nothing says which call the patch belongs to, and guessing would
   /// hang a diff off the wrong row.
@@ -886,7 +886,7 @@ public struct StreamDeltaEvent: Decodable, Sendable, Equatable {
 }
 
 public struct TurnResultEvent: Decodable, Sendable, Equatable {
-  /// 'success' | 'error_during_execution' | 'error_max_turns' | ... — kept as String.
+  /// 'success' | 'error_during_execution' | 'error_max_turns' | ... - kept as String.
   public let subtype: String
   public let isError: Bool
   public let durationMs: Double
@@ -926,7 +926,7 @@ public enum SessionEventBody: Sendable, Equatable {
   /// known rather than replacing it: each producer (MCP servers, the sandbox's
   /// capability set) answers for its own names only.
   case toolTitles([String: String])
-  /// The engine wrote a host file and handed over its path — the
+  /// The engine wrote a host file and handed over its path - the
   /// host-filesystem sibling of `fileDelivered`.
   case fileProduced(ProducedFile)
   /// `model` nil = back to the server default.
@@ -940,7 +940,7 @@ public enum SessionEventBody: Sendable, Equatable {
   /// The engine started a fresh conversation inside the same session (`/clear`,
   /// plan-mode exit). The transcript empties; session-scoped state survives.
   /// `sdkSessionId` is the fresh conversation's engine session id, when the
-  /// engine reported one — the follow-up `system_init` stays authoritative.
+  /// engine reported one - the follow-up `system_init` stays authoritative.
   case conversationReset(sdkSessionId: String?)
   /// The engine summarised earlier turns to fit the context window. Not a
   /// reset: the transcript keeps everything, and the engine reports the
@@ -967,7 +967,7 @@ public enum SessionEventBody: Sendable, Equatable {
   case sessionError(message: String)
   /// reason: 'client' | 'server' | 'error'; kept as String.
   case sessionClosed(reason: String)
-  /// An event type (or payload shape) this Swift mirror doesn't model — never a stream error.
+  /// An event type (or payload shape) this Swift mirror doesn't model - never a stream error.
   case unknown(type: String, raw: JSONValue)
 }
 
@@ -1120,7 +1120,7 @@ public enum SessionCommand: Sendable, Equatable {
     requestId: String, behavior: PermissionBehavior,
     updatedInput: [String: JSONValue]? = nil, message: String? = nil, interrupt: Bool? = nil)
   case interrupt
-  /// Start a fresh conversation in the same session — the old one stays
+  /// Start a fresh conversation in the same session - the old one stays
   /// resumable. The server answers with a `conversation_reset` event.
   case clearContext
   case setPermissionMode(PermissionMode)
@@ -1194,7 +1194,7 @@ public struct AttachedFrame: Decodable, Sendable, Equatable {
   public let replayingFrom: Int
   /// Whether this principal may run `!` shell commands on this session: the gateway's
   /// `shell` config, operator privilege and the engine's host cwd, ANDed. Omitted rather
-  /// than sent false, and absent entirely from a gateway that predates the feature —
+  /// than sent false, and absent entirely from a gateway that predates the feature -
   /// so nil means no, and the composer offers the mode only on an explicit true.
   public let shell: Bool?
 
@@ -1207,7 +1207,7 @@ public struct AttachedFrame: Decodable, Sendable, Equatable {
 }
 
 /// Ask the attached client to execute a tool call in its own sandbox (browser
-/// bridge). An iOS remote-control client typically ignores these — the server
+/// bridge). An iOS remote-control client typically ignores these - the server
 /// fails the execution at `expiresAt`.
 public struct ToolCallRequestFrame: Decodable, Sendable, Equatable {
   public let executionId: String
@@ -1229,7 +1229,7 @@ public enum ServerFrame: Sendable, Equatable {
   case toolCallRequest(ToolCallRequestFrame)
   case toolCallCanceled(executionId: String, reason: String)
   case protocolError(message: String)
-  /// A frame type this mirror doesn't model — ignore, never a stream error.
+  /// A frame type this mirror doesn't model - ignore, never a stream error.
   case unknown(type: String, raw: JSONValue)
 }
 

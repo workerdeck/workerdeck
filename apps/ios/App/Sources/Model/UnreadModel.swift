@@ -5,13 +5,13 @@ import Observation
 /// The app's unread memory: the kit's `Watermarks` (the shared monotonic rules)
 /// backed by UserDefaults, wrapped so views re-derive when a mark moves.
 ///
-/// The rules — monotonicity, the once-a-minute touch, the 30-day prune, and
-/// `unseenCount`'s rows-not-turns arithmetic — live in the kit as a port of
+/// The rules - monotonicity, the once-a-minute touch, the 30-day prune, and
+/// `unseenCount`'s rows-not-turns arithmetic - live in the kit as a port of
 /// `packages/protocol/src/watermarks.ts`, because the VS Code extension and the
 /// dashboard count unread the same way and a second implementation would drift.
 /// All that is iOS-shaped is where the marks are kept, and the `revision`
 /// counter: `Watermarks` is not observable, so reading a count through here is
-/// what lets a badge learn that answering a prompt just cleared it — reading
+/// what lets a badge learn that answering a prompt just cleared it - reading
 /// rows is silent (no poll, no event), and `mark`'s return value is the only
 /// signal there is.
 @MainActor
@@ -37,8 +37,8 @@ final class UnreadModel {
         }))
   }
 
-  /// Record what is on screen now. Callers own the "genuinely on screen" test —
-  /// the session view visible and showing it — because that is a fact about the
+  /// Record what is on screen now. Callers own the "genuinely on screen" test -
+  /// the session view visible and showing it - because that is a fact about the
   /// UI, not about storage.
   @discardableResult
   func mark(host: UUID, sessionId: String, itemCount: Int?, activity: Int?, prose: Int?, turns: Int?)
@@ -51,7 +51,7 @@ final class UnreadModel {
     return moved
   }
 
-  /// The same, straight off a rollup record — every caller has one, and reading
+  /// The same, straight off a rollup record - every caller has one, and reading
   /// the three counters out by hand at four call sites is how one of them came
   /// to miss a number the badge depends on.
   @discardableResult
@@ -70,7 +70,7 @@ final class UnreadModel {
       mark: marks.get(hostId: host.uuidString, sessionId: info.id), info: info)
   }
 
-  /// Where this phone had read to, and when — the catch-up seam's whole input.
+  /// Where this phone had read to, and when - the catch-up seam's whole input.
   /// Deliberately **not** `revision`-dependent: the boundary is fixed when a
   /// session is opened, and a mark that moved under a reader would walk the
   /// recap row down the transcript while they read it.
@@ -88,7 +88,7 @@ final class UnreadModel {
 
 /// What a session screen was handed at mount: how much of the transcript had
 /// been read, and when that was true. Epoch milliseconds, the wire's unit and
-/// the kit's — the phone converts once, where it draws.
+/// the kit's - the phone converts once, where it draws.
 struct CatchUpMark: Equatable {
   var itemCount: Int
   var seenAt: Double

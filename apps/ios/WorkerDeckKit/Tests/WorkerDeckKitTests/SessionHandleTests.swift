@@ -236,7 +236,7 @@ struct SessionHandleTests {
     try await waitUntil("two events") { log.sessionEvents.count == 2 }
     #expect(handle.lastSeq == 2)
 
-    // A reconnect replays generously — the same seqs must not surface twice.
+    // A reconnect replays generously - the same seqs must not surface twice.
     socket.push(eventFrame(seq: 1))
     socket.push(eventFrame(seq: 2))
     socket.push(eventFrame(seq: 3))
@@ -386,7 +386,7 @@ struct SessionHandleTests {
     defer { handle.detach() }
 
     try await waitUntil("second attempt") { log.events.contains(.reconnectAttempt(2)) }
-    // Nothing ever opened, so there is no connectionChange to pair it with —
+    // Nothing ever opened, so there is no connectionChange to pair it with -
     // which is exactly why the counter is its own event.
     #expect(!log.events.contains(.connectionChange(true)))
 

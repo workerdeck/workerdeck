@@ -102,7 +102,7 @@ describe('project discovery', () => {
     expect(nearer.project).toEqual({ name: 'UI Kit', root: realpathSync(join(repo, 'packages')) })
   })
 
-  it('degrades to no project at all when nothing is declared — todays wire, byte for byte', async () => {
+  it('degrades to no project at all when nothing is declared - todays wire, byte for byte', async () => {
     const root = tempRoot()
     const cwd = join(root, 'plain')
     mkdirSync(cwd, { recursive: true })
@@ -205,7 +205,7 @@ describe('project icon route', () => {
     expect(res.headers.get('content-type')).toBe('image/svg+xml')
   })
 
-  it('refuses a `..` escape, an absolute path, and a planted symlink — identically to no icon', async () => {
+  it('refuses a `..` escape, an absolute path, and a planted symlink - identically to no icon', async () => {
     const root = tempRoot()
     // The "secret" sits outside every project root but inside the cwd allowlist, so only icon containment stands in the way.
     const secret = join(root, 'secret.png')
@@ -296,7 +296,7 @@ describe('ProjectInfoService cache', () => {
     mkdirSync(repo, { recursive: true })
     writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Before' }))
 
-    const cached = new ProjectInfoService() // default TTL — the second read must not walk
+    const cached = new ProjectInfoService() // default TTL - the second read must not walk
     expect((cached.withProject(infoFor(repo)).project as ProjectInfo).name).toBe('Before')
     writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'After' }))
     expect((cached.withProject(infoFor(repo)).project as ProjectInfo).name).toBe('Before')

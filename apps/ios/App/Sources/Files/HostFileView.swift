@@ -3,7 +3,7 @@ import SwiftUI
 
 /// One host file: read always, edit where the server allows it.
 ///
-/// A plain `TextEditor` in a monospaced font, not a code editor — the app has zero
+/// A plain `TextEditor` in a monospaced font, not a code editor - the app has zero
 /// third-party dependencies, and a Tree-sitter editor would be its first. Good
 /// enough for the thing a phone is actually for: fixing a line the agent got
 /// wrong, not writing a module.
@@ -92,7 +92,7 @@ struct HostFileView: View {
           get: { file.errorMessage != nil },
           set: { if !$0 { file.errorMessage = nil } })
       ) {
-        // A conflict is not retryable: something else — most likely the agent —
+        // A conflict is not retryable: something else - most likely the agent -
         // wrote this file since it was read, and forcing would discard that.
         // Reloading is the only honest option, and it costs the local edit.
         if file.conflict {

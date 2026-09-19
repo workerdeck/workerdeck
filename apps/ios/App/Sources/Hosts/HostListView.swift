@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The saved gateways. Doubles as the app's root (no host selected yet) and as
 /// the switcher sheet reached from the session list, hence the `dismiss` on
-/// selection — a no-op at the root of a stack, a close when presented.
+/// selection - a no-op at the root of a stack, a close when presented.
 struct HostListView: View {
   @Environment(HostStore.self) private var hosts
   @Environment(\.dismiss) private var dismiss
@@ -16,7 +16,7 @@ struct HostListView: View {
         ContentUnavailableView {
           Label("No servers", systemImage: "server.rack")
         } description: {
-          Text("Add the workerdeck gateway you run — typically over Tailscale.")
+          Text("Add the workerdeck gateway you run - typically over Tailscale.")
         } actions: {
           Button("Add server") { editing = Host() }
             .buttonStyle(.borderedProminent)

@@ -2,7 +2,7 @@ import SwiftUI
 import WorkerDeckKit
 
 /// The sub-agent takeover: the screen becomes one agent's own work, with the
-/// navigation bar as the way back — the phone's shape for what `packages/ui`'s
+/// navigation bar as the way back - the phone's shape for what `packages/ui`'s
 /// `SessionPanel` does with `subagentId` and `SubagentStrip`.
 ///
 /// **Not a second attach.** This view captures the session screen's own
@@ -12,7 +12,7 @@ import WorkerDeckKit
 /// are exactly the membership the web takeover shows.
 ///
 /// Two decisions carried over from the web, recorded in `docs/PACKAGES.md`:
-/// the **composer goes** — you talk to the session, not to one of its agents —
+/// the **composer goes** - you talk to the session, not to one of its agents -
 /// but the **approvals stay**: a sub-agent's own tool calls raise session-level
 /// permission requests, and hiding them here would deadlock the very agent
 /// being watched. And the takeover **never auto-exits**: a `Task` call the
@@ -20,7 +20,7 @@ import WorkerDeckKit
 /// they choose.
 struct SubagentTakeoverView: View {
   let taskId: String
-  /// The gateway this session belongs to — the watermark key's first half,
+  /// The gateway this session belongs to - the watermark key's first half,
   /// for the unread marks that keep flowing while this screen is the session.
   let hostId: UUID
   let vm: TranscriptViewModel
@@ -31,7 +31,7 @@ struct SubagentTakeoverView: View {
   @Environment(AppSettings.self) private var settings
   @Environment(BookmarkModel.self) private var bookmarks
 
-  /// The frame's own scroll — fresh per open, so the takeover lands pinned to
+  /// The frame's own scroll - fresh per open, so the takeover lands pinned to
   /// its own bottom: the live tail of a running agent, and the final report of
   /// a settled one.
   @State private var scroll = TranscriptScrollModel()
@@ -41,13 +41,13 @@ struct SubagentTakeoverView: View {
 
   /// The same pair the session screen marks seen on. Its own copy because the
   /// session view's per-event task dies with its `.task` when this screen
-  /// covers it — and the frame's rows are still landing on a watched screen.
+  /// covers it - and the frame's rows are still landing on a watched screen.
   private struct SeenKey: Hashable {
     var revision: Int
     var attached: Bool
   }
 
-  /// The spawning call, when the transcript has it — the strip's one source of
+  /// The spawning call, when the transcript has it - the strip's one source of
   /// truth. The rollup below is allowed only to *name* an agent this cannot.
   /// The kit's lookup, shared with the transcript view's brief row, so the
   /// strip and the frame cannot disagree about what "the task" is.
@@ -60,7 +60,7 @@ struct SubagentTakeoverView: View {
   }
 
   /// The one thing `SessionInfo.subagents` may do here: name an agent whose
-  /// `Task` call is not in the transcript. A label is not content — the rollup
+  /// `Task` call is not in the transcript. A label is not content - the rollup
   /// keeps only eight settled records and can never be what a frame shows.
   private var fallbackLabel: String {
     vm.session?.subagents?.first(where: { $0.toolUseId == taskId }).map(subagentLabel)
@@ -91,9 +91,9 @@ struct SubagentTakeoverView: View {
         }
       } else if task == nil {
         // The frame's two empty states are two different facts, and this is
-        // the second: a task the transcript does not have — a `/clear` retired
+        // the second: a task the transcript does not have - a `/clear` retired
         // the conversation it lived in, or the id was never this session's.
-        // (The first — an agent that has not spoken yet — is simply an empty
+        // (The first - an agent that has not spoken yet - is simply an empty
         // transcript under a strip saying `working…`.) Never auto-exit on
         // this: navigating out from under a reader is worse than one honest
         // line they can leave when they choose.
@@ -104,7 +104,7 @@ struct SubagentTakeoverView: View {
       } else if settings.transcriptVariant.isTerminal {
         // The approvals ride along for the rail's sake: its approval mark pins
         // at the rail's foot, which is where this screen's own footer shows the
-        // prompt — the same pairing the session screen has, and the web passes
+        // prompt - the same pairing the session screen has, and the web passes
         // `state.pendingApprovals` into a frame's rows for the same reason.
         // The same bookmark set the session screen passes, and it can be the
         // same only because the seam is item ids: inside the frame each id
@@ -118,7 +118,7 @@ struct SubagentTakeoverView: View {
           onToggleBookmark: { bookmarks.toggle(host: hostId, sessionId: vm.sessionId, itemId: $0) })
       } else {
         // The cards renderer folds nothing, so the frame is the filtered items
-        // handed to it directly — the same membership, the plainer surface.
+        // handed to it directly - the same membership, the plainer surface.
         TranscriptListView(items: frameItems, revision: vm.revision)
       }
     }
@@ -133,7 +133,7 @@ struct SubagentTakeoverView: View {
     .navigationTitle(strip.name)
     .navigationBarTitleDisplayMode(.inline)
     .transcriptPreferences(settings)
-    // The second screen claim — what keeps the one attach alive across the
+    // The second screen claim - what keeps the one attach alive across the
     // push, since the session view's own `.task` is cancelled once it is
     // covered. See `TranscriptViewModel.holdOpen`.
     .task { await vm.holdOpen() }
@@ -145,7 +145,7 @@ struct SubagentTakeoverView: View {
       push.visibleSessionId = phase == .active ? vm.sessionId : nil
     }
     // The unread watermark keeps moving while the takeover is the session on
-    // screen — the session view's per-event mark died with its `.task`.
+    // screen - the session view's per-event mark died with its `.task`.
     .task(id: SeenKey(revision: vm.revision, attached: vm.session != nil)) {
       guard scenePhase == .active, let info = vm.session else { return }
       unread.mark(
@@ -156,7 +156,7 @@ struct SubagentTakeoverView: View {
   // MARK: - The strip
 
   /// The line above the frame: how the agent is doing and how much it has done
-  /// — `SubagentStrip` minus the way back (the navigation bar's) and minus the
+  /// - `SubagentStrip` minus the way back (the navigation bar's) and minus the
   /// name (the title's). Silent when the transcript has no `Task` call to
   /// read: better than confidently wrong about an agent we cannot see.
   @ViewBuilder private var stripView: some View {
@@ -195,7 +195,7 @@ struct SubagentTakeoverView: View {
 
   /// The approvals, and only the approvals: the composer belongs to the
   /// conversation, but a permission request is session-level however deep the
-  /// call that raised it — hiding it here would deadlock the agent on screen.
+  /// call that raised it - hiding it here would deadlock the agent on screen.
   @ViewBuilder private var footer: some View {
     if let request = vm.pendingApproval {
       VStack(alignment: .leading, spacing: 4) {
@@ -222,7 +222,7 @@ struct SubagentTakeoverView: View {
 
 /// The gutter mark: the brand pulse while the agent works, the theme's bullet
 /// once it has settled. The beat is in the glyph, as it is on the `Task` row
-/// this screen was opened from — and it rests on the pulse's last frame under
+/// this screen was opened from - and it rests on the pulse's last frame under
 /// Reduce Motion, which is free: the last frame *is* the mark.
 private struct SubagentStripGlyph: View {
   let busy: Bool
@@ -247,11 +247,11 @@ private struct SubagentStripGlyph: View {
 }
 
 /// The one approval prompt, in whichever of the two renderers the reader is in
-/// — shared by the session screen's floating stack and the takeover's footer,
+/// - shared by the session screen's floating stack and the takeover's footer,
 /// because a prompt that could only be answered on one of the two surfaces the
 /// session shows on would be the deadlock in a thinner disguise.
 ///
-/// Two renderers, not two code paths through one — the same split the
+/// Two renderers, not two code paths through one - the same split the
 /// transcript makes; see the session view's comment on the retired `lines`
 /// variant.
 struct ApprovalPromptHost: View {

@@ -46,7 +46,7 @@ function persist(hosts: GatewayHost[]): void {
 }
 
 // Not `crypto.randomUUID()`: it is gated on a secure context, so it is undefined on exactly the deployment this exists
-// for — a dashboard served over plain HTTP on a tailnet name. `getRandomValues` carries no such gate.
+// for - a dashboard served over plain HTTP on a tailnet name. `getRandomValues` carries no such gate.
 export function newHostId(): string {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID()

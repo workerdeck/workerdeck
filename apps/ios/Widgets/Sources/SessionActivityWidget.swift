@@ -6,12 +6,12 @@ import WorkerDeckActivity
 /// The Live Activity: one card per engaged session, on the lock screen and in the Dynamic Island.
 ///
 /// This target draws and nothing else. It holds no credential, opens no socket, and reads no
-/// Keychain — a button's `LiveActivityIntent` is performed by the app process, not here. Keep it
+/// Keychain - a button's `LiveActivityIntent` is performed by the app process, not here. Keep it
 /// that way: an extension that needs a secret is a second place the gateway key lives.
 ///
 /// Layout follows `_docs/features/LIVE-ACTIVITY-DESIGN.md`: four bands at four clearly different
 /// weights, with the hero swapping by phase. A reader glancing at a locked phone is asking one
-/// question — *does it need me?* — and the hero is the answer.
+/// question - *does it need me?* - and the hero is the answer.
 struct SessionActivityWidget: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: SessionActivityAttributes.self) { context in
@@ -212,7 +212,7 @@ private struct Sub: View {
         .foregroundStyle(.secondary)
         .lineLimit(2)
         // Bystander-readable on a locked screen, and iOS's "Show Previews: When Unlocked" does not
-        // govern Live Activities — this is the only thing that redacts a command.
+        // govern Live Activities - this is the only thing that redacts a command.
         .privacySensitive()
     }
   }
@@ -266,7 +266,7 @@ private struct CompactTrailing: View {
 private func decisionLabel(_ decision: String) -> String {
   switch decision {
   case SessionActivityDecision.sending: return "Sending…"
-  case SessionActivityDecision.sent: return "Sent — waiting"
+  case SessionActivityDecision.sent: return "Sent - waiting"
   case SessionActivityDecision.gone: return "Already answered"
   case SessionActivityDecision.parked: return "Session parked"
   case SessionActivityDecision.failed: return "Couldn't reach gateway"

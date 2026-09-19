@@ -4,54 +4,54 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
 
 ## Wrapup Config
 
-- check: `pnpm lint` + `pnpm typecheck`. **Read the warnings — do not grep for `error`.**
+- check: `pnpm lint` + `pnpm typecheck`. **Read the warnings - do not grep for `error`.**
   `wd(max-comment-lines)` is a warning by design (`docs/CODE-STYLE.md` § Comments says why a line
   count cannot express the rule), so a run that greps for errors reports clean while the one check
   that watches comment prose is firing. It fired on 2026-09-02 and was filtered out; the prose
   shipped and needed a follow-up commit to strip.
 - test: `pnpm test`
-- push: yes — branch `master`, repo is public, and every push deploys the docs site.
-- version_bump: yes — `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
+- push: yes - branch `master`, repo is public, and every push deploys the docs site.
+- version_bump: yes - `pnpm version:set <x.y.z> && pnpm install --lockfile-only` (the 10 packages
   plus `apps/vscode`; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 is published
   (protocol **7** + the codex engine + the session-runner parity work; it absorbed the
   never-published 0.8.0). 0.10.0 added codex skills and generated images, the codex MCP panel and
   the session workspace. 0.11.0 published the VS Code extension, the session rename, the
-  terminal transcript (virtualized, keyboard-first prompts) and the Iso Deck mark. **0.12.0** — the
+  terminal transcript (virtualized, keyboard-first prompts) and the Iso Deck mark. **0.12.0** - the
   extension's navigation rebuilt around "no webview draws its own header and no view has
   screens" (native QuickPick create/resume, Gateways as its own view, a title-bar filter
   toggle), transcript density and the brand pulse in `ui`, the cross-client parity work (the
   sessions-list view model and unread model lifted into `protocol`, then taken to the dashboard
   and iOS), and the branding pass that retired "Claude Code sessions" for **coding agent
   sessions**; protocol stays **7**. The bump now
-  covers `apps/vscode` too — `version:set` filtered `./packages/*` only, which is how the `.vsix`
-  came to report 0.10.0 against 0.11.0 packages. **0.13.0** — cross-origin gateway auth
+  covers `apps/vscode` too - `version:set` filtered `./packages/*` only, which is how the `.vsix`
+  came to report 0.10.0 against 0.11.0 packages. **0.13.0** - cross-origin gateway auth
   (`hostAuth`, server CORS, the CLI's `--cors-origin`) and the dashboard rebuilt as four
   sections and a dialog, with jobs read-only behind `SessionPanel`'s new `readOnly` seam;
-  tagged and pushed, so the publish workflow ran for it. **0.14.0** — session scope
+  tagged and pushed, so the publish workflow ran for it. **0.14.0** - session scope
   (`CreateSessionRequest.scope` + `authorizeSession`, enforced at every door, 404 on a miss),
   `EngineCapabilities.hostCwd` so a filesystem-less engine need not name a `cwd`,
-  `sandboxedProviderProfile()`, and `apps/embedded` — the reference embedding. **Never released**:
+  `sandboxedProviderProfile()`, and `apps/embedded` - the reference embedding. **Never released**:
   bumped and committed but never tagged, so nothing under that number reached npm and its content
-  ships inside 0.15.0. The registry goes 0.13.0 → 0.15.0, and that gap is deliberate — do not
-  publish a v0.14.0 after the fact. `version:set` now covers `apps/embedded` too — it is not
+  ships inside 0.15.0. The registry goes 0.13.0 → 0.15.0, and that gap is deliberate - do not
+  publish a v0.14.0 after the fact. `version:set` now covers `apps/embedded` too - it is not
   idempotent (a re-run at the same version fails on "Version not changed"), so add a new workspace
   member to the filter *before* the bump, not after.
-  **0.15.0** — the embedding seams the DEV-UX assessment asked for: a loud MCP failure
+  **0.15.0** - the embedding seams the DEV-UX assessment asked for: a loud MCP failure
   (`connectMcpTools`'s `required`, `McpConnection.servers`, a build that refuses a declared server
   that is not there, and `provider.mcpStatus` flipping to `true` so `/sessions/:id/mcp` answers
   instead of 501ing), `createEngineSession({ tools })` at a stated trust, `seedVfs`/`id`,
   `createProviderRunner`, `requireAvailableProfile`, and `SessionPanel`'s `toolHost`. Plus the
-  documentation half — a "Rules you cannot infer from the types" section in every package README,
+  documentation half - a "Rules you cannot infer from the types" section in every package README,
   and three new pages in `apps/docs` (the app-embedding guide, engines-and-executors,
-  writing-tools) — and `apps/embedded` rebuilt on one silkweave action set behind two adapters.
+  writing-tools) - and `apps/embedded` rebuilt on one silkweave action set behind two adapters.
   Protocol stays **7**.
-  **0.16.0** — the terminal theme *adopted*, and the `lines` variant deleted. The theme itself
+  **0.16.0** - the terminal theme *adopted*, and the `lines` variant deleted. The theme itself
   landed unreleased in 0.15.0's tail; this is every client on it: the VS Code dock (at the
   editor's own cell, `--cw-font-mono` repointed at the editor font, three new
   `workerdeck.terminal.*` settings), the dashboard (Settings → Agent view style → Terminal, with
-  a stored `lines` migrating to it), and `apps/embedded`'s rail. Plus what adoption needed —
+  a stored `lines` migrating to it), and `apps/embedded`'s rail. Plus what adoption needed -
   `SessionPanel.terminalMetrics` feeding all three of its terminal surfaces, and the composer's
-  own terminal form (`>` in the gutter cell) — and what it let go: `'lines'`, `useLines`,
+  own terminal form (`>` in the gutter cell) - and what it let go: `'lines'`, `useLines`,
   `LineGlyph`, `line-prompt.tsx` and every `lines` branch, including `Response`'s sixty
   `!important` overrides (157 lines → 28). `apps/ios` keeps its own `lines`: a Swift terminal
   renderer is a separate track, and deleting the phone's only compact view for symmetry with a
@@ -65,18 +65,18 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `workerdeck.newSession.permissionMode`, and the window's folders finally leading the cwd
   candidates), the dock's usage meters gaining the pace marker the other two clients already had,
   the scrubber marking a **failed tool call**, and the two verbosity fixes the terminal theme
-  needed to be readable against a real session — a collapsed tool result clipped by **characters**
+  needed to be readable against a real session - a collapsed tool result clipped by **characters**
   as well as lines (a minified MCP reply is one line, so the old four-line slice kept all thirty
   thousand characters of it) and the shell fold widened to **any run of consecutive tool calls**.
 
-  **0.17.0** — the release the two entries below were held back for, cut once the verification debt
+  **0.17.0** - the release the two entries below were held back for, cut once the verification debt
   they were gated on was cleared (see the verification paragraph at the end of this section).
-  Everything from here to that paragraph ships under this number; it is a **minor** — additive
+  Everything from here to that paragraph ships under this number; it is a **minor** - additive
   throughout, `persistLive` defaults off, absent `subagents` means empty, and protocol stays **7**.
   Riding there too, from the sidebar/prompts session: **project identity**
   (`.workerdeck.json` → `SessionInfo.project`, the ancestor walk, the icon route, the `project`
-  facet), now **drawn on all three clients**. The VS Code sidebar took it first — a card's second
-  line reads the project in place of the cwd basename it was only ever a proxy for — and the repo
+  facet), now **drawn on all three clients**. The VS Code sidebar took it first - a card's second
+  line reads the project in place of the cwd basename it was only ever a proxy for - and the repo
   grew a `.workerdeck.json` of its own so the walk, the route and the wire have all been exercised
   against a real file rather than only a fixture (the icon route had never served a byte). The
   dashboard followed, via `SessionBrowser` and `useProjectIcons`. **iOS** was the biggest of the
@@ -85,27 +85,27 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `Facet`/`GroupBy`/`SortBy`, `ViewConfig.projects`, `projectKey`/`projectLabel`/`projectsOf`,
   `WorkerClient.projectIcon`), and then the **row deliberately does not follow the other two**: the
   phone is the only client that draws the *whole cwd*, so replacing it with a name would remove
-  information the others never had. Line two prefixes instead — `WorkerDeck · packages/ui` — with
+  information the others never had. Line two prefixes instead - `WorkerDeck · packages/ui` - with
   the relative half dropped when the session sits at the root (it would say one thing twice) and
   when the cwd is not under the root at all, which is not paranoia: `root` is the gateway's
   **realpath'd** directory and `cwd` is the path as given, so a session started through a symlink
   has a perfectly good project and no computable relative path. Two platform facts shape the rest.
-  **Apple cannot decode an SVG from bytes** — `CGImageSourceCopyTypeIdentifiers()` lists 62 types
-  and none is SVG; asset catalogs convert at *compile* time, which a downloaded blob cannot use —
+  **Apple cannot decode an SVG from bytes** - `CGImageSourceCopyTypeIdentifiers()` lists 62 types
+  and none is SVG; asset catalogs convert at *compile* time, which a downloaded blob cannot use -
   so an `image/svg+xml` icon degrades to the name alone, and a repo that wants its mark on the
   phone must declare a **PNG**, which is why this one now does (`docs/assets/icon.png`, regenerated
   per `BRAND.md`). Rasterising **on the gateway** was considered and rejected, and the reason is
-  worth keeping: the icon route deliberately parses nothing — it serves bytes with `nosniff` and an
-  attachment disposition precisely so a hostile file is inert — and the session cwd *is* the agent's
+  worth keeping: the icon route deliberately parses nothing - it serves bytes with `nosniff` and an
+  attachment disposition precisely so a hostile file is inert - and the session cwd *is* the agent's
   working tree, so converting would mean running an SVG parser over agent-writable input on the
   shared gateway, where the CVE history is long and the blast radius is every user of it. It would
   also have to bake one colour scheme, losing the `prefers-color-scheme` adaptation the web clients
   get for free. A `WKWebView` snapshot on the phone is the answer if this ever needs solving
   properly (it parses in the client's own sandbox, exactly as an `<img>` already does on web, and
-  the cache is already once-per-hash-for-the-process) — not built. And the **glyph arm is a vocabulary translation, not a bundle-size
+  the cache is already once-per-hash-for-the-process) - not built. And the **glyph arm is a vocabulary translation, not a bundle-size
   trade** (`ProjectGlyphs.swift`): lucide does not exist on iOS, so 111 names are mapped to SF
   Symbols, every one validated against `CoreGlyphs.bundle/symbol_order.plist` because a guessed
-  symbol name renders *nothing* rather than failing to compile — and then checked **again at
+  symbol name renders *nothing* rather than failing to compile - and then checked **again at
   runtime** with `UIImage(systemName:)`, since this Mac's catalog is newer than the app's iOS 17
   floor and a name valid here can be absent on a phone. Both fall back to `folder`, which is what
   protocol's `ProjectIcon` requires of every client. `UIPREVIEW=projects` is the fixture that
@@ -119,18 +119,18 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   streaming singleton, the terminal theme's `Task` fold, `SessionInfo.subagents` +
   `SubagentTracker`, the extension's expandable rows and subagent status item). Both are held back
   from a bump on purpose, and for the same reason: each is proven against a harness that authored
-  every event it feeds — a mock model and a fake runner for parking, the fake `queryFn` for
-  sub-agents — so the tests confirm the *fold* and say nothing about the real CLI's stream shape or
+  every event it feeds - a mock model and a fake runner for parking, the fake `queryFn` for
+  sub-agents - so the tests confirm the *fold* and say nothing about the real CLI's stream shape or
   whether the app boots with a key. **That gate is now open: the debt was cleared 2026-08-20** (see
   the verification paragraph at the end of this section).
   The change is a **minor** (additive, `persistLive` defaults off, and absent `subagents` means
-  empty). Protocol stays **7** — `replayRetains` and the `sdk_event` coalesce key are gateway-side
+  empty). Protocol stays **7** - `replayRetains` and the `sdk_event` coalesce key are gateway-side
   rules with no wire shape, so a client that has never heard of them is bit-identical after the
   fold, which is exactly what their property test asserts. The **scrubber's failure semantics and its
   two channels** ride there too and are proven the way the theme's pure logic always is (unit tests
   on both platforms): a failure is an *outcome* (`taskFailed` is the task's own, `runFailed` is a
   folded run's last call), an item that *shares* a row marks as a tick at its fraction of it rather
-  than inheriting an extent that is mostly other items' work, and the two lanes became **channels** —
+  than inheriting an extent that is mostly other items' work, and the two lanes became **channels** -
   input left (prompts + a green band per sub-agent, drawn from membership and never the spawner's
   name), output right (the answer, and every failure that produced one). The same session also found and fixed
   `SubagentTracker`'s mis-reading of the SDK's *async* agents (above), which is the one piece of
@@ -140,17 +140,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   files, and it is three seams rather than a tidy-up. `ExpansionKey` replaced a stringly-typed
   protocol whose trap had already cost a bug: a block's `key` is its **row identity** (produced by
   the fold, mirrored in web's `blocks.ts`, used for diffing and the plan cache) and coincides with
-  an expansion key for only two of five block shapes — an `.item` call's row key is
+  an expansion key for only two of five block shapes - an `.item` call's row key is
   `toolCall:<id>` while what opens it is `call:<id>`, and a run of one is *drawn as the call*, so
   its `run:<id>` opened nothing. Typed, `expansion.isOpen(block.key)` does not compile, row keys
   stay `String` so web parity is untouched, `full`/`pending` became **call ids** (there is no
   fully-expanded run) which deleted the `dropFirst("full:")` surgery from two files, and the
-  run-of-one rule is now `TerminalRunBlock.expansionKey: ExpansionKey?` — an `Optional` the
+  run-of-one rule is now `TerminalRunBlock.expansionKey: ExpansionKey?` - an `Optional` the
   compiler asks about rather than a comment that had to be obeyed. `blockCalls(in:expansion:)` is
   the **one walk of a block**, where the item/run/task/task-children switch had been written four
   times (`redItemIndices`, `expansionKeys`, `truncatedCallIds`, the planner); its `ownLine` flag
   *is* the fold rule stated once, which is what makes "if it is red in the transcript, it is red on
-  the rail" a fact the rail reads rather than a claim that two derivations agree — `redItemIndices`
+  the rail" a fact the rail reads rather than a claim that two derivations agree - `redItemIndices`
   is four lines now and `truncatedCallIds` is gone. And `ScrubberRegion`/`ScrubberRail` split
   **ground from points**: `.expanded` had been a `ScrubberMarkKind` needing three exemptions from
   the mark machinery within an hour (skip the fractional `RowPosition` rule, never merge, paint
@@ -161,24 +161,24 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   (`height.ts`'s first invariant and `TerminalExpansion.swift`): expansion is per-row `useState`
   there and a planner input here, closing it either way costs one client its central
   simplification, and that inversion is exactly *why* this rail can be expansion-aware and the web
-  rail cannot. The pass was then **reviewed adversarially** — the reviewer reconstructed the
+  rail cannot. The pass was then **reviewed adversarially** - the reviewer reconstructed the
   pre-refactor functions from `git show HEAD` and diffed them against the new ones over 2,000
-  randomized transcripts, which is what makes `ownLine`'s equivalence verified rather than argued —
+  randomized transcripts, which is what makes `ownLine`'s equivalence verified rather than argued -
   and the most instructive thing it found is that the fix for the fold walk had *re-offered the very
   trap the typed key was built to kill*, one namespace over: unifying on `blockCalls` made
   `expansionKeys` emit `.call(taskId)` for a `Task`'s header, and `planTask` never plans a task's
   own result. Hence `BlockCall.drawsResult`, false for exactly that one thing. Two seams went with
   it: the rail was rebuilt inside `TerminalScrubberView.body` while `peek`/`dragging` were `@State`
   on the same view, so one drag re-ran `scrubberMarks` + `redItemIndices` + `expandedRegions` per
-  **touch event** over the whole transcript — the same lesson as the replay counter above, in a
+  **touch event** over the whole transcript - the same lesson as the replay counter above, in a
   gesture instead of a stream, and the file already knew it (`ScrubberBandView` exists for exactly
   that reason; the peek was on the wrong side of the split, now `ScrubberTouchLayer`); and
   `TerminalTranscriptModel.plan(at:)` passed the whole expansion where the book had cached a height
-  planned from `subset(for:)`, which made "the lines drawn are as tall as the height reserved" —
-  the one claim this renderer cannot get wrong — rest on two derivations agreeing. Riding there too, and **not** subject to that debt: the iOS
-  **native Swift terminal renderer** (phase 1 — virtualized, deterministic heights, the folds,
+  planned from `subset(for:)`, which made "the lines drawn are as tall as the height reserved" -
+  the one claim this renderer cannot get wrong - rest on two derivations agreeing. Riding there too, and **not** subject to that debt: the iOS
+  **native Swift terminal renderer** (phase 1 - virtualized, deterministic heights, the folds,
   diffs; `lines` deleted there as on the web) and the iOS **replay hold**. Those two are the
-  opposite case — built, then run on a real device against a real session, which is how the
+  opposite case - built, then run on a real device against a real session, which is how the
   open-a-session flicker was found and fixed. Phase 2 rides there too: **tap to expand/collapse**
   (`TerminalExpansion`, an *input to the planner* rather than cell state, because a
   `UICollectionViewLayout` takes every frame from the height book) and the **scrubber** (the port
@@ -186,39 +186,39 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   testable). Both are on the phone; both have one gesture the simulator could not be driven to
   exercise. Phase 3 rides there now too: the renderer is **hand-rolled UIKit**
   (`TerminalRowCell`, three views per row instead of two SwiftUI views per *line*) with the body
-  as **one selectable TextKit run** — selection within a row works, across rows is still open —
+  as **one selectable TextKit run** - selection within a row works, across rows is still open -
   gated by a second audit claim, `measureHeights`, since a wrong `lineFragmentPadding` puts every
   row a fraction off with nothing visibly wrong. Beside it: the **sticky prompt**
   (`StickyPrompt.swift`, arithmetic in the kit because a view cannot be tested, and its first test
-  caught the frame-vs-content offset bug), and the **replay hold made honest** — a deadline that
+  caught the frame-vs-content offset bug), and the **replay hold made honest** - a deadline that
   extends while `lastSeq` advances rather than a flat 1.5s that fired on exactly the sessions the
   hold exists for, the *whole reduced state* held rather than the transcript view (approvals and
   meters used to flicker through the session's history on every open), and a `seq / target`
-  counter in place of a blank screen — which then turned out to be **most of what a session open
-  cost**. Opening a session took 2–3s on the phone against under 50ms in VS Code, and the
+  counter in place of a blank screen - which then turned out to be **most of what a session open
+  cost**. Opening a session took 2-3s on the phone against under 50ms in VS Code, and the
   measurement (`AttachProfile`, plus two opt-in kit benchmarks that ruled out the fold at 6ms and
   the `@MainActor` receive loop at 0.05ms/event) put it somewhere nobody would look:
   `TranscriptViewModel` is `@Observable`, `replayHold` was a stored property on it written back on
-  **every applied event**, and the `seq / target` counter was computed from it — so 818 replayed
+  **every applied event**, and the `seq / target` counter was computed from it - so 818 replayed
   events meant 818 layout passes of a spinner and a formatted number. **1,692ms → 126ms** once the
-  hold's own state became `@ObservationIgnored` (still exact — it ends on the stated seq, and
+  hold's own state became `@ObservationIgnored` (still exact - it ends on the stated seq, and
   nothing in `ReplayHold.swift` changed) and the screen was told ten times a second instead. The
   rule generalizes and is the one worth carrying: **a per-event write to observed state, on a path
-  that replays hundreds of events, costs a render per event** — which is also why the hold now
+  that replays hundreds of events, costs a render per event** - which is also why the hold now
   *lands* rather than expiring on its 1.5s stall backstop, having previously been held open by its
   own rendering. The web client is clear of the same pathology by construction (its placeholder is
   prop-stable and count-free, and the catch-up count is gated on `!replaying`), though it does
-  dispatch per replayed event — bounded by virtualization — and `onVitals` fires per event with
+  dispatch per replayed event - bounded by virtualization - and `onVitals` fires per event with
   it, which in the VS Code webview is a `postMessage` per replayed event. The **cold plan** is
   parallel now (`TerminalHeightBook.lineCounts`, 690ms → 154ms at 16k rows), which was the other
-  half of that wait. Brief for what is left — cross-row selection — in
+  half of that wait. Brief for what is left - cross-row selection - in
   `_docs/features/ios-terminal-selection.md`. They also touch **no published package**: the phone
   app is side-loaded from this repo and has no `package.json`, so `version:set` does not reach it
   and a bump neither helps nor hinders it.
 
   Riding there too: **on-demand tool results** (protocol's `ToolResultBlock.truncated`,
   `replaySlice`, `/events/:seq/result`, `loadFullResult`, the press in both themes, and now the
-  phone — `TerminalExpansion.pending`, the third expansion state, because a head's "show
+  phone - `TerminalExpansion.pending`, the third expansion state, because a head's "show
   everything" is a network round trip and planning from `total_chars` would invent a line count
   for text nobody has seen). Its property is tested as an *inequality*, which is what the rest of
   this family cannot say: a truncated replay's fold differs from the full one in `result.text` and
@@ -226,21 +226,21 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   asserts backward compatibility rather than arguing it (an attach with no param is byte-identical
   to before). Protocol stays **7**: the marker can only reach a client that asked for it.
   **Its justification, however, did not survive being measured.** Re-run 2026-08-19 against the
-  session every number came from, the cut was **9 KB of 3,101 KB — 0.3%**, not 68%: the three
+  session every number came from, the cut was **9 KB of 3,101 KB - 0.3%**, not 68%: the three
   giant frames are base64 **screenshots**, the text rule deliberately does not touch non-text
   parts, and of 176 `tool_result` blocks only four hold more than 8,000 characters of text. The
   projection had measured `JSON.stringify(content).length`, counting base64 as text. The mechanism
-  is right and worth keeping; what it cut is small, and the 2.1 MB that is really there — parts
-  every client ships and then discards, `blockText`/`joinedText` keeping text only — is a separate
+  is right and worth keeping; what it cut is small, and the 2.1 MB that is really there - parts
+  every client ships and then discards, `blockText`/`joinedText` keeping text only - is a separate
   rule of this same family, and was measured four ways before it was acted on: **91% of all tool-result payload across 214 local sessions is base64** (44 MB text vs
-  458 MB), present in **189 of 215**, and **`Read` produces two thirds of it** — an agent looking
-  at a PNG, not a browser tool — so it is not a niche. The control session is the argument: same
+  458 MB), present in **189 of 215**, and **`Read` produces two thirds of it** - an agent looking
+  at a PNG, not a browser tool - so it is not a niche. The control session is the argument: same
   order of tool calls, more text, **771 KB of attach against 4,550 KB.** The lesson belongs beside
   the feature: **no other rule in this family has been measured after shipping.**
 
   That lesson was then acted on rather than filed. Riding on master too: **image parts replay as
   references** (`ImageRefPart`/`imagePartRef`, `refImageParts`, `?part=N` on the existing route,
-  `result.images`, a fixed 12-line box in both web themes and on the phone) — the family's seventh
+  `result.images`, a fixed 12-line box in both web themes and on the phone) - the family's seventh
   rule, and **the first measured on the wire before it was called finished**: 4,548 KB → 1,275 KB
   and 4,299 KB → 1,186 KB on two real sessions, a no-images control byte-identical, and the
   tool-result text char-identical in every case. Protocol stays **7** (its own opt-in, so a client
@@ -249,29 +249,29 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   given the replay; and a `packages/ui/dev` fixture (`image refs`), because a row type the
   playground cannot draw is a row type its two audits do not gate. Beside it, a **session-status
   fix**: a turn ending under a standing approval had its turn-over signal *discarded* rather than
-  deferred, and the settle path asserted `running` — so an interrupted or timed-out turn left the
+  deferred, and the settle path asserted `running` - so an interrupted or timed-out turn left the
   session claiming to run, on every client at once, permanently, because status is edge-driven with
   no reconciliation. Reproduced by test first, then fixed; see `docs/GOTCHAS.md` §Permissions.
 
   Cut with a **dependency sweep**: `pnpm audit` went 23 advisories to **zero**. The ones that
-  mattered were the ones rendered from model output — `streamdown` (the transcript's markdown) and
+  mattered were the ones rendered from model output - `streamdown` (the transcript's markdown) and
   `monaco-editor` pinned mermaid and dompurify below their fixed versions, and both ship to a
-  browser — overridden in `pnpm-workspace.yaml`, **not** under a `pnpm` key in `package.json`,
+  browser - overridden in `pnpm-workspace.yaml`, **not** under a `pnpm` key in `package.json`,
   which pnpm 11 ignores with only a warning. The rest was `apps/docs` build tooling, taken with an
   astro 5 → 7 major that broke exactly one thing worth naming: `index.astro` read
   `packages/cli/package.json` with `readFileSync` relative to `import.meta.url`, which held only
-  while that URL was the source file — astro 7 prerenders from a bundled chunk, so the same four
+  while that URL was the source file - astro 7 prerenders from a bundled chunk, so the same four
   `../` resolved into `apps/packages/` and the build died. A plain JSON import cannot care where
   the chunk lands.
 
-  **0.18.0** — sub-agents, on the engine that was thought not to have them and on the client that
+  **0.18.0** - sub-agents, on the engine that was thought not to have them and on the client that
   could not show them. A **minor**, additive throughout, and deliberately **no `PROTOCOL_VERSION`
-  bump** — nothing new goes on the wire, `SubagentInfo.toolUseId` keeps its documented meaning, and
+  bump** - nothing new goes on the wire, `SubagentInfo.toolUseId` keeps its documented meaning, and
   `isAgentRecord` is a shared rule rather than a field. Three tracks:
   **codex sub-agent attribution** (`engines/codex/subagents.ts`, the `threadId` gate,
   `WORKERDECK_CODEX_TRACE`), which also fixed a **live bug**: a child thread's `turn/completed`
   ended the session's turn early, published the sub-agent's last line as the result and dropped the
-  root's real answer — reproduced against 0.146.0 and re-verified on a real two-agent turn.
+  root's real answer - reproduced against 0.146.0 and re-verified on a real two-agent turn.
   **The iOS takeover plus pressable agent lines**, whose shape was decided by a SwiftUI fact worth
   restating: a navigation push cancels the covered view's `.task`, so the attach lives on a claim
   count rather than in one view. **The brief and the frame's rail**, both of which came from using
@@ -288,34 +288,34 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   **The verification debt this ledger has twice deferred a bump on was cleared 2026-08-20**, and
   clearing it changed three claims above rather than merely confirming them.
 
-  The restart is a command now — `pnpm smoke:restart [claude|codex] [noprofile] [swept] [all]`
-  (`smoke/README.md`) — spawning its own gateway on its own port and state dir, because the machine
+  The restart is a command now - `pnpm smoke:restart [claude|codex] [noprofile] [swept] [all]`
+  (`smoke/README.md`) - spawning its own gateway on its own port and state dir, because the machine
   that develops this routinely has one hosting the session doing the verifying. Both engines pass
   (claude 14/14, codex 11/11), and the check that carries it is a word the model is given *before*
   the restart and asked for *after*: a session rebuilt rather than resumed attaches cleanly and
   replays nothing, so nothing else separates the two. **The codex rehydrate had never been run and
   it works.** Three things the code's comments did not say came out of it, all now in
   `docs/GOTCHAS.md`: `ANTHROPIC_API_KEY` in a gateway's environment silently kills claude turns (the
-  CLI leaves the subscription, `plan_info` stops, the turn never completes — indistinguishable from
+  CLI leaves the subscription, `plan_info` stops, the turn never completes - indistinguishable from
   a hang); the dormant write is async and **codex emits no `system_init`**, so its first record only
   lands on the post-turn status change and a kill inside that window loses the row entirely; and a
-  **swept engine store does not 404 as this was documented to do** — the attach succeeds, the
+  **swept engine store does not 404 as this was documented to do** - the attach succeeds, the
   transcript is empty and the next turn is silently never answered, which is quieter than an error
   and worse.
 
   On-demand tool results were pressed against a real gateway on both renderers and on the phone,
-  and the parked-session arm of `/events/:seq/result` — previously "covered by reading the code" —
+  and the parked-session arm of `/events/:seq/result` - previously "covered by reading the code" -
   now has a test that proves it went through the snapshot (`registry.get()` is undefined at fetch
   time and the fake runner has no `eventAt`). The press exposed the trap worth carrying:
   **`truncateResults` is replay-only**, so a live row's marker is the renderer's display clip and
-  pressing it touches no network, while a reloaded row's is the wire truncation — identical on
+  pressing it touches no network, while a reloaded row's is the wire truncation - identical on
   screen. A verification pass concluded the feature was broken on the provider engine on exactly
   that mistake before the network panel corrected it. The **`… fetching N chars` interstitial has
   now failed to be observed on all three surfaces** because every fetch completes too fast to draw
   it; whether a state nobody can reach earns its code is a decision nobody has made.
 
-  `apps/embedded` was run end to end with a real key — restart at rest and mid-turn, the session
-  returning **idle** without re-running the interrupted turn — and it was broken before it was
+  `apps/embedded` was run end to end with a real key - restart at rest and mid-turn, the session
+  returning **idle** without re-running the interrupted turn - and it was broken before it was
   verified: the wiki's data had moved onto tRPC at `/trpc` while `vite.config.ts` proxied only
   `/v1` and `/api`, so Vite answered `index.html` with a **200** and every document query silently
   parsed HTML as JSON. `pnpm start` was unaffected, so the reference embedding was broken only in
@@ -327,12 +327,12 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   17 new tests, react 196 → 213), which closes the "no hook render test" gap without putting jsdom
   into a headless package. **No package's public API changed.**
 
-  **0.19.0** — the codex permission surface, made honest. A **minor** for `auto`, additive
+  **0.19.0** - the codex permission surface, made honest. A **minor** for `auto`, additive
   throughout, protocol stays **7**. Two features and one fix that only looks small.
   **"Approve for me"** (`auto`) is codex's own risk-assessing reviewer, wired as a permission mode
   rather than a wider grant: it rides the *same* workspace-write sandbox as `acceptEdits` and only
   moves who answers the approval, from the user to codex's `approvals_reviewer` subagent. It ships
-  beside a related honesty fix — a session in `default` (read-only) leaves the project untrusted,
+  beside a related honesty fix - a session in `default` (read-only) leaves the project untrusted,
   so codex silently ignores the project's own `.codex/config.toml`, and WorkerDeck now says so in
   the transcript instead of letting an MCP server vanish without explanation. `@openai/codex` is
   pinned to **0.149.0**.
@@ -342,22 +342,22 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `networkAccess` to false and `writableRoots` to empty **on every turn**, overriding the
   operator's `[sandbox_workspace_write]` with no error and no notice. An operator who configured
   `network_access = true` exactly as codex documents still got `Could not resolve host` on
-  anything that touched the network — which is how it presented, as "codex permissions are
+  anything that touched the network - which is how it presented, as "codex permissions are
   broken". Measured against 0.149.0: bare object → `curl: (6) Could not resolve host`, fully
   stated → `200`, omitted → `200`. Omitting is not the fix (restating the policy each turn is what
   makes a between-turns mode switch take effect), so the runner reads `config/read { cwd }` once
-  per child — it resolves project config layers for that directory — and echoes the block back
+  per child - it resolves project config layers for that directory - and echoes the block back
   verbatim, falling back to the bare shape if the read fails. `read-only` is untouched: the
   setting is scoped to workspace-write and a read-only sandbox has no network either way, measured
   both ways. A **free** canary pins the block's four fields, because losing them degrades to the
   bare shape and the clobber returns with no other symptom. Worth stating as a rule: **any field
   added to that object inherits this trap.**
 
-  Nothing here sets network policy. Network is codex's third axis — off by default in
-  workspace-write, opened by no approval policy — and it stays the operator's `config.toml` to
+  Nothing here sets network policy. Network is codex's third axis - off by default in
+  workspace-write, opened by no approval policy - and it stays the operator's `config.toml` to
   set, the same posture as credentials. What changed is that WorkerDeck stopped overwriting it.
 
-  **0.20.0** — the in-place conversation clear. A **minor**, additive throughout, protocol stays
+  **0.20.0** - the in-place conversation clear. A **minor**, additive throughout, protocol stays
   **7**. `EngineCapabilities.clearContext` + the `clear_context` command on all three engines
   (claude sends the `/clear` its CLI already honors, codex starts a fresh thread, the provider
   drops its message array), plus the `resetSeq` replay fix for codex/provider and the provider's
@@ -365,39 +365,39 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   the model as a prompt, which is the user-visible complaint it was built for.
 
   **It sat unreleased on master for two days on purpose** (`bd4e83d`, 2026-08-24), because it had
-  never run against the real codex binary and no client had a Clear control — a declared
+  never run against the real codex binary and no client had a Clear control - a declared
   capability nothing rendered. Both gates were paid 2026-08-26 (`5bdd421`, `ff25046`, `2058880`)
   before the bump, and that order is the point:
 
-  - the live run is now two commands rather than a ritual — `pnpm smoke:codex --clear` (two tiny
-    turns) and `pnpm smoke:restart codex clear` (free) — and both are green. The one thing they
+  - the live run is now two commands rather than a ritual - `pnpm smoke:codex --clear` (two tiny
+    turns) and `pnpm smoke:restart codex clear` (free) - and both are green. The one thing they
     changed rather than confirmed: **the context reading cannot witness a clear** (a fresh codex
     thread reads ~14k tokens before anyone types), so the proof is a codeword the model must fail
     to recall. `docs/GOTCHAS.md` §codex has it.
   - the control landed on **two** clients: the VS Code session card's QuickPick beside Stop and
     Delete, and the dashboard session row's eraser. Both gate on the capability record and both
     borrow a socket for one frame (a clear is a session command, not a REST route). The web one
-    was driven for real — transcript emptied, the reading went absent rather than 0%; the VS Code
+    was driven for real - transcript emptied, the reading went absent rather than 0%; the VS Code
     one has not been pressed (`_docs/VERIFICATION-DEBT.md` item 10). iOS still has none, and that
     is the only piece of this feature left.
 
   One consequence is worth stating rather than discovering: clearing a codex session **whose child
   is dead** deletes the dormant record that was its way back, so the session does not survive a
-  restart at all. That is the designed trade — losing an emptied conversation beats waking into one
-  that was deliberately discarded — and `pnpm smoke:restart codex clear` is what makes it a stated
+  restart at all. That is the designed trade - losing an emptied conversation beats waking into one
+  that was deliberately discarded - and `pnpm smoke:restart codex clear` is what makes it a stated
   one.
 
-    **`package.json` is not the release record — npm and the *pushed* tags are.** Check all three,
-  and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`–`v0.12.0`
+    **`package.json` is not the release record - npm and the *pushed* tags are.** Check all three,
+  and use `git tag --sort=v:refname`: plain `git tag` sorts lexically, so `v0.10.0`-`v0.12.0`
   land *above* `v0.5.0` and a `| tail` reads the newest tags as the oldest. 0.12.0 had a local
   tag nobody had pushed, so npm's latest was still 0.11.0 while this file claimed it shipped. `git log v<latest>..HEAD` is the other half of the same
-  habit — 0.9.0 sat on master for 15 commits *after* it had shipped.
-  **0.21.0** — **one session card for every client.** The Figma session-list design, implemented by
+  habit - 0.9.0 sat on master for 15 commits *after* it had shipped.
+  **0.21.0** - **one session card for every client.** The Figma session-list design, implemented by
   collapsing the two hand-kept drawings of a session into `SessionItem`: the dashboard's
   `SessionRowItem` and the extension's `SessionCard` agreed on the model (`SessionRow`,
   `sessionSteps`, `sessionState`) and disagreed on every measurement, so the two lists read as two
-  products. Both are wrappers now — ~660 lines of duplicated markup gone, the extension's card 380
-  → 95 — and what stays host-shaped is what should: a native QuickPick and double-click rename
+  products. Both are wrappers now - ~660 lines of duplicated markup gone, the extension's card 380
+  → 95 - and what stays host-shaped is what should: a native QuickPick and double-click rename
   there, three hover actions here, both through one `actions` slot.
 
   Selection became **two selections at two grains**, with the blue always on the finer: a selected
@@ -414,33 +414,33 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   here (dev-only, unpublished; `dev/` stays the terminal renderer's measurement harness).
 
   Four bugs surfaced on the way and are worth remembering as classes: cards were `w-full` **plus**
-  `mx-1` — 100% + 8px, an overflow by construction that grew a horizontal scrollbar, so the list
+  `mx-1` - 100% + 8px, an overflow by construction that grew a horizontal scrollbar, so the list
   owns the inset now and never the card; selection matched on `sessionId` alone, lighting the wrong
   card whenever two gateways issued the same id (invisible with one attached); `friendlyModel`
   returning `undefined` left a separator hanging off nothing, so the metadata run is assembled from
   *present parts* with separators drawn between them; and the extension's dev fixture used `name:`
   where `isAgentRecord` reads `agentType:`, so its preview had been rendering tasks, not agents, for
-  as long as it had existed. Protocol stays **7** — nothing on the gateway wire changed. **iOS is
+  as long as it had existed. Protocol stays **7** - nothing on the gateway wire changed. **iOS is
   the piece left**: the new card and the sub-agent/sub-task navigation both stop at the two web
   clients.
 
-  **0.22.0** — `fontSize` prop on SessionPanel/SessionWorkspace driving both variants,
+  **0.22.0** - `fontSize` prop on SessionPanel/SessionWorkspace driving both variants,
   `--wd-font-size` CSS custom property, em-based Streamdown overrides, `onLinkClick` prop,
   `wd-open-url` bridge message, web dashboard font-size setting, VS Code `workerdeck.fontSize`
   with `editor.fontSize` fallback. Plus the `AgentView.stories.tsx` comprehensive Storybook
   story.
 
-  **0.23.0** — **the provider-engine consumer requests.** Per-call executor selection (§1):
+  **0.23.0** - **the provider-engine consumer requests.** Per-call executor selection (§1):
   `selectExecutor`, `backend`, and `ProviderRunnerOptions.executor` accept per-call function
   forms so different tools route to different backends within one session. Client-side tool
   registration (§2): `clientTools` prop on `SessionPanel`, `ClientToolHandler`/`ClientToolResult`
-  types in `@workerdeck/react` — the server declares the schema, the client runs the handler.
+  types in `@workerdeck/react` - the server declares the schema, the client runs the handler.
   Interactive approvals (§7): `shouldApprove` callback gates sandboxed tool dispatch behind
   `permission_requested`/`permission_resolved` when the session runs in `default` mode; the
   existing `PermissionPrompt` UI renders automatically. StatusBar baseline fix (§3):
   `self-center` on icon-only slots. Protocol stays **7**.
 
-  **1.0.0** — **the launch.** Taken as a major deliberately: the version that ships publicly is
+  **1.0.0** - **the launch.** Taken as a major deliberately: the version that ships publicly is
   the version whose promises start being kept, and calling it 0.24.0 would have spent the protocol
   reset below without getting the commitment it was made for.
 
@@ -448,7 +448,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   anyone was on the other end of the wire, and this was the last moment that was free. **It is
   locked from here on**: every breaking change to the wire now costs a bump and a mismatch banner,
   and every breaking change to the published API now costs a major. Old iOS builds mismatch until
-  redeployed; nothing else is affected. `PROVIDER_PERMISSION_MODES` is removed in the same breath —
+  redeployed; nothing else is affected. `PROVIDER_PERMISSION_MODES` is removed in the same breath -
   the last of the free breakage.
 
   The bulk of it is **the client-parity matrix, closed on all four clients**. Web and VS Code
@@ -457,14 +457,14 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   given a store and an affordance), a native skills QuickPick and files routing in the extension,
   and a title unread badge on the dashboard. Then the same four on the phone
   (`TerminalTodos`, `PlanRequest`, a `BookmarkStore` behind a long-press context menu, and image
-  paste through a `UITextView` subclass) — `docs/CLIENTS.md` carries the divergences, of which the
+  paste through a `UITextView` subclass) - `docs/CLIENTS.md` carries the divergences, of which the
   load-bearing one is that iOS plans a checklist on the condition it *draws* it, because there the
   plan is the height rather than an estimate of it. Unread is counted by **prose** now, not by
   events. Plus the VS Code gateway editor as native multi-step inputs, and iOS clear-context and a
   stored-session resume picker.
 
   Two composer bugs worth naming as classes, both long-standing: the "rich-text paste" complaint
-  was never about paste — it was the input-event decoration pass collapsing `*bold*` **while you
+  was never about paste - it was the input-event decoration pass collapsing `*bold*` **while you
   typed**, so the composer is plain-text only now (`markdown={false}`); and the send re-pin lost to
   a trackpad's momentum tail, fixed escape-proof in `5eaff6a`. Eight more bugfixes around
   transcript leakage across webview reloads, unsent-draft survival, stale profile usage, and
@@ -474,52 +474,52 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   burned a 160-warning comment backlog to 1, and split the largest test suites along their
   contracts. Config must be `.oxlintrc.json`; `oxfmt-ignore` is never the answer.
 
-  **1.1.0** — **the model rows caught up.** A **minor**, additive throughout, protocol stays **1**.
-  Claude Code 2.1.258 / agent SDK 0.3.258 renamed the primary Fable row — `supportedModels()` now
+  **1.1.0** - **the model rows caught up.** A **minor**, additive throughout, protocol stays **1**.
+  Claude Code 2.1.258 / agent SDK 0.3.258 renamed the primary Fable row - `supportedModels()` now
   reports `claude-fable-5-1[1m]` → `claude-fable-5-1`, "Fable 5.1 · Most capable for your hardest
   and longest-running tasks", and drops Fable 5 entirely (it lives under the CLI's "more models"
-  now) — so the catalog was re-read live from the pinned SDK rather than inferred: the wire id is
+  now) - so the catalog was re-read live from the pinned SDK rather than inferred: the wire id is
   not guessable from the display name, and a wrong one fails as a *silently unselectable picker row*
   rather than an error. The two-truths split did the work it exists for: the capabilities event
   carries only current models, so Fable 5 leaves the live list while the static catalog keeps it as
   a non-primary row beside Opus 4.8 and Sonnet 4.6 and the cold-start create form still offers it.
   Two live Fable rows now differ **only** by `resolvedModel`, which makes "match through
   `resolvedModel`, never value" load-bearing rather than hypothetical (`docs/GOTCHAS.md` says so
-  where the rule lives). `friendlyModel` needed no change on either the TS or the Swift side —
+  where the rule lives). `friendlyModel` needed no change on either the TS or the Swift side -
   Haiku 4.5 had already covered the multi-segment version shape.
 
   Cut with a **full dependency sweep, majors included**, which moved `@openai/codex` to **0.151.0**.
   The codex catalog's documented extraction was re-run against that binary and the embedded model
   table is **byte-identical**, so only the provenance stamp moved. The free canary earned its keep
   on the same bump: `ThreadItem` gained a **`functionCallOutput`** variant. Considered and
-  deliberately left unmapped — it is output-only (`{id, name, namespace?, output}`, no arguments)
+  deliberately left unmapped - it is output-only (`{id, name, namespace?, output}`, no arguments)
   and the union carries no paired `functionCall` arm, so there is nothing to draw a call from and a
   mapped one would read as a result attached to nothing. It joins `dynamicToolCall` in the KNOWN set,
   which is the standing shape of that decision: mapping every variant is not the goal, knowing about
   each one is.
 
   What is **not** verified: `claude-fable-5-1` on the direct-API path
-  (`examples/provider-server.ts` is not the CLI) has never been run against a live key — the id
+  (`examples/provider-server.ts` is not the CLI) has never been run against a live key - the id
   follows Anthropic's dashes-for-dots convention (`claude-opus-4-8`, `claude-sonnet-4-6`) and
   nothing more.
 
-  **1.2.0** — **compaction stopped being invisible.** A **minor**, additive throughout, protocol
+  **1.2.0** - **compaction stopped being invisible.** A **minor**, additive throughout, protocol
   stays **1**. Codex auto-compacts silently, and until now WorkerDeck rendered nothing when it did:
   `contextCompaction` fell to the `sdk_event` channel no UI draws, so the conversation kept going,
   the model quietly stopped being able to see the top of it, and the transcript said nothing had
-  happened — while the context ring dropped for a reason the user did not cause and could not read.
+  happened - while the context ring dropped for a reason the user did not cause and could not read.
 
   The wire half is **`context_compacted`**, engine-neutral on purpose so the Claude engine can join
   without a second row for the same thing. It is deliberately *not* a `conversation_reset`, and the
   distinction is the whole design: a reset empties and its replay rule skips strictly below it,
   which would throw away exactly the history a compaction preserves. So it appends rather than
-  empties, takes no reset seq, and leaves `contextUsage` alone — the engine reports post-compaction
+  empties, takes no reset seq, and leaves `contextUsage` alone - the engine reports post-compaction
   occupancy itself and a guess here would put a number on the ring no `context_usage` event ever
   said. It scores 0 in both `transcriptActivity` and `transcriptProse`: engine housekeeping is not
   news and must not badge a session nobody needs to open. The rule now lives in
   `docs/PACKAGES.md` §protocol.
 
-  **Additive, so no `PROTOCOL_VERSION` bump** — and that was checked against the strictest reader
+  **Additive, so no `PROTOCOL_VERSION` bump** - and that was checked against the strictest reader
   rather than assumed. iOS's hand-written mirror decodes an unknown event `type` to `.unknown`
   (and degrades a known type whose payload does not decode the same way), so a new variant costs
   an older client nothing. That check is what made a new event affordable at all now that 1 is
@@ -530,7 +530,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   and the paired `thread/compacted` notification is documented as *"Deprecated: use the
   ContextCompaction item type instead"*, so the item is the one signal to read and the
   notification stays unhandled. A sub-agent's compaction carries `parentToolUseId` and nests under
-  its Task. The canary drops `contextCompaction` from its unmapped list — **7 of 19** on 0.151.0.
+  its Task. The canary drops `contextCompaction` from its unmapped list - **7 of 19** on 0.151.0.
 
   Two spellings, one string: a single grid row in the terminal theme and a rule-with-label in
   cards, both drawing `COMPACTION_TEXT` from `lib/format.ts`, which is where it lives because
@@ -539,21 +539,21 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   literal copy. Verified in the playground: the height audit reports the row **exact**, delta 0.
 
   What is **not** done: **iOS draws nothing yet.** `WorkerDeckKit` hand-mirrors protocol, so the
-  phone needs the event case, the item kind and the row before it is at parity — it degrades to
+  phone needs the event case, the item kind and the row before it is at parity - it degrades to
   `.unknown` safely in the meantime. And the ring's own treatment after a compaction, plus the
   272K-price-tier tooltip, are still open in `_docs/features/codex-compaction-invisible.md`.
 
   Cut alongside a docs cleanup: **`docs/ROADMAP.md` was deleted.** It had drifted to claiming
   0.16.0 and protocol 7 while carrying 500 lines of shipped narrative. Its two live parts were
-  harvested first — the non-goals (with the scoped-embedding-is-not-multi-tenant-SaaS distinction)
+  harvested first - the non-goals (with the scoped-embedding-is-not-multi-tenant-SaaS distinction)
   into `CONTRIBUTING.md` §Out of scope, which is where a contributor looks, and the open design
   questions into `_docs/`. README's stale "`PROTOCOL_VERSION` … is at 7" is corrected to 1.
 
-  **1.3.0** — **a tool call says what it is doing.** A **minor**, additive throughout, protocol
+  **1.3.0** - **a tool call says what it is doing.** A **minor**, additive throughout, protocol
   stays **1**. A transcript row drew the wire name and a JSON blob (`atomic__AppContext`
   `{"spaceId":"…"}`), which is an identifier where the reader wanted a sentence. Now
-  `packages/protocol/src/tool-titles.ts` owns one shared rule — `BUILTIN_TOOL_TITLES`,
-  `toolTitle(name, titles?)`, `sanitizeToolTitle` — and both transcript variants draw the
+  `packages/protocol/src/tool-titles.ts` owns one shared rule - `BUILTIN_TOOL_TITLES`,
+  `toolTitle(name, titles?)`, `sanitizeToolTitle` - and both transcript variants draw the
   resolved title with the wire name kept reachable. Titles reach a client two ways: declared ones
   ride a new `tool_titles` event (host tool definitions via `HostToolDefinition.title`, and each
   MCP server's own titles), and capability/synthetic names resolve client-side from the table, so
@@ -561,34 +561,34 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   mirrors that package by hand and two clients must not disagree about what a tool is called.
 
   Four decisions worth the ledger. **Resolution happens at render time**, not as a field on the
-  transcript item — the wire name is the identity the terminal variant folds runs by
+  transcript item - the wire name is the identity the terminal variant folds runs by
   (`foldsTogether`, `runSummary`), and a title inside it would move what a row *draws* without
   moving the row. **`tool_titles` is deliberately not in `replayCoalesceKey`**: the reducer
   merges, coalescing keeps only the last map, and the two would disagree the moment a session has
-  two producers. **An engine's own tool names stay untitled** — `Bash`, `Read`, `Task` are Claude
+  two producers. **An engine's own tool names stay untitled** - `Bash`, `Read`, `Task` are Claude
   Code's published vocabulary, which users read and our own docs name; the table covers only names
   we or the sandbox invented, and per engine the result is still uniform. And **a title is
   untrusted display text**: it arrives from a remote MCP server, so it is flattened to one line,
   stripped of control characters, clamped by *code point* (a UTF-16 clamp splits a surrogate pair,
   and the client mirroring this rule counts graphemes), and dropped when it only restates the name.
-  It is a label and never an identifier — the permission prompt keeps its own SDK-supplied title.
+  It is a label and never an identifier - the permission prompt keeps its own SDK-supplied title.
 
   The provider-engine half turned out to be one call, not a workaround: `@ai-sdk/mcp`'s `tools()`
   builds the AI SDK `ToolSet` and drops everything MCP-specific with it, but `client.listTools()`
   sits right beside it and returns the spec's `title`, the `annotations.title` **and** the
-  `readOnlyHint`/`destructiveHint`/`openWorldHint` trio — so `connectMcpTools` joins the two by
+  `readOnlyHint`/`destructiveHint`/`openWorldHint` trio - so `connectMcpTools` joins the two by
   name and an embedder no longer needs its own `tools/list` loopback to decide what to
   auto-approve. The claude engine cannot match that: the Agent SDK's `McpServerStatus` tool type
   models no title at all, so it probes for one and reports it only when the CLI forwards it.
 
   Riding along: **catch-up mode is now a setting** on all three clients. It is the *CLI's*
-  behaviour — a message typed mid-turn is folded into the running turn, with no Agent SDK option
-  to turn it off — so "off" could only ever be a client-side hold, which is what `useHeldSends`
+  behaviour - a message typed mid-turn is folded into the running turn, with no Agent SDK option
+  to turn it off - so "off" could only ever be a client-side hold, which is what `useHeldSends`
   and `SessionPanel`'s `midTurnSend: 'fold' | 'hold'` do. Nothing about it travels on the wire.
   A held message is not in the transcript yet (the `user_message` is the runner's echo), so
   `HeldSendsBar` above the composer is its only trace and is not optional. The hold releases on
-  `!busy` — an interrupt therefore flushes, which is the right reading of "interrupt, then say the
-  next thing" — and never applies to an ended session. Stored per client: `workerdeck.mid-turn-send`
+  `!busy` - an interrupt therefore flushes, which is the right reading of "interrupt, then say the
+  next thing" - and never applies to an ended session. Stored per client: `workerdeck.mid-turn-send`
   in the dashboard, `workerdeck.catchUpMode` in the extension, `AppSettings.catchUpMode` on iOS.
 
   **iOS is at parity in the same cut**, both features, with one deliberate divergence recorded in
@@ -598,55 +598,55 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
 
   What is **not** done: the held-sends hook has no unit test on the web side (`ui` tests are
   pure-module, no jsdom, so a hook needs the playground); codex MCP titles are out of scope; and
-  iOS drops a held message if the socket is detached at flush time — pre-existing `handle?.send`
+  iOS drops a held message if the socket is detached at flush time - pre-existing `handle?.send`
   semantics, newly reachable now that a send can be deferred, and wanting a device check.
 
-  **1.4.0** — **GPT-6 Astra, and the codex catalog re-extracted.** A **minor**, protocol stays
+  **1.4.0** - **GPT-6 Astra, and the codex catalog re-extracted.** A **minor**, protocol stays
   **1**. `@openai/codex` pinned `~0.151.0` → `~0.153.4` (root, `cli`, `core`'s devDep; the
   `~0.149.0` peer range still covers it) and `CODEX_CATALOG` refreshed by the documented
   extraction against that binary rather than by hand: `gpt-6-astra` ("GPT-6 Astra", efforts
   `low`…`ultra`) leads the picker, and `gpt-5.4` / `gpt-5.4-mini` are gone. The removals are the
-  interesting half — the binary flipped both to `visibility: "hide"`, and this cycle is what
+  interesting half - the binary flipped both to `visibility: "hide"`, and this cycle is what
   settled that **hidden means dropped, not demoted**: the old rule said `primary` mirrors
   `visibility`, which would have kept a retired model (mini's `upgrade` block has a `retirement_at`
   already in the past) and admitted the two new `gpt-daybreak-*` cyber-security rows into "more
-  models". The rule is restated above. The operator's `~/.codex/models_cache.json` — the *fetched*
-  list, client 0.153.0 — was used as the cross-check and agreed, going further still: it has no
-  `gpt-5.4` row at all. No client code changed, because none was needed — `friendlyModel` already
+  models". The rule is restated above. The operator's `~/.codex/models_cache.json` - the *fetched*
+  list, client 0.153.0 - was used as the cross-check and agreed, going further still: it has no
+  `gpt-5.4` row at all. No client code changed, because none was needed - `friendlyModel` already
   renders `gpt-6-astra` as "GPT-6 Astra" in both TS and Swift (the Swift documented-examples test
   now pins it), which is the whole point of a derived display name.
 
-  **2.0.0** — **tasks left the session card.** The first **major** since the 1.0.0 launch, and the
+  **2.0.0** - **tasks left the session card.** The first **major** since the 1.0.0 launch, and the
   reason is one package: `@workerdeck/ui` removed `Step.kind`, `Step.State.pending` and
   `SessionItem`/`SessionBrowser`'s `onRevealStep`, and changed `sessionSteps`' callback signature.
-  Versions are aligned, so nine packages that break nothing take the number too — that is the
+  Versions are aligned, so nine packages that break nothing take the number too - that is the
   standing cost of alignment, not a claim about their APIs. **Protocol stays 1**: everything on the
   wire here is additive (`SessionInfo.checklist`, a `checklist` event), so no mismatch banner.
 
   The card's disclosure drew sub-agents and tasks in one list under one badge, so `7/9` could not
   say which was which. The fix is a **scope**, not a third affordance: the card is a list surface
   and keeps the list question ("which sub-agents are running"), and tasks moved to the selected
-  session — a `workerdeck.tasks` VS Code view with a Show/Hide Completed title-bar command, a
+  session - a `workerdeck.tasks` VS Code view with a Show/Hide Completed title-bar command, a
   status-bar count and dialog on the dashboard, a status-line chip and `TasksSheet` on iOS.
 
   "Tasks" also became the thing the word means: the engine's own checklist **unified with** the
-  `Task` spawns that carry no agent type. The checklist had never reached the wire at all — it was
+  `Task` spawns that carry no agent type. The checklist had never reached the wire at all - it was
   parsed per-render in the terminal transcript and nowhere else. It is now a **fold of the event
   log** beside `activityCount`/`proseCount`/`contextUsage`, so all three runners read it from
   `info()` and a restore recomputes it for free; `parseTodoWriteInput` moved from `ui`'s `todos.ts`
   into `protocol` so core and every renderer share one whole-or-nothing rule, and
-  `SessionInfo.checklist` + `sessionTasks(info)` are named apart deliberately —
+  `SessionInfo.checklist` + `sessionTasks(info)` are named apart deliberately -
   `info.tasks !== sessionTasks(info)` is the sentence the pairing exists to prevent.
 
   Two things worth remembering as classes. **The emit must follow the subscriber fan-out**: from
   inside `SubagentTracker.observe` it appends seq n+1 and delivers it before seq n, and every
-  reducer's `seq <= lastSeq` dedupe then silently drops the message that carried the tool call — a
+  reducer's `seq <= lastSeq` dedupe then silently drops the message that carried the tool call - a
   core test pins the ordering. And codex's `turn/plan/updated` was **missing from
   `THREAD_SCOPED_NOTIFICATIONS`**, so a sub-agent thread's plan was published as the root's; it was
   harmless only because the old `codex.todo_list` `sdk_event` had zero consumers repo-wide, which is
   why that event was replaced rather than kept beside the new one. A codex session woken from
-  dormancy reports no checklist until its next plan update — thread history carries no plan
-  notifications to rebuild from — and that, with the full lifecycle table, is the new
+  dormancy reports no checklist until its next plan update - thread history carries no plan
+  notifications to rebuild from - and that, with the full lifecycle table, is the new
   `docs/GOTCHAS.md` § Checklist.
 
   One seam was added that the plan had not foreseen: `packages/react` seeds `state.session` at
@@ -655,59 +655,59 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   polled record down; the checklist half is live off the event, the spawn half is only as fresh as
   the host's poll, and the asymmetry is documented rather than hidden.
 
-  **2.1.0** — **catch-up mode means the catch-up bar.** Cut as a **minor** by the maintainer's
+  **2.1.0** - **catch-up mode means the catch-up bar.** Cut as a **minor** by the maintainer's
   call, and the exception is worth stating rather than hiding: `@workerdeck/ui` dropped
   `SessionPanel`/`SessionWorkspace`'s `midTurnSend` prop and the whole `held-sends.tsx` export set
   (`useHeldSends`, `HeldSendsBar`, `HeldSend`, `HeldSends`), which the standing 1.0.0 rule would
   price as a major. The judgement is that the removed surface is a nine-day-old toggle nobody
-  outside this repo wired — a dropped optional prop is inert at a call site, and the three exports
-  had no consumer — so a major would have spent the number on nothing. **Protocol stays 1**; none
+  outside this repo wired - a dropped optional prop is inert at a call site, and the three exports
+  had no consumer - so a major would have spent the number on nothing. **Protocol stays 1**; none
   of this was ever on the wire. Do not read it as a softening of the rule.
 
   The setting shipped in 0.18.0 under the right name against the wrong feature. "Catch-up mode"
-  read as the CLI behaviour it is named after — a message typed mid-turn folded into the running
-  turn — so "off" could only be a client-side hold, and the hold is what got built. Nobody wants
+  read as the CLI behaviour it is named after - a message typed mid-turn folded into the running
+  turn - so "off" could only be a client-side hold, and the hold is what got built. Nobody wants
   that off: folding mid-turn is the point of a remote control. What is genuinely a preference is
-  the *recap* — the boundary row, the faded already-read rows above it, and the "N new rows since
-  you were last here — jump / dismiss" bar. It earns its keep for a reader who lets a session run
+  the *recap* - the boundary row, the faded already-read rows above it, and the "N new rows since
+  you were last here - jump / dismiss" bar. It earns its keep for a reader who lets a session run
   unattended and comes back; for a reader hopping between sessions every few seconds it is pure
   noise. So the setting kept its name and changed what it gates, and the hold was deleted rather
   than left behind a prop nobody would set.
 
   The panel holds no preference of its own: catch-up is `unseen`, and off is `unseen={undefined}`.
   That was already the seam, which is why the `ui` side of this is a deletion and nothing else.
-  Web stores `workerdeck.catch-up` (the old `workerdeck.mid-turn-send` key is simply abandoned —
+  Web stores `workerdeck.catch-up` (the old `workerdeck.mid-turn-send` key is simply abandoned -
   one stale localStorage entry, no migration worth writing), VS Code keeps `workerdeck.catchUpMode`
   with the same name and default and a rewritten description. The **watermark itself keeps
-  advancing either way**, so turning catch-up off costs nothing on the sessions-list unread badge —
+  advancing either way**, so turning catch-up off costs nothing on the sessions-list unread badge -
   the two read the same mark for different jobs. iOS lost its toggle outright: `HeldSends.swift`,
   `HeldSendsBar.swift` and their tests are gone, and the phone has no recap seam yet, so keeping
   the switch would have shipped an inert one. `TerminalRows`' `recapAt`/`recapLabel` machinery is
-  still there, unwired — the iOS half of this is the obvious next cycle.
+  still there, unwired - the iOS half of this is the obvious next cycle.
 
-  **2.2.1** — **the deep link lands where it was pointed, and the user band can be selected.**
+  **2.2.1** - **the deep link lands where it was pointed, and the user band can be selected.**
   A **patch**: two bug fixes, nothing additive, no API or wire change; **protocol stays 1**.
 
   **A tapped notification was landing at the tail instead of on its row**, on every client surface
   that streams. `ReplayHold` lifts on a 1.5s stall as well as on the stated seq, so `!replaying`
   routinely means "shown early" rather than "complete"; `resolveFocus` found the row and
-  `scrollToRow` then derived the pin from where it landed — which, in a transcript still filling,
+  `scrollToRow` then derived the pin from where it landed - which, in a transcript still filling,
   is within `repinThreshold` of the bottom. Pinned, every later replay event re-asserted the
   bottom. The rule now lives in two pure kit pieces: `deepLinkPlacement` reports whether the row
   was found against a *complete* transcript (`lastSeq >= session.lastSeq`, never "the hold ended"),
   and `TranscriptScrollGeometry.pinsAfterJump` refuses to pin an incomplete jump. A user jump or
-  scrub is unchanged — landing on the last row still *is* going to the bottom. The same hazard was
+  scrub is unchanged - landing on the last row still *is* going to the bottom. The same hazard was
   fixed in `resolveReveal` and `revealTask`.
 
   **The terminal theme's user band declares its own selectability.** `.term-user` is the one block
   that is neither a `.term-press` nor plain flow text, and it said nothing about `user-select` or
-  `cursor`, so it inherited the host's default — selectable with an arrow cursor on the web, and
+  `cursor`, so it inherited the host's default - selectable with an arrow cursor on the web, and
   **not selectable at all in the VS Code webview**, where the selection jumped past it and
   swallowed everything above. Declared now, as `.term-press` already did deliberately.
 
   **Verification is uneven and recorded as such.** The fix's `complete: true` branch is confirmed
   on a physical device from an instrumented trace; `complete: false`, the branch it exists for, is
-  green on the simulator only — a phone on a tailnet lands 5,100 events in ~1s and never streams
+  green on the simulator only - a phone on a tailnet lands 5,100 events in ~1s and never streams
   long enough to reach it without Network Link Conditioner.
 
   **Two defects ship knowingly**, both written up in `docs/GOTCHAS.md`: a dormant wake renumbers a
@@ -719,12 +719,12 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   **The cycle's real lesson was about testing, not scrolling.** Three of four "failures" on device
   were the harness: `turn_completed` carries a session-keyed `collapseId`, so a real turn push
   *replaces* a test push, and the large session chosen for the runs was the one driving the live
-  Claude conversation — the phone tapped a payload carrying seq 11,277 when 2,790 had been sent,
+  Claude conversation - the phone tapped a payload carrying seq 11,277 when 2,790 had been sent,
   landed correctly on its tail, and read as a failure three times. `smoke/README.md` now carries
   the three rules: push at an idle session, force-quit first, and confirm the seq that *arrived*.
 
-  **2.2.0** — **`!` shell mode, and the composer's buttons on a thumb.** A **minor**, additive
-  throughout; **protocol stays 1** — `AttachedFrame.shell?` and the `shell_command` command are
+  **2.2.0** - **`!` shell mode, and the composer's buttons on a thumb.** A **minor**, additive
+  throughout; **protocol stays 1** - `AttachedFrame.shell?` and the `shell_command` command are
   both additive, so an older gateway simply advertises nothing and no mismatch banner fires.
 
   Shell mode is the headline: type `!` as the first character and the composer becomes a host
@@ -733,7 +733,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   and gated on three ANDed conditions re-checked per command with one identical refusal string so
   the surface is not an existence oracle. It deliberately does **not** ride on `hostFiles` or
   `allowedCwdRoots`: unlike an agent's Bash tool a `!` command goes through no permission flow at
-  all, which is the whole reason it gets its own gate. It also does not start a turn —
+  all, which is the whole reason it gets its own gate. It also does not start a turn -
   `Runner.queueLocalCommand` emits the transcript row now and holds the model-facing text for the
   next real `sendMessage`, wrapped in `<local-command-caveat>`, because routing it through the
   streaming input queue would earn a reply to every `ls`. This is the first child process
@@ -742,25 +742,25 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `SIGKILL` to the **group** on timeout, close, park and shutdown.
 
   The rest is **iOS**, and both halves are worth reading before touching the phone's composer
-  again. Shell mode ships in the same pass rather than trailing — the kit mirrors the command, the
-  frame field and both reducer rules — and the `!` is refused in `shouldChangeTextIn` *before*
+  again. Shell mode ships in the same pass rather than trailing - the kit mirrors the command, the
+  frame field and both reducer rules - and the `!` is refused in `shouldChangeTextIn` *before*
   insertion rather than cleared afterwards, because `textViewDidChangeSelection` fires before
   `textViewDidChange`, so clearing from `onEdit` had the character written straight back and on a
   shell prompt that meant `! ls` reaching `/bin/sh`, where a leading `!` negates the exit status.
 
-  Then the composer's glyph buttons got a **cell** — see `docs/CLIENTS.md` § apps/ios for the
+  Then the composer's glyph buttons got a **cell** - see `docs/CLIENTS.md` § apps/ios for the
   ruling. The one thing that belongs *here* is the process failure, because it will recur: the
   design's measurements were read straight off the Figma frames as points and shipped **1.5x too
-  large**. Those frames are drawn over a 1170x2532 screenshot — an @3x capture of a 390pt phone —
+  large**. Those frames are drawn over a 1170x2532 screenshot - an @3x capture of a 390pt phone -
   placed at 585 units wide, so **one design unit is two thirds of a point**. Nothing in the frame
   says so; the only way to find it is to ask Figma for the placed image's natural size and divide.
   The fix was not a nudge but a conversion applied once (`TermComposerMetrics`), and it was
-  **verified by measuring simulator pixels**, not by eye — cell 96px, padding 16px, text at 136px,
+  **verified by measuring simulator pixels**, not by eye - cell 96px, padding 16px, text at 136px,
   bar 140px, all exact. Take that as the standing rule for any future design hand-off: get the
   source image's pixel dimensions, derive the unit, and check the built screen against a pixel
   count rather than a screenshot comparison.
 
-  **2.3.0** — **a host can draw its own approval card, and an edited approval finally reaches the
+  **2.3.0** - **a host can draw its own approval card, and an edited approval finally reaches the
   tool.** A **minor**, additive throughout; **protocol stays 1**. Opened by a contributor PR
   (RuliSlim, #1) whose two commits are in the history under their own name; the seam it proposed
   was reshaped before merge and the bug it exposed was fixed separately.
@@ -769,45 +769,45 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   ComponentType<ApprovalPromptProps>>`, so a host draws the one tool it has a real review screen
   for (a record the agent wants to save, laid out as the form the reviewer already knows) and the
   built-in prompt keeps the rest. It is a *registry* rather than the render prop first proposed
-  because the panel already was one, with two private entries — `AskUserQuestion` →
-  `QuestionPrompt`, `ExitPlanMode` → `PermissionPrompt`'s plan arm — so this publishes the
+  because the panel already was one, with two private entries - `AskUserQuestion` →
+  `QuestionPrompt`, `ExitPlanMode` → `PermissionPrompt`'s plan arm - so this publishes the
   mechanism it had instead of bolting a second dispatch beside it, matching `clientTools` and
   `tool_titles`. Three defects died with the shape. The lookup sits **above** the theme split, so
   an entry draws in both; the render prop was consulted only on the cards path, which made it a
   silent no-op in `apps/embedded` (the reference embedding runs `transcriptVariant="terminal"`) and
   would have made a host's card blink in and out of existence with the dashboard's and VS Code's
   runtime theme toggle. There is no fallback sentinel, and so no way to hit the trap that `null`,
-  `false` and `''` all render nothing while passing `!== undefined` — the natural
+  `false` and `''` all render nothing while passing `!== undefined` - the natural
   `cond ? <Card/> : null` left an approval nobody could answer. And `ApprovalPromptProps` carries
   the built-ins' own callback shapes, `interrupt?` included, without which a host card could not
   offer the default card's "Deny & stop"; `packages/ui/test/approval-prompts.test.ts` holds that
   assignability, since a stray required prop on either prompt would break the drop-in fallback
   silently.
 
-  **The provider runner was dropping `decision.updatedInput`** — edit-then-approve, wired end to
+  **The provider runner was dropping `decision.updatedInput`** - edit-then-approve, wired end to
   end and honored by the claude and codex engines since each existed, did nothing on this one.
   Amending the pending call is only half the fix: `AiSdkRunner` keeps its own `#messages`, whose
   assistant message still held the `tool-call` part the model wrote, so running B while the history
   claimed A would have the model reason from A on the next leg. `#amendToolInput` rewrites the
   matching part too, immutably, and both halves ride `#buildSnapshot` so an edit survives
   park/resume. The transcript still shows the input the model wrote, which is what the other two
-  engines do — the edit goes to the tool, not to the row.
+  engines do - the edit goes to the tool, not to the row.
 
   **The terminal theme's free-text fields grow.** The cards theme got a growing "Other…" in the
   same PR; the terminal kept a single-line `<input>`, so the sideways-scrolling window survived in
-  the dashboard, the VS Code webview and iOS — every client that actually ships this theme.
+  the dashboard, the VS Code webview and iOS - every client that actually ships this theme.
   `PromptInput` is a `textarea` now, which fixes the question card's own-words answer and the
   permission card's deny reason at once. It stays on the cell grid because it has no padding and
   `line-height` is `--term-line`: measured 1 through 8 rows in the playground, with the grid audit
   still clean. Enter sends and Shift+Enter is the newline, the composer's contract rather than a
-  second one — which brought the `isComposing` guard with it, fixing a bug nobody on a Latin
+  second one - which brought the `isComposing` guard with it, fixing a bug nobody on a Latin
   keyboard could see: the old field submitted on an IME's candidate-confirming Enter, so a Japanese
   or Chinese answer could never be typed past its first word.
 
   **Coverage the fix needed and did not have.** Provider approvals had *no* tests at all;
   there are now three plus a park/resume round trip, and each was confirmed to fail against the
-  unfixed runner. `smoke:live` could not stand in — it drives tool calls by hand and configures no
-  executor, so it never reaches `#dispatchSingle` — hence **`smoke:live-approval`**, which edits
+  unfixed runner. `smoke:live` could not stand in - it drives tool calls by hand and configures no
+  executor, so it never reaches `#dispatchSingle` - hence **`smoke:live-approval`**, which edits
   the first call at approval and proves the edit ran from a *VFS entry* rather than from anything
   the model chose to say. Checked both ways against Anthropic: passing on the fix, failing on both
   assertions without it. Also fixed on the way past: `attachment-routes`' `settle()` was a fixed
@@ -815,32 +815,32 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   parallel load; the three positive sites now wait for the input and the negative one waits for the
   error frame that *is* its signal.
 
-  **2.4.0** — **the phone decides what it is worth buzzing for.** A **minor**, additive
+  **2.4.0** - **the phone decides what it is worth buzzing for.** A **minor**, additive
   throughout; **protocol stays 1**. Running several sessions at once meant a notification for
   every approval, every finished turn and every session that went away, with no dial short of
   revoking notifications for the whole app.
 
   **`DeviceRecord.notify` is a per-device event allowlist**, accepted on `POST /apns/devices`
-  under the same three-state rule as `liveActivityStartToken` — omitted leaves the record alone,
-  so an older app that never sends the field keeps what it last chose instead of being reset —
+  under the same three-state rule as `liveActivityStartToken` - omitted leaves the record alone,
+  so an older app that never sends the field keeps what it last chose instead of being reset -
   with one addition the start token does not have: `[]` is a *real answer* meaning "no alerts",
   so absent and empty must never be collapsed into one nullish check. Absent falls back to
   `DEFAULT_NOTIFY`, which is every type but `session_closed`: a session closing is bookkeeping,
   not news, since it fires whenever a tab goes away. Per **device** rather than per gateway
-  because a phone and an iPad watching the same sessions do not want the same interruptions —
+  because a phone and an iPad watching the same sessions do not want the same interruptions -
   and per device is also why this is not `SessionNotifier.events`, which stays untouched, so
   webhooks keep their own config.
 
   **Every type now collapses per session, keyed by kind.** `collapseId` was `turn_completed`-only;
   it is now `COLLAPSE_PREFIX[type]` plus a hash of the session id, so a session with five calls
-  waiting — or one erroring five times — holds one banner instead of five. The per-kind prefix is
+  waiting - or one erroring five times - holds one banner instead of five. The per-kind prefix is
   load-bearing rather than tidiness: collapsing on the session alone would let an arriving
   approval silently overwrite a finished turn, which is news *lost*, not a repeat folded away.
 
   **iOS gets the two switches** (Settings ▸ Notifications): a master toggle plus a row per event,
   and Live Activities on their own. Turning notifications off sends `[]` rather than deleting the
   token, so turning them back on is one POST and not a re-authorization. The Live Activities
-  toggle withholds the push-to-start token — the only thing that lets a gateway raise a card —
+  toggle withholds the push-to-start token - the only thing that lets a gateway raise a card -
   and ends any card already on screen; `ActivityCoordinator.applyEnablement` is the single path
   for both that switch and the system's, which is what keeps the app's answer and iOS's answer
   from disagreeing. It also killed a latent bug it surfaced: `WorkerDeckApp` built its own
@@ -852,22 +852,22 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   the stream and left every entry in `#pendingApprovals` with its timeout still armed, so a
   request raised moments before an interrupt could resolve itself minutes later against a session
   that had long gone idle. Interrupting now denies each with `resolvedBy: 'client'` and clears the
-  timer — which is what the session's own bookkeeping reads, so `pendingApprovals` and
+  timer - which is what the session's own bookkeeping reads, so `pendingApprovals` and
   `pendingPermissionCount` both settle to empty and the executor is never reached.
 
-  **2.5.0** — **install the extension, press Start.** A **minor**, additive throughout;
+  **2.5.0** - **install the extension, press Start.** A **minor**, additive throughout;
   **protocol stays 1**. Getting a gateway running was `npm i -g workerdeck` in a terminal before
   the extension could talk to anything; Host Mode makes the editor do it.
 
-  **The extension supervises the published CLI as a detached child — it does not embed the
+  **The extension supervises the published CLI as a detached child - it does not embed the
   server.** That is the dependency rule holding, and three separate facts make it the only
   design. The server must **outlive the window**: in-process in the extension host, closing one
   window kills the sessions two other windows are watching, so the child is `detached`, `unref`ed
-  and writes to `<state-dir>/vscode-host.log` rather than a pipe — a `detached` child piped to a
+  and writes to `<state-dir>/vscode-host.log` rather than a pipe - a `detached` child piped to a
   dead extension host dies with `EPIPE` on its next write. Credentials stay the operator's, in a
   child spawned from VS Code's login-shell-resolved env, which is also the PATH holding `claude`
   and `codex`. And **bundling was measured, not assumed**: `@openai/codex` is 275 MB and the Agent
-  SDK's platform package 190 MB, per platform — a `.vsix` cannot carry that, so the binary is
+  SDK's platform package 190 MB, per platform - a `.vsix` cannot carry that, so the binary is
   resolved `workerdeck.host.binaryPath` → PATH → `npx --yes workerdeck@<the extension's own
   version>`. That npx arm is what makes "press Start with nothing installed" true, and pinning it
   to the extension's version is what keeps both sides on one `PROTOCOL_VERSION`, since they
@@ -875,68 +875,68 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   ready timeout and a progress notification where the PATH arm gets 30 seconds.
 
   **The port is the lock; there is no leader election across windows.** Every window probes the
-  configured port and adopts whatever answers — a sibling window's server and one the operator
+  configured port and adopts whatever answers - a sibling window's server and one the operator
   started by hand are deliberately the same case. Only when nothing answers does a window spawn,
   and a lost race self-resolves: the loser gets `EADDRINUSE` and exits 1 within a second, which
   the ready loop reads as "re-probe and adopt", not as a failure. `vscode-host.json` is **not**
-  the lock — only the ownership record, written after a successful probe and only by the window
+  the lock - only the ownership record, written after a successful probe and only by the window
   whose own child won the port, so **Stop refuses to kill a server VS Code did not start**; a
   pidfile whose pid is gone is a crash leftover and is cleared on read. Stop and Restart confirm
   against the reading `workerdeck guard` uses, naming the sessions and which are blocked on a
   human, then `SIGTERM` (a *drain* in this CLI), 30s, a second `SIGTERM` (its own "stop now"),
-  then `SIGKILL` — to the **process group**, because on the npx arm the server is a grandchild.
+  then `SIGKILL` - to the **process group**, because on the npx arm the server is a grandchild.
 
   Two security rules are not negotiable and are why every `workerdeck.host.*` key is
   **`scope: "machine"`**, never `machine-overridable`: a workspace-scoped `bindAddress: "0.0.0.0"`
   in a cloned repo's `.vscode/settings.json` would otherwise expose an agent runner on the LAN.
-  And the auth key — generated by the extension, kept in `SecretStorage` — reaches the child
+  And the auth key - generated by the extension, kept in `SecretStorage` - reaches the child
   through **`WORKERDECK_AUTH_KEY` in its environment, never argv**, because `ps` is world-readable.
 
   **Profiles became a runtime surface rather than a pre-boot one**, which is the change with the
   widest reach. `/v1/profiles` had full CRUD, `createFileProfileStore`, `declaredGuard`,
-  `canManage` and a finished dashboard editor — and `startInstance` never passed `profileStore`,
+  `canManage` and a finished dashboard editor - and `startInstance` never passed `profileStore`,
   so all of it answered 404 and the editor was dead UI. The CLI now opens one at
   `<state-dir>/profiles.json` by default, so **existing users gain a working Profiles editor in
   the dashboard on upgrade**. `allowedConfigDirRoots` defaults to the **home directory**: an
   operator principal can already start an agent with `bypassPermissions` in any cwd, so what this
   guard can meaningfully refuse is `/etc` and another user's home. `--profile-root` narrows it,
   `--no-profile-store` refuses management outright (and unhooks a store a config file supplied,
-  rather than leaving one wired up under a flag that says off), and no state dir means no store —
+  rather than leaving one wired up under a flag that says off), and no state dir means no store -
   management stays refused rather than silently forgetting every profile on the next restart. The
   API still never accepts a credential, only a directory the official SDK resolves one from; the
   guard is the root list, not a sanitizer.
 
   That deleted the profiles-in-settings design this cycle started with. VS Code gets **WorkerDeck:
-  Profiles** and a collapsed **Profiles view** beside Gateways instead — the Gateways view's shape
+  Profiles** and a collapsed **Profiles view** beside Gateways instead - the Gateways view's shape
   exactly, a list and nothing else with `+` in the title and every mutation a native flow, so the
   bridge carries a list and three verbs. It works against **any** gateway, which a settings array
   never could: no settings file can write a config file on the Mac mini. `~` expands only for a
   loopback gateway, since it is this machine's home and the wrong home for every other, and each
-  row's dot is the gateway's own credential probe — the only question creating a profile really
+  row's dot is the gateway's own credential probe - the only question creating a profile really
   raises. `workerdeck.host.configPath` survives for what JSON cannot spell: a **provider** profile
   needs functions, so it is config-file-only by construction.
 
   One trap worth the ledger space, found in testing and not in review: **`Extension.extensionKind`
   is not "am I where the files are"**. A local window has no remote extension host to be
-  `Workspace` relative to, so it reports `UI` — gating Host Mode on `=== Workspace` disabled it in
+  `Workspace` relative to, so it reports `UI` - gating Host Mode on `=== Workspace` disabled it in
   every ordinary window and enabled it only under Remote SSH, exactly backwards from how the check
   reads. The condition that means what was wanted is `env.remoteName !== undefined &&
   extensionKind === UI`. The server log also moved from a text document to a tailed **WorkerDeck
-  Server** output channel, which follows live and works for an adopted server too — decoded
+  Server** output channel, which follows live and works for an adopted server too - decoded
   through a `StringDecoder`, because a read landing mid-codepoint makes `toString` emit U+FFFD.
 
-  **2.6.0** — **the first launch that 2.5.0 shipped, fixed.** A **minor** — detection grew a second
-  profile and the dashboard grew an engine — but the reach is two first-run bugs that Host Mode's
+  **2.6.0** - **the first launch that 2.5.0 shipped, fixed.** A **minor** - detection grew a second
+  profile and the dashboard grew an engine - but the reach is two first-run bugs that Host Mode's
   own release surfaced the moment someone pressed Start on a clean machine. **Protocol stays 1.**
 
   **A managed codex profile could never be created.** `configDirGuard` read `profile.configDir`
   unconditionally, but a codex profile carries `codexHome` and no `configDir` at all, so every
-  codex create was refused with `configDir is outside the allowed roots` — naming a field the
+  codex create was refused with `configDir is outside the allowed roots` - naming a field the
   request had never sent, against roots that did contain the directory it *had* sent. The guard now
   reads the field the engine actually uses and names that field in the refusal. A codex profile with
   **no** `codexHome` is exempt rather than refused: it names no credential store of its own and runs
   on the server's own environment, which every session already inherits. The rule this restores is
-  the one 2.5.0 stated and did not implement — the guard is the root list, applied to whichever
+  the one 2.5.0 stated and did not implement - the guard is the root list, applied to whichever
   directory the profile actually points at.
 
   **The auto-detected `default` profile was declared, and declared means immutable.** 2.5.0 gave
@@ -944,20 +944,20 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   the one row it refused to touch. Detection now **seeds the store** on the first launch that finds
   it empty instead of declaring anything, so detected profiles arrive `managed` and editable;
   without a store they are still declared, and detection never writes again once the store holds a
-  profile. Deleting every profile and restarting does re-seed — that is the cost of using emptiness
+  profile. Deleting every profile and restarting does re-seed - that is the cost of using emptiness
   as the first-launch signal, and it is the cheap direction to be wrong in.
 
   Detection also covers **codex** now (`$CODEX_HOME`/`~/.codex` → a `codex` profile, beside
   `$CLAUDE_CONFIG_DIR`/`~/.claude` → `default`), by directory rather than by binary: a directory
   that exists is one the operator has logged into, and a profile whose engine is not installed
   reports itself unavailable rather than failing at session start. That second detected profile is
-  what forced the one compatibility change here — "exactly one profile is implicit" would have
+  what forced the one compatibility change here - "exactly one profile is implicit" would have
   started 400ing every caller that never named one, so **a profile literally named `default` is
   implicit too**, however many sit beside it. Choosing is otherwise still the caller's, because a
   profile is a credential store.
 
   The dashboard's create-profile dialog also gained **codex**, which it had never offered while the
-  extension's QuickPick had — `codexHome` optional there, since absent means the server's own
+  extension's QuickPick had - `codexHome` optional there, since absent means the server's own
   `CODEX_HOME` and an empty string would not.
 
   One thing to know when testing Host Mode against an unreleased server: **the extension spawns the
@@ -966,21 +966,21 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   server behind it stays whatever npm last served. Point `workerdeck.host.binaryPath` at
   `packages/cli/build/cli.mjs` for that loop.
 
-  **2.7.0** — **the window badge counts gateways.** A **minor**, and a small one: one status-bar
+  **2.7.0** - **the window badge counts gateways.** A **minor**, and a small one: one status-bar
   item changed what it is about. **Protocol stays 1.**
 
   It read `:8787`. Of the five Host Mode states it was the only one showing infrastructure rather
   than a state word, and the port is the one fact about a running server already on its tooltip.
-  The consistent fix — `on`, matching `off`/`starting`/`stopping` — would have been equally dead
+  The consistent fix - `on`, matching `off`/`starting`/`stopping` - would have been equally dead
   pixels, since it is true almost always. So the steady state became **`X/Y`**: gateways answering
   their probe over gateways that exist. Host Mode's own counts in both halves *while it serves*,
   which falls out of the supervisor already registering `This machine` on start and unregistering
-  it on stop — a stopped host is absent from the denominator rather than a permanent miss in it.
+  it on stop - a stopped host is absent from the denominator rather than a permanent miss in it.
 
   Two things followed from that and are the part worth remembering. A **transient** Host Mode state
   still takes the badge whole (`starting`, `stopping`, the error `$(warning)`): those are
   short-lived, they are what the click acts on, and a count cannot say "starting". And the badge
-  **stopped being Host-Mode-only** — it used to hide whenever Host Mode was `disabled`, but a
+  **stopped being Host-Mode-only** - it used to hide whenever Host Mode was `disabled`, but a
   window with only remote gateways still has a count worth drawing, so it now hides only when there
   are no gateways at all, and consequently renders in a window with no supervisor (the UI side of a
   remote) where it never did before. `workerdeck.host.actions` is registered `"when": false`, so
@@ -988,77 +988,77 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   badge counts is reachable from the thing counting it, and `workerdeck.host.statusBar`'s
   description no longer calls it a Host Mode badge.
 
-  **2.7.1** — **the first release CI publishes to the Marketplace.** A **patch**, and it earns
+  **2.7.1** - **the first release CI publishes to the Marketplace.** A **patch**, and it earns
   that: nothing since 2.7.0 adds a feature to any package. **Protocol stays 1.**
 
-  2.7.0's listing went up through the Marketplace's own web form, deliberately — a first listing
+  2.7.0's listing went up through the Marketplace's own web form, deliberately - a first listing
   is worth seeing before it is automatic, and that path needs no PAT on disk. 2.7.1 is what
   proves the tag-driven job, so treat a green `vscode` job here as the thing being released. It
-  went green on the **fourth** attempt, and none of the first three were the extension's fault —
+  went green on the **fourth** attempt, and none of the first three were the extension's fault -
   see the `VSCE_PAT` note under `- marketplace:` before debugging a `TF400813`.
 
   The dependency work behind it is worth more than the version number. **All 41 dependabot alerts
-  were fictional** — every advisory's first-patched version was already met and `pnpm audit`
+  were fictional** - every advisory's first-patched version was already met and `pnpm audit`
   reported zero across 1207 deps. They could not close because **GitHub held no dependency graph
   for this repo at all** (`dependencyGraphManifests.totalCount: 0`; the SBOM endpoint 404s where a
-  working repo times out). Dependabot *updates* were fine throughout — they use their own pnpm
-  resolver — but *alerts* ride on the graph, and those are two separate pipelines. Enabling the
+  working repo times out). Dependabot *updates* were fine throughout - they use their own pnpm
+  resolver - but *alerts* ride on the graph, and those are two separate pipelines. Enabling the
   graph closed all 42 as `fixed` on the first scan. **Check the graph before triaging an alert
   backlog**: an alert count is not a vulnerability count, and three lockfile-changing pushes moved
   it not at all.
 
-  Two dependency facts worth keeping. **`zod` was split** — `^4.5.4` in root and core against
-  `^3.25.76` in `apps/embedded` — which is what made the grouped dev bump fail typecheck: two
+  Two dependency facts worth keeping. **`zod` was split** - `^4.5.4` in root and core against
+  `^3.25.76` in `apps/embedded` - which is what made the grouped dev bump fail typecheck: two
   `@silkweave/core` instances, one resolved per zod, with mutually unassignable
   `AdapterGenerator` types. And **QuickJS is pinned at 0.31 with a dependabot `ignore`**: 0.32
   typechecks once the variant and `quickjs-emscripten-core` move in lockstep (the variant's module
   type only satisfies `SandboxVariantInput` when it matches the core it was built against), and
   then fails 13/13 sandbox tests and 12 core tests on teardown with `QuickJSRuntime(rt = N) not
-  found when trying to free HostRef(id = -2147483648)` — INT32_MIN, an uninitialized host ref
+  found when trying to free HostRef(id = -2147483648)` - INT32_MIN, an uninitialized host ref
   freed on dispose. **A green typecheck was actively misleading about a WASM boundary**, so
   re-test that pin with `pnpm smoke:sandbox`, never the unit tests alone.
 
-- publish: yes — npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
+- publish: yes - npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
-  with `packages/*/package.json`, and skipping versions already on the registry — a half-failed
+  with `packages/*/package.json`, and skipping versions already on the registry - a half-failed
   run is safe to re-run, and a prerelease tag goes out under `next`. Manual fallback is `pnpm
-  publish:all`. Gatekeeper audit first. MIT (ui ships `src/` — allowlisted in gatekeeper.json).
+  publish:all`. Gatekeeper audit first. MIT (ui ships `src/` - allowlisted in gatekeeper.json).
 
   **Never `git push --tags`. Push the one tag by name:** `git push origin master && git push origin
   v<x.y.z>`. On 2026-09-02 a `--tags` push sent a **local-only `v0.10.0`** that had been created
   during the 0.10.0 cycle and never pushed. The publish workflow's guards did not catch it and
   could not: at that tag the tree's `package.json` really does say 0.10.0, so the tag agreed with
   the versions, and 0.10.0 had never reached the registry, so the skip-what-exists rule had nothing
-  to skip. It published 0.10.0 to nine packages and **moved every `latest` dist-tag backwards** —
+  to skip. It published 0.10.0 to nine packages and **moved every `latest` dist-tag backwards** -
   `npm i workerdeck` served a weeks-old build on protocol 7. Recovery is
   `npm dist-tag add <pkg>@<current> latest` per package (npm forbids unpublishing); the bad
   versions stay on the registry forever. Check `git tag` against `git ls-remote --tags origin`
   before any release: a local tag the remote has never seen is a loaded gun.
 
-  **A just-published version reads as *absent*, not as stale — do not re-run on that evidence.**
+  **A just-published version reads as *absent*, not as stale - do not re-run on that evidence.**
   npm accepts a publish and holds the version **staged** for a few minutes before it enters the
   packument. In that window the gap is not a cache you can bust: `npm view <pkg> versions` omits
   it, the version document 404s, and a real `npm install` of a package depending on it fails
-  `ETARGET` — with `--prefer-online` and a brand-new `--cache` directory. On 2026-09-14 nine of
+  `ETARGET` - with `--prefer-online` and a brand-new `--cache` directory. On 2026-09-14 nine of
   ten packages went live within a minute and `@workerdeck/protocol@2.3.0` did not, which looked
   exactly like a lost publish that had broken every dependent, and the run was re-triggered. The
-  re-run is what told the truth: **`409 Cannot publish over previously staged version`** — the
+  re-run is what told the truth: **`409 Cannot publish over previously staged version`** - the
   first publish had worked all along. Read a 409 saying *staged* as "it is there, wait", never as
   a conflict to clear. The workflow's own `✅ Published` line is the authority; the registry catches
   up. Waiting costs minutes, and a re-run against a genuinely half-published release is the one
   operation that can make things worse.
-- marketplace: yes, on the same tag — `.github/workflows/publish.yml`'s second job, `vscode`,
+- marketplace: yes, on the same tag - `.github/workflows/publish.yml`'s second job, `vscode`,
   publishes `apps/vscode` to the **VS Code Marketplace** under the publisher **`silkweave`**
   (display `Silkweave`, domain `silkweave.dev`, owned by the Microsoft account
-  `tobias.strebitzer@gmail.com` — the personal address). Reused rather than a new `workerdeck`
+  `tobias.strebitzer@gmail.com` - the personal address). Reused rather than a new `workerdeck`
   publisher so the extension inherits the domain verification, and the verified checkmark when
   Microsoft's two 6-month clocks (domain age, publish age) run out. The listing is
   `https://marketplace.visualstudio.com/items?itemName=silkweave.workerdeck-vscode`.
 
   **This is the one credential in this repo that is not OIDC.** `vsce` authenticates with a
-  long-lived Azure DevOps PAT in the `VSCE_PAT` repo secret, scoped **Marketplace → Manage** and —
-  the part everyone gets wrong once — **All accessible organizations**; a token scoped to a single
+  long-lived Azure DevOps PAT in the `VSCE_PAT` repo secret, scoped **Marketplace → Manage** and -
+  the part everyone gets wrong once - **All accessible organizations**; a token scoped to a single
   org fails to publish. So the job is deliberately fenced: it `needs: publish` (npm first), skips
   prerelease tags entirely (the Marketplace has no dist-tags, so `next` has nowhere to go), and
   **warns and skips rather than failing the release** when the secret is absent. A 401 there is
@@ -1067,7 +1067,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `apps/vscode`, or a hand upload at
   `https://marketplace.visualstudio.com/manage/publishers/silkweave`, which keeps the PAT off disk.
 
-  Version is the repo's, in lockstep with the packages — the Marketplace **rejects re-publishing
+  Version is the repo's, in lockstep with the packages - the Marketplace **rejects re-publishing
   an existing version**, and the job re-checks the tag against `apps/vscode/package.json` because
   the npm job's check only walks `packages/`. Keep `apps/vscode/CHANGELOG.md` in step; it is the
   Marketplace's Changelog tab and the extension's own record, separate from this ledger.
@@ -1076,11 +1076,11 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
 
   - **`--no-dependencies` is mandatory**, and not merely a pnpm workaround. It skips vsce's
     `npm list --production` walk, which cannot read pnpm's symlinked `node_modules`. It is
-    *correct* because the vsix ships no runtime `node_modules` at all — esbuild and vite bundle
+    *correct* because the vsix ships no runtime `node_modules` at all - esbuild and vite bundle
     everything. If a real runtime dependency is ever added, it must be vendored into `dist/` the
     same way or the install breaks silently.
   - **`private: true` is not a blocker.** The 2.5.0-era note said vsce refuses to package a
-    private package; it does not — `vsce package` and `vsce publish` both accept it (verified
+    private package; it does not - `vsce package` and `vsce publish` both accept it (verified
     against 3.9.2, which went straight past manifest validation to auth). So `apps/vscode` keeps
     `private: true`, which is what stops `pnpm publish -r` from pushing the extension to npm. Do
     not remove it.
@@ -1092,39 +1092,39 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
     README *is* the listing page, so **unpack the vsix and read `extension/readme.md`** before
     publishing: `unzip -q apps/vscode/workerdeck.vsix -d /tmp/vsix && grep '](' /tmp/vsix/extension/readme.md`.
 
-  **Setting `VSCE_PAT` — the failure that cost four CI attempts.** `gh secret set` takes
+  **Setting `VSCE_PAT` - the failure that cost four CI attempts.** `gh secret set` takes
   `--body <string>` and **reads stdin only when `--body` is omitted**, so
   `… | gh secret set VSCE_PAT --body -` stores the literal string `-`. It fails silently in the
   worst way: the job's own "is the PAT present?" guard passes, because `-` is a non-empty string,
   and the publish then returns `TF400813: The user 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' is not
-  authorized` — the anonymous-identity sentinel, which reads exactly like a mis-scoped token. The
+  authorized` - the anonymous-identity sentinel, which reads exactly like a mis-scoped token. The
   correct form is `… | gh secret set VSCE_PAT` with no `--body` at all. **Also give the secret
   ~60s before re-running**: an attempt fired 8s after the write still used the old value.
 
   The diagnosis that error invites is wrong, and was wrong here: the Marketplace read endpoints
   (`/_apis/gallery/publishers/<pub>` and `…/extensions/<ext>`) return **200 for any valid PAT and
   302 anonymously**, so a 200 proves the token authenticates and says *nothing* about publish
-  authority. `vsce verify-pat` is not a substitute — it **hangs**, twice reproduced, even with
+  authority. `vsce verify-pat` is not a substitute - it **hangs**, twice reproduced, even with
   stdin closed. The only honest local check is to **publish an already-published version**:
   `vsce publish --packagePath <old>.vsix`. The Marketplace rejects a duplicate *after* it
   authenticates, so `already exists` proves write authority and publishes nothing.
 
   **First listing: 2.7.0, uploaded by hand on 2026-09-16**, through
-  `marketplace.visualstudio.com/manage` rather than the CI job — a first listing is worth seeing
+  `marketplace.visualstudio.com/manage` rather than the CI job - a first listing is worth seeing
   before it is automatic, and the web upload needs no PAT on disk. The CI job takes over from the
   next tag. Two things that run counter to instinct while waiting on it: the extension reads
   `flags: public` and every asset is already on the CDN **before** validation finishes, so
   "it's live" is not the same question as "it passed"; the one that answers it is whether an
   `extensionquery` with `ExcludeNonValidated` (flag `32`) still returns the extension. And the
-  CDN asset sizes are an exact check on what shipped — they matched the packaged bytes file for
+  CDN asset sizes are an exact check on what shipped - they matched the packaged bytes file for
   file, which is how the Changelog and License tabs were confirmed, both of them assets
   `.vscodeignore` had never admitted before that release.
 
-  Open VSX — the registry Cursor, Windsurf and VSCodium actually read — is **not** done. Same
+  Open VSX - the registry Cursor, Windsurf and VSCodium actually read - is **not** done. Same
   vsix, different registry: `pnpm dlx ovsx create-namespace silkweave -p <TOKEN>` then
   `pnpm dlx ovsx publish apps/vscode/workerdeck.vsix -p <TOKEN>`, token from open-vsx.org via
   GitHub sign-in.
-- catalogs: when `@openai/codex` moves, refresh `packages/core/src/engines/codex/catalog.ts` —
+- catalogs: when `@openai/codex` moves, refresh `packages/core/src/engines/codex/catalog.ts` -
   the model table is extracted from the JSON embedded in the *platform binary*. The extraction
   script lived in that file's header comment until 2026-09-02 and lives here now, which is where a
   release procedure belongs:
@@ -1144,17 +1144,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   not optional**: under pnpm's strict layout `@openai/codex-<platform>` resolves only from
   `@openai/codex`'s own location, never the repo root (the same two hops
   `resolveBundledCodexExecutable` makes). Mapping rules when diffing: **`visibility: "hide"` does
-  not ship at all** — not as a non-primary row, which is what the rule said until 0.153.4 made the
+  not ship at all** - not as a non-primary row, which is what the rule said until 0.153.4 made the
   difference matter. A hidden row is one OpenAI has taken out of its own picker, and 0.153.4 hides
-  three kinds at once: the internal `codex-auto-review`, the retired (`gpt-5.4`, `gpt-5.4-mini` —
+  three kinds at once: the internal `codex-auto-review`, the retired (`gpt-5.4`, `gpt-5.4-mini` -
   the latter carries an `upgrade` block with a past `retirement_at`) and the specialised
   (`gpt-daybreak-blue/red-latest`, cyber-security variants, one of them explicitly
   cyber-permissive). Shipping any of them under "more models" offers a model the backend may no
   longer serve, or one no coding picker should suggest. Every `list` row ships, and ships
   `primary`. `reasoningEfforts` carries `supported_reasoning_levels` verbatim (it includes
-  `max`/`ultra` beyond the SDK union — trust the binary, keep the strings open). Restate
+  `max`/`ultra` beyond the SDK union - trust the binary, keep the strings open). Restate
   `provenance` with the binary version and the extraction date. Cross-check the result against
-  `~/.codex/models_cache.json` if the operator has one — it is the *fetched* list the backend
+  `~/.codex/models_cache.json` if the operator has one - it is the *fetched* list the backend
   actually offers, and where the two disagree the binary is the older truth (at 0.153.4 the fetch
   had already dropped `gpt-5.4` outright and reworded Sol and 5.5).
   The **claude** catalog refreshes differently, and its procedure lives here rather than in the
@@ -1163,12 +1163,12 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   keeps a verbatim copy of the extraction it was authored from (`RAW_CLAUDE`) and asserts the
   current-model rows still equal the live shaping of it, so a drift fails a unit test rather than
   producing a wrong picker. Hand-maintained older rows (the CLI's "more models") sit outside that
-  comparison and carry no `reasoningEfforts`, and `defaultModel` is deliberately absent — a claude
+  comparison and carry no `reasoningEfforts`, and `defaultModel` is deliberately absent - a claude
   profile's default is the operator's own CLI config. Restate `provenance` with the SDK version and
   the extraction date.
 - docs: root CLAUDE.md + README.md + docs/ + apps/docs (keep site content in sync with README)
 - frontend_smoke: no (manual via `pnpm dev:server` + `pnpm dev:web`, which bind `$WD_DEV_HOST`
-  and default to loopback — set it in your shell to reach them from a phone or tailnet, never in
+  and default to loopback - set it in your shell to reach them from a phone or tailnet, never in
   the committed script; `apps/embedded` has its own `pnpm dev`)
 - co_authored_by: no (global)
 

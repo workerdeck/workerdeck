@@ -385,7 +385,7 @@ export class SessionParkManager {
     if (runner.id !== id) {
       runner.close('error')
       const error = new Error(
-        `rebuilt session has id '${runner.id}', expected '${id}' — the engine factory must ` +
+        `rebuilt session has id '${runner.id}', expected '${id}' - the engine factory must ` +
           'forward EngineRunnerContext.restore (or, without a snapshot, the session id) ' +
           'to the runner config',
       )

@@ -49,7 +49,7 @@ function foldOf(events: SessionEvent[], options: Record<string, boolean>) {
   return fold(replaySlice(events, { afterSeq: 0, ...options }))
 }
 
-describe('image refs — the fold moves in exactly one field', () => {
+describe('image refs - the fold moves in exactly one field', () => {
   const events = log([
     { type: 'text', text: 'looked at the screenshot' },
     image(png(340_000)),
@@ -72,7 +72,7 @@ describe('image refs — the fold moves in exactly one field', () => {
     expect(strip(refd)).toEqual(strip(whole))
   })
 
-  it('does not move the text — which is the whole measured justification', () => {
+  it('does not move the text - which is the whole measured justification', () => {
     const textOf = (state: ReturnType<typeof fold>) => state.items.find((item) => item.kind === 'tool_call')!.result?.text
     expect(textOf(foldOf(events, { imageRefs: true }))).toBe('looked at the screenshot')
     expect(textOf(foldOf(events, { imageRefs: true }))).toBe(textOf(foldOf(events, {})))
@@ -100,7 +100,7 @@ describe('image refs composed with truncation', () => {
     expect(call.result?.images).toEqual([{ partIndex: 1, mediaType: 'image/jpeg', bytes: 500_000, sourceSeq: 2 }])
   })
 
-  it('keeps images through text hydration — the press must not orphan the picture', () => {
+  it('keeps images through text hydration - the press must not orphan the picture', () => {
     const state = foldOf(events, { imageRefs: true, truncateResults: true })
     const hydrated = hydrateToolResult(state, 'call-1', big)
     const call = hydrated.items.find((i) => i.kind === 'tool_call')!

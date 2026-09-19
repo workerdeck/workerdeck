@@ -24,7 +24,7 @@ struct PlanRequestTests {
 
   @Test("the plan is handed back unmodified, so the renderer sees the markdown it was given")
   func planIsVerbatim() {
-    // Trimmed only for the *emptiness* test — leading whitespace can be a fenced
+    // Trimmed only for the *emptiness* test - leading whitespace can be a fenced
     // block's indentation, and eating it would change what the plan says.
     let plan = "   - indented\n\n"
     #expect(
@@ -37,7 +37,7 @@ struct PlanRequestTests {
     #expect(PlanRequest.plan(from: nil) == nil)
     // The right shape under the wrong tool: a Bash call is never a plan.
     #expect(PlanRequest.plan(from: request(tool: "Bash", input: .object(["plan": .string("x")]))) == nil)
-    // The right tool with nothing to read — the case that would otherwise draw
+    // The right tool with nothing to read - the case that would otherwise draw
     // an empty card asking the reader to approve it.
     #expect(PlanRequest.plan(from: request(tool: "ExitPlanMode", input: .object(["plan": .string("  \n ")]))) == nil)
     #expect(PlanRequest.plan(from: request(tool: "ExitPlanMode", input: .object([:]))) == nil)

@@ -14,7 +14,7 @@ import Foundation
 /// cannot be measured as one string and drawn as another, because there is only
 /// one string.
 ///
-/// Block structure — headings, lists, quotes, fences, rules — is
+/// Block structure - headings, lists, quotes, fences, rules - is
 /// ``MarkdownBlocks``' job; this is what renders the text *inside* each block.
 /// `.inlineOnlyPreservingWhitespace` rather than full parsing for two reasons:
 /// the full mode collapses whitespace, which a monospace grid cannot afford, and
@@ -28,7 +28,7 @@ public enum MarkdownInline {
     return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
   }
 
-  /// The characters that will be drawn — what to wrap and measure.
+  /// The characters that will be drawn - what to wrap and measure.
   public static func plain(_ text: String) -> String {
     String(attributed(text).characters)
   }

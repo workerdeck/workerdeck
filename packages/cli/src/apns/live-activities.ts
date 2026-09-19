@@ -199,7 +199,7 @@ export function driveLiveActivities(options: {
     const state = projectContentState({ info, request, startedAtMs: current.startedAtMs })
     const waiting = isWaiting(state.phase)
     // A new request, or the card crossing between working and waiting, is what a person is waiting
-    // to see. Everything else — a checklist tick, a tool title — can ride a coalesced push.
+    // to see. Everything else - a checklist tick, a tool title - can ride a coalesced push.
     const urgent = waiting !== current.lastWaiting || state.request?.id !== current.lastRequestId
     current.lastWaiting = waiting
     current.lastRequestId = state.request?.id

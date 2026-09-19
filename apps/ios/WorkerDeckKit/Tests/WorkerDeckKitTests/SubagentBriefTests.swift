@@ -7,8 +7,8 @@ import Testing
 /// frame and the inline task expansion alike, clipped to
 /// `TerminalPlanner.briefLines` and pressable for the whole of it. The rules
 /// under test are the ones two clients must agree on (web `BriefRow` /
-/// `briefPx`): presence is `taskBrief` — no `prompt`, no row, which is every
-/// codex task — the clip is a wrapped-line count, and on this renderer the
+/// `briefPx`): presence is `taskBrief` - no `prompt`, no row, which is every
+/// codex task - the clip is a wrapped-line count, and on this renderer the
 /// collapsed and expanded heights must both be exact in the book.
 @Suite("Subagent brief")
 struct SubagentBriefTests {
@@ -35,7 +35,7 @@ struct SubagentBriefTests {
       result: nil)
   }
 
-  /// An unbroken run wraps break-word style, filling whole 48-cell lines — the
+  /// An unbroken run wraps break-word style, filling whole 48-cell lines - the
   /// arithmetic stays exact.
   private func unbroken(_ chars: Int) -> String { String(repeating: "x", count: chars) }
 
@@ -60,7 +60,7 @@ struct SubagentBriefTests {
   }
 
   /// A **foreground** Task forwards its brief as a real nested user item, so the
-  /// frame already opens with it and the synthetic row must stand down — drawn
+  /// frame already opens with it and the synthetic row must stand down - drawn
   /// both ways, the reader sees one instruction twice. A **background** agent
   /// forwards nothing, which is the case the synthetic row exists for.
   @Test("the stream's own brief wins over the call's prompt")
@@ -78,7 +78,7 @@ struct SubagentBriefTests {
   }
 
   /// The codex case: its spawn message is encrypted on the wire, so there is no
-  /// row — not an empty one. Whitespace is not a brief either.
+  /// row - not an empty one. Whitespace is not a brief either.
   @Test("a task without a prompt draws no brief row")
   func noPromptNoRow() {
     let bare = TerminalRows.build(items: frameItems, frameTask: task("T1", prompt: nil))
@@ -88,7 +88,7 @@ struct SubagentBriefTests {
     #expect(blank.count == 3)
   }
 
-  @Test("the brief leads the inline task expansion — and only the open one")
+  @Test("the brief leads the inline task expansion - and only the open one")
   func briefLeadsInlineExpansion() {
     let blocks = terminalBlocks([
       .toolCall(task("T1", prompt: "dig in")),
@@ -105,7 +105,7 @@ struct SubagentBriefTests {
     var expansion = TerminalExpansion()
     expansion.apply(.toggle(block.expansionKey), subtree: [])
     let open = TerminalPlanner.plan(.task(block), metrics: metrics, expansion: expansion)
-    // Header first — the row's identity — then the brief, then the work.
+    // Header first - the row's identity - then the brief, then the work.
     #expect(open[0].press == .openSubagent(taskId: "T1"))
     #expect(open[1].gutter == TermGlyph.prompt)
     #expect(open[1].text == "dig in")
@@ -131,13 +131,13 @@ struct SubagentBriefTests {
 
   // MARK: - The clip
 
-  /// The clip is `briefLines` **wrapped** lines — the planner's own wrap, so the
+  /// The clip is `briefLines` **wrapped** lines - the planner's own wrap, so the
   /// boundary is exact: four full 48-column lines fit untouched, one character
   /// more clips.
   @Test("the clip boundary is briefLines wrapped lines")
   func clipBoundary() {
     let cols = 48
-    // Exactly four lines' worth: shown whole, no affordance, no press — a
+    // Exactly four lines' worth: shown whole, no affordance, no press - a
     // target that visibly does nothing teaches the reader the theme is broken.
     let fits = TerminalPlanner.plan(
       .brief(id: "T1", text: unbroken(TerminalPlanner.briefLines * cols)), metrics: metrics)
@@ -174,8 +174,8 @@ struct SubagentBriefTests {
     #expect(lines.allSatisfy { $0.press == .toggle(.brief("T1")) && $0.inOpen })
   }
 
-  /// An interior blank line is planned as a single space — a real line of the
-  /// grid, never a zero-height fragment — and the trim means the edges can
+  /// An interior blank line is planned as a single space - a real line of the
+  /// grid, never a zero-height fragment - and the trim means the edges can
   /// never hold one.
   @Test("hard newlines inside a brief are exact lines")
   func interiorBlankLines() {

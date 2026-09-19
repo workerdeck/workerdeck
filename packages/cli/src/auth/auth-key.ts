@@ -40,7 +40,7 @@ export async function materializeAuthKey(
       try {
         const { mode } = await stat(path)
         if ((mode & 0o077) !== 0) {
-          warn(`auth key file ${path} is readable by other users ` + `(mode ${(mode & 0o777).toString(8)}) — run: chmod 600 ${path}`)
+          warn(`auth key file ${path} is readable by other users ` + `(mode ${(mode & 0o777).toString(8)}) - run: chmod 600 ${path}`)
         }
       } catch {}
       return { key, source: 'stored', path }

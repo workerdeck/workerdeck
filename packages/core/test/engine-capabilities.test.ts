@@ -55,7 +55,7 @@ describe('ENGINE_CAPABILITIES invariants', () => {
 })
 
 describe('adapter conformance', () => {
-  it('every adapter’s record IS the protocol record — the divergence guard', () => {
+  it('every adapter’s record IS the protocol record - the divergence guard', () => {
     // Identity, not equality: adapters must reference the protocol constant, never copy it.
     expect(claudeAdapter.capabilities).toBe(ENGINE_CAPABILITIES.claude)
     expect(codexAdapter.capabilities).toBe(ENGINE_CAPABILITIES.codex)

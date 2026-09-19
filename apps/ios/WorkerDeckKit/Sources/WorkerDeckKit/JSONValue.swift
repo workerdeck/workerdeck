@@ -1,6 +1,6 @@
 import Foundation
 
-/// A JSON value of unknown shape — the Swift stand-in for the protocol's `unknown`
+/// A JSON value of unknown shape - the Swift stand-in for the protocol's `unknown`
 /// payloads (tool inputs, sdk_event payloads, meta). Codable both ways.
 public enum JSONValue: Sendable, Equatable {
   case null

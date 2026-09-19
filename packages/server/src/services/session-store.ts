@@ -113,7 +113,7 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
       } catch (error) {
         options.onError?.(error, { path, op: 'save' })
         throw new Error(
-          `parked session '${record.id}' is not JSON-serializable — a host-injected value ` +
+          `parked session '${record.id}' is not JSON-serializable - a host-injected value ` +
             `reached its config or snapshot: ${String(error)}`,
           { cause: error },
         )

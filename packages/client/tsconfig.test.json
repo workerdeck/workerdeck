@@ -1,5 +1,5 @@
 {
-  // Tests run a real server in Node, so they need node types — kept out of the
+  // Tests run a real server in Node, so they need node types - kept out of the
   // main tsconfig on purpose: `src` compiles with `types: []` so a Node-only API
   // sneaking into the browser client is a type error, not a runtime surprise.
   "extends": "./tsconfig.json",

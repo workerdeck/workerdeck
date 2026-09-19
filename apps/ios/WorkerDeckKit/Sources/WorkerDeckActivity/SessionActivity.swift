@@ -4,12 +4,12 @@ import Foundation
 /// the phone.
 ///
 /// This is a *contract with the forwarder*, not part of the protocol
-/// `WorkerDeckKit` mirrors — the same reasoning that keeps `DeviceRegistration`
+/// `WorkerDeckKit` mirrors - the same reasoning that keeps `DeviceRegistration`
 /// out of the kit. It lives in its own module because two binaries must compile
 /// the identical type: the app, which performs the intents, and the widget
 /// extension, which draws the card.
 ///
-/// The whole payload — `attributes` plus `content-state` plus APNs' own keys —
+/// The whole payload - `attributes` plus `content-state` plus APNs' own keys -
 /// shares one 4 KB budget. The forwarder measures and shrinks; nothing here may
 /// assume a field survived.
 public struct SessionActivityAttributes: Sendable, Codable, Hashable {
@@ -31,7 +31,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
   }
 
   public struct ContentState: Sendable, Codable, Hashable {
-    /// One of `Phase`'s constants — but typed as `String` deliberately. A
+    /// One of `Phase`'s constants - but typed as `String` deliberately. A
     /// `Codable` enum throws on an unknown raw value, and ActivityKit drops the
     /// whole update when decoding throws: a newer gateway would freeze the card
     /// instead of degrading it. Same rule as `PushPayload.type`.
@@ -41,7 +41,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
     public var detail: String?
     /// Epoch **milliseconds**, never a `Date`. ActivityKit decodes pushed
     /// content state with a default `JSONDecoder`, whose date strategy counts
-    /// seconds from 2001 — a Unix timestamp landing in a `Date` field draws a
+    /// seconds from 2001 - a Unix timestamp landing in a `Date` field draws a
     /// countdown from the wrong century. Numbers sidestep the strategy.
     public var startedAtMs: Double
     public var expiresAtMs: Double?
@@ -102,7 +102,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
     public var choices: [Choice]
     /// The original `PermissionRequest.input`, verbatim, when it fitted. An
     /// answer is encoded by *rewriting* that input, so without it the card can
-    /// only offer "Answer in app" — which is exactly what an absent value means.
+    /// only offer "Answer in app" - which is exactly what an absent value means.
     public var inputJSON: String?
 
     public init(id: String, kind: String, choices: [Choice] = [], inputJSON: String? = nil) {
@@ -126,7 +126,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
   }
 }
 
-/// The phases the forwarder sends. Not an enum on the wire — see `phase`.
+/// The phases the forwarder sends. Not an enum on the wire - see `phase`.
 public enum SessionActivityPhase {
   public static let running = "running"
   public static let approval = "approval"
@@ -173,7 +173,7 @@ public enum SessionActivityLimits {
   public static let detail = 200
   public static let choiceLabel = 40
   /// A layout budget under the lock screen's 160 pt, not a documented platform
-  /// cap — Apple publishes no per-activity button count.
+  /// cap - Apple publishes no per-activity button count.
   public static let choices = 4
 }
 

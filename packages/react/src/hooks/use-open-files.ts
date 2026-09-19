@@ -158,7 +158,7 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
       if (!file || file.saving) {
         return
       }
-      // Captured before the re-read, whose `loaded` clears the draft — the one thing "take mine" must not do.
+      // Captured before the re-read, whose `loaded` clears the draft - the one thing "take mine" must not do.
       const mine = currentText(file)
       dispatch({ type: 'saveStart', path })
       try {

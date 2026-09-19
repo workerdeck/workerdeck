@@ -13,7 +13,7 @@ struct EngineMarkTests {
   func firstParty() {
     #expect(engineMark(engine: "claude", model: nil) == .claude)
     #expect(engineMark(engine: "codex", model: nil) == .codex)
-    // The engine wins over the model — a codex session pointed at a Gemini id
+    // The engine wins over the model - a codex session pointed at a Gemini id
     // is still OpenAI's process.
     #expect(engineMark(engine: "codex", model: "gemini-2.5-pro") == .codex)
   }
@@ -50,7 +50,7 @@ struct EngineMarkTests {
   }
 
   /// Colour reaches the mark for both branded vendors and the *name* for only
-  /// one — OpenAI's guidelines forbid adding colour to the mark, so theirs is at
+  /// one - OpenAI's guidelines forbid adding colour to the mark, so theirs is at
   /// full contrast, which is right on a glyph and wrong on an 11pt label.
   @Test("the vendor colour reaches the mark further than it reaches the name")
   func tintReach() {

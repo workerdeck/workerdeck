@@ -26,8 +26,8 @@ export type WorkerServerOptions = {
     ignore?: string[]
   }
   // `!` shell mode: the command runs on the host in the session's cwd and its output lands in the transcript and
-  // the model's context. It goes through NO permission flow — no permission card, no allowlist, no
-  // disableBypassPermissions — hence its own switch, default off, offered to operators only (never a scoped
+  // the model's context. It goes through NO permission flow - no permission card, no allowlist, no
+  // disableBypassPermissions - hence its own switch, default off, offered to operators only (never a scoped
   // principal) on engines with a host cwd. Defaults: 120s wall clock, 32 KiB of captured output.
   shell?: {
     enabled?: boolean
@@ -48,7 +48,7 @@ export type WorkerServerOptions = {
   maxBodyBytes?: number
   disableBypassPermissions?: boolean
   // How long a permission prompt or an AskUserQuestion may sit unanswered before the engine denies it.
-  // Omitted or null: never — a prompt waits for a human for as long as the session lives. A session may
+  // Omitted or null: never - a prompt waits for a human for as long as the session lives. A session may
   // override it per request with CreateSessionRequest.approvalTimeoutMs.
   approvalTimeoutMs?: number | null
   requireApiKey?: boolean
@@ -103,7 +103,7 @@ export type QueueServerOptions = {
 export type DrainReport = {
   // Sessions mid-turn. These resolve on their own, so the drain waits for them.
   working: string[]
-  // Sessions blocked on a human — a pending approval. The drain names these but never waits for them: nothing about
+  // Sessions blocked on a human - a pending approval. The drain names these but never waits for them: nothing about
   // shutting down will answer the prompt, so waiting is a hang with better manners.
   awaitingHuman: string[]
   // True when the deadline passed with work still running.

@@ -27,7 +27,7 @@ function base(items: TranscriptItem[], status: TranscriptState['status']): Trans
 }
 
 const run: TranscriptItem[] = [
-  item({ kind: 'user', text: 'Set up prettier for the repo, but only for code — markdown and JSON churn buys nothing.' }),
+  item({ kind: 'user', text: 'Set up prettier for the repo, but only for code - markdown and JSON churn buys nothing.' }),
   item({
     kind: 'assistant_text',
     text: 'Now applying the format and immediately verifying nothing broke:',
@@ -37,7 +37,7 @@ const run: TranscriptItem[] = [
   item({ kind: 'thinking', text: 'Thought for 9s, ran 1 shell command', parentToolUseId: null }),
   item({
     kind: 'assistant_text',
-    text: 'Format applied. Now checking whether oxlint discovers the root config from a package subdirectory — that determines whether the per-package `lint` scripts can stay as-is:',
+    text: 'Format applied. Now checking whether oxlint discovers the root config from a package subdirectory - that determines whether the per-package `lint` scripts can stay as-is:',
     streaming: false,
     parentToolUseId: null,
   }),
@@ -155,7 +155,7 @@ const markdown: TranscriptItem[] = [
     parentToolUseId: null,
     text: `## Packaging
 
-Releases go through **pnpm only** — \`npm publish\` would ship \`workspace:*\` verbatim.
+Releases go through **pnpm only** - \`npm publish\` would ship \`workspace:*\` verbatim.
 
 The rules, in order:
 
@@ -165,7 +165,7 @@ The rules, in order:
 
 Things that are *not* the release record:
 
-- \`package.json\` — it is the intent, not the outcome
+- \`package.json\` - it is the intent, not the outcome
 - a local tag nobody pushed
 - this file
 
@@ -186,7 +186,7 @@ git tag v0.16.0 && git push --tags
 
 See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-runs.`,
   }),
-  // The break rule's guard, one poem per half — the height calculator has been wrong in each direction once.
+  // The break rule's guard, one poem per half - the height calculator has been wrong in each direction once.
   item({ kind: 'user', text: 'now a short poem about releases' }),
   item({
     kind: 'assistant_text',
@@ -199,7 +199,7 @@ See [the workflow](https://github.com/workerdeck/workerdeck) for the gate it re-
       ...['It sat in the local dark,', 'a name without a wire,', 'while npm told the world'].map((l) => `${l}  `),
       'the old truth, entire.',
       '',
-      ...['Check the registry,', 'check the remote refs too —', 'a release is what shipped,'].map((l) => `${l}  `),
+      ...['Check the registry,', 'check the remote refs too -', 'a release is what shipped,'].map((l) => `${l}  `),
       'not what version:set knew.',
     ].join('\n'),
   }),
@@ -269,7 +269,7 @@ const long: TranscriptItem[] = Array.from({ length: 40 }, (_, index) =>
       }),
 )
 
-// 600 rows of varied height, with a catch-up splice at item 300 (see App.tsx) — the scale where estimate error becomes visible scrollbar drift.
+// 600 rows of varied height, with a catch-up splice at item 300 (see App.tsx) - the scale where estimate error becomes visible scrollbar drift.
 const huge: TranscriptItem[] = Array.from({ length: 600 }, (_, index) => {
   const step = index % 6
   if (step === 0) {
@@ -434,7 +434,7 @@ The refactor holds. ${'The call sites stay compatible and the tests agree. '.rep
   }
 })
 
-// Adversarial on purpose: long unbroken tokens, CJK, emoji, combining marks, tabs, a wide table, a deep diff — the height audit's input.
+// Adversarial on purpose: long unbroken tokens, CJK, emoji, combining marks, tabs, a wide table, a deep diff - the height audit's input.
 const adversarial: TranscriptItem[] = [
   // A result far bigger than the expanded row's budget: it must clip and offer the rest.
   item({
@@ -490,7 +490,7 @@ short
 
 漢字テキストの段落。カタカナとひらがなが混ざっていて、折り返し位置は全角文字の幅に依存する。`,
   }),
-  item({ kind: 'thinking', text: 'Considering 👩‍💻 a ZWJ sequence and a naïve café — combining marks résumé…', parentToolUseId: null }),
+  item({ kind: 'thinking', text: 'Considering 👩‍💻 a ZWJ sequence and a naïve café - combining marks résumé…', parentToolUseId: null }),
   item({
     kind: 'tool_call',
     name: 'Read',
@@ -638,7 +638,7 @@ const subagents: TranscriptItem[] = [
   item({ kind: 'user', text: 'Find every place we parse a permission mode, and check the docs match.' }),
   item({
     kind: 'assistant_text',
-    text: 'Two searches in parallel — one over the engines, one over the docs.',
+    text: 'Two searches in parallel - one over the engines, one over the docs.',
     streaming: false,
     parentToolUseId: null,
   }),
@@ -722,7 +722,7 @@ const subagents: TranscriptItem[] = [
   }),
 ]
 
-// The playground supplies no image loader, so every box settles into its failure state — deliberate: all three states are one box of `IMAGE_BOX_LINES`.
+// The playground supplies no image loader, so every box settles into its failure state - deliberate: all three states are one box of `IMAGE_BOX_LINES`.
 const images: TranscriptItem[] = [
   item({ kind: 'user', text: 'Look at the three mockups and tell me which one holds up.' }),
   item({

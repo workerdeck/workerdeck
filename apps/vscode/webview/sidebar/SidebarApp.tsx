@@ -41,7 +41,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
     ...persisted?.config,
   })
 
-  // The view config outlives a reload — VS Code tears webviews down freely.
+  // The view config outlives a reload - VS Code tears webviews down freely.
   useEffect(() => {
     bridge.setState<Persisted>({ config })
   }, [bridge, config])

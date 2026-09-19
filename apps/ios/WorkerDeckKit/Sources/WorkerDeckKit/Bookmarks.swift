@@ -1,20 +1,20 @@
 import Foundation
 
-/// The reader's own marks on a transcript — which items, per session — the
+/// The reader's own marks on a transcript - which items, per session - the
 /// semantics of the web client's `useBookmarks`
 /// (`packages/web/src/hooks/useBookmarks.ts`, localStorage key
 /// `workerdeck.bookmarks.v1`).
 ///
 /// Bookmarks are transcript item **ids, not indexes**: an index is an artifact
-/// of one replay's coalescing, an id survives it — the same argument that keyed
+/// of one replay's coalescing, an id survives it - the same argument that keyed
 /// the web seam, mirrored here so a mark means the same thing on every client
 /// that draws it. Membership is per `host:session`, stored flat so one map
 /// covers every gateway; losing the map costs starred rows, nothing structural,
 /// which is why the app-side read swallows a decode failure rather than
 /// guarding one.
 ///
-/// Not a protocol port the way `Watermarks` is — no shared `bookmarks.ts`
-/// exists — but the rules live in the kit for the reason `MarkdownBlocks`'s do:
+/// Not a protocol port the way `Watermarks` is - no shared `bookmarks.ts`
+/// exists - but the rules live in the kit for the reason `MarkdownBlocks`'s do:
 /// this package is the only part of the app under test, and toggle semantics
 /// are exactly the kind of pure logic whose interesting cases are all edges.
 public struct BookmarkStore {
@@ -59,7 +59,7 @@ public final class Bookmarks {
 
   /// Add the mark if absent, remove it if present; returns whether the item is
   /// bookmarked *now*. A session whose last mark was removed leaves the map
-  /// entirely — the web deletes the emptied key, so storage never accrues a
+  /// entirely - the web deletes the emptied key, so storage never accrues a
   /// tombstone per session someone once starred and unstarred.
   @discardableResult
   public func toggle(hostId: String, sessionId: String, itemId: String) -> Bool {

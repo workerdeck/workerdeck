@@ -1,6 +1,6 @@
 import Foundation
 
-/// The `TodoWrite` checklist — a port of
+/// The `TodoWrite` checklist - a port of
 /// `packages/ui/src/components/terminal/todos.ts`.
 ///
 /// `TodoWrite`'s result prose is "Todos have been modified successfully", which
@@ -33,7 +33,7 @@ public enum TerminalTodos {
   }
 
   public struct Preview: Equatable, Sendable {
-    /// The header's parenthetical — what `toolInputPreview` would otherwise say.
+    /// The header's parenthetical - what `toolInputPreview` would otherwise say.
     public var summary: String
     public var shown: [Entry]
     /// The overflow line, verbatim, because the planner wraps this exact string.
@@ -70,8 +70,8 @@ public enum TerminalTodos {
     return Entry(status: status, text: text)
   }
 
-  /// Whole-or-nothing: a malformed entry — which is what a streaming, partially
-  /// delivered input looks like — falls back to the generic preview rather than
+  /// Whole-or-nothing: a malformed entry - which is what a streaming, partially
+  /// delivered input looks like - falls back to the generic preview rather than
   /// a half-drawn checklist.
   public static func parse(_ input: JSONValue?) -> [Entry]? {
     guard let items = input?.objectValue?["todos"]?.arrayValue, !items.isEmpty else { return nil }
@@ -94,7 +94,7 @@ public enum TerminalTodos {
       more: hidden > 0 ? "… +\(hidden) more" : nil)
   }
 
-  /// Height and render both draw this exact string — the planner wraps what the
+  /// Height and render both draw this exact string - the planner wraps what the
   /// renderer paints, so there is one spelling of a checklist line and not two.
   public static func line(_ entry: Entry) -> String {
     "\(glyph(entry.status)) \(entry.text)"

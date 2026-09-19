@@ -9,7 +9,7 @@ import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { connectAppServer } from './process.ts'
 import type { AppServerConnectFn, AppServerThreadListResponse, AppServerThreadSummary } from './types.ts'
 
-const NOT_INSTALLED = '@openai/codex is not installed — add it (an optional peer of @workerdeck/core) to run codex profiles'
+const NOT_INSTALLED = '@openai/codex is not installed - add it (an optional peer of @workerdeck/core) to run codex profiles'
 
 export function resolveBundledCodexExecutable(): string | undefined {
   const triple = targetTriple()
@@ -71,15 +71,15 @@ async function checkCodexAvailability(
       if (`${stdout}\n${stderr}`.includes('Not logged in')) {
         // Presence checks on the NAMES only; values are never read.
         const hint = childEnv.CODEX_API_KEY
-          ? ' CODEX_API_KEY is read only by `codex exec`, never by the app-server — run ' +
+          ? ' CODEX_API_KEY is read only by `codex exec`, never by the app-server - run ' +
             '`codex login --with-api-key` under this profile’s CODEX_HOME to persist it.'
           : childEnv.OPENAI_API_KEY
-            ? ' OPENAI_API_KEY is not used by codex — run `codex login --with-api-key` under this profile’s CODEX_HOME.'
+            ? ' OPENAI_API_KEY is not used by codex - run `codex login --with-api-key` under this profile’s CODEX_HOME.'
             : ''
         resolve({
           available: false,
           reason:
-            `codex is not logged in for this profile's environment — run \`codex login\`` +
+            `codex is not logged in for this profile's environment - run \`codex login\`` +
             (profile.codexHome ? ` with CODEX_HOME=${profile.codexHome}` : '') +
             `.${hint}`,
         })
@@ -162,7 +162,7 @@ export async function listCodexSessions(options: {
     connection.close()
   }
   const summaries = rows
-    // An ephemeral thread was never materialized on disk — nothing to resume.
+    // An ephemeral thread was never materialized on disk - nothing to resume.
     .filter((row) => typeof row.id === 'string' && row.id.length > 0 && !row.ephemeral)
     .map(summarizeThread)
   const start = options.offset ?? 0

@@ -5,7 +5,7 @@ import Foundation
 /// A port of `packages/react/src/lib/recap.ts`, and the counting is the whole
 /// contract: the recap is **derived from the transcript, never written by the
 /// model**. A prose summary would spend a turn on something nobody asked for,
-/// and would be worst in the case that matters most — a session that failed
+/// and would be worst in the case that matters most - a session that failed
 /// unattended.
 public struct RecapSummary: Equatable, Sendable {
   public var turns: Int
@@ -52,7 +52,7 @@ public func summarizeSince(items: [TranscriptItem], from index: Int, pendingAppr
     }
   }
 
-  // Swift's sort is not stable, so the name tiebreak is explicit — the same
+  // Swift's sort is not stable, so the name tiebreak is explicit - the same
   // reason the sessions list carries one.
   let toolNames =
     toolCounts
@@ -63,7 +63,7 @@ public func summarizeSince(items: [TranscriptItem], from index: Int, pendingAppr
     errors: errors, pending: pendingApprovals)
 }
 
-/// The one line the seam draws. `nil` when nothing happened — there is then no
+/// The one line the seam draws. `nil` when nothing happened - there is then no
 /// boundary worth marking, and a row saying so would be the noise this feature
 /// is supposed to save the reader.
 public func recapLine(_ summary: RecapSummary) -> String? {

@@ -44,7 +44,7 @@ export function UsageDialog({
           {rateLimits.length === 0 ? (
             <p className="py-6 text-center text-body-sm text-fg-4">
               {engine === 'claude'
-                ? 'This session reports no plan windows — API-key sessions have none, and a subscription session reports them once a turn has run.'
+                ? 'This session reports no plan windows - API-key sessions have none, and a subscription session reports them once a turn has run.'
                 : `Plan windows are a claude.ai subscription thing; this session runs on the ${engine} engine.`}
             </p>
           ) : (

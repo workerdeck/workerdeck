@@ -145,7 +145,7 @@ describe('truncated replay', () => {
     expect(block?.total_chars).toBe(BIG.length)
   })
 
-  it('leaves the stored log whole — a second, plain attach gets everything', async () => {
+  it('leaves the stored log whole - a second, plain attach gets everything', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await start(harness)
     const id = await seed(harness, base)
@@ -229,7 +229,7 @@ async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string) 
 describe('image-ref replay', () => {
   const partsOf = (event: SessionEvent | undefined) => resultBlock(event)?.content as Array<Record<string, unknown>> | undefined
 
-  it('sends the base64 whole when nobody asked — byte-identical to before this rule', async () => {
+  it('sends the base64 whole when nobody asked - byte-identical to before this rule', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await start(harness)
     const id = await seedImage(harness, base)
@@ -253,7 +253,7 @@ describe('image-ref replay', () => {
     })
   })
 
-  it('leaves the stored log whole — the bytes are what the route serves back', async () => {
+  it('leaves the stored log whole - the bytes are what the route serves back', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await start(harness)
     const id = await seedImage(harness, base)

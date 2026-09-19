@@ -1,4 +1,4 @@
-// pnpm smoke:live-approval [provider] [model-id]   — spends tokens, never part of `pnpm test`.
+// pnpm smoke:live-approval [provider] [model-id]   - spends tokens, never part of `pnpm test`.
 //
 // Edit-then-approve against a real provider. `smoke:live` drives tools by hand and configures no
 // executor, so it never reaches the runner's own approval dispatch; this one does, and it is the
@@ -32,7 +32,7 @@ const runner = new AiSdkRunner({
   languageModel: factory(modelId),
   instructions:
     'You evaluate sales leads. Use the eval_script tool to compute answers from files in the ' +
-    'sandbox VFS — never guess numbers. The sandbox exposes vfs.read(path), vfs.write(path, text), ' +
+    'sandbox VFS - never guess numbers. The sandbox exposes vfs.read(path), vfs.write(path, text), ' +
     'and vfs.list(dir). The value of the last expression in your script is returned to you. ' +
     'Report whatever the tool returns, even if it surprises you.',
   tools: {
@@ -103,10 +103,10 @@ const files = vfs.snapshot() as Record<string, string>
 const history = JSON.stringify(runner.messages)
 const failures: string[] = []
 if (approvals === 0) {
-  failures.push('no approval was ever requested — shouldApprove did not fire')
+  failures.push('no approval was ever requested - shouldApprove did not fire')
 }
 if (files[PROOF] !== SENTINEL) {
-  failures.push(`${PROOF} is ${JSON.stringify(files[PROOF])} — the edited script never ran`)
+  failures.push(`${PROOF} is ${JSON.stringify(files[PROOF])} - the edited script never ran`)
 }
 if (edited !== undefined && !history.includes(edited)) {
   failures.push('the amended script is absent from the model history')

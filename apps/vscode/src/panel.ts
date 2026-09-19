@@ -33,7 +33,7 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
 
   #focusPending = false
   // The single read-request slot: `openSubagent` and `reveal` go to different panel APIs
-  // but at most one can ever be pending — asking for either withdraws the other. One slot
+  // but at most one can ever be pending - asking for either withdraws the other. One slot
   // makes that mutual exclusion structural. The shared nonce is strictly increasing, so a
   // repeated ask of the same kind still reads as new on the webview side ("asking twice
   // means twice": `openSubagent`/`reveal` land in props).
@@ -125,7 +125,7 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
     this.#pushActive()
   }
 
-  // Deliberately not `show()`, which materializes the view — on activation that would force the dock open on every window start.
+  // Deliberately not `show()`, which materializes the view - on activation that would force the dock open on every window start.
   restoreActive(active: ActiveSession): void {
     if (this.#active) {
       return
@@ -261,7 +261,7 @@ export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> 
           behavior: choice === 'Approve' ? 'allow' : 'deny',
         })
       } catch {
-        // Already resolved from the panel (or elsewhere) — nothing to report.
+        // Already resolved from the panel (or elsewhere) - nothing to report.
       }
     })
   }

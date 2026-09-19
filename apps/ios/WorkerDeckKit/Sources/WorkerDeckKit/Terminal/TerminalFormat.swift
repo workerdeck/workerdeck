@@ -1,6 +1,6 @@
 import Foundation
 
-/// Formatters and tool predicates for the terminal transcript — a port of the
+/// Formatters and tool predicates for the terminal transcript - a port of the
 /// pieces of `packages/ui/src/lib/format.ts` and `lib/tool-icon.ts` that the
 /// theme draws with.
 ///
@@ -29,16 +29,16 @@ public enum TermFmt {
     return parts.joined(separator: " · ")
   }
 
-  /// `formatCost` — `nil`/NaN reads "—" rather than "$0.00", because "we do not
+  /// `formatCost` - `nil`/NaN reads "-" rather than "$0.00", because "we do not
   /// know" and "it was free" are different facts.
   public static func cost(_ usd: Double?) -> String {
-    guard let usd, !usd.isNaN else { return "—" }
+    guard let usd, !usd.isNaN else { return "-" }
     if usd == 0 { return "$0.00" }
     if usd < 0.01 { return "<$0.01" }
     return String(format: "$%.2f", usd)
   }
 
-  /// `formatDuration` — "820ms" / "3.2s" / "1m 4s".
+  /// `formatDuration` - "820ms" / "3.2s" / "1m 4s".
   public static func duration(ms: Double) -> String {
     if ms < 1000 { return "\(Int(ms.rounded()))ms" }
     let seconds = ms / 1000
@@ -47,7 +47,7 @@ public enum TermFmt {
     return "\(minutes)m \(Int((seconds.truncatingRemainder(dividingBy: 60)).rounded()))s"
   }
 
-  /// `formatBytes` — binary thresholds, decimal-ish labels, exactly as the web
+  /// `formatBytes` - binary thresholds, decimal-ish labels, exactly as the web
   /// client spells them.
   public static func bytes(_ count: Int) -> String {
     let value = Double(count)
@@ -56,7 +56,7 @@ public enum TermFmt {
     return "\(count) B"
   }
 
-  /// `formatTokens` — 850 → "850", 359_000 → "359.0k".
+  /// `formatTokens` - 850 → "850", 359_000 → "359.0k".
   public static func tokens(_ count: Int) -> String {
     let value = Double(count)
     if value >= 1_000_000 { return String(format: "%.1fM", value / 1_000_000) }
@@ -78,14 +78,14 @@ public enum TermFmt {
     return (count < 0 ? "-" : "") + out
   }
 
-  /// `clip` — the theme's one truncation rule: keep `max - 1` and spend the last
+  /// `clip` - the theme's one truncation rule: keep `max - 1` and spend the last
   /// cell on the ellipsis, so a clipped string is never wider than its budget.
   public static func clip(_ text: String, max: Int = 80) -> String {
     guard text.count > max, max > 0 else { return text }
     return String(text.prefix(max - 1)) + "…"
   }
 
-  /// `toolInputPreview` — the one-line summary of a tool's input. First present
+  /// `toolInputPreview` - the one-line summary of a tool's input. First present
   /// of the seven well-known keys wins; anything else falls back to compact
   /// JSON.
   public static func toolInputPreview(_ input: JSONValue?, max: Int = 80) -> String {
@@ -101,7 +101,7 @@ public enum TermFmt {
   }
 
   /// Compact JSON, keys sorted. `JSON.stringify` emits insertion order, which a
-  /// decoded Swift dictionary does not preserve and cannot recover — so this
+  /// decoded Swift dictionary does not preserve and cannot recover - so this
   /// picks the one order that is stable across runs rather than one that is
   /// merely usually right. It is a fallback path (every first-party tool hits a
   /// named key above) and it is measured with the same function that draws it.
@@ -143,7 +143,7 @@ public enum TermFmt {
 
 /// Does this tool run a shell command? The terminal theme folds a run that is
 /// *all* shell into "Ran N shell commands", the sentence people were already
-/// reading. `BashOutput`/`KillShell` are excluded on purpose — they manage a
+/// reading. `BashOutput`/`KillShell` are excluded on purpose - they manage a
 /// background shell rather than run something, and folding them in inflates the
 /// count.
 public func isShellTool(_ name: String) -> Bool {

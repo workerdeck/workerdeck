@@ -31,7 +31,7 @@ struct SubagentFrameTests {
 
   // MARK: - Frame membership
 
-  /// Everything the agent produced — the brief, thinking, calls, the report —
+  /// Everything the agent produced - the brief, thinking, calls, the report -
   /// and nothing else: not the spawning call (that is the frame, not a row in
   /// it), not another agent's work, not the main thread.
   @Test("subagentItems is the membership rule, not a slice")
@@ -54,7 +54,7 @@ struct SubagentFrameTests {
   }
 
   /// Stream ids are namespaced per sidechain (`streaming:<parentId>`), so a
-  /// frame picks up in-flight text for free — proven through the reducer, which
+  /// frame picks up in-flight text for free - proven through the reducer, which
   /// is what actually stamps the parent, not through a hand-built item.
   @Test("a streaming item lands in its agent's frame")
   func streamingItemIsFrameMember() {
@@ -120,7 +120,7 @@ struct SubagentFrameTests {
   // MARK: - The press
 
   /// The phone's divergence, stated in `TermPress.openSubagent`: the Task row's
-  /// one press is the takeover, and every collapsed line carries it — a thumb
+  /// one press is the takeover, and every collapsed line carries it - a thumb
   /// gets the whole block as one target.
   @Test("a collapsed Task row's press is the takeover")
   func collapsedTaskPressOpensSubagent() {
@@ -136,7 +136,7 @@ struct SubagentFrameTests {
   }
 
   /// Open (the preview harness's expand-all state), the header still raises the
-  /// takeover while the children keep their own presses — a child's result is
+  /// takeover while the children keep their own presses - a child's result is
   /// its own target, never the frame's.
   @Test("an open Task keeps the takeover on its header only")
   func openTaskHeaderPress() {
@@ -153,7 +153,7 @@ struct SubagentFrameTests {
   // MARK: - The frame's nesting
 
   /// Inside the frame those items are the top level (web `nestedClass`): the
-  /// agent's own rows shed the step, a stray grandchild keeps it — and the
+  /// agent's own rows shed the step, a stray grandchild keeps it - and the
   /// height book reads the same value the planner does, because `nested`
   /// spends cells and so changes the wrap.
   @Test("frameParentId suppresses the step for the frame's own rows only")
@@ -175,7 +175,7 @@ struct SubagentFrameTests {
     let otherLines = TerminalPlanner.plan(other, metrics: metrics, frameParentId: "T1")
     #expect(ownLines.allSatisfy { !$0.nested })
     #expect(otherLines.allSatisfy { $0.nested })
-    // Un-framed, the same row steps in — the suppression is the frame's alone.
+    // Un-framed, the same row steps in - the suppression is the frame's alone.
     #expect(TerminalPlanner.plan(own, metrics: metrics).allSatisfy { $0.nested })
 
     // The one claim this renderer cannot afford to get wrong, restated for the
@@ -213,7 +213,7 @@ struct SubagentFrameTests {
   }
 
   /// No `Task` call to read: the label is the rollup's, and the status is
-  /// silent — better than confidently wrong about an agent we cannot see.
+  /// silent - better than confidently wrong about an agent we cannot see.
   @Test("the strip without a task names the agent and claims nothing")
   func stripFallback() {
     let line = subagentStripLine(task: nil, items: [], fallbackLabel: "Explore")
@@ -225,7 +225,7 @@ struct SubagentFrameTests {
   // MARK: - The sub-task reveal
 
   /// The other half of the agent/task split. A **task** step names a tool call
-  /// with no agent behind it, so it has no frame to open — the press opens the
+  /// with no agent behind it, so it has no frame to open - the press opens the
   /// session and travels to that call's own row instead. This is the first hop
   /// of that journey, and the reason it answers in **item** space: rows are
   /// refolded on every revision and every rotation, items are not.
@@ -237,7 +237,7 @@ struct SubagentFrameTests {
       .toolCall(call("c1", parent: "T1")),
       .toolCall(call("c2")),
     ]
-    // The spawning call itself, which `subagentItems` deliberately excludes —
+    // The spawning call itself, which `subagentItems` deliberately excludes -
     // a task reveal wants exactly the row that frame refuses to contain.
     #expect(toolCallItemIndex(items, id: "T1") == 1)
     // A nested call is findable too: this is "where is this id", not "where is

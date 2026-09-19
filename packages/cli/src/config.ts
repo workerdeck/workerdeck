@@ -66,7 +66,7 @@ function parseDuration(raw: string, source: string): number | null {
   }
   const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)?$/.exec(raw)
   if (!match) {
-    throw new ConfigError(`${source}: expected a duration like 300000, 30s, 5m — or 'none'; got: ${raw}`)
+    throw new ConfigError(`${source}: expected a duration like 300000, 30s, 5m - or 'none'; got: ${raw}`)
   }
   const scale = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[match[2] ?? 'ms']!
   const ms = Number(match[1]) * scale
@@ -340,7 +340,7 @@ function normalizeInsecureHost(raw: string): string {
   }
   if (url.port !== '') {
     throw new ConfigError(
-      `insecureHosts entry ${JSON.stringify(raw)} carries a port — name the host alone; ` +
+      `insecureHosts entry ${JSON.stringify(raw)} carries a port - name the host alone; ` +
         `the bind host and the Host header are both compared portless`,
     )
   }
@@ -356,7 +356,7 @@ export function resolveInstanceConfig(
   const envPort = env.WORKERDECK_PORT ? parsePort(env.WORKERDECK_PORT, 'WORKERDECK_PORT') : undefined
   const port = flags.port ?? envPort ?? loaded.options.port ?? 8787
   const host = flags.host ?? env.WORKERDECK_HOST ?? loaded.options.host ?? '127.0.0.1'
-  // `||`, not `??`: an empty secret is not a secret — `WORKERDECK_AUTH_KEY=` means "unset".
+  // `||`, not `??`: an empty secret is not a secret - `WORKERDECK_AUTH_KEY=` means "unset".
   const authKey = flags.authKey || env.WORKERDECK_AUTH_KEY || loaded.options.auth?.secret || undefined
   const hostAuthenticates = typeof loaded.options.authenticate === 'function'
 
@@ -471,7 +471,7 @@ export function resolveInstanceConfig(
     delete options.profileStore
   }
   const manageProfiles = flags.profileStore !== false
-  // The home directory, because an operator principal already has full authority over this machine — it can start an
+  // The home directory, because an operator principal already has full authority over this machine - it can start an
   // agent with bypassPermissions in any cwd. What this guard can meaningfully refuse is /etc and another user's home.
   if (manageProfiles && !options.allowedConfigDirRoots) {
     options.allowedConfigDirRoots = flags.profileRoots.length ? flags.profileRoots : [homedir()]

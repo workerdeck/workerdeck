@@ -2,7 +2,7 @@ import WorkerDeckKit
 import SwiftUI
 
 /// One stored SDK session: title, directory, branch, age. Internal rather than
-/// private because the create form's resume picker draws the same rows — a
+/// private because the create form's resume picker draws the same rows - a
 /// stored session should look the same wherever it is offered.
 struct SdkSessionRowView: View {
   let summary: SdkSessionSummary

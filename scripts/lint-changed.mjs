@@ -49,9 +49,12 @@ for (const file of changedFiles(TEXT_EXT)) {
 if (emDashHits.length > 0) {
   process.stderr.write(`${emDashHits.join('\n')}\n`)
   process.stderr.write(
-    `\nNo em or en dashes (${EM_DASH} ${EN_DASH}) in this project: use a comma, or a plain '-' where\n` +
-      `a dash is really wanted. See docs/CODE-STYLE.md. Errors on files you changed; the tree\n` +
-      `is swept separately. A line where the character is data can carry '${EM_DASH_OPT_OUT}'.\n`,
+    `\nNo em or en dashes (${EM_DASH} ${EN_DASH}) in this project. Fix every line above with:\n` +
+      `\n    pnpm fix:dashes\n\n` +
+      `which rewrites them to the plain '-' that docs/CODE-STYLE.md already sanctions. Do not\n` +
+      `hand-punctuate a backlog: the tree is swept mechanically and stays that way. Add --all to\n` +
+      `go beyond your changed files. A line where the character is data can carry\n` +
+      `'${EM_DASH_OPT_OUT}', which both this check and the fixer skip.\n`,
   )
   process.exit(1)
 }

@@ -16,7 +16,7 @@ enum TranscriptRowAnchor: Sendable {
 /// the fold." The iOS spelling of the web client's `useRevealOnOpen`.
 ///
 /// **One-directional, and only on the open transition.** A row already in view
-/// never moves, and closing one never scrolls — the reader asked to see more,
+/// never moves, and closing one never scrolls - the reader asked to see more,
 /// not to be taken somewhere. Nonce-keyed so asking twice for the same row is
 /// two requests while an unchanged value is a no-op.
 struct TranscriptRevealRequest: Equatable, Sendable {
@@ -28,7 +28,7 @@ struct TranscriptRevealRequest: Equatable, Sendable {
 ///
 /// Distinct from ``TranscriptRevealRequest`` on purpose, and the difference is
 /// the whole reason for a second type: a reveal is one-directional and
-/// apologetic — it moves nothing that is already in view, because the reader
+/// apologetic - it moves nothing that is already in view, because the reader
 /// asked to *read*, not to travel. This is the opposite instruction: a tapped
 /// notification asked to be taken somewhere, and the tail it would otherwise
 /// land on is precisely the wrong place.
@@ -39,14 +39,14 @@ struct TranscriptFocusRequest: Equatable, Sendable {
   var row: Int
   var nonce: Int
   // Whether the transcript this row sits in has fully arrived. A row found while the replay is
-  // still filling is landed on but never followed — see `TranscriptScrollGeometry.pinsAfterJump`.
+  // still filling is landed on but never followed - see `TranscriptScrollGeometry.pinsAfterJump`.
   var complete: Bool
 }
 
 /// One frame's worth of scroll geometry, all in **content space** (the top
 /// inset already folded in, so `contentOffset` is "how far into the content the
 /// first visible point is"). This is the coordinate system the scrubber's
-/// `railScale` arithmetic wants — its denominator is
+/// `railScale` arithmetic wants - its denominator is
 /// `max(contentHeight, viewportHeight)`, exactly as on the web.
 struct TranscriptScrollReadings: Equatable, Sendable {
   var contentOffset: CGFloat = 0
@@ -69,7 +69,7 @@ protocol TranscriptScrollDriver: AnyObject {
 ///
 /// Readings are published once per runloop turn (the coordinator coalesces
 /// them), so a 120Hz scroll writes at most one observation mutation per frame
-/// and only views that actually read a field re-render — the scrubber's
+/// and only views that actually read a field re-render - the scrubber's
 /// cursor, not the whole session screen. Held by the parent as `@State` so it
 /// survives the representable's many re-inits.
 @MainActor @Observable
@@ -90,7 +90,7 @@ final class TranscriptScrollModel {
   }
 
   /// Jump to a row by **row index** (the fold's index, not a transcript item
-  /// index — resolve items through `TerminalRows.rowIndex(forItem:)` first,
+  /// index - resolve items through `TerminalRows.rowIndex(forItem:)` first,
   /// never by arithmetic; a `Task` row covers a membership).
   func scrollToRow(_ index: Int, anchor: TranscriptRowAnchor = .top, animated: Bool = false) {
     driver?.scrollToRow(index, anchor: anchor, animated: animated)
@@ -136,7 +136,7 @@ final class TranscriptCollectionView: UICollectionView {
 
 private let transcriptRowReuseIdentifier = "term-row"
 
-/// What a long-press on a row offers — the phone's shape for the web's hover
+/// What a long-press on a row offers - the phone's shape for the web's hover
 /// actions (`affordances.tsx`), which a thumb cannot reach. One menu with the
 /// deliberate moves in it: the bookmark toggle (the `☆`/`★` the web puts on the
 /// row's overlay) and Copy, which otherwise has no home on this renderer beyond
@@ -148,18 +148,18 @@ private let transcriptRowReuseIdentifier = "term-row"
 /// starred.
 struct TerminalRowMenu {
   struct Bookmark {
-    /// Is the row's item bookmarked now — which of the two labels the action
+    /// Is the row's item bookmarked now - which of the two labels the action
     /// wears, the web `BookmarkAction`'s `active`.
     var active: Bool
     var toggle: () -> Void
   }
 
   /// Nil when the row addresses no item (the recap seam) or the host wired no
-  /// store — the web's missing-`BookmarkProvider` contract: no action at all,
+  /// store - the web's missing-`BookmarkProvider` contract: no action at all,
   /// never a dead one.
   var bookmark: Bookmark?
   /// Nil when the row has no source worth copying; the menu then omits Copy
-  /// rather than copying an invention — see `TranscriptRow.copyText`.
+  /// rather than copying an invention - see `TranscriptRow.copyText`.
   var copyText: String?
 }
 
@@ -171,7 +171,7 @@ struct TerminalRowMenu {
 /// The cells are **hand-rolled UIKit, not `UIHostingConfiguration`**, and the
 /// reason is selection rather than speed: a row's body has to be one text run
 /// for a selection to cross the lines inside it. Recycling got cheaper on the
-/// way — three views per row instead of two SwiftUI views per *line* — but that
+/// way - three views per row instead of two SwiftUI views per *line* - but that
 /// was the consolation prize. The builder is therefore a `configure` closure
 /// against a concrete cell rather than the old generic `RowContent`; there is
 /// one renderer on this surface and genericity was buying nothing.
@@ -182,7 +182,7 @@ struct TerminalRowMenu {
 ///   the book and the rows draw their pre-wrapped lines from the same metrics,
 ///   which is the whole reason no self-sizing exists here.
 /// - Rows are the single source of what a cell draws. The builder runs only
-///   when a row (or the metrics) changed — parent state that should redraw a
+///   when a row (or the metrics) changed - parent state that should redraw a
 ///   row must be *in* the row. Anything expansion-shaped must flow through the
 ///   rows/book epoch too: an expanded result changes a row's height, and a
 ///   height the book doesn't know about is a frame the layout gets wrong.
@@ -198,24 +198,24 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   var expansion: TerminalExpansion
   var scroll: TranscriptScrollModel
   var reveal: TranscriptRevealRequest?
-  /// Where a deep link wants the reader put — see ``TranscriptFocusRequest``.
+  /// Where a deep link wants the reader put - see ``TranscriptFocusRequest``.
   var focus: TranscriptFocusRequest?
   /// Hidden while the overview rail is mounted: the rail *is* the scrollbar
   /// there, and two of them beside each other is one too many. The web client
   /// makes the same trade, and restores the native bar under
-  /// `affordances={false}` — never leave a reader with no way to scroll.
+  /// `affordances={false}` - never leave a reader with no way to scroll.
   var showsScrollIndicator = true
   /// Breathing room above the first and below the last row, applied as
   /// `contentInset` so it scrolls with the content and never enters the book.
   var verticalPadding: CGFloat = 0
   /// Fill a recycled cell with the row at this index. Called only when a row
-  /// (or the metrics) changed — parent state that should redraw a row must be
+  /// (or the metrics) changed - parent state that should redraw a row must be
   /// *in* the row.
   var configureRow: (TerminalRowCell, Int) -> Void
   /// The long-press menu for the row at this index, asked as the menu is about
-  /// to present (see ``TerminalRowMenu``). Nil — the default, and the sticky
+  /// to present (see ``TerminalRowMenu``). Nil - the default, and the sticky
   /// prompt's case by construction, since that copy of a row rides outside any
-  /// collection view — presents nothing.
+  /// collection view - presents nothing.
   var menuForRow: ((Int) -> TerminalRowMenu?)? = nil
 
   func makeCoordinator() -> Coordinator {
@@ -227,7 +227,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     let cv = TranscriptCollectionView(frame: .zero, collectionViewLayout: layout)
     cv.backgroundColor = .clear
     // The composer is docked with `.safeAreaInset(edge: .bottom)` and the nav
-    // bar floats; `.automatic` turns both — and the keyboard — into
+    // bar floats; `.automatic` turns both - and the keyboard - into
     // `adjustedContentInset`, which is the one coordinate system every
     // computation below reads. Nothing here assumes where an inset came from.
     cv.contentInsetAdjustmentBehavior = .automatic
@@ -237,7 +237,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     cv.showsVerticalScrollIndicator = showsScrollIndicator
     cv.isPrefetchingEnabled = true
     // The load-bearing negation: a cell must never invalidate its own size.
-    // Every frame comes from the book — see `TranscriptLayout`.
+    // Every frame comes from the book - see `TranscriptLayout`.
     cv.selfSizingInvalidation = .disabled
     // Rows are not selectable things; taps belong to what is inside them.
     cv.allowsSelection = false
@@ -278,7 +278,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   // MARK: - Coordinator
 
   /// Owns the data source, the key diff, and the one genuinely hard rule on
-  /// this surface: **two parties want to write `contentOffset`** — following
+  /// this surface: **two parties want to write `contentOffset`** - following
   /// the tail, and holding the scrollback still while content above it
   /// changes. The web client resolves it by splitting regimes
   /// (`packages/ui/src/components/agent/Transcript.tsx`), and this mirrors it:
@@ -289,8 +289,8 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   /// - **Escaped, the scrollback holds still.** Before an epoch lands, the row
   ///   under the viewport's top edge is captured *by key* plus the offset into
   ///   it; after, the offset is re-derived from that key's new position. A key
-  ///   anchor rather than a sum of height deltas because rows fold — a run
-  ///   absorbs its successor, a recap splices in — so "the same row" is a
+  ///   anchor rather than a sum of height deltas because rows fold - a run
+  ///   absorbs its successor, a recap splices in - so "the same row" is a
   ///   membership question the keys already answer, not an index. If the key
   ///   vanished (its call folded into a neighbouring run), the numeric offset
   ///   stands, clamped: one line of drift in a case the reader cannot have
@@ -298,7 +298,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   ///
   /// The moment the user scrolls up, the pin releases; scrolling back to
   /// within `repinThreshold` of the bottom re-arms it. Only *user* scrolls
-  /// move the flag — `isTracking || isDragging || isDecelerating` — so our own
+  /// move the flag - `isTracking || isDragging || isDecelerating` - so our own
   /// writes can never be mistaken for an escape, which is the exact bug the
   /// web comment warns about (a correction reading as a user scroll and
   /// breaking the lock mid-stream).
@@ -318,7 +318,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     private var expansion = TerminalExpansion()
     private var revealedNonce: Int?
     private var focusedNonce: Int?
-    /// Cached keys of `rows` — the diff runs per applied epoch and rebuilding
+    /// Cached keys of `rows` - the diff runs per applied epoch and rebuilding
     /// the old side each time would double its cost.
     private var keys: [String] = []
 
@@ -351,12 +351,12 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     {
       let rowsChanged = newRows != rows
       let metricsChanged = newMetrics != metrics
-      // Expansion changes no row and no key — only what each is worth — so
+      // Expansion changes no row and no key - only what each is worth - so
       // without this the guard below would swallow it and the layout would keep
       // drawing the collapsed frames.
       let expansionChanged = newExpansion != expansion
-      // Equal (rows, metrics) derive an identical book — the calculator is
-      // deterministic, which is the premise of this whole surface — so there
+      // Equal (rows, metrics) derive an identical book - the calculator is
+      // deterministic, which is the premise of this whole surface - so there
       // is nothing to do. This guard is what makes it safe for SwiftUI to call
       // `updateUIView` as often as it likes.
       guard rowsChanged || metricsChanged || expansionChanged else { return }
@@ -374,7 +374,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       let oldBook = book
       let oldKeys = keys
       let wasPinned = pinned
-      // The anchor is captured before anything moves, and only when escaped —
+      // The anchor is captured before anything moves, and only when escaped -
       // pinned needs no anchor, the bottom is the anchor.
       let anchor = wasPinned ? nil : captureAnchor(cv, old: old, oldBook: oldBook)
 
@@ -404,7 +404,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
           cv.performBatchUpdates { cv.insertItems(at: inserted) }
           reconfigureVisible(cv, old: old, force: metricsChanged || expansionChanged)
         } else {
-          // Anything structural — a refold, the recap splice, a truncation.
+          // Anything structural - a refold, the recap splice, a truncation.
           // Deliberately not a keyed batch-diff: UICollectionView move/delete
           // arithmetic is a classic crash source for exactly these reshapes,
           // and with frames owned by the layout and the offset owned by the
@@ -457,7 +457,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       guard let oldBook, old.count > 0 else { return nil }
       let foldY = cv.contentOffset.y + cv.adjustedContentInset.top
       var row = min(max(oldBook.rowIndex(atOffset: foldY), 0), old.count - 1)
-      // Settle onto the row actually containing the fold — the book's rounding
+      // Settle onto the row actually containing the fold - the book's rounding
       // convention at an exact boundary is not ours to assume.
       while row > 0, oldBook.offset(at: row) > foldY { row -= 1 }
       while row + 1 < old.count, oldBook.offset(at: row + 1) <= foldY { row += 1 }
@@ -478,7 +478,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
 
     /// Outward scan from where the key last was. Keys move by a handful of
     /// positions per epoch (an append shifts nothing, a fold shifts by one or
-    /// two), so this is O(shift), not O(rows) — and never a per-epoch
+    /// two), so this is O(shift), not O(rows) - and never a per-epoch
     /// dictionary of five thousand strings.
     private func rowIndex(forKey key: String, near start: Int) -> Int? {
       let count = rows.count
@@ -500,7 +500,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     ///
     /// Two cases need it, and the escaped one needs it least: the anchor
     /// already holds the row under the fold still, so a press on a row you can
-    /// see moves nothing. It is the **pinned** case this exists for — expanding
+    /// see moves nothing. It is the **pinned** case this exists for - expanding
     /// near the tail re-pins to the bottom, and eighty new lines push the header
     /// you pressed clean off the top of the screen.
     func reveal(_ request: TranscriptRevealRequest?) {
@@ -537,15 +537,15 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       if width != lastWidth {
         lastWidth = width
         // A horizontal *inset* change never reaches
-        // `shouldInvalidateLayout(forBoundsChange:)` — the bounds are
-        // untouched — so the nudge lives here.
+        // `shouldInvalidateLayout(forBoundsChange:)` - the bounds are
+        // untouched - so the nudge lives here.
         layout?.invalidateLayout()
       }
       let viewport = cv.bounds.height - inset.top - inset.bottom
       if viewport != lastViewport {
         lastViewport = viewport
         // The composer growing (or the keyboard rising) steals lines from the
-        // transcript with no scroll event fired — `contentOffset` is untouched
+        // transcript with no scroll event fired - `contentOffset` is untouched
         // while "the bottom" moved. Re-pin **only when already pinned**: this
         // guard is the whole feature, or every keyboard appearance would yank
         // a reader who had deliberately scrolled up (the web client's scroller
@@ -587,7 +587,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     private func pinToBottom(_ scrollView: UIScrollView) {
       // Not before the view has a size. `bottomOffsetY` subtracts the bounds
       // height, so at zero bounds "the bottom" computes to the whole content
-      // height — a position one viewport past the end. The first `apply` runs
+      // height - a position one viewport past the end. The first `apply` runs
       // from `updateUIView`, which SwiftUI calls *before* it has laid the view
       // out, so this is the ordinary path and not an edge case: it would mount
       // cells at a bogus offset and then move them the moment the real bounds
@@ -657,7 +657,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       let height = book.height(at: index)
       let contentY: CGFloat
       switch anchor {
-      // `.top` lands on the frame's top, gap line included — the breathing
+      // `.top` lands on the frame's top, gap line included - the breathing
       // room is wanted there, and it matches the web's one-line scroll margin
       // on a jumped-to row.
       case .top: contentY = top
@@ -708,14 +708,14 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       (cell as? TerminalRowCell)?.cancelImageLoads()
     }
 
-    /// The row's long-press menu — through the collection view's own context
+    /// The row's long-press menu - through the collection view's own context
     /// menu machinery rather than a per-cell `UIContextMenuInteraction`, so
     /// UIKit installs one recognizer per surface and coordinates it with the
     /// scroll, which is exactly the fight a hand-added recognizer would have
     /// to win by itself (the tap already needed simultaneous recognition just
     /// to fire once). What it cannot be coordinated with by machinery is the
     /// text view's selection long-press, so a standing selection wins here the
-    /// way it wins the tap — and, as the README says of every gesture on this
+    /// way it wins the tap - and, as the README says of every gesture on this
     /// surface, the finger-level interplay ships as a device check.
     func collectionView(
       _ collectionView: UICollectionView,
@@ -753,7 +753,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     // MARK: UIScrollViewDelegate
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-      // Only a *user's* scroll may move the pin — this is the regime split's
+      // Only a *user's* scroll may move the pin - this is the regime split's
       // load-bearing guard. Our own writes (pins, corrections, animated jumps)
       // arrive here with all three flags false and fall through to readings.
       if scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating {
@@ -765,7 +765,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
       guard !decelerate, pinned else { return }
       // Settle the last few points so "pinned" means *at* the bottom, not
-      // near it — otherwise an idle session rests a half-line short until the
+      // near it - otherwise an idle session rests a half-line short until the
       // next event pins it.
       scrollView.setContentOffset(
         CGPoint(x: scrollView.contentOffset.x, y: bottomOffsetY(scrollView)), animated: true)

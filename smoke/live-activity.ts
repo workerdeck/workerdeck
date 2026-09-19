@@ -1,4 +1,4 @@
-// pnpm smoke:activity <host> start|update|end [sessionId]   — a real Live Activity push, no session needed.
+// pnpm smoke:activity <host> start|update|end [sessionId]   - a real Live Activity push, no session needed.
 //
 // The device half of this cannot be tested any other way: push-to-start does not work in the
 // Simulator, and the gateway's own driver only fires on a real turn. This drives the same builder
@@ -6,7 +6,7 @@
 //
 // `start` reads `apns-devices.json` and pushes to every `liveActivityStartToken`; `update` and `end`
 // read `apns-activities.json`, which only has entries once the phone has reported an update token
-// back — so the order is always start, wait a beat, then update. Same env vars and the same two
+// back - so the order is always start, wait a beat, then update. Same env vars and the same two
 // 401s as `smoke:push` (`docs/GOTCHAS.md` §APNs push).
 import { readFile } from 'node:fs/promises'
 import type { SessionInfo } from '@workerdeck/protocol'
@@ -59,13 +59,13 @@ const client = createApnsClient({ keyFile, keyId, teamId, topic }, key)
 const state = projectContentState({
   info: session,
   startedAtMs: Date.now() - 90_000,
-  ...(kind === 'end' ? { finalPhase: 'done' as const, finalHeadline: 'smoke:activity — ended' } : {}),
+  ...(kind === 'end' ? { finalPhase: 'done' as const, finalHeadline: 'smoke:activity - ended' } : {}),
 })
 
 if (kind === 'start') {
   const { devices } = JSON.parse(await readFile(`${stateDir}/apns-devices.json`, 'utf8')) as { devices: DeviceRecord[] }
   const startable = devices.filter((device) => device.liveActivityStartToken !== undefined)
-  console.log(`session ${session.id} — ${startable.length} of ${devices.length} device(s) can be started at`)
+  console.log(`session ${session.id} - ${startable.length} of ${devices.length} device(s) can be started at`)
   if (startable.length === 0) {
     console.error('no device has a push-to-start token: open the app once on a build that registers one.')
     process.exit(1)
@@ -82,7 +82,7 @@ if (kind === 'start') {
 } else {
   const { activities } = JSON.parse(await readFile(`${stateDir}/apns-activities.json`, 'utf8')) as { activities: ActivityRecord[] }
   const live = activities.filter((record) => record.sessionId === session.id && record.updateToken !== undefined)
-  console.log(`session ${session.id} — ${live.length} live card(s)`)
+  console.log(`session ${session.id} - ${live.length} live card(s)`)
   if (live.length === 0) {
     console.error('no card has reported an update token yet: run `start` first and give the phone a moment.')
     process.exit(1)

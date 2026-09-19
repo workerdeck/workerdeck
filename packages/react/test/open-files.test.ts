@@ -136,7 +136,7 @@ function only(state: OpenFilesState) {
   return state.files[0]!
 }
 
-describe('openFilesReducer — editing', () => {
+describe('openFilesReducer - editing', () => {
   it('keeps the draft separate from what was read', () => {
     const file = only(edited())
     expect(file.content).toBe('original')
@@ -154,7 +154,7 @@ describe('openFilesReducer — editing', () => {
     expect(isDirty(only(state))).toBe(false)
   })
 
-  it('refuses to edit a binary tab — saving it back as utf8 would corrupt it', () => {
+  it('refuses to edit a binary tab - saving it back as utf8 would corrupt it', () => {
     const state = run([
       { type: 'open', path: '/p/logo.png' },
       loaded('/p/logo.png', 'AAAA', 'base64'),

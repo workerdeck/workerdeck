@@ -6,7 +6,7 @@ import UIKit
 /// credentials it found, and the files it has handed over.
 ///
 /// The identity half of the old "Session details" list. Context and usage moved
-/// to their own sheets — they change every turn and are consulted mid-run, while
+/// to their own sheets - they change every turn and are consulted mid-run, while
 /// everything here is fixed at creation and looked up once.
 struct SessionInfoSheet: View {
   let state: TranscriptState

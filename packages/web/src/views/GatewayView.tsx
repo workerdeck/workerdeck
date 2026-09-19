@@ -75,11 +75,11 @@ export function GatewayView() {
                 <span className="text-danger">{snapshot.error}</span>
               </DetailRow>
             ) : null}
-            <DetailRow label="Live sessions">{snapshot ? snapshot.sessions.length : <span className="text-fg-4">—</span>}</DetailRow>
+            <DetailRow label="Live sessions">{snapshot ? snapshot.sessions.length : <span className="text-fg-4">-</span>}</DetailRow>
             <DetailRow label="Reachability">{isLocal(host) ? 'This machine (loopback)' : 'Remote'}</DetailRow>
             <DetailRow label="Credential">
               {host.implicit ? (
-                <span className="text-fg-4">the login cookie it set — same origin</span>
+                <span className="text-fg-4">the login cookie it set - same origin</span>
               ) : (
                 <span className="text-fg-4">an auth key held in this browser</span>
               )}
@@ -90,7 +90,7 @@ export function GatewayView() {
         {host.implicit ? (
           <p className="text-label text-fg-4">
             This is the gateway that served the page. Its address is this origin and its credential is the cookie it already set, so there
-            is nothing here to change — and nothing to remove, since removing it would just be closing the tab.
+            is nothing here to change - and nothing to remove, since removing it would just be closing the tab.
           </p>
         ) : (
           <Card>

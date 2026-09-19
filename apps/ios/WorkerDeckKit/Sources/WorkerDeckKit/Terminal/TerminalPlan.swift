@@ -1,10 +1,10 @@
 import Foundation
 
-/// What a row draws, line by line — the port of
+/// What a row draws, line by line - the port of
 /// `packages/ui/src/components/terminal/height.ts`, turned inside out.
 ///
 /// On the web the browser wraps the text and `height.ts` *predicts* how many
-/// lines that will be; the two agree to 99–100% on real content and the
+/// lines that will be; the two agree to 99-100% on real content and the
 /// calculator flags the cases it cannot know. On iOS we can do better than
 /// agree: the planner wraps the text, the renderer draws the lines the planner
 /// returned, and a row's height is by definition `lines.count × metrics.line`.
@@ -22,17 +22,17 @@ import Foundation
 ///    expanded row that the book had not planned would be a frame the layout
 ///    got wrong. `TerminalExpansion` is therefore an input to the planner, and
 ///    the expanded budgets in `ResultPreview` are load-bearing rather than
-///    decorative — see `TerminalExpansion.swift`.
+///    decorative - see `TerminalExpansion.swift`.
 /// 2. **The strings are the heights.** Every summary, preview and affordance
 ///    string comes from `ToolRun.swift` / `ResultPreview.swift`, never from a
-///    view — a second spelling would be a second height.
+///    view - a second spelling would be a second height.
 
 // MARK: - Metrics
 
 /// The character cell, in whole points.
 ///
 /// `cell` is **measured**, never derived from `fontSize`: a 13pt monospace face
-/// advances about 7.8pt, not 13 × 0.6. `line` and `cell` must be whole points —
+/// advances about 7.8pt, not 13 × 0.6. `line` and `cell` must be whole points -
 /// 1.5 × 13 = 19.5 puts every second row on a half-pixel, which softens the text
 /// and seams the diff bands.
 public struct TerminalMetrics: Equatable, Sendable {
@@ -62,7 +62,7 @@ public struct TerminalMetrics: Equatable, Sendable {
 
 // MARK: - Tones
 
-/// The palette, by meaning rather than by colour — the views map these to the
+/// The palette, by meaning rather than by colour - the views map these to the
 /// theme's tokens. Named for what they *say*, so a row asks for `dim` (meta,
 /// tool output) and never for a grey.
 public enum TermTone: String, Equatable, Sendable {
@@ -87,7 +87,7 @@ public enum TermBand: String, Equatable, Sendable {
 /// beside it, already wrapped to the column count.
 ///
 /// The gutter is its own column, which is what gives every wrapped line its
-/// hanging indent for free — the body cannot flow under the marker.
+/// hanging indent for free - the body cannot flow under the marker.
 public struct TermLine: Equatable, Sendable {
   /// Gutter content, pre-padded to `columns` cells by the planner. Empty means
   /// an unmarked row, which still reserves the column so text stays aligned.
@@ -96,7 +96,7 @@ public struct TermLine: Equatable, Sendable {
   /// The body, one rendered line's worth.
   public var text: String
   /// Inline-styled body, when the block had inline markdown. When set, the view
-  /// draws this and `text` is what it was measured as — the same characters.
+  /// draws this and `text` is what it was measured as - the same characters.
   public var attributed: AttributedString?
   public var tone: TermTone
   /// Gutter width in cells. 2 by default; a numbered diff or a numbered choice
@@ -109,8 +109,8 @@ public struct TermLine: Equatable, Sendable {
   public var italic: Bool
   /// Drawn one level in behind a rule, for a subagent's own rows.
   public var nested: Bool
-  /// The gutter glyph animates through the brand pulse. Never affects height —
-  /// every frame is one cell — so it rides the plan rather than forcing the
+  /// The gutter glyph animates through the brand pulse. Never affects height -
+  /// every frame is one cell - so it rides the plan rather than forcing the
   /// view to re-derive which rows are working.
   public var pulsing: Bool
   /// What a tap on this line does, if anything. On the plan rather than derived
@@ -124,12 +124,12 @@ public struct TermLine: Equatable, Sendable {
   /// drew carries the block's press and the whole of it is one target.
   public var press: TermPress?
   /// The picture this line begins, when the line is the head of an image box.
-  /// Never affects the height — the box is already `image.lines` planned lines,
-  /// this one included — so it rides the plan rather than making the view work
+  /// Never affects the height - the box is already `image.lines` planned lines,
+  /// this one included - so it rides the plan rather than making the view work
   /// out which lines were reserved for what.
   public var image: TermImageBox?
-  /// Is this line inside a block that is open? Drawn as a full-bleed wash — the
-  /// web client's `.term-open` — so eighty lines that appeared at once read as
+  /// Is this line inside a block that is open? Drawn as a full-bleed wash - the
+  /// web client's `.term-open` - so eighty lines that appeared at once read as
   /// one block rather than as the transcript having grown.
   public var inOpen: Bool
 
@@ -162,7 +162,7 @@ public struct TermLine: Equatable, Sendable {
 /// of the plan belong to it.
 ///
 /// Carried on the **first** line of the box; the lines after it are ordinary
-/// blank ones. That is what keeps the height model intact — the box is
+/// blank ones. That is what keeps the height model intact - the box is
 /// `lines` planned lines whatever state it is in, so the placeholder, the
 /// loaded picture and the failure notice are all exactly as tall as each other
 /// and a load can never reflow the transcript.
@@ -200,7 +200,7 @@ public struct TermImageBox: Equatable, Sendable {
   public var key: String { "\(sourceSeq)/\(toolUseId)/\(partIndex)" }
 }
 
-/// The gutter glyph vocabulary — the CLI's own.
+/// The gutter glyph vocabulary - the CLI's own.
 public enum TermGlyph {
   /// What you typed. Shared with the composer: two spellings would put the caret
   /// a glyph off the column every prompt row sits on.
@@ -219,7 +219,7 @@ public enum TermGlyph {
   /// Between two diff hunks.
   public static let hunkGap = "⋮"
 
-  /// The working marker: the brand mark's own pulse, `⋄ ◇ ◈ ◆` at 150ms — one
+  /// The working marker: the brand mark's own pulse, `⋄ ◇ ◈ ◆` at 150ms - one
   /// cycle is 0.6s, the clock in `icon-loading.svg`. It rests on `◆` under
   /// Reduce Motion, which is free: the last frame *is* the mark.
   public static let pulseFrames = ["⋄", "◇", "◈", "◆"]

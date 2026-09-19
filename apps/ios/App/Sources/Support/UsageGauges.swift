@@ -1,7 +1,7 @@
 import SwiftUI
 import WorkerDeckKit
 
-/// A progress ring with its own label inside it — the shared shape behind every
+/// A progress ring with its own label inside it - the shared shape behind every
 /// gauge in the app, so the context reading, the rate-limit windows and a
 /// sessions-list row all read as the same measurement.
 ///
@@ -12,11 +12,11 @@ import WorkerDeckKit
 /// Hand-rolled rather than stock, which is a deliberate call: `ProgressView`'s
 /// `.circular` style is indeterminate-only on iOS (it is a spinner, not a
 /// meter), and `Gauge` with `.accessoryCircular` is determinate but sized for a
-/// watch complication — scaled down to fit a status bar its stroke goes hairline
+/// watch complication - scaled down to fit a status bar its stroke goes hairline
 /// and its label unreadable. This is a `Circle().trim()` and a `Text`, which is
 /// the whole of what a ring is.
 struct RadialGauge: View {
-  /// 0–1. Clamped here, so callers can hand over raw arithmetic.
+  /// 0-1. Clamped here, so callers can hand over raw arithmetic.
   let fraction: Double
   let tint: Color
   /// One or two characters shown in the middle. The ring is the reading; this
@@ -57,14 +57,14 @@ struct RadialGauge: View {
 /// Capped at 99 rather than rounded to 100: three digits don't fit, and a window
 /// that full is telling you the same thing either way.
 ///
-/// Takes the bare percentage, not a usage record — the session screen holds a
+/// Takes the bare percentage, not a usage record - the session screen holds a
 /// whole `ContextUsage` from the event stream and a list row holds the compact
 /// `ContextReading` from the rollup, and this is the one number both agree on.
 /// A ring that named either type would make the other convert to draw itself.
 ///
 /// **On a list row the label goes: `showsLabel: false`.** Two digits inside a
 /// 16pt ring are unreadable at arm's length, and across twenty rows the ring's
-/// *fill* is the reading — the exact number is what opening the session is for.
+/// *fill* is the reading - the exact number is what opening the session is for.
 struct ContextRing: View {
   let percentage: Double
   var diameter: CGFloat = 20
@@ -83,7 +83,7 @@ struct ContextRing: View {
   }
 }
 
-/// A **bar's** fill, over a 0–100 percentage — the web's `meterTintClass`.
+/// A **bar's** fill, over a 0-100 percentage - the web's `meterTintClass`.
 func usageTint(_ percentage: Double) -> Color {
   switch percentage {
   case ..<70: return .accentColor
@@ -92,7 +92,7 @@ func usageTint(_ percentage: Double) -> Color {
   }
 }
 
-/// A **ring's** stroke — the web's `meterColorClass` over the kit's
+/// A **ring's** stroke - the web's `meterColorClass` over the kit's
 /// `meterSeverity`, which turns later than a bar and is neutral below the first
 /// turn. The session card's ring is a reading, and a reading that is blue from
 /// 1% to 79% has spent the accent saying nothing.

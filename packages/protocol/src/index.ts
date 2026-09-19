@@ -603,7 +603,7 @@ export type CreateSessionRequest = {
   forkSession?: boolean
   reasoningEffort?: string
   includePartialMessages?: boolean
-  // Overrides the gateway's default. null (or 0) means a prompt never expires — it waits as long as the session lives.
+  // Overrides the gateway's default. null (or 0) means a prompt never expires - it waits as long as the session lives.
   approvalTimeoutMs?: number | null
   questionBehavior?: QuestionBehavior
   capabilities?: SessionCapability[]
@@ -652,7 +652,7 @@ export type SessionInfo = {
   createdAt: number
   lastSeq: number
   // Which log the seqs belong to. A dormant wake starts a fresh log and bumps it, so a `seq`
-  // that outlived one — a notification sitting on a lock screen — can be told from a live one.
+  // that outlived one - a notification sitting on a lock screen - can be told from a live one.
   // Absent from a gateway that predates it, and from a session that has never woken; additive,
   // so no `PROTOCOL_VERSION` bump, and a reader that finds it absent on either side must keep
   // trusting the seq.
@@ -665,8 +665,8 @@ export type SessionInfo = {
   totalCostUsd?: number
   numTurns?: number
   activityCount?: number
-  // Rows of the kind a person is actually waiting to read — see `transcriptProse`.
-  // Absent from a gateway that predates it — additive, so no `PROTOCOL_VERSION` bump —
+  // Rows of the kind a person is actually waiting to read - see `transcriptProse`.
+  // Absent from a gateway that predates it - additive, so no `PROTOCOL_VERSION` bump -
   // which is why every reader falls back to `activityCount`. This is the badge's number; `activityCount` stays the "has
   // anything happened at all" measure that sorting and dormancy read.
   proseCount?: number

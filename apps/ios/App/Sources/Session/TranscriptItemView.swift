@@ -2,7 +2,7 @@ import WorkerDeckKit
 import SwiftUI
 
 extension TranscriptItem {
-  /// Stable row identity. `id` alone is not unique — the reducer upserts on id
+  /// Stable row identity. `id` alone is not unique - the reducer upserts on id
   /// *and* kind, so two items may legitimately share an id across kinds.
   var rowID: String { "\(kind.rawValue)#\(id)" }
 }
@@ -11,7 +11,7 @@ extension TranscriptItem {
 /// interesting ones (tool calls) can hold their own layout without this growing.
 ///
 /// This is the `cards` renderer, and only `cards`: the `terminal` variant draws
-/// every row itself (`Session/Terminal/`) rather than branching inside these —
+/// every row itself (`Session/Terminal/`) rather than branching inside these -
 /// mirroring the web `ui` package, where nothing under `components/agent/` asks
 /// which variant it is in.
 struct TranscriptItemView: View {
@@ -75,7 +75,7 @@ private struct UserBubble: View {
         // A photo can be the whole message: an empty bubble under it would be a
         // rectangle saying nothing.
         if !text.isEmpty {
-          // Literal text, not markdown — what was typed is what was sent. The one
+          // Literal text, not markdown - what was typed is what was sent. The one
           // pass over it is token styling, so a message reads the same after sending
           // as it did in the composer.
           Text(PromptTokenStyle.styled(text))
@@ -101,7 +101,7 @@ private struct AssistantText: View {
       MarkdownText(text: text)
         .frame(maxWidth: .infinity, alignment: .leading)
       if streaming {
-        // Subtle: a caret-sized bar, not a spinner — the text itself is the
+        // Subtle: a caret-sized bar, not a spinner - the text itself is the
         // progress indicator.
         Capsule()
           .fill(Color.secondary.opacity(0.5))

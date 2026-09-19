@@ -22,7 +22,7 @@ export function pidAlive(pid: number): boolean {
     process.kill(pid, 0)
     return true
   } catch (err) {
-    // EPERM means the process exists and belongs to someone else — still alive.
+    // EPERM means the process exists and belongs to someone else - still alive.
     return (err as NodeJS.ErrnoException).code === 'EPERM'
   }
 }

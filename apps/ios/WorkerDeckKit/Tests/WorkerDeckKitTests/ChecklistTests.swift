@@ -3,7 +3,7 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The selected session's Tasks surface — the port of
+/// The selected session's Tasks surface - the port of
 /// `packages/react/test/checklist.test.ts`.
 ///
 /// Two sources, one row shape, and the rules both clients must agree about:
@@ -41,7 +41,7 @@ struct ChecklistTests {
   }
 
   /// A record with an agent type is a sub-agent and belongs to the card, not
-  /// here — the same split `sessionSteps` reads from the other side.
+  /// here - the same split `sessionSteps` reads from the other side.
   @Test("an agent record is never a task")
   func agentsExcluded() {
     let tasks = sessionTasks(

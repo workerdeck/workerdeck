@@ -4,7 +4,7 @@ import Foundation
 ///
 /// The trap this exists to close: a build run from Xcode gets a **sandbox**
 /// token, a TestFlight or App Store build gets a **production** one, and the two
-/// namespaces do not overlap. Same key, same device, different token — push a
+/// namespaces do not overlap. Same key, same device, different token - push a
 /// sandbox token at `api.push.apple.com` and Apple answers `BadDeviceToken`, and
 /// the other way round too. So the app *tells* the gateway which environment it
 /// registered in rather than leaving the operator to guess.
@@ -29,7 +29,7 @@ enum PushEnvironment: String, Sendable {
   }
 
   /// `embedded.mobileprovision` is a CMS envelope wrapped around a plist. Rather
-  /// than decode PKCS#7, slice the plist out by its delimiters — crude, but it
+  /// than decode PKCS#7, slice the plist out by its delimiters - crude, but it
   /// is the standard trick, needs no dependency, and the alternative (guessing
   /// from `#if DEBUG`) is wrong for a Release build run from Xcode.
   private static func provisioningEntitlement(_ key: String) -> String? {

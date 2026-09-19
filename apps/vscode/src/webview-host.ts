@@ -38,7 +38,7 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
   // `resolveWebviewView` before the HTML is set, matching the original providers.
   protected wire(_view: vscode.WebviewView): void {}
 
-  // Runs after the view is fully wired — the place for an eager first push.
+  // Runs after the view is fully wired - the place for an eager first push.
   protected afterResolve(): void {}
 
   // First shot at every message (the transport bridge). Return true when consumed.
@@ -46,7 +46,7 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
     return false
   }
 
-  // The `wd-ready` arm: `ready` is already true — re-push what the fresh document missed.
+  // The `wd-ready` arm: `ready` is already true - re-push what the fresh document missed.
   protected abstract onReady(): void
 
   // Every message neither the interceptor nor `wd-ready` consumed.
@@ -56,10 +56,10 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
   protected onViewDisposed(): void {}
 
   // Drop anything keyed to the *document* rather than the view, because `reloadWebview` replaces the document while
-  // VS Code keeps the `WebviewView` alive — so neither `resolveWebviewView` nor `onDidDispose` runs. Transports are
+  // VS Code keeps the `WebviewView` alive - so neither `resolveWebviewView` nor `onDidDispose` runs. Transports are
   // the case that bites: their sockets are keyed by an id the document allocates from 1, so a surviving socket
   // answers to an id the fresh document has since handed to something else. Per-view listeners belong in `wire`,
-  // which must NOT be re-run here — it would double-register them.
+  // which must NOT be re-run here - it would double-register them.
   protected resetForReload(): void {}
 
   protected get view(): vscode.WebviewView | undefined {

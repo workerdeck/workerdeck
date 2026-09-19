@@ -46,7 +46,7 @@ function toolCall(status: 'running' | 'settled' | 'failed', result?: { text: str
   }
 }
 
-// One row per item, 100px each — so a mark's y is its index × 10 at this scale, and two marks five items apart do not merge.
+// One row per item, 100px each - so a mark's y is its index × 10 at this scale, and two marks five items apart do not merge.
 const ROW = 100
 const RAIL = 100
 
@@ -67,7 +67,7 @@ function props(items: TranscriptItem[], extra: Partial<TerminalScrubberProps> = 
   }
 }
 
-// Every mark with the lane its cluster drew it in — clusters merge, so a cluster-level filter silently loses the quieter member.
+// Every mark with the lane its cluster drew it in - clusters merge, so a cluster-level filter silently loses the quieter member.
 function members(clusters: ReturnType<typeof buildClusters>) {
   return clusters.flatMap((c) => c.marks.map((m) => ({ lane: c.lane, ...m.mark })))
 }
@@ -254,7 +254,7 @@ describe('buildClusters', () => {
   })
 
   it('does NOT mark a failure the model recovered from inside its run', () => {
-    // `kinds` maps one row per item by default, so a run has to be spelled by pinning them to a shared row — which is what folding does.
+    // `kinds` maps one row per item by default, so a run has to be spelled by pinning them to a shared row - which is what folding does.
     const a = toolCall('settled', { text: 'no such file', isError: true })
     const b = toolCall('settled', { text: 'ok', isError: false })
     expect(kinds([a, b], { rowIndexFor: () => 0 })).toEqual([])
@@ -390,7 +390,7 @@ describe('marks inside a shared row', () => {
     expect(clusters.find((c) => c.kind === 'toolFailed')!.y).toBe(RAIL - 2)
   })
 
-  it('applies to a bookmark on an absorbed child too — the same bug', () => {
+  it('applies to a bookmark on an absorbed child too - the same bug', () => {
     const items = [user('go'), toolCall('settled')]
     const clusters = buildClusters(
       props(items, {

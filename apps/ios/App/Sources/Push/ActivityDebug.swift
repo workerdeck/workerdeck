@@ -6,14 +6,14 @@
   /// Raises a card locally, without a gateway or APNs.
   ///
   /// Two jobs. In the Simulator it is the only way to iterate the lock-screen and Dynamic Island
-  /// layouts at all — neither push-to-start nor APNs works there. On a real phone it is the cheapest
+  /// layouts at all - neither push-to-start nor APNs works there. On a real phone it is the cheapest
   /// possible version of build step 9a: tap a button on a locally started card and read the log for
   /// which process performed the intent. If that says the app's bundle id, the whole
   /// buttons-run-in-the-app design holds and the rest of the intent work is ordinary.
   enum ActivityDebug {
     /// Returns what happened, because `Activity.request` is the one call here that fails for half a
-    /// dozen reasons the user can fix — Live Activities switched off for the app, switched off
-    /// device-wide, a payload over the cap — and every one of them looks identical from the outside:
+    /// dozen reasons the user can fix - Live Activities switched off for the app, switched off
+    /// device-wide, a payload over the cap - and every one of them looks identical from the outside:
     /// a button that does nothing.
     @discardableResult
     static func raise(phase: String) -> String {
@@ -68,7 +68,7 @@
       let token = Activity<SessionActivityAttributes>.pushToStartToken
         .map { data in data.map { String(format: "%02x", $0) }.joined() }
       // The token the gateway holds goes stale on every reinstall, and a push to a stale
-      // push-to-start token is accepted by Apple and then dropped by the phone — no 410, no card,
+      // push-to-start token is accepted by Apple and then dropped by the phone - no 410, no card,
       // nothing to read anywhere. Printing the live one is the only way to catch the mismatch.
       // Head **and** tail: two push-to-start tokens for the same app on the same device share a
       // long prefix, so a 16-character comparison against the gateway's copy proves nothing.

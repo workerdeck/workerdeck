@@ -55,7 +55,7 @@ struct TerminalTodosTests {
     #expect(TerminalTodos.parse(input(todo("skipped", "one"))) == nil)
     // Neither is a blank content.
     #expect(TerminalTodos.parse(input(todo("pending", "   "))) == nil)
-    // Neither is an empty list — there is nothing to say about it.
+    // Neither is an empty list - there is nothing to say about it.
     #expect(TerminalTodos.parse(.object(["todos": .array([])])) == nil)
     #expect(TerminalTodos.parse(.object([:])) == nil)
   }

@@ -1,16 +1,16 @@
 import SwiftUI
 import UIKit
 
-/// How the transcript draws a turn — the Swift mirror of the web `ui` package's
+/// How the transcript draws a turn - the Swift mirror of the web `ui` package's
 /// `TranscriptVariant` (`packages/ui/src/components/agent/transcript-variant.tsx`).
 ///
-/// - `cards` — the chat convention: a bubble for what you typed, bordered tool
+/// - `cards` - the chat convention: a bubble for what you typed, bordered tool
 ///   cards, generous gaps.
-/// - `terminal` — the CLI's own shape, drawn by its own renderer
+/// - `terminal` - the CLI's own shape, drawn by its own renderer
 ///   (`Session/Terminal/`) rather than by branches in the `cards` views: one
 ///   line height, monospace by construction, a fixed glyph gutter instead of
 ///   boxes. Nothing under `TranscriptItemView`/`Markdown` asks which variant it
-///   is in any more — if it is drawing, it is drawing cards.
+///   is in any more - if it is drawing, it is drawing cards.
 enum TranscriptVariant: String, Codable, CaseIterable, Sendable {
   case cards
   case terminal
@@ -26,7 +26,7 @@ enum TranscriptVariant: String, Codable, CaseIterable, Sendable {
 /// How much room the transcript gives each row.
 ///
 /// **Cards-only.** Terminal has one line height and is monospace by
-/// construction, so there is no "how much air around a row" to prefer — its
+/// construction, so there is no "how much air around a row" to prefer - its
 /// spacing is a blank *line* decided per pair of blocks, not a container gap
 /// (see `transcriptRowGap` below). A control that changed nothing under
 /// terminal would invite pressing it for no effect, so callers must hide or
@@ -43,7 +43,7 @@ enum TranscriptDensity: String, Codable, CaseIterable, Sendable {
   }
 }
 
-/// The typeface the agent view runs in — the Swift mirror of `SessionPanel`'s
+/// The typeface the agent view runs in - the Swift mirror of `SessionPanel`'s
 /// `transcriptFont`.
 ///
 /// `monospace` applies to a **running session and nothing else**: the session
@@ -88,13 +88,13 @@ enum TranscriptFont: String, Codable, CaseIterable, Sendable {
 ///
 /// One object for the whole app rather than a per-session choice: how a
 /// transcript should read is a property of the reader, not of the session being
-/// read. Follows the house pattern (`SessionListModel.config`) — `@Observable`,
-/// injected defaults, `didSet` persist — rather than `@AppStorage`, so the
+/// read. Follows the house pattern (`SessionListModel.config`) - `@Observable`,
+/// injected defaults, `didSet` persist - rather than `@AppStorage`, so the
 /// storage stays testable and the keys stay namespaced in one place.
 /// Whether a Live Activity's Approve button may act while the phone is locked.
 ///
 /// The notification's Approve is a `UNNotificationAction` with `.authenticationRequired`, so iOS
-/// demands Face ID before it runs. **A Live Activity button has no equivalent** — this setting is
+/// demands Face ID before it runs. **A Live Activity button has no equivalent** - this setting is
 /// the only thing standing between a locked phone in a pocket and an approved tool call. Deny is
 /// never gated: the worst a stray tap can do is refuse something the agent can ask for again.
 enum ApproveWhileLocked: String, Codable, CaseIterable, Sendable {
@@ -118,7 +118,7 @@ enum ApproveWhileLocked: String, Codable, CaseIterable, Sendable {
 /// The raw values are `SessionNotificationType` in `packages/protocol`, sent to every gateway as
 /// the `notify` array on the device registration (`/apns/devices`). The gateway sends nothing this
 /// list leaves out, so turning one off here stops the push at the source rather than hiding it on
-/// arrival — which is the point, on a phone watching several sessions at once.
+/// arrival - which is the point, on a phone watching several sessions at once.
 enum PushEvent: String, Codable, CaseIterable, Sendable {
   case permissionRequested = "permission_requested"
   case turnCompleted = "turn_completed"
@@ -153,7 +153,7 @@ final class AppSettings {
   }
 
   /// Whether this device wants the per-session card at all. Off withholds the push-to-start token,
-  /// which is the only thing that lets a gateway raise one — see `ActivityCoordinator`.
+  /// which is the only thing that lets a gateway raise one - see `ActivityCoordinator`.
   var liveActivitiesEnabled: Bool {
     didSet { defaults.set(liveActivitiesEnabled, forKey: Self.liveActivitiesKey) }
   }
@@ -181,7 +181,7 @@ final class AppSettings {
     didSet { defaults.set(transcriptFont.rawValue, forKey: Self.fontKey) }
   }
 
-  /// Catch-up mode: whether reopening a session marks where you left off — the
+  /// Catch-up mode: whether reopening a session marks where you left off - the
   /// recap seam, the faded rows above it and the "N new since" bar. On by
   /// default, matching the other two clients. Off is for a reader who hops
   /// between sessions constantly, for whom the marker is noise rather than news.
@@ -222,7 +222,7 @@ final class AppSettings {
       defaults.string(forKey: Self.approveLockKey).flatMap(ApproveWhileLocked.init(rawValue:)) ?? .unlockedOnly
     pushEnabled = defaults.object(forKey: Self.pushEnabledKey) as? Bool ?? true
     liveActivitiesEnabled = defaults.object(forKey: Self.liveActivitiesKey) as? Bool ?? true
-    // An absent key is a reader who has never chosen, not one who chose nothing — the empty set is
+    // An absent key is a reader who has never chosen, not one who chose nothing - the empty set is
     // a real answer (every event off) and only a stored array may produce it.
     pushEvents =
       (defaults.array(forKey: Self.pushEventsKey) as? [String])
@@ -235,8 +235,8 @@ final class AppSettings {
 /// Variant and density reach the rows as environment values rather than props.
 /// Every row kind needs them and only the transcript root knows them; threading
 /// two parameters through seven row types (and the markdown blocks below those)
-/// to reach a background colour is worse than one lookup. Same reasoning — and
-/// the same shape — as `\.fileDownloader` and `\.producedImageLoader`.
+/// to reach a background colour is worse than one lookup. Same reasoning - and
+/// the same shape - as `\.fileDownloader` and `\.producedImageLoader`.
 private struct TranscriptVariantKey: EnvironmentKey {
   static let defaultValue: TranscriptVariant = .cards
 }
@@ -268,7 +268,7 @@ extension EnvironmentValues {
 
 extension TranscriptVariant {
   /// True in `terminal`, for the chrome that sits *beside* the transcript
-  /// (composer, status bar) rather than inside it — those still need to know
+  /// (composer, status bar) rather than inside it - those still need to know
   /// which shape they're docking against, even though the rows themselves no
   /// longer branch on this.
   var isTerminal: Bool { self == .terminal }
@@ -280,7 +280,7 @@ extension View {
   /// put it over the type-checker's budget.
   ///
   /// The font is applied here as well as published: `fontDesign` is inherited by
-  /// every `Text` below, which is the whole mechanism — the same one-attribute,
+  /// every `Text` below, which is the whole mechanism - the same one-attribute,
   /// let-the-cascade-do-it trick `SessionPanel` plays with `data-agent-font`. It
   /// is scoped to whatever this modifier is attached to, so a monospace agent
   /// view cannot leak into the list you reached it from.
@@ -292,7 +292,7 @@ extension View {
   }
 }
 
-/// The composer's own text size when the docked (terminal) shape is in force —
+/// The composer's own text size when the docked (terminal) shape is in force -
 /// the UIKit vocabulary, for the `UITextView` that sits outside SwiftUI's font
 /// environment and has to be told (see `DraftStyle`, `RichTextEditor`). The rest
 /// of the `lines` variant's one-size rule died with `lines` itself: the
@@ -303,14 +303,14 @@ extension View {
 /// different app's input box.
 let lineTextUIStyle: UIFont.TextStyle = .subheadline
 
-/// The gap between two `cards` rows, per density — the whole of the density
+/// The gap between two `cards` rows, per density - the whole of the density
 /// feature, since `TranscriptListView`'s `LazyVStack` spacing is the only
 /// vertical separation between rows that exists.
 ///
 /// Terminal returns 0 unconditionally: its rows are one line height apart by
 /// construction, and the blank line that separates *blocks* (not rows) is drawn
 /// per pair of blocks inside the terminal renderer itself, not by a container
-/// gap here — mirroring the web `ui` package, where density "reaches `cards`
+/// gap here - mirroring the web `ui` package, where density "reaches `cards`
 /// only" for the same reason.
 func transcriptRowGap(_ variant: TranscriptVariant, _ density: TranscriptDensity) -> CGFloat {
   switch variant {

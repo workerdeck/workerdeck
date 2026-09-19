@@ -697,7 +697,7 @@ export class SessionRunner implements Runner {
   #resolveQuestionByPolicy(request: PermissionRequest, mode: 'auto' | 'deny'): PermissionResult {
     this.#emit({ type: 'permission_requested', request })
     if (mode === 'deny') {
-      const message = 'Interactive questions are disabled for this session — choose the most reasonable option yourself and continue.'
+      const message = 'Interactive questions are disabled for this session - choose the most reasonable option yourself and continue.'
       this.#emit({
         type: 'permission_resolved',
         requestId: request.id,

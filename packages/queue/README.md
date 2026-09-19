@@ -2,7 +2,7 @@
 
 Job queue over the WorkerDeck session runner: remote services schedule one-shot runs; the queue
 executes them as ordinary sessions with bounded concurrency and token budgets, delivering progress
-and completion via webhooks. Pluggable adapter interface — in-memory bundled; redis/bullmq/pubsub
+and completion via webhooks. Pluggable adapter interface - in-memory bundled; redis/bullmq/pubsub
 adapters can implement the same contract.
 
 Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). It runs jobs through
@@ -59,8 +59,8 @@ Job state lives behind the `QueueAdapter` interface: `add`, `claimNext`, `get`, 
 `prune`, `addDailyTokens`/`dailyTokens`, and an optional `onWork` wakeup for shared backends.
 Two rules matter when implementing one:
 
-- `claimNext()` must be **atomic** across workers — two concurrent claims must never return the
-  same job — and must skip queued jobs whose `nextRunAt` is still in the future (retry backoff).
+- `claimNext()` must be **atomic** across workers - two concurrent claims must never return the
+  same job - and must skip queued jobs whose `nextRunAt` is still in the future (retry backoff).
 - Daily token counters live in the adapter (keyed by UTC `YYYY-MM-DD`), so budgets hold across
   multiple workers sharing a backend.
 
@@ -70,7 +70,7 @@ reset on restart. Back the queue with a shared store for anything beyond one tru
 ### Runs that park
 
 A job whose session is waiting on a deferred execution does not sit and hold a slot. The session
-parks — its state is snapshotted, its runner torn down — and the job goes `parked`, emitting
+parks - its state is snapshotted, its runner torn down - and the job goes `parked`, emitting
 `job_parked` with the `executionId` it waits on. It keeps its attempt, its accumulated usage, and
 its place, but frees its concurrency slot and stops its wall-clock clock; `job_resumed` fires when
 the result lands. One worker can therefore have a hundred runs waiting on the world and still run
@@ -89,12 +89,12 @@ needs a durable session store on the server side.
 | `maxConcurrency` | 1 | Concurrent job sessions. |
 | `sessionTokenLimit` | off | Token cap per job run; exceeding interrupts and fails the job. |
 | `dailyTokenLimit` | off | Global budget per UTC day; queued jobs held until rollover. |
-| `maxJobDurationMs` | off | Wall-clock cap per run — the watchdog for stuck CLIs. |
+| `maxJobDurationMs` | off | Wall-clock cap per run - the watchdog for stuck CLIs. |
 | `killGraceMs` | 5000 | Wind-down after a kill before the run is force-finalized. |
 | `retention` | keep forever | Prune terminal jobs older than `maxAgeMs` (periodic sweep). |
 | `webhookAttempts` / `webhookRetryDelayMs` | 3 / 500ms | Delivery retries per event, exponential backoff. |
 | `buildRunnerConfig` | identity | Patch job session configs (env, tool policy) before they run. |
-| `onEvent` | — | Local observer for every `JobEvent`, in addition to any webhook. |
+| `onEvent` | - | Local observer for every `JobEvent`, in addition to any webhook. |
 
 Per-request, `CreateJobRequest` adds `attempts`, `retryDelayMs`, `maxTokens`, `maxDurationMs`
 (the stricter of request and queue limits wins), `webhook.progress: 'completion'` to quiet
@@ -106,12 +106,12 @@ progress deliveries, and free-form `meta`.
   entire contract a custom `QueueAdapter` has to hold; get either wrong and a job runs twice or a
   retry runs early.
 - **Jobs are one-shot, but parking is not failure.** A run that parks frees its concurrency slot
-  and stops its duration clock — the watchdog must not kill work that is waiting on a deferred
+  and stops its duration clock - the watchdog must not kill work that is waiting on a deferred
   result by design.
 - **Retention is not optional with the bundled adapter.** In-memory terminal jobs accumulate for
   the life of the process; set `retention` or accept the growth knowingly.
 
 ## License
 
-MIT © Tobias Strebitzer — see
+MIT © Tobias Strebitzer - see
 [LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE).

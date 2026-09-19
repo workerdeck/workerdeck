@@ -1,5 +1,5 @@
 {
-  // The bridge e2e test runs a real server in Node, so tests need node types —
+  // The bridge e2e test runs a real server in Node, so tests need node types -
   // kept out of the main tsconfig on purpose: `src` compiles with `types: []`
   // so a Node-only API sneaking into the browser layer is a type error.
   "extends": "./tsconfig.json",

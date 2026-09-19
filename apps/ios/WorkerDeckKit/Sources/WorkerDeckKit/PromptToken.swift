@@ -1,26 +1,26 @@
 import Foundation
 
-/// The three prompt tokens — `@file`, `/command` and `$skill` — as one set of
+/// The three prompt tokens - `@file`, `/command` and `$skill` - as one set of
 /// rules, used by both halves of the app: the composer (which completes them)
 /// and the transcript (which styles them once sent).
 ///
 /// Pure string work, so it lives here rather than in the app: this package is the
-/// part under test, and every interesting case is an edge — an `@` mid-word, a
+/// part under test, and every interesting case is an edge - an `@` mid-word, a
 /// token already terminated by a space, an email address, a slash that is really
 /// an absolute path.
 public struct PromptToken: Equatable, Sendable {
   public enum Kind: String, Equatable, Sendable {
-    /// `@path` — valid anywhere a word starts.
+    /// `@path` - valid anywhere a word starts.
     case file
-    /// `/name` — also valid anywhere a word starts. The CLI runs a command only
+    /// `/name` - also valid anywhere a word starts. The CLI runs a command only
     /// from the front of a message, but the picker is an editing aid: you reach
     /// for it mid-draft, and refusing to complete there just means typing the
     /// name out by hand.
     case command
-    /// `$name` — a skill. Codex's own sigil: its TUI completes skills on `$`
+    /// `$name` - a skill. Codex's own sigil: its TUI completes skills on `$`
     /// and reserves `/` for commands, and its bundled prompts refer to skills
     /// that way in prose ("Use $pdf to …"). Unlike the other two this is not
-    /// syntax any engine parses — it is what the model reads — so the composer
+    /// syntax any engine parses - it is what the model reads - so the composer
     /// resolves it to plain text rather than to a token.
     case skill
   }
@@ -49,14 +49,14 @@ public enum PromptTokens {
   private static let commandCharacters = CharacterSet(
     charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:")
 
-  /// Trailing punctuation that belongs to the sentence, not the token — so
+  /// Trailing punctuation that belongs to the sentence, not the token - so
   /// "see @README.md." styles the path and leaves the period alone. Applied only
   /// when *scanning* finished text; a draft being typed is left exactly as typed.
   private static let sentenceTail = CharacterSet(charactersIn: ".,;:!?)]}\"'")
 
   // MARK: - Finished text
 
-  /// Every token in text that has already been sent — what the transcript styles.
+  /// Every token in text that has already been sent - what the transcript styles.
   ///
   /// Stricter than ``active(in:at:)`` on purpose: a bare `@` is a token being
   /// typed, but in a sent message it is just an at sign.
@@ -65,7 +65,7 @@ public enum PromptTokens {
     for word in words(in: text) {
       guard let kind = kind(ofWordAt: word.lowerBound, in: text) else { continue }
       // Skills complete but are never *styled*. `$` is ordinary prose far more
-      // often than it is a skill — `$PATH`, `$5.00`, a shell snippet — and
+      // often than it is a skill - `$PATH`, `$5.00`, a shell snippet - and
       // unlike `@` and `/` it is not syntax any engine parses, so a false
       // positive would be colouring a word for no reason. The charset check
       // that saves `/` here cannot save `$`: `5.00` passes it.
@@ -81,7 +81,7 @@ public enum PromptTokens {
     return tokens
   }
 
-  /// Tokens in a draft that are *finished* — the ones a composer styles.
+  /// Tokens in a draft that are *finished* - the ones a composer styles.
   ///
   /// A token counts as confirmed once something follows it, which is exactly the
   /// space that accepting a suggestion appends (and the space a typist hits after
@@ -97,7 +97,7 @@ public enum PromptTokens {
   /// The token the cursor is sitting in, or nil. This is what drives the
   /// suggestion list, so it is permissive: a bare `@` counts (query `""`, which
   /// the server answers with the shallowest files), and a half-typed command is
-  /// not charset-checked — the command list filters it anyway.
+  /// not charset-checked - the command list filters it anyway.
   ///
   /// The whole word is returned even when the cursor is mid-word, so accepting a
   /// suggestion replaces what was typed rather than splicing into it.
@@ -117,7 +117,7 @@ public enum PromptTokens {
   }
 
   /// Replace `token` with `value` (given without its prefix), plus a trailing
-  /// space — that is what closes the suggestion list and starts the next word
+  /// space - that is what closes the suggestion list and starts the next word
   /// cleanly. A completion accepted mid-message reuses the space already there
   /// rather than doubling it. Returns the new text and where the caret belongs.
   public static func apply(_ value: String, replacing token: PromptToken, in text: String)
@@ -139,7 +139,7 @@ public enum PromptTokens {
     return (next, next.index(next.startIndex, offsetBy: offset))
   }
 
-  /// Replace `token` with a **literal** — the prefix included, nothing appended.
+  /// Replace `token` with a **literal** - the prefix included, nothing appended.
   ///
   /// The sibling of ``apply(_:replacing:in:)`` for a suggestion that is a typing
   /// aid rather than a token: picking a skill types ordinary prose where the

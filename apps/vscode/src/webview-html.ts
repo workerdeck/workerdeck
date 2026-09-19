@@ -58,7 +58,7 @@ export function webviewHtml(
     `style-src ${webview.cspSource} 'unsafe-inline'`,
     `script-src ${webview.cspSource}`,
     `font-src ${webview.cspSource}`,
-    // http(s) is for inline images served by a KEYLESS gateway — header auth cannot ride an `<img>`.
+    // http(s) is for inline images served by a KEYLESS gateway - header auth cannot ride an `<img>`.
     `img-src ${webview.cspSource} data: blob: http: https:`,
   ].join('; ')
   return `<!DOCTYPE html>

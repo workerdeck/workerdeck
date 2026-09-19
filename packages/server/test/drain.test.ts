@@ -35,7 +35,7 @@ async function startWith(status: SessionStatus) {
   running = createWorkerServer({ allowUnauthenticated: true, allowedCwdRoots: ['/tmp'] })
   const { base } = await listenOn(running)
   // Registered straight on the registry: the drain reads `registry.list()`, and this lets the test drive the one
-  // thing it cares about — the reported status — without standing up a real engine.
+  // thing it cares about - the reported status - without standing up a real engine.
   const steer = steerableRunner('s-1', { cwd: '/tmp/project' } as SessionRunnerConfig, status)
   running.registry.register(steer.runner)
   return { base, steer, server: running }
@@ -90,7 +90,7 @@ describe('drain', () => {
       body: JSON.stringify({ cwd: '/tmp/project' }),
     })
     expect(rejected.status).toBe(503)
-    // Reading and steering an existing session must keep working — that is how an operator clears an approval.
+    // Reading and steering an existing session must keep working - that is how an operator clears an approval.
     expect((await fetch(`${base}/sessions/s-1`)).status).toBe(200)
     await draining
   })

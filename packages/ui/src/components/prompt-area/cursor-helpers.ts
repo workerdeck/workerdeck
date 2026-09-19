@@ -3,12 +3,12 @@
  *
  * Invariants:
  * - All functions are synchronous. Never return a promise or cross a microtask
- *   boundary after a DOM mutation — that can cause the browser to fire
+ *   boundary after a DOM mutation - that can cause the browser to fire
  *   `selectionchange` and reset the caret.
  * - Never cache a `Selection` or `Range` across calls. Ranges become detached
  *   after DOM mutations. Each function calls `window.getSelection()` or
  *   `getSelectionRange()` fresh.
- * - Chip nodes are treated atomically via `isChipElement` — we never descend
+ * - Chip nodes are treated atomically via `isChipElement` - we never descend
  *   into a contentEditable=false subtree when mapping offsets.
  */
 import {
@@ -120,11 +120,11 @@ export function createRangeAtOffset(editor: HTMLElement, targetOffset: number): 
  * Where the caret is on screen, in viewport coordinates.
  *
  * A collapsed range usually measures fine, but not when it sits *between* child
- * nodes of an element — which is exactly where a freshly inserted newline puts
+ * nodes of an element - which is exactly where a freshly inserted newline puts
  * it, because this editor's content is a flat run of text nodes and `<br>`s
  * directly under the editor element. There `getBoundingClientRect()` is all
  * zeros, and the obvious fallback (measure `startContainer`'s element) resolves
- * to the editor itself, whose rect is the viewport box — so it reports the
+ * to the editor itself, whose rect is the viewport box - so it reports the
  * caret as trivially visible and scrolls nothing.
  *
  * So measure the neighbour instead: the child the caret sits before, or failing
@@ -163,14 +163,14 @@ function caretRect(range: Range): DOMRect | null {
  * The editor is its own scroll container once it hits `maxHeight`
  * (`prompt-area.tsx` sets `overflowY: auto` there). Typing scrolls the caret
  * into view for free, because that is the browser's own behaviour for a native
- * edit — but every path that calls `preventDefault()` and rebuilds the DOM
+ * edit - but every path that calls `preventDefault()` and rebuilds the DOM
  * itself (Shift+Enter, list continuation, undo/redo, the bold/italic wrap,
  * paste) places the caret with a Range instead, and setting a selection does
  * not scroll anything. The symptom is a prompt that has grown past its cap and
  * stops following what you are writing: type and it scrolls, press Shift+Enter
  * and the new line appears below the fold.
  *
- * A no-op when the caret is already visible, so it is safe on every call — it
+ * A no-op when the caret is already visible, so it is safe on every call - it
  * corrects an off-screen caret rather than scrolling to one.
  */
 export function scrollCaretIntoView(editor: HTMLElement): void {
@@ -334,7 +334,7 @@ export function findDOMPosition(container: HTMLElement, targetOffset: number): {
       }
       remaining -= 1
     } else if (isHTMLElement(child)) {
-      // Decoration element (markdown span, URL anchor) — recurse
+      // Decoration element (markdown span, URL anchor) - recurse
       const textLen = (child.textContent ?? '').length
       if (remaining <= textLen) {
         const result = findDOMPosition(child, remaining)

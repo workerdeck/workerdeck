@@ -52,7 +52,7 @@ export class ProfileService {
       if (p.session?.instructions) {
         return (
           `profile '${p.name}' declares session.instructions, which the codex engine cannot ` +
-          'deliver — put instructions in the target repo’s AGENTS.md instead'
+          'deliver - put instructions in the target repo’s AGENTS.md instead'
         )
       }
     } else if (!p.configDir || !existsSync(p.configDir)) {
@@ -154,7 +154,7 @@ export class ProfileService {
           status: 403,
           error:
             `profile '${profile.name}' is declared in server options and cannot be changed ` +
-            'over the API — edit the `profiles` option instead',
+            'over the API - edit the `profiles` option instead',
         }
       : null
   }
@@ -166,7 +166,7 @@ export class ProfileService {
     const codex = engineOf(profile) === 'codex'
     const dir = codex ? profile.codexHome : profile.configDir
     // A codex profile that names no CODEX_HOME runs on the server's own environment, which every
-    // session already inherits — there is no separate credential store for the roots to bound.
+    // session already inherits - there is no separate credential store for the roots to bound.
     if (codex && !dir) {
       return null
     }

@@ -1,7 +1,7 @@
 name: Publish
 
 # Two jobs. `publish` sends all 10 packages to npm; `vscode` then sends the
-# extension to the VS Code Marketplace (see the comment on that job — it is the
+# extension to the VS Code Marketplace (see the comment on that job - it is the
 # one credential in this repo that is not OIDC).
 #
 # Publishes all 10 packages (the @workerdeck/* libraries plus the unscoped
@@ -11,7 +11,7 @@ name: Publish
 # automatically.
 #
 # NOTE for any FUTURE new package: a package must already EXIST on npm before a
-# trusted publisher can be configured for it — the settings page lives on the
+# trusted publisher can be configured for it - the settings page lives on the
 # package. So the first release of a new name is published by hand (`pnpm publish
 # --access public` from its directory, which is also what rewrites `workspace:*`),
 # and only then does it join this workflow.
@@ -29,7 +29,7 @@ name: Publish
 #   Environment:          (leave blank)   <- if you set one here, add `environment:` to the job below
 #
 # Release flow: `pnpm version:set <x.y.z>`, commit, then `git tag v<x.y.z> &&
-# git push origin v<x.y.z>`. Push the ONE tag by name — never `git push --tags`,
+# git push origin v<x.y.z>`. Push the ONE tag by name - never `git push --tags`,
 # which on 2026-09-02 sent a stale local tag and moved every `latest` backwards
 # (docs/RELEASING.md has the incident). A tag runs the workflow from the TAGGED
 # commit, so the tag must point at a commit that contains this file.
@@ -63,7 +63,7 @@ jobs:
         with:
           # registry-url writes an ~/.npmrc with an unresolved ${NODE_AUTH_TOKEN}
           # placeholder; pnpm >= 11.1.0 drops it so OIDC can take over (it 404s on
-          # 11.0.8). packageManager pins 11.8.0 and action-setup honours it — do
+          # 11.0.8). packageManager pins 11.8.0 and action-setup honours it - do
           # not pin pnpm below 11.1.0 or trusted publishing breaks.
           node-version: 22
           registry-url: https://registry.npmjs.org
@@ -94,12 +94,12 @@ jobs:
               console.error(`tag says ${want}, but:\n` + bad.map((p) => `  - ${p.name} is ${p.version}`).join("\n"))
               process.exit(1)
             }
-            console.log(`all ${want} — tag and packages agree`)
+            console.log(`all ${want} - tag and packages agree`)
           ' "${{ github.ref_name }}"
 
       # pnpm publish -r walks every public package in dependency order, rewrites
       # `workspace:*` to the concrete version as it packs, runs each package's own
-      # prepack, and skips versions already on the registry — so a half-failed run
+      # prepack, and skips versions already on the registry - so a half-failed run
       # is safe to re-run. --no-git-checks is required on a detached tag checkout.
       # A prerelease tag (v0.5.0-rc.1) publishes under `next` so it never becomes
       # npm's `latest`.
@@ -111,7 +111,7 @@ jobs:
 
   # The VS Code Marketplace has no OIDC equivalent: `vsce` authenticates with a
   # long-lived Azure DevOps PAT (Marketplace -> Manage, scoped to ALL ACCESSIBLE
-  # ORGANIZATIONS — a token scoped to one org fails to publish). That is a weaker
+  # ORGANIZATIONS - a token scoped to one org fails to publish). That is a weaker
   # posture than the npm half's trusted publishing, so this job is deliberately
   # separate: it runs only after npm succeeded, it never runs for a prerelease
   # tag (the Marketplace has no dist-tags, so `next` has nowhere to go), and it
@@ -142,7 +142,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::VSCE_PAT is not set — skipping the Marketplace publish."
+            echo "::warning::VSCE_PAT is not set - skipping the Marketplace publish."
           fi
 
       # apps/vscode is bumped in lockstep by `pnpm version:set`, so the tag must
@@ -157,18 +157,18 @@ jobs:
               console.error(`tag says ${want}, but workerdeck-vscode is ${got}`)
               process.exit(1)
             }
-            console.log(`extension is ${want} — tag and manifest agree`)
+            console.log(`extension is ${want} - tag and manifest agree`)
           ' "${{ github.ref_name }}"
 
       - if: steps.pat.outputs.present == 'true'
         run: pnpm install --frozen-lockfile
 
-      # Package first, publish that exact file, keep it as the artifact — so the
+      # Package first, publish that exact file, keep it as the artifact - so the
       # thing downloadable from the run is byte-identical to the thing listed.
       # `pnpm package` runs `vscode:prepublish` (the esbuild + vite bundles) and
       # passes --no-dependencies, which skips vsce's `npm list --production`
       # walk: it cannot read pnpm's symlinked node_modules, and the vsix ships
-      # no runtime node_modules anyway — everything is bundled.
+      # no runtime node_modules anyway - everything is bundled.
       - name: Package the vsix
         if: steps.pat.outputs.present == 'true'
         working-directory: apps/vscode

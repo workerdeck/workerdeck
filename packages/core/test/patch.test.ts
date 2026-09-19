@@ -23,7 +23,7 @@ describe('filePatchFromToolResult', () => {
     expect(patch).toEqual({ path: '/repo/.prettierrc', kind: 'update', hunks: [hunk] })
   })
 
-  it('drops originalFile — the wire must never carry the file', () => {
+  it('drops originalFile - the wire must never carry the file', () => {
     const patch = filePatchFromToolResult({
       filePath: '/repo/a.ts',
       originalFile: 'x'.repeat(100_000),

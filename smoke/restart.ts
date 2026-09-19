@@ -1,7 +1,7 @@
-// pnpm smoke:restart [claude|codex] [noprofile|swept|clear|all]   — costs two short turns per engine.
+// pnpm smoke:restart [claude|codex] [noprofile|swept|clear|all]   - costs two short turns per engine.
 //
 // `packages/server/test/dormant.test.ts` drives a fake engine, so it can show the record survives and the routes
-// behave, and cannot show that a real claude/codex resume works — which is the whole feature.
+// behave, and cannot show that a real claude/codex resume works - which is the whole feature.
 //
 // It spawns its OWN gateway on its own port with its own state dir and never touches an instance already running:
 // the machine that develops this usually has one hosting live sessions, and a ctrl-c on that is indistinguishable
@@ -151,7 +151,7 @@ async function attach(id: string, prompt?: string, timeoutMs = 120_000): Promise
   let live = false
   let text = ''
   // The listener goes on BEFORE the open await: the gateway flushes the replay the moment the socket is up, and a
-  // listener attached one tick later misses the whole burst — which reads exactly like "nothing was replayed".
+  // listener attached one tick later misses the whole burst - which reads exactly like "nothing was replayed".
   //
   // The attach backlog carries no marker of its own: history and live both arrive as `{ type: 'event', event }`, so
   // "replayed" here counts events seen before this attach sent anything.
@@ -160,7 +160,7 @@ async function attach(id: string, prompt?: string, timeoutMs = 120_000): Promise
     // Swallowed unless asked for: two variants *expect* the attach to fail.
     ws.on('error', (e) => {
       if (process.env.WD_SMOKE_DEBUG) {
-        console.log(`    \u001b[2m— ws error: ${(e as Error).message}\u001b[0m`)
+        console.log(`    \u001b[2m- ws error: ${(e as Error).message}\u001b[0m`)
       }
     })
     ws.on('message', (data) => {
@@ -220,11 +220,11 @@ async function waitForRecord(id: string, timeoutMs: number): Promise<boolean> {
   for (;;) {
     const names = existsSync(dir) ? readdirSync(dir) : []
     if (names.some((n) => n.startsWith(id) && n.endsWith('.json'))) {
-      console.log(`  \u001b[2m— dormant record on disk\u001b[0m`)
+      console.log(`  \u001b[2m- dormant record on disk\u001b[0m`)
       return true
     }
     if (Date.now() > deadline) {
-      console.log(`  \u001b[33m!\u001b[0m no dormant record after ${timeoutMs / 1000}s — expect the row to vanish`)
+      console.log(`  \u001b[33m!\u001b[0m no dormant record after ${timeoutMs / 1000}s - expect the row to vanish`)
       return false
     }
     await sleep(250)
@@ -232,7 +232,7 @@ async function waitForRecord(id: string, timeoutMs: number): Promise<boolean> {
 }
 
 async function main(): Promise<void> {
-  console.log(`\n[1mThe restart, end to end[0m — engine: ${engine}, port ${PORT}`)
+  console.log(`\n[1mThe restart, end to end[0m - engine: ${engine}, port ${PORT}`)
   console.log(`[2mstate ${stateDir}[0m`)
 
   writeConfig([engine])
@@ -250,11 +250,11 @@ async function main(): Promise<void> {
   if (first.text) {
     ok('the engine answered a turn', JSON.stringify(first.text.slice(0, 40)))
   } else {
-    bad('the engine answered a turn', 'no assistant text — is the profile logged in?')
+    bad('the engine answered a turn', 'no assistant text - is the profile logged in?')
   }
 
   step('2. ctrl-c, and back')
-  // The dormant write is asynchronous and not instant — claude also writes on `system_init`, codex emits none so its
+  // The dormant write is asynchronous and not instant - claude also writes on `system_init`, codex emits none so its
   // first record rides the post-turn `status_changed`. Killing inside that window loses the session outright.
   await waitForRecord(id, 15_000)
   await stopGateway()
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
 async function sweptStore(id: string): Promise<void> {
   step('7. A swept engine store')
   if (engine !== 'claude') {
-    console.log('  [2m— skipped: only wired for claude[0m')
+    console.log('  [2m- skipped: only wired for claude[0m')
     return
   }
   await stopGateway()
@@ -347,15 +347,15 @@ async function sweptStore(id: string): Promise<void> {
   const replayedHistory = after.events.some(
     (e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'),
   )
-  console.log(`  [2m— attach succeeded; history replayed: ${replayedHistory}[0m`)
-  console.log(`  [2m— the engine's answer: ${JSON.stringify(after.text.slice(0, 60))}[0m`)
+  console.log(`  [2m- attach succeeded; history replayed: ${replayedHistory}[0m`)
+  console.log(`  [2m- the engine's answer: ${JSON.stringify(after.text.slice(0, 60))}[0m`)
   if (after.text.toUpperCase().includes(WORD)) {
-    console.log(`  [33m![0m the engine still recalled the word — the CLI rebuilt the thread from somewhere`)
+    console.log(`  [33m![0m the engine still recalled the word - the CLI rebuilt the thread from somewhere`)
   } else {
     ok('the engine thread is gone (the word is not recalled)')
   }
   console.log(
-    `  [2m— a swept store degrades to: row listed, attach OK, transcript EMPTY,` +
+    `  [2m- a swept store degrades to: row listed, attach OK, transcript EMPTY,` +
       ` turn silently unanswered. Quieter than a 404, and worse.[0m`,
   )
 }
@@ -367,7 +367,7 @@ async function clearNoChild(id: string): Promise<void> {
   step('5. A clear with no live child, across a restart')
   if (engine !== 'codex') {
     console.log(
-      '  \u001b[2m— skipped: only codex can be cleared with its child dead ' +
+      '  \u001b[2m- skipped: only codex can be cleared with its child dead ' +
         "(claude's reset comes back from the CLI, which needs one)\u001b[0m",
     )
     return
@@ -379,7 +379,7 @@ async function clearNoChild(id: string): Promise<void> {
     return name ? join(dir, name) : undefined
   }
   if (!recordPath()) {
-    bad('a dormant record to invalidate', 'none on disk — nothing for the clear to get wrong')
+    bad('a dormant record to invalidate', 'none on disk - nothing for the clear to get wrong')
     return
   }
   ok('a dormant record exists, naming the conversation about to be cleared')
@@ -426,10 +426,10 @@ async function clearNoChild(id: string): Promise<void> {
   const listed = await api<{ sessions: SessionInfo[] }>('/sessions')
   const row = listed.sessions.find((s) => s.id === id)
   if (!row) {
-    ok('the cleared session is NOT resurrected', 'the row is gone — for codex the dormant record is the way back, and the clear removed it')
+    ok('the cleared session is NOT resurrected', 'the row is gone - for codex the dormant record is the way back, and the clear removed it')
     return
   }
-  console.log(`  \u001b[2m— the row came back (status ${row.status}); checking it came back empty\u001b[0m`)
+  console.log(`  \u001b[2m- the row came back (status ${row.status}); checking it came back empty\u001b[0m`)
   const after = await attach(id, undefined, 8_000)
   const priorPrompt = after.events.some((e) => e.type === 'user_message' && JSON.stringify(e.message.content).includes('Remember the word'))
   if (priorPrompt) {

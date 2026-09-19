@@ -1,16 +1,16 @@
 ---
 title: Auth & the providers' terms
-description: WorkerDeck performs no model-provider authentication of its own — what that means for operators and contributors.
+description: WorkerDeck performs no model-provider authentication of its own - what that means for operators and contributors.
 order: 8
 ---
 
-**WorkerDeck performs no Anthropic authentication of its own — by design.** It spawns the
+**WorkerDeck performs no Anthropic authentication of its own - by design.** It spawns the
 official Agent SDK, which spawns the official Claude Code CLI, which resolves whatever
 credentials the *operator's* environment provides: `ANTHROPIC_API_KEY`, Bedrock/Vertex platform
 auth, or the operator's own stored `claude login`. WorkerDeck never implements claude.ai
 OAuth, never reads, stores, or proxies tokens, and never touches `~/.claude` credentials. Which
-credentials your deployment uses — and whether that use complies with
-[Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) — is the operator's
+credentials your deployment uses - and whether that use complies with
+[Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) - is the operator's
 responsibility.
 
 ## Where we understand the lines to be
@@ -43,27 +43,27 @@ Each session's credential provenance surfaces as `apiKeySource` on `SessionInfo`
 (`'user' | 'project' | 'org' | 'temporary'`) are API-key provenance. With
 `requireApiKey: true`, an `'oauth'` session is terminated with a `session_error` telling the
 operator to set `ANTHROPIC_API_KEY` (or Bedrock/Vertex auth). Without it, the server logs a
-one-time notice instead — appropriate only for personal single-user deployments.
+one-time notice instead - appropriate only for personal single-user deployments.
 
 ## Profiles on shared machines
 
 [Profiles](/workerdeck/docs/guides/profiles/) let one worker serve several operators, each
-under their own Claude Code config dir — selected via the CLI's own `CLAUDE_CONFIG_DIR`
+under their own Claude Code config dir - selected via the CLI's own `CLAUDE_CONFIG_DIR`
 mechanism, never by touching the credential chain. The auth-relevant part: **scope profiles per
 caller** with `allowedProfiles` on the `authenticate` principal. A shared dashboard where anyone
-may run under anyone's account is multi-account pooling — exactly the red line below — while
+may run under anyone's account is multi-account pooling - exactly the red line below - while
 each person running under their own profile is just each person using their own account. The
 subscription notice logs per profile, and `apiKeySource` shows what each session actually used.
 
 ## Gateway auth is a separate thing entirely
 
-Everything above is about *Anthropic* credentials. Guarding the gateway itself — deciding who may
-reach it at all — is your own concern, and the two never mix.
+Everything above is about *Anthropic* credentials. Guarding the gateway itself - deciding who may
+reach it at all - is your own concern, and the two never mix.
 
 For an embedded deployment that is the `authenticate` hook: it gets the raw request and returns a
 principal or nothing, and it guards REST **and** the WebSocket upgrade. For the turnkey
 [`workerdeck`](https://www.npmjs.com/package/workerdeck) instance it is `--auth-key`, one
-shared secret over two transports — a login page trades it for an `HttpOnly` cookie for browsers,
+shared secret over two transports - a login page trades it for an `HttpOnly` cookie for browsers,
 while services send it as a header. Bound off loopback with no key supplied, the instance
 generates one and stores it under its state dir rather than serving open (browser logins persist
 there too, keyed by an HMAC under that secret, so a restart doesn't sign every tab out and
@@ -78,14 +78,14 @@ query-string ticket (`ClientOptions.buildWsUrl` exists for this, but something h
 ticket), or a proxy that stamps the credential server-side on the tab's behalf. Embedding a key in
 the served JavaScript is not one of them.
 
-If you take the cookie route, remember that WebSocket upgrades are **exempt from CORS** — an
+If you take the cookie route, remember that WebSocket upgrades are **exempt from CORS** - an
 explicit `Origin` check, not `SameSite` alone, is what actually defends an attach against a
 cross-site page. And note that none of this establishes *identity*: a shared secret is a door key.
 Put an identity-aware proxy in front if you need to know who is on the other end.
 
 ## Compliance status: under review
 
-We are still working through greenlighting the compliance and legal posture of this project —
+We are still working through greenlighting the compliance and legal posture of this project -
 with our own legal/compliance specialists and, where appropriate, explicit approval from
 Anthropic (whose Agent SDK docs provide for previously-approved exceptions). Until that
 concludes, treat the guidance above as our good-faith reading, not a settled position, and do
@@ -106,7 +106,7 @@ credential chain.
 
 ## Related
 
-- [Deployment](/workerdeck/docs/guides/deployment/) — the host-app auth hook
+- [Deployment](/workerdeck/docs/guides/deployment/) - the host-app auth hook
   (`authenticate`), which is a separate concern from Anthropic credentials.
-- [Server reference](/workerdeck/docs/reference/server/) — `requireApiKey` and the rest of
+- [Server reference](/workerdeck/docs/reference/server/) - `requireApiKey` and the rest of
   the options.

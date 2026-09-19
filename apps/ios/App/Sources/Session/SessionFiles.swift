@@ -32,7 +32,7 @@ struct SessionFileAccess: Sendable {
 @Observable
 final class FileDownloader {
   var access: SessionFileAccess?
-  /// Path currently downloading — drives the row's spinner.
+  /// Path currently downloading - drives the row's spinner.
   private(set) var inFlight: String?
   var shared: SharedFile?
   var errorText: String?
@@ -52,7 +52,7 @@ final class FileDownloader {
 }
 
 /// Reaches the `file_delivered` card, which sits several layers down inside the
-/// transcript — threading a downloader through every row type to reach one card
+/// transcript - threading a downloader through every row type to reach one card
 /// is worse than one environment value. Absent outside a live session, and the
 /// card then renders inert rather than offering a download it cannot perform.
 private struct FileDownloaderKey: EnvironmentKey {
@@ -86,7 +86,7 @@ struct ActivityView: UIViewControllerRepresentable {
 }
 
 extension View {
-  /// Attach at the top of a presentation context, never on a transcript row —
+  /// Attach at the top of a presentation context, never on a transcript row -
   /// a sheet anchored to a lazily-recycled row goes away with the row.
   func fileDownloadPresentation(_ downloader: FileDownloader) -> some View {
     modifier(FileDownloadPresentation(downloader: downloader))
@@ -114,7 +114,7 @@ private struct FileDownloadPresentation: ViewModifier {
   }
 }
 
-/// The session's file store, as a list. Only the provider engine has one —
+/// The session's file store, as a list. Only the provider engine has one -
 /// Claude-engine sessions write to real disk and the endpoint 404s, so an
 /// unavailable or empty store renders as nothing rather than as an error.
 struct SessionFilesSection: View {

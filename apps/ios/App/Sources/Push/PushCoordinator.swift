@@ -6,7 +6,7 @@ import WorkerDeckKit
 /// Everything push: authorization, the device token, per-host registration, and
 /// the route a tapped notification wants opened.
 ///
-/// Why the app needs this at all — iOS will not hold a WebSocket open in the
+/// Why the app needs this at all - iOS will not hold a WebSocket open in the
 /// background, so "the agent is waiting for your approval" can only reach the
 /// phone as a push. The WS is for while you are looking at the screen; APNs is
 /// the resume signal for every other moment.
@@ -27,7 +27,7 @@ final class PushCoordinator {
   /// The session on screen right now, while the app is in the foreground.
   ///
   /// Set by `SessionView` and cleared the moment it leaves or the app is
-  /// backgrounded — a session you are *watching* must not also be announced to
+  /// backgrounded - a session you are *watching* must not also be announced to
   /// you. Everything else still gets a banner: a request raised by a different
   /// session is exactly as invisible in the foreground as it is in the
   /// background, since the app holds a socket only for the one on screen.
@@ -63,7 +63,7 @@ final class PushCoordinator {
       ?? false
     authorization = await center.notificationSettings().authorizationStatus
     guard granted else { return }
-    // Re-registering on every launch is Apple's own advice — the token can
+    // Re-registering on every launch is Apple's own advice - the token can
     // change on restore, reinstall, or at the system's discretion.
     UIApplication.shared.registerForRemoteNotifications()
   }
@@ -84,7 +84,7 @@ final class PushCoordinator {
   }
 
   /// Push this device's token at every configured gateway that has not already
-  /// accepted it. Safe to call often — the view layer drives it off the host
+  /// accepted it. Safe to call often - the view layer drives it off the host
   /// list, so adding a server registers with it immediately.
   func syncRegistrations(force: Bool = false) async {
     guard let token = deviceToken, let hosts else { return }
@@ -92,7 +92,7 @@ final class PushCoordinator {
     let notify = settings?.notifyEvents ?? PushEvent.standard.map(\.rawValue).sorted()
     for host in hosts.hosts where host.isValid {
       // The start token and the allowlist are part of the key: a token that arrives after the first
-      // registration — which is the normal order, ActivityKit answers later than APNs — has to
+      // registration - which is the normal order, ActivityKit answers later than APNs - has to
       // re-POST once, and so does a gateway still holding a preference the reader has since changed.
       let key = "\(host.id.uuidString)|\(token)|\(liveActivityStartToken ?? "-")|\(notify.joined(separator: ","))"
       if synced.contains(key) { continue }
@@ -112,7 +112,7 @@ final class PushCoordinator {
   // MARK: - Delivery
 
   /// Whether a notification arriving *now* should be shown, given what the user
-  /// is already looking at. Nothing to show for the session on screen — its
+  /// is already looking at. Nothing to show for the session on screen - its
   /// events are arriving over the socket and rendering in the transcript, which
   /// is a better version of the same news.
   func presentationOptions(for payload: PushPayload?) -> UNNotificationPresentationOptions {
@@ -123,7 +123,7 @@ final class PushCoordinator {
   }
 
   /// A tap or an action on a notification, reduced by the delegate to the two
-  /// Sendable things that matter — the `UN…` types themselves cannot cross onto
+  /// Sendable things that matter - the `UN…` types themselves cannot cross onto
   /// the main actor.
   func handle(action: String, payload: PushPayload?) async {
     guard let payload else { return }
@@ -142,7 +142,7 @@ final class PushCoordinator {
   }
 
   /// A tapped Live Activity. `widgetURL` is the only way a card can route, so it lands here and
-  /// becomes the same `PushRoute` a notification tap produces — one destination type, one
+  /// becomes the same `PushRoute` a notification tap produces - one destination type, one
   /// `deepLinkSeqSurvives` rule, whichever surface asked.
   func handle(url: URL) {
     guard url.scheme == "workerdeck", url.host == "session",
@@ -184,7 +184,7 @@ final class PushCoordinator {
     }
   }
 
-  /// The gateway a payload names, falling back to whichever host is open — a
+  /// The gateway a payload names, falling back to whichever host is open - a
   /// hand-crafted `simctl push` carries no `hostId`, and that is the case this
   /// fallback exists for.
   private func client(for hostId: UUID?) -> WorkerClient? {
@@ -218,7 +218,7 @@ final class PushCoordinator {
     let approve = UNNotificationAction(
       identifier: PushAction.approve,
       title: "Approve",
-      // Approving lets an agent write to the operator's filesystem — that is not
+      // Approving lets an agent write to the operator's filesystem - that is not
       // something a locked phone in a pocket should be able to do.
       options: [.authenticationRequired])
     let deny = UNNotificationAction(

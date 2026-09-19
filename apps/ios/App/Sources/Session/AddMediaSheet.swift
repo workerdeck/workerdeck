@@ -4,7 +4,7 @@ import UIKit
 
 /// The plus button's sheet: the three places a file can come from on a phone.
 ///
-/// Deliberately three and not four — there are no connectors here, because a
+/// Deliberately three and not four - there are no connectors here, because a
 /// gateway session's "context" is the operator's own machine, which the session
 /// already has. Camera, Photos and Files are the paths that add something the
 /// agent could not reach on its own.
@@ -20,7 +20,7 @@ struct AddMediaSheet: View {
 
   /// Whether the session's engine takes images (`capabilities.attachments`).
   /// Camera and Photos only ever produce images, so without it they are not
-  /// sources — Files stays, filtered to the kinds that remain.
+  /// sources - Files stays, filtered to the kinds that remain.
   let acceptsImages: Bool
   let onChoose: (Source) -> Void
 
@@ -93,7 +93,7 @@ struct AddMediaSheet: View {
   }
 }
 
-/// `UIImagePickerController` in camera mode — SwiftUI still has no camera view,
+/// `UIImagePickerController` in camera mode - SwiftUI still has no camera view,
 /// and `PhotosPicker` deliberately cannot take a new photo.
 ///
 /// The picker hands back a `UIImage` rather than a file, which is why

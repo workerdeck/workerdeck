@@ -202,7 +202,7 @@ export function parseProjectTrustEntries(source: string): Map<string, string> | 
       continue
     }
     // `projects = {...}` / `projects."<p>" = {...}`: whole-entry forms this reader does not
-    // interpret — refuse rather than miss a trust_level inside.
+    // interpret - refuse rather than miss a trust_level inside.
     if (full.length < 3) {
       return undefined
     }
@@ -308,7 +308,7 @@ export function untrustedProjectNotice(options: { cwd: string; codexHome: string
       return undefined
     }
   }
-  // Two spellings of one directory with conflicting verdicts keep the trusted one — the
+  // Two spellings of one directory with conflicting verdicts keep the trusted one - the
   // direction that stays silent.
   const canonical = new Map<string, string>()
   for (const [key, value] of entries) {
@@ -336,7 +336,7 @@ export function untrustedProjectNotice(options: { cwd: string; codexHome: string
   const configs = ignored.map((layer) => join(layer, '.codex', 'config.toml'))
   const what = configs.length === 1 ? `its project config (${configs[0]}) is` : `its project configs (${configs.join(', ')}) are`
   return (
-    `codex does not trust this directory, so ${what} being ignored — MCP servers and ` +
+    `codex does not trust this directory, so ${what} being ignored - MCP servers and ` +
     `settings declared there will be missing from this session. To trust it, run codex once ` +
     `in ${trustDir} and accept the trust prompt, or add [projects."${trustDir}"] with ` +
     `trust_level = "trusted" to ${homeConfigPath}.`

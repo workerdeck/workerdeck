@@ -82,7 +82,7 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
               <Input
                 value={defaultModel}
                 onChange={(e) => setDefaultModel(e.target.value)}
-                placeholder="unset — request / engine default"
+                placeholder="unset - request / engine default"
                 className="font-mono"
               />
             )}
@@ -144,7 +144,7 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-label text-fg-4">
-            Name and engine are fixed — sessions and jobs are pinned to the name, and the engine decides what the rest of these fields mean.
+            Name and engine are fixed - sessions and jobs are pinned to the name, and the engine decides what the rest of these fields mean.
           </p>
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? <Spinner className="size-3.5 text-current" /> : <Save className="size-4" />}

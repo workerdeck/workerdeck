@@ -6,7 +6,7 @@ import UIKit
 ///
 /// Codex's `image_gen` reports a path and never bytes, so a tool card holding a
 /// `savedPath` has nothing to show on its own. `file_produced` turns that path
-/// into a `fileId` the gateway will serve — with no host-file root to declare
+/// into a `fileId` the gateway will serve - with no host-file root to declare
 /// and no byte cap to raise, because the allowlist is the exact set of paths
 /// this session's own runner reported writing.
 ///
@@ -18,7 +18,7 @@ import UIKit
 final class ProducedImageLoader {
   /// Set by the session view: (fileId) -> bytes.
   var fetch: (@Sendable (String) async throws -> Data)?
-  /// The session's `file_produced` announcements, keyed by host path — which is
+  /// The session's `file_produced` announcements, keyed by host path - which is
   /// what a tool card has. Kept here rather than threaded through the transcript
   /// so `ToolCallCard` needs no new props.
   var files: [String: ProducedFile] = [:]
@@ -32,7 +32,7 @@ final class ProducedImageLoader {
   }
 
   /// Whether this path is one the engine announced producing. False for a file
-  /// the agent merely read — those are not produced files and stay behind
+  /// the agent merely read - those are not produced files and stay behind
   /// `/fs/*` and its roots.
   func hasImage(forPath path: String) -> Bool {
     guard let file = files[path] else { return false }

@@ -10,8 +10,8 @@ function userOf(context: { get: <T>(key: string) => T }): string {
   return context.get<AuthInfo>('auth').userId
 }
 
-// A model asked to omit an optional field sends `""` or (observed live) `" "` instead. `.min(1)` is not the fix — a
-// single space has length 1 — so no optional string is trusted as given.
+// A model asked to omit an optional field sends `""` or (observed live) `" "` instead. `.min(1)` is not the fix - a
+// single space has length 1 - so no optional string is trusted as given.
 function text(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
@@ -30,7 +30,7 @@ const docBody = z.object({
   updatedAt: z.number(),
 })
 
-// The descriptions are written for the model — a tool description is prompt, not documentation.
+// The descriptions are written for the model - a tool description is prompt, not documentation.
 export function createWikiActions(db: WikiDb, state: AppState) {
   const listDocs = createAction({
     name: 'list_docs',
@@ -46,7 +46,7 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     name: 'read_doc',
     kind: 'query',
     description:
-      'Read one wiki document by id or by exact title. Returns its full body. Prefer id when ' + 'you have one — titles are not unique.',
+      'Read one wiki document by id or by exact title. Returns its full body. Prefer id when ' + 'you have one - titles are not unique.',
     input: z.object({
       id: z.string().optional().describe('Document id, as returned by list_docs.'),
       title: z.string().optional().describe('Exact title, case-insensitive. Used only when id is absent.'),
@@ -95,7 +95,7 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     name: 'update_doc',
     description:
       'Replace the body of an EXISTING document, and optionally its title. The body is replaced ' +
-      'wholesale, not appended — read_doc first if you mean to edit rather than replace. Takes ' +
+      'wholesale, not appended - read_doc first if you mean to edit rather than replace. Takes ' +
       'the id from list_docs; it cannot create, so use create_doc for a new document.',
     input: z.object({
       id: z.string().describe('Existing document id, from list_docs.'),
@@ -147,7 +147,7 @@ export function createWikiActions(db: WikiDb, state: AppState) {
     name: 'delete_doc',
     description:
       'Permanently delete a wiki document. This cannot be undone and there is no confirmation ' +
-      'step — do not call it unless the user has clearly asked for that document to be deleted. ' +
+      'step - do not call it unless the user has clearly asked for that document to be deleted. ' +
       'Takes an id only: resolve a title with list_docs first, and say which document you are ' +
       'about to delete before you do it.',
     input: z.object({
@@ -185,7 +185,7 @@ export function createAgentActions(db: WikiDb, state: AppState, users: readonly 
     kind: 'query',
     description:
       'Who you are talking to and what they currently have open in the app. Call this before ' +
-      'acting on phrases like "this doc", "the one I\'m on", "my notes" — it is the only way to ' +
+      'acting on phrases like "this doc", "the one I\'m on", "my notes" - it is the only way to ' +
       'resolve them, and guessing produces edits to the wrong document.',
     input: z.object({}),
     output: z.object({
@@ -216,7 +216,7 @@ export function createAgentActions(db: WikiDb, state: AppState, users: readonly 
     name: 'open_doc',
     description:
       "Navigate the user's app to a document, by id or exact title, so it is on their screen. " +
-      'Use it after creating something they asked for. This changes what the person sees — do ' +
+      'Use it after creating something they asked for. This changes what the person sees - do ' +
       'not call it to read a document, use read_doc for that.',
     input: z.object({
       id: z.string().optional().describe('Document id. Preferred.'),

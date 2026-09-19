@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { randomBytes } from 'node:crypto'
 
-// `EMBEDDED_SECRET` is the deployment answer — replicas must agree on it. The file it falls back to is a credential:
+// `EMBEDDED_SECRET` is the deployment answer - replicas must agree on it. The file it falls back to is a credential:
 // it mints a cookie for any user.
 export function resolveSecret(path: string): string {
   const fromEnv = process.env.EMBEDDED_SECRET

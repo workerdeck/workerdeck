@@ -73,7 +73,7 @@ export function isLinkElement(node: Node): node is HTMLAnchorElement {
 export function safeJsonParse(json: string): unknown {
   try {
     // JSON.parse returns `any` by default. We narrow it to `unknown`
-    // which is the safest pattern — callers must validate before use.
+    // which is the safest pattern - callers must validate before use.
     const parsed: unknown = JSON.parse(json)
     return parsed
   } catch {
@@ -208,11 +208,11 @@ export function indexOfChildNode(parent: HTMLElement, child: Node): number {
  * `readSegmentsFromDOM` in use-prompt-area.ts. This is the single predicate
  * shared with `domChildIndexToSegmentIndex` below, so a DOM child index can
  * never map to a different segment index than the one the reader actually
- * produces — decoration elements (the URL `<a>` from `decorateURLsInEditor`,
+ * produces - decoration elements (the URL `<a>` from `decorateURLsInEditor`,
  * the markdown `<span data-md>` from `decorateMarkdownInEditor`) fall through
  * to the reader's "unknown element" branch and DO produce a text segment, so
  * they must count here too, not just chips/text/`<br>`. A chip element only
- * counts if `chipNodeToSegment` would actually accept it — the reader skips a
+ * counts if `chipNodeToSegment` would actually accept it - the reader skips a
  * chip missing a required attribute (trigger/value/display), so this must too.
  */
 export function childProducesSegment(child: Node): boolean {
@@ -348,7 +348,7 @@ export function normalizeEditorDOM(editor: HTMLElement): boolean {
  * Walks direct-child text nodes in the editor and wraps URL text in
  * `<a>` elements for visual styling and clickability.
  *
- * This is a DOM-only decoration — it does NOT modify the segment model.
+ * This is a DOM-only decoration - it does NOT modify the segment model.
  * The `<a>` elements are stripped by `normalizeEditorDOM` on every input cycle,
  * so they are re-applied fresh each time.
  *
@@ -393,7 +393,7 @@ export function decorateURLsInEditor(editor: HTMLElement): boolean {
       continue
     }
 
-    // Validate URLs upfront – only keep those with safe protocols (CWE-79)
+    // Validate URLs upfront - only keep those with safe protocols (CWE-79)
     const safeMatches: Array<{ url: string; href: string; index: number }> = []
     for (const { url, index } of matches) {
       try {
@@ -447,7 +447,7 @@ export function decorateURLsInEditor(editor: HTMLElement): boolean {
  * Walks direct-child text nodes in the editor and wraps markdown-formatted
  * text (`**bold**`, `*italic*`, `***bold-italic***`) in styled `<span>` elements.
  *
- * This is a DOM-only decoration — it does NOT modify the segment model.
+ * This is a DOM-only decoration - it does NOT modify the segment model.
  * The `<span>` elements are stripped by `normalizeEditorDOM` on every input cycle,
  * so they are re-applied fresh each time.
  *
@@ -529,7 +529,7 @@ export function decorateMarkdownInEditor(editor: HTMLElement): boolean {
         fragment.appendChild(document.createTextNode(text.slice(lastIndex, index)))
       }
 
-      // Parent span — textContent still returns full match (e.g. "**world**")
+      // Parent span - textContent still returns full match (e.g. "**world**")
       const span = document.createElement('span')
       span.dataset.md = 'true'
 
@@ -642,7 +642,7 @@ export function decorateBulletsInEditor(editor: HTMLElement): boolean {
  * unchanged) and is stripped by {@link normalizeEditorDOM} each input cycle.
  * Must run BEFORE the node-splitting passes ({@link decorateURLsInEditor},
  * {@link decorateMarkdownInEditor}, {@link decorateBulletsInEditor}) so every
- * direct-child text node is still a whole line — otherwise a mid-line split
+ * direct-child text node is still a whole line - otherwise a mid-line split
  * fragment beginning with whitespace would let the `^` anchor false-match
  * non-line-leading whitespace.
  *

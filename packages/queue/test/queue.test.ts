@@ -44,7 +44,7 @@ function tick() {
 }
 
 // A deadline, not a latency assertion: every wait here asserts something eventually settles, and vi.waitFor's 1s default
-// starved a 1ms retry timer under parallel CI workers — the flake that failed the v0.9.0 publish.
+// starved a 1ms retry timer under parallel CI workers - the flake that failed the v0.9.0 publish.
 function settles<T>(assertion: () => T | Promise<T>): Promise<T> {
   return vi.waitFor(assertion, { timeout: 15_000, interval: 10 })
 }
@@ -205,7 +205,7 @@ describe('JobQueue', () => {
     expect((await queue.stats()).running).toBe(0)
   })
 
-  // Every abort path reports the same usage patch — the tokens seen so far, no cost, no turns —
+  // Every abort path reports the same usage patch - the tokens seen so far, no cost, no turns -
   // because a run that never produced a turn_result has no authoritative usage to report. Only
   // turn_result carries real numbers, so these four are the shape that must not drift apart.
   describe('the abort patch', () => {

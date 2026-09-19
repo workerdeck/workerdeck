@@ -4,7 +4,7 @@
 /* Monorepo dev: scan the ui package source for classnames (mirrors packages/web). */
 @source '../../../packages/ui/src';
 /* streamdown (markdown renderer inside @workerdeck/ui) styles itself with Tailwind
- * classes — scan its whole dist dir. pnpm nests it under the ui package. */
+ * classes - scan its whole dist dir. pnpm nests it under the ui package. */
 @source '../../../packages/ui/node_modules/streamdown/dist';
 /* This webview's own classnames. */
 @source './';
@@ -24,7 +24,7 @@
    * The monospace slot is the EDITOR's font, everywhere and unconditionally.
    * The terminal theme draws its whole surface in it (`--cw-font-mono` in
    * `terminal.css`), so this is what makes "the agent panel is in my editor
-   * font" true — and it is not a preference there: a proportional face would
+   * font" true - and it is not a preference there: a proportional face would
    * not be a different look, it would be a broken character grid.
    *
    * `workerdeck.fontFamily` still exists and still governs the `cards` variant,
@@ -35,7 +35,7 @@
 
 /*
  * The AGENT PANEL only, from `workerdeck.fontFamily` (stamped on <html> by
- * webview-html.ts — no other view carries the attribute). `editor`, the default,
+ * webview-html.ts - no other view carries the attribute). `editor`, the default,
  * points the sans token at VS Code's editor font, so the transcript renders
  * monospace and reads as part of the terminal/editor rather than as a web app
  * docked next to one. The mono token is left alone: code was already mono, and
@@ -47,13 +47,13 @@ html[data-font='editor'] {
 
 /*
  * Skin the ui tokens with the editor's own theme. VS Code injects `--vscode-*`
- * variables into every webview, already resolved for the ACTIVE theme — so
+ * variables into every webview, already resolved for the ACTIVE theme - so
  * these overrides are theme-agnostic and live on :root unconditionally
  * (`theme.ts` still stamps data-theme for the light/dark structural variants).
  * Fallbacks are the ui defaults, for the day a theme omits a variable.
  *
  * Deliberately partial: canvas, surfaces, borders, text. Semantic colors
- * (success/warning/danger) and badge tuning stay the ui's own — VS Code has no
+ * (success/warning/danger) and badge tuning stay the ui's own - VS Code has no
  * one-to-one equivalents and half-mapped semantics read worse than none.
  */
 :root {
@@ -68,7 +68,7 @@ html[data-font='editor'] {
   --fg-2: var(--vscode-foreground, #454545);
   --fg-3: var(--vscode-descriptionForeground, #737373);
   --fg-4: var(--vscode-descriptionForeground, #a1a1a1);
-  /* The theme's own primary — its link colour, which every VS Code theme tunes
+  /* The theme's own primary - its link colour, which every VS Code theme tunes
      for its background (a lighter blue in dark themes, a darker one in light).
      This is what the working spinner, the recap mark, the `❯` on your own
      messages and an armed send button wear, so "accent" in this webview means
@@ -86,11 +86,11 @@ html[data-font='editor'] {
   --row-hover: var(--vscode-list-hoverBackground, #2a2d2e);
   --row-selected: var(--vscode-list-activeSelectionBackground, #04395e);
   --row-selected-weak: var(--vscode-list-inactiveSelectionBackground, #37373d);
-  /* A count that is not an alert — VS Code's own badge, which every theme tunes
+  /* A count that is not an alert - VS Code's own badge, which every theme tunes
      to sit quietly. The unread badge stays on `--accent`. */
   --badge: var(--vscode-badge-background, #616161);
   --badge-fg: var(--vscode-badge-foreground, #cccccc);
-  /* Focus is VS Code's own focus colour, not the ui's foreground-derived ring —
+  /* Focus is VS Code's own focus colour, not the ui's foreground-derived ring -
      a white outline in an editor theme reads as a selection, not as focus. */
   --ring: var(--vscode-focusBorder, #0078d4);
 
@@ -105,14 +105,14 @@ html[data-font='editor'] {
 [data-slot='status-bar'] {
   padding-block: 2px;
 }
-/* The composer's docked treatment — flush to the panel edges, `>` in the gutter,
- * an accent rule along the top — is the terminal theme's own (`Composer.tsx`),
+/* The composer's docked treatment - flush to the panel edges, `>` in the gutter,
+ * an accent rule along the top - is the terminal theme's own (`Composer.tsx`),
  * shared with every other host that draws it. A panel switched to `cards` gets
  * the card, gutter and all.
  *
  * The one thing this host takes back is the composer's BOTTOM rule. The theme
  * brackets the prompt with two rules because in a surface that continues below
- * it — the dashboard's inset panel — the lower one is the frame's other half.
+ * it - the dashboard's inset panel - the lower one is the frame's other half.
  * Here nothing continues: `statusSurface: 'external'` puts the status bar in
  * the window, so the composer is the last element in the webview and its bottom
  * rule lands flat against the panel's edge, which VS Code rounds. A straight
@@ -121,7 +121,7 @@ html[data-font='editor'] {
  *
  * `transparent` rather than `none`, so the box keeps its 1px and nothing above
  * it shifts; and the `:focus-within` selector is repeated because the theme
- * sets all four borders at once there — same specificity, later in the cascade
+ * sets all four borders at once there - same specificity, later in the cascade
  * (this file imports `theme.css`, which imports `terminal.css`, above). */
 [data-terminal].term-composer,
 [data-terminal].term-composer:focus-within,
@@ -130,8 +130,8 @@ html[data-font='editor'] {
 }
 
 /*
- * The working marker — the `Working…` line and the pulsing brand glyph beside
- * it — is the theme's coral (`--term-mark`, the mark's own colour). In this
+ * The working marker - the `Working…` line and the pulsing brand glyph beside
+ * it - is the theme's coral (`--term-mark`, the mark's own colour). In this
  * webview it reads as the odd one out: everything else primary here is already
  * the editor's blue, because `--accent` above is repointed at the theme's link
  * colour so the panel matches the workbench it is docked in. A single coral

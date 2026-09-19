@@ -6,8 +6,8 @@ import Testing
 /// Row addressing and deterministic heights.
 ///
 /// `rowIndex(forItem:)` is the one that earns a suite of its own: a row covers a
-/// *membership*, not a range, so every positional shortcut anyone reaches for —
-/// "the row is the item index", "the row before it starts earlier" — is wrong in
+/// *membership*, not a range, so every positional shortcut anyone reaches for -
+/// "the row is the item index", "the row before it starts earlier" - is wrong in
 /// the presence of a fold.
 @Suite("TerminalRows")
 struct TerminalRowsTests {
@@ -24,8 +24,8 @@ struct TerminalRowsTests {
   @Test("the seam splices at the boundary and each side folds separately")
   func recapSplitsTheFold() {
     let items: [TranscriptItem] = [
-      .toolCall(call("a")), .toolCall(call("b")),  // 0,1 — read
-      .toolCall(call("c")), .toolCall(call("d")),  // 2,3 — new
+      .toolCall(call("a")), .toolCall(call("b")),  // 0,1 - read
+      .toolCall(call("c")), .toolCall(call("d")),  // 2,3 - new
     ]
     // Without the seam all four calls fold into one run.
     #expect(TerminalRows.build(items: items).count == 1)
@@ -36,7 +36,7 @@ struct TerminalRowsTests {
     #expect(rows[0].recapLabel == nil)
   }
 
-  @Test("row addressing survives the seam — the rows below it keep their offsets")
+  @Test("row addressing survives the seam - the rows below it keep their offsets")
   func recapKeepsAddressing() {
     let items = [text("a"), text("b"), text("c")]
     let rows = TerminalRows.build(items: items, recapAt: 1, recapLabel: "1 reply")
@@ -45,7 +45,7 @@ struct TerminalRowsTests {
     #expect(rows.rowIndex(forItem: 2) == 3)
   }
 
-  @Test("a boundary at either edge splices nothing — there is no seam to draw")
+  @Test("a boundary at either edge splices nothing - there is no seam to draw")
   func recapAtEdgesIsNoSeam() {
     let items = [text("a"), text("b")]
     #expect(TerminalRows.build(items: items, recapAt: 0).recapRow == nil)
@@ -78,7 +78,7 @@ struct TerminalRowsTests {
       text("intro"), .toolCall(call("a")), .toolCall(call("b")), .toolCall(call("c")),
     ])
     #expect(rows.count == 2)
-    // The run is one row; every member answers with it, including the last —
+    // The run is one row; every member answers with it, including the last -
     // which index arithmetic on the run's start would get right only by luck.
     for item in 1...3 { #expect(rows.rowIndex(forItem: item) == 1) }
   }
@@ -123,7 +123,7 @@ struct TerminalRowsTests {
     #expect(rows.position(forItem: 99) == nil)
   }
 
-  @Test("a run of one has no position — the rail must stay a map")
+  @Test("a run of one has no position - the rail must stay a map")
   func singletonRunHasNoPosition() {
     // The fold makes EVERY top-level tool call a run block. Without this
     // carve-out every ordinary failed call's mark would shrink from its row's
@@ -146,7 +146,7 @@ struct TerminalRowsTests {
 
   @Test("each side of the recap seam folds separately")
   func seamBreaksARun() {
-    // A count under the seam must describe only what is new — a run spanning
+    // A count under the seam must describe only what is new - a run spanning
     // "what you already read" would claim otherwise.
     let rows = TerminalRows.build(
       items: [.toolCall(call("a")), .toolCall(call("b")), .toolCall(call("c"))], recapAt: 2)
@@ -219,7 +219,7 @@ struct TerminalRowsTests {
   @Test("a collapsed Task is always one wrapped summary, however much it did")
   func taskRowStaysCollapsed() {
     // The invariant that keeps the height exact: the live signal is IN the
-    // collapsed line — the pulse, a climbing count — never an auto-expansion.
+    // collapsed line - the pulse, a climbing count - never an auto-expansion.
     var items: [TranscriptItem] = [.toolCall(call("t1", "Task"))]
     for index in 0..<60 { items.append(.toolCall(call("c\(index)", parent: "t1"))) }
     let rows = TerminalRows.build(items: items)
@@ -306,14 +306,14 @@ struct TerminalRowsTests {
 
   // MARK: - The long-press menu
 
-  @Test("a row bookmarks its own head item — the id it is keyed by")
+  @Test("a row bookmarks its own head item - the id it is keyed by")
   func bookmarkAddressesTheRowHead() {
     let rows = TerminalRows.build(items: [
       text("intro"),                        // an item row is its item
-      .toolCall(call("a")),                 // ┐ run of two — the row is
+      .toolCall(call("a")),                 // ┐ run of two - the row is
       .toolCall(call("b")),                 // ┘ `run:a`, so it bookmarks "a"
       .toolCall(call("T", "Task")),         // task row bookmarks the spawn
-      .toolCall(call("c1", parent: "T")),   // absorbed — no row of its own
+      .toolCall(call("c1", parent: "T")),   // absorbed - no row of its own
     ])
     #expect(rows.count == 3)
     #expect(rows[0].bookmarkItemId == "intro")
@@ -324,7 +324,7 @@ struct TerminalRowsTests {
   @Test("the synthetic rows bookmark nothing")
   func syntheticRowsBookmarkNothing() {
     // The seam and the brief stand for no item; a bookmark on either would be
-    // an id no transcript holds, which every client would silently drop — the
+    // an id no transcript holds, which every client would silently drop - the
     // menu must not offer a mark that can never be found again.
     let seamed = TerminalRows.build(
       items: [text("a"), text("b")], recapAt: 1, recapLabel: "1 new")
@@ -345,18 +345,18 @@ struct TerminalRowsTests {
       id: "rd", name: "Read", input: .object(["file_path": .string("/a")]),
       status: .settled, result: ToolCallResult(text: "740 lines", isError: false))
     let silent = ToolCallItem(id: "mu", name: "Kill", input: .object([:]), status: .settled)
-    // A run of one is drawn as the call, so it copies as the call — the command
+    // A run of one is drawn as the call, so it copies as the call - the command
     // outranks the result, exactly the web `ToolRow`'s `copyable`.
     #expect(TerminalRows.build(items: [.toolCall(bash)])[0].copyText == "pnpm test")
     #expect(TerminalRows.build(items: [.toolCall(read)])[0].copyText == "740 lines")
     // No command, no result: nothing to offer, and the menu says so by omission.
     #expect(TerminalRows.build(items: [.toolCall(silent)])[0].copyText == nil)
-    // A run of many is a count over other rows' content — copying an invented
+    // A run of many is a count over other rows' content - copying an invented
     // concatenation would be worse than offering nothing.
     #expect(TerminalRows.build(items: [.toolCall(bash), .toolCall(read)])[0].copyText == nil)
   }
 
-  @Test("a streaming answer offers no copy — the text in hand is a moment, not the message")
+  @Test("a streaming answer offers no copy - the text in hand is a moment, not the message")
   func streamingAnswerHasNoCopy() {
     let streaming = TerminalRows.build(items: [
       .assistantText(id: "s", text: "half a", streaming: true, parentToolUseId: nil)
@@ -395,11 +395,11 @@ struct TerminalDivergenceTests {
   @Test("the preview budget is four lines' worth at any width")
   func previewBudgetFollowsTheWidth() {
     // 400 characters is "about four lines" at a hundred columns and thirteen
-    // lines at thirty — a preview that fills a phone screen.
+    // lines at thirty - a preview that fills a phone screen.
     let blob = String(repeating: "x", count: 30_000)
     let narrow = ResultPreview.collapsed([blob], cols: 30)
     let wide = ResultPreview.collapsed([blob], cols: 100)
-    // Exactly four lines' worth, ellipsis included — a fifth line holding only
+    // Exactly four lines' worth, ellipsis included - a fifth line holding only
     // the ellipsis is the artefact this arithmetic exists to avoid.
     #expect(narrow.shown[0].count == 4 * 30)
     #expect(wide.shown[0].count == 4 * 100)

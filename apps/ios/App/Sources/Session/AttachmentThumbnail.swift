@@ -5,7 +5,7 @@ import UIKit
 /// Fetches attachment bytes for the transcript, once each.
 ///
 /// The gateway authenticates with a header, so an `AsyncImage` pointed at the
-/// URL would 401 — every thumbnail goes through the client. The cache is what
+/// URL would 401 - every thumbnail goes through the client. The cache is what
 /// keeps a `LazyVStack` from re-fetching a photo each time its row scrolls back
 /// into view.
 @MainActor

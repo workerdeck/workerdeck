@@ -1,15 +1,15 @@
 ---
 title: Theming & styling
-description: Three tiers of visual control — token overrides, className props, and source imports — from a quick re-skin to a fully custom component tree.
+description: Three tiers of visual control - token overrides, className props, and source imports - from a quick re-skin to a fully custom component tree.
 order: 11
 ---
 
 WorkerDeck's UI is designed for embedding, and embedders need different levels of visual control.
 The package offers three tiers, from lightest to deepest:
 
-1. **CSS token overrides** — change colours, type, spacing, geometry with one block of CSS.
-2. **`className` and `data-slot`** — restyle any component or sub-element without forking.
-3. **Source imports** — consume the raw `.tsx` files as your own code.
+1. **CSS token overrides** - change colours, type, spacing, geometry with one block of CSS.
+2. **`className` and `data-slot`** - restyle any component or sub-element without forking.
+3. **Source imports** - consume the raw `.tsx` files as your own code.
 
 Every tier composes: start with tokens, add targeted `className` overrides where tokens don't
 reach, and fall through to source only for the components you truly need to rewrite.
@@ -43,7 +43,7 @@ These are the ones most embedders override. Set them inside `[data-theme='light'
 | `--success-bg`, `--warning-bg`, `--danger-bg`, `--info-bg` | Semantic tint backgrounds |
 | `--vendor-claude`, `--vendor-openai` | Engine brand marks |
 
-Example — match your app's brand:
+Example - match your app's brand:
 
 ```css
 .wd-root {
@@ -194,9 +194,9 @@ imports the raw TypeScript source:
 ```
 
 With that condition active, `import { SessionPanel } from '@workerdeck/ui'` resolves to
-`packages/ui/src/index.ts` — the actual `.tsx` files, compiled by your own build. You get:
+`packages/ui/src/index.ts` - the actual `.tsx` files, compiled by your own build. You get:
 
-- **Full tree-shaking** — only the components you use are compiled.
+- **Full tree-shaking** - only the components you use are compiled.
 - **Your own Tailwind build** processes the classes, so overriding at the utility level works
   natively.
 - **You can copy and modify** any component into your own tree, importing the rest from the
@@ -231,10 +231,10 @@ exported for non-React use.
 
 | Goal | Tier |
 | --- | --- |
-| Match my app's colour palette | 1 — override `--accent`, `--bg`, `--fg-*` |
-| Use my own fonts | 1 — override `--cw-font-sans`, `--cw-font-mono` |
-| Adjust spacing / sizing | 1 — override `--wd-*` geometry tokens |
-| Restyle one component's root | 2 — `className` prop |
-| Restyle a sub-element (e.g. tool card header) | 2 — `[data-slot]` CSS selector |
-| Reshape a component's structure | 3 — source import, copy, modify |
-| Build a fully custom UI | 3 — `@workerdeck/react` headless hook |
+| Match my app's colour palette | 1 - override `--accent`, `--bg`, `--fg-*` |
+| Use my own fonts | 1 - override `--cw-font-sans`, `--cw-font-mono` |
+| Adjust spacing / sizing | 1 - override `--wd-*` geometry tokens |
+| Restyle one component's root | 2 - `className` prop |
+| Restyle a sub-element (e.g. tool card header) | 2 - `[data-slot]` CSS selector |
+| Reshape a component's structure | 3 - source import, copy, modify |
+| Build a fully custom UI | 3 - `@workerdeck/react` headless hook |

@@ -96,8 +96,8 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
             }}
             placeholder={
               plan
-                ? 'What should change? (optional) — the agent keeps planning and reads this'
-                : 'Reason (optional) — the agent reads this and can try something else'
+                ? 'What should change? (optional) - the agent keeps planning and reads this'
+                : 'Reason (optional) - the agent reads this and can try something else'
             }
             className="h-7 flex-1"
           />

@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// The sibling of `HostFilesView`, and deliberately not the same screen. That one
 /// is rooted at a session's cwd and opens files; this one starts at the server's
-/// roots — there is no cwd yet, that is what is being chosen — shows directories
+/// roots - there is no cwd yet, that is what is being chosen - shows directories
 /// only, and every level can be selected as well as entered.
 ///
 /// The roots it offers are the server's *read* roots, which is the right set:
@@ -56,7 +56,7 @@ struct FolderPickerView: View {
       } description: {
         Text(
           "This server exposes no directories to browse. Start it with --fs-root <path> "
-            + "(or --cwd-root) and folders show up here — you can still type a path.")
+            + "(or --cwd-root) and folders show up here - you can still type a path.")
       }
     case .failed(let message):
       ContentUnavailableView {
@@ -67,7 +67,7 @@ struct FolderPickerView: View {
         Button("Try again") { Task { await model.load() } }
       }
     case .ready(let roots):
-      // One root is not a choice — start inside it, so the first screen is
+      // One root is not a choice - start inside it, so the first screen is
       // already the list you came to look at.
       if roots.count == 1, let root = roots.first {
         FolderLevelView(model: model, path: root.path, select: select)

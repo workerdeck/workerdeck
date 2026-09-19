@@ -9,7 +9,7 @@ const HEAD = '[^\\s:\'"`()\\[\\]{}<>|@,]+'
 const PATH_PATTERN = new RegExp(
   // A token boundary (or the start), never consumed into the path.
   `(?:^|[\\s'"\`([{<@,])` +
-    // Absolute, dot-relative, or bare relative — the last validated below.
+    // Absolute, dot-relative, or bare relative - the last validated below.
     `((?:\\.\\.?)?(?:/${SEG})+|${HEAD}(?:/${SEG})+)` +
     `(?::(\\d+))?`,
 )
@@ -21,7 +21,7 @@ const FILENAME = /\.[A-Za-z0-9]{1,10}$/
 export type PathMatch = {
   path: string
   line?: number
-  // How much of the inspected text the path accounted for — the "mostly-a-path" test the hover affordance makes.
+  // How much of the inspected text the path accounted for - the "mostly-a-path" test the hover affordance makes.
   length: number
 }
 

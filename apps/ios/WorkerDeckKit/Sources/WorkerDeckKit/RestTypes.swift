@@ -1,12 +1,12 @@
 import Foundation
 
 // Swift mirror of the protocol's REST shapes (sessions, profiles, SDK sessions,
-// files). The job-queue surface is not mirrored yet — it is a later phase of the
+// files). The job-queue surface is not mirrored yet - it is a later phase of the
 // mobile plan; add it here (from packages/protocol) when the app grows a jobs view.
 
 // MARK: - Profiles
 
-/// A closed union, deliberately — adding a member is a versioned protocol event
+/// A closed union, deliberately - adding a member is a versioned protocol event
 /// and the app ships in lockstep with the gateway (exact version compare).
 public enum ProfileEngine: String, Codable, Sendable {
   case claude
@@ -14,7 +14,7 @@ public enum ProfileEngine: String, Codable, Sendable {
   case provider
 }
 
-/// What an engine does and does not do — mirror of the protocol's
+/// What an engine does and does not do - mirror of the protocol's
 /// `EngineCapabilities`. Render from this record instead of switching on the
 /// engine name: a false/absent capability means the affordance is *hidden*,
 /// never a control that silently does nothing.
@@ -39,17 +39,17 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   public let mcpServerActions: Bool
   public let sessionMcpServers: Bool
   public let slashCommands: Bool
-  /// The `clear_context` session command is honored — offer the "Clear
+  /// The `clear_context` session command is honored - offer the "Clear
   /// context" verb. Absent (an older gateway) reads as false: hidden, never a
   /// button the server would ignore.
   public let clearContext: Bool
   /// `skills` events can occur. False: hide the skills panel entirely rather
-  /// than showing an empty one. Orthogonal to `slashCommands` — codex has
+  /// than showing an empty one. Orthogonal to `slashCommands` - codex has
   /// skills and no commands; claude has commands and no listable skills.
   public let skillsList: Bool
   public let settingSources: Bool
   public let budgets: Bool
-  /// 'image' | 'pdf' | 'text' — open strings; filter the attach menu by the ones
+  /// 'image' | 'pdf' | 'text' - open strings; filter the attach menu by the ones
   /// this build knows.
   public let attachments: [String]
   /// Absent = the effort control is not offered.
@@ -58,7 +58,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   /// The engine runs against a host directory, so a create must name a `cwd`.
   /// Absent = true (an older gateway), which is the always-required behaviour.
   public let hostCwd: Bool?
-  /// 'token' | 'item' | 'none' — anything ≠ 'token' renders without a typing cursor.
+  /// 'token' | 'item' | 'none' - anything ≠ 'token' renders without a typing cursor.
   public let streaming: String
 
   public init(
@@ -98,7 +98,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     interactiveApprovals = try c.decode(Bool.self, forKey: .interactiveApprovals)
-    // Unknown mode strings are a newer server's vocabulary — drop them rather
+    // Unknown mode strings are a newer server's vocabulary - drop them rather
     // than fail the decode; this build could not offer them anyway.
     let rawModes = try c.decode([String].self, forKey: .permissionModes)
     permissionModes = rawModes.compactMap { PermissionMode(rawValue: $0) }
@@ -136,7 +136,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   }
 }
 
-/// Mirror of the protocol's ENGINE_CAPABILITIES — the browser-safe default when
+/// Mirror of the protocol's ENGINE_CAPABILITIES - the browser-safe default when
 /// a `ProfileInfo`/`SessionInfo` carries no record of its own. When both exist,
 /// the wire copy wins.
 public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
@@ -156,23 +156,23 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
   .codex: EngineCapabilities(
     // The app-server ask channels are wired to the permission surface. NOTE
     // the tense: codex's command approval is usually an escalation AFTER the
-    // sandbox refused ("command failed; retry without sandbox?") — render the
+    // sandbox refused ("command failed; retry without sandbox?") - render the
     // request's own title/description rather than composing "wants to use X".
     interactiveApprovals: true,
-    // `.auto` is codex's own "Approve for me" — workspace-write plus
+    // `.auto` is codex's own "Approve for me" - workspace-write plus
     // `approvalsReviewer: "auto_review"`, routing approvals to codex's
     // risk-assessing subagent rather than to the user. Unlike the claude
     // engine's auto mode, that reviewer has no operator config surface.
     permissionModes: [.default, .acceptEdits, .bypassPermissions, .auto],
     defaultPermissionMode: .default,
     // A resume replays the thread's history as `replay: true` events, and
-    // `GET /sdk-sessions?profile=` lists CODEX_HOME's threads — both true
+    // `GET /sdk-sessions?profile=` lists CODEX_HOME's threads - both true
     // since protocol 6's backfill landed.
     resume: true, resumeBackfill: true, listSessions: true,
-    // contextUsage arrives with an empty `categories` — occupancy only, no
+    // contextUsage arrives with an empty `categories` - occupancy only, no
     // breakdown. ContextSheet hides its Breakdown section for that case.
-    // `mcpServerStatus/list` answers with each server, its auth status and —
-    // unlike the Agent SDK — every tool's full JSON Schema. Liveness rides the
+    // `mcpServerStatus/list` answers with each server, its auth status and -
+    // unlike the Agent SDK - every tool's full JSON Schema. Liveness rides the
     // `mcpServer/startupStatus/updated` notification, which the runner tracks.
     // No per-server action exists on this transport, hence read-only.
     contextUsage: true, rateLimits: true, mcpStatus: true, mcpServerActions: false,
@@ -191,7 +191,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     defaultPermissionMode: .default,
     resume: false, resumeBackfill: false, listSessions: false,
     // Host-wired MCP: the runner reports what the host assembled the session
-    // from, so this engine can always answer — but never act on a connection.
+    // from, so this engine can always answer - but never act on a connection.
     contextUsage: false, rateLimits: false, mcpStatus: true, mcpServerActions: false,
     sessionMcpServers: false,
     slashCommands: false, clearContext: true, skillsList: false, settingSources: false,
@@ -206,7 +206,7 @@ extension ProfileEngine {
 }
 
 /// Permission modes the model-agnostic provider engine understands.
-/// Deprecated spelling — read `ProfileEngine.provider.defaultCapabilities`.
+/// Deprecated spelling - read `ProfileEngine.provider.defaultCapabilities`.
 public let providerPermissionModes: [PermissionMode] =
   engineCapabilities[.provider]!.permissionModes
 
@@ -270,11 +270,11 @@ public struct ProfileSessionDefaults: Codable, Sendable, Equatable {
   }
 }
 
-/// One rate-limit window as the gateway's per-profile tracker serves it —
+/// One rate-limit window as the gateway's per-profile tracker serves it -
 /// mirror of the protocol's `ProfileUsageWindow`.
 public struct ProfileUsageWindow: Codable, Sendable, Equatable {
   public let info: RateLimitInfo
-  /// Epoch ms of the `rate_limit` event this reading came from. Per window —
+  /// Epoch ms of the `rate_limit` event this reading came from. Per window -
   /// unlike the transcript's one clock for its whole map, which is why
   /// `mergeUsage` never compares the two.
   public let updatedAt: Double
@@ -317,12 +317,12 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   /// static default (`resolvedCapabilities` folds that in).
   public let capabilities: EngineCapabilities?
   /// Response-only: whether the profile's credentials probe as usable. Absent =
-  /// unknown/unchecked — treat as available. Display-only either way.
+  /// unknown/unchecked - treat as available. Display-only either way.
   public let available: Bool?
   /// Response-only: one operator-actionable line when `available == false`.
   public let unavailableReason: String?
   /// Response-only: the gateway's per-account usage tracker, folded from every
-  /// session's `rate_limit` events on this profile — never behind what one
+  /// session's `rate_limit` events on this profile - never behind what one
   /// transcript holds. Render through `mergeUsage`, not instead of it.
   public let usage: ProfileUsage?
   /// Response-only: store-backed and editable through the API.
@@ -335,7 +335,7 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   public var resolvedCapabilities: EngineCapabilities {
     capabilities ?? resolvedEngine.defaultCapabilities
   }
-  /// Grey the row (and say why) only on an explicit false — absent is "unchecked".
+  /// Grey the row (and say why) only on an explicit false - absent is "unchecked".
   public var isUnavailable: Bool { available == false }
 
   public init(
@@ -376,7 +376,7 @@ public struct ProfileConfigSnapshot: Decodable, Sendable, Equatable {
     public let model: String?
     public let defaultPermissionMode: String?
     public let permissionRules: PermissionRules?
-    /// Env var NAMES only — values never leave the server.
+    /// Env var NAMES only - values never leave the server.
     public let envKeys: [String]?
     public let hooks: [String]?
 
@@ -390,18 +390,18 @@ public struct ProfileConfigSnapshot: Decodable, Sendable, Equatable {
 
 // MARK: - Sessions
 
-/// One sub-agent a session has spawned, as the *gateway* reconstructs it — the
+/// One sub-agent a session has spawned, as the *gateway* reconstructs it - the
 /// stream carries no lifecycle events, only nested messages tagged with a
 /// `parentToolUseId`, so this is a rollup the runner keeps and a client reads.
 ///
 /// `status` is the sub-agent's **own** outcome, deliberately narrower than the
 /// terminal theme's `taskFailed`, which reddens a `Task` row when any child
-/// call failed. That is right for a transcript row you can expand — the failure
+/// call failed. That is right for a transcript row you can expand - the failure
 /// is one press away. It is wrong beside a session's name in a list, where a
 /// grep that matched nothing inside an otherwise successful agent would read as
 /// a failed run with nothing to open.
 public struct SubagentInfo: Decodable, Sendable, Equatable, Identifiable {
-  /// The `tool_use` id of the `Task` call that spawned it — the same id its
+  /// The `tool_use` id of the `Task` call that spawned it - the same id its
   /// nested events carry as `parentToolUseId`, and so the handle for jumping to
   /// that Task's row.
   public let toolUseId: String
@@ -414,7 +414,7 @@ public struct SubagentInfo: Decodable, Sendable, Equatable, Identifiable {
   public let status: SubagentStatus
   /// Epoch ms the `Task` call was emitted.
   public let startedAt: Double
-  /// Tool calls made so far — the progress reading while it runs.
+  /// Tool calls made so far - the progress reading while it runs.
   public let toolCount: Int
 
   public init(
@@ -438,24 +438,24 @@ public enum SubagentStatus: String, Decodable, Sendable, Equatable {
 
 // MARK: - Project identity
 
-/// How a project asks to be drawn — mirror of the protocol's `ProjectIcon`.
+/// How a project asks to be drawn - mirror of the protocol's `ProjectIcon`.
 ///
 /// `image` carries an **address, never bytes**: `SessionInfo` rides every row
 /// of a list polled at 1.2s, so an inlined base64 icon would be paid for on
 /// every poll of every session forever. The bytes are one
 /// `WorkerClient.projectIcon(sessionId:)` fetch away, and `hash` (sha256 hex of
 /// the bytes) is the cross-session cache key: two sessions in one project
-/// serve identical bytes, so cache by hash — never by session — and fetch once
+/// serve identical bytes, so cache by hash - never by session - and fetch once
 /// per project.
 ///
 /// `glyph` is validated by *shape only* at the gateway (it has no icon
-/// catalog), so a name this build does not recognise is expected input — draw
+/// catalog), so a name this build does not recognise is expected input - draw
 /// a generic folder mark for it, never an empty slot.
 public enum ProjectIcon: Sendable, Equatable, Hashable {
   case glyph(name: String)
   case image(mediaType: MediaType, hash: String)
 
-  /// Closed on the wire — the gateway's own classification emits only these
+  /// Closed on the wire - the gateway's own classification emits only these
   /// two. A third value is a newer gateway's vocabulary, and it degrades to
   /// "no icon" in `ProjectInfo`'s decode rather than failing the session row.
   public enum MediaType: String, Decodable, Sendable, Equatable, Hashable {
@@ -480,7 +480,7 @@ extension ProjectIcon: Decodable {
         hash: try c.decode(String.self, forKey: .hash))
     default:
       // A newer gateway's arm. Throwing is what lets `ProjectInfo` degrade it
-      // to nil — this build could not draw it anyway, and the alternative (an
+      // to nil - this build could not draw it anyway, and the alternative (an
       // `unknown` case) would make every renderer branch on a value that
       // means "pretend I am not here".
       throw DecodingError.dataCorruptedError(
@@ -489,22 +489,22 @@ extension ProjectIcon: Decodable {
   }
 }
 
-/// Project identity for a session — what a `.workerdeck.json` in the session's
+/// Project identity for a session - what a `.workerdeck.json` in the session's
 /// cwd ancestry declares, resolved by the **gateway** and shipped on
 /// `SessionInfo.project`. The gateway reads the file, not each client: this
 /// phone has no access to that filesystem, so a per-client reader would make
 /// the feature exist on exactly one client.
 public struct ProjectInfo: Decodable, Sendable, Equatable, Hashable {
-  /// Display name — the file's `name`, else the root's basename. Never empty.
+  /// Display name - the file's `name`, else the root's basename. Never empty.
   public let name: String
   /// Canonical absolute path of the directory holding `.workerdeck.json`, on
-  /// the *gateway's* filesystem — an opaque string to this client beyond
+  /// the *gateway's* filesystem - an opaque string to this client beyond
   /// equality and display. The grouping key, per gateway (see `projectKey` in
   /// `SessionList.swift`), and never `name`: two repos can both be called
   /// "api", and a rename must regroup nothing.
   public let root: String
-  /// Absent = the file declared none, or declared one the gateway refused —
-  /// malformed, escaping, oversized — which a client cannot and must not
+  /// Absent = the file declared none, or declared one the gateway refused -
+  /// malformed, escaping, oversized - which a client cannot and must not
   /// distinguish.
   public let icon: ProjectIcon?
 
@@ -518,8 +518,8 @@ public struct ProjectInfo: Decodable, Sendable, Equatable, Hashable {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
     root = try c.decode(String.self, forKey: .root)
-    // `try?`, deliberately: an icon this build cannot parse — a newer
-    // gateway's third arm, a new media type — must read as "no icon", never
+    // `try?`, deliberately: an icon this build cannot parse - a newer
+    // gateway's third arm, a new media type - must read as "no icon", never
     // fail the decode of the whole `SessionInfo`. A display declaration must
     // not cost a session its row; same posture as `EngineCapabilities`'
     // unknown permission-mode strings.
@@ -542,11 +542,11 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// Engine actually running this session. Absent = 'claude'.
   public let engine: ProfileEngine?
   /// The engine's capability record, reported by the runner like `engine`. The
-  /// attach snapshot is the session-level source — no event carries it.
+  /// attach snapshot is the session-level source - no event carries it.
   public let capabilities: EngineCapabilities?
   public let model: String?
   public let permissionMode: PermissionMode?
-  /// Whether this session may be switched into `bypassPermissions` — decided when
+  /// Whether this session may be switched into `bypassPermissions` - decided when
   /// it was created and fixed for its lifetime. Absent (an older server) reads as
   /// unknown, and the picker offers the mode rather than hiding it.
   public let canBypassPermissions: Bool?
@@ -557,7 +557,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// Highest event seq emitted so far; attach with `afterSeq` to catch up.
   public let lastSeq: Int
   /// Which log `lastSeq` counts in. A dormant wake starts the session's log again from
-  /// zero, so a seq kept across one — the one on a notification that sat on a lock screen —
+  /// zero, so a seq kept across one - the one on a notification that sat on a lock screen -
   /// addresses a row that no longer exists. Absent on a gateway that predates the field and
   /// on a session that has never woken; **absent on either side means "same log"**, which is
   /// the behaviour this client had before it existed.
@@ -569,41 +569,41 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let totalCostUsd: Double?
   public let numTurns: Int?
   /// How many transcript rows this session has produced (`transcriptActivity`'s
-  /// unit) — a monotonic counter a client can diff against a remembered value to
+  /// unit) - a monotonic counter a client can diff against a remembered value to
   /// answer "how much happened while I wasn't looking", without attaching.
   /// `numTurns` cannot (five tool calls inside one turn are one turn) and
   /// `lastSeq` cannot either (it counts every stream delta). Absent on an older
   /// server; fall back to `numTurns` rather than showing nothing.
   public let activityCount: Int?
-  /// Rows of the kind a person is actually waiting to read — protocol's
+  /// Rows of the kind a person is actually waiting to read - protocol's
   /// `transcriptProse`: assistant prose, a failed turn, an error, a delivered
   /// file, and nothing a sub-agent said to its parent. **This is the unread
   /// badge's unit**; `activityCount` stays "has anything happened at all",
   /// which is what sorting and dormancy read. Absent on a gateway that predates
-  /// the field — fall back to `activityCount` rather than going silent.
+  /// the field - fall back to `activityCount` rather than going silent.
   public let proseCount: Int?
   /// Epoch ms of the most recent emitted event.
   public let lastActivityAt: Double?
   /// Sub-agents this session has running, plus a short tail of settled ones.
   ///
   /// Absent on an engine with no sidechains and on an older gateway, and
-  /// **absent and empty mean the same thing** — render nothing rather than
+  /// **absent and empty mean the same thing** - render nothing rather than
   /// "0 sub-agents". Bounded by the gateway (every running one, plus the newest
   /// settled ones): it rides every row of a list polled at 1.2s.
   ///
   /// Mirrored late. The phone read `sessionState` off `status` alone, which was
-  /// wrong for a *background* agent — see `sessionState` in `SessionList.swift`
-  /// — and it could not be right without this field to count.
+  /// wrong for a *background* agent - see `sessionState` in `SessionList.swift`
+  /// - and it could not be right without this field to count.
   public let subagents: [SubagentInfo]?
-  /// The engine's own task checklist — Claude's `TodoWrite`, codex's plan.
+  /// The engine's own task checklist - Claude's `TodoWrite`, codex's plan.
   /// Absent and empty mean the same thing. A codex session that woke from
   /// dormancy reports none until its next plan update: thread history carries
   /// no plan notifications to rebuild from.
   public let checklist: [ChecklistItem]?
   /// Opaque tags naming what this session belongs to. Assigned at create,
-  /// immutable, and enforced by the gateway — a client only ever echoes them.
+  /// immutable, and enforced by the gateway - a client only ever echoes them.
   public let scope: [String: String]?
-  /// Project identity discovered from the session's `cwd` — stamped by the
+  /// Project identity discovered from the session's `cwd` - stamped by the
   /// **gateway at serve time** (runners never set it; a runner-echoed copy
   /// would be persisted into parking records and replay a stale name forever).
   /// Absent = no `.workerdeck.json` in the cwd's ancestry, and also = an older
@@ -611,7 +611,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// this client drew before the field existed.
   public let project: ProjectInfo?
   /// The session's latest context-window reading, served on the list so a row
-  /// can show where a session is bloating **without attaching to it** — the same
+  /// can show where a session is bloating **without attaching to it** - the same
   /// number the session screen's ring draws, retained by the runner from the
   /// last `context_usage` it emitted.
   ///
@@ -679,8 +679,8 @@ public enum SettingSource: String, Codable, Sendable {
 }
 
 public struct CreateSessionRequest: Encodable, Sendable {
-  /// Directory the session is rooted at. Optional on the wire — an engine whose
-  /// capability record says `hostCwd: false` has no host filesystem — but kept
+  /// Directory the session is rooted at. Optional on the wire - an engine whose
+  /// capability record says `hostCwd: false` has no host filesystem - but kept
   /// required here: every session this app starts runs on a real machine.
   public var cwd: String
   /// Required when the server declares more than one profile.
@@ -693,7 +693,7 @@ public struct CreateSessionRequest: Encodable, Sendable {
   public var allowedTools: [String]?
   public var disallowedTools: [String]?
   /// Passed through as raw config (stdio/http/sse shapes; see McpServerConfigWire
-  /// in packages/protocol). Modeled as JSON for now — the app doesn't author these.
+  /// in packages/protocol). Modeled as JSON for now - the app doesn't author these.
   public var mcpServers: [String: JSONValue]?
   /// Include 'project' to pick up the target repo's skills and CLAUDE.md.
   public var settingSources: [SettingSource]?
@@ -705,7 +705,7 @@ public struct CreateSessionRequest: Encodable, Sendable {
   /// With `resume`: fork to a new session id instead of continuing.
   public var forkSession: Bool?
   /// Reasoning effort for the session's model (codex engine). Only send when the
-  /// profile's capability record declares `reasoningEfforts` — the gateway 400s
+  /// profile's capability record declares `reasoningEfforts` - the gateway 400s
   /// it otherwise.
   public var reasoningEffort: String?
   /// Emit `stream_delta` events for token-by-token rendering. Server default true.
@@ -755,7 +755,7 @@ public struct CreateSessionRequest: Encodable, Sendable {
 
 public struct SdkSessionSummary: Decodable, Sendable, Equatable, Identifiable {
   public let sessionId: String
-  /// Custom title, auto summary, or first prompt — whichever the SDK has.
+  /// Custom title, auto summary, or first prompt - whichever the SDK has.
   public let summary: String
   /// Epoch ms of last modification.
   public let lastModified: Double
@@ -789,12 +789,12 @@ public struct SessionFileInfo: Decodable, Sendable, Equatable, Identifiable {
 public struct McpServerToolInfo: Decodable, Sendable, Equatable, Identifiable {
   public let name: String
   /// What the server calls this tool for a human, where it declares one. Already
-  /// sanitized by the gateway — shown beside the name, never instead of it: the
+  /// sanitized by the gateway - shown beside the name, never instead of it: the
   /// name is what a permission rule has to spell.
   public let title: String?
   public let description: String?
   public let annotations: Annotations?
-  /// The tool's JSON Schema, where the engine reports one — **engine-dependent,
+  /// The tool's JSON Schema, where the engine reports one - **engine-dependent,
   /// and not an oversight**: codex's `mcpServerStatus/list` returns the full
   /// schema, the Agent SDK's equivalent carries none. Render parameters where
   /// they exist and say they are unavailable where they don't.
@@ -833,7 +833,7 @@ public struct McpServerToolInfo: Decodable, Sendable, Equatable, Identifiable {
 /// operator's API tokens off their own machine.
 public struct McpServerStatusInfo: Decodable, Sendable, Equatable, Identifiable {
   public let name: String
-  /// 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled' — open set.
+  /// 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled' - open set.
   public let status: String
   /// Where it was configured: 'project' | 'user' | 'local' | 'dynamic' | …
   public let scope: String?
@@ -894,7 +894,7 @@ public struct McpServerActionRequest: Encodable, Sendable, Equatable {
 ///
 /// Unrelated to `SessionFileInfo` despite both being "files": that is a
 /// deliverable inside one session's in-memory VFS, this is the operator's real
-/// disk. These routes are **operator-privileged** — the auth key authorizes them
+/// disk. These routes are **operator-privileged** - the auth key authorizes them
 /// outright, and they sit outside the agent permission flow on purpose. They are
 /// also opt-in server-side: a server without roots configured 404s the whole
 /// surface, which is what `HostFileAccess.unavailable` records.
@@ -915,7 +915,7 @@ public struct HostFileRoot: Decodable, Sendable, Equatable, Identifiable {
 /// One entry in a host directory listing.
 ///
 /// Classified with `lstat` semantics: a `symlink` is reported as itself and never
-/// resolved here. Whether it *can* be followed is the next request's answer — the
+/// resolved here. Whether it *can* be followed is the next request's answer - the
 /// server refuses one that escapes its roots.
 public struct HostDirEntry: Decodable, Sendable, Equatable, Identifiable {
   public enum Kind: String, Decodable, Sendable, Equatable {
@@ -943,7 +943,7 @@ public struct HostDirEntry: Decodable, Sendable, Equatable, Identifiable {
     self.modifiedAt = modifiedAt
   }
 
-  /// Unknown `type` strings decode as `.other` rather than failing the listing —
+  /// Unknown `type` strings decode as `.other` rather than failing the listing -
   /// a newer server adding a category must not blank the browser.
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -959,11 +959,11 @@ public struct HostDirEntry: Decodable, Sendable, Equatable, Identifiable {
   }
 }
 
-/// One hit from `GET /fs/find` — the `@file` picker's unit.
+/// One hit from `GET /fs/find` - the `@file` picker's unit.
 public struct HostFileMatch: Decodable, Sendable, Equatable, Identifiable {
   /// Absolute path, for a follow-up read.
   public let path: String
-  /// Path relative to the searched directory — what the picker shows and inserts.
+  /// Path relative to the searched directory - what the picker shows and inserts.
   public let relative: String
 
   public var id: String { path }
@@ -999,7 +999,7 @@ public struct WriteHostFileRequest: Encodable, Sendable, Equatable {
 
 // MARK: - Permission resolution over REST
 
-/// Body of `POST /sessions/:id/permissions/:requestId` — the REST counterpart of
+/// Body of `POST /sessions/:id/permissions/:requestId` - the REST counterpart of
 /// the WS `permission_decision` command (e.g. answering from a push notification).
 public enum ResolvePermissionRequest: Sendable, Equatable {
   case allow(updatedInput: [String: JSONValue]? = nil)
@@ -1025,7 +1025,7 @@ extension ResolvePermissionRequest: Encodable {
   }
 }
 
-/// Body of `PATCH /sessions/:id` — mirrors protocol's `UpdateSessionRequest`.
+/// Body of `PATCH /sessions/:id` - mirrors protocol's `UpdateSessionRequest`.
 ///
 /// `title` is a three-state field and the encoding has to keep all three: a
 /// string renames, an explicit `null` clears the override (restoring the derived
@@ -1083,7 +1083,7 @@ public struct ListSdkSessionsResponse: Decodable, Sendable {
 
 public struct ListHostRootsResponse: Decodable, Sendable, Equatable {
   public let roots: [HostFileRoot]
-  /// Whether `PUT /fs/write` is enabled — hide the editor's save when false.
+  /// Whether `PUT /fs/write` is enabled - hide the editor's save when false.
   public let canWrite: Bool
 }
 
@@ -1107,7 +1107,7 @@ public struct FindHostFilesResponse: Decodable, Sendable, Equatable {
 public struct ReadHostFileResponse: Decodable, Sendable, Equatable {
   public let path: String
   public let content: String
-  /// `utf8` or `base64` — binary files come back base64 so an editor can decline
+  /// `utf8` or `base64` - binary files come back base64 so an editor can decline
   /// to open them rather than corrupt them on save.
   public let encoding: String
   public let bytes: Int
@@ -1122,7 +1122,7 @@ public struct ReadHostFileResponse: Decodable, Sendable, Equatable {
 public struct WriteHostFileResponse: Decodable, Sendable, Equatable {
   public let path: String
   public let bytes: Int
-  /// Hash of what was just written — the `expectedHash` for the next edit.
+  /// Hash of what was just written - the `expectedHash` for the next edit.
   public let hash: String
   public let modifiedAt: Double
 }
@@ -1138,7 +1138,7 @@ public struct GetProfileResponse: Decodable, Sendable {
   public let config: ProfileConfigSnapshot
 }
 
-/// `GET /sessions/:id/events/:seq/result?toolUseId=` — the whole of a tool
+/// `GET /sessions/:id/events/:seq/result?toolUseId=` - the whole of a tool
 /// result whose replay delivered only its head.
 public struct ToolResultResponse: Decodable, Sendable, Equatable {
   public let seq: Int

@@ -12,7 +12,7 @@ export function createCookieAuth(secret: string = randomBytes(32).toString('hex'
   return {
     issue(userId: string): string {
       const token = `${userId}.${sign(userId)}`
-      // No `Secure`: the demo runs on loopback http — add it the moment this is served over TLS.
+      // No `Secure`: the demo runs on loopback http - add it the moment this is served over TLS.
       return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`
     },
     clear(): string {

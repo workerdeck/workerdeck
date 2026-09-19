@@ -75,14 +75,14 @@ const ENGINES: readonly EngineChoice[] = [
     engine: 'claude',
     label: 'Claude',
     detail: 'The Claude Agent SDK, against a CLAUDE_CONFIG_DIR you name.',
-    dirPrompt: 'Config directory for this profile — its CLAUDE_CONFIG_DIR.',
+    dirPrompt: 'Config directory for this profile - its CLAUDE_CONFIG_DIR.',
     dirDefault: '~/.claude',
   },
   {
     engine: 'codex',
     label: 'Codex',
     detail: 'The codex app-server, against a CODEX_HOME you name.',
-    dirPrompt: 'Home directory for this profile — its CODEX_HOME.',
+    dirPrompt: 'Home directory for this profile - its CODEX_HOME.',
     dirDefault: '~/.codex',
   },
 ]
@@ -106,7 +106,7 @@ async function browse(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
   try {
     listed = await client.listProfiles()
   } catch (err) {
-    void vscode.window.showErrorMessage(`WorkerDeck: could not read ${host.name}'s profiles — ${describe(err)}`)
+    void vscode.window.showErrorMessage(`WorkerDeck: could not read ${host.name}'s profiles - ${describe(err)}`)
     return
   }
   const items = [
@@ -123,7 +123,7 @@ async function browse(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
     return
   }
   const picked = await showPick(items, {
-    title: `Profiles — ${host.name}`,
+    title: `Profiles - ${host.name}`,
     placeHolder: listed.canManage ? 'Pick a profile to edit, or add one' : 'This gateway serves profiles read-only',
   })
   if (picked === CANCEL || picked === BACK) {
@@ -152,7 +152,7 @@ async function edit(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeck
       : []),
     { label: '$(trash) Delete profile', action: 'delete' as const },
   ]
-  const picked = await showPick(actions, { title: `${profile.name} — ${host.name}`, placeHolder: unavailable(profile) })
+  const picked = await showPick(actions, { title: `${profile.name} - ${host.name}`, placeHolder: unavailable(profile) })
   if (picked === CANCEL || picked === BACK) {
     return
   }
@@ -162,7 +162,7 @@ async function edit(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeck
   }
   if (picked.action === 'description') {
     const answer = await showInput({
-      title: `${profile.name} — description`,
+      title: `${profile.name} - description`,
       prompt: 'One line shown beside the name when you create a session.',
       value: profile.description ?? '',
       step: 1,
@@ -186,7 +186,7 @@ async function edit(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeck
         description: m.value === profile.defaults?.model ? 'current' : undefined,
         value: m.value,
       })),
-      { title: `${profile.name} — default model` },
+      { title: `${profile.name} - default model` },
     )
     if (choice === CANCEL || choice === BACK) {
       return
@@ -201,7 +201,7 @@ async function edit(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeck
   }
   const choice = await showPick(
     modes.map((mode) => ({ label: mode, description: mode === profile.defaults?.permissionMode ? 'current' : undefined, mode })),
-    { title: `${profile.name} — default permission mode` },
+    { title: `${profile.name} - default permission mode` },
   )
   if (choice === CANCEL || choice === BACK) {
     return
@@ -249,7 +249,7 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
   while (step < TOTAL_STEPS) {
     if (step === 0) {
       const answer = await showInput({
-        title: `New profile — ${host.name}`,
+        title: `New profile - ${host.name}`,
         prompt: 'What this profile is called when you create a session.',
         placeHolder: 'work',
         value: name,
@@ -267,7 +267,7 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
       const answer = await showPick(
         ENGINES.map((e) => ({ label: e.label, detail: e.detail, choice: e })),
         {
-          title: `New profile — ${host.name}`,
+          title: `New profile - ${host.name}`,
           placeHolder: 'Which engine runs sessions on this profile',
           step: 2,
           totalSteps: TOTAL_STEPS,
@@ -284,7 +284,7 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
       step = 2
     } else {
       const answer = await showInput({
-        title: `New profile — ${host.name}`,
+        title: `New profile - ${host.name}`,
         prompt: engine.dirPrompt,
         placeHolder: engine.dirDefault,
         value: engine.dirDefault,
@@ -316,7 +316,7 @@ async function create(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDe
   }
 }
 
-// `~` is this machine's home, which is the wrong home for every gateway but a loopback one — a remote
+// `~` is this machine's home, which is the wrong home for every gateway but a loopback one - a remote
 // gateway gets the path as typed, and says so itself if the directory is not there.
 function resolveRemotePath(input: string, host: GatewayHost): string {
   if (!isLoopbackHost(host)) {
@@ -357,7 +357,7 @@ function describe(err: unknown): string {
   const status = (err as { status?: number }).status
   const message = err instanceof Error ? err.message : String(err)
   if (status === 404) {
-    return 'this gateway does not allow profile management — start it without `--no-profile-store`'
+    return 'this gateway does not allow profile management - start it without `--no-profile-store`'
   }
   if (status === 403) {
     return message

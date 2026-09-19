@@ -45,7 +45,7 @@ describe('CodexRunner context compaction', () => {
     expect(new Set(compactions.map((c) => c.uuid)).size).toBe(1)
   })
 
-  it('does NOT empty the transcript — a compaction preserves what a reset discards', async () => {
+  it('does NOT empty the transcript - a compaction preserves what a reset discards', async () => {
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: `thread-${++threads}` } }))
@@ -90,7 +90,7 @@ describe('CodexRunner context compaction', () => {
     expect(compactions[0]!.parentToolUseId).not.toBeNull()
   })
 
-  it('is a transcript row that scores no unread — it is not addressed to the human', () => {
+  it('is a transcript row that scores no unread - it is not addressed to the human', () => {
     const body = { type: 'context_compacted', uuid: 'x' } as const
     expect(transcriptContent(body)).toBe(true)
     expect(transcriptActivity(body)).toBe(0)

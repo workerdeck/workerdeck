@@ -5,7 +5,7 @@
  * *renderer*: every row it draws lands on the same character cell, and a grid
  * that has to be reassembled from `gap-2 pl-[calc(...)] -mx-1` at each call site
  * is a grid that drifts the first time someone edits one row. The components in
- * `components/terminal/` are therefore thin — they choose a class and a tone,
+ * `components/terminal/` are therefore thin - they choose a class and a tone,
  * and the geometry lives here in one place where it can be read as a whole.
  *
  * It also means an embedder gets the geometry without configuring Tailwind's
@@ -18,12 +18,12 @@
  *    face is exactly one cell, so a gutter is `2ch` and an indent level is
  *    `2ch`, and text lands on a column rather than near one. A wrapped line
  *    hangs under its own first character because the body is its own grid
- *    column — not because a padding and a negative text-indent were tuned
+ *    column - not because a padding and a negative text-indent were tuned
  *    against each other.
  * 2. **Vertical measures are whole multiples of `--term-line`, never padding.**
  *    Blank space between blocks is a *blank line* (an empty row), the way it is
  *    in a terminal. Nothing has margins, so no two blocks can disagree about
- *    the rhythm, and a row's height is always an integer number of lines — the
+ *    the rhythm, and a row's height is always an integer number of lines - the
  *    thing that keeps text off half-pixels and out of the blur.
  *
  * `--term-font-size` and `--term-line` must both be whole pixels. A line height
@@ -33,8 +33,8 @@
  */
 
 [data-terminal] {
-  /* Metrics. Overridable per host — VS Code hands its editor font down, and a
-     phone wants a larger cell — but always in whole pixels. */
+  /* Metrics. Overridable per host - VS Code hands its editor font down, and a
+     phone wants a larger cell - but always in whole pixels. */
   --term-font-size: 13px;
   --term-line: 18px;
   /* One indent level, and the width of a gutter. The same value on purpose:
@@ -51,8 +51,8 @@
   font-feature-settings:
     'liga' 0,
     'calt' 0;
-  /* `ch` is the advance of `0`, so tabular figures keep digit columns — the
-     diff's line numbers — genuinely aligned. */
+  /* `ch` is the advance of `0`, so tabular figures keep digit columns - the
+     diff's line numbers - genuinely aligned. */
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   tab-size: 2;
@@ -96,7 +96,7 @@
   --term-diff-fg: #9a9a9a;
   --term-diff-num: #5a5a5a;
 
-  /* A band of code or output. Barely there — one step off the canvas. */
+  /* A band of code or output. Barely there - one step off the canvas. */
   --term-band-bg: rgb(255 255 255 / 0.04);
   /* The user's own prompt row. */
   --term-user-bg: rgb(255 255 255 / 0.05);
@@ -104,7 +104,7 @@
   /* Behind an OPEN block. Yellow, not neutral, and the theme's one deliberate
      reuse of that tone for something other than "waiting on you": an open block
      is a state the reader put the transcript into, and on the phone it wants
-     the same colour as the rail mark that says so. Kept very low — this washes
+     the same colour as the rail mark that says so. Kept very low - this washes
      whole regions, and at band strength an opened run would shout louder than
      anything inside it. */
   --term-open-wash: rgb(215 186 125 / 0.1);
@@ -150,7 +150,7 @@
   min-height: var(--term-line);
 }
 
-/* Indent levels. A nested row steps one cell per level — the same 2 columns a
+/* Indent levels. A nested row steps one cell per level - the same 2 columns a
    marker occupies, so a child's marker sits under its parent's first letter. */
 .term-row[data-indent='1'] {
   padding-left: var(--term-cell);
@@ -163,7 +163,7 @@
 }
 
 .term-gutter {
-  /* `pre` so a space-only gutter keeps its cell — an unmarked row must still
+  /* `pre` so a space-only gutter keeps its cell - an unmarked row must still
      start its text on the same column as a marked one. */
   white-space: pre;
   user-select: none;
@@ -172,7 +172,7 @@
      drag that *begins* on an unselectable node starts no selection at all, so
      without this the most natural way to select transcript text did nothing.
      Letting the press fall through to the row keeps `user-select: none` doing
-     its real job — keeping the glyph out of the copied text — without owning
+     its real job - keeping the glyph out of the copied text - without owning
      the pointer. The row below is still pressable from here, since the press
      handler lives on the ancestor. */
   pointer-events: none;
@@ -188,7 +188,7 @@
   overflow-wrap: break-word;
 }
 
-/* A blank line — the only vertical spacing in the theme. Exactly one row tall
+/* A blank line - the only vertical spacing in the theme. Exactly one row tall
    and holding nothing, which is what a terminal's blank line is. */
 .term-blank {
   height: var(--term-line);
@@ -197,7 +197,7 @@
 /* A row `scrollIntoView`ed lands one line below the top edge rather than flush
    against it, so the target reads as the start of something rather than as
    content cut off by the frame. Only the recap's `'center'` jump still goes
-   through scrollIntoView — the scrubber's `'start'` jumps compute their own
+   through scrollIntoView - the scrubber's `'start'` jumps compute their own
    offset (a sticky row's rect is wherever it is pinned) and land the line at
    exactly the top edge. */
 [data-terminal] [data-slot='transcript-rows'] [data-index] {
@@ -215,7 +215,7 @@
 /* ── Bands ───────────────────────────────────────────────────────────────────
  *
  * A run of rows carrying a background: a code block, a command's output, a diff
- * hunk. Full-bleed — the wash reaches the scroller's edges rather than stopping
+ * hunk. Full-bleed - the wash reaches the scroller's edges rather than stopping
  * at a content gutter, because in a terminal the line *is* the full width.
  * `--term-bleed` is how far out that is; the transcript sets it to its own
  * padding and the band cancels it with matched negative margin and padding.
@@ -264,13 +264,13 @@
 }
 
 /* Weight is the only other axis. A terminal has one type size, so emphasis has
-   to be carried by weight and colour — never by a larger glyph. */
+   to be carried by weight and colour - never by a larger glyph. */
 [data-terminal] [data-weight='bold'] {
   font-weight: 600;
 }
 
-/* The scroller. Its horizontal padding IS `--term-bleed` — that is the whole
-   contract a full-bleed band relies on — and its vertical padding is a line, so
+/* The scroller. Its horizontal padding IS `--term-bleed` - that is the whole
+   contract a full-bleed band relies on - and its vertical padding is a line, so
    the first row starts one blank line down like every other block. */
 [data-terminal].term-transcript {
   padding-inline: var(--term-bleed, 0px);
@@ -280,7 +280,7 @@
 /* ── Interaction ─────────────────────────────────────────────────────────────
  *
  * A terminal has no buttons, but a transcript does have things you can open. The
- * affordance is the hover fill on the row itself — nothing gains a border, a
+ * affordance is the hover fill on the row itself - nothing gains a border, a
  * radius or a focus box that would take it off the grid.
  */
 [data-terminal] .term-press {
@@ -299,7 +299,7 @@
      this is in `press.tsx`: the click that ends such a drag is refused. */
   user-select: text;
 }
-/* The hover fill lives with the other affordances below — it is one, and it is
+/* The hover fill lives with the other affordances below - it is one, and it is
    switchable for the same reason. */
 [data-terminal] .term-press:focus-visible {
   outline: none;
@@ -307,9 +307,9 @@
 
 /* ── Affordances ─────────────────────────────────────────────────────────────
  *
- * What a real terminal cannot do. Every one of these costs **no layout** — a
+ * What a real terminal cannot do. Every one of these costs **no layout** - a
  * fill is a background, an action is an absolutely positioned overlay one line
- * tall — so switching them off leaves every glyph on the cell it was already on.
+ * tall - so switching them off leaves every glyph on the cell it was already on.
  * See `components/terminal/affordances.tsx`.
  */
 
@@ -326,7 +326,7 @@
 /* An opened block keeps the fill the pointer gave it, for the whole of what it
    opened. Eighty lines of output pushes its own first line off the top of the
    screen, and without a wash there is nothing to say where the thing you
-   expanded began — or that these rows are one block at all. Full-bleed, like
+   expanded began - or that these rows are one block at all. Full-bleed, like
    every other wash; the hover fill inside it reaches the same edge, so the two
    stack without a step. (The other half is `useRevealOnOpen`, which brings that
    first line back when it has gone above the fold.) */
@@ -339,7 +339,7 @@
 /* Another frame of reference: the rows a subagent produced, inside the `Task`
    that spawned them.
 
-   Two cells of indent, whole — the theme's rule is that horizontal measures are
+   Two cells of indent, whole - the theme's rule is that horizontal measures are
    `ch`, and these rows carry markers in a gutter that has to keep landing on the
    grid the rows above it use. The rule itself is drawn *inside* that padding
    with an inset shadow rather than as a border, which is what makes the 2ch
@@ -349,7 +349,7 @@
    `--term-faint` rather than the cards `--border` token, and that is the whole
    reason this class exists: the nested block sits on the *open* block's wash,
    and a border colour tuned for the base ground resolved to rgb(31,31,31) on it
-   — a rule nobody could see. The same trap `row-hover` is alpha to avoid. */
+   - a rule nobody could see. The same trap `row-hover` is alpha to avoid. */
 [data-terminal] .term-nested {
   padding-left: 2ch;
   box-shadow: inset 1px 0 0 var(--term-faint);
@@ -396,14 +396,14 @@
   color: var(--term-fg);
 }
 
-/* What you typed, on a band of its own — the CLI's own treatment. */
+/* What you typed, on a band of its own - the CLI's own treatment. */
 [data-terminal] .term-user {
   background: var(--term-user-bg);
   margin-inline: calc(-1 * var(--term-bleed, 0px));
   padding-inline: var(--term-bleed, 0px);
   /* Declared, never inherited. This band is the one transcript block that is
      neither a `.term-press` nor plain flow text, so without saying so it takes
-     whatever the host gives it — which differs between the browser and the VS
+     whatever the host gives it - which differs between the browser and the VS
      Code webview, and a block that cannot host a selection endpoint does not
      merely refuse the drag: the selection jumps to the next valid position
      above it, swallowing everything in between. */
@@ -419,7 +419,7 @@
 /* A file path, while the modifier that would open it is held.
  *
  * Only then, and that is the point: a path *is* clickable but only under
- * Cmd/Ctrl, so it should only look clickable then — an always-underlined path
+ * Cmd/Ctrl, so it should only look clickable then - an always-underlined path
  * promises a plain click that does nothing. Applied by `usePathLinks` using the
  * same test the click itself makes, so nothing lights up that a click ignores.
  * Outside `[data-terminal]` too, since a cards transcript names files as well. */
@@ -430,7 +430,7 @@
 }
 
 /* A status-line reading that leads somewhere. Inline and unstyled until hovered
-   — the line is meant to be quiet, and five underlined segments would make it
+   - the line is meant to be quiet, and five underlined segments would make it
    the loudest row on screen. */
 [data-terminal] .term-reading {
   font: inherit;
@@ -452,7 +452,7 @@
  * row is a fill, and the only "control" is a row you can press a number on.
  */
 
-/* One line tall with the stroke through its middle, full-bleed — the boundary
+/* One line tall with the stroke through its middle, full-bleed - the boundary
    between the run and the decision. */
 [data-terminal] .term-rule-row {
   height: var(--term-line);
@@ -474,7 +474,7 @@
 }
 
 /* An option's expanded detail (a preview, a reason field) lines up with the
-   option's own text — one gutter in, so it reads as belonging to that row. */
+   option's own text - one gutter in, so it reads as belonging to that row. */
 [data-terminal] .term-detail {
   padding-left: 5ch;
 }
@@ -511,7 +511,7 @@
   color: var(--bg, #000);
 }
 
-/* The bare text field — a caret and a rule, no box. */
+/* The bare text field - a caret and a rule, no box. */
 [data-terminal] .term-input {
   width: 100%;
   min-width: 0;
@@ -524,7 +524,7 @@
   /* The terminal's own caret: a filled cell, not a hairline. It is the last
      thing in the theme still drawn the way the web draws it, and it is the one
      the eye is always on. `caret-animation: manual` hands the blink to the
-     author and we then decline to animate it, so the block sits steady — a
+     author and we then decline to animate it, so the block sits steady - a
      blinking block is a strobe at this size, where a blinking hairline was
      merely a caret. Both are ignored where unsupported, which is exactly the
      right failure: a thin blinking caret is a plain caret, not a broken one. */
@@ -536,7 +536,7 @@
    no padding and `line-height` is `--term-line`, so the content box is always a
    whole number of lines and the rule under it lands on a cell boundary. The cap is
    lines too, not a pixel height. Where `field-sizing` is unsupported this is a
-   one-line box that scrolls — the old single-line behaviour, minus the sideways
+   one-line box that scrolls - the old single-line behaviour, minus the sideways
    crawl, so the degradation costs nothing that was there before. */
 [data-terminal] textarea.term-input {
   display: block;
@@ -556,8 +556,8 @@
  *
  * The pinned prompt is the prompt's **first line**, and the pin is the
  * browser's, not script's. `TranscriptRows` renders each prompt inside a lane
- * spanning its turn; a one-line `sticky` **head** — the same row rendered
- * again, clipped by height — leads the lane with its flow footprint cancelled
+ * spanning its turn; a one-line `sticky` **head** - the same row rendered
+ * again, clipped by height - leads the lane with its flow footprint cancelled
  * (the negative bottom margin), so in flow it lies exactly over the real
  * row's first line and is invisible. The compositor pins it (no per-scroll
  * JS, no frame lag) and the lane's bottom edge pushes it off when the next
@@ -567,18 +567,18 @@
  * The head's visible line docks flush to the top edge of the scroller. Its
  * inter-row gap is padding on the head (matching the row it overlays), so a
  * gap-carrying head is one line taller and pins one line negative: the
- * padding parks above the viewport edge and the line starts at zero — which
+ * padding parks above the viewport edge and the line starts at zero - which
  * is also what makes the pin engage exactly when the line itself reaches the
  * top, not a line early.
  *
  * The lane spans the whole turn and the head is an overlay, so both are
- * transparent to the pointer — the rows it covers own interaction, and the
- * head is `aria-hidden` in the markup. The z-index is on the lane —
+ * transparent to the pointer - the rows it covers own interaction, and the
+ * head is `aria-hidden` in the markup. The z-index is on the lane -
  * every row wrapper is its own stacking context (they are transformed), so
  * the head's own z-index could never beat a later sibling.
  *
  * `--bg` is the panel's own ground, the same token the hover-revealed row
- * actions cover themselves with — the user band is translucent by design, so
+ * actions cover themselves with - the user band is translucent by design, so
  * without a ground the rows passing beneath would show straight through the
  * pinned head. Opaque always, which is invisible in flow: the ground behind
  * it is the same `--bg`, and the row it covers is its own content.
@@ -591,14 +591,14 @@
 /* The prompt itself is *inside* the lane, not beneath it, so the lane's `none`
    reached it too and made a user message the one block in the transcript the
    pointer could not touch: a drag started on it landed on the lane instead and
-   selected nothing. Only the real row is given back — the head overlay above
+   selected nothing. Only the real row is given back - the head overlay above
    stays transparent, which is the whole point of the lane. */
 [data-terminal] [data-sticky-lane] > [data-index] {
   pointer-events: auto;
 }
 
 /* The head's own strip: the full lane, out of flow, so the head needs no
-   footprint-cancelling margin — sticky confinement clamps the margin box, and
+   footprint-cancelling margin - sticky confinement clamps the margin box, and
    a negative margin shrinks it to nothing, letting the head overshoot the
    lane's end by its own height (two pinned prompts on screen at once). */
 [data-terminal] [data-sticky-lane] > [data-sticky-headlane] {
@@ -609,7 +609,7 @@
 
 /* Hidden until actually stuck (`data-stuck`, set by the lane's sentinel
    observer): an overlay visible in flow sits on the real row's first line and
-   swallows its selection highlight — the line reads as unselectable. */
+   swallows its selection highlight - the line reads as unselectable. */
 [data-terminal] [data-sticky-headlane] > [data-sticky-head] {
   position: sticky;
   top: 0;
@@ -632,19 +632,19 @@
 /* ── Composer ────────────────────────────────────────────────────────────────
  *
  * The foot of the panel, and a *row* like every other: `>` in the gutter cell,
- * the caret on the body column. That is the whole design — a typed line and a
+ * the caret on the body column. That is the whole design - a typed line and a
  * rendered one start on the same character, which no chat composer does and
  * every terminal does for free.
  *
  * Docked rather than floating: no radius, no shadow, and a rule along the top
  * *and* the bottom, both turning accent while anything inside has focus. Those
  * two rules are the CLI's own frame for its prompt, and they are the only
- * affordance — which is what the transcript above (no boxes anywhere) asks for.
+ * affordance - which is what the transcript above (no boxes anywhere) asks for.
  * They also do the work a box would: the field reads as its own strip of the
  * panel rather than as the last row of the transcript, without a border on the
  * sides that would take the `❯` off the column the rows start on.
  *
- * The bottom rule is why the status bar under it draws none of its own — see
+ * The bottom rule is why the status bar under it draws none of its own - see
  * `StatusBar.tsx`. Two adjacent 1px rules is a 2px rule with a seam in it.
  */
 [data-terminal].term-composer {
@@ -654,7 +654,7 @@
 }
 /* The bar spans the panel; its contents sit in the transcript's own column, so
    the `>` lands on the column the rows above it start on. Two elements because
-   those are two different widths — a rule that stopped at the content column
+   those are two different widths - a rule that stopped at the content column
    would read as a card, which is the one thing this theme has none of. */
 [data-terminal] .term-composer-body {
   margin-inline: auto;
@@ -663,7 +663,7 @@
   padding-inline: var(--term-bleed, 0px);
   /* Air on each side of the prompt, and a plain pixel value rather than a
      fraction of `--term-line`: this is chrome between two rules, not a
-     transcript row, and the whole-multiple rule governs rows — a computed
+     transcript row, and the whole-multiple rule governs rows - a computed
      half-line would be exactly the fractional metric that rule exists to
      forbid. */
   padding-block: 8px;
@@ -674,7 +674,7 @@
 }
 
 /* Shell mode. The frame and the gutter glyph move together and both go magenta, because the thing
-   the mode changes is where the text goes — a subtle cue would be the wrong kind of quiet. Listed
+   the mode changes is where the text goes - a subtle cue would be the wrong kind of quiet. Listed
    after the focus rule so it wins while the field is focused, which is the whole time it is on. */
 [data-terminal].term-composer-shell,
 [data-terminal].term-composer-shell:focus-within {
@@ -684,7 +684,7 @@
   color: var(--term-dim);
 }
 
-/* The contentEditable field. `font: inherit` is what makes it the cell — the
+/* The contentEditable field. `font: inherit` is what makes it the cell - the
    surface above already carries the size and the line height, and anything that
    restates them here can disagree with the rows. */
 [data-terminal] .term-composer-field {
@@ -702,7 +702,7 @@
  * badge outside its top-right corner, over a strip with its own bottom rule.
  * None of that survives here: this theme has no rounded corners and no badges
  * floating off an edge, and the strip sits *inside* the composer's frame, which
- * already draws the only rule there is — a second one directly above the field
+ * already draws the only rule there is - a second one directly above the field
  * reads as the box this theme exists not to have.
  *
  * So the thumbnail is a plain 1px cell, and the remove control is tucked into
@@ -711,7 +711,7 @@
  * puts it just inside the thumbnail's border instead of straddling it.
  *
  * The strip's only spacing is the 8px the composer already uses above and below
- * its prompt — a plain pixel value, and deliberately, for the reason given
+ * its prompt - a plain pixel value, and deliberately, for the reason given
  * there: this is chrome between rules, not a transcript row, so the
  * whole-multiple-of-`--term-line` rule does not govern it. No side padding: the
  * strip is already inside the body column, so padding here would step it in
@@ -724,7 +724,7 @@
 }
 /* A refused upload, in the terminal's own red. This needs to be said here
    rather than left to the card form's `border-danger/50`: the rule above sets
-   the `border` shorthand, colour included, and outranks a utility class — so
+   the `border` shorthand, colour included, and outranks a utility class - so
    without this the one state that must stand out is the one that looks
    ordinary. */
 [data-terminal] .term-attachment[data-failed] {
@@ -739,7 +739,7 @@
 
 /* A composer action as a character: one cell wide, one line tall, so pressing
    it costs no width and removing it would move nothing. Dim until you reach for
-   it — the same restraint the row actions show. */
+   it - the same restraint the row actions show. */
 [data-terminal] .term-glyph {
   flex: none;
   width: var(--term-cell);
@@ -755,8 +755,8 @@
   cursor: pointer;
 }
 /* A glyph standing in the **gutter cell** is a marker, so it aligns like one.
-   The cell is 2ch and a character is 1ch, so `text-align: center` — right for a
-   standalone control at the row's trailing edge — lands the glyph half a cell
+   The cell is 2ch and a character is 1ch, so `text-align: center` - right for a
+   standalone control at the row's trailing edge - lands the glyph half a cell
    (≈3.9px at 13px/JetBrains Mono) to the right of the column every `❯` and `●`
    in the transcript starts on. `start` is what `.term-gutter` uses, and on this
    grid "nearly the same column" is just the wrong column. */
@@ -784,7 +784,7 @@
  * An added or removed line is a **band**, not coloured text: the wash runs the
  * full width of the screen, the way it does in a terminal, so the shape of a
  * change is readable from the scrollbar without reading a word of it. The line
- * numbers ride inside the wash — they are part of the changed line.
+ * numbers ride inside the wash - they are part of the changed line.
  */
 /* A diff belongs to the call above it, so it steps in one cell like any other
    tool output. */
@@ -813,7 +813,7 @@
 [data-terminal] .term-diff .term-row[data-diff='context'] {
   color: var(--term-diff-fg);
 }
-/* The number column is dimmer than the line it belongs to in every case — it is
+/* The number column is dimmer than the line it belongs to in every case - it is
    an address, not content. `.term-gutter`'s own colour would flatten all three
    to one grey, so each state dims its own. */
 [data-terminal] .term-diff .term-row > .term-gutter {
@@ -829,13 +829,13 @@
 /* ── Markdown ────────────────────────────────────────────────────────────────
  *
  * The element map is in `components/terminal/markdown.tsx`; this is the little
- * CSS it needs. Nothing here is an override — the renderer is told what to emit,
+ * CSS it needs. Nothing here is an override - the renderer is told what to emit,
  * so there is no default to undo and no `!important` anywhere in the theme.
  */
 
 /* react-markdown emits the source's newlines as text nodes between blocks. The
    surrounding rows are `pre-wrap` (a plain line of output must keep its own
-   spacing), which would render every one of those as a visible blank line — so
+   spacing), which would render every one of those as a visible blank line - so
    markdown bodies opt back out, and only a fenced block opts back in. */
 .term-md {
   white-space: normal;
@@ -844,7 +844,7 @@
 /* And it has to reach `.term-body` explicitly, because a list item *is* a Row
    and Rows carry `pre-wrap` (a plain line of tool output must keep its own
    spacing). Inherited, that turns every newline react-markdown emits between an
-   item's block children into a visible empty line — a nested list drew k+2
+   item's block children into a visible empty line - a nested list drew k+2
    phantom blanks, so a two-line nested item was 72px of 18px rows. Models nest
    lists constantly, and the grid audit cannot see it: the phantoms are whole
    lines, so every row still lands on the grid. Fenced code opts back in for
@@ -856,7 +856,7 @@
 
 /* The one vertical rule: consecutive blocks are one blank line apart. A margin
    rather than an inserted row, because this row list belongs to the markdown
-   renderer — but it is exactly one line, so the grid holds. */
+   renderer - but it is exactly one line, so the grid holds. */
 .term-md .term-block + .term-block {
   margin-top: var(--term-line);
 }
@@ -889,7 +889,7 @@
   background: linear-gradient(var(--term-faint), var(--term-faint)) left / 1px 100% no-repeat;
 }
 
-/* A horizontal rule is one line tall with the rule through its middle — the row
+/* A horizontal rule is one line tall with the rule through its middle - the row
    it occupies is a whole line either way. */
 .term-md .term-rule {
   height: var(--term-line);
@@ -921,7 +921,7 @@
   border-collapse: collapse;
   /* `max-content` and **no** `max-width`. A cap of `100%` looks like the
      defensive choice and is the opposite: it clamps a wide table below its
-     natural width, so the cells wrap and a 14-row table becomes 19 lines tall —
+     natural width, so the cells wrap and a 14-row table becomes 19 lines tall -
      which breaks the theme's premise (a row is a line) and with it the height
      calculator, whose table model counts rows. It also silently disables the
      wrapper's own `overflow-x`, since a table that shrinks never overflows.
@@ -943,15 +943,15 @@
 /* ── Scrubber ────────────────────────────────────────────────────────────────
  *
  * The overview ruler (`components/terminal/scrubber.tsx`): a 12px rail of marks
- * over the scroller's right edge — VS Code's strip beside the minimap, with
+ * over the scroller's right edge - VS Code's strip beside the minimap, with
  * this transcript's semantics. It is *chrome*, not rows: absolutely positioned
  * over the scroll container so the transcript's grid is untouched, and drawn
  * entirely from --term-* tokens so it follows the theme wherever the panel is
  * embedded. Its width is the one deliberate exception to the theme's `ch` rule
- * — see the note on `.term-scrubber` below.
+ * - see the note on `.term-scrubber` below.
  *
  * Interactivity is an affordance. Without `data-interactive` the rail is
- * passive paint with pointer events off — and the native scrollbar, which
+ * passive paint with pointer events off - and the native scrollbar, which
  * stays in that mode, keeps working straight through it.
  */
 [data-terminal].term-scrubber {
@@ -977,7 +977,7 @@
   touch-action: none;
 }
 
-/* The viewport band — where you are: a faint wash with a hairline frame,
+/* The viewport band - where you are: a faint wash with a hairline frame,
    floated over the marks (z-index) so the framed region reads as a window
    onto the rail rather than a stripe behind it. `--term-faint` at 25% rather
    than a literal, so the light palette re-tints it. */
@@ -992,7 +992,7 @@
 }
 
 /* There is no separate cursor line. The band above answers "where am I" on its
-   own — it is outlined, so its top edge already reads as an edge — and a 2px
+   own - it is outlined, so its top edge already reads as an edge - and a 2px
    blue rule laid over it was a second indicator of the same fact, in the
    loudest colour the rail has. */
 
@@ -1007,7 +1007,7 @@
   outline: 1px solid color-mix(in srgb, var(--term-bright) 40%, transparent);
 }
 
-/* Two lanes of 8px — what you asked, and what came back — and 'f', the
+/* Two lanes of 8px - what you asked, and what came back - and 'f', the
    full-width lane for annotations *about* the run (an error, an approval, a
    bookmark, the catch-up seam) rather than steps through it. Pixels, not
    percentages: the whole point of the 16px rail is that a lane is a reliable
@@ -1026,7 +1026,7 @@
   width: 12px;
 }
 
-/* Lane marks are two-tone: the first 2px — the mark's own anchor — at full
+/* Lane marks are two-tone: the first 2px - the mark's own anchor - at full
    strength, the rest of the row's extent a 25% tail, so a long answer reads
    as long without a tall solid bar shouting over the rail. A minimum-height
    mark shows only the solid segment, so short and long marks need no separate
@@ -1038,7 +1038,7 @@
 }
 /* A sub-agent's stretch of the transcript, in the input lane: green, because
    every other colour on this rail is already spoken for and none of them means
-   "somebody else's working" — blue is you, white is the answer, red is an
+   "somebody else's working" - blue is you, white is the answer, red is an
    alarm, magenta is your bookmark, yellow is the session waiting on you. Drawn
    as an extent (2px head, 25% tail) like the two marks it shares its geometry
    with: collapsed it is a tick, expanded it is the band the sub-agent covers. */
@@ -1054,13 +1054,13 @@
 .term-scrubber .term-scrub-mark[data-kind='error'] {
   background: var(--term-red);
 }
-/* A failed tool call is an alarm, so it is solid like the rest of them — in the
-   response lane, since it is something the run produced — but at 55%, which is the one thing keeping the rail readable. A session
+/* A failed tool call is an alarm, so it is solid like the rest of them - in the
+   response lane, since it is something the run produced - but at 55%, which is the one thing keeping the rail readable. A session
    error is rare and a turn failure rarer; a tool that failed and was recovered
    from is routine (a grep that matched nothing, a build fixed on the second go),
    and at full strength a normal working session paints the rail solid red and
    the two errors that actually ended something stop standing out. Dimmer reads
-   as the same class of thing, one rank quieter — which is exactly its rank in
+   as the same class of thing, one rank quieter - which is exactly its rank in
    LOUDNESS. */
 .term-scrubber .term-scrub-mark[data-kind='toolFailed'] {
   background: color-mix(in srgb, var(--term-red) 55%, transparent);
@@ -1087,8 +1087,8 @@
   }
 }
 
-/* The peek. Rendered from transcript state — the row it describes is usually
-   unmounted — and framed the theme's way: strokes as backgrounds, no border.
+/* The peek. Rendered from transcript state - the row it describes is usually
+   unmounted - and framed the theme's way: strokes as backgrounds, no border.
    pointer-events: none, so it can never trap the pointer that revealed it. */
 .term-scrubber .term-scrub-peek {
   position: absolute;
@@ -1124,7 +1124,7 @@
 
 /* While an interactive scrubber is mounted it IS the scrollbar; the transcript
    stamps this attribute on the scroll element. A passive rail leaves the
-   native scrollbar alone — pointer-events: none above is what keeps that
+   native scrollbar alone - pointer-events: none above is what keeps that
    scrollbar reachable through the paint. */
 [data-term-scrubber-host] {
   scrollbar-width: none;
@@ -1138,7 +1138,7 @@
  * A picture a tool returned, drawn in a box of whole lines (`IMAGE_BOX_LINES`,
  * set inline by `TerminalImage` so the constant has one spelling across the
  * renderer and the height calculator). The height is on the element and nothing
- * here may add to it: no margin, no border, no padding — a box that is not
+ * here may add to it: no margin, no border, no padding - a box that is not
  * exactly N lines is a row the virtualizer was told the wrong size for.
  *
  * `object-fit: contain` with a top-left origin rather than a centred one: the

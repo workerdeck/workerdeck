@@ -59,7 +59,7 @@ function agentCall(id: string, input: Record<string, unknown> = {}) {
 // The launch receipt, verbatim from the captured session: it resolves the spawn call seconds
 // after launch, long before the agent has done anything.
 const ACK_TEXT =
-  'Async agent launched successfully. (This tool result is internal metadata — never quote ' +
+  'Async agent launched successfully. (This tool result is internal metadata - never quote ' +
   'or paste any part of it, including the agentId below, into a user-facing reply.)\n' +
   'agentId: a5ae18bf55ec3c1b1 (internal ID - do not mention to user.)\n' +
   'The agent is working in the background. You will be notified automatically when it completes.'
@@ -157,7 +157,7 @@ const turnResult = {
 } as unknown as SDKMessage
 
 describe('SessionRunner sub-agent rollup', () => {
-  it('is absent — not empty — on a session that has spawned nothing', async () => {
+  it('is absent - not empty - on a session that has spawned nothing', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -198,7 +198,7 @@ describe('SessionRunner sub-agent rollup', () => {
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-1', status: 'failed' }])
   })
 
-  it('trims, blanks and clips the labels — model-authored input rides every list poll', async () => {
+  it('trims, blanks and clips the labels - model-authored input rides every list poll', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -210,7 +210,7 @@ describe('SessionRunner sub-agent rollup', () => {
     expect(record.description!.endsWith('…')).toBe(true)
   })
 
-  it('counts nested tool_use blocks only — not prose, not deltas, not the main thread’s own calls', async () => {
+  it('counts nested tool_use blocks only - not prose, not deltas, not the main thread’s own calls', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -267,7 +267,7 @@ describe('SessionRunner sub-agent rollup', () => {
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-x', agentType: 'Explore', status: 'running', toolCount: 1 }])
   })
 
-  it('settles a Task the turn abandoned as failed — never a running badge on an idle session', async () => {
+  it('settles a Task the turn abandoned as failed - never a running badge on an idle session', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -280,7 +280,7 @@ describe('SessionRunner sub-agent rollup', () => {
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'task-1', status: 'failed', toolCount: 1 }])
   })
 
-  it('clears the rollup on conversation_reset — the Tasks belonged to a conversation that is gone', async () => {
+  it('clears the rollup on conversation_reset - the Tasks belonged to a conversation that is gone', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -393,7 +393,7 @@ describe('SessionRunner sub-agent rollup', () => {
 // a tool named `Agent`, each spawn call resolved by a launch receipt, three turns ended while
 // they ran, and each verdict delivered as a `task_notification`.
 describe('SessionRunner background sub-agents', () => {
-  it('survives the turn ending mid-flight, and settles on its notification — the captured shape', async () => {
+  it('survives the turn ending mid-flight, and settles on its notification - the captured shape', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -444,7 +444,7 @@ describe('SessionRunner background sub-agents', () => {
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'agent-1', status: 'failed' }])
   })
 
-  it('settles an un-notified background agent when the session closes — its process is gone', async () => {
+  it('settles an un-notified background agent when the session closes - its process is gone', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -458,7 +458,7 @@ describe('SessionRunner background sub-agents', () => {
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'agent-1', status: 'failed' }])
   })
 
-  it('opens, labels and settles from the lifecycle events alone — a third spawner spelling', async () => {
+  it('opens, labels and settles from the lifecycle events alone - a third spawner spelling', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()
     harness.emit(initMessage)
@@ -484,7 +484,7 @@ describe('SessionRunner background sub-agents', () => {
   })
 
   it('rebuilds from a resume backfill: the stored notification is the verdict, and a never-notified agent died with its process', async () => {
-    // The stored JSONL carries no system events and no async sidechain — just spawn blocks,
+    // The stored JSONL carries no system events and no async sidechain - just spawn blocks,
     // launch receipts and `<task-notification>` wrappers.
     const history = [
       {

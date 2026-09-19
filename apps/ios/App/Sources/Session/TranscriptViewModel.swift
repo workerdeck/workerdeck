@@ -7,13 +7,13 @@ import Observation
 /// Kept view-free on purpose: the whole live-session behaviour (attach, replay,
 /// reduce, reconnect, commands) is exercised here, and `SessionView` only renders
 /// the result. The event stream is single-consumer, so exactly one `run()` may be
-/// in flight — the view's `.task` guarantees that.
+/// in flight - the view's `.task` guarantees that.
 @MainActor
 @Observable
 final class TranscriptViewModel {
   let sessionId: String
 
-  /// What the UI renders. **Not** what the replay is folding into — see
+  /// What the UI renders. **Not** what the replay is folding into - see
   /// `replayBuffer`.
   private(set) var state = TranscriptState.initial
   /// Where a held replay's events are reduced, published in one step when the
@@ -23,7 +23,7 @@ final class TranscriptViewModel {
   /// than its transcript: approvals, the question prompt, the context and usage
   /// readings, the composer's busy state and the empty state all read this same
   /// reduced state, so a replay drove *every one of them* through the session's
-  /// entire history on the way past — a permission prompt for a decision made an
+  /// entire history on the way past - a permission prompt for a decision made an
   /// hour ago flashing up and vanishing, meters counting themselves up, the
   /// empty state appearing and going. Holding one view was never the fix;
   /// holding the **state** is, and it deletes the question of which views
@@ -31,7 +31,7 @@ final class TranscriptViewModel {
   private var replayBuffer: TranscriptState?
   /// WS connectivity, from `connectionChange` and the handle's retry counter.
   /// Distinct from session status: a running session can be temporarily
-  /// unreachable — and while it is, the status the app holds is stale.
+  /// unreachable - and while it is, the status the app holds is stale.
   private(set) var connection = ConnectionState.reconnecting
   /// Snapshot from the most recent `attached` frame.
   private(set) var session: SessionInfo?
@@ -43,12 +43,12 @@ final class TranscriptViewModel {
   private(set) var canRunShell = false
   /// Last rejected command, surfaced once rather than logged into the void.
   private(set) var lastProtocolError: String?
-  /// Bumped on every applied event — a cheap change signal for auto-scroll that
+  /// Bumped on every applied event - a cheap change signal for auto-scroll that
   /// also fires for streaming deltas (which don't change `items.count`).
   private(set) var revision = 0
   /// True while the initial attach replay is still landing.
   ///
-  /// The transcript is not drawn while this holds — see `ReplayHold.swift`. It
+  /// The transcript is not drawn while this holds - see `ReplayHold.swift`. It
   /// is derived from a stated seq rather than detected from arrival timing, so
   /// it flips exactly once, on the event that completes the replay.
   private(set) var replaying = false
@@ -64,7 +64,7 @@ final class TranscriptViewModel {
   /// This is the whole of the phone's session-open cost, and it was invisible
   /// until the counter was put on screen. `replayHold` mutates on **every**
   /// applied event; observed, that is one SwiftUI invalidation per event, and
-  /// the placeholder — a spinner and a formatted counter — re-laid out 800
+  /// the placeholder - a spinner and a formatted counter - re-laid out 800
   /// times while the replay landed. Measured on a real session: 1,533ms of
   /// which the reducer fold was 6ms. The same replay costs 33ms on a Mac with
   /// no SwiftUI attached to it, which is the 37x nobody could explain.
@@ -76,17 +76,17 @@ final class TranscriptViewModel {
   @ObservationIgnored private var progressPublishedAt = 0.0
   @ObservationIgnored private var replayHold: ReplayHold?
   @ObservationIgnored private var replayBackstop: Task<Void, Never>?
-  /// Stage timings for the attach in flight — see `AttachProfile`. Measurement
+  /// Stage timings for the attach in flight - see `AttachProfile`. Measurement
   /// scaffolding for `_docs/improvements/ios-session-load-time.md`.
   private var profile: AttachProfile?
   /// The gateway's per-account usage for this session's profile, polled while
   /// the session is on screen. The profile tracker folds in every session's
   /// `rate_limit` events, so this session's own reading can be hours stale the
-  /// moment another session burns the window — see `usageWindows`.
+  /// moment another session burns the window - see `usageWindows`.
   private(set) var profileUsage: ProfileUsage?
   @ObservationIgnored private var usagePollTask: Task<Void, Never>?
   /// What "default" actually resolved to for this session, captured from
-  /// `system_init` — which the CLI sends once, before any `set_model` of ours can
+  /// `system_init` - which the CLI sends once, before any `set_model` of ours can
   /// have moved it. This is the only way to *name* the default: nothing asks the
   /// CLI "which model would you pick", so the answer is the one it did pick.
   /// Nil until init, which for a promptless session is until the first message.
@@ -98,28 +98,28 @@ final class TranscriptViewModel {
   /// fallback for a server too old to send the first.
   var defaultModel: String? { state.defaultModel ?? initModel }
 
-  /// The model this session answers as — the one it reported, or, before it has
+  /// The model this session answers as - the one it reported, or, before it has
   /// reported anything, the default it will use. A running session always has a
   /// concrete model; this is what makes that true from the first frame.
   var effectiveModel: String? { state.model ?? defaultModel }
 
   /// The engine's static catalog for this session's profile, fetched once on
-  /// attach. Only a fallback, never an override — see {@link availableModels}.
+  /// attach. Only a fallback, never an override - see {@link availableModels}.
   private(set) var catalogModels: [ModelOption] = []
 
   /// What the model picker offers.
   ///
   /// Two sources, and which one is authoritative depends on the engine. The
   /// `capabilities` event is the CLI asked what it supports, so for claude it
-  /// wins. Codex never sends one — its models are a catalog shipped with the
-  /// release and served on the profile — so without this fallback its picker is
+  /// wins. Codex never sends one - its models are a catalog shipped with the
+  /// release and served on the profile - so without this fallback its picker is
   /// permanently empty and the session cannot be switched at all.
   var availableModels: [ModelOption] {
     if let reported = state.models, !reported.isEmpty { return reported }
     return catalogModels
   }
 
-  /// Where each event's rows landed, for the push deep link — see
+  /// Where each event's rows landed, for the push deep link - see
   /// `TranscriptSeqIndex`. `@ObservationIgnored` because nothing renders it:
   /// observed, it would invalidate every view watching this model once per
   /// applied event, which is the exact cost `replayProgress` was throttled to
@@ -128,20 +128,20 @@ final class TranscriptViewModel {
 
   private let client: WorkerClient
   private var handle: SessionHandle?
-  /// Screens currently holding this session open — the session view, plus its
+  /// Screens currently holding this session open - the session view, plus its
   /// sub-agent takeover while one is pushed. See `holdOpen()`.
   @ObservationIgnored private var screenClaims = 0
-  /// The one attach loop, owned here rather than by a view's `.task` — see
+  /// The one attach loop, owned here rather than by a view's `.task` - see
   /// `holdOpen()` for why a view's task cannot own it any more.
   @ObservationIgnored private var attachTask: Task<Void, Never>?
-  /// Fired on the claim count's 0→1 and 1→0 transitions — "this session came on
+  /// Fired on the claim count's 0→1 and 1→0 transitions - "this session came on
   /// screen" / "this session left the screen". The seam the session view hangs
   /// the notification-suppression claim and the unread truing-up on, because
   /// the claim transitions are the only ordering-safe place: during a push or a
   /// pop both screens' appear/disappear events fire, interleaved, and any
   /// per-view release races the other view's claim.
   @ObservationIgnored var onScreenPresence: ((Bool) -> Void)?
-  /// Tool results whose rest is in flight — one fetch per row, however many
+  /// Tool results whose rest is in flight - one fetch per row, however many
   /// times it is pressed.
   private var fetchingResults: Set<String> = []
 
@@ -157,12 +157,12 @@ final class TranscriptViewModel {
   /// Claim-counted because of a fact that was measured, not assumed: on iOS a
   /// `NavigationStack` push fires the covered view's `onDisappear` and cancels
   /// its `.task` about half a second later, at the end of the push animation.
-  /// So `SessionView.task { await vm.run() }` — the old shape — would detach
+  /// So `SessionView.task { await vm.run() }` - the old shape - would detach
   /// the socket under the takeover, freezing exactly the surface that exists
   /// for watching an agent work, and re-attach with a replay spinner on the way
   /// back. The two views' appearances overlap in both directions (the incoming
   /// view's task starts at the transition's start, the outgoing one's dies at
-  /// its end), so the count never touches zero across a push or a pop — and a
+  /// its end), so the count never touches zero across a push or a pop - and a
   /// path reset that removes both views really does drain it, which is the one
   /// case that must detach.
   ///
@@ -203,7 +203,7 @@ final class TranscriptViewModel {
     // (see `loadFullResult`).
     // `imageRefs` is its own opt-in beside it, and asked for here for the same
     // reason: this is the unit that renders, and it can fetch a picture back
-    // (see `loadToolImage`). It is where the bytes actually were — 91% of all
+    // (see `loadToolImage`). It is where the bytes actually were - 91% of all
     // tool-result payload, none of it ever drawn.
     profile = AttachProfile()
     let handle = client.attach(
@@ -220,7 +220,7 @@ final class TranscriptViewModel {
   }
 
   /// Which transcript item a notification's `seq` points at, or nil when there
-  /// is nothing to move to (the event has not landed, or produced no row — the
+  /// is nothing to move to (the event has not landed, or produced no row - the
   /// reader then stays pinned at the tail, where it is about to appear).
   func itemIndex(forSeq seq: Int) -> Int? { seqIndex.item(forSeq: seq) }
 
@@ -235,7 +235,7 @@ final class TranscriptViewModel {
 
   /// Hold the transcript until the replay this frame promised has landed.
   ///
-  /// The hold **ends on the stated seq** — see `ReplayHold.swift`. What the
+  /// The hold **ends on the stated seq** - see `ReplayHold.swift`. What the
   /// backstop below decides is only when to give up, and it gives up on a
   /// *stall* rather than on a flat deadline from the attach: a phone replaying
   /// thousands of events over a tailnet does not finish in 1.5s, and a flat
@@ -271,17 +271,17 @@ final class TranscriptViewModel {
   }
 
   /// Feed the transcript's seq to the hold, ending it on the event that reaches
-  /// the stated target — in the same pass that applies it, so the reveal and the
+  /// the stated target - in the same pass that applies it, so the reveal and the
   /// last row land together.
   private func advanceReplayHold(lastSeq: Int) {
     guard var hold = replayHold else { return }
     let now = ProcessInfo.processInfo.systemUptime
     hold.advance(to: lastSeq, now: now)
     // Written back before the landed check so the hold that ends is the
-    // advanced one — otherwise every landing reports itself as a stall.
+    // advanced one - otherwise every landing reports itself as a stall.
     replayHold = hold
     if hold.landed { return endReplayHold() }
-    // Published on a clock, not on an event — see `progressPublishedAt`. Ten a
+    // Published on a clock, not on an event - see `progressPublishedAt`. Ten a
     // second is more than a reader can follow and 80x fewer than the replay
     // delivers.
     if now - progressPublishedAt >= Self.progressInterval {
@@ -294,8 +294,8 @@ final class TranscriptViewModel {
   private static let progressInterval = 0.1
 
   /// End the hold and publish in the same pass, so the reveal and everything
-  /// the reveal implies land on one frame. Every exit goes through here — the
-  /// stated seq, the stall backstop, and a detach — because a buffer left
+  /// the reveal implies land on one frame. Every exit goes through here - the
+  /// stated seq, the stall backstop, and a detach - because a buffer left
   /// unpublished is a transcript that silently lost its history.
   private func endReplayHold() {
     if var profile {
@@ -364,7 +364,7 @@ final class TranscriptViewModel {
     case .reconnectAttempt(let attempts):
       // The handle retries forever, so "offline" is a judgement about how long
       // it has been failing, not a state it reports. Three in a row is ~3.5s of
-      // backoff — past a blip, and the point where "Reconnecting…" stops being
+      // backoff - past a blip, and the point where "Reconnecting…" stops being
       // the honest word.
       connection = attempts >= 3 ? .offline : .reconnecting
     case .protocolError(let message):
@@ -395,7 +395,7 @@ final class TranscriptViewModel {
   /// Seeded from the process-wide cache first: this model is created per
   /// session, so without the seed a session switch would render the incoming
   /// session's own replayed numbers for a whole round trip. Gated on
-  /// `capabilities.rateLimits` — an engine with no plan windows has nothing to
+  /// `capabilities.rateLimits` - an engine with no plan windows has nothing to
   /// ask for.
   private func startUsagePoll(profile: String?) {
     guard usagePollTask == nil, let profile, capabilities.rateLimits else { return }
@@ -413,7 +413,7 @@ final class TranscriptViewModel {
         } catch {
           // A server predating profiles 404s; stop asking rather than asking
           // it again every minute. Anything else (a blip, a dead socket's
-          // sibling) keeps the cadence — the next tick may succeed.
+          // sibling) keeps the cadence - the next tick may succeed.
           if (error as? WorkerClientError)?.statusCode == 404 { return }
         }
         try? await Task.sleep(for: .seconds(60))
@@ -477,7 +477,7 @@ final class TranscriptViewModel {
   /// instead.
   var hudRateLimits: [UsageWindowRow] { Array(usageWindows.prefix(3)) }
 
-  /// Merged account + session windows in reading order — the protocol's
+  /// Merged account + session windows in reading order - the protocol's
   /// `orderUsageWindows(mergeUsage(...))`, the same fold the dashboard and the
   /// VS Code panel render. The profile side wins every window it holds; the
   /// transcript's own reading fills in only where the gateway holds nothing (a
@@ -492,7 +492,7 @@ final class TranscriptViewModel {
   // MARK: - Commands
 
   /// Send a turn. `attachmentIds` come from the composer's staging area, which
-  /// uploaded them as they were picked — a message may be attachments alone.
+  /// uploaded them as they were picked - a message may be attachments alone.
   /// A message typed mid-turn goes straight out and the engine folds it into
   /// the running turn.
   ///
@@ -518,7 +518,7 @@ final class TranscriptViewModel {
   }
 
   /// Bytes of a file this session's engine produced (a generated image). Needs
-  /// no host-file roots — see `readProducedFile`.
+  /// no host-file roots - see `readProducedFile`.
   func producedFileData(_ fileId: String) async throws -> Data {
     try await client.readProducedFile(sessionId: sessionId, fileId: fileId)
   }
@@ -536,7 +536,7 @@ final class TranscriptViewModel {
 
   func interrupt() { handle?.interrupt() }
 
-  /// Run a `!` shell command on the host. Not a turn — the output arrives as its own
+  /// Run a `!` shell command on the host. Not a turn - the output arrives as its own
   /// transcript row and reaches the model with the next message, so nothing is appended
   /// locally and `send` is not involved.
   func runShell(_ command: String) {
@@ -547,7 +547,7 @@ final class TranscriptViewModel {
     handle?.runShell(trimmed)
   }
 
-  /// Start a fresh conversation in the same session — the reducer empties the
+  /// Start a fresh conversation in the same session - the reducer empties the
   /// transcript when the echoed `conversation_reset` lands, so nothing is
   /// cleared locally.
   func clearContext() { handle?.clearContext() }
@@ -566,7 +566,7 @@ final class TranscriptViewModel {
 
   func closeSession() { handle?.closeSession() }
 
-  /// Skip the reconnect backoff — what returning to the foreground should do.
+  /// Skip the reconnect backoff - what returning to the foreground should do.
   func reconnectNow() { handle?.reconnectNow() }
 
   /// Re-fetch the REST rollup for this session.
@@ -585,7 +585,7 @@ final class TranscriptViewModel {
   ///
   /// Into the state rather than into the row that asked: the copy action then
   /// copies the whole thing and no later event can re-truncate it. A failure is
-  /// **silent on purpose** — a 404 means the log that seq belonged to is gone (a
+  /// **silent on purpose** - a 404 means the log that seq belonged to is gone (a
   /// dormant rebuild, a restart), and the head stays on screen still saying what
   /// it is, which is honest and better than an error about a press.
   func loadFullResult(toolUseId: String) {
@@ -599,7 +599,7 @@ final class TranscriptViewModel {
       defer { self.fetchingResults.remove(toolUseId) }
       guard
         // `imageRefs` here too: without it this JSON carries every screenshot's
-        // base64 and the fold below keeps only the text — bytes paid for and
+        // base64 and the fold below keeps only the text - bytes paid for and
         // discarded on a press that asked about words.
         let response = try? await self.client.toolResult(
           sessionId: self.sessionId, seq: seq, toolUseId: toolUseId, imageRefs: true)

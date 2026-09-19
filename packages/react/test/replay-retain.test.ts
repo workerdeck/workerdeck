@@ -98,7 +98,7 @@ describe('replay dropping is unobservable', () => {
     expect(state).toEqual(fold(full))
   })
 
-  it('never drops the highest-seq event — the replay hold depends on it', () => {
+  it('never drops the highest-seq event - the replay hold depends on it', () => {
     const full = seqd([
       { type: 'user_message', message: { role: 'user', content: 'go' }, parentToolUseId: null },
       args('{"a'),

@@ -145,7 +145,7 @@ function OneOf<T extends string>({ value, options, onChange }: { value: T; optio
     <Select value={value} onValueChange={(v) => onChange(v as T)}>
       <SelectTrigger className="h-6 w-full min-w-0 text-body-sm">
         {/* The popup is portalled and mounted lazily, so Base UI has no item label to
-            resolve the value against — name it explicitly. */}
+            resolve the value against - name it explicitly. */}
         <SelectValue className="truncate">{(v) => options.find((o) => o.value === v)?.label ?? String(v)}</SelectValue>
       </SelectTrigger>
       <SelectContent>

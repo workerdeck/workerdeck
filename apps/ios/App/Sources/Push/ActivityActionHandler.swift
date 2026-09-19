@@ -7,7 +7,7 @@ import WorkerDeckKit
 /// Performs a Live Activity button, in the app process.
 ///
 /// The system launches the app in the background to run a `LiveActivityIntent`, so this reaches the
-/// Keychain and the gateway exactly as the notification-action path does — the widget extension
+/// Keychain and the gateway exactly as the notification-action path does - the widget extension
 /// holds no credential and makes no call. `AppDelegate` installs this as
 /// `SessionActivityActions.handler` at `didFinishLaunching`, which is the callback a scene-less
 /// launch does run.
@@ -71,7 +71,7 @@ struct ActivityActionHandler {
 
   /// Two probes because neither alone is reliable in a background launch. `isProtectedDataAvailable`
   /// is the documented signal but is `true` during the grace period right after a lock; the Keychain
-  /// canary asks the only question that matters — can this process read something that requires an
+  /// canary asks the only question that matters - can this process read something that requires an
   /// unlocked device.
   private func isUnlocked() -> Bool {
     guard UIApplication.shared.isProtectedDataAvailable else { return false }
@@ -88,7 +88,7 @@ struct ActivityActionHandler {
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
     if status == errSecItemNotFound {
-      // First run: write it while we demonstrably can, and treat this launch as unlocked — the app
+      // First run: write it while we demonstrably can, and treat this launch as unlocked - the app
       // only reaches here from a tap, which needs a lit screen.
       SecItemAdd(
         [
@@ -120,7 +120,7 @@ struct ActivityActionHandler {
     }
   }
 
-  /// An answer is the original tool input with an `answers` object added, keyed by question text —
+  /// An answer is the original tool input with an `answers` object added, keyed by question text -
   /// the same encoding `QuestionPromptView.submit` uses, and what `codexAnswers` reads on the other
   /// engine. The **full** label is read back out of the input, so a button truncated for drawing
   /// still submits the whole thing.

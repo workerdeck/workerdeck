@@ -43,7 +43,7 @@ if (custom) {
   process.exit(result.ok ? 0 : 1)
 }
 
-console.log('QuickJS sandbox smoke — untrusted script boundary\n' + '='.repeat(50))
+console.log('QuickJS sandbox smoke - untrusted script boundary\n' + '='.repeat(50))
 
 await scenario('Happy path: evaluate a document from the scratch VFS', 'the sandbox is actually useful', async () => {
   const vfs = createVfs({ '/leads/acme.txt': 'revenue: 120' })
@@ -66,7 +66,7 @@ await scenario('Happy path: evaluate a document from the scratch VFS', 'the sand
 
 await scenario(
   'Escape attempt: prototype chain to globalThis',
-  'the CVE-2026-5752 failure shape — a guest reaching the host realm',
+  'the CVE-2026-5752 failure shape - a guest reaching the host realm',
   async () => {
     const result = await runScript(engine, {
       script: `
@@ -80,7 +80,7 @@ await scenario(
     return {
       ok: result.ok && clean,
       detail: clean
-        ? 'reached globalThis — and it is the GUEST realm: process/require/fetch all undefined'
+        ? 'reached globalThis - and it is the GUEST realm: process/require/fetch all undefined'
         : `LEAK: guest saw ${JSON.stringify(reached)}`,
     }
   },
@@ -101,7 +101,7 @@ await scenario('Denial of service: infinite loop', 'the wall-clock deadline pree
   report(result)
   return {
     ok: !result.ok && result.reason === 'timeout',
-    detail: 'the interrupt handler stopped it — no worker thread, no cross-origin isolation needed',
+    detail: 'the interrupt handler stopped it - no worker thread, no cross-origin isolation needed',
   }
 })
 
@@ -114,7 +114,7 @@ await scenario('Denial of service: runaway allocation', 'the allocator cap is re
   report(result)
   return {
     ok: !result.ok && result.reason === 'oom',
-    detail: 'guest hit its 8 MiB cap and failed as data — the host process is fine',
+    detail: 'guest hit its 8 MiB cap and failed as data - the host process is fine',
   }
 })
 
@@ -153,7 +153,7 @@ await scenario('Network: granted, but host-gated', 'the allowlist is enforced ho
   }
 })
 
-await scenario('Isolation: nothing survives between runs', 'fresh context per call — no cross-task leakage', async () => {
+await scenario('Isolation: nothing survives between runs', 'fresh context per call - no cross-task leakage', async () => {
   await runScript(engine, { vfs: createVfs(), script: 'globalThis.leak = "secret"; vfs.write("/leak.txt", "secret")' })
   const result = await runScript(engine, {
     vfs: createVfs(),
@@ -165,7 +165,7 @@ await scenario('Isolation: nothing survives between runs', 'fresh context per ca
 
 console.log('\n' + '='.repeat(50))
 if (failures > 0) {
-  console.error(`\n❌ ${failures} scenario(s) failed — the sandbox boundary is NOT holding.\n`)
+  console.error(`\n❌ ${failures} scenario(s) failed - the sandbox boundary is NOT holding.\n`)
   process.exit(1)
 }
 console.log("\n✅ All scenarios held. Try your own: pnpm smoke:sandbox '<your script>'\n")

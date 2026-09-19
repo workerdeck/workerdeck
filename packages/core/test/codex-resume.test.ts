@@ -179,7 +179,7 @@ describe('CodexRunner resume backfill', () => {
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
   })
 
-  it('says so — visibly — when only a partial page could be loaded', async () => {
+  it('says so - visibly - when only a partial page could be loaded', async () => {
     const peer = scriptedPeer()
     peer.respond('thread/resume', () => ({
       ...THREAD_RESULT,
@@ -205,7 +205,7 @@ describe('CodexRunner resume backfill', () => {
     expect(runner.status).toBe('idle')
   })
 
-  it('backfillHistory: false keeps the old lazy promptless resume — no child, no replay', async () => {
+  it('backfillHistory: false keeps the old lazy promptless resume - no child, no replay', async () => {
     const peer = scriptedPeer()
     peer.respond('thread/resume', () => ({
       ...THREAD_RESULT,

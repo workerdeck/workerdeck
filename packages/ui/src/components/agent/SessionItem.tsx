@@ -70,7 +70,7 @@ export function SessionItem({
   const extras = [
     showGateway ? row.hostName : undefined,
     info.profile ? `@${info.profile}` : undefined,
-    cost === '—' ? undefined : cost,
+    cost === '-' ? undefined : cost,
   ].filter((part): part is string => Boolean(part))
 
   const model = friendlyModel(info.model)

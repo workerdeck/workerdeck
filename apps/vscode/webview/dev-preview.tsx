@@ -49,7 +49,7 @@ const rows = [
     subagents: agents,
     project: wd,
   }),
-  // Same project, deep in a package — the row that used to read `ui`.
+  // Same project, deep in a package - the row that used to read `ui`.
   mk({
     id: '6',
     title: 'Terminal fold audit',

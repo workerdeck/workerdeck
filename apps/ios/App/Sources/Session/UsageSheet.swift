@@ -6,14 +6,14 @@ import SwiftUI
 ///
 /// The pace marker is the point of this screen. A bar alone says "17% used",
 /// which is only alarming or reassuring once you know how far into the week you
-/// are — so every window draws a tick at the elapsed share of its duration. Left
+/// are - so every window draws a tick at the elapsed share of its duration. Left
 /// of the tick is under budget, right of it is ahead of it.
 ///
 /// The duration is derived from the window key (5h, 7d), because the CLI reports
 /// a reset time and a percentage and never a duration; a window whose key doesn't
 /// say gets no marker rather than a guessed one.
 struct UsageSheet: View {
-  /// Ordered windows from `TranscriptViewModel.usageWindows` — account usage
+  /// Ordered windows from `TranscriptViewModel.usageWindows` - account usage
   /// merged over the session's own reading, each carrying its own freshness.
   let windows: [UsageWindowRow]
   /// claude.ai plan behind the windows ('max', 'pro', …), when the session has one.
@@ -33,7 +33,7 @@ struct UsageSheet: View {
             VStack(spacing: 10) {
               Text(
                 engine == .claude
-                  ? "No plan windows reported — API-key profiles have none, and a subscription "
+                  ? "No plan windows reported - API-key profiles have none, and a subscription "
                     + "account reports them once any of its sessions has run a turn."
                   : "Plan windows are a claude.ai subscription thing; this session runs on a "
                     + "provider engine.")
@@ -83,12 +83,12 @@ struct UsageSheet: View {
   }
 
   /// Whose limits these are. The plan capsule is only drawn when the CLI told us
-  /// — it reports a tier ('max'), never the multiplier a subscription page shows,
+  /// - it reports a tier ('max'), never the multiplier a subscription page shows,
   /// so this says "Max" and stops there rather than inventing "Max 20x".
   private var planHeader: some View {
     HStack(spacing: 8) {
       if engine == .claude {
-        // Anthropic's own mark, kept at its own colour — this line names whose
+        // Anthropic's own mark, kept at its own colour - this line names whose
         // limits these are, so a tinted or symbol stand-in would be the wrong
         // claim. `docs/assets/claude-code.svg`, vectored by the asset catalog.
         Image("ClaudeCode")
@@ -116,7 +116,7 @@ struct UsageSheet: View {
 }
 
 /// One window: name, used share, bar with pace marker, reset countdown, and its
-/// own freshness — the stamps are per window now that account and session
+/// own freshness - the stamps are per window now that account and session
 /// readings mix, so one footer date would be wrong for somebody's row.
 private struct UsageWindowCard: View {
   let window: UsageWindowRow
@@ -142,13 +142,13 @@ private struct UsageWindowCard: View {
           Text("overage").foregroundStyle(.orange)
         }
         if window.inferredReset {
-          // The tracker watched the reset pass with nothing reported since —
+          // The tracker watched the reset pass with nothing reported since -
           // stated, never inferred here, and it displaces the "ago" line
           // because the stamp is the reading this 0% replaced.
           Text("window reset · nothing reported since")
         } else if window.updatedAt > 0 {
           // Event time, not receipt time: a replayed reading keeps its age. A
-          // zero stamp is a transcript with no clock — say nothing.
+          // zero stamp is a transcript with no clock - say nothing.
           Text(Fmt.agoPrecise(Date(timeIntervalSince1970: window.updatedAt / 1000), now: now))
         }
       }
@@ -163,7 +163,7 @@ private struct UsageWindowCard: View {
   private var info: RateLimitInfo { window.info }
   private var utilization: Double { info.utilization ?? 0 }
 
-  /// Share of the window already elapsed — where usage *would* be if it were
+  /// Share of the window already elapsed - where usage *would* be if it were
   /// spent evenly. Needs both a duration (from the key) and a reset time.
   private var pace: Double? {
     guard let duration = Fmt.rateLimitWindowSeconds(key), let resetsAt = info.resetsAt else {
@@ -195,9 +195,9 @@ private struct UsageWindowCard: View {
 /// The marker is taller than the bar and drawn in the foreground colour so it
 /// reads as a scale mark rather than as more usage.
 struct UsageBar: View {
-  /// 0–1 used. Clamped here, so callers can hand over raw arithmetic.
+  /// 0-1 used. Clamped here, so callers can hand over raw arithmetic.
   let fraction: Double
-  /// 0–1 elapsed, or nil when the window's duration is unknown.
+  /// 0-1 elapsed, or nil when the window's duration is unknown.
   var pace: Double?
   var tint: Color = .accentColor
 

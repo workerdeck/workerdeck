@@ -56,7 +56,7 @@ export function AgentSidebar({ onWikiMaybeChanged }: AgentSidebarProps) {
     setCreating(true)
     setError(undefined)
     try {
-      // No `cwd` (`EngineCapabilities.hostCwd === false`) and no `scope` — the gateway stamps it from the principal.
+      // No `cwd` (`EngineCapabilities.hostCwd === false`) and no `scope` - the gateway stamps it from the principal.
       const session = await client.createSession({ profile: config.profile })
       setActiveId(session.id)
       await refresh()
@@ -161,7 +161,7 @@ function EmptyState({ available, reason, onStart }: { available: boolean; reason
         </button>
       ) : (
         <p className="rounded border border-border bg-surface px-3 py-2 text-xs text-fg-3">
-          The server has no model credentials — {reason ?? 'set OPENAI_API_KEY'} and restart.
+          The server has no model credentials - {reason ?? 'set OPENAI_API_KEY'} and restart.
         </p>
       )}
     </div>

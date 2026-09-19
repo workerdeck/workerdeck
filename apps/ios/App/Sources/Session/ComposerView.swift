@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 ///
 /// In `cards` it is a floating glass card. At rest it is the field and nothing
 /// else, so a session being read is not competing with a row of buttons; once it
-/// has focus, a draft, or a turn to stop, an action row unfolds underneath —
+/// has focus, a draft, or a turn to stop, an action row unfolds underneath -
 /// attach on the left, dismiss the keyboard and the one send/stop button on the
 /// right.
 ///
@@ -25,7 +25,7 @@ struct ComposerView: View {
   @Environment(\.transcriptFont) private var transcriptFont
 
   @Binding var text: String
-  /// Caret in UTF-16 units — it decides which token is being completed and where
+  /// Caret in UTF-16 units - it decides which token is being completed and where
   /// an accepted suggestion lands.
   @Binding var selection: NSRange
   @Binding var isFocused: Bool
@@ -35,7 +35,7 @@ struct ComposerView: View {
   /// outlive the composer's focus and are cleared on send.
   let attachments: ComposerAttachmentStore
   /// Whether the engine takes attachments at all (`capabilities.attachments`
-  /// non-empty). False hides the plus button — an attach affordance the engine
+  /// non-empty). False hides the plus button - an attach affordance the engine
   /// has no meaning for is not a choice.
   let canAddMedia: Bool
   /// Shell mode: the field is a host shell prompt and the send button runs the line
@@ -43,7 +43,7 @@ struct ComposerView: View {
   /// `onEdit` that detects the leading `!` also drives the completion list.
   let isShellMode: Bool
   /// Offered the first character typed into an empty field, before it is inserted.
-  /// True swallows it — that is how `!` enters shell mode without becoming part of the
+  /// True swallows it - that is how `!` enters shell mode without becoming part of the
   /// command. See `RichTextEditor.onLeadingTrigger`.
   let onLeadingTrigger: (String) -> Bool
   let onEdit: (String, NSRange) -> Void
@@ -51,7 +51,7 @@ struct ComposerView: View {
   let onStop: () -> Void
   let onAddMedia: () -> Void
   /// Leave shell mode. A phone has no Escape key, so the `!` in the gutter is the way
-  /// out — the same glyph that says which mode you are in undoes it.
+  /// out - the same glyph that says which mode you are in undoes it.
   let onExitShell: () -> Void
 
   @ViewBuilder
@@ -85,14 +85,14 @@ struct ComposerView: View {
   /// The terminal shape, and the same one VS Code's agent view wears: the
   /// composer is the *foot of the panel* rather than a card floating on it.
   ///
-  /// Edge to edge, opaque, no radius and no glass — and **one** border, an accent
+  /// Edge to edge, opaque, no radius and no glass - and **one** border, an accent
   /// rule along the top. It does not wait for focus, because the caret already
   /// says where focus is; that single line is the whole affordance, which is what
   /// an editor does and what a transcript with no boxes in it asks for.
   ///
   /// The buttons stop hiding, too. A glass circle is chat furniture; here they
-  /// are glyphs in square cells on the field's own row — `+` to attach, `↵` to
-  /// send — so an empty composer is one row tall instead of two, which is the
+  /// are glyphs in square cells on the field's own row - `+` to attach, `↵` to
+  /// send - so an empty composer is one row tall instead of two, which is the
   /// point of this variant everywhere else in the app as well.
   private var docked: some View {
     VStack(spacing: 0) {
@@ -129,7 +129,7 @@ struct ComposerView: View {
     .padding(.bottom, TermComposerMetrics.bottomPadding)
   }
 
-  /// **One** rule, along the top, and it does not wait for focus — the caret is
+  /// **One** rule, along the top, and it does not wait for focus - the caret is
   /// what says where focus is. A bottom rule would draw a second edge with only
   /// the home indicator between them; a side border would take the gutter glyph
   /// off the column every transcript marker sits on.
@@ -151,7 +151,7 @@ struct ComposerView: View {
       .accessibilityHidden(true)
   }
 
-  /// The composer's **gutter cell** — the column every transcript row's marker
+  /// The composer's **gutter cell** - the column every transcript row's marker
   /// sits in, so whatever stands here cannot move the text beside it. It holds
   /// one of three things, in this order:
   ///
@@ -197,7 +197,7 @@ struct ComposerView: View {
   }
 
   /// The field's styling, from the same two inputs `RichTextEditor` derives it
-  /// from — one derivation rather than two that have to agree.
+  /// from - one derivation rather than two that have to agree.
   private var style: DraftStyle { DraftStyle(variant: variant, font: transcriptFont) }
 
   /// Expanded whenever there is something to act on: the keyboard is up, a draft
@@ -235,12 +235,12 @@ struct ComposerView: View {
     }
   }
 
-  /// Take a picture off the clipboard and stage it. Returns whether it did —
+  /// Take a picture off the clipboard and stage it. Returns whether it did -
   /// see `RichTextEditor.onImagePaste` for why the answer suppresses the paste.
   ///
   /// **Raw bytes first, the decoded image only as a fallback.** A screenshot is
   /// PNG and the API takes PNG, so routing it through `UIPasteboard.image`
-  /// would decode and re-encode it to JPEG for nothing — a lossy round trip
+  /// would decode and re-encode it to JPEG for nothing - a lossy round trip
   /// that makes text in a screenshot, which is most of what gets pasted into an
   /// agent, measurably worse to read. `AttachmentNormalizer.file` keeps the
   /// exact bytes when the format and size already suit, and falls back to the
@@ -258,8 +258,8 @@ struct ComposerView: View {
       attachments.add(picked)
       return true
     }
-    // A clipboard whose image is in some format we did not name — or was put
-    // there as a live `UIImage` by another app — still pastes; it just costs a
+    // A clipboard whose image is in some format we did not name - or was put
+    // there as a live `UIImage` by another app - still pastes; it just costs a
     // transcode.
     guard let image = board.image,
       let picked = AttachmentNormalizer.image(image, name: "pasted.jpg", mediaType: nil)
@@ -269,7 +269,7 @@ struct ComposerView: View {
   }
 
   /// The formats worth taking verbatim, in the order a clipboard usually offers
-  /// them. Exactly `AttachmentNormalizer.acceptedImageTypes` — anything outside
+  /// them. Exactly `AttachmentNormalizer.acceptedImageTypes` - anything outside
   /// this set would be transcoded by the normalizer anyway, so asking the
   /// pasteboard for it buys nothing.
   private static let pasteboardImageTypes: [(UTType, String)] = [
@@ -277,7 +277,7 @@ struct ComposerView: View {
   ]
 
   /// Attach on the left; dismiss and send on the right. There is deliberately no
-  /// dictate button — iOS puts a microphone on the keyboard itself, right where a
+  /// dictate button - iOS puts a microphone on the keyboard itself, right where a
   /// thumb already is, and a second one here would only compete with it.
   private var actionRow: some View {
     HStack(spacing: 8) {
@@ -297,7 +297,7 @@ struct ComposerView: View {
     .padding(.bottom, 2)
   }
 
-  /// One button, two jobs. A draft always sends — messages queue behind a running
+  /// One button, two jobs. A draft always sends - messages queue behind a running
   /// turn, and taking that away to make room for stop would be a downgrade. Stop
   /// takes the slot only while a turn is live *and* there is nothing to send.
   @ViewBuilder
@@ -326,13 +326,13 @@ struct ComposerView: View {
     }
   }
 
-  /// A photo on its own is a message — the send button does not wait for text.
+  /// A photo on its own is a message - the send button does not wait for text.
   /// It does wait for the upload, so an id that hasn't landed can't be named.
   private var canSend: Bool {
     guard isEnabled else { return false }
     let typed = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     // A staged photo is not a shell command, and an upload in flight has nothing to do
-    // with one either — in this mode the line alone decides.
+    // with one either - in this mode the line alone decides.
     if isShellMode { return typed }
     guard !attachments.isUploading, !attachments.hasFailure else { return false }
     return typed || !attachments.isEmpty
@@ -342,7 +342,7 @@ struct ComposerView: View {
 /// The action row's shape: a glass circle around an SF Symbol.
 ///
 /// `.plain` keeps the glass from being repainted by the button style, and takes
-/// the automatic disabled dimming with it — hence the explicit opacity, so a
+/// the automatic disabled dimming with it - hence the explicit opacity, so a
 /// closed session's buttons read as unavailable rather than broken.
 private struct CircleButton: View {
   let systemImage: String
@@ -370,14 +370,14 @@ private struct CircleButton: View {
 ///
 /// A *character*, not an SF Symbol, and that is the whole point: this bar sits
 /// on the transcript's grid, and the glyphs it draws are the ones the CLI draws
-/// — `\u{276F}`, `+`, `\u{2715}`, `\u{21B5}`. A symbol is a picture of a button; these are the
+/// - `\u{276F}`, `+`, `\u{2715}`, `\u{21B5}`. A symbol is a picture of a button; these are the
 /// same vocabulary as the markers in the column above, so the furniture reads as
 /// part of the conversation rather than as chat chrome parked underneath it.
 ///
 /// No pill and no glass behind it, for the same reason. What it wears instead is
 /// a **cell**: a rounded square, filled and outlined, that the glyph stands in. A
 /// phone has no hover, so a bare glyph reads as text that happens to be tappable
-/// — the cell is what says "control" before you touch it. Its size and radius are
+/// - the cell is what says "control" before you touch it. Its size and radius are
 /// `TermComposerMetrics`, which is where the design's units become points.
 ///
 /// The cell is drawn **only while the button can act**. A send with nothing to
@@ -385,16 +385,16 @@ private struct CircleButton: View {
 /// costs no layout and cannot be mistaken for a disabled-looking button. Tone
 /// still carries the two states worth colouring on top of that: a running turn's
 /// stop is yellow and shell mode is magenta. Send is deliberately **not** tinted
-/// — the cell appearing is what "armed" means here.
+/// - the cell appearing is what "armed" means here.
 private struct TermGlyphButton: View {
   /// The hit target, and the cell drawn in it. Deliberately larger than the glyph
-  /// inside it — the target is what a finger needs, the glyph is what the grid
+  /// inside it - the target is what a finger needs, the glyph is what the grid
   /// needs.
   static let side = TermComposerMetrics.cell
   /// Taken from the field's own font rather than named as a constant: the
   /// composer types at `lineTextUIStyle` and that is a Dynamic Type style, so a
   /// hardcoded size would be right at one content-size category and wrong at
-  /// every other one — and these glyphs sit *on the typed line*. Handed in
+  /// every other one - and these glyphs sit *on the typed line*. Handed in
   /// rather than read off a static, so this button cannot be a render behind
   /// the field it sits on.
   let glyph: String
@@ -421,7 +421,7 @@ private struct TermGlyphButton: View {
 /// `Prompt/Default`, `Prompt/Focus` and `Prompt/Dirty`.
 ///
 /// Those frames are drawn over a **1170x2532 (@3x, 390pt) screenshot placed at
-/// 585 units wide**, so one design unit is two device pixels — two thirds of a
+/// 585 units wide**, so one design unit is two device pixels - two thirds of a
 /// point, not one. Reading the frames' numbers as points makes every one of them
 /// half again too large, which is exactly the bug this type exists to prevent:
 /// the conversion is applied once, here, and the raw frame numbers stay legible

@@ -68,7 +68,7 @@ describe('refImageParts', () => {
     ).toEqual([1, 3])
   })
 
-  it('refs blocks individually — an image beside a plain result', () => {
+  it('refs blocks individually - an image beside a plain result', () => {
     const event = refImageParts(resultEvent(1, [toolResult('a', 'plain'), toolResult('b', [image(png(500))])]))
     const blocks = (event as unknown as { message: { content: Array<Record<string, unknown>> } }).message.content
     expect(blocks[0]).toEqual(toolResult('a', 'plain'))
@@ -82,7 +82,7 @@ describe('refImageParts', () => {
     expect(refImageParts(plain)).toBe(plain)
   })
 
-  it('never mutates the stored event — the log is what serves the bytes back', () => {
+  it('never mutates the stored event - the log is what serves the bytes back', () => {
     const stored = resultEvent(1, [toolResult('a', [image(png(4_000))])])
     const before = JSON.stringify(stored)
     refImageParts(stored)
@@ -95,7 +95,7 @@ describe('refImageParts', () => {
   })
 })
 
-describe('replaySlice — the two rules composed', () => {
+describe('replaySlice - the two rules composed', () => {
   const composed = (blocks: unknown[]) => replaySlice([resultEvent(1, blocks)], { afterSeq: 0, imageRefs: true, truncateResults: true })[0]!
 
   it('keeps the image address even when the text is truncated away past it', () => {
@@ -106,7 +106,7 @@ describe('replaySlice — the two rules composed', () => {
   })
 
   it('addresses by the stored index, not the delivered position', () => {
-    // Stored: [image, text(big), image] — truncation renumbers what is delivered.
+    // Stored: [image, text(big), image] - truncation renumbers what is delivered.
     const parts = partsOf(composed([toolResult('a', [image(png(100)), { type: 'text', text: big }, image(png(200))])]))
     expect(parts.filter((p) => p.type === 'image_ref').map((p) => p.part_index)).toEqual([0, 2])
   })

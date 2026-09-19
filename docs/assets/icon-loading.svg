@@ -45,7 +45,7 @@
       80.56%, 100%   { opacity: 0; }
     }
 
-    /* The marker pulses on its own 0.6s clock — six clean runs per round, so it
+    /* The marker pulses on its own 0.6s clock - six clean runs per round, so it
        never lands mid-state at the loop boundary. Four states from two shapes:
        an inner pip (⋄, and the pip inside ◈) and an outer diamond that is either
        stroked (◇, ◈) or filled (◆). */

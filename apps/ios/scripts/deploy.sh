@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# Build the iOS app and push it to a paired iPhone — the loop an agent runs so you
+# Build the iOS app and push it to a paired iPhone - the loop an agent runs so you
 # can follow along on the real device instead of a simulator screenshot.
 #
 #   apps/ios/scripts/deploy.sh              # generate, build, install, launch
 #   apps/ios/scripts/deploy.sh --no-launch  # install only (works on a locked phone)
 #   apps/ios/scripts/deploy.sh --hot        # ...and bundle InjectionNext, for hot reload
-#   apps/ios/scripts/deploy.sh --release    # optimized build — what a shipped app costs
+#   apps/ios/scripts/deploy.sh --release    # optimized build - what a shipped app costs
 #   apps/ios/scripts/deploy.sh --device "Tobias's iPhone"
 #
 # Three facts shape this script (learned the hard way, see apps/ios/README.md):
 #
-#   1. Building with `-destination 'id=<udid>'` needs the phone *unlocked* — Xcode
+#   1. Building with `-destination 'id=<udid>'` needs the phone *unlocked* - Xcode
 #      wants to talk to it to "recover from previously reported preparation
 #      errors". `generic/platform=iOS` builds for device without touching it, so
 #      that is what we use.
@@ -30,7 +30,7 @@ BUNDLE_ID="bi.atomic.workerdeck.ios"
 DERIVED="$IOS_DIR/DerivedData"
 # Debug by default: the loop this script exists for is edit-build-look, and
 # `--hot` needs it. `--release` is for measuring, and the difference is not
-# cosmetic — the transcript fold alone is ~5.6x slower unoptimized (measured
+# cosmetic - the transcript fold alone is ~5.6x slower unoptimized (measured
 # 2026-08-19 over a captured replay), so a performance number taken from a Debug
 # build is a number about the build, not about the app.
 configuration="Debug"
@@ -105,7 +105,7 @@ else
     | "\(.identifier)\t\(.deviceProperties.name)"' "$devices_json")"
   [[ -n "$matches" ]] || fail "No available paired device. Plug in or join the phone to this Wi-Fi, and check Settings → Privacy & Security → Developer Mode."
   if [[ "$(wc -l <<<"$matches")" -gt 1 ]]; then
-    fail "More than one device is available — pass --device or set IOS_DEVICE:
+    fail "More than one device is available - pass --device or set IOS_DEVICE:
 $(sed 's/^/    /' <<<"$matches")"
   fi
   udid="$(cut -f1 <<<"$matches")"
@@ -128,7 +128,7 @@ if [[ $hot -eq 1 ]]; then
     || fail "--hot needs InjectionNext.app in /Applications (see apps/ios/README.md)."
   step "Building with the injection bundle (hot reload)"
 else
-  step "Building for device (generic destination — your phone can stay locked)"
+  step "Building for device (generic destination - your phone can stay locked)"
 fi
 build_log="$(mktemp -t workerdeck-build)"
 trap 'rm -f "$devices_json" "$build_log"' EXIT

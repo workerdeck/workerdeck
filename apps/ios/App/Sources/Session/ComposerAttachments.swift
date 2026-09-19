@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// One file staged on the composer, from picked to sent.
 ///
 /// It exists before the upload finishes, because the chip has to appear the
-/// instant a photo is chosen — waiting for a round trip to show anything makes
+/// instant a photo is chosen - waiting for a round trip to show anything makes
 /// the picker feel broken on a slow tailnet.
 @MainActor
 @Observable
@@ -22,7 +22,7 @@ final class ComposerAttachment: Identifiable {
   let name: String
   let mediaType: String
   let bytes: Int
-  /// Rendered locally — the phone already has the pixels, so a chip never waits
+  /// Rendered locally - the phone already has the pixels, so a chip never waits
   /// on a download to show what it is.
   let thumbnail: UIImage?
   private(set) var state: State = .uploading
@@ -65,12 +65,12 @@ final class ComposerAttachmentStore {
   var upload: (@Sendable (String, String, Data) async throws -> MessageAttachment)?
 
   var isEmpty: Bool { items.isEmpty }
-  /// True while anything is still in flight — send waits for it rather than
+  /// True while anything is still in flight - send waits for it rather than
   /// dropping the attachment that had not landed yet.
   var isUploading: Bool {
     items.contains { if case .uploading = $0.state { return true } else { return false } }
   }
-  /// A failed upload blocks the send rather than being dropped from it — the chip
+  /// A failed upload blocks the send rather than being dropped from it - the chip
   /// is right there with a retry and an ✕, and a message that silently lost its
   /// picture is the failure this whole path is built to avoid.
   var hasFailure: Bool { items.contains { $0.failure != nil } }
@@ -89,7 +89,7 @@ final class ComposerAttachmentStore {
     send(item, announceFailure: true)
   }
 
-  /// Retry one that failed — tapping the chip. Silent on failure the second time:
+  /// Retry one that failed - tapping the chip. Silent on failure the second time:
   /// the alert has already been seen and the badge is still there.
   func retry(_ item: ComposerAttachment) {
     guard item.failure != nil else { return }
@@ -133,7 +133,7 @@ struct PickedFile {
 
 enum AttachmentNormalizer {
   /// The API's image types. An iPhone's own photos are usually HEIC, which is
-  /// not among them — so a photo is transcoded here rather than rejected by the
+  /// not among them - so a photo is transcoded here rather than rejected by the
   /// gateway with a media type the user never chose.
   static let acceptedImageTypes: Set<String> = ["image/jpeg", "image/png", "image/gif", "image/webp"]
 
@@ -177,13 +177,13 @@ enum AttachmentNormalizer {
   }
 
   /// IANA type for a picked file, from its extension. Unknown extensions come
-  /// back as octet-stream, which the gateway refuses with a clear message —
+  /// back as octet-stream, which the gateway refuses with a clear message -
   /// better than guessing text/plain and feeding the model bytes.
   static func mediaType(for url: URL) -> String {
     UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
   }
 
-  /// Textual types whose media type doesn't start with `text/` — mirror of
+  /// Textual types whose media type doesn't start with `text/` - mirror of
   /// core's list, used only to *classify*, never to refuse: an unknown type
   /// still goes to the gateway, whose vocabulary is authoritative.
   private static let textTypes: Set<String> = [
@@ -194,7 +194,7 @@ enum AttachmentNormalizer {
 
   /// The capability-record kind ('image' | 'pdf' | 'text') this media type
   /// lands as, or nil when the classification is unknown here. Any `image/*`
-  /// counts as image — this normalizer transcodes what the API wouldn't take.
+  /// counts as image - this normalizer transcodes what the API wouldn't take.
   static func kind(of mediaType: String) -> String? {
     let type =
       mediaType.split(separator: ";").first.map {

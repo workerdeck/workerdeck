@@ -749,7 +749,7 @@ describe('transcript reducer', () => {
     expect(state.sdkSessionId).toBe('sdk-3')
   })
 
-  it('conversation_reset leaves pending approvals pending — the runner still holds them', () => {
+  it('conversation_reset leaves pending approvals pending - the runner still holds them', () => {
     seq = 0
     const state = run(initialTranscriptState, [
       {

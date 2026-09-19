@@ -28,7 +28,7 @@ export function compactionText(item: {
 
 export function formatCost(usd: number | undefined): string {
   if (usd === undefined || Number.isNaN(usd)) {
-    return '—'
+    return '-'
   }
   if (usd === 0) {
     return '$0.00'
@@ -92,7 +92,7 @@ export function formatCountdown(untilEpochMs: number, now = Date.now()): string 
 
 export function formatRelativeTime(epochMs: number | undefined, now = Date.now()): string {
   if (!epochMs) {
-    return '—'
+    return '-'
   }
   const diff = Math.max(0, now - epochMs)
   const s = Math.floor(diff / 1000)

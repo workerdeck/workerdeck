@@ -29,7 +29,7 @@ export function todoPreview(name: string, input: unknown): TodoPreview | undefin
   }
 }
 
-// Height and render both draw this exact string — `toolRowHeight` counts what `TerminalTodos` paints.
+// Height and render both draw this exact string - `toolRowHeight` counts what `TerminalTodos` paints.
 export function todoLine(todo: TodoEntry): string {
   return `${GLYPH[todo.status]} ${todo.text}`
 }

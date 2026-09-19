@@ -91,7 +91,7 @@ function StickyPromptLane({
 }
 
 // The virtualized row lane and its scroll-ownership regime. Two things want to write
-// `scrollTop` — the follow spring and the virtualizer's size-change corrections — and they are
+// `scrollTop` - the follow spring and the virtualizer's size-change corrections - and they are
 // split by regime here: pinned, corrections are suppressed outright; escaped, the virtualizer
 // corrects so the scrollback holds still (GOTCHAS "The transcript is virtualized").
 export function TranscriptRows({

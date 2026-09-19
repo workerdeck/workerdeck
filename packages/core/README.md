@@ -7,8 +7,8 @@ attach/replay; `AiSdkRunner` does the same for any provider the AI SDK supports.
 transport.
 
 Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). A `SessionRunner`
-behaves like Claude Code launched in the session's directory — same skills, same `CLAUDE.md`, same
-permission system — and both runners emit
+behaves like Claude Code launched in the session's directory - same skills, same `CLAUDE.md`, same
+permission system - and both runners emit
 [`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) events.
 [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) bridges runners to
 HTTP + WebSocket; use core directly when you want sessions in-process with no server.
@@ -24,8 +24,8 @@ Node ≥ 22 and a real filesystem. WorkerDeck implements no Anthropic auth: the 
 credentials from the operator's environment (`ANTHROPIC_API_KEY`, Bedrock/Vertex, or a personal
 `claude login`).
 
-The provider engine additionally wants `ai` (AI SDK v7), your provider package, and — for
-`eval_script` — [`@workerdeck/sandbox`](https://www.npmjs.com/package/@workerdeck/sandbox);
+The provider engine additionally wants `ai` (AI SDK v7), your provider package, and - for
+`eval_script` - [`@workerdeck/sandbox`](https://www.npmjs.com/package/@workerdeck/sandbox);
 all optional, and unused if you only run Claude sessions.
 
 ## Usage
@@ -63,28 +63,28 @@ await done
 Other controls: `interrupt()`, `setPermissionMode(mode)`, `setModel(model?)`, `close(reason?)`,
 `fail(message)` for host-enforced policy, and `info()` for a protocol `SessionInfo` snapshot
 (status, cost, pending approval count, title). `runner.id` is the server-side id;
-`runner.sdkSessionId` is the Agent SDK's — the one you pass back as `resume`.
+`runner.sdkSessionId` is the Agent SDK's - the one you pass back as `resume`.
 
 ## Approvals, event log, resume
 
-- **Pending approvals** — the runner's `canUseTool` hook turns each uncovered tool call into a
+- **Pending approvals** - the runner's `canUseTool` hook turns each uncovered tool call into a
   `permission_requested` event and a `PendingApproval` that blocks the tool until
   `resolvePermission()` (or the timeout) settles it. Allowing echoes the tool input back as
-  `updatedInput` — the SDK requires a record even for an unmodified allow. `AskUserQuestion`
+  `updatedInput` - the SDK requires a record even for an unmodified allow. `AskUserQuestion`
   rides the same path; `questionBehavior: 'auto' | 'deny'` policy-resolves it for unattended runs.
-- **Event log** — every event gets a monotonic `seq`; `subscribe(listener, afterSeq)` replays the
+- **Event log** - every event gets a monotonic `seq`; `subscribe(listener, afterSeq)` replays the
   buffer past `afterSeq` before delivering live events, so late attachers always catch up.
-- **Resume** — pass `resume: sdkSessionId` (optionally `forkSession`). The SDK only re-streams
+- **Resume** - pass `resume: sdkSessionId` (optionally `forkSession`). The SDK only re-streams
   user messages, so the runner backfills the full prior transcript from the SDK's on-disk store
   as `replay: true` events before the query starts (`backfillHistory: false` to skip).
-- **Capabilities + usage** — after init (and eagerly for promptless sessions) the runner fetches
+- **Capabilities + usage** - after init (and eagerly for promptless sessions) the runner fetches
   supported models/slash commands and a context-window snapshot, emitting `capabilities` and
   `context_usage` events; context usage is re-polled after every turn.
 
 ## The second engine
 
 `AiSdkRunner` runs the same protocol against any provider the [AI SDK](https://ai-sdk.dev)
-supports — no CLI process, no config directory. `createEngineSession()` assembles one: the model,
+supports - no CLI process, no config directory. `createEngineSession()` assembles one: the model,
 the capability-scoped tool set, and the executor that runs tool calls.
 
 ```ts
@@ -93,7 +93,7 @@ import { loadEngine } from '@workerdeck/sandbox'
 import { createEngineSession, QuickJsExecutor } from '@workerdeck/core'
 
 // Server-side, the WASM guest is loaded once for the process and shared by every
-// session. The variant package is a peer dependency you install yourself — core
+// session. The variant package is a peer dependency you install yourself - core
 // does not pick one for you, because the browser build and the server build are
 // different artifacts and only you know which side this is.
 const executor = new QuickJsExecutor({ engine: await loadEngine(variant), defaultTimeoutMs: 15_000 })
@@ -118,7 +118,7 @@ Three seams matter here:
   with this process's authority and must declare `execute`; `sandboxed` means it rides the executor
   seam and must *not*. Both contradictions are refused at assembly rather than at runtime, because
   a sandboxed tool that quietly ran in-process would defeat the only thing sandboxing it was for.
-- **`ToolExecutor` decides where code runs**, and that is a real architectural choice — see below.
+- **`ToolExecutor` decides where code runs**, and that is a real architectural choice - see below.
 
 ### Which executor?
 
@@ -127,14 +127,14 @@ Three seams matter here:
 | Runs where | this Node process, WASM guest | the attached client | wherever you send it |
 | Needs a client attached | no | **yes** | no |
 | Data locality | data must reach the server | client-held data never leaves the tab | n/a |
-| Trust | you own both sides | results are **untrusted input** — the sandboxed party answers | depends |
+| Trust | you own both sides | results are **untrusted input** - the sandboxed party answers | depends |
 | Latency | in-process | a WS round trip | unbounded (the session parks) |
 
 The question to ask is **where the data the loop reasons over already lives**:
 
 - In your database or on your disk → in-process. Pushing execution into the tab buys nothing and
   hands an executor to the party you are sandboxing against.
-- In the user's browser — a document they are editing, a file they dropped, something you would
+- In the user's browser - a document they are editing, a file they dropped, something you would
   rather not receive at all → the bridge. This is the case it exists for.
 - Somewhere that answers in minutes or hours (a queue, a human, a build) → deferred, and let the
   session park.
@@ -151,7 +151,7 @@ session mix all three.
 
 `DeferredExecutor` dispatches a call and doesn't wait. The runner then **parks**: `park()` returns
 a `RunnerSnapshot`, the process can tear the runner down, and passing that snapshot back as
-`restore` rebuilds the session as itself — same id, same event log, same seq numbering, mid-turn,
+`restore` rebuilds the session as itself - same id, same event log, same seq numbering, mid-turn,
 scratch filesystem included.
 
 ```ts
@@ -162,12 +162,12 @@ selectExecutor: () => new DeferredExecutor({
 ```
 
 [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) drives both halves
-for you — a `SessionStore` plus `POST /executions/:id/result` — but the mechanism is here, and works
+for you - a `SessionStore` plus `POST /executions/:id/result` - but the mechanism is here, and works
 with no server at all.
 
 `snapshot()` is the same value **without** the teardown: the runner stays live, attached and warm.
 That separation is what makes a provider session survive a process restart, since it has no
-engine-side store to resume from the way claude and codex do — the host writes the snapshot through
+engine-side store to resume from the way claude and codex do - the host writes the snapshot through
 after each turn and rebuilds from the last one. The gate differs from `park()`'s in one direction
 only: it refuses a turn in flight and pending *in-process* executions (whose results die with the
 process), and allows the idle case `park()` exists to refuse.
@@ -182,18 +182,18 @@ Things the compiler will not tell you, each of which has cost someone real time:
   the temptation to truncate into a snapshot: it would break the fetch for exactly the sessions
   most likely to be read late.
 
-- **Image refs happen there too — and on the live path as well.** `subscribe(..., { imageRefs })`
+- **Image refs happen there too - and on the live path as well.** `subscribe(..., { imageRefs })`
   replaces a `tool_result`'s base64 `image` parts with `image_ref` addresses, and unlike truncation
   it applies to live events as well as the replay, because a client's one render path is
   ref-then-fetch. The same "never at emit" rule holds for the same reason: `#events` keeps every
   byte, which is what the fetch route serves back. `SubscriberSet` (`src/lib/subscribers.ts`) is
-  where that per-subscriber decision lives — a subscriber is a listener *plus what it asked for*,
+  where that per-subscriber decision lives - a subscriber is a listener *plus what it asked for*,
   so the three runners no longer each own a copy of the answer. Consumers that subscribe with no
-  options — parking, notifications, the queue — see everything, as they do for every rule here.
+  options - parking, notifications, the queue - see everything, as they do for every rule here.
 
 - **A declared MCP server that never connected is refused, not degraded.** If a profile's
   `session.mcpServers` names a server and it isn't there, `createEngineSession` throws. The old
-  behaviour — start anyway, minus those tools — produced a session that reported perfectly healthy
+  behaviour - start anyway, minus those tools - produced a session that reported perfectly healthy
   while the agent apologised its way through every request that needed it. Pass
   `connectMcpTools(servers, { required: true })` to fail at connect time instead, and hand the
   resulting connection over as `mcp` (not just `mcp.tools`) so the check is exact.
@@ -201,7 +201,7 @@ Things the compiler will not tell you, each of which has cost someone real time:
   `GET` before it sends anything. Mounted under a framework's default 404, the whole connect fails
   with an error that names neither the method nor the route.
 - **Never seed the VFS by hand on a restore.** Use `seedVfs`, which is ignored when
-  `config.restore` is set. Building `config.vfs` yourself still works and still wins — and then
+  `config.restore` is set. Building `config.vfs` yourself still works and still wins - and then
   overwriting the files the parked turn wrote is yours to avoid.
 - **Forward the host's `id`.** `createEngineSession({ id })` is how a session comes back as
   *itself* across a gateway restart. Dropping it strands every client's route and unread mark, and
@@ -209,11 +209,11 @@ Things the compiler will not tell you, each of which has cost someone real time:
 - **`onClose` runs on park as well as close.** Parking releases the same resources; a disposer that
   assumes the session is over will close an MCP connection the woken session still needs to rebuild.
 - **Authoritative tools are never bridged.** `withMcpTools` marks everything authoritative by
-  construction. If you want a host tool the tab may run, declare it `sandboxed` in `tools` — and
+  construction. If you want a host tool the tab may run, declare it `sandboxed` in `tools` - and
   then treat its results as untrusted input, because the tab produced them.
 - **Never make a tool's operation depend on a field being absent.** "Create when `id` is missing,
-  overwrite when it is present" is the shape that breaks: models send `""` — and, observed live,
-  `" "` — rather than omitting, and some providers mark every property required so the model
+  overwrite when it is present" is the shape that breaks: models send `""` - and, observed live,
+  `" "` - rather than omitting, and some providers mark every property required so the model
   *cannot* omit. `z.string().min(1).optional()` does not save it (a space has length 1). Split it
   into two tools with required arguments, and trim-and-blank-check optional strings inside `run`.
 
@@ -222,9 +222,9 @@ Things the compiler will not tell you, each of which has cost someone real time:
 `InputQueue` (the push-based `AsyncIterable` bridging `sendMessage()` into the SDK's streaming
 prompt), `normalizeSdkMessage`/`toApiMessage` (SDKMessage → protocol event normalization),
 `connectMcpTools` for live MCP over http/sse, and `createWebFetch` with its SSRF guard
-(`isPrivateAddress`). Tests inject a fake `queryFn` — no real CLI spawn needed.
+(`isPrivateAddress`). Tests inject a fake `queryFn` - no real CLI spawn needed.
 
 ## License
 
-MIT © Tobias Strebitzer —
+MIT © Tobias Strebitzer -
 [LICENSE](https://github.com/workerdeck/workerdeck/blob/master/LICENSE)

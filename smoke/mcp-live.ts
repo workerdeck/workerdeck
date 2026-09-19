@@ -1,5 +1,5 @@
 // pnpm smoke:mcp --probe                  # connect + list tools against the real DeepWiki server, no model, FREE
-// pnpm smoke:mcp [provider] [model-id]    # the same tools granted to a real session — costs tokens
+// pnpm smoke:mcp [provider] [model-id]    # the same tools granted to a real session - costs tokens
 //
 // The only place a real streamable-http MCP connection is exercised end to end: tools arrive namespaced, stay
 // authoritative (server-side execute, never bridged), and the turn completes on their output.
@@ -21,7 +21,7 @@ const toolNames = Object.keys(mcp.tools)
 console.log(`Tools: ${toolNames.join(', ') || '(none)'}`)
 
 if (toolNames.length === 0) {
-  console.error('\n❌ DeepWiki exposed no tools — server unreachable or protocol drift.\n')
+  console.error('\n❌ DeepWiki exposed no tools - server unreachable or protocol drift.\n')
   process.exit(1)
 }
 if (!toolNames.some((name) => name.startsWith('deepwiki__'))) {
@@ -56,7 +56,7 @@ const runner = createEngineSession({
   mcpTools: mcp.tools,
   instructions:
     'Answer questions about public GitHub repositories using the deepwiki tools. ' +
-    'Never answer from memory — always consult the tools first.',
+    'Never answer from memory - always consult the tools first.',
 })
 
 const events: SessionEvent[] = []
@@ -113,7 +113,7 @@ const mcpCalls = events.flatMap((e) =>
     : [],
 )
 if (mcpCalls.length === 0) {
-  fail('The model answered WITHOUT calling a deepwiki__* tool — live MCP was never exercised.')
+  fail('The model answered WITHOUT calling a deepwiki__* tool - live MCP was never exercised.')
 }
 
 runner.close()
