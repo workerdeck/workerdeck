@@ -1,0 +1,14 @@
+#!/bin/sh
+# The gateway from THIS checkout, wearing the published binary's interface.
+#
+# `workerdeck.host.binaryPath` takes one executable and appends its own argv, so the node flags a
+# source run needs (the `@workerdeck/source` condition, swc-node) have nowhere to go on that
+# setting. They go here instead. Point the setting at this file and VS Code's Host Mode supervises
+# the working tree, which is what makes `WorkerDeck Host: Hot-Reload Server` do anything: the
+# published CLI is one bundled file with no module subgraph to swap.
+#
+# cd to the repo root first so `@swc-node/register` resolves from this workspace whatever the
+# caller's cwd is. Safe for the gateway: Host Mode passes --state-dir and --config as absolute paths.
+ROOT=$(cd "$(dirname "$0")/.." && pwd) || exit 1
+cd "$ROOT" || exit 1
+exec node --conditions=@workerdeck/source --import @swc-node/register/esm-register "$ROOT/packages/cli/src/cli.ts" "$@"

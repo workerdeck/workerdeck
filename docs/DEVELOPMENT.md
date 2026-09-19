@@ -102,6 +102,13 @@ How it works, in three pieces:
   `parking` options. A file store is single-process by contract, and two generations holding two of
   them over one directory is exactly the two-servers-one-directory case it refuses to be.
 
+Under VS Code's Host Mode there is one more step, because `workerdeck.host.binaryPath` takes a
+single executable and appends its own argv, leaving the node flags a source run needs nowhere to
+go: point it at **`scripts/workerdeck-dev`**, which wears the published binary's interface and
+execs the checkout behind it. Pointing it at `packages/cli/build/cli.mjs` instead is the trap - it
+is the bundle, so the flag warns and serves without hot reload, and it is stale until the next
+`pnpm build`.
+
 Dev only, and it says so rather than refusing to start: the published CLI is a single bundled file
 with no subgraph to re-evaluate, so the flag warns to stderr and serves without it. Memory grows
 per generation (old module graphs stay reachable from live closures), which is why this is a dev

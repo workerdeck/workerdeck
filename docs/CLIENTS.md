@@ -141,7 +141,10 @@ command exactly like one VS Code launched - the ownership rule exists to stop VS
 what it did not start, and a reload kills nothing. And it signals the **pid, never the group**,
 which is the inverse of Stop's rule for the same reason Stop needs the group: the swap happens
 inside the gateway process, so `-pid` would reach the npx launcher and every engine child with it.
-Windows has no POSIX signals, so the command refuses there and says so.
+Windows has no POSIX signals, so the command refuses there and says so. It also needs Host Mode to
+be launching a **checkout**: `workerdeck.host.binaryPath` points at `scripts/workerdeck-dev` for
+that (a single executable is all that setting can carry, and a source run needs node flags), never
+at `packages/cli/build/cli.mjs`, which is the bundle this feature cannot swap.
 
 The managed instance registers itself as a gateway (`workerdeck-managed`, "This machine") - the
 one exception to **there is no implicit localhost gateway**, and marked `managed` so the Gateways
