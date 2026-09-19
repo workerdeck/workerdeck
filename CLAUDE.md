@@ -89,6 +89,10 @@ Full checklist and the release ledger in `docs/RELEASING.md`. The short form:
   and CI publishes under trusted publishing. Gatekeeper audit first.
 - **`package.json` is not the release record** - npm and the *pushed* tags are. Check all three,
   and use `git tag --sort=v:refname` (plain `git tag` sorts lexically).
+- **After publishing, a package missing from the registry is staged, not lost.** npm holds a new
+  version for minutes; a 404 or an `ETARGET` install against a green publish log is expected. Wait,
+  never re-run the workflow on that evidence, and clear `~/.npm` last. `docs/RELEASING.md` has both
+  incidents.
 - co_authored_by: no. frontend_smoke: no (manual).
 - **`CLAUDE.md` must stay under 200 lines.** If a change wants to add narrative here, it belongs
   in the matching `docs/` file and gets at most a pointer here.

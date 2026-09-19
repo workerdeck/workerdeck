@@ -1121,6 +1121,10 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   other docs point at them by name. The file is still the largest in `docs/` and a split into
   `docs/gotchas/<topic>.md` behind an index is the obvious next step.
 
+- **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
+  just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
+  install failure against a green publish log is the expected reading, not a broken release. Read
+  the staged-publish paragraph below before touching anything; it has cost two sessions now.
 - publish: yes - npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
@@ -1151,6 +1155,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   a conflict to clear. The workflow's own `✅ Published` line is the authority; the registry catches
   up. Waiting costs minutes, and a re-run against a genuinely half-published release is the one
   operation that can make things worse.
+
+  It happened again on 2026-09-19 with 2.9.0, same shape: nine packages live within a minute,
+  `@workerdeck/web` absent for about five, and `npm i workerdeck@2.9.0` failing `ETARGET` because
+  the CLI pins it exactly. Two refinements from that run. **The registry catches up before your
+  local npm does**: once the version document returned 200, `npm install` still failed until
+  `npm cache clean --force`, so a stale packument in `~/.npm` outlives the staging window and is
+  the *last* thing to rule out, not the first. And **check this entry before reacting at all** -
+  the run that produced this paragraph rediscovered the 2026-09-14 incident from scratch, read a
+  green publish log as a broken release, and was minutes from re-triggering the workflow. The
+  order of evidence is: the workflow's `✅ Published` line, then the registry version document,
+  then your local cache. An install failure is the weakest signal of the three.
 - marketplace: yes, on the same tag - `.github/workflows/publish.yml`'s second job, `vscode`,
   publishes `apps/vscode` to the **VS Code Marketplace** under the publisher **`silkweave`**
   (display `Silkweave`, domain `silkweave.dev`, owned by the Microsoft account
