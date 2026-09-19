@@ -556,7 +556,7 @@ with **no roots and no byte cap** because the allowlist is built solely from `fi
 events; a path the *agent* named is not a produced file and stays behind `/fs/*`)
 and `/sessions/:id/mcp`
 (status + reconnect/enable/disable, with each server's `env`/`headers` stripped),
-the host-filesystem routes (`/fs/*`, `host-files.ts` + `host-file-search.ts` - operator
+the host-filesystem routes (`/fs/*`, `routes/fs.ts` over `services/host-files.ts` + `host-file-search.ts` - operator
 privilege; reads follow `allowedCwdRoots` and `hostFiles.roots` only narrows, writes opt in
 separately; realpath-based containment and uniform-404 disclosure, so **do not** reuse
 `cwdAllowed` there - see `docs/GOTCHAS.md` §Host filesystem),
