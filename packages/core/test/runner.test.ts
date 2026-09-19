@@ -489,6 +489,55 @@ describe('SessionRunner', () => {
     expect(events.filter((e) => e.type === 'capabilities')).toHaveLength(1)
   })
 
+  it('re-emits capabilities on a commands_changed push, keeping the fetched models', async () => {
+    const { harness, runner, events } = makeRunner(
+      { prompt: 'hi' },
+      {
+        models: [{ value: 'claude-opus-4-8', displayName: 'Opus 4.8', description: 'Most capable' }],
+        commands: [{ name: 'compact', description: 'Compact the conversation', argumentHint: '' }],
+      },
+    )
+    void runner.start()
+    harness.emit(initMessage)
+    await tick()
+
+    harness.emit({
+      type: 'system',
+      subtype: 'commands_changed',
+      session_id: 'sdk-session-1',
+      uuid: 'uuid-cc',
+      commands: [
+        { name: 'compact', description: 'Compact the conversation', argumentHint: '' },
+        { name: 'pdf', description: 'Inspect a PDF', argumentHint: '<file>' },
+      ],
+    } as unknown as SDKMessage)
+    await tick()
+
+    const emitted = events.filter((e) => e.type === 'capabilities')
+    expect(emitted).toHaveLength(2)
+    expect(emitted.at(-1)).toMatchObject({
+      commands: [{ name: 'compact' }, { name: 'pdf', argumentHint: '<file>' }],
+      models: [{ value: 'claude-opus-4-8' }],
+    })
+  })
+
+  it('ignores a commands_changed push that arrives before the first fetch resolves', async () => {
+    const { harness, runner, events } = makeRunner({ prompt: 'hi' })
+    void runner.start()
+    harness.emit({
+      type: 'system',
+      subtype: 'commands_changed',
+      session_id: 'sdk-session-1',
+      uuid: 'uuid-cc',
+      commands: [{ name: 'pdf', description: 'Inspect a PDF', argumentHint: '' }],
+    } as unknown as SDKMessage)
+    await tick()
+
+    // supportedCommands() tracks the latest push, so the fetch returns this list anyway; re-emitting
+    // here would ship an empty model list to every client.
+    expect(events.filter((e) => e.type === 'capabilities')).toHaveLength(0)
+  })
+
   it('replays events from a given seq on subscribe', async () => {
     const { harness, runner } = makeRunner()
     void runner.start()

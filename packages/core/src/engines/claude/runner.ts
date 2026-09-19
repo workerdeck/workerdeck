@@ -16,6 +16,7 @@ import {
   ENGINE_CAPABILITIES,
   type CreateSessionRequest,
   type McpServerStatusInfo,
+  type ModelOption,
   type PermissionMode,
   type PermissionRequest,
   type SessionEvent,
@@ -97,6 +98,8 @@ export class SessionRunner implements Runner {
   #idleWhileCompacting = false
   #query: Query | undefined
   #capabilitiesEmitted = false
+  #models: ModelOption[] | undefined
+  #defaultModel: string | undefined
   #subscriptionType: string | undefined
   #engineTitle: string | undefined
   #started = false
@@ -463,6 +466,14 @@ export class SessionRunner implements Runner {
       }
       return
     }
+    if (msg.type === 'system' && msg.subtype === 'commands_changed') {
+      // Ignored before the first fetch resolves: supportedCommands() tracks the latest push, so the
+      // fetch already returns this list, and re-emitting here would ship an empty model list.
+      if (this.#capabilitiesEmitted && !this.#closed) {
+        this.#emitCapabilities(msg.commands)
+      }
+      return
+    }
     if (msg.type === 'system' && msg.subtype === 'status') {
       this.#handleCompactionStatus(msg)
     }
@@ -567,18 +578,24 @@ export class SessionRunner implements Runner {
         return
       }
       this.#capabilitiesEmitted = true
-      this.#emit({
-        type: 'capabilities',
-        models: modelOptionsFromSdk(models),
-        defaultModel: defaultModelFromSdk(models),
-        commands: commands.map((c) => ({
-          name: c.name,
-          description: c.description,
-          argumentHint: c.argumentHint,
-          aliases: c.aliases,
-        })),
-      })
+      this.#models = modelOptionsFromSdk(models)
+      this.#defaultModel = defaultModelFromSdk(models)
+      this.#emitCapabilities(commands)
     } catch {}
+  }
+
+  #emitCapabilities(commands: readonly { name: string; description?: string; argumentHint?: string; aliases?: string[] }[]): void {
+    this.#emit({
+      type: 'capabilities',
+      models: this.#models ?? [],
+      defaultModel: this.#defaultModel,
+      commands: commands.map((c) => ({
+        name: c.name,
+        description: c.description,
+        argumentHint: c.argumentHint,
+        aliases: c.aliases,
+      })),
+    })
   }
 
   async #fetchEngineTitle(): Promise<void> {
