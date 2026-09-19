@@ -328,7 +328,7 @@ export function SessionPanel({
 
   const capabilities = state.capabilities
 
-  const { usage: profileUsage } = useProfileUsage(client, state.session?.profile, {
+  const { usage: profileUsage, spend: profileSpend } = useProfileUsage(client, state.session?.profile, {
     enabled: capabilities.rateLimits,
   })
   const usage = useMemo(
@@ -833,6 +833,9 @@ export function SessionPanel({
                         subscriptionType={state.subscriptionType}
                         engine={state.engine ?? 'claude'}
                         totalCostUsd={state.totalCostUsd}
+                        costUsd={state.costUsd}
+                        usageByModel={state.usageByModel}
+                        spend={profileSpend}
                         updatedAt={usageUpdatedAt}
                         open={panel === 'usage'}
                         onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}

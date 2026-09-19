@@ -883,7 +883,8 @@ struct UIPreviewHarness: View {
         ],
         subscriptionType: "max",
         engine: .claude,
-        totalCostUsd: 1.2345)
+        totalCostUsd: 1.2345,
+        costUsd: nil)
     case .context:
       ContextSheet(
         usage: ContextUsage(
@@ -910,6 +911,7 @@ struct UIPreviewHarness: View {
               key: "seven_day_fable", info: RateLimitInfo(status: "allowed", utilization: 92)),
           ],
           totalCostUsd: 1.23,
+          costUsd: nil,
           model: "claude-opus-5[1m]",
           models: Self.models,
           permissionMode: .acceptEdits,

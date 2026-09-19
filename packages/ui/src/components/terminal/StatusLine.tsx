@@ -75,10 +75,11 @@ export function TerminalStatusLine({
     )
   }
 
-  if (state.totalCostUsd > 0) {
+  const costUsd = state.costUsd ?? (state.totalCostUsd || undefined)
+  if (costUsd !== undefined && costUsd > 0) {
     parts.push(
       <Ink key="cost" tone="faint">
-        {formatCost(state.totalCostUsd)}
+        {formatCost(costUsd)}
       </Ink>,
     )
   }

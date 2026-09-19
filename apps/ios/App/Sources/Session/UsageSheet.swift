@@ -20,8 +20,12 @@ struct UsageSheet: View {
   let subscriptionType: String?
   let engine: ProfileEngine
   let totalCostUsd: Double
+  /// WorkerDeck's own figure for the same tokens. Preferred when present.
+  let costUsd: Double?
 
   @Environment(\.dismiss) private var dismiss
+
+  private var displayCostUsd: Double { costUsd ?? totalCostUsd }
 
   var body: some View {
     NavigationStack {
@@ -37,7 +41,7 @@ struct UsageSheet: View {
                     + "account reports them once any of its sessions has run a turn."
                   : "Plan windows are a claude.ai subscription thing; this session runs on a "
                     + "provider engine.")
-              Text("This session has cost \(Fmt.cost(totalCostUsd)).")
+              Text("This session has cost \(Fmt.cost(displayCostUsd)).")
                 .monospacedDigit()
             }
           }
@@ -76,7 +80,7 @@ struct UsageSheet: View {
 
       Section("This session") {
         LabeledContent("Cost") {
-          Text(Fmt.cost(totalCostUsd)).monospacedDigit()
+          Text(Fmt.cost(displayCostUsd)).monospacedDigit()
         }
       }
     }

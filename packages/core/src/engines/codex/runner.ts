@@ -17,6 +17,7 @@ import {
   type SessionStatus,
   type SkillInfo,
   type UserQuestion,
+  tokenUsageFromWire,
 } from '@workerdeck/protocol'
 import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
@@ -24,6 +25,7 @@ import { localCommandContext, localCommandTranscript, type LocalCommandResult } 
 import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
 import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
+import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
@@ -564,7 +566,7 @@ export class CodexRunner implements Runner {
   #workspaceWrite: CodexWorkspaceWrite | undefined
   #threadLoaded = false
   #numTurns = 0
-  #totalCostUsd: number | undefined
+  #cost = new CostLedger()
   #started = false
   #closed = false
   #imageDir: string | undefined
@@ -644,7 +646,9 @@ export class CodexRunner implements Runner {
       meta: this.#config.meta,
       scope: this.#config.scope,
       title: sessionTitle(this.#config),
-      totalCostUsd: this.#totalCostUsd,
+      totalCostUsd: this.#cost.reportedCostUsd,
+      costUsd: this.#cost.costUsd,
+      usageByModel: this.#cost.byModel,
       numTurns: this.#numTurns || undefined,
       lastActivityAt: this.#log.lastActivityAt,
       subagents: this.#agents.list(),
@@ -654,6 +658,14 @@ export class CodexRunner implements Runner {
 
   setTitle(title: string | undefined): void {
     this.#config = withTitle(this.#config, title)
+  }
+
+  carryCost(state: CostLedgerState): void {
+    this.#cost.carry(state)
+  }
+
+  costState(): CostLedgerState {
+    return this.#cost.snapshot()
   }
 
   start(): Promise<void> {
@@ -2006,25 +2018,31 @@ export class CodexRunner implements Runner {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'Turn ended' }, 'policy')
     }
     this.#numTurns += 1
-    this.#totalCostUsd = 0
     const usage = active.sawUsage ? active.usage : undefined
+    const wire = usage
+      ? {
+          input_tokens: Math.max(0, usage.inputTokens - usage.cachedInputTokens),
+          output_tokens: usage.outputTokens + usage.reasoningOutputTokens,
+          cache_creation_input_tokens: usage.cacheWriteInputTokens ?? 0,
+          cache_read_input_tokens: usage.cachedInputTokens,
+        }
+      : undefined
+    const turnByModel = wire ? { [this.#model ?? this.#resolvedModel ?? 'unknown']: tokenUsageFromWire(wire) } : undefined
+    if (turnByModel) {
+      this.#cost.observeDelta(turnByModel)
+    }
     this.#emit({
       type: 'turn_result',
       subtype: kind === 'success' ? 'success' : 'error_during_execution',
       isError: kind !== 'success',
       durationMs: Date.now() - startedAt,
       numTurns: this.#numTurns,
-      totalCostUsd: 0,
+      totalCostUsd: this.#cost.reportedCostUsd ?? 0,
       result: kind === 'success' ? (active.finalText ?? '') : undefined,
       errors,
-      usage: usage
-        ? {
-            input_tokens: Math.max(0, usage.inputTokens - usage.cachedInputTokens),
-            output_tokens: usage.outputTokens + usage.reasoningOutputTokens,
-            cache_creation_input_tokens: usage.cacheWriteInputTokens ?? 0,
-            cache_read_input_tokens: usage.cachedInputTokens,
-          }
-        : undefined,
+      usage: wire,
+      usageByModel: this.#cost.byModel,
+      costUsd: this.#cost.costUsd,
     })
     this.#emitContextUsage(active)
     this.#setStatus('idle')

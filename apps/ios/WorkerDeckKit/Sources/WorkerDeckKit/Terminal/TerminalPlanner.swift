@@ -307,10 +307,11 @@ public enum TerminalPlanner {
         call, metrics: metrics, expansion: expansion, inOpen: inOpen,
         frameParentId: frameParentId)
 
-    case .turnResult(_, let subtype, let isError, let durationMs, let totalCostUsd, let errors):
+    case .turnResult(
+      _, let subtype, let isError, let durationMs, let totalCostUsd, let costUsd, let errors):
       // No glyph: a turn ending is not something anyone said.
       let head =
-        "\(isError ? subtype : "done") · \(TermFmt.duration(ms: durationMs)) · \(TermFmt.cost(totalCostUsd))"
+        "\(isError ? subtype : "done") · \(TermFmt.duration(ms: durationMs)) · \(TermFmt.cost(costUsd ?? totalCostUsd))"
       var lines = wrapBody(
         head, metrics: metrics, gutter: "", tone: isError ? .red : .faint, inOpen: inOpen)
       for message in errors ?? [] {

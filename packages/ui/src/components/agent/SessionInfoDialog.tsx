@@ -46,7 +46,7 @@ export function SessionInfoDialog({ state, client, sessionId, open, onOpenChange
               {session?.createdAt ? <DialogRow label="Started">{formatRelativeTime(session.createdAt)}</DialogRow> : null}
               {session?.numTurns !== undefined ? <DialogRow label="Turns">{session.numTurns}</DialogRow> : null}
               <DialogRow label="Cost" mono>
-                {formatCost(state.totalCostUsd)}
+                {formatCost(state.costUsd ?? (state.totalCostUsd || undefined))}
               </DialogRow>
             </div>
             {state.capabilities.vfs ? <SessionFiles client={client} sessionId={sessionId} open={open} /> : null}

@@ -63,8 +63,11 @@ struct SessionStatusBar: View {
   /// Ordered slots from `TranscriptViewModel.hudRateLimits` - account usage
   /// merged over the session's own reading.
   let rateLimits: [UsageWindowRow]
-  /// Cumulative session cost, shown in place of the rings when no window reports.
+  /// Cumulative session cost as the engine reported it, shown in place of the
+  /// rings when no window reports.
   let totalCostUsd: Double
+  /// WorkerDeck's own figure for the same tokens. Preferred when present.
+  let costUsd: Double?
   let model: String?
   let models: [ModelOption]
   /// Nil until the engine reports it, which is one event later than this view's
@@ -72,6 +75,8 @@ struct SessionStatusBar: View {
   let permissionMode: PermissionMode?
   let onOpenModel: () -> Void
   let onOpenMode: () -> Void
+
+  private var displayCostUsd: Double { costUsd ?? totalCostUsd }
   /// The context ring and the usage rings each open their own sheet - the two
   /// gauges answer different questions, so one destination for both was a detour
   /// through a list every time.
@@ -218,13 +223,13 @@ struct SessionStatusBar: View {
         Group {
           if !rateLimits.isEmpty {
             UsageRings(windows: rateLimits)
-          } else if totalCostUsd > 0 {
+          } else if displayCostUsd > 0 {
             // Nothing to gauge yet: cost if there is any, and otherwise the
             // symbol alone, so the way into the usage sheet never disappears.
-            Text(Fmt.cost(totalCostUsd))
+            Text(Fmt.cost(displayCostUsd))
               .font(.caption2.monospacedDigit())
               .foregroundStyle(.secondary)
-              .accessibilityLabel("Session cost \(Fmt.cost(totalCostUsd))")
+              .accessibilityLabel("Session cost \(Fmt.cost(displayCostUsd))")
           } else {
             Image(systemName: "gauge")
               .font(.caption2)

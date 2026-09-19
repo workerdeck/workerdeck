@@ -40,6 +40,7 @@ import {
 } from '../../lib/normalize.ts'
 import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
 import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
+import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
@@ -89,7 +90,7 @@ export class SessionRunner implements Runner {
   #pending = new Map<string, PendingApproval>()
   #turnOverWhileBlocked = false
   #subagents = new SubagentTracker()
-  #totalCostUsd: number | undefined
+  #cost = new CostLedger()
   #numTurns: number | undefined
   #input = new InputQueue()
   #pendingLocalCommands: string[] = []
@@ -166,7 +167,9 @@ export class SessionRunner implements Runner {
       meta: this.#config.meta,
       scope: this.#config.scope,
       title: sessionTitle(this.#config, this.#engineTitle),
-      totalCostUsd: this.#totalCostUsd,
+      totalCostUsd: this.#cost.reportedCostUsd,
+      costUsd: this.#cost.costUsd,
+      usageByModel: this.#cost.byModel,
       numTurns: this.#numTurns,
       lastActivityAt: this.#log.lastActivityAt,
     }
@@ -174,6 +177,14 @@ export class SessionRunner implements Runner {
 
   setTitle(title: string | undefined): void {
     this.#config = withTitle(this.#config, title)
+  }
+
+  carryCost(state: CostLedgerState): void {
+    this.#cost.carryUnlessRestored(state)
+  }
+
+  costState(): CostLedgerState {
+    return this.#cost.snapshot()
   }
 
   start(): Promise<void> {
@@ -491,6 +502,7 @@ export class SessionRunner implements Runner {
     if (body) {
       this.#emit(body)
       if (body.type === 'conversation_reset') {
+        this.#cost.rollover()
         this.#pendingLocalCommands = []
         if (body.sdkSessionId) {
           this.#sdkSessionId = body.sdkSessionId
@@ -505,7 +517,10 @@ export class SessionRunner implements Runner {
         if (this.#compactionTurns > 1) {
           this.#settleCompaction()
         }
-        this.#totalCostUsd = body.totalCostUsd
+        this.#cost.observeCumulative(body.usageByModel, body.totalCostUsd)
+        body.totalCostUsd = this.#cost.reportedCostUsd ?? body.totalCostUsd
+        body.usageByModel = this.#cost.byModel
+        body.costUsd = this.#cost.costUsd
         this.#numTurns = body.numTurns
         if (this.#pending.size === 0) {
           this.#setStatus('idle')

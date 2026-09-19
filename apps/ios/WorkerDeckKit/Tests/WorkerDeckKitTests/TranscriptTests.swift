@@ -479,6 +479,33 @@ struct TranscriptTests {
     #expect(state.items[1].id == "turn-2")
   }
 
+  @Test func turnResultKeepsWorkerDeckOwnCostAndPerModelTokens() {
+    let state = reduce([
+      event(
+        1,
+        .turnResult(
+          TurnResultEvent(
+            subtype: "success", isError: false, durationMs: 100, numTurns: 1, totalCostUsd: 0.02,
+            usageByModel: ["claude-opus-5": TokenUsage(input: 1_000_000)], costUsd: 5))),
+      // An engine that reports no figure of its own leaves the last one standing.
+      event(
+        2,
+        .turnResult(
+          TurnResultEvent(
+            subtype: "success", isError: false, durationMs: 200, numTurns: 2,
+            totalCostUsd: 0.05))),
+    ])
+    #expect(state.costUsd == 5)
+    #expect(state.usageByModel?["claude-opus-5"]?.input == 1_000_000)
+    #expect(state.totalCostUsd == 0.05)
+    guard case .turnResult(_, _, _, _, let total, let cost, _) = state.items[0] else {
+      Issue.record("expected a turn result")
+      return
+    }
+    #expect(total == 0.02)
+    #expect(cost == 5)
+  }
+
   @Test func lifecycleNoticesAndFilesAppend() {
     let state = reduce([
       event(1, .fileDelivered(path: "out/report.md", bytes: 42, description: "the report")),
@@ -611,6 +638,28 @@ struct TranscriptTests {
     #expect(seeded.sdkSessionId == "sdk-live")
     #expect(seeded.permissionMode == .plan)
     #expect(seeded.engine == .provider)
+  }
+
+  // A dormant wake starts a fresh log, so nothing replays the spend and the
+  // snapshot is the only thing that still knows it.
+  @Test func seedCarriesCostAcrossALogThatStartsEmpty() {
+    let info = SessionInfo(
+      id: "s1", status: .idle, cwd: "/repo", createdAt: 0, lastSeq: 0, pendingPermissionCount: 0,
+      totalCostUsd: 0.4, costUsd: 0.37,
+      usageByModel: ["claude-opus-5": TokenUsage(input: 1_000)])
+
+    let woken = seedFromSessionInfo(.initial, info)
+    #expect(woken.totalCostUsd == 0.4)
+    #expect(woken.costUsd == 0.37)
+    #expect(woken.usageByModel?["claude-opus-5"]?.input == 1_000)
+
+    // A turn already counted in this log outranks the snapshot.
+    var live = TranscriptState.initial
+    live.totalCostUsd = 0.9
+    live.costUsd = 0.88
+    let seeded = seedFromSessionInfo(live, info)
+    #expect(seeded.totalCostUsd == 0.9)
+    #expect(seeded.costUsd == 0.88)
   }
 }
 

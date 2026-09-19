@@ -5,8 +5,13 @@ import type { ContextUsage, McpServerStatusInfo, RateLimitInfo, SessionInfo } fr
 import { rateLimitWindows, type TranscriptState } from '@workerdeck/react'
 import type { SessionVitals } from '@workerdeck/ui'
 import { Badge, Button, Spinner, TaskList, UsageMeters, cn } from '@workerdeck/ui'
-import { formatTokens } from '@workerdeck/ui/format'
+import { formatCost, formatTokens } from '@workerdeck/ui/format'
 import { RefreshCw } from 'lucide-react'
+
+function formatSessionCost(info: SessionInfo): string | undefined {
+  const usd = info.costUsd ?? info.totalCostUsd
+  return usd === undefined ? undefined : formatCost(usd)
+}
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
   if (value === undefined || value === null || value === '') {
@@ -30,7 +35,7 @@ export function InfoSection({ info }: { info: SessionInfo }) {
       <Row label="permission mode" value={info.permissionMode} />
       <Row label="credentials" value={info.apiKeySource} />
       <Row label="turns" value={info.numTurns} />
-      <Row label="cost" value={info.totalCostUsd !== undefined ? `$${info.totalCostUsd.toFixed(3)}` : undefined} />
+      <Row label="cost" value={formatSessionCost(info)} />
       <Row label="session id" value={<span className="font-mono text-[11px]">{info.id}</span>} />
     </div>
   )

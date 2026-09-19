@@ -1,6 +1,7 @@
 import { ENGINE_CAPABILITIES, mergeUsage, orderUsageWindows } from '@workerdeck/protocol'
 import type {
   ApiMessage,
+  ByModel,
   ChecklistItem,
   ContentBlock,
   ContextUsage,
@@ -71,6 +72,7 @@ export type TranscriptItem =
       isError: boolean
       durationMs: number
       totalCostUsd: number
+      costUsd?: number
       errors?: string[]
     }
   | { kind: 'notice'; id: string; level: 'info' | 'error'; text: string }
@@ -120,6 +122,8 @@ export type TranscriptState = {
   items: TranscriptItem[]
   pendingApprovals: PermissionRequest[]
   totalCostUsd: number
+  costUsd?: number
+  usageByModel?: ByModel
   lastSeq: number
 }
 
@@ -241,6 +245,11 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
     sdkSessionId: state.sdkSessionId ?? info.sdkSessionId,
     engine,
     capabilities: info.capabilities ?? ENGINE_CAPABILITIES[engine ?? 'claude'],
+    // Spend outlives the log a replay is built from: a dormant wake starts a fresh log with no `turn_result` in it,
+    // so the snapshot is the only thing that still knows what the session cost before it slept.
+    totalCostUsd: state.totalCostUsd || (info.totalCostUsd ?? 0),
+    costUsd: state.costUsd ?? info.costUsd,
+    usageByModel: state.usageByModel ?? info.usageByModel,
     session: info,
   }
 }
@@ -545,6 +554,8 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       return {
         ...base,
         totalCostUsd: event.totalCostUsd,
+        costUsd: event.costUsd ?? base.costUsd,
+        usageByModel: event.usageByModel ?? base.usageByModel,
         items: [
           ...base.items.map((item) => {
             if (!isStreamingItem(item)) {
@@ -562,6 +573,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
             isError: event.isError,
             durationMs: event.durationMs,
             totalCostUsd: event.totalCostUsd,
+            costUsd: event.costUsd,
             errors: event.errors,
           },
         ],

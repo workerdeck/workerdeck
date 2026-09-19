@@ -206,7 +206,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
   case toolCall(ToolCallItem)
   case turnResult(
     id: String, subtype: String, isError: Bool, durationMs: Double, totalCostUsd: Double,
-    errors: [String]?)
+    costUsd: Double? = nil, errors: [String]?)
   case notice(id: String, level: NoticeLevel, text: String)
   /// The agent handed over a session file (`file_delivered`). Render a download
   /// card; the file is served by GET /sessions/:id/files/<path> while the session
@@ -222,7 +222,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
     case .assistantText(let id, _, _, _): return id
     case .thinking(let id, _, _): return id
     case .toolCall(let call): return call.id
-    case .turnResult(let id, _, _, _, _, _): return id
+    case .turnResult(let id, _, _, _, _, _, _): return id
     case .notice(let id, _, _): return id
     case .fileDelivered(let id, _, _, _): return id
     case .compaction(let item): return item.id
@@ -298,6 +298,11 @@ public struct TranscriptState: Sendable, Equatable {
   public var items: [TranscriptItem]
   public var pendingApprovals: [PermissionRequest]
   public var totalCostUsd: Double
+  /// WorkerDeck's own session-cumulative figure, priced from `usageByModel`.
+  /// Absent until a gateway that computes it reports one; every cost surface
+  /// falls back to `totalCostUsd`.
+  public var costUsd: Double?
+  public var usageByModel: ByModel?
   public var lastSeq: Int
 
   public init(
@@ -312,7 +317,8 @@ public struct TranscriptState: Sendable, Equatable {
     rateLimits: [String: RateLimitInfo]? = nil, rateLimitsUpdatedAt: Double? = nil,
     subscriptionType: String? = nil,
     items: [TranscriptItem] = [],
-    pendingApprovals: [PermissionRequest] = [], totalCostUsd: Double = 0, lastSeq: Int = 0
+    pendingApprovals: [PermissionRequest] = [], totalCostUsd: Double = 0,
+    costUsd: Double? = nil, usageByModel: ByModel? = nil, lastSeq: Int = 0
   ) {
     self.status = status
     self.statusDetail = statusDetail
@@ -335,6 +341,8 @@ public struct TranscriptState: Sendable, Equatable {
     self.items = items
     self.pendingApprovals = pendingApprovals
     self.totalCostUsd = totalCostUsd
+    self.costUsd = costUsd
+    self.usageByModel = usageByModel
     self.lastSeq = lastSeq
   }
 
@@ -494,6 +502,12 @@ public func seedFromSessionInfo(_ state: TranscriptState, _ info: SessionInfo) -
   // Never changes for a live session, and no event carries it - the snapshot is
   // the only source, so take it whenever it is present.
   next.engine = info.engine ?? state.engine
+  // Spend outlives the log a replay is built from: a dormant wake starts a fresh
+  // log with no `turn_result` in it, so the snapshot is the only thing that still
+  // knows what the session cost before it slept.
+  if next.totalCostUsd == 0 { next.totalCostUsd = info.totalCostUsd ?? 0 }
+  next.costUsd = state.costUsd ?? info.costUsd
+  next.usageByModel = state.usageByModel ?? info.usageByModel
   return next
 }
 
@@ -767,8 +781,10 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
     }
 
   case .turnResult(let payload):
-    // totalCostUsd is session-cumulative on each SDK result message.
+    // Every one of these is session-cumulative as of this turn, not the turn's own spend.
     next.totalCostUsd = payload.totalCostUsd
+    next.costUsd = payload.costUsd ?? next.costUsd
+    next.usageByModel = payload.usageByModel ?? next.usageByModel
     // The turn is over: whatever is still streaming is this turn's final text -
     // an interrupted or failed turn never sends the assistant_message that
     // normally supersedes it. Finalize it under a stable id, or the *next*
@@ -796,7 +812,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
       .turnResult(
         id: "turn-\(event.seq)", subtype: payload.subtype, isError: payload.isError,
         durationMs: payload.durationMs, totalCostUsd: payload.totalCostUsd,
-        errors: payload.errors))
+        costUsd: payload.costUsd, errors: payload.errors))
 
   case .permissionRequested(let request):
     next.pendingApprovals.append(request)

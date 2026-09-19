@@ -167,7 +167,7 @@ export function activate(context: vscode.ExtensionContext): void {
       {
         title: info?.title ?? active.sessionId.slice(0, 8),
         hostName: active.host.name,
-        cost: info?.totalCostUsd,
+        cost: info?.costUsd ?? info?.totalCostUsd,
       },
       vitals,
     )

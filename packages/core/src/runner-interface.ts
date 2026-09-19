@@ -1,6 +1,7 @@
 import type { McpServerStatusInfo, PermissionMode, PermissionRequest, ProfileEngine, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
+import type { CostLedgerState } from './lib/cost-ledger.ts'
 import type { LocalCommandResult } from './lib/local-command.ts'
 import type { ToolExecutionResult } from './executors/tool-executor.ts'
 
@@ -57,6 +58,12 @@ export interface Runner {
   settleExecution?(executionId: string, result: ToolExecutionResult): boolean
   park?(): RunnerSnapshot | undefined
   snapshot?(): RunnerSnapshot | undefined
+  // A rebuilt engine process may count spend from zero or restore its own running total, and which one it did is
+  // only knowable from the first reading it produces. `costState()` is what a park persists so the rebuild can tell
+  // the restorable share from the rest; `carryCost` hands it back. Additive for codex and provider, reconciled for
+  // claude - see `CostLedger`.
+  carryCost?(state: CostLedgerState): void
+  costState?(): CostLedgerState
   fail(message: string): void
   close(reason?: 'client' | 'server' | 'error'): void
 }

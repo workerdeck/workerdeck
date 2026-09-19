@@ -1,3 +1,5 @@
+import type { ByModel, ProfileSpend } from './pricing.ts'
+
 export const PROTOCOL_VERSION = 1
 
 export type SessionStatus = 'starting' | 'running' | 'awaiting_approval' | 'idle' | 'parked' | 'failed' | 'closed'
@@ -285,6 +287,8 @@ export type SessionEventBody =
       result?: string
       errors?: string[]
       usage?: unknown
+      usageByModel?: ByModel
+      costUsd?: number
     }
   | { type: 'permission_requested'; request: PermissionRequest }
   | {
@@ -537,6 +541,7 @@ export type ProfileInfo = {
   available?: boolean
   unavailableReason?: string
   usage?: ProfileUsage
+  spend?: ProfileSpend
   managed?: boolean
 }
 
@@ -663,6 +668,8 @@ export type SessionInfo = {
   meta?: Record<string, unknown>
   title?: string
   totalCostUsd?: number
+  costUsd?: number
+  usageByModel?: ByModel
   numTurns?: number
   activityCount?: number
   // Rows of the kind a person is actually waiting to read - see `transcriptProse`.
@@ -1019,6 +1026,7 @@ export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
 
 export * from './checklist.ts'
+export * from './pricing.ts'
 export * from './session-list.ts'
 export * from './tool-titles.ts'
 export * from './usage.ts'

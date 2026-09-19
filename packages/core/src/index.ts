@@ -6,6 +6,7 @@ export type { HistoryFn, QueryFn, SessionRunnerConfig } from './engines/claude/r
 export { checkClaudeAuth, resolveBundledClaudeExecutable } from './engines/claude/auth.ts'
 export type { ClaudeAuthProbe, ClaudeAuthStatus } from './engines/claude/auth.ts'
 export type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, SessionEventListener } from './runner-interface.ts'
+export { CostLedger, type CostFigures, type CostLedgerState } from './lib/cost-ledger.ts'
 export type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './executors/tool-executor.ts'
 export { QuickJsExecutor, isHostAllowed } from './executors/quickjs-executor.ts'
 export type { HostFetch, QuickJsExecutorOptions } from './executors/quickjs-executor.ts'

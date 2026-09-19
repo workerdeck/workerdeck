@@ -270,7 +270,7 @@ export function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 
   return (
     <div>
       <Row tone={item.isError ? 'red' : 'faint'}>
-        {item.isError ? item.subtype : 'done'} · {formatDuration(item.durationMs)} · {formatCost(item.totalCostUsd)}
+        {item.isError ? item.subtype : 'done'} · {formatDuration(item.durationMs)} · {formatCost(item.costUsd ?? item.totalCostUsd)}
       </Row>
       {item.errors?.map((message, index) => (
         <Row key={index} tone="red">

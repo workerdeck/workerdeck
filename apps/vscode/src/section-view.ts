@@ -105,8 +105,8 @@ function headerDescription(kind: SectionKind, state: SidebarState, vitals: Sessi
   if (kind === 'mcp' && !caps.mcpStatus) {
     return 'not supported'
   }
-  if (kind === 'usage' && info.totalCostUsd !== undefined) {
-    return formatCost(info.totalCostUsd)
+  if (kind === 'usage' && (info.costUsd ?? info.totalCostUsd) !== undefined) {
+    return formatCost(info.costUsd ?? info.totalCostUsd)
   }
   if (kind === 'tasks') {
     return taskCountLabel(taskSummary(vitals?.tasks ?? sessionTasks(info)))

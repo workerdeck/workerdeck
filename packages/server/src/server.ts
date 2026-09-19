@@ -36,6 +36,7 @@ import { SessionParkManager } from './services/parking.ts'
 import { ProducedFileStore } from './services/produced-files.ts'
 import { ProfileService } from './services/profiles.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
+import { SpendLedger } from './services/spend-ledger.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
@@ -96,6 +97,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const profileDefaultModels = new Map<string, string>()
   const profileUsage = new ProfileUsageTracker()
+  const spendLedger = new SpendLedger({
+    store: options.spend?.store,
+    monthlySubscriptionUsd: (name) => options.spend?.monthlySubscriptionUsd?.[name] ?? options.spend?.monthlySubscriptionUsd?.['*'],
+    onError: (error) => options.spend?.onError?.(error),
+  })
+  void spendLedger.load()
   // The backstop behind the attach-time refresh, for the surface that reads the account number without opening a
   // session at all. Fire and forget: this request still answers with what is known, and the newer reading arrives
   // as a `rate_limit` event moments later. One session per profile is enough - the reading is account-level - and
@@ -136,6 +143,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         refreshStaleUsage(name)
         return profileUsage.usage(name)
       },
+      spend: (name) => spendLedger.spend(name),
     },
   })
   for (const p of options.profiles ?? []) {
@@ -177,7 +185,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     // the case that needs it: the runner outlives this server, and these closures would otherwise keep delivering
     // webhooks and pushes from a generation that is over, one extra copy per reload.
     onRegister: (runner) => {
-      const detachers = [notifier.watch(runner), producedFiles.watch(runner), profileUsage.watch(runner), shell?.watch(runner)]
+      const detachers = [
+        notifier.watch(runner),
+        producedFiles.watch(runner),
+        profileUsage.watch(runner),
+        spendLedger.watch(runner),
+        shell?.watch(runner),
+      ]
       const profile = runner.info().profile
       if (profile) {
         detachers.push(

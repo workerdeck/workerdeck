@@ -33,9 +33,10 @@ struct TranscriptItemView: View {
     case .toolCall(let call):
       ToolCallCard(call: call, isExpanded: $isExpanded)
         .nested(call.parentToolUseId != nil)
-    case .turnResult(_, _, let isError, let durationMs, let totalCostUsd, let errors):
+    case .turnResult(_, _, let isError, let durationMs, let totalCostUsd, let costUsd, let errors):
       TurnResultRow(
-        isError: isError, durationMs: durationMs, totalCostUsd: totalCostUsd, errors: errors)
+        isError: isError, durationMs: durationMs, totalCostUsd: totalCostUsd, costUsd: costUsd,
+        errors: errors)
     case .notice(_, let level, let text):
       NoticeRow(level: level, text: text)
     case .fileDelivered(_, let path, let bytes, let description):
@@ -147,6 +148,7 @@ private struct TurnResultRow: View {
   let isError: Bool
   let durationMs: Double
   let totalCostUsd: Double
+  let costUsd: Double?
   let errors: [String]?
 
   var body: some View {
@@ -159,7 +161,7 @@ private struct TurnResultRow: View {
     VStack(alignment: .center, spacing: 3) {
       HStack(spacing: 6) {
         Image(systemName: isError ? "xmark.circle.fill" : "checkmark.circle")
-        Text("\(Fmt.duration(ms: durationMs)) · \(Fmt.cost(totalCostUsd))")
+        Text("\(Fmt.duration(ms: durationMs)) · \(Fmt.cost(costUsd ?? totalCostUsd))")
           .monospacedDigit()
       }
       .font(.caption2)

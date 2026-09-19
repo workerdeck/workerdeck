@@ -1,7 +1,14 @@
 import { existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
-import { createFileProfileStore, createFileSessionStore, createWorkerServer, type CarriedSession, type WorkerServer } from '@workerdeck/server'
+import {
+  createFileProfileStore,
+  createFileSessionStore,
+  createFileSpendStore,
+  createWorkerServer,
+  type CarriedSession,
+  type WorkerServer,
+} from '@workerdeck/server'
 import { dashboardDir } from '@workerdeck/web'
 import { createApnsRoute } from '../apns/routes.ts'
 import { createApnsForwarder } from '../apns/forwarder.ts'
@@ -200,12 +207,20 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   // so management stays refused rather than silently forgetting every profile on restart.
   const profileStore = config.profileStore && config.stateDir ? createFileProfileStore(join(config.stateDir, 'profiles.json')) : undefined
 
+  const spend = { ...config.options.spend }
+  if (config.stateDir && !spend.store) {
+    spend.store = createFileSpendStore(join(config.stateDir, 'spend.json'), (error) => {
+      process.stderr.write(`[workerdeck] spend ledger write failed: ${error instanceof Error ? error.message : String(error)}\n`)
+    })
+  }
+
   const server = createWorkerServer({
     ...config.options,
     ...(profileStore ? { profileStore } : {}),
     // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
     parking,
+    spend,
     // Composed, not replaced: turning push on must not unhook a config file's own observer.
     notifications:
       apns === undefined

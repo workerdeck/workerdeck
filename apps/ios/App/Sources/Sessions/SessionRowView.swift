@@ -186,7 +186,8 @@ struct SessionRowView: View {
       // `formatCost` ($3.10, and `<$0.01` rather than a fourth decimal), and a
       // list row is exactly where the same person compares the three clients.
       // `Fmt.cost` keeps its four decimals where a *single turn* is priced.
-      (session.totalCostUsd ?? 0) > 0 ? TermFmt.cost(session.totalCostUsd) : nil,
+      (session.costUsd ?? session.totalCostUsd ?? 0) > 0
+        ? TermFmt.cost(session.costUsd ?? session.totalCostUsd) : nil,
     ].compactMap({ $0 }) {
       parts.append(Text(extra).foregroundStyle(.secondary))
     }

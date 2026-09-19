@@ -325,6 +325,10 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   /// session's `rate_limit` events on this profile - never behind what one
   /// transcript holds. Render through `mergeUsage`, not instead of it.
   public let usage: ProfileUsage?
+  /// Response-only: the gateway's rolling spend ledger for this profile, priced
+  /// from per-model token counts rather than from anything an engine billed.
+  /// Absent on a gateway that predates the field.
+  public let spend: ProfileSpend?
   /// Response-only: store-backed and editable through the API.
   public let managed: Bool?
 
@@ -345,7 +349,8 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     defaults: ProfileDefaults? = nil, session: ProfileSessionDefaults? = nil,
     models: [ModelOption]? = nil, defaultModel: String? = nil,
     capabilities: EngineCapabilities? = nil, available: Bool? = nil,
-    unavailableReason: String? = nil, usage: ProfileUsage? = nil, managed: Bool? = nil
+    unavailableReason: String? = nil, usage: ProfileUsage? = nil, spend: ProfileSpend? = nil,
+    managed: Bool? = nil
   ) {
     self.name = name
     self.engine = engine
@@ -361,6 +366,7 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     self.available = available
     self.unavailableReason = unavailableReason
     self.usage = usage
+    self.spend = spend
     self.managed = managed
   }
 }
@@ -566,7 +572,14 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let meta: [String: JSONValue]?
   /// Display title: meta.title if the host set one, else derived (e.g. first prompt).
   public let title: String?
+  /// What the engine itself reported. Claude only, and absent everywhere else.
   public let totalCostUsd: Double?
+  /// WorkerDeck's own figure, priced from `usageByModel`. Prefer it over
+  /// `totalCostUsd` wherever a session's cost is drawn; absent on a gateway
+  /// that predates the field, which is why every reader still falls back.
+  public let costUsd: Double?
+  /// Session-cumulative per-model token counts, for every engine.
+  public let usageByModel: ByModel?
   public let numTurns: Int?
   /// How many transcript rows this session has produced (`transcriptActivity`'s
   /// unit) - a monotonic counter a client can diff against a remembered value to
@@ -636,6 +649,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, epoch: Int? = nil, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
+    costUsd: Double? = nil, usageByModel: ByModel? = nil,
     numTurns: Int? = nil, activityCount: Int? = nil, proseCount: Int? = nil,
     lastActivityAt: Double? = nil,
     subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
@@ -660,6 +674,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.meta = meta
     self.title = title
     self.totalCostUsd = totalCostUsd
+    self.costUsd = costUsd
+    self.usageByModel = usageByModel
     self.numTurns = numTurns
     self.activityCount = activityCount
     self.proseCount = proseCount

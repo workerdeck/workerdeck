@@ -66,7 +66,7 @@ export function SessionItem({
   const project = showProject ? projectLabel(row) : projectSubpath(row)
   const projectIcon = showProject ? info.project?.icon : undefined
   const iconSrc = projectIcon?.type === 'image' ? projectIcons?.[projectIcon.hash] : undefined
-  const cost = formatCost(info.totalCostUsd)
+  const cost = formatCost(info.costUsd ?? info.totalCostUsd)
   const extras = [
     showGateway ? row.hostName : undefined,
     info.profile ? `@${info.profile}` : undefined,

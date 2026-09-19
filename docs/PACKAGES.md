@@ -341,6 +341,39 @@ gate as every other `/sessions/:id/*` route, and a scoped principal's miss is th
 project-keyed route would need the project root in the URL, and a route addressed by host paths is
 an existence oracle for the gateway's filesystem.
 
+### Pricing
+
+`pricing.ts` is the whole of what the repo knows about money. It holds a bundled, dated rate table
+(`DEFAULT_PRICING`, `PRICING_AS_OF`) in USD per million tokens, and the functions that turn token
+counts into dollars: `canonicalModel`, `rateFor`, `costOf`, `costOfByModel`, `tokenUsageFromWire`,
+`meteredCost`, `subscriptionComparison`. It lives here rather than in `core` because every client
+prices for itself: the browser side never round-trips for a dollar figure, and iOS hand-mirrors the
+module the way it hand-mirrors the reducer.
+
+Three rules the table encodes, none of them inferable from the numbers:
+
+- **Cache tiers are separate rates.** Anthropic prices a 5m cache write at 1.25x fresh input, a 1h
+  write at 2x, and a read at 0.1x, except where a model prices reads off that ladder (Fable 5.1
+  reads at a flat $0.25/MTok). OpenAI charges no write premium at all and publishes the cached-input
+  rate directly. Collapsing these into one per-token rate makes the estimate meaningless on an
+  agentic workload, where cache reads are most of the tokens.
+- **An unpriced model is worth `undefined`, never `0`.** A missing row for the model you actually use
+  understates by an order of magnitude and looks entirely plausible, so `CostBreakdown` carries
+  `unpricedTokens` and `unpricedShare` and the UI warns above `UNPRICED_WARN_SHARE` rather than
+  drawing a confident number.
+- **A dollar figure here is never a bill.** A subscription is a flat fee; this is what the same
+  tokens would have cost on the pay-as-you-go API. `PRICING_NOTE` is the sentence every surface
+  shows, and keeping it honest is the point of `PRICING_AS_OF`.
+
+The ledger that consumes this table lives in `core` (`lib/cost-ledger.ts`) and its carry rules are in
+`docs/GOTCHAS.md`: the short version is that an engine's running total belongs to its process, not to
+the session, and the claude carry has to be reconciled rather than added because the CLI restores its
+own total from its transcript on a resume.
+
+`meteredCost` is the other question the same tokens answer: a plan window meters fresh input, output
+and cache writes, and does not meter cache reads, which is why quota burn and API-equivalent cost
+diverge so widely.
+
 ## `packages/core`
 
 the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
@@ -479,6 +512,18 @@ replayed reading must not clobber a live one), and the **0%-after-reset inferenc
 serve time** - it is a function of the wall clock, and a fabricated `rate_limit` event would be
 replayed from transcripts forever and captured into parking snapshots. `inferredReset` keeps
 that zero distinguishable from an engine-reported one; absent stays **unknown, never 0%**.
+**Spend per profile** (`spend-ledger.ts` → `ProfileInfo.spend`) is the same argument carried into
+money: plan usage says how full the window is, and says nothing about what the account has actually
+spent over a week. `SpendLedger` banks a per-turn delta by differencing the session-cumulative
+`turn_result.usageByModel` against what that session last contributed, seeded at watch time from
+`runner.info().usageByModel` so a woken session's carried spend is not banked twice. Buckets are
+`day → profile → ByModel`, persisted debounced to `spend.json` under the state dir (in memory only
+without one), pruned to 92 days. A backwards delta is dropped rather than recorded, because a
+cumulative figure only goes down when the baseline belonged to something else. The
+subscription-relative reading needs `spend.monthlySubscriptionUsd` in the gateway config, keyed by
+profile with `'*'` as the fallback: a plan reports its tier, never its price, so the flat fee is the
+one number the gateway cannot discover.
+
 Plus: optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD),
 `GET /sessions/:id/files`,
 message attachments (`attachments.ts` - bytes held per session so the event log carries only

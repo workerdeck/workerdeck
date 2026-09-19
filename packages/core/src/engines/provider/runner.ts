@@ -14,12 +14,15 @@ import {
   type SessionInfo,
   type SessionStatus,
   type ToolExecutionBackend,
+  type ByModel,
+  tokenUsageFromWire,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
 import type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, SessionEventListener } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
+import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
@@ -61,7 +64,6 @@ export type AiSdkSessionState = {
   pendingToolCalls: PendingToolCall[]
   dispatched: string[]
   numTurns: number
-  totalUsage: { input: number; output: number; cacheWrite: number; cacheRead: number }
   turnAccum?: { startedAt: number; input: number; output: number; cacheWrite: number; cacheRead: number }
   permissionMode: PermissionMode
   model?: string
@@ -91,7 +93,7 @@ export class AiSdkRunner implements Runner {
   #abort: AbortController | undefined
   #turnAccum: { startedAt: number; input: number; output: number; cacheWrite: number; cacheRead: number } | undefined
   #numTurns = 0
-  #totalUsage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+  #cost = new CostLedger()
   #started = false
   #closed = false
   #parked = false
@@ -137,7 +139,6 @@ export class AiSdkRunner implements Runner {
     }
     this.#dispatched = new Set(state.dispatched)
     this.#numTurns = state.numTurns
-    this.#totalUsage = { ...state.totalUsage }
     this.#turnAccum = state.turnAccum ? { ...state.turnAccum } : undefined
     if (this.#turnAccum && state.parkedAt !== undefined) {
       this.#turnAccum.startedAt += Date.now() - state.parkedAt
@@ -200,8 +201,22 @@ export class AiSdkRunner implements Runner {
       scope: this.#config.scope,
       title: sessionTitle(this.#config),
       numTurns: this.#numTurns || undefined,
+      costUsd: this.#cost.costUsd,
+      usageByModel: this.#cost.byModel,
       lastActivityAt: this.#log.lastActivityAt,
     }
+  }
+
+  carryCost(state: CostLedgerState): void {
+    this.#cost.carry(state)
+  }
+
+  costState(): CostLedgerState {
+    return this.#cost.snapshot()
+  }
+
+  #turnByModel(accum: { input: number; output: number; cacheWrite: number; cacheRead: number }): ByModel {
+    return { [this.#modelId() ?? 'unknown']: tokenUsageFromWire(turnUsage(accum)) }
   }
 
   start(): Promise<void> {
@@ -258,7 +273,6 @@ export class AiSdkRunner implements Runner {
       pendingToolCalls: [...this.#pendingToolCalls.values()],
       dispatched: [...this.#dispatched],
       numTurns: this.#numTurns,
-      totalUsage: { ...this.#totalUsage },
       turnAccum: this.#turnAccum ? { ...this.#turnAccum } : undefined,
       permissionMode: this.#permissionMode,
       model: this.#modelAlias,
@@ -973,10 +987,8 @@ export class AiSdkRunner implements Runner {
   #finishTurn(text: string): void {
     const accum = this.#turnAccum ?? { startedAt: Date.now(), input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
     this.#numTurns += 1
-    this.#totalUsage.input += accum.input
-    this.#totalUsage.output += accum.output
-    this.#totalUsage.cacheWrite += accum.cacheWrite
-    this.#totalUsage.cacheRead += accum.cacheRead
+    const byModel = this.#turnByModel(accum)
+    this.#cost.observeDelta(byModel)
     this.#emit({
       type: 'turn_result',
       subtype: 'success',
@@ -986,6 +998,8 @@ export class AiSdkRunner implements Runner {
       totalCostUsd: 0,
       result: text,
       usage: turnUsage(accum),
+      usageByModel: this.#cost.byModel,
+      costUsd: this.#cost.costUsd,
     })
     this.#turnAccum = undefined
     this.#setStatus('idle')

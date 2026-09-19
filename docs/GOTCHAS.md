@@ -11,8 +11,36 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - The SDK version floats (`^0.3.x`) and its unions grow; protocol mirrors must stay assignable
   both ways (SDK to protocol for events, protocol to SDK for options). Unmodeled SDK messages pass
   through as `sdk_event`: extend the protocol first-class, don't parse payloads client-side.
-- `total_cost_usd`/`num_turns` on result messages are session-cumulative: roll up last-seen, never
-  sum. `usage` is per-turn: sum input+output+cache_creation+cache_read.
+- `total_cost_usd`/`num_turns` on result messages are cumulative **for the engine process**, not for
+  the session: roll up last-seen within one process, never sum. `usage` is per-turn: sum
+  input+output+cache_creation+cache_read.
+- **A session outlives its engine process**, through a dormant wake, a rebuild after a park, and a
+  mid-session context clear. `CostLedger` (`core/src/lib/cost-ledger.ts`) is what keeps the session
+  total whole: `observeCumulative` for an engine that reports a running total (claude),
+  `observeDelta` for one that does not (codex, provider), `rollover()` at a `conversation_reset`,
+  and `carryCost()` at rebuild from the `costState()` the park record saved.
+- **A rebuilt claude process does not reliably count from zero, so its carry is reconciled, not
+  added.** The CLI writes a `cost-state` line into its own transcript and restores `totalCostUSD` and
+  `modelUsage` from it on a resume or a fork, so the woken process's first result already carries the
+  earlier turns. But a transcript written by a CLI predating that feature has no such line, and then
+  it does start at zero, and nothing the SDK emits says which happened. So `carryUnlessRestored` holds
+  the restorable share pending and decides **once**, at the first non-empty cumulative reading: a
+  restored total is the baseline plus new spend, hence at least the baseline on every model and every
+  token field at once, and a reading that clears that bar is taken to already contain it. Adding
+  unconditionally, which is the obvious implementation, **doubles the total in the common case**.
+  Codex and provider report deltas and stay purely additive. A `/clear` is the one boundary that is
+  certain: the CLI zeroes the ledger and scopes it to a new conversation id, so `rollover()` folds
+  deterministically and pre-clear spend is never restorable.
+- **`SessionInfo.totalCostUsd` and `SessionInfo.costUsd` are different claims.** `totalCostUsd` is
+  what the engine reported and only claude reports one; `costUsd` is our own figure, priced from
+  `usageByModel` through `protocol/src/pricing.ts`. Display surfaces read `costUsd ?? totalCostUsd`.
+  An unpriced model yields `undefined`, never `0`: `$0.00` means free, `-` means unknown, and a
+  table with no row for the model you actually use understates by an order of magnitude while
+  looking fine, which is what `unpricedShare` exists to surface.
+- `turn_result.usageByModel` and `turn_result.costUsd` are **session-cumulative for every engine**,
+  which is what lets the server's `SpendLedger` bank a per-turn delta by differencing. Its baseline
+  comes from `runner.info().usageByModel` at watch time, so a woken session's carried spend is not
+  banked a second time.
 - On `resume` the SDK re-streams only user messages; the runner backfills full history as
   `replay: true` events and the reducer dedupes doubled user messages by uuid. The SDK never
   echoes streamed-input user messages: the runner emits `user_message` itself in `sendMessage()`.

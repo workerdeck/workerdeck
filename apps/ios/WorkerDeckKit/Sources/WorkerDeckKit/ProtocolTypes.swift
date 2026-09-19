@@ -896,10 +896,18 @@ public struct TurnResultEvent: Decodable, Sendable, Equatable {
   public let result: String?
   public let errors: [String]?
   public let usage: JSONValue?
+  /// Session-cumulative per-model token counts as of this turn, for every
+  /// engine. Absent on a gateway that predates the field.
+  public let usageByModel: ByModel?
+  /// WorkerDeck's own session-cumulative figure, priced from `usageByModel`.
+  /// `totalCostUsd` keeps its old meaning: what the engine itself reported,
+  /// which only Claude does.
+  public let costUsd: Double?
 
   public init(
     subtype: String, isError: Bool, durationMs: Double, numTurns: Int, totalCostUsd: Double,
-    result: String? = nil, errors: [String]? = nil, usage: JSONValue? = nil
+    result: String? = nil, errors: [String]? = nil, usage: JSONValue? = nil,
+    usageByModel: ByModel? = nil, costUsd: Double? = nil
   ) {
     self.subtype = subtype
     self.isError = isError
@@ -909,6 +917,8 @@ public struct TurnResultEvent: Decodable, Sendable, Equatable {
     self.result = result
     self.errors = errors
     self.usage = usage
+    self.usageByModel = usageByModel
+    self.costUsd = costUsd
   }
 }
 

@@ -17,7 +17,7 @@ function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_r
       <div className="flex items-center gap-2">
         <div className="h-px flex-1 bg-border" />
         <span className={cn('font-mono text-label', item.isError ? 'text-danger' : 'text-fg-4')}>
-          {item.isError ? item.subtype : 'turn done'} · {formatDuration(item.durationMs)} · {formatCost(item.totalCostUsd)}
+          {item.isError ? item.subtype : 'turn done'} · {formatDuration(item.durationMs)} · {formatCost(item.costUsd ?? item.totalCostUsd)}
         </span>
         <div className="h-px flex-1 bg-border" />
       </div>

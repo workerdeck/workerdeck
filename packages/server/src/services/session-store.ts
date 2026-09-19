@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
+import type { CostLedgerState, ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import type { SessionInfo } from '@workerdeck/protocol'
 
 export type ParkedSessionRecord = {
@@ -11,6 +11,7 @@ export type ParkedSessionRecord = {
   config: SessionRunnerConfig
   snapshot: RunnerSnapshot
   executions: ParkedExecution[]
+  cost?: CostLedgerState
   parkedAt: number
 }
 
@@ -25,6 +26,7 @@ export type DormantSessionRecord = {
   profile?: string
   config: SessionRunnerConfig
   sdkSessionId: string
+  cost?: CostLedgerState
   savedAt: number
 }
 

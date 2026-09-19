@@ -1,7 +1,24 @@
-import type { McpServerStatus, SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { sanitizeToolTitle } from '@workerdeck/protocol'
+import type { McpServerStatus, SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
+import { type ByModel, canonicalModel, emptyTokenUsage, sanitizeToolTitle } from '@workerdeck/protocol'
 import type { ApiMessage, ContentBlock, McpServerStatusInfo, ModelOption, SessionEventBody, TextBlock } from '@workerdeck/protocol'
 import { filePatchFromToolResult } from './patch.ts'
+
+export function byModelFromSdk(modelUsage: SDKResultMessage['modelUsage'] | undefined): ByModel | undefined {
+  if (!modelUsage) {
+    return undefined
+  }
+  const out: ByModel = {}
+  for (const [model, entry] of Object.entries(modelUsage)) {
+    out[entry.canonicalModel ?? canonicalModel(model)] = {
+      ...emptyTokenUsage(),
+      input: Math.max(0, entry.inputTokens ?? 0),
+      output: Math.max(0, entry.outputTokens ?? 0),
+      cacheWrite5m: Math.max(0, entry.cacheCreationInputTokens ?? 0),
+      cacheRead: Math.max(0, entry.cacheReadInputTokens ?? 0),
+    }
+  }
+  return Object.keys(out).length === 0 ? undefined : out
+}
 
 const FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']
 
@@ -255,6 +272,7 @@ export function normalizeSdkMessage(msg: SDKMessage): SessionEventBody | null {
         result: msg.subtype === 'success' ? msg.result : undefined,
         errors: msg.subtype === 'success' ? undefined : msg.errors,
         usage: msg.usage,
+        usageByModel: byModelFromSdk(msg.modelUsage),
       }
     }
     case 'conversation_reset': {

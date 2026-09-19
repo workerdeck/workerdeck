@@ -431,7 +431,7 @@ private func scrubberMarks(_ input: ScrubberInput) -> [ScrubberMark] {
       marks.append(
         ScrubberMark(kind: .user, itemIndex: index, rowIndex: input.rows.rowIndex(forItem: index)))
 
-    case .turnResult(_, _, let isError, _, _, _):
+    case .turnResult(_, _, let isError, _, _, _, _):
       segment.turn = index
       segment.failed = isError
       closeSegment()
@@ -697,7 +697,7 @@ public func scrubberPeek(
       lines.append(.init(text: "\(TermGlyph.bullet) \(text)", tone: .fg, excerpt: true))
     }
     if let turnIndex = mark.turnIndex, turnIndex < input.items.count,
-      case .turnResult(_, _, let isError, _, _, let errors) = input.items[turnIndex]
+      case .turnResult(_, _, let isError, _, _, _, let errors) = input.items[turnIndex]
     {
       if let done = doneLine(input.items[turnIndex]) {
         lines.append(.init(text: done, tone: isError ? .red : .faint))
@@ -725,8 +725,10 @@ public func scrubberPeek(
 }
 
 private func doneLine(_ item: TranscriptItem?) -> String? {
-  guard case .turnResult(_, let subtype, let isError, let durationMs, let cost, _) = item else {
+  guard case .turnResult(_, let subtype, let isError, let durationMs, let total, let cost, _) = item
+  else {
     return nil
   }
-  return "\(isError ? subtype : "done") · \(TermFmt.duration(ms: durationMs)) · \(TermFmt.cost(cost))"
+  return
+    "\(isError ? subtype : "done") · \(TermFmt.duration(ms: durationMs)) · \(TermFmt.cost(cost ?? total))"
 }

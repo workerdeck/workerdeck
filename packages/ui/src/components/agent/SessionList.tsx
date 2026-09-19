@@ -36,7 +36,7 @@ export function SessionListItem({ session, active, onSelect, onDelete, className
         <div className="mt-0.5 flex items-center gap-2 font-mono text-label text-fg-4">
           <span className="truncate">{session.cwd}</span>
           {session.profile ? <span className="shrink-0">@{session.profile}</span> : null}
-          <span className="shrink-0">{formatCost(session.totalCostUsd)}</span>
+          <span className="shrink-0">{formatCost(session.costUsd ?? session.totalCostUsd)}</span>
           <span className="shrink-0">{formatRelativeTime(session.lastActivityAt ?? session.createdAt)}</span>
         </div>
       </button>

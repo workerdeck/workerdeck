@@ -34,7 +34,7 @@ public func summarizeSince(items: [TranscriptItem], from index: Int, pendingAppr
 
   for item in items[start...] {
     switch item {
-    case .turnResult(_, _, let isError, _, _, _):
+    case .turnResult(_, _, let isError, _, _, _, _):
       turns += 1
       if isError { errors += 1 }
     case .assistantText:

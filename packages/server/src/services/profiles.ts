@@ -18,6 +18,7 @@ export type ProfileServiceOptions = {
     defaultModel: (name: string) => string | undefined
     availability: (name: string) => EngineAvailability | undefined
     usage: (name: string) => ProfileInfo['usage'] | undefined
+    spend?: (name: string) => ProfileInfo['spend'] | undefined
   }
 }
 
@@ -126,6 +127,10 @@ export class ProfileService {
     const usage = decorate.usage(p.name)
     if (usage) {
       base.usage = usage
+    }
+    const spend = decorate.spend?.(p.name)
+    if (spend) {
+      base.spend = spend
     }
     return base
   }

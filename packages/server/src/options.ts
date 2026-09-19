@@ -8,6 +8,7 @@ import type { ParkErrorContext, SessionParkManager } from './services/parking.ts
 import type { ProfileStore } from './services/profile-store.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionStore } from './services/session-store.ts'
+import type { SpendStore } from './services/spend-ledger.ts'
 
 export type SdkSessionLister = (options: { dir?: string; limit?: number; offset?: number }) => Promise<SdkSessionSummary[]>
 
@@ -64,6 +65,13 @@ export type WorkerServerOptions = {
     expiredGraceMs?: number
     persistLive?: boolean
     onError?: (error: unknown, context: ParkErrorContext) => void
+  }
+  spend?: {
+    store?: SpendStore
+    // Keyed by profile name, with '*' as the fallback. The operator's own flat fee, which the gateway has no way
+    // to discover: a plan reports its tier, never its price.
+    monthlySubscriptionUsd?: Record<string, number>
+    onError?: (error: unknown) => void
   }
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
   engines?: Partial<Record<ProfileEngine, EngineAdapter>>

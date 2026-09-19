@@ -378,7 +378,9 @@ submitter already holds the POST response, so webhook delivery starts at `job_st
 `job_retrying` marks a failed run that was re-queued (`job.nextRunAt` says when); `job_completed`
 is always terminal. Token
 accounting sums per-turn `usage` (input + output + cache_creation + cache_read);
-`total_cost_usd`/`num_turns` are session-cumulative and rolled up last-seen, never summed.
+`total_cost_usd`/`num_turns` are cumulative for the engine process and rolled up last-seen, never
+summed; `CostLedger` carries the total across a rebuild or a context clear, and prices it through
+`protocol/src/pricing.ts` when the engine reports no cost of its own.
 
 ## Deferred execution
 

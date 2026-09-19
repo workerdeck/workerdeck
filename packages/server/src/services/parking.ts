@@ -301,6 +301,7 @@ export class SessionParkManager {
       profile: info.profile,
       config: { ...config, meta: info.meta },
       sdkSessionId,
+      cost: runner.costState?.(),
       savedAt: Date.now(),
     }
     try {
@@ -350,6 +351,7 @@ export class SessionParkManager {
           profile: info.profile,
           config: { ...config, meta: info.meta },
           snapshot,
+          cost: runner.costState?.(),
           executions: snapshot.parked,
           parkedAt: Date.now(),
         }
@@ -385,6 +387,7 @@ export class SessionParkManager {
     if (this.#options.onParking && !this.#options.onParking(id, executions[0]!)) {
       return
     }
+    const cost = runner.costState?.()
     const snapshot = runner.park()
     if (!snapshot) {
       return
@@ -399,6 +402,7 @@ export class SessionParkManager {
       config,
       snapshot,
       executions: snapshot.parked,
+      cost,
       parkedAt: Date.now(),
     }
     for (const execution of snapshot.parked) {
@@ -447,6 +451,7 @@ export class SessionParkManager {
       this.#options.onError?.(error, { sessionId: id, phase: 'resume' })
       throw error
     }
+    runner.carryCost?.(record.cost ?? { byModel: record.info.usageByModel, reportedCostUsd: record.info.totalCostUsd })
     this.#options.registry.register(runner)
     // The config the runner was actually built with, not the one on the record: a dormant wake
     // bumps the epoch, and the next park must carry the new one rather than resurrect the old.

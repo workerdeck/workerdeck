@@ -328,7 +328,8 @@ struct SessionView: View {
             windows: vm.usageWindows,
             subscriptionType: vm.state.subscriptionType,
             engine: vm.engine,
-            totalCostUsd: vm.state.totalCostUsd)
+            totalCostUsd: vm.state.totalCostUsd,
+            costUsd: vm.state.costUsd)
         case .info:
           SessionInfoSheet(state: vm.state, session: vm.session, fileAccess: vm.fileAccess)
         case .tasks:
@@ -933,6 +934,7 @@ struct SessionView: View {
       contextUsage: vm.state.contextUsage,
       rateLimits: vm.hudRateLimits,
       totalCostUsd: vm.state.totalCostUsd,
+      costUsd: vm.state.costUsd,
       model: vm.effectiveModel,
       models: vm.availableModels,
       permissionMode: vm.state.permissionMode,
