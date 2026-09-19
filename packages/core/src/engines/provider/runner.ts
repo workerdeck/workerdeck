@@ -55,7 +55,7 @@ export type PendingToolCall = {
   toolCallId: string
   toolName: string
   input: unknown
-  deferred?: boolean
+  parkable?: boolean
   expiresAt?: number
 }
 
@@ -135,7 +135,8 @@ export class AiSdkRunner implements Runner {
     this.#messages = [...state.messages]
     this.#pendingLocalCommands = [...(state.pendingLocalCommands ?? [])]
     for (const call of state.pendingToolCalls) {
-      this.#pendingToolCalls.set(call.toolCallId, call)
+      const legacy = (call as { deferred?: boolean }).deferred
+      this.#pendingToolCalls.set(call.toolCallId, legacy === undefined ? call : { ...call, parkable: call.parkable ?? legacy })
     }
     this.#dispatched = new Set(state.dispatched)
     this.#numTurns = state.numTurns
@@ -691,14 +692,14 @@ export class AiSdkRunner implements Runner {
       signal: this.#abort?.signal,
     }
     const profile = executor.describe?.(toolCall) ?? {}
-    call.deferred = profile.deferred === true ? true : undefined
+    call.parkable = profile.deferred === true ? true : undefined
     call.expiresAt = profile.timeoutMs === undefined ? undefined : Date.now() + profile.timeoutMs
     this.#emit({
       type: 'execution_dispatched',
       executionId: call.toolCallId,
       toolName: call.toolName,
       backend: profile.backend ?? this.#config.executionBackend ?? 'server',
-      deferred: call.deferred,
+      deferred: call.parkable,
       expiresAt: call.expiresAt,
     })
     const promise = executor
@@ -716,7 +717,7 @@ export class AiSdkRunner implements Runner {
           error: error instanceof Error ? error.message : String(error),
         })
       })
-    return { deferred: call.deferred === true, promise }
+    return { deferred: call.parkable === true, promise }
   }
 
   #announceParked(): void {
@@ -733,7 +734,7 @@ export class AiSdkRunner implements Runner {
       return false
     }
     for (const call of this.#pendingToolCalls.values()) {
-      if (call.deferred !== true) {
+      if (call.parkable !== true) {
         return false
       }
     }
