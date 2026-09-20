@@ -1,4 +1,4 @@
-import type { SessionVitals } from '@workerdeck/ui'
+import { sessionState } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
@@ -6,7 +6,12 @@ import { GatewaysViewProvider } from './gateways-view.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore, isLoopbackHost } from './hosts.ts'
 import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
-import { SessionPanelProvider } from './panel.ts'
+import { SessionPanelView } from './panel.ts'
+import { SessionEditorTab } from './session-tab.ts'
+import { SurfaceRegistry } from './surfaces.ts'
+import type { AnySurface, SessionRef, SurfaceDelegate } from './session-surface.ts'
+import type { SelectOptions } from './sidebar.ts'
+import type { SurfaceState } from './bridge-protocol.ts'
 import { addProfile, editProfile, manageProfiles, removeProfile, type ProfileFlowDeps } from './profiles.ts'
 import { ProfilesModel } from './profiles-model.ts'
 import { ProfilesViewProvider } from './profiles-view.ts'
@@ -28,6 +33,7 @@ const SECTION_VIEWS: Record<SectionKind, string> = {
 }
 
 const HAS_SESSION_KEY = 'workerdeck.hasSession'
+const PANEL_HAS_SESSION_KEY = 'workerdeck.panelHasSession'
 const TASKS_SHOW_COMPLETED_KEY = 'workerdeck.tasksShowCompleted.v1'
 const TASKS_SHOW_COMPLETED_CONTEXT_KEY = 'workerdeck.tasksShowCompleted'
 
@@ -40,7 +46,6 @@ export function activate(context: vscode.ExtensionContext): void {
   const model = new SessionsModel(store)
   const fs = new WorkerdeckFileSystem(store)
 
-  let vitals: SessionVitals | undefined
   const statusBar = new SessionStatusBar()
   const unread = new UnreadStatusItem()
   const subagents = new SubagentStatusItem()
@@ -48,14 +53,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const syncUnreadWatcher = () => model.setWatching(UNREAD_WATCHER, badgeEnabled('unread') || badgeEnabled('subagents'))
   syncUnreadWatcher()
 
-  const markSeen = (force = false) => {
-    const active = panel.active
-    if (!active || (!panel.visible && !force)) {
+  const infoOf = (hostId: string, sessionId: string) => model.sessionsOf(hostId).find((s) => s.id === sessionId)
+  const titleOf = (hostId: string, sessionId: string) => infoOf(hostId, sessionId)?.title ?? sessionId.slice(0, 8)
+  const sessionRef = (hostId: string, sessionId: string, cwd?: string): SessionRef | undefined => {
+    const host = store.get(hostId)
+    return host ? { host, sessionId, cwd: cwd ?? infoOf(hostId, sessionId)?.cwd } : undefined
+  }
+
+  const markSeen = (surface: AnySurface, force = false) => {
+    const session = surface.session
+    if (!session || (!surface.visible && !force)) {
       return
     }
-    const info = model.sessionsOf(active.host.id).find((s) => s.id === active.sessionId)
-    const moved = watermarks.mark(active.host.id, active.sessionId, {
-      itemCount: vitals?.itemCount,
+    const info = infoOf(session.host.id, session.sessionId)
+    const moved = watermarks.mark(session.host.id, session.sessionId, {
+      itemCount: surface.vitals?.itemCount,
       activity: info?.activityCount,
       prose: info?.proseCount,
       turns: info?.numTurns,
@@ -64,11 +76,16 @@ export function activate(context: vscode.ExtensionContext): void {
       sidebar.refreshUnread()
     }
   }
+  const markAllSeen = () => {
+    for (const surface of registry.all()) {
+      markSeen(surface)
+    }
+  }
 
   let tasksShowCompleted = context.globalState.get<boolean>(TASKS_SHOW_COMPLETED_KEY) ?? false
   const feed = {
     state: () => model.sidebarState(),
-    vitals: () => vitals,
+    vitals: () => registry.focused.vitals,
     tasksShowCompleted: () => tasksShowCompleted,
   }
   const sections = Object.fromEntries(
@@ -118,14 +135,17 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     return unseen
   })
-  model.onDidChange(() => markSeen())
+  model.onDidChange(() => markAllSeen())
 
-  // Panel and sidebar reference each other only through these delegates; construction order breaks the cycle.
+  // Surfaces, the registry and the sidebar reference each other only through these delegates; construction order breaks the cycle.
   let sidebar: SidebarProvider
-  const panel = new SessionPanelProvider(context.extensionUri, store, {
-    openPanel: async (p) => {
+  let registry: SurfaceRegistry
+  const lastStatus = new WeakMap<AnySurface, string | undefined>()
+  const surfaceDelegate: SurfaceDelegate = {
+    openPanel: async (surface, p) => {
+      registry.setFocused(surface)
       if (p === 'skills') {
-        await pickCommand(panel, vitals)
+        await pickCommand(surface)
         return
       }
       if (p === 'files') {
@@ -134,74 +154,164 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       await vscode.commands.executeCommand(`${SECTION_VIEWS[p]}.focus`)
     },
-    vitals: (v) => {
+    vitals: (surface) => {
       // Only a status change nudges the model: the rest of `vitals` moves on every stream delta.
-      const moved = v.status !== vitals?.status
-      vitals = v
-      if (moved) {
+      const status = surface.vitals?.status
+      if (status !== lastStatus.get(surface)) {
+        lastStatus.set(surface, status)
         model.nudge()
       }
-      markSeen()
-      pushSections()
-      pushStatusBar()
+      markSeen(surface)
+      if (surface === registry.focused) {
+        pushSections()
+        pushStatusBar()
+      }
     },
-    subagent: (toolUseId) => model.setSelectedSubagent(toolUseId),
+    subagent: (surface) => {
+      if (surface === registry.focused) {
+        model.setSelectedSubagent(surface.subagentToolUseId)
+      }
+    },
     unseen: (hostId, sessionId) => {
       const mark = watermarks.get(hostId, sessionId)
       return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
     },
-    visibilityChanged: () => {
-      markSeen()
-      // The mark is written from the last poll, so refresh and mark once more - with `force`, the panel being already hidden.
-      void model.refresh().then(() => markSeen(true))
+    visibilityChanged: (surface) => {
+      markSeen(surface)
+      // The mark is written from the last poll, so refresh and mark once more - with `force`, the surface being already hidden.
+      void model.refresh().then(() => markSeen(surface, true))
+    },
+    focused: (surface) => registry.setFocused(surface),
+  }
+  const panel = new SessionPanelView(context.extensionUri, store, {
+    ...surfaceDelegate,
+    focusHeld: async (held) => {
+      const tab = registry.tabFor(held.host.id, held.sessionId)
+      if (tab) {
+        await tab.focus()
+        registry.setFocused(tab)
+      }
+    },
+    sessionChanged: (session) => {
+      void context.workspaceState.update(
+        ACTIVE_SESSION_KEY,
+        session ? { hostId: session.host.id, sessionId: session.sessionId, cwd: session.cwd } : undefined,
+      )
+      registry.changed()
     },
   })
+  registry = new SurfaceRegistry(panel)
+  const tabDelegate = {
+    ...surfaceDelegate,
+    closed: (tab: SessionEditorTab) => {
+      registry.remove(tab)
+      const session = tab.session
+      // Closing the tab hands the session back to a panel still waiting on it; a panel that moved on keeps its own.
+      if (session && panel.heldSession && sameRef(panel.heldSession, session)) {
+        void panel.show(session, { quiet: true })
+      }
+    },
+  }
+  const closeTab = (tab: SessionEditorTab) => {
+    tab.dispose()
+    registry.remove(tab)
+  }
+  const openTab = (ref: SessionRef, column: vscode.ViewColumn, focus: boolean): SessionEditorTab => {
+    const title = titleOf(ref.host.id, ref.sessionId)
+    if (panel.holds(ref.host.id, ref.sessionId)) {
+      panel.hold(ref, title)
+    }
+    const tab = SessionEditorTab.create(context.extensionUri, store, tabDelegate, ref, title, column, focus)
+    const info = infoOf(ref.host.id, ref.sessionId)
+    if (info) {
+      tab.setState(sessionState(info))
+    }
+    registry.add(tab)
+    return tab
+  }
+  const moveToPanel = async (tab: SessionEditorTab) => {
+    const session = tab.session
+    closeTab(tab)
+    if (session) {
+      await panel.show(session, { focus: true })
+      registry.setFocused(panel)
+    }
+  }
+
   const pushStatusBar = () => {
-    const active = panel.active
-    if (!active) {
+    const surface = registry.focused
+    const session = surface.session
+    if (!session) {
       statusBar.update(undefined, undefined)
       return
     }
-    const info = model.sessionsOf(active.host.id).find((s) => s.id === active.sessionId)
+    const info = infoOf(session.host.id, session.sessionId)
     statusBar.update(
       {
-        title: info?.title ?? active.sessionId.slice(0, 8),
-        hostName: active.host.name,
+        title: info?.title ?? session.sessionId.slice(0, 8),
+        hostName: session.host.name,
         cost: info?.costUsd ?? info?.totalCostUsd,
       },
-      vitals,
+      surface.vitals,
     )
   }
-  const selectSession = async (hostId: string, sessionId: string, subagentToolUseId?: string, revealToolUseId?: string) => {
-    const host = store.get(hostId)
-    if (!host) {
+  const syncSelected = () => {
+    const surface = registry.focused
+    const session = surface.session
+    model.setSelected(
+      session ? { hostId: session.host.id, sessionId: session.sessionId, subagentToolUseId: surface.subagentToolUseId } : undefined,
+    )
+  }
+  const selectSession = async (hostId: string, sessionId: string, options: SelectOptions = {}) => {
+    const ref = sessionRef(hostId, sessionId)
+    if (!ref) {
       return
     }
-    const info = model.sessionsOf(hostId).find((s) => s.id === sessionId)
-    // Re-clicking the session already on screen does not remount the panel, so nothing would re-send the readings.
-    if (!panel.isShowing(hostId, sessionId)) {
-      vitals = undefined
+    const composerFocus = !options.subagentToolUseId && !options.revealToolUseId
+    let surface: AnySurface
+    const tab = registry.tabFor(hostId, sessionId)
+    if (tab) {
+      if (options.target === 'editor-beside') {
+        tab.show(vscode.ViewColumn.Beside)
+      } else {
+        tab.show()
+      }
+      if (composerFocus) {
+        tab.focusComposer()
+      }
+      surface = tab
+    } else if (options.target) {
+      surface = openTab(ref, options.target === 'editor-beside' ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active, composerFocus)
+    } else {
+      await panel.show(ref, { focus: composerFocus })
+      surface = panel
     }
-    model.setSelected({ hostId, sessionId, subagentToolUseId })
-    void context.workspaceState.update(ACTIVE_SESSION_KEY, { hostId, sessionId, cwd: info?.cwd })
-    await panel.show({ host, sessionId, cwd: info?.cwd }, { focus: !subagentToolUseId && !revealToolUseId })
-    if (subagentToolUseId) {
-      panel.openSubagent(subagentToolUseId)
-    } else if (revealToolUseId) {
-      panel.reveal(revealToolUseId)
+    registry.setFocused(surface)
+    if (options.subagentToolUseId) {
+      surface.openSubagent(options.subagentToolUseId)
+    } else if (options.revealToolUseId) {
+      surface.reveal(options.revealToolUseId)
     }
   }
   sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
     selectSession,
-    clearPanelIfActive: async (sessionId) => {
-      if (panel.active?.sessionId === sessionId) {
-        vitals = undefined
-        model.setSelected(undefined)
-        void context.workspaceState.update(ACTIVE_SESSION_KEY, undefined)
+    sessionDeleted: async (hostId, sessionId) => {
+      const tab = registry.tabFor(hostId, sessionId)
+      if (tab) {
+        closeTab(tab)
+      }
+      if (panel.holdsOrHeld(hostId, sessionId)) {
         await panel.show(undefined)
       }
     },
-    activeSessionId: () => panel.active?.sessionId,
+    surfaceOf: (hostId, sessionId) =>
+      registry.tabFor(hostId, sessionId) ? 'editor' : panel.holds(hostId, sessionId) ? 'panel' : undefined,
+    moveToPanel: async (hostId, sessionId) => {
+      const tab = registry.tabFor(hostId, sessionId)
+      if (tab) {
+        await moveToPanel(tab)
+      }
+    },
     revealGateways: (options) => (options.add ? addGateway(gatewayFlow) : gateways.reveal()),
     unread: (rows, waiting) => unread.update(rows, waiting),
     subagents: (running, sessions) => subagents.update(running, sessions),
@@ -211,12 +321,38 @@ export function activate(context: vscode.ExtensionContext): void {
     store,
     state: () => model.sidebarState(),
     refresh: () => model.refresh(),
-    reveal: selectSession,
+    reveal: (hostId, sessionId) => selectSession(hostId, sessionId),
   }
 
-  panel.onDidChangeActive(() => pushStatusBar())
-  model.onDidChange(() => pushStatusBar())
-  pushStatusBar()
+  const syncContextKeys = () => {
+    void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, registry.hasSession())
+    void vscode.commands.executeCommand('setContext', PANEL_HAS_SESSION_KEY, panel.session !== undefined)
+  }
+  const syncSurfaces = () => {
+    syncSelected()
+    syncContextKeys()
+    model.setOpen(registry.openMap())
+    pushStatusBar()
+    pushSections()
+  }
+  registry.onDidChange(() => syncSurfaces())
+  registry.onDidChangeFocus(() => syncSurfaces())
+  model.onDidChange(() => {
+    for (const tab of registry.tabs()) {
+      const session = tab.session
+      const info = session && infoOf(session.host.id, session.sessionId)
+      if (info) {
+        tab.setTitle(info.title ?? session.sessionId.slice(0, 8))
+        tab.setState(sessionState(info))
+      }
+    }
+    const held = panel.heldSession
+    if (held) {
+      panel.retitleHeld(titleOf(held.host.id, held.sessionId))
+    }
+    pushStatusBar()
+  })
+  syncSurfaces()
 
   const setTasksShowCompleted = (showCompleted: boolean) => {
     tasksShowCompleted = showCompleted
@@ -226,21 +362,12 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   setTasksShowCompleted(tasksShowCompleted)
 
-  const syncHasSession = (has: boolean) => void vscode.commands.executeCommand('setContext', HAS_SESSION_KEY, has)
-  panel.onDidChangeActive((active) => syncHasSession(active !== undefined))
-  syncHasSession(panel.active !== undefined)
-
-  // Must stay after the `onDidChangeActive` subscribers above, so restoring feeds the status bar and the `when` key the way selecting would.
-  const remembered = context.workspaceState.get<{
-    hostId: string
-    sessionId: string
-    cwd?: string
-  }>(ACTIVE_SESSION_KEY)
+  // Must stay after the registry subscribers above, so restoring feeds the status bar and the `when` keys the way selecting would.
+  const remembered = context.workspaceState.get<SurfaceState>(ACTIVE_SESSION_KEY)
   if (remembered) {
-    const host = store.get(remembered.hostId)
-    if (host) {
-      model.setSelected({ hostId: remembered.hostId, sessionId: remembered.sessionId })
-      panel.restoreActive({ host, sessionId: remembered.sessionId, cwd: remembered.cwd })
+    const ref = sessionRef(remembered.hostId, remembered.sessionId, remembered.cwd)
+    if (ref) {
+      panel.restore(ref)
     } else {
       void context.workspaceState.update(ACTIVE_SESSION_KEY, undefined)
     }
@@ -275,7 +402,7 @@ export function activate(context: vscode.ExtensionContext): void {
   void model.refresh()
 
   context.subscriptions.push(
-    startDevReload(context, [panel, sidebar, gateways, profiles, ...Object.values(sections)]),
+    startDevReload(context, [{ reloadWebview: () => registry.reloadAll() }, sidebar, gateways, profiles, ...Object.values(sections)]),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (
         e.affectsConfiguration('workerdeck.fontSize') ||
@@ -287,7 +414,7 @@ export function activate(context: vscode.ExtensionContext): void {
         e.affectsConfiguration('editor.fontSize') ||
         e.affectsConfiguration('editor.lineHeight')
       ) {
-        panel.reloadWebview()
+        registry.reloadAll()
       }
       if (e.affectsConfiguration(HOST_SECTION)) {
         hostStatus.render()
@@ -302,6 +429,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     model,
     profilesModel,
+    registry,
     panel,
     sidebar,
     gateways,
@@ -321,8 +449,22 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.window.registerWebviewViewProvider(SECTION_VIEWS[kind as SectionKind], provider),
     ),
     ...Object.values(sections),
-    vscode.window.registerWebviewViewProvider(SessionPanelProvider.viewId, panel, {
+    vscode.window.registerWebviewViewProvider(SessionPanelView.viewId, panel, {
       webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.window.registerWebviewPanelSerializer(SessionEditorTab.viewType, {
+      deserializeWebviewPanel: async (webviewPanel, state: SurfaceState | undefined) => {
+        const ref = state && sessionRef(state.hostId, state.sessionId, state.cwd)
+        if (!ref || registry.tabFor(ref.host.id, ref.sessionId)) {
+          webviewPanel.dispose()
+          return
+        }
+        const title = titleOf(ref.host.id, ref.sessionId)
+        if (panel.holds(ref.host.id, ref.sessionId)) {
+          panel.hold(ref, title)
+        }
+        registry.add(SessionEditorTab.restore(context.extensionUri, store, tabDelegate, webviewPanel, ref, title))
+      },
     }),
     vscode.workspace.registerFileSystemProvider(WorkerdeckFileSystem.scheme, fs, {
       isCaseSensitive: true,
@@ -356,7 +498,27 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('workerdeck.showCompletedTasks', () => setTasksShowCompleted(true)),
     vscode.commands.registerCommand('workerdeck.hideCompletedTasks', () => setTasksShowCompleted(false)),
 
+    vscode.commands.registerCommand('workerdeck.openSessionInEditor', async () => {
+      const session = panel.session
+      if (!session) {
+        void vscode.window.showInformationMessage('WorkerDeck: open a session in the Agent panel first.')
+        return
+      }
+      await selectSession(session.host.id, session.sessionId, { target: 'editor' })
+    }),
+    vscode.commands.registerCommand('workerdeck.moveSessionToPanel', async () => {
+      const focused = registry.focused
+      const tab = registry.activeTab() ?? (focused.kind === 'editor' ? (focused as SessionEditorTab) : undefined)
+      if (!tab) {
+        void vscode.window.showInformationMessage('WorkerDeck: no session tab is active.')
+        return
+      }
+      await moveToPanel(tab)
+    }),
+
     vscode.commands.registerCommand('workerdeck.selectModel', async () => {
+      const surface = registry.focused
+      const vitals = surface.vitals
       const models = vitals?.models ?? []
       if (models.length === 0) {
         void vscode.window.showInformationMessage('WorkerDeck: no models to switch to yet.')
@@ -373,10 +535,12 @@ export function activate(context: vscode.ExtensionContext): void {
         { title: 'WorkerDeck: model', placeHolder: modelLabel(vitals) },
       )
       if (picked) {
-        panel.setModel(picked.value)
+        surface.setModel(picked.value)
       }
     }),
     vscode.commands.registerCommand('workerdeck.selectPermissionMode', async () => {
+      const surface = registry.focused
+      const vitals = surface.vitals
       const modes = vitals?.permissionModes ?? []
       if (modes.length === 0) {
         void vscode.window.showInformationMessage('WorkerDeck: this session has no mode switch.')
@@ -397,27 +561,27 @@ export function activate(context: vscode.ExtensionContext): void {
         { title: 'WorkerDeck: permission mode' },
       )
       if (picked && !picked.disabled) {
-        panel.setPermissionMode(picked.mode)
+        surface.setPermissionMode(picked.mode)
       }
     }),
 
-    vscode.commands.registerCommand('workerdeck.useSkill', () => pickCommand(panel, vitals)),
+    vscode.commands.registerCommand('workerdeck.useSkill', () => pickCommand(registry.focused)),
 
     vscode.commands.registerCommand('workerdeck.openProjectFolder', async () => {
-      const active = panel.active
-      if (!active?.cwd) {
+      const session = registry.focused.session
+      if (!session?.cwd) {
         void vscode.window.showInformationMessage('WorkerDeck: open a session first.')
         return
       }
-      const uri = isLoopbackHost(active.host)
-        ? vscode.Uri.file(active.cwd)
+      const uri = isLoopbackHost(session.host)
+        ? vscode.Uri.file(session.cwd)
         : vscode.Uri.from({
             scheme: WorkerdeckFileSystem.scheme,
-            authority: active.host.id.toLowerCase(),
-            path: active.cwd,
+            authority: session.host.id.toLowerCase(),
+            path: session.cwd,
           })
       const name =
-        uri.scheme === WorkerdeckFileSystem.scheme ? `${active.host.name}: ${active.cwd.split('/').pop() ?? active.cwd}` : undefined
+        uri.scheme === WorkerdeckFileSystem.scheme ? `${session.host.name}: ${session.cwd.split('/').pop() ?? session.cwd}` : undefined
       vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, {
         uri,
         name,
@@ -426,10 +590,14 @@ export function activate(context: vscode.ExtensionContext): void {
   )
 }
 
+function sameRef(a: SessionRef, b: SessionRef): boolean {
+  return a.host.id === b.host.id && a.sessionId === b.sessionId
+}
+
 // The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts - this QuickPick is its
 // native stand-in, over the same merged list the composer's `/` offers.
-async function pickCommand(panel: SessionPanelProvider, vitals: SessionVitals | undefined): Promise<void> {
-  const rows = vitals?.composerCommands
+async function pickCommand(surface: AnySurface): Promise<void> {
+  const rows = surface.vitals?.composerCommands
   if (!rows) {
     void vscode.window.showInformationMessage('WorkerDeck: commands are listed once the session connects - send a message first.')
     return
@@ -453,7 +621,7 @@ async function pickCommand(panel: SessionPanelProvider, vitals: SessionVitals | 
     { title: 'WorkerDeck: commands and skills', placeHolder: 'Insert into the composer' },
   )
   if (picked && !picked.disabled) {
-    panel.insertComposerText(picked.insertText)
+    surface.insertComposerText(picked.insertText)
   }
 }
 

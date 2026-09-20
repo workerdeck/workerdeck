@@ -4,9 +4,9 @@ import type { SessionHandle } from '@workerdeck/client'
 import { clientFor } from './gateway.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import type { HostToSidebar, SidebarToHost } from './bridge-protocol.ts'
+import type { HostToSidebar, SidebarToHost, SurfaceTarget } from './bridge-protocol.ts'
 import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, runningSubagents, type ViewConfig } from './view-config.ts'
-import { WebviewHost } from './webview-host.ts'
+import { WebviewViewHost } from './webview-host.ts'
 import { ProjectIconCache } from './project-icons.ts'
 
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
@@ -14,16 +14,19 @@ const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 export const FILTER_CONTEXT_KEY = 'workerdeck.sessionsFilterOpen'
 const FILTER_OPEN_KEY = 'workerdeck.filterOpen.v1'
 
+export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; target?: SurfaceTarget }
+
 export type SidebarDelegate = {
-  selectSession: (hostId: string, sessionId: string, subagentToolUseId?: string, revealToolUseId?: string) => Promise<void>
-  clearPanelIfActive: (sessionId: string) => Promise<void>
-  activeSessionId: () => string | undefined
+  selectSession: (hostId: string, sessionId: string, options?: SelectOptions) => Promise<void>
+  sessionDeleted: (hostId: string, sessionId: string) => Promise<void>
+  surfaceOf: (hostId: string, sessionId: string) => 'panel' | 'editor' | undefined
+  moveToPanel: (hostId: string, sessionId: string) => Promise<void>
   revealGateways: (options: { add?: boolean }) => Promise<void>
   unread: (rows: number, waiting: number) => void
   subagents: (running: number, sessions: number) => void
 }
 
-export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> implements vscode.Disposable {
+export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSidebar> implements vscode.Disposable {
   static readonly viewId = 'workerdeck.sessions'
 
   readonly #store: HostStore
@@ -138,7 +141,11 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
         return
       }
       case 'wd-select-session': {
-        await this.#delegate.selectSession(msg.hostId, msg.sessionId, msg.subagentToolUseId, msg.revealToolUseId)
+        await this.#delegate.selectSession(msg.hostId, msg.sessionId, {
+          subagentToolUseId: msg.subagentToolUseId,
+          revealToolUseId: msg.revealToolUseId,
+          target: msg.target,
+        })
         return
       }
       case 'wd-stop-session': {
@@ -168,6 +175,20 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
         label: '$(debug-stop) Stop',
         detail: 'Interrupt the turn in flight',
         run: () => this.#stopSession(hostId, sessionId),
+      })
+    }
+    const surface = this.#delegate.surfaceOf(hostId, sessionId)
+    if (surface === 'editor') {
+      items.push({
+        label: '$(layout-panel) Move to Panel',
+        detail: 'Close the editor tab and show the session in the Agent panel',
+        run: () => this.#delegate.moveToPanel(hostId, sessionId),
+      })
+    } else {
+      items.push({
+        label: '$(empty-window) Open in Editor Area',
+        detail: 'Show the session in an editor tab (Cmd/Ctrl+click a session does the same)',
+        run: () => this.#delegate.selectSession(hostId, sessionId, { target: 'editor' }),
       })
     }
     if (info.capabilities?.clearContext) {
@@ -273,7 +294,7 @@ export class SidebarProvider extends WebviewHost<SidebarToHost, HostToSidebar> i
     } catch (err) {
       void vscode.window.showErrorMessage(`WorkerDeck: delete failed - ${err instanceof Error ? err.message : String(err)}`)
     }
-    await this.#delegate.clearPanelIfActive(sessionId)
+    await this.#delegate.sessionDeleted(hostId, sessionId)
     await this.#model.refresh()
   }
 

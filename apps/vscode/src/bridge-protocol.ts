@@ -30,13 +30,20 @@ export type WireProfile = {
 
 export type { ScopeRoot, WorkspaceScope }
 
+export type SurfaceTarget = 'editor' | 'editor-beside'
+
 export type SidebarState = {
   hosts: WireHost[]
   sessions: Record<string, SessionInfo[]>
   selected?: { hostId: string; sessionId: string; subagentToolUseId?: string }
   scope?: WorkspaceScope
   unseen?: Record<string, number>
+  // `host:session` keys of the sessions an editor tab holds.
+  open?: Record<string, 'editor'>
 }
+
+// What a session tab persists across a window reload (`bridge.setState`), read back by the panel serializer.
+export type SurfaceState = { hostId: string; sessionId: string; cwd?: string }
 
 export type TransportToHost =
   | {
@@ -71,6 +78,8 @@ export type TransportToWebview =
 export type PanelToHost =
   | TransportToHost
   | { kind: 'wd-ready' }
+  | { kind: 'wd-focus' }
+  | { kind: 'wd-focus-held' }
   | { kind: 'wd-open-path'; path: string; line?: number }
   | { kind: 'wd-open-url'; url: string }
   | {
@@ -92,10 +101,14 @@ export type HostToPanel =
       kind: 'wd-show-session'
       session?: {
         baseUrl: string
+        hostId: string
         sessionId: string
         hostName: string
+        cwd?: string
         unseen?: { itemCount: number; since: number }
       }
+      // The bottom panel's info state: the session it last showed now lives in an editor tab.
+      held?: { title: string }
     }
   | {
       kind: 'wd-set-model'
@@ -126,6 +139,7 @@ export type SidebarToHost =
       sessionId: string
       subagentToolUseId?: string
       revealToolUseId?: string
+      target?: SurfaceTarget
     }
   | {
       kind: 'wd-stop-session'

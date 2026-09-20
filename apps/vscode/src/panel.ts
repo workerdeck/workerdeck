@@ -1,336 +1,107 @@
 import * as vscode from 'vscode'
-import type { PermissionMode } from '@workerdeck/protocol'
-import type { SessionVitals, SessionSurfacePanel } from '@workerdeck/ui'
-import type { GatewayHost, HostStore } from './hosts.ts'
-import { apiUrl, isLoopbackHost } from './hosts.ts'
-import { clientFor } from './gateway.ts'
-import { WebviewTransportHost } from './webview-transports.ts'
-import { catchUpMode, panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant } from './webview-html.ts'
-import { WebviewHost } from './webview-host.ts'
-import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
+import type { HostStore } from './hosts.ts'
+import type { PanelToHost } from './bridge-protocol.ts'
+import { SessionSurface, sameSession, type SessionRef, type SurfaceDelegate } from './session-surface.ts'
 
-export type ActiveSession = {
-  host: GatewayHost
-  sessionId: string
-  cwd: string | undefined
+export type PanelDelegate = SurfaceDelegate & {
+  // The info state's Focus button: the session the panel last showed now lives in a tab.
+  focusHeld: (held: SessionRef) => Promise<void>
+  // The panel took a session on or dropped one (the held state counts as dropped).
+  sessionChanged: (session: SessionRef | undefined) => void
 }
 
-export type PanelDelegate = {
-  openPanel: (panel: SessionSurfacePanel) => Promise<void>
-  vitals: (vitals: SessionVitals) => void
-  subagent: (toolUseId: string | undefined) => void
-  unseen: (hostId: string, sessionId: string) => { itemCount: number; since: number } | undefined
-  visibilityChanged: () => void
-}
-
-export class SessionPanelProvider extends WebviewHost<PanelToHost, HostToPanel> implements vscode.Disposable {
+// The bottom Agent panel: always exactly one, may be empty, and never shows a session an editor
+// tab holds. When a tab takes its session, the panel keeps a `held` reference so its info state
+// can focus the tab, and so closing that tab hands the session back.
+export class SessionPanelView extends SessionSurface<vscode.WebviewView> implements vscode.WebviewViewProvider, vscode.Disposable {
   static readonly viewId = 'workerdeck.sessionPanel'
 
-  readonly #store: HostStore
-  readonly #delegate: PanelDelegate
-  readonly #onDidChangeActive = new vscode.EventEmitter<ActiveSession | undefined>()
-  readonly onDidChangeActive = this.#onDidChangeActive.event
-
-  #focusPending = false
-  // The single read-request slot: `openSubagent` and `reveal` go to different panel APIs
-  // but at most one can ever be pending - asking for either withdraws the other. One slot
-  // makes that mutual exclusion structural. The shared nonce is strictly increasing, so a
-  // repeated ask of the same kind still reads as new on the webview side ("asking twice
-  // means twice": `openSubagent`/`reveal` land in props).
-  #pending: { kind: 'wd-open-subagent' | 'wd-reveal-tool-use'; toolUseId: string } | undefined
-  #pendingNonce = 0
-  #active: ActiveSession | undefined
-  // The catch-up boundary, frozen when the session became active.
-  //
-  // It answers "where were you when you opened this?", so it cannot be re-read at push time: making the view
-  // visible marks the session seen, and `show()` awaits the focus command in between. Re-reading afterwards
-  // returned the mark that opening had just moved, which cost the recap seam, the dimming and the jump target.
-  #activeUnseen: { itemCount: number; since: number } | undefined
-  #transports: WebviewTransportHost | undefined
-
-  protected readonly bundle = 'main.js'
+  readonly kind = 'panel'
+  readonly #panelDelegate: PanelDelegate
+  #held: SessionRef | undefined
+  #heldTitle: string | undefined
 
   constructor(extensionUri: vscode.Uri, store: HostStore, delegate: PanelDelegate) {
-    super(extensionUri)
-    this.#store = store
-    this.#delegate = delegate
+    super(extensionUri, store, delegate)
+    this.#panelDelegate = delegate
   }
 
-  get active(): ActiveSession | undefined {
-    return this.#active
+  get heldSession(): SessionRef | undefined {
+    return this.#held
   }
 
-  get visible(): boolean {
-    return this.view?.visible ?? false
+  holdsOrHeld(hostId: string, sessionId: string): boolean {
+    return this.holds(hostId, sessionId) || sameSession(this.#held, hostId, sessionId)
   }
 
-  isShowing(hostId: string, sessionId: string): boolean {
-    return this.#active?.sessionId === sessionId && this.#active.host.id === hostId
-  }
-
-  protected override rootAttrs(): Record<string, string> {
-    const cell = terminalMetrics()
-    return {
-      'data-density': transcriptDensity(),
-      'data-variant': transcriptVariant(),
-      'data-panel-font-size': String(panelFontSize()),
-      'data-font-size': String(cell.fontSize),
-      'data-line-height': String(cell.lineHeight),
-      'data-affordances': terminalAffordances() ? 'on' : 'off',
-      'data-catch-up': catchUpMode() ? 'on' : 'off',
-    }
-  }
-
-  protected override htmlOptions(): { font?: boolean } {
-    return { font: true }
+  resolveWebviewView(view: vscode.WebviewView): void {
+    this.attach(view)
   }
 
   protected override wire(view: vscode.WebviewView): void {
-    this.resetForReload()
-    view.onDidChangeVisibility(() => this.#delegate.visibilityChanged())
+    super.wire(view)
+    view.onDidChangeVisibility(() => this.delegate.visibilityChanged(this))
   }
 
-  protected override resetForReload(): void {
-    this.#transports?.dispose()
-    this.#transports = new WebviewTransportHost(
-      this.#store,
-      (msg) => this.post(msg),
-      (text) => this.#tapFrame(text),
-    )
+  async focus(): Promise<void> {
+    await vscode.commands.executeCommand(`${SessionPanelView.viewId}.focus`)
   }
 
-  protected override intercept(msg: PanelToHost): Promise<boolean> | boolean {
-    return this.#transports?.handle(msg) ?? false
-  }
-
-  protected override onViewDisposed(): void {
-    this.#transports?.dispose()
-    // A disposed panel is not showing anything: nothing counts as read from here on.
-    this.#delegate.visibilityChanged()
-  }
-
-  async show(active: ActiveSession | undefined, options: { focus?: boolean } = {}): Promise<void> {
+  // `quiet` neither focuses nor materializes: a session handed back by a closing tab waits for the panel's next showing.
+  async show(session: SessionRef | undefined, options: { focus?: boolean; quiet?: boolean } = {}): Promise<void> {
     const existed = !!this.view
-    this.#active = active
-    this.#activeUnseen = active ? this.#delegate.unseen(active.host.id, active.sessionId) : undefined
-    this.#onDidChangeActive.fire(active)
+    this.#held = undefined
+    this.#heldTitle = undefined
+    this.setSession(session, { focus: options.focus })
+    this.#panelDelegate.sessionChanged(session)
     // Focussing also materializes the view, which is why a first show does it unasked.
-    if (active && (options.focus || !existed)) {
-      await vscode.commands.executeCommand(`${SessionPanelProvider.viewId}.focus`)
+    if (session && !options.quiet && (options.focus || !existed)) {
+      await this.focus()
     }
-    // Queued rather than posted: a panel opening for the first time has not said `wd-ready` yet.
-    if (active && options.focus) {
-      this.#focusPending = true
-    }
-    this.#pushActive()
+    // The first show pushed before the view existed; a view materialized above receives it on `wd-ready`.
+    this.pushSession()
   }
 
   // Deliberately not `show()`, which materializes the view - on activation that would force the dock open on every window start.
-  restoreActive(active: ActiveSession): void {
-    if (this.#active) {
+  restore(session: SessionRef): void {
+    if (this.session) {
       return
     }
-    this.#active = active
-    this.#activeUnseen = this.#delegate.unseen(active.host.id, active.sessionId)
-    this.#onDidChangeActive.fire(active)
-    this.#pushActive()
+    this.setSession(session)
+    this.#panelDelegate.sessionChanged(session)
   }
 
-  #pushActive(): void {
-    if (!this.view || !this.ready) {
-      return
-    }
-    const active = this.#active
-    if (!active) {
-      this.post({ kind: 'wd-show-session', session: undefined })
-      return
-    }
-    // After the session, never before: a composer about to be replaced must not take the caret.
-    const focus = this.#focusPending
-    this.#focusPending = false
-    const base = apiUrl(active.host)
-    if (!base) {
-      return
-    }
-    this.post({
-      kind: 'wd-show-session',
-      session: {
-        baseUrl: base,
-        sessionId: active.sessionId,
-        hostName: active.host.name,
-        unseen: this.#activeUnseen,
-      },
-    })
-    if (focus) {
-      this.post({ kind: 'wd-focus-composer' })
-    }
-    this.#flushPending()
+  // A tab took the session: the panel renders "open as an editor tab" until the next single click replaces it.
+  hold(session: SessionRef, title: string): void {
+    this.#held = session
+    this.#heldTitle = title
+    this.setSession(undefined)
+    this.#panelDelegate.sessionChanged(undefined)
   }
 
-  openSubagent(toolUseId: string): void {
-    this.#pending = { kind: 'wd-open-subagent', toolUseId }
-    this.#flushPending()
-  }
-
-  reveal(toolUseId: string): void {
-    this.#pending = { kind: 'wd-reveal-tool-use', toolUseId }
-    this.#flushPending()
-  }
-
-  #flushPending(): void {
-    if (!this.view || !this.ready) {
+  retitleHeld(title: string): void {
+    if (!this.#held || this.#heldTitle === title) {
       return
     }
-    const pending = this.#pending
-    if (!pending) {
-      return
-    }
-    this.#pending = undefined
-    this.post({ kind: pending.kind, toolUseId: pending.toolUseId, nonce: ++this.#pendingNonce })
+    this.#heldTitle = title
+    this.pushSession()
   }
 
-  protected override onReady(): void {
-    // Safe ahead of the flushes below: a queued frame is re-posted straight after.
-    this.#delegate.subagent(undefined)
-    this.#pushActive()
+  protected override held(): { title: string } | undefined {
+    return this.#held ? { title: this.#heldTitle ?? this.#held.sessionId.slice(0, 8) } : undefined
   }
 
   protected override async onMessage(msg: PanelToHost): Promise<void> {
-    switch (msg.kind) {
-      case 'wd-open-path': {
-        return openTranscriptPath(this.#active, msg.path, msg.line)
+    if (msg.kind === 'wd-focus-held') {
+      if (this.#held) {
+        await this.#panelDelegate.focusHeld(this.#held)
       }
-      case 'wd-open-url': {
-        return void vscode.env.openExternal(vscode.Uri.parse(msg.url))
-      }
-      case 'wd-vitals': {
-        this.#delegate.vitals(msg.vitals)
-        return
-      }
-      case 'wd-open-panel': {
-        await this.#delegate.openPanel(msg.panel)
-        return
-      }
-      case 'wd-subagent-open': {
-        this.#delegate.subagent(msg.toolUseId)
-        return
-      }
-    }
-  }
-
-  #tapFrame(text: string): void {
-    const active = this.#active
-    if (!active) {
       return
     }
-    if (this.view?.visible) {
-      return
-    }
-    let frame: {
-      type?: string
-      event?: { type?: string; request?: { id?: string; toolName?: string; title?: string } }
-    }
-    try {
-      frame = JSON.parse(text)
-    } catch {
-      return
-    }
-    if (frame.type !== 'event' || frame.event?.type !== 'permission_requested') {
-      return
-    }
-    const request = frame.event.request
-    const requestId = request?.id
-    if (!requestId) {
-      return
-    }
-    const title = `WorkerDeck (${active.host.name}): ${request?.title ?? `wants to run ${request?.toolName ?? 'a tool'}`}`
-    void vscode.window.showWarningMessage(title, 'Approve', 'Deny', 'Open').then(async (choice) => {
-      if (!choice) {
-        return
-      }
-      if (choice === 'Open') {
-        await vscode.commands.executeCommand(`${SessionPanelProvider.viewId}.focus`)
-        return
-      }
-      const client = await clientFor(this.#store, active.host)
-      if (!client) {
-        return
-      }
-      try {
-        await client.resolvePermission(active.sessionId, requestId, {
-          behavior: choice === 'Approve' ? 'allow' : 'deny',
-        })
-      } catch {
-        // Already resolved from the panel (or elsewhere) - nothing to report.
-      }
-    })
-  }
-
-  // Inert until the panel has been opened at least once: with no webview there is no attach to command.
-  setModel(model?: string): void {
-    this.post({ kind: 'wd-set-model', model })
-  }
-
-  setPermissionMode(mode: PermissionMode): void {
-    this.post({ kind: 'wd-set-permission-mode', mode })
-  }
-
-  insertComposerText(text: string): void {
-    this.post({ kind: 'wd-insert-composer-text', text })
+    await super.onMessage(msg)
   }
 
   dispose(): void {
-    this.#transports?.dispose()
-    this.#onDidChangeActive.dispose()
+    this.disposeTransports()
   }
-}
-
-// In a Remote SSH window "this machine" is the remote box, which is exactly where a loopback gateway's files are.
-async function openTranscriptPath(active: ActiveSession | undefined, clicked: string, line: number | undefined): Promise<void> {
-  if (!active) {
-    return
-  }
-  const path = resolveAgainstCwd(clicked, active.cwd)
-  if (!path) {
-    return
-  }
-  const uri = isLoopbackHost(active.host)
-    ? vscode.Uri.file(path)
-    : vscode.Uri.from({ scheme: 'workerdeck', authority: active.host.id.toLowerCase(), path })
-  try {
-    if (line) {
-      const doc = await vscode.workspace.openTextDocument(uri)
-      const selection = new vscode.Range(line - 1, 0, line - 1, 0)
-      await vscode.window.showTextDocument(doc, { preview: true, selection })
-    } else {
-      await vscode.commands.executeCommand('vscode.open', uri, { preview: true })
-    }
-  } catch {
-    void vscode.window.showWarningMessage(`WorkerDeck: could not open ${path}`)
-  }
-}
-
-function resolveAgainstCwd(clicked: string, cwd: string | undefined): string | undefined {
-  if (clicked.startsWith('/')) {
-    return normalizePosix(clicked)
-  }
-  if (!cwd) {
-    return undefined
-  }
-  return normalizePosix(`${cwd.replace(/\/+$/, '')}/${clicked}`)
-}
-
-function normalizePosix(path: string): string {
-  const out: string[] = []
-  for (const part of path.split('/')) {
-    if (part === '' || part === '.') {
-      continue
-    }
-    if (part === '..') {
-      out.pop()
-    } else {
-      out.push(part)
-    }
-  }
-  return `/${out.join('/')}`
 }

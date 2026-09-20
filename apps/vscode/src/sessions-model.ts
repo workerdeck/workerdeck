@@ -25,6 +25,7 @@ export class SessionsModel implements vscode.Disposable {
   readonly #folders: vscode.Disposable
 
   #unseen: ((sessions: SidebarState['sessions']) => Record<string, number>) | undefined
+  #open: Record<string, 'editor'> = {}
 
   constructor(store: HostStore) {
     this.#store = store
@@ -34,6 +35,16 @@ export class SessionsModel implements vscode.Disposable {
 
   setSelected(selected: SidebarState['selected']): void {
     this.#selected = selected
+    this.#onDidChange.fire()
+  }
+
+  setOpen(open: Record<string, 'editor'>): void {
+    const before = Object.keys(this.#open).sort().join('\n')
+    const after = Object.keys(open).sort().join('\n')
+    if (before === after) {
+      return
+    }
+    this.#open = open
     this.#onDidChange.fire()
   }
 
@@ -209,7 +220,7 @@ export class SessionsModel implements vscode.Disposable {
         sessions[host.id] = snap.sessions
       }
     }
-    return { hosts, sessions, selected: this.#selected, scope, unseen: this.#unseen?.(sessions) }
+    return { hosts, sessions, selected: this.#selected, scope, unseen: this.#unseen?.(sessions), open: this.#open }
   }
 
   setUnseenProvider(provider: (sessions: SidebarState['sessions']) => Record<string, number>): void {

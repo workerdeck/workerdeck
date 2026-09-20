@@ -1951,6 +1951,30 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   the app, off device-wide, an over-cap payload, or too many active cards, all presenting as a
   dead button. The debug raiser surfaces the error string instead.
 
+## VS Code surfaces (the Agent panel and session tabs)
+
+- **A session lives in at most one surface, and the panel never shows a session a tab holds.**
+  Every click path goes through `selectSession`, which checks the registry first: a session with
+  a tab is revealed there whatever the modifier, and opening a tab on the panel's own session
+  moves it (`panel.hold`). Bypassing `selectSession` to call `panel.show` directly is how two
+  webviews end up attached to one session, each moving the other's watermark.
+- **Focus is sticky and only a surface can claim it.** `registry.setFocused` is called from a
+  tab's `active` transition, a webview's `wd-focus`, and `selectSession`; nothing clears it. A
+  panel with no session (the held info state) does not claim focus on click, or the status bar
+  and every section would blank the moment the user pressed its Focus button.
+- **Vitals are per surface.** `surface.vitals` replaces the old module-level `let vitals`; a
+  tab streaming in the background must not repaint the status bar for the focused session, so
+  the `vitals` delegate pushes only when the reporting surface is the focused one. `markSeen`
+  takes the surface, not the session, for the same reason.
+- **A closing tab hands its session back quietly.** `panel.show(session, { quiet: true })`
+  skips the focus command that a first `show` otherwise runs, because the panel view may have
+  been disposed since it held the session and materializing it would pop the dock open on every
+  tab close (window shutdown included).
+- **Tab restore runs before the model has sessions.** The serializer rebuilds a tab from the
+  persisted `{ hostId, sessionId, cwd }` alone, titles it by short id, and lets the next
+  `model.onDidChange` retitle it; a restored tab on the panel's remembered session converts the
+  panel to the held state, whichever of the two restores first.
+
 ## VS Code Host Mode (the supervised `workerdeck` child)
 
 - **Every `workerdeck.host.*` setting is `scope: "machine"`, never `machine-overridable"`.** The

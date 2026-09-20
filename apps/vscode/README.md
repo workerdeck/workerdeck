@@ -68,6 +68,12 @@ The conversation, docked at the bottom next to Terminal, in your editor font. St
 transcript, tool calls you can expand, a composer with `@` file references, `/` slash commands
 and image paste. Click anywhere that is not a control and the caret lands in the composer.
 
+Want more than one on screen? **Cmd+click** (Ctrl on Windows and Linux) a session in the
+sidebar to open it as an editor tab, **Option+click** (Alt) to open it to the side, and arrange
+the tabs like any other editors. A single click on a session that has a tab brings that tab
+forward; the panel keeps showing whichever session you clicked plainly. **Open in Editor Area**
+on the panel and **Move to Panel** on a tab switch a session between the two.
+
 Come back to a session that moved on without you and it opens in **catch-up**: a recap row at
 the boundary counting what happened while you were gone (turns, tool calls, files, errors,
 approvals waiting), everything above it dimmed, and a bar offering jump or dismiss.

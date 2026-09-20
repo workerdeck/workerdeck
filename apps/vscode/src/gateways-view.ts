@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import type { GatewaysToHost, HostToGateways, SidebarState } from './bridge-protocol.ts'
 import type { HostStore } from './hosts.ts'
-import { WebviewHost } from './webview-host.ts'
+import { WebviewViewHost } from './webview-host.ts'
 
 export type GatewaysFeed = {
   state: () => SidebarState
@@ -10,7 +10,7 @@ export type GatewaysFeed = {
   edit: (hostId: string) => Promise<void>
 }
 
-export class GatewaysViewProvider extends WebviewHost<GatewaysToHost, HostToGateways> implements vscode.Disposable {
+export class GatewaysViewProvider extends WebviewViewHost<GatewaysToHost, HostToGateways> implements vscode.Disposable {
   static readonly viewId = 'workerdeck.gateways'
 
   readonly #store: HostStore

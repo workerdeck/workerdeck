@@ -121,7 +121,7 @@ export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsD
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export { SessionList, SessionListItem, type SessionListItemProps, type SessionListProps } from './components/agent/SessionList.tsx'
 export { SessionBrowser, rowShapeClass, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
-export { SessionItem, type SessionItemProps } from './components/agent/SessionItem.tsx'
+export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
 export { type Step, StepRow, StepToggle, runningSteps, sessionSteps } from './components/agent/SessionSteps.tsx'

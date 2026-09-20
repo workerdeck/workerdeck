@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import type { HostToProfiles, ProfilesToHost } from './bridge-protocol.ts'
 import type { ProfilesModel } from './profiles-model.ts'
-import { WebviewHost } from './webview-host.ts'
+import { WebviewViewHost } from './webview-host.ts'
 
 export type ProfilesFeed = {
   refresh: () => Promise<void>
@@ -10,7 +10,7 @@ export type ProfilesFeed = {
   remove: (hostId: string, name: string) => Promise<void>
 }
 
-export class ProfilesViewProvider extends WebviewHost<ProfilesToHost, HostToProfiles> implements vscode.Disposable {
+export class ProfilesViewProvider extends WebviewViewHost<ProfilesToHost, HostToProfiles> implements vscode.Disposable {
   static readonly viewId = 'workerdeck.profiles'
 
   readonly #model: ProfilesModel

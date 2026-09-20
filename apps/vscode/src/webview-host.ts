@@ -1,18 +1,24 @@
 import * as vscode from 'vscode'
 import { webviewHtml } from './webview-html.ts'
 
-// The webview-provider skeleton shared by the panel, the sidebar, the section views and the
-// gateways view: the `#view`/`#ready`/`#htmlVersion` triple, `resolveWebviewView`'s
-// options + HTML + message wiring, the `wd-ready` flip, and the dev reloader's
+// What a `WebviewView` and a `WebviewPanel` have in common, which is all the skeleton needs.
+export type WebviewSurface = {
+  readonly webview: vscode.Webview
+  readonly visible: boolean
+  readonly onDidDispose: vscode.Event<void>
+}
+
+// The webview skeleton shared by every host: the `#view`/`#ready`/`#htmlVersion` triple,
+// `attach`'s options + HTML + message wiring, the `wd-ready` flip, and the dev reloader's
 // `reloadWebview()`. Getting the ready/push ordering right is this class's whole job:
-// `ready` is false from resolve until the webview says `wd-ready`, and it is the subclass's
+// `ready` is false from attach until the webview says `wd-ready`, and it is the subclass's
 // `onReady()` that re-pushes whatever the fresh document missed.
 //
 // `In` is the webview→host message union (it must include `{ kind: 'wd-ready' }`),
-// `Out` the host→webview one.
-export abstract class WebviewHost<In extends { kind: string }, Out> implements vscode.WebviewViewProvider {
+// `Out` the host→webview one, `V` the concrete VS Code surface.
+export abstract class WebviewHost<In extends { kind: string }, Out, V extends WebviewSurface = vscode.WebviewView> {
   readonly #extensionUri: vscode.Uri
-  #view: vscode.WebviewView | undefined
+  #view: V | undefined
   #ready = false
   // Bumped by the dev reloader: identical HTML would not re-fetch the bundle.
   #htmlVersion = 0
@@ -35,8 +41,8 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
   }
 
   // Wire per-view listeners (transports, visibility) on the fresh view. Runs inside
-  // `resolveWebviewView` before the HTML is set, matching the original providers.
-  protected wire(_view: vscode.WebviewView): void {}
+  // `attach` before the HTML is set.
+  protected wire(_view: V): void {}
 
   // Runs after the view is fully wired - the place for an eager first push.
   protected afterResolve(): void {}
@@ -56,13 +62,13 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
   protected onViewDisposed(): void {}
 
   // Drop anything keyed to the *document* rather than the view, because `reloadWebview` replaces the document while
-  // VS Code keeps the `WebviewView` alive - so neither `resolveWebviewView` nor `onDidDispose` runs. Transports are
+  // VS Code keeps the surface alive - so neither `attach` nor `onDidDispose` runs. Transports are
   // the case that bites: their sockets are keyed by an id the document allocates from 1, so a surviving socket
   // answers to an id the fresh document has since handed to something else. Per-view listeners belong in `wire`,
   // which must NOT be re-run here - it would double-register them.
   protected resetForReload(): void {}
 
-  protected get view(): vscode.WebviewView | undefined {
+  protected get view(): V | undefined {
     return this.#view
   }
 
@@ -78,7 +84,7 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
     return vscode.Uri.joinPath(this.#extensionUri, 'dist', 'webview')
   }
 
-  resolveWebviewView(view: vscode.WebviewView): void {
+  protected attach(view: V): void {
     this.#view = view
     this.#ready = false
     this.wire(view)
@@ -117,5 +123,15 @@ export abstract class WebviewHost<In extends { kind: string }, Out> implements v
     this.#ready = false
     this.resetForReload()
     view.webview.html = webviewHtml(view.webview, this.#dist(), this.bundle, this.rootAttrs(), ++this.#htmlVersion, this.htmlOptions())
+  }
+}
+
+// The `WebviewView` flavour: VS Code hands the view over through `resolveWebviewView`.
+export abstract class WebviewViewHost<In extends { kind: string }, Out>
+  extends WebviewHost<In, Out, vscode.WebviewView>
+  implements vscode.WebviewViewProvider
+{
+  resolveWebviewView(view: vscode.WebviewView): void {
+    this.attach(view)
   }
 }

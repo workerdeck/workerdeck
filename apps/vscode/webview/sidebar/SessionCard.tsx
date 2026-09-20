@@ -1,6 +1,6 @@
 import type { SessionRow } from '@workerdeck/protocol'
-import { SessionItem, cn } from '@workerdeck/ui'
-import { MoreHorizontal } from 'lucide-react'
+import { SessionItem, cn, type SelectModifiers } from '@workerdeck/ui'
+import { AppWindow, MoreHorizontal } from 'lucide-react'
 
 export function SessionCard({
   row,
@@ -8,6 +8,7 @@ export function SessionCard({
   showGateway,
   projectIcons,
   selected,
+  inEditor = false,
   activeSubagentId,
   onSelect,
   onSelectSubagent,
@@ -19,8 +20,9 @@ export function SessionCard({
   showGateway?: boolean
   projectIcons?: Record<string, string>
   selected: boolean
+  inEditor?: boolean
   activeSubagentId?: string
-  onSelect: () => void
+  onSelect: (modifiers: SelectModifiers) => void
   onSelectSubagent: (toolUseId: string) => void
   onRename: (title: string) => void
   onMenu: () => void
@@ -36,7 +38,12 @@ export function SessionCard({
       onSelect={onSelect}
       onSelectSubagent={onSelectSubagent}
       onRename={onRename}
-      actions={<CardMenu onOpen={onMenu} />}
+      actions={
+        <>
+          {inEditor ? <AppWindow className="size-3.5 shrink-0 text-fg-4" aria-label="Open in an editor tab" /> : null}
+          <CardMenu onOpen={onMenu} />
+        </>
+      }
     />
   )
 }

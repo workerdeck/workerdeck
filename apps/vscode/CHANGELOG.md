@@ -5,6 +5,25 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [Unreleased]
+
+### Added
+
+- Sessions open in **editor tabs** beside the Agent panel: Cmd+click (Ctrl on Windows and
+  Linux) a session for a tab in the active column, Option/Alt+click for one to the side. A
+  session lives in one surface at a time - opening a tab moves it out of the panel, which shows
+  a short info state with a Focus button until the next click; closing the tab hands it back. A
+  plain click on a session that has a tab reveals the tab. `Open in Editor Area` (panel title)
+  and `Move to Panel` (editor title) switch a session between the two, and both rows sit in the
+  session card's `⋯` menu. Tabs survive a window reload, carry the session title and a state
+  dot, and the card shows a glyph while its session is in a tab.
+
+### Changed
+
+- The status bar, the secondary-sidebar views, the model and mode pickers, `Use Skill` and
+  `Open Session Project Folder` follow the **focused** surface (the last tab or panel you clicked
+  into), not only the bottom panel.
+
 ## [2.7.1] - 2026-09-16
 
 First release published by CI rather than by hand. No behaviour change - 2.7.0 was uploaded

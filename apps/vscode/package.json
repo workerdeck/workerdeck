@@ -216,6 +216,18 @@
         "category": "WorkerDeck"
       },
       {
+        "command": "workerdeck.openSessionInEditor",
+        "title": "Open Session in Editor Area",
+        "category": "WorkerDeck",
+        "icon": "$(empty-window)"
+      },
+      {
+        "command": "workerdeck.moveSessionToPanel",
+        "title": "Move Session to Panel",
+        "category": "WorkerDeck",
+        "icon": "$(layout-panel)"
+      },
+      {
         "command": "workerdeck.showCompletedTasks",
         "title": "Show Completed Tasks",
         "category": "WorkerDeck",
@@ -297,7 +309,19 @@
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "workerdeck.moveSessionToPanel",
+          "when": "activeWebviewPanelId == workerdeck.session",
+          "group": "navigation@1"
+        }
+      ],
       "view/title": [
+        {
+          "command": "workerdeck.openSessionInEditor",
+          "when": "view == workerdeck.sessionPanel && workerdeck.panelHasSession",
+          "group": "navigation@1"
+        },
         {
           "command": "workerdeck.showCompletedTasks",
           "when": "view == workerdeck.tasks && !workerdeck.tasksShowCompleted",

@@ -43,6 +43,54 @@ where the *sans* token is what the transcript reads in, and is stamped on `<html
 sidebar and section views are workbench UI and follow `--vscode-font-family`, which is the
 webview baseline `styles.css` sets.
 
+### Surfaces: the Agent panel and editor tabs
+
+A session's webview is a **surface**, and there are two kinds: the bottom Agent panel (a
+`WebviewView`, always exactly one, may be empty) and editor tabs (`WebviewPanel`s of viewType
+`workerdeck.session`, zero or more). `src/session-surface.ts` is everything a session needs from
+its host - transports, the permission toast, the single open-subagent/reveal slot, the session
+push, model/mode/insert - and the two hosts (`panel.ts`, `session-tab.ts`) only differ in how
+they materialize, focus and persist. `WebviewHost` is generic over the surface (`webview`,
+`visible`, `onDidDispose` is all it needs); `WebviewViewHost` adds `resolveWebviewView` for the
+view-based providers. `src/surfaces.ts` is the registry: the list, the focused surface,
+`find(hostId, sessionId)`, `reloadAll()`.
+
+Two invariants keep the rest boring. **A session lives in at most one surface.** Cmd (macOS) /
+Ctrl (elsewhere) + click on a session card opens it in a tab in the active column, Alt/Option +
+click to the side (`ViewColumn.Beside`, the explorer's own open-to-the-side modifier);
+`SessionItem.onSelect` now receives `{ meta, ctrl, alt }`, which the dashboard and the
+embedding ignore, and `wd-select-session` carries the resolved `target`. If the panel was
+showing that session the tab *moves* it: the panel keeps a `held` reference and renders an
+info state ("open as an editor tab" + a Focus button, `wd-focus-held`) until the next single
+click replaces it. A single click on a session a tab holds reveals the tab instead of the panel,
+and closing a tab hands its session back to a panel still holding for it (`show` with `quiet`,
+so a closing tab never forces the dock open). Deleting a session disposes its tab. The panel
+title action **Open in Editor Area** and the editor title action **Move to Panel** (gated on
+`activeWebviewPanelId == workerdeck.session`) are the terminal's "Move Terminal into Editor
+Area" pair, and both rows are in the card's `⋯` QuickPick.
+
+**One surface is focused, and it is sticky.** Sources: a tab's `onDidChangeViewState.active`,
+a `wd-focus` message every session webview posts on `window` focus / `focusin` (a
+`WebviewView` has no `active` notion, and a panel with no session does not claim focus), and
+`selectSession`. Clicking into a text editor does not clear it, same as the terminal status
+item. Every former singleton re-targets to the focused surface: the status bar, the section
+feed's `vitals()`, `model.setSelected` (which is how the sidebar highlights the focused
+session; the sub-agent frame included), the model/mode QuickPicks, `useSkill`,
+`openProjectFolder`. `workerdeck.hasSession` is "any surface has a session";
+`workerdeck.panelHasSession` gates the panel's title action. `markSeen` runs over every
+visible surface, and vitals are per surface (`surface.vitals`), so a tab streaming in the
+background never moves the focused session's readings. Dev reload and the config-change
+`reloadWebview()` iterate the registry.
+
+Tabs are `retainContextWhenHidden` (the notebook trade-off: memory per hidden tab, no
+reconnect on switch) and survive a window reload through a `WebviewPanelSerializer`: the
+webview persists `{ hostId, sessionId, cwd }` via `bridge.setState` on every
+`wd-show-session`, and deserialization rebuilds the tab, converting a panel restored on the
+same session into the held state. Title follows the session title on every model change; the
+icon is a data-URI circle in the row's `SessionState` colour. The sidebar's `open` map
+(`SidebarState.open`, `host:session` → `'editor'`) draws the "in editor" glyph in the card's
+`actions` slot.
+
 ### The status bar
 
 The window status bar is the panel's bar, and each of its badges is its own boolean

@@ -11,6 +11,8 @@ import type { Step } from './SessionSteps.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
 
+export type SelectModifiers = { meta: boolean; ctrl: boolean; alt: boolean }
+
 export interface SessionItemProps {
   row: SessionRow
   active?: boolean
@@ -20,7 +22,7 @@ export interface SessionItemProps {
   projectIcons?: Record<string, string>
   expanded?: boolean
   onExpandedChange?: (expanded: boolean) => void
-  onSelect?: () => void
+  onSelect?: (modifiers: SelectModifiers) => void
   onSelectSubagent?: (toolUseId: string) => void
   onRename?: (title: string) => void
   renameOn?: 'doubleClick' | 'external'
@@ -29,6 +31,8 @@ export interface SessionItemProps {
   actions?: ReactNode
   className?: string
 }
+
+const NO_MODIFIERS: SelectModifiers = { meta: false, ctrl: false, alt: false }
 
 export function SessionItem({
   row,
@@ -93,7 +97,7 @@ export function SessionItem({
   for (const extra of extras) {
     parts.push(<span key={extra}>{extra}</span>)
   }
-  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.()))
+  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)))
   const holdsOpenAgent = steps.some((s) => s.key === activeStepKey)
 
   return (
@@ -106,7 +110,7 @@ export function SessionItem({
         if (e.detail > 1 || isEditing) {
           return
         }
-        onSelect?.()
+        onSelect?.({ meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey })
       }}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) {
@@ -114,7 +118,7 @@ export function SessionItem({
         }
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          onSelect?.()
+          onSelect?.({ meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey })
         }
       }}
       className={cn(

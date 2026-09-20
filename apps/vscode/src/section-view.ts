@@ -5,7 +5,7 @@ import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSection, SectionToHost, SidebarState } from './bridge-protocol.ts'
 import type { SessionVitals } from '@workerdeck/ui'
 import { formatCost } from '@workerdeck/ui/format'
-import { WebviewHost } from './webview-host.ts'
+import { WebviewViewHost } from './webview-host.ts'
 
 export type SectionKind = 'info' | 'context' | 'usage' | 'mcp' | 'tasks'
 
@@ -15,7 +15,7 @@ export type SectionFeed = {
   tasksShowCompleted: () => boolean
 }
 
-export class SectionViewProvider extends WebviewHost<SectionToHost, HostToSection> implements vscode.Disposable {
+export class SectionViewProvider extends WebviewViewHost<SectionToHost, HostToSection> implements vscode.Disposable {
   readonly #store: HostStore
   readonly #kind: SectionKind
   readonly #feed: SectionFeed

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { SessionPanel, Toaster, usePathLinks, type PathHit, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
+import { Button, SessionPanel, Toaster, usePathLinks, type PathHit, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
+import type { SurfaceState } from '../src/bridge-protocol.ts'
 import type { Bridge } from './bridge.ts'
-
 
 type Shown = {
   baseUrl: string
+  hostId: string
   sessionId: string
   hostName: string
+  cwd?: string
   unseen?: { itemCount: number; since: number }
 }
 
@@ -63,6 +65,7 @@ export function App({
   fontSize?: number
 }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
+  const [held, setHeld] = useState<{ title: string } | undefined>(undefined)
   const [openSubagent, setOpenSubagent] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const controls = useRef<SessionControls | undefined>(undefined)
@@ -82,8 +85,14 @@ export function App({
       bridge.onHostMessage((msg) => {
         if (msg.kind === 'wd-show-session') {
           setShown(msg.session)
+          setHeld(msg.held)
           setOpenSubagent(undefined)
           setReveal(undefined)
+          // What an editor tab hands the serializer on window reload; harmless in the bottom panel.
+          const session = msg.session
+          bridge.setState<SurfaceState | undefined>(
+            session ? { hostId: session.hostId, sessionId: session.sessionId, cwd: session.cwd } : undefined,
+          )
         } else if (msg.kind === 'wd-set-model') {
           controls.current?.setModel(msg.model)
         } else if (msg.kind === 'wd-set-permission-mode') {
@@ -103,6 +112,17 @@ export function App({
       }),
     [bridge],
   )
+
+  // Focus is sticky across surfaces on the host side, and only a surface can say it was clicked into.
+  useEffect(() => {
+    const onFocus = () => bridge.post({ kind: 'wd-focus' })
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('focusin', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('focusin', onFocus)
+    }
+  }, [bridge])
 
   const client = useMemo(
     () =>
@@ -124,6 +144,19 @@ export function App({
   // is only reachable from a mounted panel.
   const { bookmarks, toggle: toggleBookmark } = useBookmarks(shown ? `${shown.baseUrl}#${shown.sessionId}` : '')
 
+  if (held && !shown) {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center gap-2 px-5 text-center text-sm text-fg-3">
+        <p>
+          <span className="font-medium text-fg-2">{held.title}</span> is open as an editor tab.
+        </p>
+        <p className="text-label text-fg-4">Pick another session in the sidebar to show it here.</p>
+        <Button variant="outline" size="sm" className="mt-1" onClick={() => bridge.post({ kind: 'wd-focus-held' })}>
+          Focus the tab
+        </Button>
+      </div>
+    )
+  }
   if (!shown || !client) {
     return <div className="flex h-screen items-center justify-center text-sm text-fg-3">Pick a session in the WorkerDeck sidebar.</div>
   }

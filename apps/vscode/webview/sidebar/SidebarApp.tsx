@@ -1,9 +1,9 @@
 import { FolderOpen, Layers, Plug, SearchX } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { SessionInfo, SessionRow } from '@workerdeck/protocol'
-import type { SidebarState } from '../../src/bridge-protocol.ts'
+import type { SidebarState, SurfaceTarget } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
-import { ProjectIcon } from '@workerdeck/ui'
+import { ProjectIcon, type SelectModifiers } from '@workerdeck/ui'
 import { Empty, Key } from '../ui/Empty.tsx'
 import { SessionCard } from './SessionCard.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
@@ -23,6 +23,19 @@ import {
 } from '../../src/view-config.ts'
 
 type Persisted = { config?: ViewConfig }
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+
+// Cmd (macOS) / Ctrl (elsewhere) opens a tab in the active column, Alt/Option one to the side: the explorer's own modifiers.
+function targetOf(modifiers: SelectModifiers): SurfaceTarget | undefined {
+  if (IS_MAC ? modifiers.meta : modifiers.ctrl) {
+    return 'editor'
+  }
+  if (modifiers.alt) {
+    return 'editor-beside'
+  }
+  return undefined
+}
 
 function iconSrcOf(info: SessionInfo | undefined, icons: Record<string, string>): string | undefined {
   const icon = info?.project?.icon
@@ -176,14 +189,16 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                   showGateway={config.groupBy !== 'gateway' && hosts.length > 1}
                   projectIcons={projectIcons}
                   selected={selectedIs(row) !== undefined}
+                  inEditor={state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor'}
                   /* Only THIS card's frame: `selected` is one object for the whole list, so
                      reading its `subagentToolUseId` unguarded turns every card grey. */
                   activeSubagentId={selectedIs(row)?.subagentToolUseId}
-                  onSelect={() =>
+                  onSelect={(modifiers) =>
                     bridge.post({
                       kind: 'wd-select-session',
                       hostId: row.hostId,
                       sessionId: row.info.id,
+                      target: targetOf(modifiers),
                     })
                   }
                   onSelectSubagent={(subagentToolUseId) =>
