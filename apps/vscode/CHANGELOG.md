@@ -5,7 +5,7 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
-## [Unreleased]
+## [2.10.0] - 2026-09-20
 
 ### Added
 
@@ -23,6 +23,10 @@ gateway and protocol it talks to.
 - The status bar, the secondary-sidebar views, the model and mode pickers, `Use Skill` and
   `Open Session Project Folder` follow the **focused** surface (the last tab or panel you clicked
   into), not only the bottom panel.
+- Session cost is priced client-side for every engine (`@workerdeck/protocol`'s rate table), and
+  the total survives a park, a dormant wake and a context clear instead of reading `$0.00` after
+  a reattach.
+- Picking a codex skill inserts codex's own `$name` mention, which the runner expands itself.
 
 ## [2.7.1] - 2026-09-16
 

@@ -1121,6 +1121,18 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   other docs point at them by name. The file is still the largest in `docs/` and a split into
   `docs/gotchas/<topic>.md` behind an index is the obvious next step.
 
+  **2.10.0** - **a session opens where you want it.** A **minor**, and the VS Code extension's
+  release: sessions open in **editor tabs** beside the Agent panel (Cmd/Ctrl+click for the active
+  column, Alt/Option+click for the side), one surface per session, the panel dropping into an
+  info state when a tab takes its session and taking it back when the tab closes, focus sticky
+  across surfaces and every former singleton (status bar, section views, sidebar selection, the
+  pickers) following it. `WebviewHost` is generic over the surface, `panel.ts` split into
+  `session-surface.ts` / `panel.ts` / `session-tab.ts` with `surfaces.ts` as the registry, and
+  `SessionItem.onSelect` receives the click modifiers. Riding with it: **every engine priced by
+  the client** (`protocol/src/pricing.ts`, the cost ledger carrying the total across a park, a
+  wake and a clear), codex's **`$name` skill mention** inserted and honoured, and the shared
+  `usePathLinks`. **Protocol stays 1**: `pricing` and `usageByModel` are additive.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
