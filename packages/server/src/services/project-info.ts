@@ -9,6 +9,7 @@ const MAX_PROJECT_FILE_BYTES = 64 * 1024
 export const MAX_PROJECT_ICON_BYTES = 512 * 1024
 const MAX_NAME_CHARS = 80
 const GLYPH_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
+const SHORTCODE_RE = /^[A-Z0-9]{2,5}$/
 
 const DEFAULT_TTL_MS = 30_000
 const SWEEP_ABOVE = 256
@@ -112,13 +113,18 @@ function tryLoad(file: string, root: string): Omit<Resolution, 'expiresAt'> | un
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return undefined
   }
-  const raw = parsed as { name?: unknown; icon?: unknown }
+  const raw = parsed as { name?: unknown; icon?: unknown; shortcode?: unknown }
   const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, MAX_NAME_CHARS) : basename(root)
   const icon = classifyIcon(raw.icon, root)
+  const shortcode = classifyShortcode(raw.shortcode)
   return {
-    project: { name, root, ...(icon ? { icon: icon.wire } : {}) },
+    project: { name, root, ...(icon ? { icon: icon.wire } : {}), ...(shortcode ? { shortcode } : {}) },
     ...(icon?.resolved ? { icon: icon.resolved } : {}),
   }
+}
+
+function classifyShortcode(value: unknown): string | undefined {
+  return typeof value === 'string' && SHORTCODE_RE.test(value) ? value : undefined
 }
 
 function classifyIcon(value: unknown, root: string): { wire: ProjectIcon; resolved?: ResolvedProjectIcon } | undefined {

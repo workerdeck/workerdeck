@@ -1,12 +1,13 @@
 ---
 title: Project identity
-description: A `.workerdeck.json` gives a directory a name and an icon, so a list of sessions reads as a list of projects instead of a column of folder basenames.
+description: A `.workerdeck.json` gives a directory a name, an icon and an optional shortcode, so a list of sessions reads as a list of projects instead of a column of folder basenames.
 order: 10
 ---
 
 A gateway with twenty sessions on it shows you twenty rows, and the only thing distinguishing
 them is the tail of a path. `ui`, `server`, `web` - three rows of one repo, and nothing says so.
-A `.workerdeck.json` fixes that by giving a directory a name and an icon.
+A `.workerdeck.json` fixes that by giving a directory a name, an icon and, if the name is long,
+a short code to stand in for it.
 
 ```json
 {
@@ -75,6 +76,31 @@ gateway. The icon route deliberately parses nothing - it serves bytes with `nosn
 attachment disposition precisely so that a hostile file is inert.
 
 If your project should show its mark on every client, ship a PNG.
+
+## Shortcodes
+
+A long name in a narrow sidebar is a truncated name. Declare a `shortcode` and every list row
+draws that instead:
+
+```json
+{ "name": "WorkerDeck", "shortcode": "WD" }
+```
+
+2 to 5 characters, upper-case letters and digits only (`^[A-Z0-9]{2,5}$`). It is used **always**,
+not only when a row runs out of room, so the label a person learns to recognise does not change
+with the width of a pane. Wherever a client draws the project *label* - the row, a project group
+header, the project filter - it draws the shortcode, so there is one word to recognise rather than
+two. The full name is a hover away on the web clients (it is the row's tooltip) and remains what
+`projectName` returns for any surface with room for it. Search matches either, so typing `worker`
+or `wd` finds the same rows.
+
+The gateway validates the shape and nothing more. A value it refuses - lower-case, one character,
+six, or not a string at all - is simply absent, exactly like a malformed icon: no error, and no
+rewrite either. `"wd"` does not become `"WD"`, because a file saying one thing while a row says
+another is worse than no shortcode.
+
+Grouping is untouched: the key is still the root, so a shortcode can be added, changed or removed
+without emptying a saved filter.
 
 ## Security
 

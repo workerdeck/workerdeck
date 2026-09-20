@@ -27,6 +27,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     session: ctx.projects.withProject(runner.info()),
     replayingFrom: afterSeq,
     ...(shellPermitted(ctx.shell, runner, access.operator) ? { shell: true } : {}),
+    ...(ctx.pricingOverrides ? { pricingOverrides: ctx.pricingOverrides } : {}),
   })
   const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
     coalesceReplay: true,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { WorkerDeckClient, SessionHandle } from '@workerdeck/client'
-import { PROTOCOL_VERSION } from '@workerdeck/protocol'
-import type { AttachedFrame, ModelOption, PermissionMode, SessionEvent } from '@workerdeck/protocol'
+import { DEFAULT_PRICING, PROTOCOL_VERSION, mergePricing } from '@workerdeck/protocol'
+import type { AttachedFrame, ModelOption, PermissionMode, PricingTable, SessionEvent } from '@workerdeck/protocol'
 import {
   applyEvent,
   blockText,
@@ -60,6 +60,8 @@ export type UseClaudeSessionResult = {
   protocolMismatch?: number
   // The gateway offers `!` shell mode to this principal on this session. Absent from an older gateway, so falsy by default.
   shell: boolean
+  // The gateway's rate table, its own overrides merged over the bundled one, for every figure this client prices itself.
+  pricing: PricingTable
   models: ModelOption[]
   effectiveModel?: string
   handle: SessionHandle | undefined
@@ -92,6 +94,7 @@ export function useClaudeSession(
   const [connection, setConnection] = useState<ConnectionState>('reconnecting')
   const [protocolMismatch, setProtocolMismatch] = useState<number | undefined>()
   const [shell, setShell] = useState(false)
+  const [pricing, setPricing] = useState<PricingTable>(DEFAULT_PRICING)
   const [replayTarget, setReplayTarget] = useState<number | undefined>()
   const [resyncSeq, setResyncSeq] = useState(0)
   // Ref for the stable callbacks below; state so consumers of `handle` re-render when the socket opens or the session switches.
@@ -144,6 +147,7 @@ export function useClaudeSession(
       setReplayTarget(initialReplayTarget(frame))
       setProtocolMismatch(frame.protocolVersion === PROTOCOL_VERSION ? undefined : frame.protocolVersion)
       setShell(frame.shell === true)
+      setPricing(mergePricing(frame.pricingOverrides).pricing)
     })
     const offConn = handle.on('connectionChange', (open: boolean) => setConnection(open ? 'live' : 'reconnecting'))
     const offRetry = handle.on('reconnectAttempt', (attempts: number) =>
@@ -221,6 +225,7 @@ export function useClaudeSession(
       replaying,
       protocolMismatch,
       shell,
+      pricing,
       models,
       effectiveModel: state.model ?? state.defaultModel,
       handle: handleState,
@@ -236,7 +241,7 @@ export function useClaudeSession(
       reconnectNow,
       loadFullResult,
     }),
-    [state, connected, connection, replaying, protocolMismatch, shell, models, handleState, reconnectNow, loadFullResult],
+    [state, connected, connection, replaying, protocolMismatch, shell, pricing, models, handleState, reconnectNow, loadFullResult],
   )
 }
 

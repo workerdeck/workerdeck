@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   type ByModel,
   DEFAULT_PRICING,
+  PRICING_AS_OF,
+  PRICING_STALE_DAYS,
   UNPRICED_WARN_SHARE,
   addTokenUsage,
   canonicalModel,
@@ -10,8 +12,13 @@ import {
   emptyTokenUsage,
   mergeByModel,
   meteredCost,
+  mergePricing,
+  pricingAgeNote,
   rateFor,
+  setPricingOverrides,
   subscriptionComparison,
+  unknownBasisModels,
+  worseBasis,
   tokenUsageFromWire,
   totalTokens,
   unpricedModels,
@@ -196,5 +203,73 @@ describe('the bundled table', () => {
       expect(rate.output, model).toBeGreaterThanOrEqual(rate.input)
       expect(rate.cacheRead, model).toBeLessThan(rate.input)
     }
+  })
+})
+
+describe('pricingAgeNote', () => {
+  const asOfMs = Date.parse(PRICING_AS_OF)
+  const dayMs = 86_400_000
+
+  it('stays quiet while the table is inside its window', () => {
+    expect(pricingAgeNote(asOfMs + (PRICING_STALE_DAYS - 1) * dayMs)).toBeUndefined()
+    expect(pricingAgeNote(asOfMs + PRICING_STALE_DAYS * dayMs)).toBeUndefined()
+  })
+
+  it('names the age once the table is older than the window', () => {
+    const note = pricingAgeNote(asOfMs + (PRICING_STALE_DAYS + 1) * dayMs)
+    expect(note).toContain('91 days old')
+  })
+})
+
+describe('mergePricing', () => {
+  it('replaces one model rates and leaves the rest of the table alone', () => {
+    const merged = mergePricing({ 'claude-opus-5': { input: 1, output: 2, cacheWrite5m: 3, cacheWrite1h: 4, cacheRead: 5 } })
+    expect(merged.pricing['claude-opus-5']).toEqual({ input: 1, output: 2, cacheWrite5m: 3, cacheWrite1h: 4, cacheRead: 5 })
+    expect(merged.pricing['claude-sonnet-5']).toEqual(DEFAULT_PRICING['claude-sonnet-5'])
+    expect(Object.keys(merged.pricing).length).toBe(Object.keys(DEFAULT_PRICING).length)
+    expect(merged.dropped).toEqual([])
+  })
+
+  it('keys an override by canonical model, so a dated or prefixed id still lands', () => {
+    const merged = mergePricing({
+      'us.anthropic.claude-haiku-4-5-20251001': { input: 9, output: 9, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 },
+    })
+    expect(merged.overrides['claude-haiku-4-5']?.input).toBe(9)
+  })
+
+  it('drops an entry missing a tier rather than pricing it at zero', () => {
+    const merged = mergePricing({
+      'claude-opus-5': { input: 1, output: 2 },
+      'gpt-5': 'cheap',
+      'claude-sonnet-5': { input: -1, output: 1, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 },
+    })
+    expect(merged.dropped).toEqual(['claude-opus-5', 'gpt-5', 'claude-sonnet-5'])
+    expect(merged.pricing['claude-opus-5']).toEqual(DEFAULT_PRICING['claude-opus-5'])
+  })
+
+  it('reaches every pricing call once set as the active table, and resets cleanly', () => {
+    setPricingOverrides({ 'claude-opus-5': { input: 100, output: 100, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 } })
+    expect(rateFor('claude-opus-5')?.input).toBe(100)
+    expect(costOf({ ...emptyTokenUsage(), input: 1_000_000 }, 'claude-opus-5').total).toBeCloseTo(100)
+    setPricingOverrides(undefined)
+    expect(rateFor('claude-opus-5')?.input).toBe(5)
+  })
+})
+
+describe('costBasis', () => {
+  it('keeps the worse basis when two readings of a model are added', () => {
+    expect(worseBasis('list', 'unknown')).toBe('unknown')
+    expect(worseBasis('managed', 'list')).toBe('managed')
+    expect(worseBasis(undefined, 'list')).toBe('list')
+    const sum = addTokenUsage({ ...emptyTokenUsage(), costBasis: 'list' }, { ...emptyTokenUsage(), costBasis: 'unknown' })
+    expect(sum.costBasis).toBe('unknown')
+  })
+
+  it('names the models the engine could not price', () => {
+    const byModel: ByModel = {
+      'claude-opus-5': { ...emptyTokenUsage(), input: 10, costBasis: 'list' },
+      'claude-sonnet-5': { ...emptyTokenUsage(), input: 10, costBasis: 'unknown' },
+    }
+    expect(unknownBasisModels(byModel)).toEqual(['claude-sonnet-5'])
   })
 })

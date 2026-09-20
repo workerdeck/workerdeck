@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { projectLabel, projectSubpath, sessionLabel } from '@workerdeck/protocol'
+import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
 import type { SessionRow } from '@workerdeck/protocol'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
@@ -68,6 +68,7 @@ export function SessionItem({
 
   const engine = info.engine ?? 'claude'
   const project = showProject ? projectLabel(row) : projectSubpath(row)
+  const projectTitle = showProject ? projectName(row) : undefined
   const projectIcon = showProject ? info.project?.icon : undefined
   const iconSrc = projectIcon?.type === 'image' ? projectIcons?.[projectIcon.hash] : undefined
   const cost = formatCost(info.costUsd ?? info.totalCostUsd)
@@ -88,8 +89,8 @@ export function SessionItem({
   }
   if (project !== undefined) {
     parts.push(
-      <span key="project">
-        <ProjectIcon icon={projectIcon} src={iconSrc} name={project} className="mr-1.5 size-4 align-[-0.3em]" />
+      <span key="project" title={projectTitle}>
+        <ProjectIcon icon={projectIcon} src={iconSrc} name={projectTitle} className="mr-1.5 size-4 align-[-0.3em]" />
         {project}
       </span>,
     )

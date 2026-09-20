@@ -409,6 +409,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     `turn/plan/updated`) gates this against `#isRootThread`.
   - **Items and deltas are deliberately not filtered** - a sub-agent's work belongs in the
     transcript, attributed by `threadId`.
+  - **A child's items resolve through the agent's own `ItemScope`, never the root turn.** Agents
+    outlive root turns by design, so the root's `#activeTurn` cannot be the gate: each `CodexAgent`
+    carries its own nonce (its anchor id), tool-use latch and reasoning section index, and
+    `#itemContext` picks the agent's scope when `threadId` names one. Between root turns the root
+    thread is heard for `subAgentActivity` only (a settle or a relabel); every other root item with
+    no turn is still dropped. Pinned by the outlives-the-turn test in `core/test/codex-subagents.test.ts`.
 - **`WORKERDECK_CODEX_TRACE=<file>`** (`CODEX_TRACE_ENV` in `jsonrpc.ts`) dumps raw inbound
   app-server traffic (notifications and server->client requests, JSONL, appended). Off unless set,
   and deliberately skips `account/*` and `login*` - the one place this protocol can carry a masked
@@ -1296,10 +1302,20 @@ handover wrong.
 ## Checklist (the `checklist` event, `SessionInfo.checklist`)
 
 - **`checklist` is the engine's list; `tasks` is the product concept, and they are deliberately
-  different words.** The field carries only what the engine itself wrote (Claude's `TodoWrite`,
-  codex's `turn/plan/updated`); clients draw `sessionTasks(info)`, that list unified with the
+  different words.** The field carries only what the engine itself wrote (Claude's `TodoWrite` or
+  its `TaskCreate`/`TaskUpdate` successors, codex's `turn/plan/updated`); clients draw `sessionTasks(info)`, that list unified with the
   untyped `Task` spawns `isAgentRecord` rejects. Naming the field `tasks` invites
   `info.tasks !== sessionTasks(info)` bugs; the pairing mirrors `subagents`/`sessionSteps`.
+- **The `TaskCreate`/`TaskUpdate` half is incremental, and the id is minted in the result.** The
+  current CLI replaced `TodoWrite` with `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList`;
+  `TaskCreate`'s input carries no id, the id comes back as `Task #N created successfully: ...` in the
+  tool_result text, and `TaskUpdate` is `{taskId, status?, subject?, activeForm?}` with `deleted` as
+  a status. `TaskChecklist` (`core/src/lib/checklist.ts`) holds a create pending until its result
+  names the id, applies updates only to tasks it has seen created, and reads the id from the result
+  *text* so the resume backfill (which carries no `tool_use_result`) rebuilds the same list. The
+  SDK's `task_started`/`task_updated` system messages are background tasks (agents, bash), not this
+  list; `task_subject` exists only on hook inputs. A `TodoWrite` from the same session resets the
+  task fold: the whole-list vocabulary wins whenever it appears.
 - **It is a fold of the event log, not a tracker.** `EventLog` folds it beside `activityCount`,
   `proseCount` and `contextUsage`; all three runners' `info()` read `this.#log.checklist`. The event
   serves the attached transcript, the `SessionInfo` field serves polled list surfaces. `restore()`
@@ -1531,6 +1547,14 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   and what the body says; spacing, radius and border belong to `Row`/`Blank`/`Band`. `❯` is also
   `PROMPT_GLYPH`, shared with the composer's gutter, so both spellings keep the caret on the same
   column.
+- **A run of exactly one tool call draws as the call itself, never as a one-line summary.**
+  `RunRow` (`terminal/items.tsx`) falls through to `ToolRow` when `items.length === 1`; a run of
+  two or more still draws `ToolRunRow`'s `runSummary(...)` row. This is a rendering rule only, the
+  block model (`RunBlock`, its key, indices, expansion state) is untouched, and `blockHeight`
+  (`height.ts`) prices the run-of-one case as `itemHeight(block.run[0], m)` to match. Shared with
+  iOS: `planRun` in `TerminalPlanner.swift` falls through to `planToolCall` for the same case,
+  because the summary would occupy the same one row while throwing away the tool's name, input and
+  result preview.
 - **`--term-font-size` and `--term-line` must be whole pixels.** A line height of `1.5 x 13px` is
   19.5px: every second row of a long transcript lands on a half-pixel, text visibly softens, and
   diff bands show a seam along their edge. `TerminalSurface` rounds what it is handed rather than
@@ -1829,6 +1853,12 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
 - **`Activity` is not `Sendable`.** Every ActivityKit call from `@MainActor` is a Swift 6 "sending"
   error. `ActivityCoordinator` keeps stream handling `nonisolated`, passes only Strings to the
   actor, and the per-card watchers re-look-up the activity by **id** rather than capturing it.
+- **The card's `agents` line is additive, and the first thing `shrink` gives up.** `ActivityAgent`
+  is `{name, state}`, at most 4 running-first entries off `SessionInfo.subagents`; the Swift
+  `ContentState.agents` is optional so an older app and an older gateway both degrade to no line.
+  Answer buttons still go first, then agents, then any of the card's own text.
+- **A running card's hero is the checklist step only when exactly one is `in_progress`.** The first
+  of several would be a confident wrong answer, so two in flight say "Working…" instead.
 - **A Live Activity's content state must carry dates as epoch-millisecond numbers, never `Date`.**
   ActivityKit decodes a pushed content state with a default `JSONDecoder` (seconds-since-2001
   strategy); a Unix timestamp in a `Date` field draws a countdown from the wrong century. For the

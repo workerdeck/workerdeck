@@ -76,6 +76,8 @@ extension JSONValue {
       return ["description", "subagent_type", "prompt"]
     case "TodoWrite":
       return ["todos"]
+    case "TaskCreate", "TaskUpdate":
+      return ["subject", "activeForm", "status", "taskId"]
     case "Skill":
       return ["skill", "command"]
     default:
@@ -97,7 +99,7 @@ enum ToolIcon {
     case "WebFetch": return "arrow.down.circle"
     case "WebSearch": return "globe"
     case "Task", "Agent": return "person.2"
-    case "TodoWrite": return "checklist"
+    case "TodoWrite", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList": return "checklist"
     case "Skill": return "sparkles"
     case "AskUserQuestion": return "questionmark.bubble"
     // The codex engine's own tool names (see its runner's item mapping).

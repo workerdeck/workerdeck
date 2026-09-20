@@ -47,6 +47,10 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
     public var expiresAtMs: Double?
     public var pendingCount: Int
     public var steps: Steps?
+    /// Running first, capped at `SessionActivityLimits.agents`. Absent from a
+    /// gateway that predates the field, and the first thing the forwarder drops
+    /// when a payload has to shrink: the card draws the line only when it came.
+    public var agents: [Agent]?
     public var request: Request?
     /// Deep-link freight only; the card itself is keyed by `sessionId`, which
     /// survives a dormant wake. Same staleness contract as `PushPayload`.
@@ -65,6 +69,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
       expiresAtMs: Double? = nil,
       pendingCount: Int = 0,
       steps: Steps? = nil,
+      agents: [Agent]? = nil,
       request: Request? = nil,
       epoch: Int? = nil,
       seq: Int? = nil,
@@ -78,6 +83,7 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
       self.expiresAtMs = expiresAtMs
       self.pendingCount = pendingCount
       self.steps = steps
+      self.agents = agents
       self.request = request
       self.epoch = epoch
       self.seq = seq
@@ -92,6 +98,18 @@ public struct SessionActivityAttributes: Sendable, Codable, Hashable {
     public init(done: Int, total: Int) {
       self.done = done
       self.total = total
+    }
+  }
+
+  public struct Agent: Sendable, Codable, Hashable {
+    public var name: String
+    /// A `SubagentInfo.status` value: `running`, `done` or `failed`. `String`
+    /// for the same reason `phase` is.
+    public var state: String
+
+    public init(name: String, state: String) {
+      self.name = name
+      self.state = state
     }
   }
 
@@ -175,6 +193,35 @@ public enum SessionActivityLimits {
   /// A layout budget under the lock screen's 160 pt, not a documented platform
   /// cap - Apple publishes no per-activity button count.
   public static let choices = 4
+  /// Four names at roughly 55 wire bytes each, drawn as one line.
+  public static let agents = 4
+  public static let agentName = 24
+}
+
+/// One compact line about the session's sub-agents, and the count the Dynamic
+/// Island has room for. Lives here rather than in the widget so `swift test`
+/// covers the wording.
+public enum SessionActivityAgents {
+  public static let running = "running"
+  public static let done = "done"
+  public static let failed = "failed"
+
+  public static func runningCount(_ agents: [SessionActivityAttributes.Agent]?) -> Int {
+    (agents ?? []).filter { $0.state == running }.count
+  }
+
+  public static func summary(_ agents: [SessionActivityAttributes.Agent]?) -> String? {
+    guard let agents, !agents.isEmpty else { return nil }
+    let counts = [running, done, failed].map { state in agents.filter { $0.state == state }.count }
+    var parts: [String] = []
+    for (index, state) in [running, done, failed].enumerated() where counts[index] > 0 {
+      let count = counts[index]
+      let noun = parts.isEmpty ? " agent\(count == 1 ? "" : "s")" : ""
+      parts.append("\(count)\(noun) \(state)")
+    }
+    // A state this build does not know is still an agent, so it counts rather than vanishing.
+    return parts.isEmpty ? "\(agents.count) agent\(agents.count == 1 ? "" : "s")" : parts.joined(separator: " · ")
+  }
 }
 
 // `canImport(ActivityKit)` alone is not enough: the module imports on macOS but

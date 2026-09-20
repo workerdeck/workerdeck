@@ -161,6 +161,27 @@ describe('project discovery', () => {
     const res = await fetch(`${base}/sessions/${session.id}/project/icon`)
     expect(res.status).toBe(404)
   })
+
+  it('ships a well-formed shortcode and drops every malformed one without an error', async () => {
+    const root = tempRoot()
+    const base = await startServer(root)
+    const accepted = ['AB', 'ABC12', 'A1']
+    for (const [index, declared] of accepted.entries()) {
+      const repo = join(root, `ok-${index}`)
+      mkdirSync(repo, { recursive: true })
+      writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Deck', shortcode: declared }))
+      const session = await createSession(base, repo)
+      expect(session.project).toEqual({ name: 'Deck', root: realpathSync(repo), shortcode: declared })
+    }
+    const refused = ['a', 'A', 'abcdef', 'ABCDEF', 'abc', 'Ab', 'A B', ' AB ', 'A-B', '', 42, null, ['AB'], { code: 'AB' }]
+    for (const [index, declared] of refused.entries()) {
+      const repo = join(root, `bad-${index}`)
+      mkdirSync(repo, { recursive: true })
+      writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ name: 'Deck', shortcode: declared }))
+      const session = await createSession(base, repo)
+      expect(session.project).toEqual({ name: 'Deck', root: realpathSync(repo) })
+    }
+  })
 })
 
 describe('project icon route', () => {

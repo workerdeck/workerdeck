@@ -19,6 +19,15 @@ export function toolFamily(name: string): string {
   return name.toLowerCase()
 }
 
+export type RunPlan = { kind: 'call'; item: ToolCallItem } | { kind: 'summary'; items: ToolCallItem[] }
+
+// Matches iOS's `planRun` (`TerminalPlanner.swift`): a run of exactly one call draws as the call
+// itself, because the summary row would occupy the same one row while throwing away the tool's
+// name, input and result preview.
+export function planRun(items: ToolCallItem[]): RunPlan {
+  return items.length === 1 ? { kind: 'call', item: items[0]! } : { kind: 'summary', items }
+}
+
 export function runSummary(items: readonly ToolCallItem[], busy: boolean): string {
   const verb = busy ? 'Running ' : 'Ran '
   const tail = busy ? '…' : ''

@@ -7,6 +7,7 @@ import { JobQueue } from '@workerdeck/queue'
 import {
   PROTOCOL_VERSION,
   sessionState,
+  setPricingOverrides,
   type CreateSessionRequest,
   type JobEvent,
   type ProfileEngine,
@@ -94,6 +95,14 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const corsOrigins = options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
   const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter => options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
+
+  const pricing = setPricingOverrides(options.pricing?.overrides)
+  if (pricing.dropped.length > 0) {
+    console.warn(
+      `[workerdeck] Ignoring pricing.overrides for ${pricing.dropped.join(', ')}: ` +
+        'each entry needs input, output, cacheWrite5m, cacheWrite1h and cacheRead in USD per million tokens',
+    )
+  }
 
   const profileDefaultModels = new Map<string, string>()
   const profileUsage = new ProfileUsageTracker()
@@ -327,6 +336,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     maxHostFileBytes: options.hostFiles?.maxFileBytes ?? 1024 * 1024,
     maxHostDirEntries: options.hostFiles?.maxEntries ?? 5000,
     shell,
+    pricingOverrides: Object.keys(pricing.overrides).length > 0 ? pricing.overrides : undefined,
   }
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {

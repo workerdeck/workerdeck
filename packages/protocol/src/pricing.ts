@@ -1,9 +1,12 @@
+export type CostBasis = 'list' | 'managed' | 'unknown'
+
 export type TokenUsage = {
   input: number
   output: number
   cacheWrite5m: number
   cacheWrite1h: number
   cacheRead: number
+  costBasis?: CostBasis
 }
 
 export type ByModel = Record<string, TokenUsage>
@@ -35,7 +38,15 @@ export const PRICING_NOTE = `List rates as of ${PRICING_AS_OF}. A subscription i
 
 export const UNPRICED_WARN_SHARE = 0.005
 
+export const PRICING_STALE_DAYS = 90
+
 const MTOK = 1_000_000
+
+const DAY_MS = 86_400_000
+
+const BASIS_ORDER: Record<CostBasis, number> = { list: 0, managed: 1, unknown: 2 }
+
+const RATE_FIELDS = ['input', 'output', 'cacheWrite5m', 'cacheWrite1h', 'cacheRead'] as const
 
 const WEEKS_PER_MONTH = 52 / 12
 
@@ -72,6 +83,76 @@ export const DEFAULT_PRICING: Record<string, ModelRate> = {
   'gpt-5': openaiRate(1.25, 10, 0.125),
 }
 
+export type PricingTable = Record<string, ModelRate>
+
+export type PricingOverrides = Record<string, ModelRate>
+
+export type PricingMerge = {
+  pricing: PricingTable
+  overrides: PricingOverrides
+  dropped: string[]
+}
+
+let activeTable: PricingTable = DEFAULT_PRICING
+
+function rateFromInput(value: unknown): ModelRate | undefined {
+  if (value === null || typeof value !== 'object') {
+    return undefined
+  }
+  const raw = value as Record<string, unknown>
+  const rate: ModelRate = { input: 0, output: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 }
+  for (const field of RATE_FIELDS) {
+    const rest = raw[field]
+    if (typeof rest !== 'number' || !Number.isFinite(rest) || rest < 0) {
+      return undefined
+    }
+    rate[field] = rest
+  }
+  return rate
+}
+
+export function mergePricing(overrides: unknown, base: PricingTable = DEFAULT_PRICING): PricingMerge {
+  const accepted: PricingOverrides = {}
+  const dropped: string[] = []
+  if (overrides !== null && typeof overrides === 'object') {
+    for (const [model, value] of Object.entries(overrides as Record<string, unknown>)) {
+      const rate = rateFromInput(value)
+      const key = canonicalModel(model)
+      if (!rate || key === '') {
+        dropped.push(model)
+        continue
+      }
+      accepted[key] = rate
+    }
+  }
+  return { pricing: { ...base, ...accepted }, overrides: accepted, dropped }
+}
+
+export function activePricing(): PricingTable {
+  return activeTable
+}
+
+// The table is process-wide configuration, like the bundled rates it replaces entries in, so the gateway sets it
+// once at start and every pricing call that names no table of its own reads it.
+export function setPricingOverrides(overrides: unknown): PricingMerge {
+  const merged = mergePricing(overrides)
+  activeTable = merged.pricing
+  return merged
+}
+
+export function pricingAgeDays(now: number, asOf: string = PRICING_AS_OF): number {
+  const dated = Date.parse(asOf)
+  return Number.isFinite(dated) ? Math.floor((now - dated) / DAY_MS) : 0
+}
+
+export function pricingAgeNote(now: number, asOf: string = PRICING_AS_OF): string | undefined {
+  const days = pricingAgeDays(now, asOf)
+  if (days <= PRICING_STALE_DAYS) {
+    return undefined
+  }
+  return `This rate table is ${days} days old, so check the vendor's current list prices before you trust the total.`
+}
+
 export function canonicalModel(model: string): string {
   const slash = model.lastIndexOf('/')
   const withoutProvider = slash === -1 ? model : model.slice(slash + 1)
@@ -83,7 +164,7 @@ export function canonicalModel(model: string): string {
     .replace(/-v\d+:\d+$/, '')
 }
 
-export function rateFor(model: string | undefined, pricing: Record<string, ModelRate> = DEFAULT_PRICING): ModelRate | undefined {
+export function rateFor(model: string | undefined, pricing: PricingTable = activePricing()): ModelRate | undefined {
   return model ? pricing[canonicalModel(model)] : undefined
 }
 
@@ -102,7 +183,26 @@ export function addTokenUsage(into: TokenUsage, add: TokenUsage): TokenUsage {
     cacheWrite5m: into.cacheWrite5m + add.cacheWrite5m,
     cacheWrite1h: into.cacheWrite1h + add.cacheWrite1h,
     cacheRead: into.cacheRead + add.cacheRead,
+    costBasis: worseBasis(into.costBasis, add.costBasis),
   }
+}
+
+// A total priced on a basis the engine could not identify stays suspect however little of it there was,
+// so the worse basis wins rather than the newer one.
+export function worseBasis(a: CostBasis | undefined, b: CostBasis | undefined): CostBasis | undefined {
+  if (a === undefined) {
+    return b
+  }
+  if (b === undefined) {
+    return a
+  }
+  return BASIS_ORDER[a] >= BASIS_ORDER[b] ? a : b
+}
+
+export function unknownBasisModels(byModel: ByModel): string[] {
+  return Object.entries(byModel)
+    .filter(([, usage]) => usage.costBasis === 'unknown')
+    .map(([model]) => canonicalModel(model))
 }
 
 export function mergeByModel(into: ByModel, add: ByModel): ByModel {
@@ -161,7 +261,7 @@ function unpricedBreakdown(tokens: number): CostBreakdown {
   }
 }
 
-export function costOf(usage: TokenUsage, model: string | undefined, pricing: Record<string, ModelRate> = DEFAULT_PRICING): CostBreakdown {
+export function costOf(usage: TokenUsage, model: string | undefined, pricing: PricingTable = activePricing()): CostBreakdown {
   const rate = rateFor(model, pricing)
   if (!rate) {
     return unpricedBreakdown(totalTokens(usage))
@@ -182,7 +282,7 @@ export function costOf(usage: TokenUsage, model: string | undefined, pricing: Re
   }
 }
 
-export function costOfByModel(byModel: ByModel, pricing: Record<string, ModelRate> = DEFAULT_PRICING): CostBreakdown {
+export function costOfByModel(byModel: ByModel, pricing: PricingTable = activePricing()): CostBreakdown {
   const acc: CostBreakdown = {
     input: 0,
     output: 0,
@@ -215,7 +315,7 @@ export function costOfByModel(byModel: ByModel, pricing: Record<string, ModelRat
   return acc
 }
 
-export function unpricedModels(byModel: ByModel, pricing: Record<string, ModelRate> = DEFAULT_PRICING): string[] {
+export function unpricedModels(byModel: ByModel, pricing: PricingTable = activePricing()): string[] {
   return Object.keys(byModel).filter((model) => rateFor(model, pricing) === undefined)
 }
 

@@ -264,6 +264,7 @@ export function SessionPanel({
     replaying,
     protocolMismatch,
     shell,
+    pricing,
     models,
     effectiveModel,
     handle,
@@ -835,6 +836,7 @@ export function SessionPanel({
                         totalCostUsd={state.totalCostUsd}
                         costUsd={state.costUsd}
                         usageByModel={state.usageByModel}
+                        pricing={pricing}
                         spend={profileSpend}
                         updatedAt={usageUpdatedAt}
                         open={panel === 'usage'}

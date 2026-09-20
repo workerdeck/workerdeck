@@ -513,11 +513,16 @@ public struct ProjectInfo: Decodable, Sendable, Equatable, Hashable {
   /// malformed, escaping, oversized - which a client cannot and must not
   /// distinguish.
   public let icon: ProjectIcon?
+  /// A 2 to 5 character abbreviation the file declared, validated by the
+  /// gateway and absent when it refused one. List rows draw this instead of
+  /// `name` when it is present; grouping never uses it.
+  public let shortcode: String?
 
-  public init(name: String, root: String, icon: ProjectIcon? = nil) {
+  public init(name: String, root: String, icon: ProjectIcon? = nil, shortcode: String? = nil) {
     self.name = name
     self.root = root
     self.icon = icon
+    self.shortcode = shortcode
   }
 
   public init(from decoder: Decoder) throws {
@@ -530,10 +535,11 @@ public struct ProjectInfo: Decodable, Sendable, Equatable, Hashable {
     // not cost a session its row; same posture as `EngineCapabilities`'
     // unknown permission-mode strings.
     icon = try? c.decodeIfPresent(ProjectIcon.self, forKey: .icon)
+    shortcode = try? c.decodeIfPresent(String.self, forKey: .shortcode)
   }
 
   private enum CodingKeys: String, CodingKey {
-    case name, root, icon
+    case name, root, icon, shortcode
   }
 }
 

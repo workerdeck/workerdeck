@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
 import { taskChildItems, terminalBlocks, type TaskBlock, type ToolCallItem } from '../src/components/terminal/blocks.ts'
-import { blockHeight, createHeightEpoch, estimateBlockPx, textLines } from '../src/components/terminal/height.ts'
-import { taskSummary } from '../src/components/terminal/tool-run.ts'
+import { blockHeight, createHeightEpoch, estimateBlockPx, itemHeight, textLines } from '../src/components/terminal/height.ts'
+import { runSummary, taskSummary } from '../src/components/terminal/tool-run.ts'
 import { gapBefore, positionInRow, rowIndexForItem, rowItem, type TranscriptRow } from '../src/components/agent/transcript-rows.ts'
 
 let seq = 0
@@ -239,5 +239,29 @@ describe('task block height', () => {
     expect(narrow.cache.get(call)).toBeUndefined()
     expect(before).toBe(18)
     expect(after).toBe(36)
+  })
+})
+
+describe('run block height', () => {
+  const m = { width: 400, ch: 8, line: 18 }
+  const runBlockOf = (items: TranscriptItem[]) => {
+    const block = terminalBlocks(items)[0]!
+    if (!('run' in block)) {
+      throw new Error('expected a run block')
+    }
+    return block
+  }
+
+  it('prices a run of one exactly like the tool call it draws - the height book must agree with what is drawn', () => {
+    const solo = tool('Read')
+    const block = runBlockOf([solo])
+    expect(blockHeight(block, m)).toEqual(itemHeight(solo, m))
+  })
+
+  it('prices a run of two or more as the shared summary row, same parent or not', () => {
+    const sameParent = runBlockOf([tool('Bash', 'agent-1'), tool('Bash', 'agent-1')])
+    const cols = Math.floor((m.width - 2 * m.ch) / m.ch)
+    const summary = runSummary(sameParent.run, false)
+    expect(blockHeight(sameParent, m).px).toBe(textLines(summary, cols).lines * m.line)
   })
 })

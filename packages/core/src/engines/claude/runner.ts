@@ -25,7 +25,7 @@ import {
   type SessionStatus,
 } from '@workerdeck/protocol'
 import { type AttachmentInput, attachmentContentBlocks, attachmentRef } from '../../lib/attachments.ts'
-import { checklistFromBody, sameChecklist } from '../../lib/checklist.ts'
+import { TaskChecklist, checklistFromBody, sameChecklist } from '../../lib/checklist.ts'
 import { InputQueue } from '../../lib/input-queue.ts'
 import { isSlashCommand, localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
 import {
@@ -81,6 +81,7 @@ export class SessionRunner implements Runner {
   readonly #cwd: string
   #log = new EventLog()
   #subscribers = new SubscriberSet()
+  #tasks = new TaskChecklist()
   #status: SessionStatus = 'starting'
   #statusDetail: string | undefined
   #sdkSessionId: string | undefined
@@ -827,7 +828,14 @@ export class SessionRunner implements Runner {
     const event = this.#log.append(body)
     this.#subagents.observe(body, event.ts)
     this.#subscribers.emit(event)
-    const items = checklistFromBody(body)
+    const todos = checklistFromBody(body)
+    if (todos) {
+      this.#tasks.reset()
+    }
+    if (body.type === 'conversation_reset') {
+      this.#tasks.reset()
+    }
+    const items = todos ?? this.#tasks.observe(body)
     if (items && !sameChecklist(this.#log.checklist, items)) {
       this.#emit({ type: 'checklist', items })
     }

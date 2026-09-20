@@ -52,6 +52,7 @@ function subtractUsage(from: TokenUsage, part: TokenUsage): TokenUsage {
     cacheWrite5m: Math.max(0, from.cacheWrite5m - part.cacheWrite5m),
     cacheWrite1h: Math.max(0, from.cacheWrite1h - part.cacheWrite1h),
     cacheRead: Math.max(0, from.cacheRead - part.cacheRead),
+    costBasis: from.costBasis,
   }
 }
 

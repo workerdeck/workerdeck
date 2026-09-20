@@ -138,7 +138,9 @@ function JobHeader({ job, onChanged, actions }: { job: JobInfo; onChanged: () =>
           </span>
         ) : null}
         {job.usage.tokens > 0 ? <span className="shrink-0">{formatTokens(job.usage.tokens)} tok</span> : null}
-        {job.usage.totalCostUsd > 0 ? <span className="shrink-0">{formatCost(job.usage.totalCostUsd)}</span> : null}
+        {(job.usage.costUsd ?? job.usage.totalCostUsd) > 0 ? (
+          <span className="shrink-0">{formatCost(job.usage.costUsd ?? job.usage.totalCostUsd)}</span>
+        ) : null}
         {job.error ? <span className="truncate text-danger">{job.error}</span> : null}
       </div>
     </DetailBar>

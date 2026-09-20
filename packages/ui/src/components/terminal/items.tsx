@@ -13,7 +13,7 @@ import { collapsedResult } from './result-preview.ts'
 import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
 import { useToolTitle } from '../agent/tool-titles.tsx'
 import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
-import { runFailed, runSummary } from './tool-run.ts'
+import { planRun, runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
@@ -265,6 +265,11 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
       ) : null}
     </div>
   )
+}
+
+export function RunRow({ items }: { items: ToolCallItem[] }) {
+  const plan = planRun(items)
+  return plan.kind === 'call' ? <ToolRow item={plan.item} /> : <ToolRunRow items={plan.items} />
 }
 
 export function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {

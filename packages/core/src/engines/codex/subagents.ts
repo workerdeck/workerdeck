@@ -14,6 +14,7 @@ export class CodexAgentTracker {
       record = {
         agentThreadId,
         toolUseId,
+        scope: { nonce: toolUseId, toolUseEmitted: new Set(), sectionIndex: new Map() },
         status: 'running',
         startedAt: ts,
         toolCount: 0,
@@ -98,9 +99,17 @@ export class CodexAgentTracker {
   }
 }
 
+export type ItemScope = {
+  nonce: string
+  toolUseEmitted: Set<string>
+  sectionIndex: Map<string, number>
+}
+
 export type CodexAgent = {
   agentThreadId: string
   toolUseId: string
+  // The child's items resolve through its own scope, so they keep flowing between root turns.
+  scope: ItemScope
   agentType?: string
   status: 'running' | 'done' | 'failed'
   startedAt: number

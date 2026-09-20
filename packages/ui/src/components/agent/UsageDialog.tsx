@@ -1,5 +1,5 @@
-import type { ByModel, ProfileEngine, ProfileSpend, UsageWindowRow } from '@workerdeck/protocol'
-import { PRICING_NOTE } from '@workerdeck/protocol'
+import type { ByModel, PricingTable, ProfileEngine, ProfileSpend, UsageWindowRow } from '@workerdeck/protocol'
+import { PRICING_NOTE, pricingAgeNote } from '@workerdeck/protocol'
 import { Badge } from '../ui/Badge.tsx'
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
 import { formatAgoPrecise, formatCost, formatTokens } from '../../lib/format.ts'
@@ -13,11 +13,16 @@ export interface UsageDialogProps {
   totalCostUsd?: number
   costUsd?: number
   usageByModel?: ByModel
+  pricing?: PricingTable
   spend?: ProfileSpend
   updatedAt?: number
   open: boolean
   onOpenChange: (open: boolean) => void
   className?: string
+}
+
+function engineLabel(engine: ProfileEngine): string {
+  return engine === 'claude' ? 'Claude Code' : engine
 }
 
 function Line({ label, value, tone }: { label: string; value: string; tone?: 'muted' }) {
@@ -62,9 +67,15 @@ function CostEvidence({ cost, engine }: { cost: SessionCost; engine: ProfileEngi
           rather than an estimate.
         </p>
       ) : null}
+      {cost.unknownBasisModels.length > 0 ? (
+        <p className="text-label text-warning">
+          {engineLabel(engine)} matched no rate table of its own to {cost.unknownBasisModels.join(', ')}, so the figure it reports for those
+          tokens is a guess rather than a rate.
+        </p>
+      ) : null}
       {cost.gapUsd !== undefined ? (
         <p className="text-label text-fg-4">
-          {engine === 'claude' ? 'Claude Code' : engine} reports {formatCost(cost.reportedUsd)} for the same tokens.
+          {engineLabel(engine)} reports {formatCost(cost.reportedUsd)} for the same tokens.
         </p>
       ) : null}
     </div>
@@ -98,6 +109,7 @@ export function UsageDialog({
   totalCostUsd,
   costUsd,
   usageByModel,
+  pricing,
   spend,
   updatedAt,
   open,
@@ -105,13 +117,14 @@ export function UsageDialog({
   className,
 }: UsageDialogProps) {
   const now = useMinuteClock(open)
-  const cost = sessionCost({ costUsd, totalCostUsd, usageByModel })
+  const cost = sessionCost({ costUsd, totalCostUsd, usageByModel, pricing })
+  const ageNote = pricingAgeNote(now)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={className}>
         <DialogHeader
           title="Usage"
-          description={engine === 'claude' ? 'Claude Code' : engine}
+          description={engineLabel(engine)}
           actions={
             subscriptionType ? (
               <Badge variant="accent" className="mt-0.5 shrink-0 capitalize">
@@ -134,7 +147,7 @@ export function UsageDialog({
             <CostEvidence cost={cost} engine={engine} />
           </div>
           {spend ? <ProfileSpendSection spend={spend} /> : null}
-          <p className="mt-3 text-label text-fg-4">{PRICING_NOTE}</p>
+          <p className="mt-3 text-label text-fg-4">{ageNote ? `${PRICING_NOTE} ${ageNote}` : PRICING_NOTE}</p>
           {updatedAt ? <p className="mt-2 text-label text-fg-4">Updated {formatAgoPrecise(updatedAt, now)}</p> : null}
         </DialogBody>
       </DialogContent>

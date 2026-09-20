@@ -164,8 +164,9 @@ function JobRow({ job, active, onOpen, onChanged }: { job: JobInfo; active: bool
   if (job.profile) {
     details.push(`@${job.profile}`)
   }
-  if (job.usage.totalCostUsd > 0) {
-    details.push(formatCost(job.usage.totalCostUsd))
+  const costUsd = job.usage.costUsd ?? job.usage.totalCostUsd
+  if (costUsd > 0) {
+    details.push(formatCost(costUsd))
   }
   return (
     <SidebarRow

@@ -24,6 +24,16 @@
         "done": 2,
         "total": 7
       },
+      "agents": [
+        {
+          "name": "explorer",
+          "state": "running"
+        },
+        {
+          "name": "reviewer",
+          "state": "done"
+        }
+      ],
       "epoch": 2,
       "seq": 412,
       "decision": null

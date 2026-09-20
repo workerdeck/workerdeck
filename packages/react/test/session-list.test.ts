@@ -9,6 +9,7 @@ import {
   inScope,
   projectKey,
   projectLabel,
+  projectName,
   projectSubpath,
   projectsOf,
   scopeActive,
@@ -248,6 +249,16 @@ describe('project facet', () => {
     expect(projectLabel(declaredUi)).toBe('WorkerDeck')
     expect(projectLabel(undeclared)).toBe('alpha')
     expect(projectLabel(nowhere)).toBe('No project')
+  })
+
+  it('prefers a declared shortcode for the label while projectName keeps the full name', () => {
+    const coded = row({ info: info({ id: 'sc1', cwd: '/work/deck/packages/ui', project: { ...project, shortcode: 'WD' } }) })
+    expect(projectLabel(coded)).toBe('WD')
+    expect(projectName(coded)).toBe('WorkerDeck')
+    expect(projectKey(coded)).toBe(projectKey(declaredUi))
+    expect(projectLabel(declaredUi)).toBe('WorkerDeck')
+    expect(projectName(undeclared)).toBe('alpha')
+    expect(projectName(nowhere)).toBe('No project')
   })
 
   it('answers the sub-path inside a project, and nothing at all at its root', () => {

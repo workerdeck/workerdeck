@@ -53,6 +53,24 @@ function assistant(content: unknown, parent: string | null = null) {
   } as unknown as SDKMessage
 }
 
+function taskCreate(id: string, subject: string, activeForm?: string) {
+  return { type: 'tool_use', id, name: 'TaskCreate', input: activeForm ? { subject, description: subject, activeForm } : { subject, description: subject } }
+}
+
+function taskUpdate(id: string, taskId: string, status: string) {
+  return { type: 'tool_use', id, name: 'TaskUpdate', input: { taskId, status } }
+}
+
+function created(toolUseId: string, taskId: string, subject: string, parent: string | null = null) {
+  return {
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: `Task #${taskId} created successfully: ${subject}` }] },
+    parent_tool_use_id: parent,
+    uuid: nextUuid(),
+    session_id: 'sdk-session-1',
+  } as unknown as SDKMessage
+}
+
 function collect(runner: SessionRunner): SessionEvent[] {
   const events: SessionEvent[] = []
   runner.subscribe((event) => events.push(event))
@@ -188,6 +206,60 @@ describe('SessionRunner checklist rollup', () => {
     await tick()
     expect(runner.info().checklist).toEqual([{ text: 'plan', status: 'pending' }])
     expect(events.filter((e) => e.type === 'checklist')).toHaveLength(2)
+  })
+
+  it('folds TaskCreate and TaskUpdate into a checklist, the id read from the create result', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    const events = collect(runner)
+    harness.emit(assistant([taskCreate('c1', 'Rename the app', 'Renaming the app')]))
+    await tick()
+    expect(runner.info().checklist).toBeUndefined()
+    harness.emit(created('c1', '1', 'Rename the app'))
+    harness.emit(assistant([taskCreate('c2', 'Draft the icon')]))
+    harness.emit(created('c2', '2', 'Draft the icon'))
+    await tick()
+    expect(runner.info().checklist).toEqual([
+      { text: 'Rename the app', status: 'pending' },
+      { text: 'Draft the icon', status: 'pending' },
+    ])
+    harness.emit(assistant([taskUpdate('u1', '1', 'in_progress')]))
+    await tick()
+    expect(runner.info().checklist).toEqual([
+      { text: 'Renaming the app', status: 'in_progress' },
+      { text: 'Draft the icon', status: 'pending' },
+    ])
+    harness.emit(assistant([taskUpdate('u2', '1', 'completed'), taskUpdate('u3', '2', 'deleted')]))
+    await tick()
+    expect(runner.info().checklist).toEqual([{ text: 'Rename the app', status: 'completed' }])
+    expect(events.filter((e) => e.type === 'checklist')).toHaveLength(4)
+  })
+
+  it('ignores a TaskUpdate for a task it never saw created, and a sub-agent task list', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(assistant([taskUpdate('u1', '9', 'completed')]))
+    harness.emit(assistant([taskCreate('c1', 'child work')], 'task-1'))
+    harness.emit(created('c1', '1', 'child work', 'task-1'))
+    await tick()
+    expect(runner.info().checklist).toBeUndefined()
+  })
+
+  it('hands the list back to TodoWrite when the model switches vocabulary', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(assistant([taskCreate('c1', 'old way')]))
+    harness.emit(created('c1', '1', 'old way'))
+    await tick()
+    harness.emit(assistant([todoWrite('w1', [todo('pending', 'new way')])]))
+    await tick()
+    expect(runner.info().checklist).toEqual([{ text: 'new way', status: 'pending' }])
+    harness.emit(assistant([taskUpdate('u1', '1', 'completed')]))
+    await tick()
+    expect(runner.info().checklist).toEqual([{ text: 'new way', status: 'pending' }])
   })
 
   it('rebuilds from a resume backfill, last write winning', async () => {

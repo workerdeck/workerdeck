@@ -31,7 +31,7 @@ import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { JsonRpcError } from './jsonrpc.ts'
-import { CodexAgentTracker, type CodexAgent } from './subagents.ts'
+import { CodexAgentTracker, type CodexAgent, type ItemScope } from './subagents.ts'
 import { untrustedProjectNotice } from './trust.ts'
 import type {
   AppServerCollabAgentToolCallItem,
@@ -547,8 +547,7 @@ function rateLimitWindowName(minutes: number | null | undefined): string | undef
   return `window_${minutes}m`
 }
 
-type ActiveTurn = {
-  nonce: string
+type ActiveTurn = ItemScope & {
   turnId?: string
   interrupted: boolean
   finalText?: string
@@ -557,8 +556,6 @@ type ActiveTurn = {
   sawUsage: boolean
   contextTokens?: number
   contextWindow?: number
-  toolUseEmitted: Set<string>
-  sectionIndex: Map<string, number>
   settled: boolean
   steerGate: Promise<void>
   openSteerGate: () => void
@@ -606,6 +603,7 @@ export class CodexRunner implements Runner {
   #producedPaths = new Set<string>()
   #mcpStatus = new Map<string, { status: string; error?: string; failureReason?: string }>()
   #agents = new CodexAgentTracker()
+  #idleScope: ItemScope = { nonce: 'codex', toolUseEmitted: new Set(), sectionIndex: new Map() }
   #clearedThreads = new Set<string>()
   #cannotSteer = new WeakSet<AppServerConnection>()
   #clearsPending = 0
@@ -1371,6 +1369,7 @@ export class CodexRunner implements Runner {
       }
     })
     this.#activeTurn = active
+    this.#idleScope = { nonce: active.nonce, toolUseEmitted: new Set(), sectionIndex: new Map() }
     try {
       const connection = await this.#ensureThread()
       // The first turn's input was built before the connection's own skills/list answered.
@@ -1501,10 +1500,11 @@ export class CodexRunner implements Runner {
 
   #reasoningDelta(method: string): (params: unknown) => void {
     return (params) => {
-      const active = this.#activeTurn
-      if (!active) {
+      const context = this.#itemContext(params)
+      if (!context) {
         return
       }
+      const { scope, agent } = context
       const payload = params as {
         delta?: string
         itemId?: string
@@ -1515,28 +1515,41 @@ export class CodexRunner implements Runner {
         return
       }
       const index = payload.contentIndex ?? payload.summaryIndex ?? 0
-      const agent = this.#agentFor(params)
-      // Both the agent and the method ride the key. sectionIndex lives on the root turn, and whether
-      // app-server item ids are unique across a turn's threads is unverified (docs/GOTCHAS.md
-      // §Codex), so two agents must not be able to share a section counter; the two reasoning
-      // streams must never share a section boundary either.
-      const key = `${agent?.toolUseId ?? ''}:${payload.itemId ?? ''}:${method}`
-      const previous = active.sectionIndex.get(key)
-      active.sectionIndex.set(key, index)
+      const key = `${payload.itemId ?? ''}:${method}`
+      const previous = scope.sectionIndex.get(key)
+      scope.sectionIndex.set(key, index)
       const separator = previous !== undefined && index > previous ? '\n\n' : ''
       this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta }, agent?.toolUseId ?? null)
     }
   }
 
   #itemProgress = (params: unknown): void => {
-    const active = this.#activeTurn
-    if (!active) {
+    const context = this.#itemContext(params)
+    const item = (params as { item?: AppServerItem })?.item
+    if (!context || !item) {
       return
     }
-    const item = (params as { item?: AppServerItem })?.item
-    if (item) {
-      this.#handleItemProgress(item, active, this.#agentFor(params))
+    this.#handleItemProgress(item, context.scope, context.agent)
+  }
+
+  // A child's items resolve through the agent's own scope, so they survive the root turn ending
+  // while the agent works. On the root thread the scope is the live turn; between turns only a
+  // subAgentActivity item is heard, because a settle or a relabel is the one thing codex can still
+  // say about an agent it spawned earlier.
+  #itemContext(params: unknown): { scope: ItemScope; agent?: CodexAgent } | undefined {
+    const agent = this.#agentFor(params)
+    if (agent) {
+      return { scope: agent.scope, agent }
     }
+    const active = this.#activeTurn
+    if (active) {
+      return { scope: active }
+    }
+    const item = (params as { item?: AppServerItem })?.item
+    if (item?.type === 'subAgentActivity') {
+      return { scope: this.#idleScope }
+    }
+    return undefined
   }
 
   readonly #notifications: Record<string, (params: unknown) => void> = {
@@ -1567,22 +1580,21 @@ export class CodexRunner implements Runner {
     'item/started': this.#itemProgress,
     'item/updated': this.#itemProgress,
     'item/completed': (params) => {
-      const active = this.#activeTurn
-      if (!active) {
+      const context = this.#itemContext(params)
+      const item = (params as { item?: AppServerItem })?.item
+      if (!context || !item) {
         return
       }
-      const item = (params as { item?: AppServerItem })?.item
-      if (item) {
-        this.#handleItemCompleted(item, active, this.#agentFor(params))
-      }
+      this.#handleItemCompleted(item, context.scope, context.agent)
     },
     'item/agentMessage/delta': (params) => {
-      if (!this.#activeTurn) {
+      const context = this.#itemContext(params)
+      if (!context) {
         return
       }
       const delta = (params as { delta?: string })?.delta
       if (typeof delta === 'string' && delta) {
-        this.#emitDelta({ type: 'text_delta', text: delta }, this.#agentFor(params)?.toolUseId ?? null)
+        this.#emitDelta({ type: 'text_delta', text: delta }, context.agent?.toolUseId ?? null)
       }
     },
     'item/reasoning/textDelta': this.#reasoningDelta('item/reasoning/textDelta'),
@@ -1772,7 +1784,7 @@ export class CodexRunner implements Runner {
     }
   }
 
-  #handleItemProgress(item: AppServerItem, active: ActiveTurn, agent?: CodexAgent): void {
+  #handleItemProgress(item: AppServerItem, active: ItemScope, agent?: CodexAgent): void {
     const id = `${active.nonce}:${item.id}`
     if (item.type === 'subAgentActivity') {
       this.#itemCompleted.subAgentActivity(item, active, id, agent)
@@ -1809,10 +1821,10 @@ export class CodexRunner implements Runner {
     }
   }
 
-  #handleItemCompleted(item: AppServerItem, active: ActiveTurn, agent?: CodexAgent): void {
+  #handleItemCompleted(item: AppServerItem, active: ItemScope, agent?: CodexAgent): void {
     const id = `${active.nonce}:${item.id}`
     const handler = this.#itemCompleted[item.type] as
-      | ((item: AppServerItem, active: ActiveTurn, id: string, agent?: CodexAgent) => void)
+      | ((item: AppServerItem, active: ItemScope, id: string, agent?: CodexAgent) => void)
       | undefined
     if (handler) {
       handler(item, active, id, agent)
@@ -1823,7 +1835,7 @@ export class CodexRunner implements Runner {
   }
 
   readonly #itemCompleted: {
-    [K in AppServerItem['type']]: (item: Extract<AppServerItem, { type: K }>, active: ActiveTurn, id: string, agent?: CodexAgent) => void
+    [K in AppServerItem['type']]: (item: Extract<AppServerItem, { type: K }>, active: ItemScope, id: string, agent?: CodexAgent) => void
   } = {
     userMessage: (item, active, _id, agent) => {
       if (!agent) {
@@ -1840,11 +1852,11 @@ export class CodexRunner implements Runner {
         uuid: `${active.nonce}:${item.id}`,
       })
     },
-    agentMessage: (item, active, id, agent) => {
+    agentMessage: (item, _active, id, agent) => {
       const text = typeof item.text === 'string' ? item.text : ''
       this.#emitAssistant(id, [{ type: 'text', text }], agent?.toolUseId ?? null)
-      if (!agent) {
-        active.finalText = text
+      if (!agent && this.#activeTurn) {
+        this.#activeTurn.finalText = text
       }
     },
     reasoning: (item, _active, id, agent) => {

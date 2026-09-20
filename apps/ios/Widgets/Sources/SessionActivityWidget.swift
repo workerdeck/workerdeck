@@ -34,6 +34,7 @@ struct SessionActivityWidget: Widget {
           VStack(alignment: .leading, spacing: 8) {
             Hero(state: context.state, stale: context.isStale)
             Sub(state: context.state)
+            AgentLine(state: context.state)
             StepBar(state: context.state)
             ActionRow(attributes: context.attributes, state: context.state)
           }
@@ -44,8 +45,7 @@ struct SessionActivityWidget: Widget {
       } compactTrailing: {
         CompactTrailing(state: context.state)
       } minimal: {
-        Image(systemName: SessionActivityPhase.isWaiting(context.state.phase) ? "questionmark.circle.fill" : "circle.dotted")
-          .foregroundStyle(accent(context.state, stale: context.isStale))
+        Minimal(state: context.state, stale: context.isStale)
       }
       .widgetURL(sessionURL(context.attributes, context.state))
     }
@@ -96,6 +96,7 @@ private struct LockScreenCard: View {
       Header(attributes: attributes, state: state, stale: stale)
       Hero(state: state, stale: stale)
       Sub(state: state)
+      AgentLine(state: state)
       StepBar(state: state)
       ActionRow(attributes: attributes, state: state)
     }
@@ -218,6 +219,21 @@ private struct Sub: View {
   }
 }
 
+/// The sub-agents, as one line of counts. Names would need a row each and the card has no room;
+/// the app is where a fan-out is read.
+private struct AgentLine: View {
+  let state: SessionActivityAttributes.ContentState
+
+  var body: some View {
+    if let summary = SessionActivityAgents.summary(state.agents) {
+      Label(summary, systemImage: "point.3.connected.trianglepath.dotted")
+        .font(.caption2)
+        .foregroundStyle(SessionActivityAgents.runningCount(state.agents) > 0 ? .primary : .secondary)
+        .lineLimit(1)
+    }
+  }
+}
+
 // MARK: - Band 4: progress
 
 private struct StepBar: View {
@@ -253,12 +269,33 @@ private struct CompactTrailing: View {
   var body: some View {
     if SessionActivityPhase.isWaiting(state.phase) {
       Image(systemName: "questionmark.circle.fill").foregroundStyle(.orange)
+    } else if agents > 0 {
+      Label("\(agents)", systemImage: "point.3.connected.trianglepath.dotted").font(.caption2.monospacedDigit())
     } else if let steps = state.steps, steps.total > 0 {
       Text("\(steps.done)/\(steps.total)").font(.caption2.monospacedDigit())
     } else {
       Text(Date(timeIntervalSince1970: state.startedAtMs / 1000), style: .timer)
         .font(.caption2.monospacedDigit())
         .frame(maxWidth: 44)
+    }
+  }
+
+  private var agents: Int { SessionActivityAgents.runningCount(state.agents) }
+}
+
+/// One slot, so the count wins over the glyph: how many agents are out is the only number that
+/// fits, and a waiting card still says so first.
+private struct Minimal: View {
+  let state: SessionActivityAttributes.ContentState
+  let stale: Bool
+
+  var body: some View {
+    let agents = SessionActivityAgents.runningCount(state.agents)
+    if !SessionActivityPhase.isWaiting(state.phase), agents > 0 {
+      Text("\(agents)").font(.caption2.monospacedDigit()).foregroundStyle(accent(state, stale: stale))
+    } else {
+      Image(systemName: SessionActivityPhase.isWaiting(state.phase) ? "questionmark.circle.fill" : "circle.dotted")
+        .foregroundStyle(accent(state, stale: stale))
     }
   }
 }

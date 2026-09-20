@@ -60,6 +60,38 @@ struct SessionActivityTests {
     #expect(state.request == nil)
   }
 
+  @Test("sub-agents decode running first and draw as one line")
+  func agentsDecode() throws {
+    let state = try load("start-running").aps.contentState
+    let agents = try #require(state.agents)
+    #expect(agents.count <= SessionActivityLimits.agents)
+    #expect(agents.map(\.state) == [SessionActivityAgents.running, SessionActivityAgents.done])
+    #expect(agents.first?.name == "explorer")
+    #expect(SessionActivityAgents.summary(agents) == "1 agent running · 1 done")
+    #expect(SessionActivityAgents.runningCount(agents) == 1)
+  }
+
+  @Test("an older gateway that sends no agents decodes, and draws no line")
+  func agentsAreOptional() throws {
+    for name in ["update-approval", "update-question", "end-done", "update-unknown-phase"] {
+      let state = try load(name).aps.contentState
+      #expect(state.agents == nil, "\(name) must not carry agents")
+      #expect(SessionActivityAgents.summary(state.agents) == nil)
+      #expect(SessionActivityAgents.runningCount(state.agents) == 0)
+    }
+  }
+
+  @Test("the agent line pluralises, and counts a state it does not know")
+  func agentSummaryWording() {
+    let agent = { (state: String) in SessionActivityAttributes.Agent(name: "explorer", state: state) }
+    #expect(SessionActivityAgents.summary([]) == nil)
+    #expect(SessionActivityAgents.summary([agent("running"), agent("running")]) == "2 agents running")
+    #expect(SessionActivityAgents.summary([agent("done")]) == "1 agent done")
+    #expect(SessionActivityAgents.summary([agent("running"), agent("done"), agent("failed")]) == "1 agent running · 1 done · 1 failed")
+    #expect(SessionActivityAgents.summary([agent("compacting")]) == "1 agent")
+    #expect(SessionActivityAgents.runningCount([agent("compacting")]) == 0)
+  }
+
   @Test("an update carries only the content state")
   func updateOmitsAttributes() throws {
     let envelope = try load("update-approval")

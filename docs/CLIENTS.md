@@ -808,7 +808,10 @@ remains, which is the closest the transcript can get, untested against a real re
 The **row itself** mirrors the dashboard's (`packages/ui`'s `SessionBrowser`) rather than
 inventing a phone shape: two lines, not three - a state *glyph*, title, unread badge and the
 context ring on top; the engine's mark, one truncating run of model · project · gateway ·
-profile · cost, then the age and the step disclosure underneath, in that order. **State leads both
+profile · cost, then the age and the step disclosure underneath, in that order. The project slot
+is `projectLabel` from the kit, so a declared `shortcode` shortens the phone's row exactly as it
+shortens the dashboard's, with no App-side change: `projectName` is the kit's companion for a
+surface that wants the whole name, and the phone has no tooltip to put one on. **State leads both
 lines**, in a 14pt cell the engine
 mark lands in underneath - it used to trail, and a trailing glyph has no fixed x, so a list of
 thirty gave the eye nothing to run down. The mark itself needed two new pieces the app had
@@ -1068,6 +1071,12 @@ in the attributes, over `/apns/activities`), and reconciles on every foreground:
 session is no longer engaged, whose host is gone, or which 404s is ended. Everything is started
 from `AppDelegate`, never the SwiftUI `.task` - see `docs/GOTCHAS.md` §APNs for why, and for the
 five other things about this that bite.
+The card's hero is the checklist's **single** `in_progress` step while the turn runs, and only when
+there is exactly one: with two in flight the card cannot say which it is drawing, so it falls back
+to "Working…". `agents` is the one optional line under the detail (at most 4 entries of
+`{name, state}`, running first then most recent, ~55 wire bytes each), drawn as "2 agents running"
+or "1 agent running · 1 done" and as a bare count in the Dynamic Island's compact and minimal
+slots; absent (an older gateway, or the forwarder shrinking a payload) it draws nothing.
 An `AskUserQuestion` gets real option buttons only when it is one question, single-select and ≤ 4
 options, and the card is still carrying the original tool input; otherwise it says "Answer in app".
 The answer is the original input rewritten with an `answers` object, exactly as

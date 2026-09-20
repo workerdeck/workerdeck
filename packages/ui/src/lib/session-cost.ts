@@ -1,6 +1,8 @@
 import {
   type ByModel,
+  type CostBasis,
   type CostBreakdown,
+  type PricingTable,
   type TokenUsage,
   UNPRICED_WARN_SHARE,
   canonicalModel,
@@ -8,6 +10,7 @@ import {
   costOfByModel,
   rateFor,
   totalTokens,
+  unknownBasisModels,
 } from '@workerdeck/protocol'
 
 export type SessionCostRow = {
@@ -15,6 +18,7 @@ export type SessionCostRow = {
   usage: TokenUsage
   tokens: number
   costUsd: number | undefined
+  costBasis: CostBasis | undefined
 }
 
 export type SessionCost = {
@@ -25,6 +29,8 @@ export type SessionCost = {
   rows: SessionCostRow[]
   unpricedShare: number
   showUnpricedWarning: boolean
+  // Models the engine itself could not match to a rate table, so the figure *it* reports for them is a guess.
+  unknownBasisModels: string[]
   // Both figures price the same tokens, one by the engine and one by us, so a gap is the thing worth reading.
   gapUsd: number | undefined
 }
@@ -33,13 +39,15 @@ export type SessionCostInput = {
   costUsd?: number
   totalCostUsd?: number
   usageByModel?: ByModel
+  pricing?: PricingTable
 }
 
 const GAP_SHARE = 0.02
 
 export function sessionCost(input: SessionCostInput): SessionCost {
   const byModel = input.usageByModel ?? {}
-  const breakdown = costOfByModel(byModel)
+  const pricing = input.pricing
+  const breakdown = costOfByModel(byModel, pricing)
   const computedUsd = input.costUsd ?? (breakdown.unpriced || Object.keys(byModel).length === 0 ? undefined : breakdown.total)
   const reportedUsd = input.totalCostUsd
   const rows = Object.entries(byModel)
@@ -47,7 +55,8 @@ export function sessionCost(input: SessionCostInput): SessionCost {
       model: canonicalModel(model),
       usage,
       tokens: totalTokens(usage),
-      costUsd: rateFor(model) ? costOf(usage, model).total : undefined,
+      costUsd: rateFor(model, pricing) ? costOf(usage, model, pricing).total : undefined,
+      costBasis: usage.costBasis,
     }))
     .sort((a, b) => b.tokens - a.tokens)
   const gap = computedUsd !== undefined && reportedUsd !== undefined ? reportedUsd - computedUsd : undefined
@@ -60,6 +69,7 @@ export function sessionCost(input: SessionCostInput): SessionCost {
     rows,
     unpricedShare: breakdown.unpricedShare,
     showUnpricedWarning: breakdown.unpricedShare > UNPRICED_WARN_SHARE,
+    unknownBasisModels: unknownBasisModels(byModel),
     gapUsd: worthShowing ? gap : undefined,
   }
 }

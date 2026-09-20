@@ -1133,6 +1133,20 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   wake and a clear), codex's **`$name` skill mention** inserted and honoured, and the shared
   `usePathLinks`. **Protocol stays 1**: `pricing` and `usageByModel` are additive.
 
+  **2.11.0** (committed 2026-09-20, **not yet bumped or tagged**) - **the residuals, paid.** A **minor**, cut from the `_docs/features` sweep: every
+  open item judged worth more than a coin flip, built in one pass. Codex **agents that outlive
+  the root turn** keep flowing (each `CodexAgent` carries its own `ItemScope`; the root turn was
+  never the right gate). The CLI's **`TaskCreate`/`TaskUpdate` checklist** folds into the
+  existing `checklist` event (`TaskChecklist` in core, the id read from the result text, so the
+  resume backfill rebuilds it). The web draws a **run of one as the call itself**, the rule iOS
+  already had. `.workerdeck.json` gains **`shortcode`** (2 to 5 uppercase, gateway-validated,
+  `projectLabel` prefers it on every client). Cost grows **job `costUsd`**, the SDK's
+  **`costBasis`** with an unknown-basis warning, a **rate-table age note** past 90 days, and
+  **`pricing.overrides`** merged at start and told to clients over `AttachedFrame`. The Live
+  Activity carries the **current step's text** as its headline and a **sub-agents line**
+  (`ContentState.agents`, cap 4). **Protocol stays 1**: `shortcode`, `costUsd`, `costBasis` and
+  `pricingOverrides` are all additive.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

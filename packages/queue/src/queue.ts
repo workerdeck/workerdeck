@@ -7,6 +7,7 @@ import type {
   JobEvent,
   JobInfo,
   JobProgress,
+  JobUsage,
   QueueStats,
   SessionEvent,
 } from '@workerdeck/protocol'
@@ -52,6 +53,15 @@ type RunningJob = {
 
 function dayKey(epochMs: number): string {
   return new Date(epochMs).toISOString().slice(0, 10)
+}
+
+// An attempt that reported no priced figure at all stays unknown rather than banking a zero:
+// only the claude engine reports a cost of its own, and `$0.00` is a claim.
+function addOptionalCost(prior: number | undefined, attempt: number | undefined): number | undefined {
+  if (prior === undefined && attempt === undefined) {
+    return undefined
+  }
+  return (prior ?? 0) + (attempt ?? 0)
 }
 
 function sumUsage(usage: unknown): number {
@@ -453,6 +463,7 @@ export class JobQueue {
             tokens,
             totalCostUsd: event.totalCostUsd,
             numTurns: event.numTurns,
+            costUsd: event.costUsd,
           },
           result: {
             subtype: event.subtype,
@@ -512,10 +523,11 @@ export class JobQueue {
       await this.#adapter.addDailyTokens(dayKey(Date.now()), attemptUsage.tokens)
     }
     const prior = job.record.info.usage
-    const usage = {
+    const usage: JobUsage = {
       tokens: prior.tokens + attemptUsage.tokens,
       totalCostUsd: prior.totalCostUsd + attemptUsage.totalCostUsd,
       numTurns: prior.numTurns + attemptUsage.numTurns,
+      costUsd: addOptionalCost(prior.costUsd, attemptUsage.costUsd),
     }
     const attempt = job.record.info.attempt ?? 1
     const maxAttempts = job.record.request.attempts ?? 1

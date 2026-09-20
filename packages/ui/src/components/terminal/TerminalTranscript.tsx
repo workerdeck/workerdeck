@@ -8,7 +8,7 @@ import {
   CompactionRow,
   FileRow,
   NoticeRow,
-  ToolRunRow,
+  RunRow,
   ThinkingRow,
   ToolRow,
   TurnResultRow,
@@ -119,7 +119,7 @@ export function TaskRow({
           {block.children.map((leaf, index) => (
             <Fragment key={leaf.key}>
               {index > 0 && blockNeedsBlank(block.children[index - 1]!, leaf) ? <Blank /> : null}
-              {'run' in leaf ? <ToolRunRow items={leaf.run} /> : <TerminalItemView item={leaf.item} fileUrl={fileUrl} />}
+              {'run' in leaf ? <RunRow items={leaf.run} /> : <TerminalItemView item={leaf.item} fileUrl={fileUrl} />}
             </Fragment>
           ))}
         </div>
@@ -174,7 +174,7 @@ export function TerminalTranscript({ state, fileUrl, fontSize, lineHeight, affor
         <Fragment key={block.key}>
           {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
           {'run' in block ? (
-            <ToolRunRow items={block.run} />
+            <RunRow items={block.run} />
           ) : 'item' in block ? (
             <TerminalItemView item={block.item} fileUrl={fileUrl} />
           ) : (

@@ -289,7 +289,15 @@ rule**: a value ending in `.png`/`.svg` (case-insensitive) is a repo-relative im
 only, since the file is checked into a repo that clones onto other machines, where an absolute path
 is wrong by construction - and anything else must be a lucide-shaped glyph name
 (`^[a-z0-9]+(-[a-z0-9]+)*$`) or it is ignored. The two shapes cannot collide (a glyph name contains
-no dot), so this is a classification and not a guess.
+no dot), so this is a classification and not a guess. `shortcode` is the third optional key, a
+2 to 5 character abbreviation matching `^[A-Z0-9]{2,5}$` that list rows draw **in place of**
+`name`: validated by shape only, like the glyph, and a value that fails is simply absent rather
+than an error or a rewrite - the gateway never upper-cases on the operator's behalf, because a
+file the operator wrote saying `wd` and a row saying `WD` is a lie about what is checked in.
+`projectLabel` prefers it, so everything drawing a label (rows, group headers, `projectsOf`) says
+the short word, while `projectName` never does and is what a tooltip or a roomier surface draws;
+`projectKey` is untouched, so a shortcode can be added or removed without emptying a saved filter,
+and `matchesSearch` matches either string. Additive on the wire, so no `PROTOCOL_VERSION` bump.
 
 Three kinds are deliberately **excluded** from `replayCoalesceKey` despite looking eligible.
 `capabilities`, because `defaultModel: event.defaultModel ?? base.defaultModel` is a fallback
@@ -525,6 +533,12 @@ cumulative figure only goes down when the baseline belonged to something else. T
 subscription-relative reading needs `spend.monthlySubscriptionUsd` in the gateway config, keyed by
 profile with `'*'` as the fallback: a plan reports its tier, never its price, so the flat fee is the
 one number the gateway cannot discover.
+
+**Pricing overrides** (`options.pricing.overrides`, keyed by canonical model id, each a full
+`ModelRate` in USD per million tokens) are merged over `DEFAULT_PRICING` once at start by
+`setPricingOverrides`; malformed entries are dropped with one warning. The accepted subset rides
+`AttachedFrame.pricingOverrides` so every client merges the same table and prices for itself; the
+bundled table itself never goes over the wire.
 
 Plus: optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD),
 `GET /sessions/:id/files`,

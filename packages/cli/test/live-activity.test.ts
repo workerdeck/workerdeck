@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import type { PermissionRequest, SessionInfo } from '@workerdeck/protocol'
+import type { PermissionRequest, SessionInfo, SubagentInfo } from '@workerdeck/protocol'
 import { attributesFor, buildLiveActivityPush, contentHash, projectContentState } from '../src/apns/live-activity.ts'
 
 const FIXTURES = fileURLToPath(new URL('../../../apps/ios/WorkerDeckKit/Tests/WorkerDeckActivityTests/Fixtures/', import.meta.url))
@@ -29,6 +29,10 @@ function checklist(done: number, active: string, total: number): SessionInfo['ch
     text: index === done ? active : `step ${index}`,
     status: index < done ? ('completed' as const) : index === done ? ('in_progress' as const) : ('pending' as const),
   }))
+}
+
+function subagent(overrides: Partial<SubagentInfo> = {}): SubagentInfo {
+  return { toolUseId: 'tu_a', agentType: 'explorer', status: 'running', startedAt: STARTED, toolCount: 3, ...overrides }
 }
 
 function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
@@ -59,6 +63,57 @@ describe('live activity projection', () => {
 
   it('says Working when the agent has planned nothing to say', () => {
     expect(projectContentState({ info: session(), startedAtMs: STARTED }).headline).toBe('Working…')
+  })
+
+  it('refuses a checklist headline when more than one step is in flight', () => {
+    const items: SessionInfo['checklist'] = [
+      { text: 'Reading the forwarder', status: 'in_progress' },
+      { text: 'Reading the widget', status: 'in_progress' },
+      { text: 'Writing the docs', status: 'pending' },
+    ]
+    const state = projectContentState({ info: session({ checklist: items }), startedAtMs: STARTED })
+    expect(state.headline).toBe('Working…')
+    expect(state.steps).toEqual({ done: 0, total: 3 })
+  })
+
+  it('keeps the checklist headline off a waiting card, where the hero is the request', () => {
+    const state = projectContentState({
+      info: session({ status: 'awaiting_approval', pendingPermissionCount: 1, checklist: checklist(1, 'Running the suite', 3) }),
+      request: request({ title: 'Bash', input: { command: 'pnpm test' } }),
+      startedAtMs: STARTED,
+    })
+    expect(state.headline).toBe('Bash')
+  })
+
+  it('draws sub-agents running first, then the most recent, capped at four', () => {
+    const subagents = [
+      subagent({ toolUseId: 'tu_1', agentType: 'old-done', status: 'done', startedAt: STARTED - 60_000 }),
+      subagent({ toolUseId: 'tu_2', agentType: 'new-done', status: 'done', startedAt: STARTED - 10_000 }),
+      subagent({ toolUseId: 'tu_3', agentType: 'failed-one', status: 'failed', startedAt: STARTED - 30_000 }),
+      subagent({ toolUseId: 'tu_4', agentType: 'newer-run', status: 'running', startedAt: STARTED - 5_000 }),
+      subagent({ toolUseId: 'tu_5', agentType: 'older-run', status: 'running', startedAt: STARTED - 20_000 }),
+    ]
+    const state = projectContentState({ info: session({ subagents }), startedAtMs: STARTED })
+    expect(state.agents).toEqual([
+      { name: 'newer-run', state: 'running' },
+      { name: 'older-run', state: 'running' },
+      { name: 'new-done', state: 'done' },
+      { name: 'failed-one', state: 'failed' },
+    ])
+  })
+
+  it('names a sub-agent the way the sessions list does, clamped to the card', () => {
+    const state = projectContentState({
+      info: session({ subagents: [subagent({ description: 'sweep every apns fixture for drift' })] }),
+      startedAtMs: STARTED,
+    })
+    expect(state.agents).toEqual([{ name: 'explorer · sweep every …', state: 'running' }])
+  })
+
+  it('omits agents entirely for a tool call that is not a sub-agent', () => {
+    const plain = projectContentState({ info: session({ subagents: [subagent({ agentType: undefined })] }), startedAtMs: STARTED })
+    expect(plain.agents).toBeUndefined()
+    expect(projectContentState({ info: session(), startedAtMs: STARTED }).agents).toBeUndefined()
   })
 
   it('turns a permission request into an approval card with its command visible', () => {
@@ -237,6 +292,41 @@ describe('live activity push', () => {
     expect(sent.headline).toBe('Auth method')
   })
 
+  it('fits a maximal card - four agents, the longest headline and detail - inside the budget', () => {
+    const state = projectContentState({
+      info: session({
+        status: 'awaiting_approval',
+        title: 'T'.repeat(200),
+        pendingPermissionCount: 3,
+        checklist: checklist(9, 'S'.repeat(300), 12),
+        subagents: Array.from({ length: 6 }, (_, index) =>
+          subagent({ toolUseId: `tu_${index}`, agentType: 'A'.repeat(40), description: 'D'.repeat(40), startedAt: STARTED - index }),
+        ),
+      }),
+      request: request({ title: 'H'.repeat(300), input: { command: 'C'.repeat(300) } }),
+      startedAtMs: STARTED,
+    })
+    expect(state.agents).toHaveLength(4)
+    expect(state.headline.length).toBeLessThanOrEqual(120)
+    const push = buildLiveActivityPush('start', { attributes, state, now: STARTED })
+    const sent = (push.payload as { aps: { 'content-state': typeof state } }).aps['content-state']
+    // Nothing had to be shrunk: the maximal card is inside the 3800-byte budget as projected.
+    expect(sent.agents).toHaveLength(4)
+    expect(Buffer.byteLength(JSON.stringify(push.payload))).toBeLessThan(3800)
+  })
+
+  it('gives up the sub-agent line before any of the card’s own text', () => {
+    const huge = 'z'.repeat(6000)
+    const state = projectContentState({
+      info: session({ subagents: [subagent()], checklist: checklist(1, 'Running the suite', 3) }),
+      startedAtMs: STARTED,
+    })
+    const push = buildLiveActivityPush('update', { attributes, state: { ...state, detail: huge }, now: STARTED })
+    const sent = (push.payload as { aps: { 'content-state': typeof state } }).aps['content-state']
+    expect(sent.agents).toBeUndefined()
+    expect(sent.headline).toBe('Running the suite')
+  })
+
   it('still fits when every field is pathological', () => {
     const huge = 'y'.repeat(9000)
     const state = projectContentState({
@@ -259,7 +349,13 @@ describe('swift fixtures', () => {
       buildLiveActivityPush('start', {
         attributes: attributesFor(session(), HOST_ID),
         state: projectContentState({
-          info: session({ checklist: checklist(2, 'Reading packages/cli/src/apns/client.ts', 7) }),
+          info: session({
+            checklist: checklist(2, 'Reading packages/cli/src/apns/client.ts', 7),
+            subagents: [
+              subagent({ toolUseId: 'tu_1', agentType: 'explorer', startedAt: STARTED - 5_000 }),
+              subagent({ toolUseId: 'tu_2', agentType: 'reviewer', status: 'done', startedAt: STARTED - 40_000 }),
+            ],
+          }),
           startedAtMs: STARTED,
         }),
         now: STARTED,

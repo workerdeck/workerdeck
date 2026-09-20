@@ -6,7 +6,7 @@ import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
-import { ToolRunRow } from '../terminal/items.tsx'
+import { RunRow } from '../terminal/items.tsx'
 import { parentOf } from '../terminal/blocks.ts'
 import { briefPx, estimateBlockPx } from '../terminal/height.ts'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
@@ -324,7 +324,7 @@ export function TranscriptRows({
         const content =
           'run' in row ? (
             <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-              <ToolRunRow items={row.run} />
+              <RunRow items={row.run} />
             </div>
           ) : 'item' in row ? (
             <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item, frameParentId))}>

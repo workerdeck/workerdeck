@@ -335,6 +335,18 @@ struct SessionListTests {
     #expect(projectLabel(nowhere.info) == "No project")
   }
 
+  @Test func prefersADeclaredShortcodeForTheLabelWhileProjectNameKeepsTheFullName() {
+    let coded = row(
+      info: info(
+        id: "sc1", cwd: "/work/deck/packages/ui",
+        project: ProjectInfo(name: "WorkerDeck", root: "/work/deck", shortcode: "WD")))
+    #expect(projectLabel(coded.info) == "WD")
+    #expect(projectName(coded.info) == "WorkerDeck")
+    #expect(projectKey(coded) == projectKey(declaredUi))
+    #expect(projectName(undeclared.info) == "alpha")
+    #expect(projectName(nowhere.info) == "No project")
+  }
+
   @Test func answersTheSubPathInsideAProjectAndNothingAtAllAtItsRoot() {
     // What a row shows *instead of* the name when the list is already grouped by
     // project: the header has said "WorkerDeck", so what is left worth saying is

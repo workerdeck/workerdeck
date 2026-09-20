@@ -1,6 +1,6 @@
 import type { EngineAdapter } from '@workerdeck/core'
 import type { JobQueue } from '@workerdeck/queue'
-import type { ProfileEngine } from '@workerdeck/protocol'
+import type { PricingOverrides, ProfileEngine } from '@workerdeck/protocol'
 import type { SdkSessionLister, WorkerServerOptions } from './options.ts'
 import type { AttachmentStore } from './services/attachments.ts'
 import type { AuthService } from './services/auth.ts'
@@ -41,4 +41,6 @@ export type ServerContext = {
   maxHostDirEntries: number
 
   shell: ShellService | null
+  // The accepted subset of `options.pricing.overrides`, as clients are told them.
+  pricingOverrides: PricingOverrides | undefined
 }

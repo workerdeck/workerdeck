@@ -166,6 +166,56 @@ describe('CodexRunner sub-agents', () => {
     expect(resultFor(wait[0]!.block.id)).toBeDefined()
   })
 
+  it('an agent that outlives the root turn keeps its work flowing, and settles from a between-turns item', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      const root = { threadId: 'thread-1', turnId }
+      emit('item/completed', { ...root, item: spawnItem('call_a', 'thread-a', '/root/alpha') })
+      emit('item/started', {
+        threadId: 'thread-a',
+        turnId: 'turn-a',
+        item: { id: 'cmd-1', type: 'commandExecution', command: 'ls', status: 'inProgress' },
+      })
+      emit('item/completed', { ...root, item: { id: 'm-root', type: 'agentMessage', text: 'spawned, moving on' } })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'spawn', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+    expect(ofType(events, 'turn_result')).toHaveLength(1)
+    const before = events.length
+
+    peer.emit('item/agentMessage/delta', { threadId: 'thread-a', turnId: 'turn-a', itemId: 'm-a', delta: 'still ' })
+    peer.emit('item/completed', {
+      threadId: 'thread-a',
+      turnId: 'turn-a',
+      item: { id: 'cmd-1', type: 'commandExecution', command: 'ls', status: 'completed', exitCode: 0, aggregatedOutput: 'a.txt' },
+    })
+    peer.emit('item/completed', { threadId: 'thread-a', turnId: 'turn-a', item: { id: 'm-a', type: 'agentMessage', text: 'still here' } })
+    peer.emit('item/completed', {
+      threadId: 'thread-1',
+      item: { id: 'call_a', type: 'subAgentActivity', kind: 'completed', agentThreadId: 'thread-a', agentPath: '/root/alpha' },
+    })
+
+    const anchor = toolUses(events).find((t) => t.block.name === 'CodexAgent')!
+    const late = events.slice(before)
+    expect(late.length).toBeGreaterThan(0)
+    expect(deltas(late)).toEqual([{ text: 'still ', parent: anchor.block.id }])
+    const command = toolUses(late).find((t) => t.block.name === 'CodexCommand')
+    expect(command).toBeUndefined()
+    const results = ofType(late, 'user_message').map((e) => ({
+      id: (e.message.content as Array<{ tool_use_id?: string }>)[0]!.tool_use_id,
+      parent: e.parentToolUseId ?? null,
+    }))
+    const started = toolUses(events).find((t) => t.block.name === 'CodexCommand')!
+    expect(results).toEqual([
+      { id: started.block.id, parent: anchor.block.id },
+      { id: anchor.block.id, parent: null },
+    ])
+    expect(ofType(late, 'assistant_message').some((e) => e.parentToolUseId === anchor.block.id)).toBe(true)
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: anchor.block.id, status: 'done', toolCount: 1 }])
+  })
+
   it('a dying child settles the agents that lived in it', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {

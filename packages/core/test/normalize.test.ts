@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modelOptionsFromSdk, rateLimitEventsFromUsage } from '../src/lib/normalize.ts'
+import { byModelFromSdk, modelOptionsFromSdk, rateLimitEventsFromUsage } from '../src/lib/normalize.ts'
 
 describe('modelOptionsFromSdk', () => {
   const reported = [
@@ -117,5 +117,28 @@ describe('rateLimitEventsFromUsage', () => {
       },
     })
     expect(events.map((e) => e.type === 'rate_limit' && e.info.rateLimitType)).toEqual(['seven_day_opus'])
+  })
+})
+
+describe('byModelFromSdk', () => {
+  const entry = {
+    inputTokens: 100,
+    outputTokens: 20,
+    cacheReadInputTokens: 5,
+    cacheCreationInputTokens: 7,
+    webSearchRequests: 0,
+    costUSD: 1,
+    contextWindow: 200_000,
+    maxOutputTokens: 64_000,
+  }
+
+  it("carries the SDK's costBasis, keyed by the canonical model", () => {
+    const byModel = byModelFromSdk({ 'claude-opus-5[1m]': { ...entry, costBasis: 'unknown' } })
+    expect(byModel?.['claude-opus-5']?.costBasis).toBe('unknown')
+  })
+
+  it('leaves the basis absent when the process has not priced the model yet', () => {
+    const byModel = byModelFromSdk({ 'claude-sonnet-5': entry })
+    expect(byModel?.['claude-sonnet-5']?.costBasis).toBeUndefined()
   })
 })

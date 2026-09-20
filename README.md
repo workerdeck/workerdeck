@@ -130,7 +130,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
   and an icon, found by an ancestor walk from the session's cwd - so a list of sessions reads as
   a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it
-  (a phone cannot see the gateway's filesystem) and the wire carries an address, not bytes.
+  (a phone cannot see the gateway's filesystem) and the wire carries an address, not bytes. An
+  optional `"shortcode": "WD"` (2 to 5 characters, `A-Z` and `0-9`) is what narrow list rows draw
+  instead of the name, with the full name still on the tooltip; anything else is ignored silently.
 - **Sessions you can put in front of your own users.** A gateway embedded in an app's backend can
   run the provider engine with nothing granted - no shell, no host filesystem, no egress, just the
   QuickJS guest and an in-memory VFS (`sandboxedProviderProfile()`) - and tag each session with

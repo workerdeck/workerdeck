@@ -111,6 +111,10 @@ export function projectKey(row: SessionRow): string {
 }
 
 export function projectLabel(row: Pick<SessionRow, 'info'>): string {
+  return row.info.project?.shortcode || projectName(row)
+}
+
+export function projectName(row: Pick<SessionRow, 'info'>): string {
   const name = row.info.project?.name
   if (name) {
     return name
@@ -147,6 +151,7 @@ function matchesSearch(row: SessionRow, needle: string): boolean {
     sessionLabel(row.info).toLowerCase().includes(needle) ||
     row.info.cwd.toLowerCase().includes(needle) ||
     (row.info.project?.name.toLowerCase().includes(needle) ?? false) ||
+    (row.info.project?.shortcode?.toLowerCase().includes(needle) ?? false) ||
     row.hostName.toLowerCase().includes(needle) ||
     row.adapter.toLowerCase().includes(needle) ||
     row.info.id.startsWith(needle)

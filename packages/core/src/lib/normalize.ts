@@ -15,6 +15,8 @@ export function byModelFromSdk(modelUsage: SDKResultMessage['modelUsage'] | unde
       output: Math.max(0, entry.outputTokens ?? 0),
       cacheWrite5m: Math.max(0, entry.cacheCreationInputTokens ?? 0),
       cacheRead: Math.max(0, entry.cacheReadInputTokens ?? 0),
+      // Absent until the process has priced a request for the model, which the SDK says to read as 'list'.
+      costBasis: entry.costBasis,
     }
   }
   return Object.keys(out).length === 0 ? undefined : out

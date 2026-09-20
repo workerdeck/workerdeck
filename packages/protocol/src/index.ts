@@ -1,4 +1,4 @@
-import type { ByModel, ProfileSpend } from './pricing.ts'
+import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
 export const PROTOCOL_VERSION = 1
 
@@ -375,6 +375,10 @@ export type AttachedFrame = {
   // Whether this principal may run `!` commands on this session: server config x operator x hostCwd.
   // Additive, so no PROTOCOL_VERSION bump; an older gateway omits it and the client never offers the mode.
   shell?: boolean
+  // The operator's rate overrides alone, never the bundled table: a client merges them over its own
+  // `DEFAULT_PRICING` so what it prices for itself matches what this gateway priced. Additive, and an
+  // older gateway omits it, which is the same thing as having no overrides.
+  pricingOverrides?: PricingOverrides
 }
 
 export type ToolCallRequestFrame = {
@@ -640,6 +644,7 @@ export type ProjectInfo = {
   name: string
   root: string
   icon?: ProjectIcon
+  shortcode?: string
 }
 
 export type SessionInfo = {
@@ -956,6 +961,7 @@ export type JobUsage = {
   tokens: number
   totalCostUsd: number
   numTurns: number
+  costUsd?: number
 }
 
 export type JobResult = {

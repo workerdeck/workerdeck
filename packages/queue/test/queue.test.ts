@@ -94,6 +94,11 @@ function errorResult(): SessionEventBody {
   }
 }
 
+// Our own figure in place of the engine's: codex and the provider engine report a cost of 0 and price from tokens.
+function priced(base: SessionEventBody, costUsd: number): SessionEventBody {
+  return base.type === 'turn_result' ? { ...base, totalCostUsd: 0, costUsd } : base
+}
+
 function makeQueue(options: Partial<JobQueueOptions> = {}) {
   const runners: FakeRunner[] = []
   const createRunner = vi.fn(() => {
@@ -414,6 +419,31 @@ describe('JobQueue', () => {
     expect(done?.usage.numTurns).toBe(4)
     expect(done?.usage.totalCostUsd).toBeCloseTo(0.25)
     expect(done?.nextRunAt).toBeUndefined()
+  })
+
+  it('sums our own costUsd across attempts, for engines that report no cost of their own', async () => {
+    const { queue, runners } = makeQueue()
+    const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 5 }))
+    await tick()
+    runners[0]!.emit(priced(errorResult(), 0.4))
+    await tick()
+    await settles(() => expect(runners).toHaveLength(2))
+    runners[1]!.emit(priced(successResult(100), 0.1))
+    await tick()
+
+    const done = await queue.get(job.id)
+    expect(done?.usage.costUsd).toBeCloseTo(0.5)
+    expect(done?.usage.totalCostUsd).toBe(0)
+  })
+
+  it('leaves costUsd unknown when no attempt priced itself, rather than banking a zero', async () => {
+    const { queue, runners } = makeQueue()
+    const job = await queue.submit(jobRequest())
+    await tick()
+    runners[0]!.emit(successResult(100))
+    await tick()
+
+    expect((await queue.get(job.id))?.usage.costUsd).toBeUndefined()
   })
 
   it('fails terminally once attempts are exhausted', async () => {

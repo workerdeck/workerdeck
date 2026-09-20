@@ -52,7 +52,11 @@ export function toolIcon(toolName: string): LucideIcon {
     case 'Agent': {
       return UsersRound
     }
-    case 'TodoWrite': {
+    case 'TodoWrite':
+    case 'TaskCreate':
+    case 'TaskUpdate':
+    case 'TaskGet':
+    case 'TaskList': {
       return CheckSquare
     }
     case 'Skill': {

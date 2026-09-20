@@ -1,7 +1,15 @@
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { ClaudeAuthProbe, EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import type { JobQueue, QueueAdapter } from '@workerdeck/queue'
-import type { CreateSessionRequest, JobEvent, ProfileEngine, ProfileInfo, SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
+import type {
+  CreateSessionRequest,
+  JobEvent,
+  ModelRate,
+  ProfileEngine,
+  ProfileInfo,
+  SdkSessionSummary,
+  SessionInfo,
+} from '@workerdeck/protocol'
 import type { BridgeHub, BridgeHubOptions } from './services/bridge.ts'
 import type { SessionNotificationOptions } from './services/notifications.ts'
 import type { ParkErrorContext, SessionParkManager } from './services/parking.ts'
@@ -65,6 +73,12 @@ export type WorkerServerOptions = {
     expiredGraceMs?: number
     persistLive?: boolean
     onError?: (error: unknown, context: ParkErrorContext) => void
+  }
+  // Rates the operator knows better than the bundled table does: an enterprise discount, a rate the
+  // release predates, a provider the table has no row for. Keyed by canonical model id and merged over
+  // `DEFAULT_PRICING` at start, for every pricing call this gateway makes and for the clients it tells.
+  pricing?: {
+    overrides?: Record<string, ModelRate>
   }
   spend?: {
     store?: SpendStore

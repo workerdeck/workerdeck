@@ -141,6 +141,17 @@ ALTER TABLE events ADD COLUMN metadata jsonb DEFAULT '{}';
 This is safe online because the default is not volatile and the column is nullable in effect (the default fills it).`,
   })
 
+  // A run of exactly one call: the terminal theme draws this as the tool row itself, not a "Ran 1 tool" summary.
+  items.push({
+    kind: 'tool_call',
+    id: 'tc3',
+    name: 'Grep',
+    parentToolUseId: null,
+    input: { pattern: 'claimNext', path: 'packages/queue' },
+    status: 'settled',
+    result: { content: 'packages/queue/src/postgres-adapter.ts:88' },
+  } as unknown as TranscriptItem)
+
   items.push({
     kind: 'user',
     id: 'u3',

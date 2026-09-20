@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto'
-import { parseUserQuestions, type PermissionRequest, type SessionInfo } from '@workerdeck/protocol'
+import {
+  CHECKLIST_TEXT_MAX,
+  isAgentRecord,
+  parseUserQuestions,
+  subagentLabel,
+  type PermissionRequest,
+  type SessionInfo,
+  type SubagentInfo,
+} from '@workerdeck/protocol'
 import type { ApnsRequest } from './client.ts'
 
 // The wire contract with `apps/ios/WorkerDeckKit/Sources/WorkerDeckActivity`. Every field name here
@@ -13,6 +21,8 @@ export type ActivityAttributes = {
 }
 
 export type ActivityChoice = { index: number; label: string }
+
+export type ActivityAgent = { name: string; state: SubagentInfo['status'] }
 
 export type ActivityRequestState = {
   id: string
@@ -30,6 +40,7 @@ export type ActivityContentState = {
   expiresAtMs?: number
   pendingCount: number
   steps?: { done: number; total: number }
+  agents?: ActivityAgent[]
   request?: ActivityRequestState
   epoch?: number
   seq?: number
@@ -43,7 +54,7 @@ export type ActivityPhaseName = 'running' | 'approval' | 'question' | 'plan' | '
 export type LiveActivityPushKind = 'start' | 'update' | 'end'
 
 const MAX_PAYLOAD_BYTES = 3800
-const LIMIT = { title: 60, headline: 120, detail: 200, choiceLabel: 40, choices: 4 } as const
+const LIMIT = { title: 60, headline: 120, detail: 200, choiceLabel: 40, choices: 4, agentName: 24, agents: 4 } as const
 const STALE_MS = 20 * 60 * 1000
 const DISMISSAL_MS = 15 * 60 * 1000
 // Constant, and deliberately short. "Latest timestamp wins" only holds among pushes still
@@ -51,6 +62,8 @@ const DISMISSAL_MS = 15 * 60 * 1000
 // resolution that followed it and re-raise an answered question.
 const EXPIRATION_MS = 10 * 60 * 1000
 const END_EXPIRATION_MS = 4 * 60 * 60 * 1000
+
+const WORKING = 'Working…'
 
 const RELEVANCE: Record<ActivityPhaseName, number> = {
   approval: 100,
@@ -115,6 +128,28 @@ function choicesFor(request: PermissionRequest, kind: ActivityRequestState['kind
   return question.options.map((option, index) => ({ index, label: clamp(option.label, LIMIT.choiceLabel) }))
 }
 
+// Running first, then the most recently started, because a finished agent is history and the card
+// has room for four names at most.
+function agentsFor(info: SessionInfo): ActivityAgent[] {
+  const records = (info.subagents ?? []).filter(isAgentRecord)
+  const ranked = [...records].sort((a, b) => {
+    const running = Number(b.status === 'running') - Number(a.status === 'running')
+    return running !== 0 ? running : b.startedAt - a.startedAt
+  })
+  return ranked.slice(0, LIMIT.agents).map((sub) => ({ name: clamp(subagentLabel(sub), LIMIT.agentName), state: sub.status }))
+}
+
+// Exactly one, never the first of several: with two items in flight the card cannot say which one
+// it is drawing, and a wrong specific line is worse than an honest "Working…".
+function activeChecklistText(info: SessionInfo): string | undefined {
+  const active = (info.checklist ?? []).filter((item) => item.status === 'in_progress')
+  if (active.length !== 1) {
+    return undefined
+  }
+  const text = clamp(active[0]!.text, Math.min(LIMIT.headline, CHECKLIST_TEXT_MAX))
+  return text === '' ? undefined : text
+}
+
 function phaseFor(info: SessionInfo, request: PermissionRequest | undefined): ActivityPhaseName {
   switch (info.status) {
     case 'awaiting_approval': {
@@ -154,8 +189,7 @@ function headlineFor(info: SessionInfo, phase: ActivityPhaseName, request: Permi
     return clamp(request.title ?? request.displayName ?? request.toolName, LIMIT.headline)
   }
   if (phase === 'running') {
-    const active = info.checklist?.find((item) => item.status === 'in_progress')
-    return clamp(active?.text ?? 'Working…', LIMIT.headline)
+    return activeChecklistText(info) ?? WORKING
   }
   const finals: Partial<Record<ActivityPhaseName, string>> = {
     done: 'Turn finished',
@@ -202,6 +236,7 @@ export function projectContentState(options: {
   const kind = request === undefined ? undefined : requestKind(request)
   const choices = request === undefined || kind === undefined ? [] : choicesFor(request, kind)
   const total = info.checklist?.length ?? 0
+  const agents = agentsFor(info)
 
   return {
     phase,
@@ -212,6 +247,7 @@ export function projectContentState(options: {
     ...(request?.expiresAt === undefined ? {} : { expiresAtMs: request.expiresAt }),
     pendingCount: info.pendingPermissionCount,
     ...(total === 0 ? {} : { steps: { done: info.checklist!.filter((item) => item.status === 'completed').length, total } }),
+    ...(agents.length === 0 ? {} : { agents }),
     ...(request === undefined || kind === undefined
       ? {}
       : {
@@ -243,6 +279,9 @@ export function contentHash(state: ActivityContentState): string {
 function shrink(state: ActivityContentState): ActivityContentState | undefined {
   if (state.request?.inputJSON !== undefined) {
     return { ...state, request: { ...state.request, choices: [], inputJSON: undefined } }
+  }
+  if (state.agents !== undefined) {
+    return { ...state, agents: undefined }
   }
   if (state.detail !== undefined && state.detail.length > 24) {
     return { ...state, detail: clamp(state.detail, Math.floor(state.detail.length / 2)) }

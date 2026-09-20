@@ -340,7 +340,7 @@ public func projectKey(_ row: SessionRow) -> String {
 }
 
 /// What a project group (or a row's project slot) is called: the declared
-/// name, else the cwd's basename - the exact string this client rendered
+/// shortcode if there is one, else the declared name, else the cwd's basename - the exact string this client rendered
 /// before the feature existed, so an undeclared project looks like today.
 /// "No project" is only ever the no-cwd case (a sandboxed provider session),
 /// where there is no folder to name.
@@ -350,6 +350,14 @@ public func projectKey(_ row: SessionRow) -> String {
 /// the rest of a row to name it, and two spellings of this string would put
 /// the list and its group headers on different names.
 public func projectLabel(_ info: SessionInfo) -> String {
+  if let shortcode = info.project?.shortcode, !shortcode.isEmpty { return shortcode }
+  return projectName(info)
+}
+
+/// The full project name, never abbreviated - what `projectLabel` returned
+/// before shortcodes existed, and what a surface with room for the whole name
+/// draws.
+public func projectName(_ info: SessionInfo) -> String {
   if let name = info.project?.name, !name.isEmpty { return name }
   let dir = normalizePath(info.cwd)
   if let slash = dir.lastIndex(of: "/") {
@@ -410,6 +418,7 @@ private func matchesSearch(_ row: SessionRow, needle: String) -> Bool {
     // the repo as "WorkerDeck", not by whatever the folder happens to be
     // called.
     || (row.info.project?.name.lowercased().contains(needle) ?? false)
+    || (row.info.project?.shortcode?.lowercased().contains(needle) ?? false)
     || row.hostName.lowercased().contains(needle)
     || row.adapter.lowercased().contains(needle)
     // An id is matched by prefix only - a hex soup matching mid-string would

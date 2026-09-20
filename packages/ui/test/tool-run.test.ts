@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
 import {
   foldsTogether,
+  planRun,
   runFailed,
   runSummary,
   taskBrief,
@@ -79,6 +80,18 @@ describe('runSummary', () => {
   it('trails the ellipsis on the whole line while busy, never on the count', () => {
     expect(runSummary([call('Bash'), call('Bash')], true)).toBe('Running 2 shell commands…')
     expect(runSummary([call('Bash'), call('Read')], true)).toBe('Running 2 tools · 1 read, 1 shell…')
+  })
+})
+
+describe('planRun', () => {
+  it('draws a run of exactly one call as the call itself, matching iOS', () => {
+    const only = call('Read')
+    expect(planRun([only])).toEqual({ kind: 'call', item: only })
+  })
+
+  it('still summarizes a run of two or more, even with the same parent', () => {
+    const items = [call('Bash', 'agent-1'), call('Bash', 'agent-1')]
+    expect(planRun(items)).toEqual({ kind: 'summary', items })
   })
 })
 

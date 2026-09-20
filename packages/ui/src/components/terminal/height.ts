@@ -5,7 +5,7 @@ import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.
 import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { todoLine, todoPreview } from './todos.ts'
-import { runSummary, taskSummary } from './tool-run.ts'
+import { planRun, runSummary, taskSummary } from './tool-run.ts'
 
 export type CellMetrics = {
   width: number
@@ -640,8 +640,12 @@ export function blockHeight(block: TerminalBlock, m: CellMetrics): ComputedHeigh
     return rowH(taskSummary(block.task, taskChildItems(block)), m)
   }
   if ('run' in block) {
-    const busy = block.run.some((item) => item.status === 'running' || item.status === 'pending')
-    return rowH(runSummary(block.run, busy), m)
+    const plan = planRun(block.run)
+    if (plan.kind === 'call') {
+      return itemHeight(plan.item, m)
+    }
+    const busy = plan.items.some((item) => item.status === 'running' || item.status === 'pending')
+    return rowH(runSummary(plan.items, busy), m)
   }
   return itemHeight(block.item, m)
 }
