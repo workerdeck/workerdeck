@@ -312,8 +312,8 @@ async function threadItemUnionCanary(): Promise<void> {
     'hookPrompt',
     'agentMessage',
     // 0.151.0. Output-only (`{id, name, namespace?, output}` with no arguments), and the union carries no paired
-    // `functionCall` arm, so there is nothing to draw a call from. Considered and left unmapped, as `dynamicToolCall`
-    // is: a call that renders as output alone would read as a result attached to nothing.
+    // `functionCall` arm, so there is nothing to draw a call from. Considered and left unmapped: a call that renders
+    // as output alone would read as a result attached to nothing.
     'functionCallOutput',
     'plan',
     'reasoning',
@@ -339,6 +339,7 @@ async function threadItemUnionCanary(): Promise<void> {
     'commandExecution',
     'fileChange',
     'mcpToolCall',
+    'dynamicToolCall',
     'webSearch',
     'imageGeneration',
     'imageView',

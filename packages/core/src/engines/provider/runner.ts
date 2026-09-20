@@ -19,13 +19,21 @@ import {
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
-import type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, SessionEventListener } from '../../runner-interface.ts'
+import type {
+  ParkedExecution,
+  PermissionDecision,
+  Runner,
+  RunnerSnapshot,
+  SendMessageOptions,
+  SessionEventListener,
+} from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
+import { peerMessageEnvelope, type PeerDirectory } from '../../lib/peers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
 
 const SUPPORTED_PERMISSION_MODES: readonly PermissionMode[] = ['default', 'bypassPermissions', 'dontAsk']
@@ -49,6 +57,7 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   reportMcpServers?: () => Promise<McpServerStatusInfo[] | undefined>
   onClose?: () => void | Promise<void>
   restore?: RunnerSnapshot
+  peers?: PeerDirectory
 }
 
 export type PendingToolCall = {
@@ -293,13 +302,14 @@ export class AiSdkRunner implements Runner {
     }
   }
 
-  sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
+  sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
     if (this.#parked) {
       throw new Error('session is parked')
     }
     if (this.#closed) {
       throw new Error('session is closed')
     }
+    const modelText = options?.origin ? peerMessageEnvelope(text, options.origin) : text
     const files = (attachments ?? []).map((attachment) => ({
       type: 'file' as const,
       data: attachment.data,
@@ -310,8 +320,12 @@ export class AiSdkRunner implements Runner {
     this.#pendingLocalCommands = []
     const content =
       files.length || context
-        ? [...(context ? [{ type: 'text' as const, text: context }] : []), ...files, ...(text ? [{ type: 'text' as const, text }] : [])]
-        : text
+        ? [
+            ...(context ? [{ type: 'text' as const, text: context }] : []),
+            ...files,
+            ...(modelText ? [{ type: 'text' as const, text: modelText }] : []),
+          ]
+        : modelText
     this.#messages.push({ role: 'user', content })
     this.#emit({
       type: 'user_message',
@@ -319,6 +333,7 @@ export class AiSdkRunner implements Runner {
       parentToolUseId: null,
       attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
       uuid: randomUUID(),
+      ...(options?.origin ? { origin: options.origin } : {}),
     })
     this.#scheduleTurn()
   }

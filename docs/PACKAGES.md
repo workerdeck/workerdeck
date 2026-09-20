@@ -467,6 +467,17 @@ third filter on a replay and the only opt-in one, because it is only sound for a
 handling of those events is last-write-wins: the WS attach is the single caller, while
 `parking.ts` - which subscribes from seq 0 - *branches* on `status_changed`, so coalescing for
 everyone would silently skip a park. `src/lib/replay.ts` is the backwards scan behind it.
+
+`src/lib/peers.ts` is the engine-agnostic half of peer messaging: the `PeerDirectory` contract
+(caller id first on every method, since one directory serves every session), the three tool
+shapes as zod (`PEER_TOOL_SHAPES`, the one source both the SDK's `tool()` and codex's JSON-schema
+`dynamicTools` are derived from), `runPeerTool` (the dispatcher every engine calls, which answers
+errors as tool output and never throws), `peerMessageEnvelope` (what the model reads; the event
+keeps the bare text plus `origin`) and `recentLines` (the peek digest: top-level prose and
+prompts only). `Runner.sendMessage` grew a third argument, `{ origin }`, for the delivery. The
+directory reaches a runner as `peerDirectoryHandle()`, resolved per call from a process-wide slot,
+which is what keeps a hot-reload-carried runner pointed at the live registry.
+
 ## `packages/sandbox`
 
 untrusted-code boundary: QuickJS-NG WASM guest, in-memory map VFS (not a
@@ -680,6 +691,16 @@ the result to `runner.queueLocalCommand`. Operator-only, off by default, and out
 flow entirely - the invariants are in `docs/GOTCHAS.md` § Shell mode and you should read them before
 touching it. `attachClient` takes an `AttachAccess { operator }` computed at upgrade time rather than
 re-authenticating, and re-checks the gate on every `shell_command`.
+
+
+`services/peers.ts` is the server's `PeerDirectory`: visibility by `scopeMatches` with the
+sender's scope as principal, `list` over the registry plus dormant records, `peek` off a live
+runner's log (never a wake), `send` through `parking.ensureLive` then `runner.sendMessage(text,
+undefined, { origin })`, with a per-pair rate limit, a size cap and a hop chain that a human turn
+resets (watched through `onRegister`). On by default; `peers: { enabled: false }` removes the tools
+from every session. `createSessionFactory` stamps `peers` into the config in `buildRunner`, the
+one chokepoint, so parked and dormant rebuilds get it too, and `session-store.ts` strips it from
+records. Invariants in `docs/GOTCHAS.md` §Peer messaging.
 
 ## `packages/client`
 

@@ -10,6 +10,7 @@ import { Response } from './Response.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
 import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
+import { peerLabel } from '../terminal/items.tsx'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
   return (
@@ -69,6 +70,7 @@ export function TranscriptItemView({
     case 'user': {
       return (
         <Message from="user">
+          {item.origin ? <div className="wd-peer-origin text-xs text-muted-foreground">{peerLabel(item.origin)}</div> : null}
           {item.attachments?.length ? <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} /> : null}
           {item.text ? (
             <MessageContent>

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createVfs, type SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import type { WebFetchFn } from './web-fetch.ts'
+import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
 
 export type ToolTrust = 'sandboxed' | 'authoritative'
 
@@ -24,6 +25,9 @@ export type ToolContextOptions = {
   limits?: { timeoutMs?: number; memoryLimitBytes?: number }
   onDispatch?: (executionId: string, toolName: string) => void
   onSettle?: (executionId: string, result: ToolExecutionResult) => void
+  peers?: PeerDirectory
+  // The runner does not exist while its tools are built, so the caller's own id is read at call time.
+  selfId?: () => string
 }
 
 export type ToolContext = {
@@ -99,6 +103,25 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
         },
       }),
     })
+  }
+
+  if (options.peers) {
+    const peers = options.peers
+    const selfId = options.selfId ?? (() => options.sessionId)
+    for (const name of PEER_TOOL_NAMES) {
+      definitions.push({
+        name,
+        trust: 'authoritative',
+        tool: tool({
+          description: PEER_TOOL_SHAPES[name].description,
+          inputSchema: z.object(PEER_TOOL_SHAPES[name].shape),
+          execute: async (args) => {
+            const output = await runPeerTool(peers, selfId(), name, args)
+            return output.isError ? { error: output.text } : { result: output.text }
+          },
+        }),
+      })
+    }
   }
 
   if (options.search) {

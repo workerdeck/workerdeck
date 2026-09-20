@@ -5,7 +5,7 @@ import {
   type ProfileEngine,
   type ProfileInfo,
 } from '@workerdeck/protocol'
-import type { EngineAdapter, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
+import type { EngineAdapter, PeerDirectory, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { claudeSessionEnv, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
 import type { EngineRunnerContext, LateBoundRefs } from '../options.ts'
@@ -20,6 +20,7 @@ export type SessionFactoryDeps = {
   disableBypassPermissions?: boolean
   approvalTimeoutMs?: number | null
   requireApiKey?: boolean
+  peers?: PeerDirectory
   refs: LateBoundRefs
 }
 
@@ -175,7 +176,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
   }
 
-  const buildRunner = async (config: SessionRunnerConfig, restore?: RunnerSnapshot, id?: string): Promise<Runner> => {
+  const buildRunner = async (built: SessionRunnerConfig, restore?: RunnerSnapshot, id?: string): Promise<Runner> => {
+    // Applied here rather than in buildRunnerConfig so a parked record, which stores its config, gets it too.
+    const config = deps.peers ? { ...built, peers: deps.peers } : built
     const name = config.profile
     const profile = name !== undefined ? profiles.get(name) : undefined
     if (name !== undefined && !profile) {

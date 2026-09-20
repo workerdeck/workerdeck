@@ -37,6 +37,30 @@ describe('capability-scoped tool set', () => {
     expect(Object.keys(full.tools)).toContain('download')
   })
 
+  it('adds the peer tools, authoritative, when a directory is supplied', async () => {
+    const calls: unknown[] = []
+    const context = createToolContext({
+      executor: stubExecutor(),
+      sessionId: 'pending',
+      selfId: () => 'me',
+      peers: {
+        list: async (from) => {
+          calls.push(from)
+          return []
+        },
+        peek: async () => undefined,
+        send: async () => ({ delivered: false, reason: 'no' }),
+      },
+    })
+    expect(Object.keys(context.tools)).toEqual(expect.arrayContaining(['peers_list', 'peers_peek', 'peers_send']))
+    expect(context.sandboxedToolNames).not.toContain('peers_send')
+    const list = context.tools.peers_list as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+    expect(await list.execute({}, {})).toEqual({ result: 'No other sessions are reachable from this one.' })
+    expect(calls).toEqual(['me'])
+    const send = context.tools.peers_send as { execute: (args: unknown, opts: unknown) => Promise<unknown> }
+    expect(await send.execute({ sessionId: 'b', text: 'x' }, {})).toEqual({ error: 'not delivered: no' })
+  })
+
   it('marks only eval_script as sandboxed; everything else is authoritative', () => {
     const context = createToolContext({
       executor: stubExecutor(),

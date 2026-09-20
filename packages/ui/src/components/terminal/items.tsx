@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { MessageOrigin } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
@@ -35,10 +36,20 @@ function clipToChars(lines: string[], maxChars: number): string[] {
   return out
 }
 
+export function peerLabel(origin: MessageOrigin): string {
+  const who = origin.name ? `${origin.name} (${origin.sessionId.slice(0, 8)})` : origin.sessionId.slice(0, 8)
+  return `message from ${origin.engine ? `${origin.engine} session ` : 'session '}${who}`
+}
+
 export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user' }> }) {
   return (
     <WithActions actions={<BookmarkAction id={item.id} />}>
       <div className="term-user">
+        {item.origin ? (
+          <Row glyph={PROMPT_GLYPH} glyphTone="dim" tone="dim">
+            {peerLabel(item.origin)}
+          </Row>
+        ) : null}
         {item.attachments?.length ? (
           <Row glyph={PROMPT_GLYPH} glyphTone="dim" tone="dim">
             {item.attachments.map((attachment) => attachment.name).join(', ')}

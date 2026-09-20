@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { getEngineAdapter } from '@workerdeck/core'
+import { getEngineAdapter, installPeerDirectory, peerDirectoryHandle } from '@workerdeck/core'
 import type { EngineAdapter } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
 import {
@@ -38,6 +38,7 @@ import { ProducedFileStore } from './services/produced-files.ts'
 import { ProfileService } from './services/profiles.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
 import { SpendLedger } from './services/spend-ledger.ts'
+import { createPeerService } from './services/peers.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
@@ -163,6 +164,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
 
   const refs: LateBoundRefs = {}
+  const projects = new ProjectInfoService()
+  const peers = options.peers?.enabled === false ? undefined : createPeerService({ refs, projects, options: options.peers })
+  if (peers) {
+    installPeerDirectory(peers)
+  }
   const factory = createSessionFactory({
     adapterFor,
     profiles,
@@ -172,6 +178,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     disableBypassPermissions: options.disableBypassPermissions,
     approvalTimeoutMs: options.approvalTimeoutMs,
     requireApiKey: options.requireApiKey,
+    peers: peers ? peerDirectoryHandle() : undefined,
     refs,
   })
 
@@ -182,7 +189,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     sessionEnvFor: factory.sessionEnvFor,
   })
 
-  const projects = new ProjectInfoService()
   const notifier = new SessionNotifier({
     ...options.notifications,
     decorateInfo: (info) => projects.withProject(info),
@@ -200,6 +206,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         profileUsage.watch(runner),
         spendLedger.watch(runner),
         shell?.watch(runner),
+        peers?.watch(runner),
       ]
       const profile = runner.info().profile
       if (profile) {

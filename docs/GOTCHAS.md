@@ -889,6 +889,55 @@ handover wrong.
   would break every embedder whose hook is a one-expression arrow. Safe for `#park`, which clears
   the runner's subscribers first, so the cleanups are no-ops there.
 
+## Peer messaging (`peers_list` / `peers_peek` / `peers_send`)
+
+Session-to-session messaging on one gateway: every engine gets the three tools, backed by one
+`PeerDirectory` the server installs (`services/peers.ts`). `docs/ARCHITECTURE.md` §Peer messaging
+has the shape; these are the ways to get it wrong.
+
+- **The transcript carries the bare text and `origin`; only the model input carries the
+  envelope.** `sendMessage(text, attachments, { origin })` emits `user_message` with `origin:
+  { kind: 'peer', sessionId, name, engine, hops }` and the text as sent, and feeds the model
+  `peerMessageEnvelope(text, origin)`: a `<peer-message from-session=...>` block plus the framing
+  that says it is not the user and cannot approve anything. A client never strips anything, and
+  the badge rule is untouched: `transcriptProse` still scores a `user_message` zero.
+- **A peer-origin `/clear` is text, never a command.** `CodexRunner.sendMessage` runs `/clear`
+  through `clearContext` only when there is no origin; the claude engine gets the envelope, which
+  the CLI does not match as a slash command. A peer must not be able to wipe another session.
+- **Codex declares the tools as `dynamicTools` on `thread/start` and `thread/resume`; the call
+  arrives as the server request `item/tool/call`.** Both need `experimentalApi`, which
+  `INITIALIZE_PARAMS` already sends. Measured against 0.153.4: `thread/start` with `dynamicTools`
+  is accepted and unknown fields are ignored, not refused, so a binary that drops the field
+  silently drops the tools. **Whether `thread/resume` honours it is unverified** (a resume needs a
+  rollout, which needs a turn, which costs tokens); `pnpm smoke:codex` is the check. There is no
+  stdio MCP server and no `config.toml` write: `thread/start` also accepts a per-thread
+  `config: { mcp_servers }` override (measured), kept in reserve, and never used for this because a
+  child process with the gateway's address in argv is exactly what `mcpStatusInfo` forwards.
+- **`dynamicToolCall` is a mapped item now.** `item/started` draws the call under the tool's own
+  name (`peers_send`, not `mcp__...`), `item/completed` settles it from `contentItems`. The
+  canary's MAPPED set moved it; `functionCallOutput` stays unmapped for the reason recorded there.
+- **The runner holds a handle, not the directory.** `config.peers` is `peerDirectoryHandle()`,
+  which resolves `installPeerDirectory`'s process-wide slot (`Symbol.for`) on every call. That is
+  the hot-reload rule: a carried runner keeps the config it was born with, and a captured
+  directory would keep answering from the generation whose registry was emptied by the handover.
+  `peers` is in `EPHEMERAL_CONFIG_KEYS`; a function-bearing config must never reach a record.
+- **Visibility is the sender's scope, not a client's.** `scopeMatches(from.scope, to.scope)`: a
+  scoped session sees what a client carrying its scope would, an unscoped session sees everything.
+  `authorizeSession` is *not* consulted, because it takes a principal and a session is not one;
+  an embedder whose policy is richer than the tags must turn `peers` off (`peers: { enabled:
+  false }`) or scope every session. A miss is "no such session", never a different word.
+- **`peek` never wakes and never drives.** It reads a live runner's log through
+  `subscribe(..., 0, { truncateResults, imageRefs })` and detaches at once, and a dormant session
+  answers `live: false` with its stored `info`. `send` is the only path through
+  `parking.ensureLive`, and it goes through `Runner.sendMessage`, so every engine's mid-turn rule
+  applies unchanged: claude buffers in `InputQueue`, codex `turn/steer`s, provider chains a turn.
+- **The loop guard is a hop chain reset by a human.** Each delivery carries `hops` (every session
+  the exchange has passed through); the service remembers the last chain each session *received*
+  and extends it when that session sends. A `user_message` with no `origin` clears it. Past
+  `maxHops` (12) a send is refused with a reason that tells the model to ask its user. Beside it:
+  `perMinute` (10) per sender-target pair, `maxMessageChars` (16k) with "write a file, send the
+  path" as the refusal.
+
 ## Server, profiles & auth
 
 - **`writeFile`'s `mode` option applies only when the file is created**, so a 0600 write over an

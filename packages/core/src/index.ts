@@ -5,7 +5,14 @@ export type { AiSdkRunnerConfig, AiSdkSessionState, PendingToolCall, ToolCallOut
 export type { HistoryFn, QueryFn, SessionRunnerConfig } from './engines/claude/runner.ts'
 export { checkClaudeAuth, resolveBundledClaudeExecutable } from './engines/claude/auth.ts'
 export type { ClaudeAuthProbe, ClaudeAuthStatus } from './engines/claude/auth.ts'
-export type { ParkedExecution, PermissionDecision, Runner, RunnerSnapshot, SessionEventListener } from './runner-interface.ts'
+export type {
+  ParkedExecution,
+  PermissionDecision,
+  Runner,
+  RunnerSnapshot,
+  SendMessageOptions,
+  SessionEventListener,
+} from './runner-interface.ts'
 export { CostLedger, type CostFigures, type CostLedgerState } from './lib/cost-ledger.ts'
 export type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './executors/tool-executor.ts'
 export { QuickJsExecutor, isHostAllowed } from './executors/quickjs-executor.ts'
@@ -24,6 +31,30 @@ export type { WebFetchDigest, WebFetchFn, WebFetchOptions, WebFetchResult } from
 export { PendingRequestRegistry } from './lib/pending-registry.ts'
 export type { PendingEntry, PendingKind, PendingOutcome, RegisterOptions, SettledBy } from './lib/pending-registry.ts'
 export { InputQueue } from './lib/input-queue.ts'
+export {
+  PEER_MCP_SERVER,
+  PEER_MESSAGE_MAX_CHARS,
+  PEER_RECENT_DEFAULT,
+  PEER_RECENT_MAX,
+  PEER_TOOL_NAMES,
+  installPeerDirectory,
+  installedPeerDirectory,
+  peerDirectoryHandle,
+  peerMessageEnvelope,
+  peerSummary,
+  peerToolSpecs,
+  recentLines,
+  runPeerTool,
+} from './lib/peers.ts'
+export type {
+  PeerDirectory,
+  PeerPeek,
+  PeerSendOptions,
+  PeerSendResult,
+  PeerSessionSummary,
+  PeerToolName,
+  PeerToolSpec,
+} from './lib/peers.ts'
 export {
   SUPPORTED_ATTACHMENT_TYPES,
   attachmentContentBlocks,

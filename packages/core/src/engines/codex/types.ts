@@ -86,6 +86,16 @@ export type AppServerCollabAgentToolCallItem = {
   reasoningEffort?: string | null
   agentsStates?: Record<string, unknown> | null
 }
+export type AppServerDynamicToolCallItem = {
+  id: string
+  type: 'dynamicToolCall'
+  tool: string
+  namespace?: string | null
+  arguments: unknown
+  status: string
+  success?: boolean | null
+  contentItems?: Array<{ type: string; text?: string }> | null
+}
 export type AppServerUserMessageItem = { id: string; type: 'userMessage'; content?: unknown }
 export type AppServerContextCompactionItem = { id: string; type: 'contextCompaction' }
 
@@ -98,6 +108,7 @@ export type AppServerItem =
   | AppServerCommandExecutionItem
   | AppServerFileChangeItem
   | AppServerMcpToolCallItem
+  | AppServerDynamicToolCallItem
   | AppServerWebSearchItem
   | AppServerImageGenerationItem
   | AppServerImageViewItem
@@ -188,6 +199,15 @@ export type AppServerMcpStatusUpdate = {
   status?: string
   error?: string | null
   failureReason?: string | null
+}
+
+export type AppServerDynamicToolCallParams = {
+  callId: string
+  threadId: string
+  turnId: string
+  tool: string
+  namespace?: string | null
+  arguments: unknown
 }
 
 export type AppServerUserInput =

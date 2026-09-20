@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import {
+  createSdkMcpServer,
   getSessionInfo,
   getSessionMessages,
   query as sdkQuery,
+  tool as sdkTool,
   type CanUseTool,
   type Options,
   type PermissionResult,
@@ -38,12 +40,20 @@ import {
   rateLimitEventsFromUsage,
   toApiMessage,
 } from '../../lib/normalize.ts'
-import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import type { PermissionDecision, Runner, SendMessageOptions, SessionEventListener } from '../../runner-interface.ts'
 import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
+import {
+  PEER_MCP_SERVER,
+  PEER_TOOL_SHAPES,
+  PEER_TOOL_NAMES,
+  peerMessageEnvelope,
+  runPeerTool,
+  type PeerDirectory,
+} from '../../lib/peers.ts'
 import { SubagentTracker } from './subagents.ts'
 
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
@@ -65,6 +75,7 @@ export type SessionRunnerConfig = CreateSessionRequest & {
   backfillHistory?: boolean
   historyFn?: HistoryFn
   sessionInfoFn?: SessionInfoFn
+  peers?: PeerDirectory
 }
 
 type PendingApproval = {
@@ -200,7 +211,7 @@ export class SessionRunner implements Runner {
     return this.#runPromise
   }
 
-  sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
+  sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
     if (this.#closed) {
       throw new Error('session is closed')
     }
@@ -210,10 +221,11 @@ export class SessionRunner implements Runner {
     if (context) {
       blocks.unshift({ type: 'text', text: context })
     }
+    const modelText = options?.origin ? peerMessageEnvelope(text, options.origin) : text
     // A message may be attachments alone; an empty text block is not valid API input.
     const content = blocks.length
-      ? ([...blocks, ...(text ? [{ type: 'text', text }] : [])] as unknown as SDKUserMessage['message']['content'])
-      : text
+      ? ([...blocks, ...(modelText ? [{ type: 'text', text: modelText }] : [])] as unknown as SDKUserMessage['message']['content'])
+      : modelText
     this.#input.push({
       type: 'user',
       message: { role: 'user', content },
@@ -226,6 +238,7 @@ export class SessionRunner implements Runner {
       parentToolUseId: null,
       attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
       uuid: randomUUID(),
+      ...(options?.origin ? { origin: options.origin } : {}),
     })
   }
 
@@ -419,7 +432,7 @@ export class SessionRunner implements Runner {
       permissionMode: c.permissionMode,
       allowedTools: c.allowedTools,
       disallowedTools: c.disallowedTools,
-      mcpServers: c.mcpServers as Options['mcpServers'],
+      mcpServers: this.#mcpServersOption(),
       settingSources: c.settingSources,
       model: c.model,
       maxTurns: c.maxTurns,
@@ -436,6 +449,21 @@ export class SessionRunner implements Runner {
       ...c.extraOptions,
     }
     return options
+  }
+
+  #mcpServersOption(): Options['mcpServers'] {
+    const declared = this.#config.mcpServers as Options['mcpServers']
+    const peers = this.#config.peers
+    if (!peers) {
+      return declared
+    }
+    const tools = PEER_TOOL_NAMES.map((name) =>
+      sdkTool(name, PEER_TOOL_SHAPES[name].description, PEER_TOOL_SHAPES[name].shape, async (args) => {
+        const output = await runPeerTool(peers, this.id, name, args)
+        return { content: [{ type: 'text', text: output.text }], isError: output.isError }
+      }),
+    )
+    return { ...declared, [PEER_MCP_SERVER]: createSdkMcpServer({ name: PEER_MCP_SERVER, tools }) }
   }
 
   #handleMessage(msg: SDKMessage): void {

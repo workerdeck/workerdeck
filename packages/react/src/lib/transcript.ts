@@ -8,6 +8,7 @@ import type {
   EngineCapabilities,
   FilePatch,
   MessageAttachment,
+  MessageOrigin,
   ModelOption,
   PermissionMode,
   PermissionRequest,
@@ -32,6 +33,7 @@ export type TranscriptItem =
       id: string
       text: string
       attachments?: MessageAttachment[]
+      origin?: MessageOrigin
       // Optional, not `string | null` like the other kinds: there forgetting to stamp it must not typecheck; here almost every prompt has no parent.
       parentToolUseId?: string
     }
@@ -447,6 +449,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
               id: event.uuid ?? `user-${event.seq}`,
               text: slashCommandText(text) ?? text,
               attachments: event.attachments,
+              ...(event.origin && { origin: event.origin }),
               ...(event.parentToolUseId != null && {
                 parentToolUseId: event.parentToolUseId,
               }),

@@ -413,6 +413,33 @@ cover is a turn in flight at the moment of the restart; `workerdeck guard` (`pac
 the other half, refusing the restart while any session is mid-turn, awaiting an approval, or
 (unless `--allow-parked`) parked without a durable store behind it.
 
+## Peer messaging
+
+A session can list, read and message the other sessions on its gateway, whatever engine either
+side runs. The surface is three tools the gateway puts in front of every model: `peers_list` (id,
+engine, project, status, title of every session the caller may see), `peers_peek` (status,
+checklist, pending approvals, the last few transcript lines: a look, never an interruption) and
+`peers_send` (a message delivered as a `user_message` stamped `origin: { kind: 'peer', ... }`).
+
+One `PeerDirectory` (`packages/core/src/lib/peers.ts` for the contract and the pure parts,
+`packages/server/src/services/peers.ts` for the one the server installs) serves every engine, and
+each engine hands the tools to its model the way that engine allows: an in-process SDK MCP server
+(`createSdkMcpServer`, named `workerdeck`) on claude, `dynamicTools` on codex's `thread/start`
+answered over the `item/tool/call` server request, plain `ToolDefinition`s on the provider engine.
+No child process, no socket, no `config.toml`.
+
+Delivery reuses `Runner.sendMessage`, so it inherits each engine's mid-turn rule and never
+interrupts: a busy peer reads the message between tool calls, an idle one starts a turn on it, a
+dormant one is woken through `parking.ensureLive`. The model sees the text inside a
+`<peer-message>` envelope with the framing that it came from a session and not the user; the
+transcript keeps the bare text with the origin, and clients caption the row. There is no
+request/response: a reply is another `peers_send` later, and the tool result says so.
+
+Visibility is the session-scope rule with the sender's scope as the principal. Three guards bound
+an unattended exchange: a per-pair rate limit, a size cap that points at a file instead, and a hop
+chain that a human turn resets (`docs/GOTCHAS.md` §Peer messaging). Delegation with an
+accept/reject/fulfil contract is the next layer, not this one.
+
 ## Tooling conventions
 
 pnpm workspace + turbo; TS 7 native preview (`tsgo`) for typecheck; oxlint; tsdown builds

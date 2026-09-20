@@ -17,6 +17,12 @@ export const BUILTIN_TOOL_TITLES: Record<string, string> = {
   CodexWebSearch: 'Searching the web',
   CodexImageGeneration: 'Generating an image',
   CodexImageView: 'Viewing an image',
+  peers_list: 'Listing peer sessions',
+  peers_peek: 'Peeking at a peer session',
+  peers_send: 'Messaging a peer session',
+  mcp__workerdeck__peers_list: 'Listing peer sessions',
+  mcp__workerdeck__peers_peek: 'Peeking at a peer session',
+  mcp__workerdeck__peers_send: 'Messaging a peer session',
 }
 
 export function toolTitle(name: string, titles?: Record<string, string>): string | undefined {

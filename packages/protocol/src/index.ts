@@ -270,6 +270,7 @@ export type SessionEventBody =
       attachments?: MessageAttachment[]
       patch?: FilePatch
       uuid?: string
+      origin?: MessageOrigin
     }
   | {
       type: 'stream_delta'
@@ -645,6 +646,17 @@ export type ProjectInfo = {
   root: string
   icon?: ProjectIcon
   shortcode?: string
+}
+
+// Who wrote a `user_message` when it was not the person at the keyboard. Absent means the human;
+// `peer` is another session on this or a sibling gateway, delivered through the peer tools.
+export type MessageOrigin = {
+  kind: 'peer'
+  sessionId: string
+  name?: string
+  engine?: ProfileEngine
+  hostId?: string
+  hops?: string[]
 }
 
 export type SessionInfo = {

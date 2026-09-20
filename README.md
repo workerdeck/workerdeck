@@ -127,6 +127,11 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   on the host in the session's cwd, with the output in the transcript and in the model's next
   context - no turn spent, no permission card, no rewording by the agent. Which is exactly why it
   is `--shell`, off by default, and offered to an operator only.
+- **Sessions that can talk to each other.** Every session, on any engine, gets three tools:
+  `peers_list`, `peers_peek` (status, checklist, the last few lines, without interrupting) and
+  `peers_send`. A message lands as a peer-stamped message that never cuts into a running turn, so a
+  Claude session in one repo can ask a Codex session in another to do something and read how far
+  it got. Scope-bounded, rate-limited, and loop-guarded by a hop chain a human turn resets.
 - **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
   and an icon, found by an ancestor walk from the session's cwd - so a list of sessions reads as
   a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it

@@ -1,4 +1,12 @@
-import type { McpServerStatusInfo, PermissionMode, PermissionRequest, ProfileEngine, SessionEvent, SessionInfo } from '@workerdeck/protocol'
+import type {
+  MessageOrigin,
+  McpServerStatusInfo,
+  PermissionMode,
+  PermissionRequest,
+  ProfileEngine,
+  SessionEvent,
+  SessionInfo,
+} from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
 import type { CostLedgerState } from './lib/cost-ledger.ts'
@@ -24,6 +32,10 @@ export type RunnerSnapshot = {
   state: unknown
 }
 
+export type SendMessageOptions = {
+  origin?: MessageOrigin
+}
+
 export type PermissionDecision =
   | { behavior: 'allow'; updatedInput?: Record<string, unknown> }
   | { behavior: 'deny'; message?: string; interrupt?: boolean }
@@ -40,7 +52,7 @@ export interface Runner {
     options?: { coalesceReplay?: boolean; truncateResults?: boolean; imageRefs?: boolean },
   ): () => void
   eventAt?(seq: number): SessionEvent | undefined
-  sendMessage(text: string, attachments?: readonly AttachmentInput[]): void
+  sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void
   queueLocalCommand?(result: LocalCommandResult): void
   // Re-reads the account's rate-limit windows and re-emits them as `rate_limit` events. Optional because only the
   // claude engine has a control request for it. Throttled by the implementation: an attach is a client's arrival,

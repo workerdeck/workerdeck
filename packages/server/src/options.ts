@@ -13,6 +13,7 @@ import type {
 import type { BridgeHub, BridgeHubOptions } from './services/bridge.ts'
 import type { SessionNotificationOptions } from './services/notifications.ts'
 import type { ParkErrorContext, SessionParkManager } from './services/parking.ts'
+import type { PeerServiceOptions } from './services/peers.ts'
 import type { ProfileStore } from './services/profile-store.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionStore } from './services/session-store.ts'
@@ -65,6 +66,9 @@ export type WorkerServerOptions = {
   requireAvailableProfile?: boolean
   listSdkSessions?: SdkSessionLister
   queue?: QueueServerOptions
+  // Session-to-session messaging (`peers_list` / `peers_peek` / `peers_send` on every engine). On by default; an
+  // operator who wants sessions unable to see each other turns it off here.
+  peers?: PeerServiceOptions
   notifications?: SessionNotificationOptions
   bridge?: BridgeHubOptions
   parking?: {

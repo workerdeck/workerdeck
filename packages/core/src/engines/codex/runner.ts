@@ -23,7 +23,7 @@ import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
 import { localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
 import { parseUnifiedDiff } from '../../lib/patch.ts'
-import type { PermissionDecision, Runner, SessionEventListener } from '../../runner-interface.ts'
+import type { PermissionDecision, Runner, SendMessageOptions, SessionEventListener } from '../../runner-interface.ts'
 import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
 import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
@@ -33,11 +33,13 @@ import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent, type ItemScope } from './subagents.ts'
 import { untrustedProjectNotice } from './trust.ts'
+import { peerMessageEnvelope, peerToolSpecs, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
 import type {
   AppServerCollabAgentToolCallItem,
   AppServerCommandApprovalParams,
   AppServerConnection,
   AppServerConnectFn,
+  AppServerDynamicToolCallParams,
   AppServerElicitationParams,
   AppServerFileChangeApprovalParams,
   AppServerHistoryTurn,
@@ -522,6 +524,7 @@ export type CodexRunnerConfig = CreateSessionRequest & {
   codexHome?: string
   defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
+  peers?: PeerDirectory
 }
 
 type QueuedTurn = { input: AppServerUserInput[] }
@@ -758,11 +761,11 @@ export class CodexRunner implements Runner {
     }
   }
 
-  sendMessage(text: string, attachments?: readonly AttachmentInput[]): void {
+  sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    if (text.trim() === '/clear' && !attachments?.length) {
+    if (text.trim() === '/clear' && !attachments?.length && !options?.origin) {
       void this.clearContext().catch((error: unknown) => {
         this.#emit({
           type: 'session_error',
@@ -771,7 +774,7 @@ export class CodexRunner implements Runner {
       })
       return
     }
-    const input = this.#buildInput(text, attachments ?? [])
+    const input = this.#buildInput(options?.origin ? peerMessageEnvelope(text, options.origin) : text, attachments ?? [])
     const echo = () =>
       this.#emit({
         type: 'user_message',
@@ -779,6 +782,7 @@ export class CodexRunner implements Runner {
         parentToolUseId: null,
         attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
         uuid: randomUUID(),
+        ...(options?.origin ? { origin: options.origin } : {}),
       })
     if (this.#backfillPending) {
       this.#turnChain = this.#turnChain.then(echo)
@@ -1124,6 +1128,9 @@ export class CodexRunner implements Runner {
       }
       if (this.#model) {
         options.model = this.#model
+      }
+      if (this.#config.peers) {
+        options.dynamicTools = peerToolSpecs().map((spec) => ({ type: 'function', ...spec }))
       }
       const resuming = this.#sdkSessionId !== undefined
       const result = (
@@ -1676,6 +1683,11 @@ export class CodexRunner implements Runner {
     if (channel) {
       return this.#requestApproval(channel, method, params, wireId)
     }
+    if (method === 'item/tool/call' && this.#config.peers) {
+      const call = params as AppServerDynamicToolCallParams
+      const output = await runPeerTool(this.#config.peers, this.id, call.tool, call.arguments)
+      return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
+    }
     throw new JsonRpcError(-32601, `workerdeck does not handle server request '${method}'`)
   }
 
@@ -1800,6 +1812,11 @@ export class CodexRunner implements Runner {
       this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments, agent)
       return
     }
+    if (item.type === 'dynamicToolCall' && !active.toolUseEmitted.has(id)) {
+      active.toolUseEmitted.add(id)
+      this.#emitToolUse(id, item.tool, item.arguments, agent)
+      return
+    }
     if (item.type === 'contextCompaction' && !active.toolUseEmitted.has(id)) {
       // Reuses the tool-use ledger only as a once-per-item latch; the row it draws is the
       // compaction boundary, which `item/completed` then settles under the same id.
@@ -1906,6 +1923,17 @@ export class CodexRunner implements Runner {
         undefined,
         agent?.toolUseId ?? null,
       )
+    },
+    dynamicToolCall: (item, active, id, agent) => {
+      if (!active.toolUseEmitted.has(id)) {
+        active.toolUseEmitted.add(id)
+        this.#emitToolUse(id, item.tool, item.arguments, agent)
+      }
+      const text = (item.contentItems ?? [])
+        .map((part) => part.text)
+        .filter((part): part is string => typeof part === 'string')
+        .join('\n')
+      this.#emitToolResult(id, text, item.success === false || item.status === 'failed', undefined, agent?.toolUseId ?? null)
     },
     webSearch: (item, _active, id, agent) => {
       this.#emitToolUse(id, 'CodexWebSearch', { query: item.query }, agent)

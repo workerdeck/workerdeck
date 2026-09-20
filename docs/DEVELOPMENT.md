@@ -136,6 +136,10 @@ yet; **ui: the pure modules only, and deliberately so** - the terminal theme's
 test in `packages/ui/test` that wanted a DOM belongs in the playground audit. `buildClusters` and
 `railScale` are exported *for the test alone* (not from `index.ts`) - both have shipped pure-logic
 bugs, which is the whole argument.
+Peer messaging is pinned in three places: `core/test/peers.test.ts` (the dispatcher, envelope
+and digest), `claude-peers` / `codex-peers` (each engine's declaration and delivery, through the
+fake harness and the scripted peer) and `server/test/peers.test.ts` (scope, wake, the three
+guards); what none of them can prove is that a real codex honours `dynamicTools` on resume.
 Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path or
 CLI-control-request changes need one - the fake harness can't validate those payloads - and **an
 engine's process contract can't either**: any change to `CodexRunner`'s spawn options,

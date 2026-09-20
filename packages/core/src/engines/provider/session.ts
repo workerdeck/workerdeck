@@ -95,6 +95,8 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     webFetch,
     onFileDelivered:
       options.capabilities?.deliverFiles === false || !isGranted('deliverFiles') ? undefined : (file) => runner?.emitFileDelivered(file),
+    peers: options.config.peers,
+    selfId: () => runner?.id ?? 'pending',
   })
   const declaredServers = options.profile?.session?.mcpServers
   const connected = options.mcp?.tools ?? options.mcpTools
