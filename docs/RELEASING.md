@@ -1133,7 +1133,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   wake and a clear), codex's **`$name` skill mention** inserted and honoured, and the shared
   `usePathLinks`. **Protocol stays 1**: `pricing` and `usageByModel` are additive.
 
-  **2.11.0** (committed 2026-09-20, **not yet bumped or tagged**) - **the residuals, paid.** A **minor**, cut from the `_docs/features` sweep: every
+  **2.11.0** - **the residuals, paid.** A **minor**, cut from the `_docs/features` sweep: every
   open item judged worth more than a coin flip, built in one pass. Codex **agents that outlive
   the root turn** keep flowing (each `CodexAgent` carries its own `ItemScope`; the root turn was
   never the right gate). The CLI's **`TaskCreate`/`TaskUpdate` checklist** folds into the
