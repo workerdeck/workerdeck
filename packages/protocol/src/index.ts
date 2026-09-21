@@ -625,6 +625,10 @@ export type SubagentInfo = {
   toolUseId: string
   agentType?: string
   description?: string
+  // Set by an engine whose every record is a delegated agent, however it was named. Codex runs
+  // each one as its own thread and often has no name for it, so presence of `agentType` cannot
+  // be the test. Additive, so no `PROTOCOL_VERSION` bump.
+  isAgent?: boolean
   status: 'running' | 'done' | 'failed'
   startedAt: number
   toolCount: number

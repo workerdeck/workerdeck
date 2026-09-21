@@ -41,7 +41,7 @@ export function visibleSubagents(info: SessionInfo, show: SubagentDisplay): Suba
 }
 
 export function isAgentRecord(sub: SubagentInfo): boolean {
-  return (sub.agentType?.trim() ?? '') !== ''
+  return sub.isAgent === true || (sub.agentType?.trim() ?? '') !== ''
 }
 
 export function subagentLabel(sub: SubagentInfo): string {

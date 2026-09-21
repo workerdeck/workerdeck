@@ -417,6 +417,9 @@ public struct SubagentInfo: Decodable, Sendable, Equatable, Identifiable {
   /// The Task input's short description. With `agentType` this is what tells two
   /// parallel sub-agents apart; a row reading only `Task` answers nothing.
   public let description: String?
+  /// Set by an engine whose every record is a delegated agent, however it was
+  /// named - Codex runs each one as its own thread and often has no name for it.
+  public let isAgent: Bool?
   public let status: SubagentStatus
   /// Epoch ms the `Task` call was emitted.
   public let startedAt: Double
@@ -425,11 +428,12 @@ public struct SubagentInfo: Decodable, Sendable, Equatable, Identifiable {
 
   public init(
     toolUseId: String, agentType: String? = nil, description: String? = nil,
-    status: SubagentStatus, startedAt: Double, toolCount: Int
+    isAgent: Bool? = nil, status: SubagentStatus, startedAt: Double, toolCount: Int
   ) {
     self.toolUseId = toolUseId
     self.agentType = agentType
     self.description = description
+    self.isAgent = isAgent
     self.status = status
     self.startedAt = startedAt
     self.toolCount = toolCount

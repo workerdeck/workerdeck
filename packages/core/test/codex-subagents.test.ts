@@ -268,6 +268,9 @@ describe('CodexRunner sub-agents', () => {
     expect(anchor.seq).toBeLessThan(ofType(events, 'stream_delta')[0]!.seq)
     expect(runner.info().subagents).toMatchObject([{ toolUseId: anchor.block.id, status: 'running' }])
     expect(runner.info().subagents![0]!.agentType).toBeUndefined()
+    // A nameless thread is still an agent, and only `isAgent` can say so: a card that reads the
+    // list by `agentType` would file it as a task and never draw it.
+    expect(runner.info().subagents![0]!.isAgent).toBe(true)
   })
 
   it('replays a historical spawn as a closed row and lists nothing: history holds no verdicts', async () => {

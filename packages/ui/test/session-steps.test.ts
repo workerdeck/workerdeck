@@ -28,6 +28,10 @@ describe('isAgentRecord', () => {
   it('does not count whitespace as an identity', () => {
     expect(isAgentRecord(sub({ agentType: '   ' }))).toBe(false)
   })
+
+  it('trusts an engine that marks the record an agent without naming it', () => {
+    expect(isAgentRecord(sub({ isAgent: true }))).toBe(true)
+  })
 })
 
 describe('sessionSteps', () => {

@@ -90,6 +90,7 @@ export class CodexAgentTracker {
       out.push({
         toolUseId: r.toolUseId,
         agentType: r.agentType,
+        isAgent: true,
         status: r.status,
         startedAt: r.startedAt,
         toolCount: r.toolCount,

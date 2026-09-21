@@ -108,11 +108,14 @@ public func subagentLabel(_ sub: SubagentInfo) -> String {
 /// whose parent it has not seen, so the list holds two different things wearing
 /// one shape. One carries a `subagent_type` - a delegated agent with an identity
 /// (`Explore`), whose own work is worth a surface of its own. The other carries
-/// only a description, and there is no agent there to open.
+/// only a description, and there is no agent there to open. An engine that runs
+/// every record as an agent says so with `isAgent`, because its records may carry
+/// no name at all.
 ///
 /// Shared rather than re-derived because it decides two things no two clients
 /// may disagree about: what is pressable, and what wears the sub-agent colour.
 public func isAgentRecord(_ sub: SubagentInfo) -> Bool {
+  if sub.isAgent == true { return true }
   guard let agent = sub.agentType?.trimmingCharacters(in: .whitespacesAndNewlines) else {
     return false
   }
