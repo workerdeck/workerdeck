@@ -1144,8 +1144,10 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   **`costBasis`** with an unknown-basis warning, a **rate-table age note** past 90 days, and
   **`pricing.overrides`** merged at start and told to clients over `AttachedFrame`. The Live
   Activity carries the **current step's text** as its headline and a **sub-agents line**
-  (`ContentState.agents`, cap 4). **Protocol stays 1**: `shortcode`, `costUsd`, `costBasis` and
-  `pricingOverrides` are all additive.
+  (`ContentState.agents`, cap 4). Carrying one fix the send re-pin had only half-covered: a
+  **scroller resize no longer escapes the transcript's bottom lock** (`absorbScrollerResize`), so a
+  multi-line send keeps following the reply on the web and in VS Code. **Protocol stays 1**:
+  `shortcode`, `costUsd`, `costBasis` and `pricingOverrides` are all additive.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`

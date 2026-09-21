@@ -1889,6 +1889,19 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   late for a tick in the send's own task), and presses `scrollTop` synchronously. Deliberate detach
   still wins: `stopScroll()` and drag-selection run ahead of the guard, and the hold expires before
   a reply's first row can arrive. `test/repin.test.ts` pins the synchronous-state contract.
+- **A scroller resize escapes the bottom lock, and re-pinning alone does not stop it.** Growing the
+  scroller (the composer collapsing back to one line after a multi-line send, an interrupt hint
+  leaving at the turn's end) shrinks the maximum `scrollTop`, so the browser clamps the current one
+  and reports the clamp as an ordinary scroll event. `handleScroll` reads that as scroll-up intent
+  and escapes: `escapedFromLock` goes true and `isAtBottom` false **while the view still sits at
+  the bottom**, so nothing looks wrong and the rest of the turn streams past unfollowed. The
+  library's guard against exactly this, `resizeDifference`, is set only by its observer on the
+  *content*, and our own scroller `ResizeObserver` runs before `handleScroll`'s deferred decision
+  but used to race it: `scrollToBottom('instant')` re-pins, then the clamp unpins a millisecond
+  later and the animation's `!state.isAtBottom` check aborts. So `absorbScrollerResize`
+  (`use-transcript-jumps.ts`) sets `resizeDifference` itself, clearing it on the library's own
+  rAF-then-task schedule, and leaves a live send pin's `state.animation` intact rather than letting
+  `scrollToBottom` clear the `ignoreEscapes` hold mid-momentum-tail.
 - **A new height epoch invalidates every remembered size, the measurements included**, since they
   were taken at the old width. `virtualizer.measure()` clears the size cache, but a row re-enters
   it only when its ResizeObserver fires, which needs a size *change*: a mounted row whose height

@@ -26,6 +26,31 @@ export function repinToBottom(stick: RepinTarget): void {
   state.scrollTop = state.calculatedTargetScrollTop
 }
 
+// A scroller whose height changes clamps `scrollTop`, and the browser reports that clamp as an
+// ordinary scroll event, which the library reads as scroll-up intent and answers by escaping the
+// bottom lock. Its guard against exactly that, `resizeDifference`, is set only by the observer on
+// the *content*, so a composer collapsing after send breaks the lock while the view still sits at
+// the bottom, and the turn's later output streams past unfollowed (GOTCHAS "A scroller resize
+// escapes the bottom lock"). Set the flag ourselves, on the library's schedule. A live send re-pin
+// owns `state.animation` and `scrollToBottom` would clear it, dropping the `ignoreEscapes` hold
+// into the momentum tail, so press that scroll by hand instead.
+export function absorbScrollerResize(stick: RepinTarget, difference: number): void {
+  const { state } = stick
+  state.resizeDifference = difference
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      if (state.resizeDifference === difference) {
+        state.resizeDifference = 0
+      }
+    }, 1)
+  })
+  if (state.animation?.ignoreEscapes) {
+    state.scrollTop = state.calculatedTargetScrollTop
+    return
+  }
+  void stick.scrollToBottom('instant')
+}
+
 export function useTranscriptJumps(options: {
   rows: TranscriptRow[]
   terminal: boolean

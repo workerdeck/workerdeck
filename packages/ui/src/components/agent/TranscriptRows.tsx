@@ -14,7 +14,7 @@ import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { Scrubber } from './Scrubber.tsx'
 import { gapBefore, positionInRow, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
 import { useHeightEpoch } from './use-height-epoch.ts'
-import { useTranscriptJumps } from './use-transcript-jumps.ts'
+import { absorbScrollerResize, useTranscriptJumps } from './use-transcript-jumps.ts'
 import { BriefRow, TaskRow } from '../terminal/TerminalTranscript.tsx'
 import { RecapRow, TranscriptItemView } from './TranscriptItemView.tsx'
 
@@ -168,9 +168,10 @@ export function TranscriptRows({
       if (height === last) {
         return
       }
+      const difference = height - last
       last = height
       if (stick.state.isAtBottom) {
-        void stick.scrollToBottom('instant')
+        absorbScrollerResize(stick, difference)
       }
     })
     observer.observe(scrollElement)
