@@ -9,24 +9,31 @@ describe('CodexRunner clearContext', () => {
     const peer = scriptedPeer()
     let threads = 0
     peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: `thread-${++threads}` } }))
-    scriptTurn(peer, (emit, turnId) => {
-      emit('item/completed', {
-        threadId: 'thread-1',
-        turnId,
-        item: {
-          id: 'call_spawn',
-          type: 'subAgentActivity',
-          kind: 'started',
-          agentThreadId: 'thread-child',
-          agentPath: '/root/luna_1',
-        },
-      })
-      emit('thread/tokenUsage/updated', {
-        threadId: 'thread-1',
-        turnId,
-        tokenUsage: { last: USAGE_A, total: USAGE_A, modelContextWindow: 1_000 },
-      })
-      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    let turns = 0
+    peer.respond('turn/start', (params) => {
+      const threadId = (params as { threadId: string }).threadId
+      const turnId = `turn-${++turns}`
+      peer.emit('turn/started', { threadId, turn: { id: turnId, status: 'inProgress' } })
+      if (threadId === 'thread-1') {
+        peer.emit('item/completed', {
+          threadId,
+          turnId,
+          item: {
+            id: 'call_spawn',
+            type: 'subAgentActivity',
+            kind: 'started',
+            agentThreadId: 'thread-child',
+            agentPath: '/root/luna_1',
+          },
+        })
+        peer.emit('thread/tokenUsage/updated', {
+          threadId,
+          turnId,
+          tokenUsage: { last: USAGE_A, total: USAGE_A, modelContextWindow: 1_000 },
+        })
+      }
+      peer.emit('turn/completed', { threadId, turn: { id: turnId, status: 'completed' } })
+      return { turn: { id: turnId, status: 'inProgress' } }
     })
     const runner = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: peer.connectFn })
     const events = collect(runner)
@@ -41,11 +48,17 @@ describe('CodexRunner clearContext', () => {
     expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(0)
     const resets = ofType(events, 'conversation_reset')
     expect(resets).toHaveLength(1)
-    expect(resets[0]!.sdkSessionId).toBe('thread-2')
-    expect(runner.info().sdkSessionId).toBe('thread-2')
+    // The fresh thread has no rollout until its first turn, so nothing names it as resumable yet.
+    expect(resets[0]!.sdkSessionId).toBeUndefined()
+    expect(runner.info().sdkSessionId).toBeUndefined()
     expect(runner.info().contextUsage).toBeUndefined()
     expect(runner.info().subagents).toBeUndefined()
     expect(runner.info().activityCount).toBeGreaterThan(0)
+
+    runner.sendMessage('after the clear')
+    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+    expect((peer.requests.filter((r) => r.method === 'turn/start')[1]!.params as { threadId: string }).threadId).toBe('thread-2')
+    expect(runner.info().sdkSessionId).toBe('thread-2')
   })
 
   it('intercepts a bare /clear prompt instead of sending it to the model', async () => {

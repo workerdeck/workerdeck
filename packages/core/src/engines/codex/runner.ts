@@ -529,12 +529,30 @@ export type CodexRunnerConfig = CreateSessionRequest & {
 
 type QueuedTurn = { input: AppServerUserInput[] }
 
+type AppServerThreadResult = {
+  thread?: { id?: string; turns?: AppServerHistoryTurn[] }
+  model?: string | null
+  reasoningEffort?: string | null
+  turnsBackwardsCursor?: string | null
+}
+
 function steerUnsupported(error: unknown): boolean {
   if (!(error instanceof JsonRpcError)) {
     return false
   }
   // Measured against 0.153.4: an unknown method is a serde miss on the ClientRequest enum, -32600 with this message, never -32601.
   return error.code === -32601 || (error.code === -32600 && error.message.includes('unknown variant `turn/steer`'))
+}
+
+function rolloutMissing(error: unknown): boolean {
+  return error instanceof JsonRpcError && error.code === -32600 && error.message.startsWith('no rollout found for thread id')
+}
+
+function threadLostNotice(threadId: string): string {
+  return (
+    `Codex has no record of this session's thread (${threadId}): it was never saved to CODEX_HOME, or has since been removed. ` +
+    'A new thread was started, so the model begins without the earlier conversation.'
+  )
 }
 
 function rateLimitWindowName(minutes: number | null | undefined): string | undefined {
@@ -591,6 +609,7 @@ export class CodexRunner implements Runner {
   #connection: AppServerConnection | undefined
   #workspaceWrite: CodexWorkspaceWrite | undefined
   #threadLoaded = false
+  #threadMaterialized: boolean
   #numTurns = 0
   #cost = new CostLedger()
   #started = false
@@ -628,6 +647,7 @@ export class CodexRunner implements Runner {
     this.#model = config.model
     this.#reasoningEffort = config.reasoningEffort
     this.#sdkSessionId = config.resume
+    this.#threadMaterialized = config.resume !== undefined
     this.id = id
     this.createdAt = Date.now()
   }
@@ -641,7 +661,12 @@ export class CodexRunner implements Runner {
   }
 
   get sdkSessionId(): string | undefined {
-    return this.#sdkSessionId
+    return this.#resumableThreadId()
+  }
+
+  // Codex writes a thread's rollout on its first turn, not on `thread/start`: until then the id resumes nothing.
+  #resumableThreadId(): string | undefined {
+    return this.#threadMaterialized ? this.#sdkSessionId : undefined
   }
 
   get lastSeq(): number {
@@ -655,7 +680,7 @@ export class CodexRunner implements Runner {
   info(): SessionInfo {
     return {
       id: this.id,
-      sdkSessionId: this.#sdkSessionId,
+      sdkSessionId: this.#resumableThreadId(),
       status: this.#status,
       cwd: this.#cwd,
       profile: this.#config.profile,
@@ -938,13 +963,16 @@ export class CodexRunner implements Runner {
       throw new Error('session is closed')
     }
     const previousThread = this.#sdkSessionId
+    const previousMaterialized = this.#threadMaterialized
     this.#sdkSessionId = undefined
+    this.#threadMaterialized = false
     this.#threadLoaded = false
     if (this.#connection) {
       try {
         await this.#ensureThread()
       } catch (error) {
         this.#sdkSessionId = previousThread
+        this.#threadMaterialized = previousMaterialized
         this.#threadLoaded = false
         throw error
       }
@@ -958,7 +986,7 @@ export class CodexRunner implements Runner {
     }
     this.#resumedHistory = undefined
     this.#pendingLocalCommands = []
-    this.#emit({ type: 'conversation_reset', sdkSessionId: this.#sdkSessionId })
+    this.#emit({ type: 'conversation_reset', sdkSessionId: this.#resumableThreadId() })
   }
 
   async #interruptTurn(): Promise<void> {
@@ -974,8 +1002,7 @@ export class CodexRunner implements Runner {
           })
         } catch {}
       } else if (connection) {
-        // No turn id yet: nothing to address the interrupt to, so end the child. The thread
-        // survives on disk and the next message respawns into it.
+        // No turn id yet: nothing to address the interrupt to, so end the child and let the next message respawn.
         connection.close()
         if (this.#connection === connection) {
           this.#connection = undefined
@@ -1132,19 +1159,28 @@ export class CodexRunner implements Runner {
       if (this.#config.peers) {
         options.dynamicTools = peerToolSpecs().map((spec) => ({ type: 'function', ...spec }))
       }
-      const resuming = this.#sdkSessionId !== undefined
-      const result = (
-        resuming
-          ? await connection.request('thread/resume', { threadId: this.#sdkSessionId, ...options })
-          : await connection.request('thread/start', options)
-      ) as {
-        thread?: { id?: string; turns?: AppServerHistoryTurn[] }
-        model?: string | null
-        reasoningEffort?: string | null
-        turnsBackwardsCursor?: string | null
+      const resuming = this.#resumableThreadId()
+      let lostThread: string | undefined
+      let result: AppServerThreadResult
+      if (resuming !== undefined) {
+        try {
+          result = (await connection.request('thread/resume', { threadId: resuming, ...options })) as AppServerThreadResult
+        } catch (error) {
+          if (!rolloutMissing(error)) {
+            throw error
+          }
+          lostThread = resuming
+          result = (await connection.request('thread/start', options)) as AppServerThreadResult
+        }
+      } else {
+        result = (await connection.request('thread/start', options)) as AppServerThreadResult
       }
       if (typeof result?.thread?.id === 'string') {
         this.#sdkSessionId = result.thread.id
+      }
+      if (lostThread !== undefined) {
+        this.#threadMaterialized = false
+        this.#emit({ type: 'session_error', message: threadLostNotice(lostThread) })
       }
       if (typeof result?.model === 'string') {
         this.#resolvedModel = result.model
@@ -1152,7 +1188,7 @@ export class CodexRunner implements Runner {
       if (typeof result?.reasoningEffort === 'string') {
         this.#resolvedEffort = result.reasoningEffort
       }
-      if (resuming && this.#backfillPending && !this.#resumedHistory) {
+      if (resuming !== undefined && lostThread === undefined && this.#backfillPending && !this.#resumedHistory) {
         this.#resumedHistory = {
           turns: Array.isArray(result?.thread?.turns) ? result.thread.turns : [],
           partial: typeof result?.turnsBackwardsCursor === 'string',
@@ -1567,6 +1603,7 @@ export class CodexRunner implements Runner {
       }
     },
     'turn/started': (params) => {
+      this.#threadMaterialized = true
       const active = this.#activeTurn
       const turn = (params as { turn?: AppServerTurn })?.turn
       if (active && turn) {
@@ -1574,6 +1611,7 @@ export class CodexRunner implements Runner {
       }
     },
     'turn/completed': (params) => {
+      this.#threadMaterialized = true
       const active = this.#activeTurn
       const turn = (params as { turn?: AppServerTurn })?.turn
       if (!active || !turn) {
@@ -1961,6 +1999,11 @@ export class CodexRunner implements Runner {
       this.#emit({ type: 'context_compacted', uuid: id, parentToolUseId: agent?.toolUseId ?? null })
     },
     subAgentActivity: (item, _active, id, agent) => {
+      // Codex names the counterpart of an interaction, and the counterpart of a sub-agent's message
+      // back is this session's own thread (`agentPath: '/root'`). It is not an agent of itself.
+      if (item.agentThreadId === this.#sdkSessionId) {
+        return
+      }
       if (this.#replayingHistory) {
         if (item.kind !== 'started') {
           return

@@ -500,13 +500,11 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
   // The literal `/clear` a user types, not the route: the same call in the runner, so this covers both entry points.
   clearRun.runner.sendMessage('/clear')
   await waitFor(() => clearRun.events.some((e) => e.type === 'conversation_reset'), 60_000, 'conversation_reset')
-  const newThread = clearRun.runner.sdkSessionId
-  if (newThread && newThread !== clearedThread) {
-    // The LAST octet, not the first: codex thread ids are time-ordered, so two threads started a minute apart share
-    // a long prefix and `slice(0, 8)` renders a genuine change as no change at all.
-    ok('clear starts a new thread', `…${clearedThread.slice(-8)} → …${newThread.slice(-8)}`)
+  // The fresh thread has no rollout until its first turn, so the runner must not name it as resumable yet.
+  if (clearRun.runner.sdkSessionId === undefined) {
+    ok('the fresh thread is unnamed until it runs', 'sdkSessionId is absent after the reset, so no record can resume a ghost')
   } else {
-    fail('clear starts a new thread', newThread ? 'the thread id did not change: this was a resume, not a start' : 'no new thread id')
+    fail('the fresh thread is unnamed until it runs', `sdkSessionId=${clearRun.runner.sdkSessionId} before any turn ran on it`)
   }
   if (clearRun.runner.info().contextUsage === undefined) {
     ok('the reading is retired', 'contextUsage is absent, so the ring goes blank rather than 0%')
@@ -518,6 +516,14 @@ async function runClearScenario(cwd: string, open: CodexRunner[]): Promise<void>
     'What codeword did I ask you to remember? Reply with just the codeword, ' + 'or the single word none if I never gave you one.',
   )
   await waitFor(() => turnResults(clearRun.events).length >= 2, 120_000, 'the post-clear turn')
+  const newThread = clearRun.runner.sdkSessionId
+  if (newThread && newThread !== clearedThread) {
+    // The LAST octet, not the first: codex thread ids are time-ordered, so two threads started a minute apart share
+    // a long prefix and `slice(0, 8)` renders a genuine change as no change at all.
+    ok('clear starts a new thread', `…${clearedThread.slice(-8)} → …${newThread.slice(-8)}`)
+  } else {
+    fail('clear starts a new thread', newThread ? 'the thread id did not change: this was a resume, not a start' : 'no new thread id')
+  }
   const afterClear = turnResults(clearRun.events)[1]
   const recalled = afterClear?.result?.includes(CODEWORD) ?? false
   if (afterClear?.subtype === 'success' && !recalled) {

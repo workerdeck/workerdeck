@@ -252,3 +252,160 @@ describe('CodexRunner resume backfill', () => {
     expect(replayCount()).toBe(2)
   })
 })
+
+// Codex writes a thread's rollout on its first turn, not on `thread/start`; an id with no turn behind it resumes nothing.
+function scriptTurnOnRequestedThread(peer: ReturnType<typeof scriptedPeer>, reply = 'done') {
+  let turns = 0
+  peer.respond('turn/start', (params) => {
+    const threadId = (params as { threadId: string }).threadId
+    const turnId = `turn-${++turns}`
+    peer.emit('turn/started', { threadId, turn: { id: turnId, status: 'inProgress' } })
+    peer.emit('item/completed', { threadId, turnId, item: { id: 'item-1', type: 'agentMessage', text: reply } })
+    peer.emit('turn/completed', { threadId, turn: { id: turnId, status: 'completed' } })
+    return { turn: { id: turnId, status: 'inProgress' } }
+  })
+}
+
+describe('CodexRunner thread materialization', () => {
+  it('names no thread until a turn reaches codex, and names it from turn/started on', async () => {
+    const peer = scriptedPeer()
+    let finish: (() => void) | undefined
+    peer.respond('turn/start', (params) => {
+      const threadId = (params as { threadId: string }).threadId
+      finish = () => {
+        peer.emit('turn/started', { threadId, turn: { id: 'turn-1', status: 'inProgress' } })
+        peer.emit('turn/completed', { threadId, turn: { id: 'turn-1', status: 'completed' } })
+      }
+      return { turn: { id: 'turn-1', status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    const started = runner.start()
+    await vi.waitFor(() => expect(finish).toBeDefined())
+
+    expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(true)
+    expect(runner.sdkSessionId).toBeUndefined()
+    expect(runner.info().sdkSessionId).toBeUndefined()
+
+    finish!()
+    await started
+    expect(runner.sdkSessionId).toBe('thread-1')
+    expect(runner.info().sdkSessionId).toBe('thread-1')
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'success' })
+  })
+
+  it('a thread whose first turn never reached codex is started over after a dead child, never resumed', async () => {
+    const peer = scriptedPeer()
+    let threads = 0
+    peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: `thread-${++threads}` } }))
+    let rejectOnce = true
+    peer.respond('turn/start', (params) => {
+      if (rejectOnce) {
+        rejectOnce = false
+        throw new JsonRpcError(-32000, 'model unavailable')
+      }
+      const threadId = (params as { threadId: string }).threadId
+      peer.emit('turn/started', { threadId, turn: { id: 'turn-2', status: 'inProgress' } })
+      peer.emit('turn/completed', { threadId, turn: { id: 'turn-2', status: 'completed' } })
+      return { turn: { id: 'turn-2', status: 'inProgress' } }
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'go', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'error_during_execution', errors: ['model unavailable'] })
+    expect(runner.info().sdkSessionId).toBeUndefined()
+
+    peer.die('codex app-server exited (code 1): gone')
+    runner.sendMessage('again')
+    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(2))
+
+    expect(peer.requests.filter((r) => r.method === 'thread/resume')).toHaveLength(0)
+    expect(peer.requests.filter((r) => r.method === 'thread/start')).toHaveLength(2)
+    const second = peer.requests.filter((r) => r.method === 'turn/start')[1]!
+    expect((second.params as { threadId: string }).threadId).toBe('thread-2')
+    expect(ofType(events, 'turn_result')[1]).toMatchObject({ subtype: 'success' })
+    expect(runner.info().sdkSessionId).toBe('thread-2')
+    expect(events.some((e) => e.type === 'session_error')).toBe(false)
+  })
+
+  it('a resumed id names the thread at once, so a wake before any new turn still persists it', async () => {
+    const peer = scriptedPeer()
+    const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', backfillHistory: false, connectFn: peer.connectFn })
+    await runner.start()
+    expect(runner.info().sdkSessionId).toBe('prior')
+  })
+
+  it('a wake whose rollout is gone starts a fresh thread with the same options, says so once, and keeps working', async () => {
+    const peer = scriptedPeer()
+    peer.respond('thread/resume', () => {
+      throw new JsonRpcError(-32600, 'no rollout found for thread id prior')
+    })
+    peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: 'thread-fresh' } }))
+    scriptTurnOnRequestedThread(peer, 'fresh answer')
+    const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    expect(peer.requests.map((r) => r.method)).toEqual(['initialize', 'config/read', 'thread/resume', 'thread/start', 'skills/list'])
+    const { threadId, ...resumeOptions } = peer.requests[2]!.params as Record<string, unknown>
+    expect(threadId).toBe('prior')
+    expect(peer.requests[3]!.params).toEqual(resumeOptions)
+    const notices = ofType(events, 'session_error')
+    expect(notices).toHaveLength(1)
+    expect(notices[0]!.message).toContain('prior')
+    expect(notices[0]!.message).toMatch(/new thread/)
+    expect(events.some((e) => e.type === 'user_message' || e.type === 'assistant_message')).toBe(false)
+    expect(events.some((e) => e.type === 'turn_result')).toBe(false)
+    expect(runner.status).toBe('idle')
+    expect(runner.info().sdkSessionId).toBeUndefined()
+
+    runner.sendMessage('hello again')
+    await vi.waitFor(() => expect(ofType(events, 'turn_result')).toHaveLength(1))
+    const turn = peer.requests.find((r) => r.method === 'turn/start')!
+    expect((turn.params as { threadId: string }).threadId).toBe('thread-fresh')
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'success', result: 'fresh answer' })
+    expect(ofType(events, 'session_error')).toHaveLength(1)
+    expect(runner.info().sdkSessionId).toBe('thread-fresh')
+    const echo = events.findIndex((e) => e.type === 'user_message')
+    expect(echo).toBeGreaterThan(events.indexOf(notices[0]!))
+  })
+
+  it('a wake with a prompt heals the same way, with the notice ahead of the new turn', async () => {
+    const peer = scriptedPeer()
+    peer.respond('thread/resume', () => {
+      throw new JsonRpcError(-32600, 'no rollout found for thread id prior')
+    })
+    peer.respond('thread/start', () => ({ ...THREAD_RESULT, thread: { id: 'thread-fresh' } }))
+    scriptTurnOnRequestedThread(peer)
+    const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', prompt: 'continue', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const types = events.map((e) => e.type)
+    expect(types.indexOf('session_error')).toBeLessThan(types.indexOf('user_message'))
+    expect(ofType(events, 'session_error')).toHaveLength(1)
+    expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'success' })
+    expect((peer.requests.find((r) => r.method === 'turn/start')!.params as { threadId: string }).threadId).toBe('thread-fresh')
+  })
+
+  it('any other resume rejection still fails the turn, and never starts a thread behind the user', async () => {
+    for (const rejection of [
+      new JsonRpcError(-32600, 'invalid params: unknown field `sandbox`'),
+      new JsonRpcError(-32000, 'no rollout found for thread id prior'),
+    ]) {
+      const peer = scriptedPeer()
+      peer.respond('thread/resume', () => {
+        throw rejection
+      })
+      const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', prompt: 'continue', connectFn: peer.connectFn })
+      const events = collect(runner)
+      await runner.start()
+
+      expect(peer.requests.some((r) => r.method === 'thread/start')).toBe(false)
+      expect(ofType(events, 'session_error')).toHaveLength(0)
+      expect(ofType(events, 'turn_result')[0]).toMatchObject({ subtype: 'error_during_execution', errors: [rejection.message] })
+      expect(runner.info().sdkSessionId).toBe('prior')
+      expect(runner.status).toBe('idle')
+    }
+  })
+})

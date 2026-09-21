@@ -216,6 +216,25 @@ describe('CodexRunner sub-agents', () => {
     expect(runner.info().subagents).toMatchObject([{ toolUseId: anchor.block.id, status: 'done', toolCount: 1 }])
   })
 
+  it("never lists this session's own thread as an agent, whatever codex says it interacted with", async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      const root = { threadId: 'thread-1', turnId }
+      emit('item/completed', { ...root, item: spawnItem('call_a', 'thread-a', '/root/alpha') })
+      emit('item/completed', {
+        ...root,
+        item: { id: 'call_r', type: 'subAgentActivity', kind: 'interacted', agentThreadId: 'thread-1', agentPath: '/root' },
+      })
+      emit('item/completed', { ...root, item: { id: 'm-root', type: 'agentMessage', text: 'spawned' } })
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', prompt: 'spawn', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+    expect(runner.info().subagents).toMatchObject([{ agentType: 'alpha' }])
+    expect(toolUses(events).filter((t) => t.block.name === 'CodexAgent')).toHaveLength(1)
+  })
+
   it('a dying child settles the agents that lived in it', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {

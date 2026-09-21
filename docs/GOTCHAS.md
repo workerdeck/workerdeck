@@ -369,14 +369,44 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `ephemeral` rows are dropped (never materialized: nothing to resume). `?profile=` picks whose
   store to list; absent, exactly-one-profile servers resolve implicitly and multi-profile servers
   keep the legacy claude-store answer.
-- **A dead child is a failed turn, not a failed session.** The thread lives on disk in `CODEX_HOME`,
-  so the runner drops the connection, fails the in-flight turn with the exit + stderr tail, and the
-  next message spawns a fresh child that resumes the same thread id. `turn/completed(status:
+- **A dead child is a failed turn, not a failed session.** Once a turn has reached codex the thread
+  lives on disk in `CODEX_HOME`, so the runner drops the connection, fails the in-flight turn with
+  the exit + stderr tail, and the next message spawns a fresh child that resumes the same thread id;
+  a thread no turn ever reached is started over instead (next bullet). `turn/completed(status:
   failed)` and a rejected `turn/start` land the same way. Codex has no instructions surface
   (`session.instructions` on a codex profile is refused at startup; codex reads the cwd's
   AGENTS.md), no per-session MCP (`CODEX_HOME`'s config.toml owns servers; `/mcp` 501s), and image +
   text attachments only (images as `localImage` host temp-file paths, text inlined; a PDF has no
   representation and 415s).
+- **`thread/start` materializes nothing; the rollout is written on the first turn.** Measured
+  against the operator's binary on 2026-09-21: `thread/start` answers with an id at once, but
+  `$CODEX_HOME/sessions/` gets no file until a turn runs, and `thread/resume` on such an id from
+  another connection fails with `-32600 no rollout found for thread id <id>` (the row `thread/list`
+  would report as `ephemeral`). So the runner treats a thread id as resumable only once
+  `turn/started` or `turn/completed` has been heard on the root thread, or the runner was built from
+  `config.resume`. Until then `info().sdkSessionId`, the `sdkSessionId` getter and
+  `conversation_reset.sdkSessionId` all report nothing (`#resumableThreadId` in `runner.ts`; the
+  private `#sdkSessionId` still holds the live id for `turn/start`, steering, interrupts and
+  `#isRootThread`), which is what keeps the parking service from persisting a ghost
+  (`#rememberDormant` reads `info()`), and an in-process reconnect after a dead child does
+  `thread/start` rather than resume. Consequence: a new codex session, or one just cleared, has no
+  dormant record until its first turn has started; a restart in that window loses the row, the
+  existing no-`system_init` posture rather than a new one. Before this rule the record could name a
+  ghost, and every turn of the woken session then failed in ~30ms with that error, forever, because
+  nothing cleared the dead id. Whether an interrupted or failed first turn leaves a rollout behind is
+  unverified; `turn/started` is taken as the earliest point codex can have recorded the input, and
+  the next bullet covers the case where it did not.
+- **A resume whose rollout is gone heals into a fresh thread, with a notice.** `#ensureThread`
+  matches exactly a `JsonRpcError` with code `-32600` and a message starting `no rollout found for
+  thread id` (any other rejection still fails the turn, and never starts a thread behind the user),
+  repeats `thread/start` with the same options (`dynamicTools` included), adopts the new id as
+  unmaterialized, and emits one `session_error` naming the lost thread. The runner's own log stays,
+  but a dormant wake has nothing to backfill, so on that path the transcript is empty too, which is
+  why the notice says the model begins without the earlier conversation and claims nothing about
+  the UI. The stale record is re-written only at the next turn's `status_changed`: a rebuilt runner
+  is not in the manager's `#remembered` set, so an id-less `info()` deletes nothing, and a second
+  restart before that turn wakes the ghost again and heals again, one more notice, no data lost.
+  Pinned by the thread materialization cases in `core/test/codex-resume.test.ts`.
 - **An unmapped `ThreadItem` is invisible, not merely unstyled.** Unknown item types fall to the
   `sdk_event` `codex.<type>` channel, which no UI renders. When codex adds an item type, extend the
   union (`codex app-server generate-json-schema --out <dir>` or `generate-ts` dumps the
@@ -407,6 +437,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     `turn/completed` can arrive while the root turn is still running. `THREAD_SCOPED_NOTIFICATIONS`
     in `runner.ts` (`turn/started`, `turn/completed`, `thread/tokenUsage/updated`,
     `turn/plan/updated`) gates this against `#isRootThread`.
+  - **A `subAgentActivity` item names the *counterpart* of the interaction, and the counterpart can
+    be this session's own thread.** A sub-agent messaging the root back produces
+    `{kind: 'interacted', agentThreadId: <the root thread>, agentPath: '/root'}` (measured in real
+    rollouts, where `/root` is the main thread and `/root/<name>` an agent). The handler keys on the
+    item's `agentThreadId`, not on `#agentFor`, so without a guard the session opened an agent for
+    itself and `agentName('/root')` published it as a sub-agent called **root**. The root is not an
+    agent of itself: the item is dropped when `agentThreadId` is `#sdkSessionId`.
   - **Items and deltas are deliberately not filtered** - a sub-agent's work belongs in the
     transcript, attributed by `threadId`.
   - **A child's items resolve through the agent's own `ItemScope`, never the root turn.** Agents
@@ -436,16 +473,19 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     clear link runs have already executed; whatever is left was typed after and belongs to the new
     conversation.
   - **The new thread id is adopted before `conversation_reset` is emitted** whenever a child is
-    already up (an eager `thread/start`, no tokens/model call). Mirrors the Claude engine's
-    immediate adoption of `new_conversation_id`, so a dormant record written mid-clear names the
-    fresh conversation. The fallible step goes first and rolls back on failure (restores the old id)
-    - a half-clear is the worst outcome.
-  - **With no live child there is no id to adopt**, so the session sits with no `sdkSessionId` until
-    its next turn. The parking service deletes the stale dormant record (`#forgetDormant` in
+    already up (an eager `thread/start`, no tokens/model call), but it is not reported until the
+    next turn materializes it: `conversation_reset.sdkSessionId` is undefined and the reset's
+    dormant re-save deletes the record rather than naming a ghost (the Claude engine's
+    `new_conversation_id` is resumable at once; a codex thread is not until it has run a turn). The
+    fallible step goes first and rolls back on failure (restores the old id and its materialized
+    flag) - a half-clear is the worst outcome.
+  - **With or without a live child, the session sits with no reported `sdkSessionId` until its next
+    turn** (no child: nothing to adopt; live child: the fresh thread has no rollout yet). The
+    parking service deletes the stale dormant record (`#forgetDormant` in
     `packages/server/src/services/parking.ts`, narrower than `discard`) rather than let a restart
     wake the session into the transcript the user just cleared. Consequence: for codex the dormant
-    record IS the session's way back, so a session cleared while its child is dead does not survive
-    a restart at all - the row is simply gone.
+    record IS the session's way back, so a cleared session does not survive a restart until a turn
+    has run on the new thread - the row is simply gone.
   - **The context reading is retired and cannot be re-polled** (unlike Claude). Codex's only source,
     `thread/tokenUsage/updated`, arrives during a turn, so there's no reading until the next turn
     runs - render nothing, never 0%.
@@ -808,8 +848,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `#rememberDormant` runs on `system_init` and every non-park `status_changed`, so a claude session
   has a record from its first moments. Codex emits no `system_init` at all, so its first record
   rides the post-turn `status_changed`; kill the gateway inside that window and the row is gone, not
-  merely un-resumable. Verified with `pnpm smoke:restart codex`, which waits for the record on disk
-  rather than racing it.
+  merely un-resumable. An earlier write would find nothing anyway: `info().sdkSessionId` is
+  withheld until a turn has reached codex (§Codex, thread materialization), because a thread id
+  with no turn behind it has no rollout and would wake into an unrecoverable session. Verified with
+  `pnpm smoke:restart codex`, which waits for the record on disk rather than racing it.
 - **A swept engine store fails quietly.** Delete the CLI's own transcript behind a dormant record
   and the attach still succeeds: the row lists, the socket opens, the transcript comes back empty
   (a dormant record backfills from the engine, which now has nothing), and the next turn is simply
@@ -831,7 +873,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **A `conversation_reset` must re-write the record, and nothing else will.** No `status_changed`
   follows a clear, and `#persistLive` is otherwise driven by `turn_result`, so the reset arm calls
   both `#rememberDormant` and `#persistLive`. The dormant record names the just-cleared conversation
-  (re-saved under a freshly adopted engine session id, or deleted if the engine has none yet); the
+  (re-saved under a freshly adopted engine session id on claude; deleted on codex, whose fresh
+  thread is not resumable until a turn has run on it, and whenever the engine has no id yet); the
   live record carries the transcript, so skipping the second call leaves the pre-clear messages
   on disk until the next turn ends. Either omission means a restart in that window wakes the session
   straight back into the transcript the user threw away.
