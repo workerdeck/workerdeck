@@ -206,7 +206,7 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
       >
         <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
           <Row glyph={busy ? pulse : '●'} glyphTone={tone} tone="fg" title={title ? item.name : undefined}>
-            <Ink bold tone="bright">
+            <Ink bold tone="bright" className={busy ? 'term-shimmer' : undefined}>
               {title ?? item.name}
             </Ink>
             <Ink tone="dim">({todos ? todos.summary : toolInputPreview(item.input)})</Ink>
@@ -331,7 +331,7 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
         <Row glyph={busy ? pulse : undefined} glyphTone={busy ? 'mark' : undefined} tone={failed ? 'red' : 'dim'}>
-          {runSummary(items, busy)}
+          {busy ? <span className="term-shimmer">{runSummary(items, busy)}</span> : runSummary(items, busy)}
         </Row>
       </Pressable>
       {open ? (
@@ -421,7 +421,7 @@ export function WorkingRow({ label, startedAt, tokens }: { label: string; starte
   const readings = [elapsed, tokens ? `↓ ${(tokens / 1000).toFixed(1)}k tokens` : undefined].filter(Boolean)
   return (
     <Row glyph={pulse} glyphTone="mark" tone="mark">
-      {label}
+      <span className="term-shimmer">{label}</span>
       {readings.length ? <Ink tone="faint"> ({readings.join(' · ')})</Ink> : null}
     </Row>
   )

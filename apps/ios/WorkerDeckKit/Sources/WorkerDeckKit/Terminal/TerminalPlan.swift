@@ -226,10 +226,11 @@ public enum TermGlyph {
   /// Between two diff hunks.
   public static let hunkGap = "⋮"
 
-  /// The working marker: the brand mark's own pulse, `⋄ ◇ ◈ ◆` at 150ms - one
-  /// cycle is 0.6s, the clock in `icon-loading.svg`. It rests on `◆` under
-  /// Reduce Motion, which is free: the last frame *is* the mark.
-  public static let pulseFrames = ["⋄", "◇", "◈", "◆"]
-  public static let pulseRest = "◆"
-  public static let pulseInterval: TimeInterval = 0.15
+  /// The working marker: the classic braille spinner, ten frames at 90ms. It is
+  /// no longer the brand mark's pulse and no longer shares a clock with
+  /// `icon-loading.svg`. Braille has no "complete" frame, so the Reduce Motion
+  /// rest is an explicit choice: `⠿`, all six dots.
+  public static let pulseFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+  public static let pulseRest = "⠿"
+  public static let pulseInterval: TimeInterval = 0.09
 }

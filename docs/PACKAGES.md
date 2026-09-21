@@ -1294,11 +1294,24 @@ boundary, the faded rows above it and the "N new rows since you were last here" 
 own storage. `docs/GOTCHAS.md` § Catch-up mode has the rule.
 
 The working marker is
-the **brand mark's own pulse** (`pulse.tsx`: `⋄ ◇ ◈ ◆` at 150ms = the 0.6s clock in
-`icon-loading.svg`), shared by the transcript's working row and each running tool row's gutter
-glyph so they beat together; it rests on `◆` under `prefers-reduced-motion`, free because the
-last frame *is* the mark. BRAND.md's ambiguous-width caveat is why this is webview-only: the
-gutter cell centres the glyph in a fixed box, a real terminal must use the ASCII set. The
+the **classic braille spinner** (`pulse.tsx`: `⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏` at 90ms), shared by the
+transcript's working row and each running tool row's gutter glyph so they beat together. They
+beat together because every spinner reads the same frame off one shared ticker rather than
+counting its own, the way iOS derives it from the wall clock, so a row mounted mid-turn is never
+half a cycle behind the row above it. It rests on `⠿` under `prefers-reduced-motion`, and that
+one is a **choice, not a freebie**: braille has no frame that reads as complete, so the rest
+state has to be named. The marker is no longer the brand mark's pulse and no longer shares a
+clock with `icon-loading.svg`. The ambiguous-width caveat still binds and is why this is
+webview-only: the gutter cell centres the glyph in a fixed box, a real terminal must use the
+ASCII set. In-progress *text* carries a moving gradient on top of the glyph - the `Working…` row
+and each running tool or agent row's title - drawn as a single `background-clip: text` element
+over themed `--term-shimmer-*` stops, never per-character spans, which would break selection and
+the virtualizer's row measurement. Those five stops walk violet to cyan and are taken from box's
+`paint()`, deliberately not the clay accent: the mark says whose turn it is, the shimmer only says
+something is still moving. It is gated on the in-progress flag, so replayed history is
+static; it flattens to `--term-shimmer-3` under `prefers-reduced-motion`; and it carries its own
+`::selection` rule, because clipped transparent text otherwise selects invisibly. **iOS has the
+spinner but not the shimmer** (`docs/GOTCHAS.md` § Terminal theme has why). The
 tool row has no right-edge `Spinner` - two spinners on one row is one too many. The transcript is **virtualized**
 (`@tanstack/react-virtual`), and the rule that keeps it honest is that two parties want to
 write `scrollTop`: `use-stick-to-bottom`'s follow spring and the virtualizer's size-change

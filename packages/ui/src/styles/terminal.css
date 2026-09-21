@@ -79,6 +79,15 @@
   --term-faint: #6a6a6a;
 
   --term-mark: #d97757;
+  /* The working mark in motion. Five stops travelling violet to cyan and back,
+     lifted from box's `paint()` so an in-progress line reads the same here as
+     it does in the terminal. Deliberately not the clay accent: the mark states
+     whose turn it is, the shimmer states that something is still moving. */
+  --term-shimmer-1: #c5a3e8;
+  --term-shimmer-2: #a3a4e8;
+  --term-shimmer-3: #7b7ef5;
+  --term-shimmer-4: #8aaeea;
+  --term-shimmer-5: #a8e5ed;
   --term-blue: #afb9fe;
   --term-green: #4ec9a0;
   --term-red: #f14c4c;
@@ -122,6 +131,13 @@
   --term-faint: #8d8d8d;
 
   --term-mark: #bf5b3d;
+  /* Same five stops walked down for a light ground; the dark set's cyan is
+     invisible on white. */
+  --term-shimmer-1: #7a4fb0;
+  --term-shimmer-2: #5457b8;
+  --term-shimmer-3: #4347c9;
+  --term-shimmer-4: #3f6fb5;
+  --term-shimmer-5: #1f7d8c;
   --term-blue: #0a66c2;
   --term-green: #16794a;
   --term-red: #c62828;
@@ -269,6 +285,60 @@
 }
 [data-terminal] [data-tone='peer'] {
   color: var(--term-peer);
+}
+
+/* Work in progress. One element, never a span per character: the transcript
+   measures its own rows and supports text selection, and both break the moment
+   a line is shredded into glyphs. The tile is periodic (it ends on the colour
+   it starts on) and the animation travels exactly one tile width, so the loop
+   has no seam. Scoped under `[data-terminal]` to outrank the tone rules, which
+   would otherwise repaint the clipped text opaque. */
+[data-terminal] .term-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--term-shimmer-1),
+    var(--term-shimmer-2),
+    var(--term-shimmer-3),
+    var(--term-shimmer-4),
+    var(--term-shimmer-5),
+    var(--term-shimmer-4),
+    var(--term-shimmer-3),
+    var(--term-shimmer-2),
+    var(--term-shimmer-1)
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: term-shimmer 3s linear infinite;
+}
+
+@keyframes term-shimmer {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+/* Clipped text with a transparent fill selects invisibly - the highlight paints
+   under glyphs that have no colour of their own. */
+[data-terminal] .term-shimmer::selection {
+  color: var(--term-bright);
+  -webkit-text-fill-color: var(--term-bright);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-terminal] .term-shimmer {
+    animation: none;
+    background-image: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    -webkit-text-fill-color: var(--term-shimmer-3);
+    color: var(--term-shimmer-3);
+  }
 }
 
 /* Weight is the only other axis. A terminal has one type size, so emphasis has

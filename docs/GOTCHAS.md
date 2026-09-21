@@ -1719,12 +1719,32 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   half-written message. `isTyping` must test the field's *content*, not its focus: VS Code keeps
   the composer focused at all times, so guarding on focus alone means the approval prompt can never
   take the keyboard.
-- **The pulse frames `⋄ ◇ ◈ ◆` (U+25C6/7/8) are East-Asian ambiguous width.** Under an East-Asian
-  locale a terminal may render them double-width and shift the line, so they are safe only inside a
-  fixed-width box, which is exactly `.term-gutter` (one `--term-cell` wide). Anything writing to a
-  real terminal must use the ASCII set instead. Frames are 150ms (one cycle of the 0.6s clock
-  `icon-loading.svg` pulses on) and the rest frame is the complete mark, so stopping never lands
-  mid-glyph.
+- **The pulse frames are East-Asian ambiguous width.** Under an East-Asian locale a terminal may
+  render them double-width and shift the line, so they are safe only inside a fixed-width box,
+  which is exactly `.term-gutter` (one `--term-cell` wide). Anything writing to a real terminal
+  must use the ASCII set instead. That held for the old `⋄ ◇ ◈ ◆` and holds identically for the
+  braille block the marker now uses: the frames are `⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏` at 90ms, and the rest
+  frame under `prefers-reduced-motion` is `⠿`, all six dots. **The rest frame is now a choice
+  rather than a freebie.** The old set rested on `◆` because the last frame *was* the brand mark;
+  braille has no frame that reads as complete, so `⠿` is named explicitly and nothing about the
+  marker is tied to `icon-loading.svg` any more. Every spinner on screen shares one frame: iOS
+  derives it from the wall clock, and the web now does the same through a single shared ticker,
+  so rows mounted turns apart still beat together.
+- **`@fontsource/jetbrains-mono` has no braille, so the spinner always falls through the stack.**
+  The package ships latin, latin-ext, cyrillic, greek and vietnamese subsets only, which means
+  U+2800 is resolved by a later family in `--cw-font-mono` on every platform, every time. Menlo and
+  SF Mono cover it, Consolas does not, which is why the stack carries `'DejaVu Sans Mono'` ahead of
+  the bare `monospace` fallback for Linux. A residual tofu risk remains on Windows browsers with no
+  covering mono face; there is no fix short of shipping a glyph, and the marker is decorative
+  enough that we take it. On iOS the terminal draws in `UIFont.monospacedSystemFont` and CoreText
+  resolves braille to Apple's own braille face, one whose advance is slightly wider than the mono
+  cell; the gutter clips (`lineBreakMode = .byClipping`) and the ink is centred, so it lands, the
+  same way `⎿` already does.
+- **iOS has the spinner but not the shimmer.** The moving gradient over in-progress text is web
+  only. SwiftUI and UIKit have no `background-clip: text`, so the iOS version needs a masked
+  gradient over attributed text that also survives selection in the row's text view, and that is
+  deferred rather than approximated. Until it lands, the working row and running tool titles are
+  flat `--term-mark` on iOS and the two clients diverge there deliberately.
 - **The vendored prompt-area's list continuation rewrites `- ` to `• ` in the MODEL, not just on
   screen.** A bulleted message would reach the agent as `• item`, which no markdown parser reads as
   a list and which the character grid has no cell for; it is switched off in `Composer`.

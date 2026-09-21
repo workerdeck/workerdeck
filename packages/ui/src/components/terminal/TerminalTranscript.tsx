@@ -112,7 +112,7 @@ export function TaskRow({
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
         <Row glyph={busy ? pulse : '●'} glyphTone={failed ? 'red' : busy ? 'mark' : 'dim'} tone={failed ? 'red' : 'green'}>
-          {taskSummary(block.task, children)}
+          {busy ? <span className="term-shimmer">{taskSummary(block.task, children)}</span> : taskSummary(block.task, children)}
         </Row>
       </Pressable>
       {open ? (

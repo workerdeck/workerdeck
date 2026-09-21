@@ -279,11 +279,13 @@ Four things about it are load-bearing:
 - **Below ~24px the pulse collapses** into a blink; the *travel* still reads, so
   it degrades to a working spinner rather than to mush. It is not a 16px asset.
 
-The terminal equivalent is the same four states as characters - `⋄ ◇ ◈ ◆` at
-150ms - but note that `U+25C6/7/8` are East-Asian **ambiguous width**: safe in a
-webview that centres the glyph in a fixed box, capable of rendering double-width
-in a terminal under an East-Asian locale and shifting every line with it. Use
-the ASCII set there.
+**The terminal transcript no longer mirrors this.** It used to spell the same
+four states as characters, which made the marker and the mark one animation; it
+now runs the classic braille spinner on its own clock, so the asset here has no
+twin in the product's text. Nothing about the asset changed, and the rule the
+old pairing taught survives it: those glyph blocks are East-Asian **ambiguous
+width**, safe only where something centres them in a fixed box. The caveat lives
+in `docs/GOTCHAS.md` § Terminal theme now, with the marker it belongs to.
 
 ## Usage rules
 

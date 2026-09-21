@@ -271,7 +271,7 @@
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
   --cw-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --cw-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --cw-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 
   --motion-fast: 120ms;
   --motion-base: 150ms;

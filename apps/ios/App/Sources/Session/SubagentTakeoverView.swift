@@ -220,10 +220,9 @@ struct SubagentTakeoverView: View {
   }
 }
 
-/// The gutter mark: the brand pulse while the agent works, the theme's bullet
-/// once it has settled. The beat is in the glyph, as it is on the `Task` row
-/// this screen was opened from - and it rests on the pulse's last frame under
-/// Reduce Motion, which is free: the last frame *is* the mark.
+/// The gutter mark: the braille spinner while the agent works, the theme's
+/// bullet once it has settled. The beat is in the glyph, as it is on the `Task`
+/// row this screen was opened from - and it rests on `⠿` under Reduce Motion.
 private struct SubagentStripGlyph: View {
   let busy: Bool
   let failed: Bool

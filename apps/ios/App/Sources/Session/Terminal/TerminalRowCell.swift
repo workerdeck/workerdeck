@@ -574,10 +574,9 @@ extension TerminalRowCell {
       }
     }
 
-    /// The working marker: the brand mark's own pulse, `⋄ ◇ ◈ ◆` at 150ms - one
-    /// cycle is 0.6s, the clock in `icon-loading.svg`, so the transcript's
-    /// working row and the brand mark beat together. It rests on `◆` under
-    /// Reduce Motion, which is free: the last frame *is* the mark.
+    /// The working marker: the classic braille spinner, ten frames at 90ms. It
+    /// rests on `⠿` under Reduce Motion, an explicit choice rather than a
+    /// borrowed one, because braille has no frame that reads as complete.
     ///
     /// Read off the wall clock rather than counted, so every pulsing row in the
     /// transcript is on the same frame however long ago each was mounted.
