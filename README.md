@@ -131,7 +131,10 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   `peers_list`, `peers_peek` (status, checklist, the last few lines, without interrupting) and
   `peers_send`. A message lands as a peer-stamped message that never cuts into a running turn, so a
   Claude session in one repo can ask a Codex session in another to do something and read how far
-  it got. Scope-bounded, rate-limited, and loop-guarded by a hop chain a human turn resets.
+  it got. Scope-bounded, rate-limited, and loop-guarded by a hop chain a human turn resets. In the
+  composer, `#` names one of them: it completes from the sessions this gateway shows and sends a
+  hint, not an order - "commit what #Astra left unstaged" tells the agent which session to go and
+  read, and the transcript keeps the bare text you typed.
 - **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
   and an icon, found by an ancestor walk from the session's cwd - so a list of sessions reads as
   a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it
@@ -187,7 +190,7 @@ Each package has its own README, with the code for using it.
 | [`@workerdeck/server`](packages/server) | The gateway: HTTP + WebSocket, session registry, auth hook, profiles, job routes, session notifications, browser tool bridge, parked-session storage, opt-in host-file routes. |
 | [`@workerdeck/client`](packages/client) | Typed client for browsers and Node: REST + WS attach with auto-reconnect and replay-from-last-seq. Zero runtime deps. |
 | [`@workerdeck/react`](packages/react) | Headless React: the session hook, attachment and host-file hooks, and pure reducers for the transcript and the sessions list. No styling opinion. |
-| [`@workerdeck/ui`](packages/ui) | Styled agent-control components: the session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file` / `/command` completion), the sessions browser, and the workspace around them. Tailwind v4 + Base UI. |
+| [`@workerdeck/ui`](packages/ui) | Styled agent-control components: the session panel (transcript, tool-call cards, permission prompts, composer with attachments and `@file` / `/command` / `#session` completion), the sessions browser, and the workspace around them. Tailwind v4 + Base UI. |
 | [`@workerdeck/web`](packages/web) | The dashboard as prebuilt static files, for serving from your own host. Zero runtime deps. |
 
 The apps - [`apps/ios`](apps/ios), [`apps/vscode`](apps/vscode), the
