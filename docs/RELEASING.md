@@ -1149,6 +1149,22 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   multi-line send keeps following the reply on the web and in VS Code. **Protocol stays 1**:
   `shortcode`, `costUsd`, `costBasis` and `pricingOverrides` are all additive.
 
+  **2.12.0** - **the sub-agent preference, read at a glance.** A **minor**. The control that
+  shipped in 2.11.0 was an icon-only cycling button, and three stops is one more than a single
+  glyph can report; it is a menu now (`SubagentToggle`: the state, a caret, three labelled options
+  with the current one ticked). The glyph is one drawing on three clients - a session line at full
+  strength over two child rows, greying the rows the card is not drawing, never striking them,
+  because a hidden sub-agent has not failed. VS Code carries it as three `contributes.submenus`
+  gated on the existing context key (a submenu icon is static in the manifest, so `when` is the
+  only way the trigger follows the state), which exposed the bug worth the release: its three
+  commands set the *next* state - right for a cycling button, backwards as menu items, so `Hide
+  Completed` was setting `all`. Labels and order are the dashboard's on every client now, and
+  refresh left the sessions title bar for the overflow. Carrying the codex half of the same
+  complaint: **a codex sub-agent is an agent**. `isAgentRecord` tested `agentType`, which only a
+  Claude `Task` reliably carries; a codex thread discovered through `#agentFor` is nameless, so it
+  was filed as a task and no card drew it. `SubagentInfo.isAgent` is the engine saying what only it
+  knows. **Protocol stays 1** - `isAgent` is additive.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
