@@ -364,9 +364,21 @@ export type SessionCommand =
       logs?: string[]
     }
   | { type: 'shell_command'; command: string }
+  | { type: 'terminal_open'; command?: string; cols: number; rows: number }
+  | { type: 'terminal_input'; data: string }
+  | { type: 'terminal_resize'; cols: number; rows: number }
+  | { type: 'terminal_close' }
   | { type: 'close' }
 
 export const SHELL_COMMAND_MAX = 4000
+
+// A terminal is bound to one WebSocket, never to the session: its bytes never enter the event log,
+// so they are never replayed to a second client nor captured into a parking snapshot.
+export const TERMINAL_INPUT_MAX = 4096
+export const TERMINAL_MIN_COLS = 1
+export const TERMINAL_MAX_COLS = 1000
+export const TERMINAL_MIN_ROWS = 1
+export const TERMINAL_MAX_ROWS = 500
 
 export type AttachedFrame = {
   type: 'attached'
@@ -397,6 +409,9 @@ export type ServerFrame =
   | { type: 'event'; event: SessionEvent }
   | ToolCallRequestFrame
   | { type: 'tool_call_canceled'; executionId: string; reason: string }
+  | { type: 'terminal_opened'; cols: number; rows: number }
+  | { type: 'terminal_output'; data: string }
+  | { type: 'terminal_exit'; exitCode: number; signal?: number }
   | { type: 'protocol_error'; message: string }
 
 export type ClientFrame = SessionCommand

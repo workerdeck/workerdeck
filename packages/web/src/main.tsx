@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/globals.css'
+import '@xterm/xterm/css/xterm.css'
 import { applyTheme } from '@/lib/theme.ts'
 import { App } from '@/App.tsx'
 

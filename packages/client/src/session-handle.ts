@@ -25,6 +25,9 @@ export type SessionHandleEvents = {
   reconnectAttempt: number
   toolCallRequest: ToolCallRequestFrame
   toolCallCanceled: { executionId: string; reason: string }
+  terminalOpened: { cols: number; rows: number }
+  terminalOutput: string
+  terminalExit: { exitCode: number; signal?: number }
 }
 
 export class SessionHandle {
@@ -78,6 +81,22 @@ export class SessionHandle {
 
   runShell(command: string): void {
     this.#sendFrame({ type: 'shell_command', command })
+  }
+
+  openTerminal(size: { cols: number; rows: number }, command?: string): void {
+    this.#sendFrame({ type: 'terminal_open', command, cols: size.cols, rows: size.rows })
+  }
+
+  sendTerminalInput(data: string): void {
+    this.#sendFrame({ type: 'terminal_input', data })
+  }
+
+  resizeTerminal(size: { cols: number; rows: number }): void {
+    this.#sendFrame({ type: 'terminal_resize', cols: size.cols, rows: size.rows })
+  }
+
+  closeTerminal(): void {
+    this.#sendFrame({ type: 'terminal_close' })
   }
 
   clearContext(): void {
@@ -158,6 +177,12 @@ export class SessionHandle {
         this.#events.emit('toolCallRequest', frame)
       } else if (frame.type === 'tool_call_canceled') {
         this.#events.emit('toolCallCanceled', { executionId: frame.executionId, reason: frame.reason })
+      } else if (frame.type === 'terminal_opened') {
+        this.#events.emit('terminalOpened', { cols: frame.cols, rows: frame.rows })
+      } else if (frame.type === 'terminal_output') {
+        this.#events.emit('terminalOutput', frame.data)
+      } else if (frame.type === 'terminal_exit') {
+        this.#events.emit('terminalExit', { exitCode: frame.exitCode, signal: frame.signal })
       } else if (frame.type === 'protocol_error') {
         this.#events.emit('protocolError', frame.message)
       }

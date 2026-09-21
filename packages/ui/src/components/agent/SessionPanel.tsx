@@ -8,7 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react'
-import type { WorkerDeckClient } from '@workerdeck/client'
+import type { SessionHandle, WorkerDeckClient } from '@workerdeck/client'
 import {
   PROTOCOL_VERSION,
   mergeUsage,
@@ -128,6 +128,8 @@ export interface SessionPanelProps {
   statusPlacement?: 'top' | 'bottom'
   onOpenPanel?: (panel: SessionSurfacePanel) => void
   onVitals?: (vitals: SessionVitals) => void
+  // The live socket, for surfaces that ride it without going through the panel (the terminal pane).
+  onHandle?: (handle: SessionHandle | undefined) => void
   transcriptVariant?: TranscriptVariant
   affordances?: TerminalAffordances | boolean
   terminalMetrics?: TerminalMetrics
@@ -223,6 +225,7 @@ export function SessionPanel({
   statusPlacement = 'top',
   onOpenPanel,
   onVitals,
+  onHandle,
   transcriptVariant = 'cards',
   transcriptDensity = 'comfortable',
   transcriptFont = 'sans',
@@ -430,6 +433,11 @@ export function SessionPanel({
 
   const onVitalsRef = useRef(onVitals)
   onVitalsRef.current = onVitals
+  const onHandleRef = useRef(onHandle)
+  onHandleRef.current = onHandle
+  useEffect(() => {
+    onHandleRef.current?.(handle)
+  }, [handle])
   const vitalsModel = effectiveModel ?? state.model
   const permissionModes = useMemo(
     () => permissionModeChoices(capabilities.permissionModes, state.session?.canBypassPermissions),

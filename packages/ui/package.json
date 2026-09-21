@@ -56,10 +56,18 @@
   "peerDependencies": {
     "monaco-editor": "^0.56.0",
     "react": "^18.0.0 || ^19.0.0",
-    "react-dom": "^18.0.0 || ^19.0.0"
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "@xterm/xterm": "^6.0.0",
+    "@xterm/addon-fit": "^0.11.0"
   },
   "peerDependenciesMeta": {
     "monaco-editor": {
+      "optional": true
+    },
+    "@xterm/xterm": {
+      "optional": true
+    },
+    "@xterm/addon-fit": {
       "optional": true
     }
   },
@@ -83,7 +91,9 @@
     "tailwindcss": "^4.3.3",
     "tsdown": "^0.22.14",
     "vite": "^8.3.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@xterm/xterm": "^6.0.0",
+    "@xterm/addon-fit": "^0.11.0"
   },
   "author": "Tobias Strebitzer",
   "repository": {

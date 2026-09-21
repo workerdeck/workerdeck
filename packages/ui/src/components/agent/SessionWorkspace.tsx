@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import type { WorkerDeckClient } from '@workerdeck/client'
+import type { SessionHandle, WorkerDeckClient } from '@workerdeck/client'
 import { useHostFileRoots, useHostFileSearch, useHostFileTree, useOpenFiles, useSessionInfo, isDirty } from '@workerdeck/react'
 import { PanelLeftOpen } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
@@ -38,6 +38,9 @@ export interface SessionWorkspaceProps {
   defaultRailWidth?: number
   defaultRailCollapsed?: boolean
   onRailChange?: (rail: { width: number; collapsed: boolean }) => void
+  // A terminal pane docked under the agent panel. A node rather than a flag so the xterm bundle stays
+  // the embedder's choice, exactly as the editor pane keeps monaco out of the default entry.
+  terminal?: (ctx: { handle: SessionHandle | undefined }) => ReactNode
   className?: string
 }
 
@@ -45,6 +48,7 @@ const RAIL_MIN = 180
 const RAIL_MAX = 520
 const AGENT_MIN = 220
 const EDITOR_MIN = 120
+const TERMINAL_MIN = 80
 
 export function SessionWorkspace({
   client,
@@ -72,6 +76,7 @@ export function SessionWorkspace({
   defaultRailWidth = 260,
   defaultRailCollapsed,
   onRailChange,
+  terminal,
   className,
 }: SessionWorkspaceProps) {
   const { info } = useSessionInfo(client, sessionId)
@@ -100,6 +105,8 @@ export function SessionWorkspace({
     onRailChangeRef.current?.({ width: railWidth, collapsed: railCollapsed })
   }, [railWidth, railCollapsed])
   const [editorHeight, setEditorHeight] = useState(360)
+  const [terminalHeight, setTerminalHeight] = useState(260)
+  const [handle, setHandle] = useState<SessionHandle | undefined>()
 
   const hasFiles = files.files.length > 0
 
@@ -132,9 +139,11 @@ export function SessionWorkspace({
     container: column,
     onOpen: openPath,
     enabled: tree.available,
-    ignore: '.monaco-editor',
+    ignore: '.monaco-editor, .xterm',
   })
   const editorMax = Math.max(EDITOR_MIN, columnHeight - AGENT_MIN)
+  const terminalMax = Math.max(TERMINAL_MIN, columnHeight - AGENT_MIN)
+  const terminalSize = Math.min(terminalHeight, terminalMax || terminalHeight)
 
   const [topBar, setTopBar] = useState<HTMLDivElement | null>(null)
   const hoisted: SessionPanelProps['header'] =
@@ -229,8 +238,25 @@ export function SessionWorkspace({
             unseen={unseen}
             readOnly={readOnly}
             onVitals={onVitals}
+            onHandle={setHandle}
             className="min-h-0 flex-1"
           />
+          {terminal ? (
+            <Splitter
+              orientation="horizontal"
+              value={terminalSize}
+              onValueChange={setTerminalHeight}
+              min={TERMINAL_MIN}
+              max={terminalMax}
+              inverted
+              aria-label="Resize the terminal"
+            />
+          ) : null}
+          {terminal ? (
+            <div className="flex min-h-0 shrink-0 flex-col overflow-hidden border-t border-border" style={{ height: terminalSize }}>
+              {terminal({ handle })}
+            </div>
+          ) : null}
         </div>
 
         {overlayRail && railOpen ? (

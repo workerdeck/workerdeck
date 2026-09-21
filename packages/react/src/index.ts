@@ -32,3 +32,5 @@ export type { ClientToolHandler, ClientToolResult, ToolCallHostOptions, ToolHost
 export { applyEvent, hydrateToolResult, initialTranscriptState, rateLimitWindows, seedFromSessionInfo } from './lib/transcript.ts'
 export type { ProducedFileRef, ToolResultImageRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
 export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './lib/recap.ts'
+export { useTerminal } from './hooks/use-terminal.ts'
+export type { TerminalSize, TerminalStatus, UseTerminalOptions, UseTerminalResult } from './hooks/use-terminal.ts'
