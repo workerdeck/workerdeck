@@ -1,7 +1,7 @@
 import { Input, Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '@workerdeck/ui'
 import { X } from 'lucide-react'
 import type { WireHost, WorkspaceScope } from '../../src/bridge-protocol.ts'
-import { STATE_LABELS, STATE_ORDER, type GroupBy, type SortBy, type ViewConfig } from '../../src/view-config.ts'
+import { STATE_LABELS, STATE_ORDER, type GroupBy, type SortBy, type SubagentDisplay, type ViewConfig } from '../../src/view-config.ts'
 
 const GROUP_LABELS: Record<GroupBy, string> = {
   none: 'None',
@@ -9,6 +9,12 @@ const GROUP_LABELS: Record<GroupBy, string> = {
   adapter: 'Adapter',
   state: 'State',
   project: 'Project',
+}
+
+const SUBAGENT_LABELS: Record<SubagentDisplay, string> = {
+  active: 'Hide completed',
+  all: 'Show all',
+  none: 'Hide all',
 }
 
 const SORT_LABELS: Record<SortBy, string> = {
@@ -116,6 +122,9 @@ export function ViewConfigPanel({
 
         <Row label="Group">
           <OneOf value={config.groupBy} options={labelledOptions(GROUP_LABELS)} onChange={(v) => set('groupBy', v)} />
+        </Row>
+        <Row label="Sub-agents">
+          <OneOf value={config.subagents} options={labelledOptions(SUBAGENT_LABELS)} onChange={(v) => set('subagents', v)} />
         </Row>
         <Row label="Sort">
           <OneOf value={config.sortBy} options={labelledOptions(SORT_LABELS)} onChange={(v) => set('sortBy', v)} />

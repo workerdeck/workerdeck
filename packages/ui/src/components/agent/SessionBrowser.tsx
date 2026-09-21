@@ -12,7 +12,7 @@ import {
   projectsOf,
   subsetSummary,
 } from '@workerdeck/protocol'
-import type { GroupBy, SessionRow, SessionState, SortBy, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
+import type { GroupBy, SessionRow, SessionState, SortBy, SubagentDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
@@ -142,6 +142,18 @@ export function SessionBrowser({
             onChange={(groupBy) => set({ groupBy: groupBy as GroupBy })}
           />
         </FilterRow>
+        <FilterRow label="Sub-agents">
+          <OneOfSelect
+            label="Sub-agents"
+            value={config.subagents}
+            options={[
+              { value: 'active', label: 'Hide completed' },
+              { value: 'all', label: 'Show all' },
+              { value: 'none', label: 'Hide all' },
+            ]}
+            onChange={(subagents) => set({ subagents: subagents as SubagentDisplay })}
+          />
+        </FilterRow>
         <FilterRow label="Sort">
           <OneOfSelect
             label="Sort"
@@ -209,6 +221,7 @@ export function SessionBrowser({
                   activeSubagentId={activeSubagentId}
                   showGateway={gateways.length > 1 && config.groupBy !== 'gateway'}
                   showProject={config.groupBy !== 'project'}
+                  subagents={config.subagents}
                   projectIcons={projectIcons}
                   onSelect={onSelect}
                   onDelete={onDelete}
@@ -236,6 +249,7 @@ interface SessionRowItemProps {
   activeSubagentId?: string
   showGateway?: boolean
   showProject?: boolean
+  subagents?: SubagentDisplay
   projectIcons?: Record<string, string>
   onSelect?: (row: SessionRow) => void
   onDelete?: (row: SessionRow) => void
@@ -250,6 +264,7 @@ function SessionRowItem({
   activeSubagentId,
   showGateway,
   showProject = true,
+  subagents,
   projectIcons,
   onSelect,
   onDelete,
@@ -267,6 +282,7 @@ function SessionRowItem({
       activeStepKey={activeSubagentId}
       showGateway={showGateway}
       showProject={showProject}
+      subagents={subagents}
       projectIcons={projectIcons}
       onSelect={() => onSelect?.(row)}
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}

@@ -38,16 +38,23 @@ export const Collapsed: Story = {
   args: { row: makeRow({ id: '1', title: 'Session 1 Title', subagents: AGENTS }, 5) },
 }
 
-export const Expanded: Story = {
+export const ShowAll: Story = {
   args: {
     row: makeRow({ id: '2', title: 'Session 2 Title', subagents: AGENTS }, 5),
-    expanded: true,
+    subagents: 'all',
+  },
+}
+
+export const HiddenSubagents: Story = {
+  args: {
+    row: makeRow({ id: '2h', title: 'Session 2 Title', subagents: AGENTS }, 5),
+    subagents: 'none',
   },
 }
 
 export const SelectionNone: Story = {
   name: 'Selection · nothing selected',
-  args: { row: makeRow({ id: 'sel-0', title: 'Session Title', subagents: MIXED }), expanded: true },
+  args: { row: makeRow({ id: 'sel-0', title: 'Session Title', subagents: MIXED }), subagents: 'all' },
 }
 
 export const SelectionSession: Story = {
@@ -55,7 +62,7 @@ export const SelectionSession: Story = {
   args: {
     row: makeRow({ id: 'sel-1', title: 'Session Title', subagents: MIXED }),
     active: true,
-    expanded: true,
+    subagents: 'all',
   },
 }
 
@@ -65,7 +72,7 @@ export const SelectionSubagent: Story = {
     row: makeRow({ id: 'sel-2', title: 'Session Title', subagents: MIXED }),
     active: true,
     activeStepKey: 'a',
-    expanded: true,
+    subagents: 'all',
   },
 }
 
@@ -75,7 +82,7 @@ export const SelectionTaskKeyIgnored: Story = {
     row: makeRow({ id: 'sel-3', title: 'Session Title', subagents: MIXED }),
     active: true,
     activeStepKey: 't1',
-    expanded: true,
+    subagents: 'all',
   },
 }
 
@@ -93,7 +100,7 @@ function SelectionPlayground(args: React.ComponentProps<typeof SessionItem>) {
     <div className="flex flex-col gap-2">
       <SessionItem
         {...args}
-        expanded
+        subagents="all"
         active={selected}
         activeStepKey={agentKey}
         onSelect={() => {
@@ -164,11 +171,11 @@ export const TheList: Story = {
   args: { row: makeRow({ id: 'x', title: 'unused' }) },
   render: (args) => (
     <div className="flex flex-col">
-      <SessionItem {...args} row={makeRow({ id: 'a', title: 'Session 1 Title', subagents: AGENTS }, 5)} expanded activeStepKey="a" />
+      <SessionItem {...args} row={makeRow({ id: 'a', title: 'Session 1 Title', subagents: AGENTS }, 5)} subagents="all" activeStepKey="a" />
       <SessionItem {...args} row={makeRow({ id: 'b', title: 'Session 2 Title', status: 'idle' }, 3)} />
-      <SessionItem {...args} row={makeRow({ id: 'c', title: 'Session 3 Title', subagents: AGENTS }, 5)} active expanded />
+      <SessionItem {...args} row={makeRow({ id: 'c', title: 'Session 3 Title', subagents: AGENTS }, 5)} active subagents="all" />
       <SessionItem {...args} row={makeRow({ id: 'd', title: 'Session 4 Title', subagents: AGENTS }, 5)} />
-      <SessionItem {...args} row={makeRow({ id: 'e', title: 'Session 5 Title', subagents: AGENTS }, 5)} expanded />
+      <SessionItem {...args} row={makeRow({ id: 'e', title: 'Session 5 Title', subagents: AGENTS }, 5)} subagents="all" />
     </div>
   ),
 }

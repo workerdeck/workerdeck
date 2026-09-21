@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import { filterRows, sessionLabel, type SessionRow } from '@workerdeck/protocol'
-import { Button, Empty, EmptyKey, EngineIcon, SessionBrowser, SessionStatusIcon, cn, toast } from '@workerdeck/ui'
+import { Button, Empty, EmptyKey, EngineIcon, SessionBrowser, SessionStatusIcon, SubagentToggle, cn, toast } from '@workerdeck/ui'
 import { Filter, Layers, Plus, RefreshCw } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
@@ -78,6 +78,7 @@ export function SessionsSidebar() {
         railActions={create}
         actions={
           <>
+            <SubagentToggle value={config.subagents} onChange={(subagents) => setConfig({ ...config, subagents })} />
             <Button
               variant="ghost"
               size="icon-sm"

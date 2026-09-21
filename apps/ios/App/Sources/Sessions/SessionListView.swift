@@ -23,10 +23,6 @@ struct SessionListView: View {
   /// so an editable label inside one fights the tap that opens the session.
   @State private var pendingRename: SessionRow?
   @State private var renameText = ""
-  /// Session ids whose agent lines are showing. Not persisted: a disclosure is
-  /// about the glance you are having, and a list that reopened yesterday's
-  /// twisties would be answering a question nobody asked twice.
-  @State private var expandedAgents: Set<String> = []
 
   /// Restarting identity for the poll loop: any of these changing means the
   /// current loop is polling for the wrong world (or should not run at all).
@@ -274,8 +270,6 @@ struct SessionListView: View {
                 projectImage: projectImage(for: row, model: model),
                 // Grouped by project, the section header already names it.
                 showsProject: model.config.groupBy != .project,
-                expanded: expandedAgents.contains(row.info.id),
-                onToggle: { toggleAgents(row) },
                 menu: { rowActions(for: row, model: model) })
               // Two different actions wearing one gesture. Closing a *live*
               // session terminates a run someone may be relying on, so it asks
@@ -306,9 +300,7 @@ struct SessionListView: View {
                 .tint(.accentColor)
               }
               .contextMenu { rowActions(for: row, model: model) }
-              if expandedAgents.contains(row.info.id) {
-                stepRows(for: row)
-              }
+              stepRows(for: row, show: model.config.subagents)
             }
           }
         } header: {
@@ -401,22 +393,13 @@ struct SessionListView: View {
 
   // MARK: - Step lines
 
-  private func toggleAgents(_ row: SessionRow) {
-    if expandedAgents.contains(row.info.id) {
-      expandedAgents.remove(row.info.id)
-    } else {
-      expandedAgents.insert(row.info.id)
-    }
-  }
-
   /// One row per step, **agents first** and **all of them pressable** - the
   /// order and the kind both come from the kit's `sessionSteps`, which is the
   /// same derivation the dashboard and the extension draw from.
   ///
   /// Rows rather than a stack inside the session row: a full-width list row is
   /// a real thumb target where a line inside a two-line row is not, and it
-  /// keeps the promise the disclosure makes - every target here has its own
-  /// frame.
+  /// keeps every target its own frame.
   ///
   /// **What a press means is what tells the two kinds apart**, and that is the
   /// whole of it. An *agent* has work of its own, so it opens that agent's
@@ -428,8 +411,8 @@ struct SessionListView: View {
   /// `NavigationLink`s to the same case with different payloads, so this is one
   /// row shape with one destination type, not a variant branch inside a row.
   @ViewBuilder
-  private func stepRows(for row: SessionRow) -> some View {
-    ForEach(sessionSteps(row.info)) { step in
+  private func stepRows(for row: SessionRow, show: SubagentDisplay) -> some View {
+    ForEach(sessionSteps(row.info, show)) { step in
       let route = UUID(uuidString: row.hostId).map {
         SessionRoute.step(hostId: $0, sessionId: row.info.id, step: step)
       }
@@ -535,6 +518,13 @@ struct SessionListView: View {
     ToolbarItem(id: "settings", placement: .topBarLeading) {
       Button { showSettings = true } label: {
         Label("Settings", systemImage: "gearshape")
+      }
+    }
+    ToolbarItem(id: "subagents", placement: .topBarTrailing) {
+      Group {
+        if let model {
+          SubagentMenu(subagents: Binding(get: { model.config.subagents }, set: { model.config.subagents = $0 }))
+        }
       }
     }
     ToolbarItem(id: "filter", placement: .topBarTrailing) {

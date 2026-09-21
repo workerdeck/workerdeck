@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAgentRecord } from '@workerdeck/protocol'
+import { isAgentRecord, visibleSubagents } from '@workerdeck/protocol'
 import type { SubagentInfo } from '@workerdeck/protocol'
 import { sessionSteps } from '../src/components/agent/SessionSteps.tsx'
 import type { SessionInfo } from '@workerdeck/protocol'
@@ -70,5 +70,37 @@ describe('sessionSteps', () => {
   it('has no steps at all when every record is untyped', () => {
     const info = { subagents: [sub({ toolUseId: 't1', description: 'a task' })] } as unknown as SessionInfo
     expect(sessionSteps(info, () => {})).toEqual([])
+  })
+
+  it('draws what the display preference asks for', () => {
+    const info = {
+      subagents: [
+        sub({ toolUseId: 'run', agentType: 'Explore' }),
+        sub({ toolUseId: 'done', agentType: 'Explore', status: 'done' }),
+        sub({ toolUseId: 'bad', agentType: 'Explore', status: 'failed' }),
+      ],
+    } as unknown as SessionInfo
+    expect(sessionSteps(info, () => {}, 'all').map((s) => s.key)).toEqual(['run', 'done', 'bad'])
+    expect(sessionSteps(info, () => {}, 'active').map((s) => s.key)).toEqual(['run', 'bad'])
+    expect(sessionSteps(info, () => {}, 'none')).toEqual([])
+  })
+})
+
+describe('visibleSubagents', () => {
+  const info = {
+    subagents: [sub({ toolUseId: 'run' }), sub({ toolUseId: 'done', status: 'done' }), sub({ toolUseId: 'bad', status: 'failed' })],
+  } as unknown as SessionInfo
+
+  it('keeps a failed record under active: it is not a completed one', () => {
+    expect(visibleSubagents(info, 'active').map((s) => s.toolUseId)).toEqual(['run', 'bad'])
+  })
+
+  it('keeps every record under all, and none under none', () => {
+    expect(visibleSubagents(info, 'all').map((s) => s.toolUseId)).toEqual(['run', 'done', 'bad'])
+    expect(visibleSubagents(info, 'none')).toEqual([])
+  })
+
+  it('survives a session with no sub-agents at all', () => {
+    expect(visibleSubagents({} as SessionInfo, 'all')).toEqual([])
   })
 })

@@ -122,7 +122,7 @@ private struct SessionsPreview: View {
     ]
   }
 
-  @State private var open: Set<String> = ["1"]
+  @State private var subagents: SubagentDisplay = .active
   @State private var path: [SessionRoute] = []
 
   var body: some View {
@@ -131,40 +131,35 @@ private struct SessionsPreview: View {
         ForEach(items) { item in
           SessionCardView(
             row: item.row, onOpen: { path.append(Self.route(for: item.row)) },
-            hostName: item.row.hostName, expanded: open.contains(item.id),
-            onToggle: { toggle(item.id) },
+            hostName: item.row.hostName,
             // The app's own actions, spelled out rather than left empty: the
             // menu is part of what this harness exists to check.
             menu: {
               Button { } label: { Label("Rename", systemImage: "pencil") }
               Button(role: .destructive) { } label: { Label("Close", systemImage: "xmark.circle") }
             })
-          if open.contains(item.id) {
-            ForEach(sessionSteps(item.row.info)) { step in
-              NavigationLink(value: Self.route(for: item.row, step: step)) {
-                SessionStepRow(step: step)
-              }
-              .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
+          ForEach(sessionSteps(item.row.info, subagents)) { step in
+            NavigationLink(value: Self.route(for: item.row, step: step)) {
+              SessionStepRow(step: step)
             }
+            .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
           }
         }
       }
       .listStyle(.plain)
       .navigationTitle("Sessions")
       .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(id: "subagents", placement: .topBarTrailing) {
+          SubagentMenu(subagents: $subagents)
+        }
+      }
       .navigationDestination(for: SessionRoute.self) { route in
         Text(String(describing: route)).font(.caption.monospaced()).padding()
       }
     }
   }
 
-  private func toggle(_ id: String) {
-    if open.contains(id) {
-      open.remove(id)
-    } else {
-      open.insert(id)
-    }
-  }
 }
 
 /// The sessions list's second line, in every project state it has.
@@ -373,7 +368,7 @@ private struct StepsPreview: View {
             .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
           }
         } header: {
-          Text("\(stepCountWords(running: runningSteps(steps), total: steps.count)) · agents only")
+          Text("\(steps.count) agents only")
         } footer: {
           Text(
             """

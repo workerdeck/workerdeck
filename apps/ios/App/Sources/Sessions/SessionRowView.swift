@@ -30,7 +30,6 @@ struct SessionRowView: View {
   /// at the project root has nothing to add and the slot disappears. The rule
   /// `hostName` follows one facet over.
   var showsProject: Bool = true
-  var expanded: Bool = false
 
   static let verticalPadding: CGFloat = 3
 
@@ -131,12 +130,6 @@ struct SessionRowView: View {
             .layoutPriority(1)
         }
         Spacer(minLength: 6)
-        let steps = sessionSteps(session)
-        if !steps.isEmpty {
-          // `.hidden()` keeps the layout: the disclosure `SessionCardView` overlays as a button is this same view, so its width is reserved here and never measured.
-          StepDisclosure(expanded: expanded, running: runningSteps(steps), total: steps.count)
-            .hidden()
-        }
         // Same trick for the overflow control the card overlays: reserved here,
         // never measured there, so the identity run truncates before it reaches
         // it instead of sliding underneath.

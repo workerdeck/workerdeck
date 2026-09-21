@@ -1,21 +1,32 @@
 import XCTest
 
 final class SessionRowUITests: XCTestCase {
+  // Sub-agents are drawn without asking - there is no disclosure any more - and
+  // the preference in the title bar is the only thing that changes how many.
+  // Both halves are invisible from the outside: rows that need a press to appear
+  // look identical in a screenshot to rows that are simply there.
   @MainActor
-  func testDisclosureAndRowAreSeparateTargets() throws {
+  func testSubagentRowsDrawWithoutAPressAndFollowThePreference() throws {
     let app = XCUIApplication()
     app.launchEnvironment["UIPREVIEW"] = "sessions"
     app.launch()
 
-    let closed = app.descendants(matching: .any).matching(identifier: "Show 1 of 3 agents running")
-    let open = app.descendants(matching: .any).matching(identifier: "Hide 1 of 3 agents running")
-    XCTAssertTrue(closed.firstMatch.waitForExistence(timeout: 8))
-    XCTAssertEqual(closed.count, 2)
-    XCTAssertEqual(open.count, 1)
+    // Three cards carry the fixture's agents; under the default only the running
+    // one of each draws, so a completed sweep does not bury the list.
+    let steps = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Explore · Fix base-url'"))
+    XCTAssertTrue(steps.firstMatch.waitForExistence(timeout: 8), "no sub-agent row drew on its own")
+    XCTAssertEqual(steps.count, 3)
 
-    closed.firstMatch.tap()
-    XCTAssertTrue(open.element(boundBy: 1).waitForExistence(timeout: 3), "the disclosure did not toggle")
-    XCTAssertTrue(app.navigationBars["Sessions"].exists, "the disclosure pushed the row")
+    let preference = app.descendants(matching: .any).matching(identifier: "Sub-agents").firstMatch
+    XCTAssertTrue(preference.waitForExistence(timeout: 3))
+    preference.tap()
+    app.buttons["Show all"].tap()
+    XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'fable'")).firstMatch.waitForExistence(timeout: 3))
+
+    preference.tap()
+    app.buttons["Hide all"].tap()
+    XCTAssertFalse(steps.firstMatch.waitForExistence(timeout: 3), "hiding left sub-agent rows behind")
+    XCTAssertTrue(app.navigationBars["Sessions"].exists, "the preference pushed a row")
 
     let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Session 2 Title'")).firstMatch
     XCTAssertTrue(row.waitForExistence(timeout: 3))

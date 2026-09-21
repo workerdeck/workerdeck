@@ -79,6 +79,10 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             setFilterOpen(msg.open)
             return
           }
+          case 'wd-subagents': {
+            setConfig((held) => (held.subagents === msg.subagents ? held : { ...held, subagents: msg.subagents }))
+            return
+          }
         }
       }),
     [bridge],
@@ -187,6 +191,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                   row={row}
                   showProject={config.groupBy !== 'project'}
                   showGateway={config.groupBy !== 'gateway' && hosts.length > 1}
+                  subagents={config.subagents}
                   projectIcons={projectIcons}
                   selected={selectedIs(row) !== undefined}
                   inEditor={state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor'}

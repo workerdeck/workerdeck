@@ -118,3 +118,37 @@ struct FilterMenu: View, Equatable {
       })
   }
 }
+
+/// The sub-agent display preference, icon-only beside the funnel.
+///
+/// Its own control rather than a section inside `FilterMenu`, because it is not
+/// a filter over sessions: it says how much of a card is drawn. The glyph is the
+/// reading - two people, faded, or crossed out - so the state is legible without
+/// opening anything.
+struct SubagentMenu: View, Equatable {
+  @Binding var subagents: SubagentDisplay
+
+  nonisolated static func == (lhs: SubagentMenu, rhs: SubagentMenu) -> Bool {
+    lhs.subagents == rhs.subagents
+  }
+
+  var body: some View {
+    Menu {
+      Picker("Sub-agents", selection: $subagents) {
+        Text("Hide completed").tag(SubagentDisplay.active)
+        Text("Show all").tag(SubagentDisplay.all)
+        Text("Hide all").tag(SubagentDisplay.none)
+      }
+    } label: {
+      Label("Sub-agents", systemImage: Self.glyph(subagents))
+    }
+  }
+
+  static func glyph(_ show: SubagentDisplay) -> String {
+    switch show {
+    case .all: return "person.2.fill"
+    case .active: return "person.2"
+    case .none: return "person.2.slash"
+    }
+  }
+}

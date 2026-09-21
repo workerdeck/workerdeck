@@ -124,7 +124,15 @@ export { SessionBrowser, rowShapeClass, type SessionBrowserProps } from './compo
 export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
-export { type Step, StepRow, StepToggle, runningSteps, sessionSteps } from './components/agent/SessionSteps.tsx'
+export { type Step, StepRow, sessionSteps } from './components/agent/SessionSteps.tsx'
+export {
+  SUBAGENT_DISPLAY_META,
+  SUBAGENT_DISPLAY_ORDER,
+  SubagentDisplayIcon,
+  SubagentToggle,
+  nextSubagentDisplay,
+  type SubagentToggleProps,
+} from './components/agent/SubagentToggle.tsx'
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
 export { SessionEmptyState, type SessionEmptyStateProps } from './components/agent/SessionEmptyState.tsx'

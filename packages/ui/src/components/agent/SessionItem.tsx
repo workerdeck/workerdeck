@@ -1,12 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
-import type { SessionRow } from '@workerdeck/protocol'
+import type { SessionRow, SubagentDisplay } from '@workerdeck/protocol'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
-import { StepRow, StepToggle, runningSteps, sessionSteps } from './SessionSteps.tsx'
+import { StepRow, sessionSteps } from './SessionSteps.tsx'
 import type { Step } from './SessionSteps.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
@@ -20,8 +20,7 @@ export interface SessionItemProps {
   showGateway?: boolean
   showProject?: boolean
   projectIcons?: Record<string, string>
-  expanded?: boolean
-  onExpandedChange?: (expanded: boolean) => void
+  subagents?: SubagentDisplay
   onSelect?: (modifiers: SelectModifiers) => void
   onSelectSubagent?: (toolUseId: string) => void
   onRename?: (title: string) => void
@@ -41,8 +40,7 @@ export function SessionItem({
   showGateway,
   showProject = true,
   projectIcons,
-  expanded,
-  onExpandedChange,
+  subagents = 'active',
   onSelect,
   onSelectSubagent,
   onRename,
@@ -53,12 +51,6 @@ export function SessionItem({
   className,
 }: SessionItemProps) {
   const { info } = row
-  const [ownExpanded, setOwnExpanded] = useState(false)
-  const open = expanded ?? ownExpanded
-  const setOpen = (next: boolean) => {
-    setOwnExpanded(next)
-    onExpandedChange?.(next)
-  }
   const [ownEditing, setOwnEditing] = useState(false)
   const isEditing = editing ?? ownEditing
   const setEditing = (next: boolean) => {
@@ -98,7 +90,7 @@ export function SessionItem({
   for (const extra of extras) {
     parts.push(<span key={extra}>{extra}</span>)
   }
-  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)))
+  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)), subagents)
   const holdsOpenAgent = steps.some((s) => s.key === activeStepKey)
 
   return (
@@ -195,20 +187,11 @@ export function SessionItem({
             {formatRelativeTime(info.lastActivityAt ?? info.createdAt)}
           </span>
           <span className="min-w-0 flex-1" />
-          {steps.length > 0 ? (
-            <StepToggle
-              expanded={open}
-              running={runningSteps(steps)}
-              total={steps.length}
-              noun={steps[0]!.noun}
-              onToggle={() => setOpen(!open)}
-            />
-          ) : null}
           {actions}
         </div>
       </div>
 
-      {open && steps.length > 0 ? (
+      {steps.length > 0 ? (
         <div className="flex flex-col">
           {steps.map((step: Step) => (
             <StepRow key={step.key} step={step} active={step.key === activeStepKey} onSelect={step.onSelect} />

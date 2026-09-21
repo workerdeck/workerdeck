@@ -58,8 +58,8 @@ public struct Step: Sendable, Equatable, Identifiable, Hashable {
 ///
 /// Dispatch order is the only order these records have that means anything (it
 /// is the order the work was started in), so this filters and never reorders.
-public func sessionSteps(_ info: SessionInfo) -> [Step] {
-  (info.subagents ?? []).filter(isAgentRecord).map { sub -> Step in
+public func sessionSteps(_ info: SessionInfo, _ show: SubagentDisplay = .all) -> [Step] {
+  visibleSubagents(info, show).filter(isAgentRecord).map { sub -> Step in
     let label = subagentLabel(sub)
     return Step(
       key: sub.toolUseId,
@@ -77,28 +77,4 @@ public func stepState(_ status: SubagentStatus) -> Step.State {
   case .failed: return .failed
   case .done: return .done
   }
-}
-
-/// How many of these are still going - the live half of the disclosure's count.
-public func runningSteps(_ steps: [Step]) -> Int {
-  steps.filter { $0.state == .running }.count
-}
-
-/// The disclosure's reading in digits: `2/3` while some are still going, `3`
-/// once they have all settled.
-///
-/// "How many are still working" is the live question and a bare total answers it
-/// wrong the moment one finishes. Digits rather than words on the line itself
-/// because this sits beside the folder and the age on a narrow second line, and
-/// `1 of 6 agents` truncates the folder name away to say what three characters
-/// already said. The words are ``stepCountWords(running:total:noun:)`` and go to
-/// the accessibility label, which is where they read correctly.
-public func stepCountLabel(running: Int, total: Int) -> String {
-  running > 0 && running < total ? "\(running)/\(total)" : "\(total)"
-}
-
-/// The same count spoken - what a screen reader and a tooltip get.
-public func stepCountWords(running: Int, total: Int, noun: String = "agent") -> String {
-  if running > 0 && running < total { return "\(running) of \(total) \(noun)s running" }
-  return "\(total) \(noun)\(total == 1 ? "" : "s")"
 }

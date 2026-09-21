@@ -1,4 +1,4 @@
-import type { SessionRow } from '@workerdeck/protocol'
+import type { SessionRow, SubagentDisplay } from '@workerdeck/protocol'
 import { SessionItem, cn, type SelectModifiers } from '@workerdeck/ui'
 import { AppWindow, MoreHorizontal } from 'lucide-react'
 
@@ -6,6 +6,7 @@ export function SessionCard({
   row,
   showProject = true,
   showGateway,
+  subagents,
   projectIcons,
   selected,
   inEditor = false,
@@ -18,6 +19,7 @@ export function SessionCard({
   row: SessionRow
   showProject?: boolean
   showGateway?: boolean
+  subagents?: SubagentDisplay
   projectIcons?: Record<string, string>
   selected: boolean
   inEditor?: boolean
@@ -34,6 +36,7 @@ export function SessionCard({
       activeStepKey={activeSubagentId}
       showProject={showProject}
       showGateway={showGateway}
+      subagents={subagents}
       projectIcons={projectIcons}
       onSelect={onSelect}
       onSelectSubagent={onSelectSubagent}

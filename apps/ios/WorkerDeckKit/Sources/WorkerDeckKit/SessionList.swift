@@ -68,6 +68,21 @@ public func runningSubagents(_ info: SessionInfo) -> [SubagentInfo] {
   (info.subagents ?? []).filter { $0.status == .running }
 }
 
+/// How much of a session's sub-agent list its card draws. A layout preference,
+/// not a facet filter, so `clearFilters` preserves it the way it preserves
+/// grouping and sort. Mirror of protocol's `SubagentDisplay`.
+public enum SubagentDisplay: String, Codable, Sendable, Hashable, CaseIterable {
+  case all, active, none
+}
+
+/// A failed sub-agent is not a completed one: `.active` keeps it, because it is
+/// the row most worth reading. Mirror of protocol's `visibleSubagents`.
+public func visibleSubagents(_ info: SessionInfo, _ show: SubagentDisplay) -> [SubagentInfo] {
+  guard show != .none else { return [] }
+  let subagents = info.subagents ?? []
+  return show == .all ? subagents : subagents.filter { $0.status != .done }
+}
+
 /// A sub-agent's identity on one line: `Explore · find the auth check`.
 ///
 /// The mirror of protocol's `subagentLabel`, and the reason it is shared: the
@@ -147,11 +162,13 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
   public var scoped: Bool
   public var groupBy: GroupBy
   public var sortBy: SortBy
+  public var subagents: SubagentDisplay
 
   public init(
     search: String = "", gateways: [String] = [], adapters: [String] = [],
     states: [SessionState] = [], projects: [String] = [], scoped: Bool = true,
-    groupBy: GroupBy = .state, sortBy: SortBy = .recent
+    groupBy: GroupBy = .state, sortBy: SortBy = .recent,
+    subagents: SubagentDisplay = .active
   ) {
     self.search = search
     self.gateways = gateways
@@ -161,6 +178,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     self.scoped = scoped
     self.groupBy = groupBy
     self.sortBy = sortBy
+    self.subagents = subagents
   }
 
   /// Mirror of `DEFAULT_VIEW_CONFIG`.
@@ -188,10 +206,14 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     sortBy =
       (try c.decodeIfPresent(String.self, forKey: .sortBy)).flatMap { SortBy(rawValue: $0) }
       ?? .recent
+    subagents =
+      (try c.decodeIfPresent(String.self, forKey: .subagents)).flatMap {
+        SubagentDisplay(rawValue: $0)
+      } ?? .active
   }
 
   private enum CodingKeys: String, CodingKey {
-    case search, gateways, adapters, states, projects, scoped, groupBy, sortBy
+    case search, gateways, adapters, states, projects, scoped, groupBy, sortBy, subagents
   }
 }
 
@@ -636,5 +658,6 @@ public func clearFilters(_ config: ViewConfig) -> ViewConfig {
   next.scoped = false
   next.groupBy = config.groupBy
   next.sortBy = config.sortBy
+  next.subagents = config.subagents
   return next
 }

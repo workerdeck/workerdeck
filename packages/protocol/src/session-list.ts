@@ -31,6 +31,15 @@ export function runningSubagents(info: SessionInfo): SubagentInfo[] {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
 }
 
+// A failed sub-agent is not a completed one: 'active' keeps it, because it is the row most worth reading.
+export function visibleSubagents(info: SessionInfo, show: SubagentDisplay): SubagentInfo[] {
+  if (show === 'none') {
+    return []
+  }
+  const subagents = info.subagents ?? []
+  return show === 'all' ? [...subagents] : subagents.filter((sub) => sub.status !== 'done')
+}
+
 export function isAgentRecord(sub: SubagentInfo): boolean {
   return (sub.agentType?.trim() ?? '') !== ''
 }
@@ -48,6 +57,9 @@ export type Facet = 'gateway' | 'adapter' | 'state' | 'project'
 export type GroupBy = 'none' | Facet
 export type SortBy = 'recent' | 'name' | Facet
 
+// How much of a session's sub-agent list its card draws. A layout preference, not a facet filter.
+export type SubagentDisplay = 'all' | 'active' | 'none'
+
 export type ViewConfig = {
   search: string
   gateways: string[]
@@ -57,6 +69,7 @@ export type ViewConfig = {
   scoped: boolean
   groupBy: GroupBy
   sortBy: SortBy
+  subagents: SubagentDisplay
 }
 
 export const DEFAULT_VIEW_CONFIG: ViewConfig = {
@@ -68,6 +81,7 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
   scoped: true,
   groupBy: 'state',
   sortBy: 'recent',
+  subagents: 'active',
 }
 
 export type ScopeRoot = { hostId?: string; path: string }
@@ -298,5 +312,6 @@ export function clearFilters(config: ViewConfig): ViewConfig {
     scoped: false,
     groupBy: config.groupBy,
     sortBy: config.sortBy,
+    subagents: config.subagents,
   }
 }

@@ -14,8 +14,6 @@ struct SessionCardView<MenuContent: View>: View {
   var hostName: String?
   var projectImage: UIImage?
   var showsProject: Bool = true
-  var expanded: Bool = false
-  var onToggle: () -> Void = {}
   // Required, and required deliberately: a card that can be built without a menu
   // is a card a preview can draw *simpler* than the app ships it, which is how
   // the missing chevron got past a green screenshot. Callers with nothing to
@@ -26,16 +24,11 @@ struct SessionCardView<MenuContent: View>: View {
     Button(action: onOpen) {
       SessionRowView(
         session: row.info, hostName: hostName, unseen: row.unseen,
-        projectImage: projectImage, showsProject: showsProject, expanded: expanded)
+        projectImage: projectImage, showsProject: showsProject)
         // A list-row button paints its label in the accent colour; the title must stay primary.
         .foregroundStyle(.primary)
     }
-    .overlay(alignment: .bottomTrailing) {
-      HStack(spacing: 0) {
-        toggle
-        overflow
-      }
-    }
+    .overlay(alignment: .bottomTrailing) { overflow }
   }
 
   // Persistent, not revealed: the dashboard hides the same actions behind hover
@@ -57,27 +50,6 @@ struct SessionCardView<MenuContent: View>: View {
     .tint(Color.secondary)
     .accessibilityLabel("Session actions")
   }
-
-  @ViewBuilder
-  private var toggle: some View {
-    let steps = sessionSteps(row.info)
-    if !steps.isEmpty {
-      let running = runningSteps(steps)
-      Button(action: onToggle) {
-        StepDisclosure(expanded: expanded, running: running, total: steps.count)
-          .padding(.bottom, SessionRowView.verticalPadding)
-          .frame(maxHeight: .infinity, alignment: .bottom)
-          .contentShape(Rectangle())
-      }
-      // `.plain` because a bordered button inside a list row draws a second
-      // surface, and because the default style would tint the chevron with the
-      // accent colour on a row where the accent has a meaning of its own.
-      .buttonStyle(.plain)
-      .accessibilityLabel(
-        (expanded ? "Hide " : "Show ")
-          + stepCountWords(running: running, total: steps.count))
-    }
-  }
 }
 
 // The overflow affordance, drawn identically whether it is the live control
@@ -91,23 +63,5 @@ struct SessionOverflowGlyph: View {
       .foregroundStyle(.secondary)
       .padding(.leading, 12)
       .padding(.trailing, 2)
-  }
-}
-
-struct StepDisclosure: View {
-  let expanded: Bool
-  let running: Int
-  let total: Int
-
-  var body: some View {
-    HStack(spacing: 2) {
-      Image(systemName: expanded ? "chevron.down" : "chevron.right")
-        .font(.caption2.weight(.semibold))
-      Text(stepCountLabel(running: running, total: total))
-        .font(.caption)
-        .monospacedDigit()
-    }
-    .foregroundStyle(running > 0 ? Color.accentColor : .secondary)
-    .padding(.leading, 10)
   }
 }

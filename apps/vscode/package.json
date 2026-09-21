@@ -178,6 +178,24 @@
         "category": "WorkerDeck"
       },
       {
+        "command": "workerdeck.subagentsActive",
+        "title": "Sub-agents: Hide Completed",
+        "category": "WorkerDeck",
+        "icon": "$(list-filter)"
+      },
+      {
+        "command": "workerdeck.subagentsAll",
+        "title": "Sub-agents: Show All",
+        "category": "WorkerDeck",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workerdeck.subagentsNone",
+        "title": "Sub-agents: Hidden",
+        "category": "WorkerDeck",
+        "icon": "$(list-flat)"
+      },
+      {
         "command": "workerdeck.refreshSessions",
         "title": "Refresh Sessions",
         "category": "WorkerDeck",
@@ -348,9 +366,24 @@
           "group": "navigation@2"
         },
         {
+          "command": "workerdeck.subagentsActive",
+          "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'active'",
+          "group": "navigation@3"
+        },
+        {
+          "command": "workerdeck.subagentsAll",
+          "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'all'",
+          "group": "navigation@3"
+        },
+        {
+          "command": "workerdeck.subagentsNone",
+          "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'none'",
+          "group": "navigation@3"
+        },
+        {
           "command": "workerdeck.refreshSessions",
           "when": "view == workerdeck.sessions",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "workerdeck.resumeSession",

@@ -94,15 +94,18 @@ struct SessionStepsTests {
     #expect(steps.map(\.state) == [.running, .failed, .done])
   }
 
-  @Test("running steps are counted, settled ones are not")
-  func running() {
-    let steps = sessionSteps(
-      info(subagents: [
-        agent("a1", status: .running), agent("a2", status: .failed),
-        agent("a3", status: .running), agent("a4"),
-      ]))
-    #expect(runningSteps(steps) == 2)
-    #expect(runningSteps([]) == 0)
+  /// A failed record is not a completed one, so `.active` keeps it: it is the
+  /// row most worth reading on a card that has gone quiet.
+  @Test("the display preference decides which records draw")
+  func display() {
+    let session = info(subagents: [
+      agent("a1", status: .running), agent("a2", status: .failed), agent("a3", status: .done),
+    ])
+    #expect(sessionSteps(session, .all).map(\.key) == ["a1", "a2", "a3"])
+    #expect(sessionSteps(session, .active).map(\.key) == ["a1", "a2"])
+    #expect(sessionSteps(session, .none).isEmpty)
+    #expect(visibleSubagents(session, .active).map(\.toolUseId) == ["a1", "a2"])
+    #expect(visibleSubagents(info(subagents: nil), .all).isEmpty)
   }
 
   // MARK: - The reading
@@ -124,19 +127,6 @@ struct SessionStepsTests {
     let steps = sessionSteps(
       info(subagents: [agent("a1"), agent("a2", description: nil), task("t1")]))
     #expect(steps.map(\.label) == ["Explore · find the auth check", "Explore"])
-  }
-
-  /// The two spellings of one count. The phone had a hand-rolled copy of this
-  /// on the row's chip beside `StepToggle`'s - one derivation now.
-  @Test("the count reads live while any are running and settles to a total")
-  func countSpellings() {
-    #expect(stepCountLabel(running: 1, total: 3) == "1/3")
-    #expect(stepCountLabel(running: 0, total: 3) == "3")
-    // All of them running is a total too: `3/3` says nothing `3` does not.
-    #expect(stepCountLabel(running: 3, total: 3) == "3")
-    #expect(stepCountWords(running: 1, total: 3) == "1 of 3 agents running")
-    #expect(stepCountWords(running: 0, total: 3) == "3 agents")
-    #expect(stepCountWords(running: 0, total: 1) == "1 agent")
   }
 
   // MARK: - Job runs

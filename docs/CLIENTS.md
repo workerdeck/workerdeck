@@ -451,9 +451,7 @@ row hover on three actions instead, drives the same editor from a pencil (`renam
 The colours are not this file's business either: `styles.css` repoints `--row-hover` and
 `--row-selected` at `list.hoverBackground` / `list.activeSelectionBackground` and
 `--badge`/`--badge-fg` at VS Code's own badge pair, so the shared card wears the user's theme
-without a `--vscode-*` variable being named in the component. The disclosure
-reads `1/6` rather than `1 of 6 agents`, the words having truncated the folder name away to say
-what three characters say, with the sentence kept for the tooltip and the screen reader.
+without a `--vscode-*` variable being named in the component.
 
 ### Dev harness & CSP
 
@@ -473,17 +471,23 @@ fidelity risk is that it hand-supplies the `--vscode-*` variables, so a token it
 forgets looks fine there and wrong in the editor; and `.vscodeignore` allows `dist/` only, so
 none of it ships.
 
-### Sub-agents: expansion and the panel frame
+### Sub-agents: always drawn, and the panel frame
 
-A session row **expands** to its sub-agents (`SessionInfo.subagents`) - `sessionSteps`,
-`StepToggle` and `StepRow`, which live in **`packages/ui`** (`SessionSteps.tsx`) rather than in
-this webview, that being exactly why the dashboard had none of them; a session's sub-agents are a
-protocol fact and a disclosure over them is a list affordance, so neither is extension-specific.
-The disclosure sits on the *second* line, since the first line's left edge belongs to the name you scan by, doubling as the
-count (`2 of 3 agents`, and it counts **sub-agents only** now, which is what makes the number
-answerable - it used to include tasks, so `7/9` could not say which was which); expansion is
-row-local React state and unpersisted, and could not be a native twisty regardless, every view
-here being a webview. Pressing a child selects the session and **hands the panel over to that agent's own work**
+A session row **draws its sub-agents** (`SessionInfo.subagents`) - `sessionSteps` and `StepRow`,
+which live in **`packages/ui`** (`SessionSteps.tsx`) rather than in this webview, that being
+exactly why the dashboard had none of them; a session's sub-agents are a protocol fact and how
+many of them a card shows is a list preference, so neither is extension-specific.
+There is **no per-row disclosure**, and the `1/3` count that doubled as its handle is gone with
+it: what a sub-agent is doing is the most answerable thing a card can say, and a control that
+started closed on every row, on every client, unpersisted, hid it by default. How many rows draw
+is one preference instead - `ViewConfig.subagents`, `all` / `active` / `none`, default `active`
+(running and failed; a failed record is not a completed one) - read by `visibleSubagents` in
+protocol and offered as an icon-only cycling control, `SubagentToggle` in `packages/ui`. **This
+view has no header to put it in**, so here it is three `view/title` commands gated on one
+`workerdeck.sessionsSubagents` context key, the `showCompletedTasks`/`hideCompletedTasks` pair one
+state wider: the host owns the key and the `globalState` write, pushes `wd-subagents`, and reads
+the webview's own `wd-view-config` back so the panel's picker and the title bar cannot disagree.
+Pressing a child selects the session and **hands the panel over to that agent's own work**
 (`wd-select-session`'s `subagentToolUseId` → `wd-open-subagent` → `SessionPanel.openSubagent`),
 still **without focusing the composer** - and now for a stronger reason than before: while a
 sub-agent is framed there *is* no composer. That chain was `revealToolUse` → `wd-reveal-tool-use`
@@ -808,7 +812,7 @@ remains, which is the closest the transcript can get, untested against a real re
 The **row itself** mirrors the dashboard's (`packages/ui`'s `SessionBrowser`) rather than
 inventing a phone shape: two lines, not three - a state *glyph*, title, unread badge and the
 context ring on top; the engine's mark, one truncating run of model · project · gateway ·
-profile · cost, then the age and the step disclosure underneath, in that order. The project slot
+profile · cost, then the age underneath, in that order. The project slot
 is `projectLabel` from the kit, so a declared `shortcode` shortens the phone's row exactly as it
 shortens the dashboard's, with no App-side change: `projectName` is the kit's companion for a
 surface that wants the whole name, and the phone has no tooltip to put one on. **State leads both
@@ -833,26 +837,23 @@ this row shipped a collision the preview could not show: `route` was optional, t
 none, so the card drew bare while the app wrapped it in a `NavigationLink` whose platform chevron
 landed under the badge and ring. A preview that omits what the list passes is a preview of a
 different composition; the card now has no optional that lets that happen twice.
-Four rules were off and are now ported. The **step disclosure sits on line two**, where the
-dashboard puts it, not centred on the row's trailing edge as a third column. The Figma frame
+Four rules were off and are now ported. The Figma frame
 (`SessionLists`, node `17-1156`) settles the trailing edge outright: **no per-row chevron** -
-line one ends with the ring, line two with the `ListDropdown`, and only the sub-items carry an
-arrow. So the row is a `Button` that appends its route to the stack's path (the push notification
+line one ends with the ring, and only the sub-items carry an arrow. So the row is a `Button` that appends its route to the stack's path (the push notification
 and create paths already navigate that way), not a `NavigationLink`: a link draws the chevron the
 design has no room for, and `navigationLinkIndicatorVisibility(.hidden)` - annotated iOS 17 via
 `@_alwaysEmitIntoClient` - is a **no-op on the iOS 18 runtime** (measured on the 18.5 simulator;
 only 26 honours it), so the modifier could not carry a 17.0 deployment target. A list-row button
 paints its label in the accent, which the card overrides to `.primary`; every other colour on the
-row is explicit already. The disclosure stays **outside** the row's button - a hand-rolled button
-inside the row's tap target is a coin toss under a thumb - as an `.overlay(alignment:
-.bottomTrailing)` sibling in z-order, full row height for the thumb and bottom-aligned for the
-eye. It is laid out by **the same view drawn twice**: `StepDisclosure` sits `.hidden()` at the end
-of line two, reserving exactly its own width in the line's flow, and the overlaid button draws the
-visible copy on top of it. Nothing is measured, so nothing can drift; the earlier
-`DisclosureWidthKey` overhang measured the sibling and reached line one over a chevron it never
-knew about. The two targets are **pressed, not asserted**: `WorkerDeckAppUITests` runs the
-`UIPREVIEW=sessions` fixture and checks that the disclosure toggles without pushing and the row
-pushes (`xcodebuild test … -only-testing:WorkerDeckAppUITests`, in `apps/ios/README.md`).
+row is explicit already. **Sub-agent rows are simply drawn**, as they are on every other client:
+there is no per-row disclosure and no `1/3` chip that was also its handle, and how many rows a
+card carries is `ViewConfig.subagents` - the icon-only `SubagentMenu` beside the funnel in the
+list's toolbar, persisted with the rest of the config. `ViewConfig`'s lenient `init(from:)` is
+what lets that key be added: a config stored by an older build decodes with the new field at its
+default rather than failing and resetting every preference the person had. The claim is
+**pressed, not asserted**: `WorkerDeckAppUITests` runs the `UIPREVIEW=sessions` fixture and checks
+that sub-agent rows are there without a press, that the preference changes how many, and that the
+row still pushes (`xcodebuild test … -only-testing:WorkerDeckAppUITests`, in `apps/ios/README.md`).
 The **context ring reads off the ring ramp**, not the bar ramp: the web draws two off one
 percentage and they turn in different places, so `meterSeverity` (80/95, neutral below) is now in
 the kit and tested there, `ringTint` maps it, and `usageTint` (70/90, accent below) stays what a
@@ -864,8 +865,10 @@ fact, where it drew a static `circle.dotted`.
 The **`···` is drawn, and drawn persistently** - which is a divergence from the dashboard and *not*
 one from the frame. The web reveals the same actions on hover; a phone has no hover, so the
 alternative to always-there is invisible, and the swipe and the long press are both only found by
-someone who already guessed they were there. It rides the trailing edge of line two beside the
-disclosure, by the same hidden-copy trick, and its menu comes from **one builder**
+someone who already guessed they were there. It rides the trailing edge of line two, laid out by
+the same view drawn twice - `SessionOverflowGlyph` sits `.hidden()` at the end of the line,
+reserving exactly its own width, and the overlaid button draws the visible copy on top of it, so
+nothing is measured and nothing can drift - and its menu comes from **one builder**
 (`rowActions(for:model:)`) shared with the long-press menu so the two cannot drift; the trailing
 swipe still spells Close/Remove for itself because a swipe button is a different drawing. The
 `Menu` is `.tint(Color.secondary)`: a menu paints its label in the accent, and on this row the
@@ -928,32 +931,29 @@ than component-local, because the height book must know every height - the frame
 twin therefore share one state. Codex draws no brief row at all, enforced where the row is built
 rather than where it is drawn: its spawn message is encrypted on the wire, and there is nothing to
 show.
-Sub-agents are a count **and** a disclosure, and they are the **same target**: the count on the
-row's trailing edge *is* the control, with a chevron beside it saying which way it will go -
-the frame's `ListDropdown`, drawn where the frame draws it. It reads `2/3` while some are still
-running and a bare total once they have settled (the two spellings `StepToggle` picks between),
-and it wears the accent while anything is live.
+Sub-agents are **always drawn**, one full-width row each, and the count that used to sit on the
+row's trailing edge as a disclosure is gone. The control it doubled as is gone with it: what a
+session's agents are doing is the most answerable thing a card can say, and a twisty that started
+closed on every row hid it by default while costing a per-row tap and a second target inside a row
+that already takes the press. What survives is the *preference*, once for the whole list -
+`ViewConfig.subagents` (`all` / `active` / `none`, default `active`, which keeps failed records
+because a failed agent is not a completed one), offered as `SubagentMenu`, an icon-only menu in the
+list's toolbar beside the funnel. It is in the config rather than in `AppSettings` for the rule
+this file keeps elsewhere: a transcript-reading preference is the phone's own, and anything the
+three clients must agree about lives in `ViewConfig`.
 
-It is a **sibling of the row's button, never a child**, and that part is not negotiable: a
-hand-rolled button inside the row's tap target is a coin toss under a thumb, because the row takes
-the tap. The row used to draw the count alone for exactly that reason - right about *nesting*, and
-answered by not nesting rather than by refusing the disclosure, because "which agent" is a
-question the list can answer and the alternative is opening the session to find out.
-
-An earlier pass put the disclosure in a **reserved left gutter** instead, 26pt on every row so
-the titles would line up. That is gone: it spent a column in front of the entire list to hold a
-control most rows never showed, and it asked the reader to find the disclosure somewhere other
-than on the thing being disclosed. A trailing control has nothing to line up with, so a session
-with no agents simply has no disclosure and its row runs full width. Expanded, each agent is its **own
-full-width row**, which is a real thumb target where a line inside a two-line row is not, and it
-pushes `SessionRoute.session(…, subagent:)` - the session with that agent already framed, the
-phone's spelling of the dashboard's `?subagent=`. The rows come from the kit's `sessionSteps`
+An earlier pass put the disclosure in a **reserved left gutter**, 26pt on every row so the titles
+would line up. That is gone too, and for a reason that outlived it: it spent a column in front of
+the entire list to hold a control most rows never showed. Each agent is its **own full-width
+row**, which is a real thumb target where a line inside a two-line row is not, and it pushes
+`SessionRoute.session(…, subagent:)` - the session with that agent already framed, the phone's
+spelling of the dashboard's `?subagent=`. The rows come from the kit's `sessionSteps`
 (`SessionSteps.swift`, the port of `packages/ui`'s `SessionSteps.tsx`) and are **sub-agents only**:
-`isAgentRecord` decides membership, `SessionRoute.step` has one destination, and every step pushes
-its takeover.
+`isAgentRecord` decides membership, `visibleSubagents` decides how many, `SessionRoute.step` has one
+destination, and every step pushes its takeover.
 
-Tasks are the thing that is *not* here, and the omission is the design. They used to share this
-disclosure, which made one badge answer two questions and answer neither - so they moved to the
+Tasks are the thing that is *not* here, and the omission is the design. They used to share that
+count, which made one badge answer two questions and answer neither - so they moved to the
 session's own **`TasksSheet`**, opened from the count on `SessionStatusBar` (a chip, because the app
 has no popovers: every status-line item is a case on `SessionView.Sheet` and a `.sheet(item:)`).
 Its rows come from `sessionTasks` (`Checklist.swift`), unifying the engine's checklist with the

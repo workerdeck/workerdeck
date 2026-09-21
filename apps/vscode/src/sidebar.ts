@@ -5,7 +5,7 @@ import { clientFor } from './gateway.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost, SurfaceTarget } from './bridge-protocol.ts'
-import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, runningSubagents, type ViewConfig } from './view-config.ts'
+import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, runningSubagents, type SubagentDisplay, type ViewConfig } from './view-config.ts'
 import { WebviewViewHost } from './webview-host.ts'
 import { ProjectIconCache } from './project-icons.ts'
 
@@ -13,6 +13,8 @@ const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 
 export const FILTER_CONTEXT_KEY = 'workerdeck.sessionsFilterOpen'
 const FILTER_OPEN_KEY = 'workerdeck.filterOpen.v1'
+
+export const SUBAGENTS_CONTEXT_KEY = 'workerdeck.sessionsSubagents'
 
 export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; target?: SurfaceTarget }
 
@@ -57,8 +59,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       ...DEFAULT_VIEW_CONFIG,
       ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
     }
-    // Seeds the context key, so the title bar shows the right toggle icon before the view opens.
+    // Seeds the context keys, so the title bar shows the right toggle icons before the view opens.
     this.setFilterOpen(context.globalState.get<boolean>(FILTER_OPEN_KEY) ?? false)
+    this.setSubagents(this.#viewConfig.subagents)
     model.onDidChange(() => this.#pushState())
   }
 
@@ -91,6 +94,17 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
 
   toggleFilter(): void {
     this.setFilterOpen(!this.#filterOpen)
+  }
+
+  setSubagents(subagents: SubagentDisplay): void {
+    this.#viewConfig = { ...this.#viewConfig, subagents }
+    void this.#context.globalState.update(VIEW_CONFIG_KEY, this.#viewConfig)
+    void vscode.commands.executeCommand('setContext', SUBAGENTS_CONTEXT_KEY, subagents)
+    this.post({ kind: 'wd-subagents', subagents })
+  }
+
+  subagentsDisplay(): SubagentDisplay {
+    return this.#viewConfig.subagents
   }
 
   #pushState(): void {
@@ -126,6 +140,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.#pushState()
     // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
     this.post({ kind: 'wd-filter-open', open: this.#filterOpen })
+    this.post({ kind: 'wd-subagents', subagents: this.#viewConfig.subagents })
   }
 
   protected override async onMessage(msg: SidebarToHost): Promise<void> {
@@ -135,8 +150,12 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         return
       }
       case 'wd-view-config': {
+        const changed = this.#viewConfig.subagents !== msg.config.subagents
         this.#viewConfig = msg.config
         void this.#context.globalState.update(VIEW_CONFIG_KEY, msg.config)
+        if (changed) {
+          void vscode.commands.executeCommand('setContext', SUBAGENTS_CONTEXT_KEY, msg.config.subagents)
+        }
         this.#pushState()
         return
       }

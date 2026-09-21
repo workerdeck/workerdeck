@@ -23,7 +23,17 @@ export {
   subagentLabel,
   subsetSummary,
 } from '@workerdeck/protocol'
-export type { Facet, GroupBy, SessionGroup, SessionRow, SessionState, SortBy, SubsetSummary, ViewConfig } from '@workerdeck/protocol'
+export type {
+  Facet,
+  GroupBy,
+  SessionGroup,
+  SessionRow,
+  SessionState,
+  SortBy,
+  SubagentDisplay,
+  SubsetSummary,
+  ViewConfig,
+} from '@workerdeck/protocol'
 
 export function buildRows(state: SidebarState | undefined): SessionRow[] {
   if (!state) {

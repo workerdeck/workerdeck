@@ -226,7 +226,10 @@ recomputes `activityCount`: a rehydrated session that forgot where its last rese
 the cleared conversation to the first client that attached.
 `session-list.ts` is the
 **sessions-list view model** (the `attention/working/idle/ended` buckets, the
-gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`,
+gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`
+- which preserves `groupBy`, `sortBy` and `subagents`, those being layout preferences rather than
+facets, so "clear filters" never silently re-draws the list a different shape -
+`visibleSubagents` over `ViewConfig.subagents`,
 `projectLabel` and its companion `projectSubpath` - what a row shows *instead of* the project
 name when the list is already grouped by project, i.e. where in the project the session sits, and
 nothing at all at the root, and
@@ -1494,10 +1497,14 @@ button, and stops the click rather than letting it fall through to the session u
 green is not a new rule: it is the transcript's (`TaskRow` bodies are green, the marker carries the
 beat), so a list that spent blue on "running" would be saying something different from the
 transcript about the same agent. Failure still outranks it - an alarm is not a category.
-`SessionSteps.tsx` holds that disclosure - `sessionSteps`, `StepToggle`, `StepRow` - lifted out
+`SessionSteps.tsx` holds those rows - `sessionSteps`, `StepRow` - lifted out
 of the VS Code webview, which is exactly why this list had none of it: a session's sub-agents are
-a protocol fact and a disclosure over them is a list affordance, so neither was ever
-extension-specific. A step is divided from the card's header by **indentation and its own rounded
+a protocol fact and how many of them a card draws is a list preference, so neither was ever
+extension-specific. There is **no per-row disclosure**: the rows are always drawn, and the `1/3`
+count that doubled as the twisty's handle is gone with `StepToggle`. How many draw is one global
+preference, `ViewConfig.subagents` (`all` / `active` / `none`, default `active` - running and
+failed, a failed record not being a completed one), applied by protocol's `visibleSubagents` and
+cycled by `SubagentToggle`, an icon-only button each client puts in its own top nav. A step is divided from the card's header by **indentation and its own rounded
 hit shape**, not by a rule. The rules came first, on the argument that at 11px (`text-micro`) an
 indent is not enough to say "list inside a row" - right about the reading and wrong about the
 cost: a stack of hairlines across every open card turned the list into a ledger, and a rule cannot
