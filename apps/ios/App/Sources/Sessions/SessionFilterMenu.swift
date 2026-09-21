@@ -123,8 +123,8 @@ struct FilterMenu: View, Equatable {
 ///
 /// Its own control rather than a section inside `FilterMenu`, because it is not
 /// a filter over sessions: it says how much of a card is drawn. The glyph is the
-/// reading - two people, faded, or crossed out - so the state is legible without
-/// opening anything.
+/// reading - a session line over two child rows, greying the rows the card is
+/// not drawing - so the state is legible without opening anything.
 struct SubagentMenu: View, Equatable {
   @Binding var subagents: SubagentDisplay
 
@@ -135,20 +135,45 @@ struct SubagentMenu: View, Equatable {
   var body: some View {
     Menu {
       Picker("Sub-agents", selection: $subagents) {
+        Text("All sub-agents").tag(SubagentDisplay.all)
         Text("Hide completed").tag(SubagentDisplay.active)
-        Text("Show all").tag(SubagentDisplay.all)
-        Text("Hide all").tag(SubagentDisplay.none)
+        Text("Hide sub-agents").tag(SubagentDisplay.none)
       }
     } label: {
-      Label("Sub-agents", systemImage: Self.glyph(subagents))
+      SubagentGlyph(value: subagents)
+        .accessibilityLabel("Sub-agents")
+        .accessibilityIdentifier("Sub-agents")
     }
   }
+}
 
-  static func glyph(_ show: SubagentDisplay) -> String {
-    switch show {
-    case .all: return "person.2.fill"
-    case .active: return "person.2"
-    case .none: return "person.2.slash"
+/// The sub-agent display preference drawn as one glyph, mirroring the dashboard
+/// and the extension: a session line at full strength over two child rows, and a
+/// row the card is not drawing goes grey rather than getting struck through. A
+/// hidden sub-agent has not failed, and a cross would say it had.
+///
+/// Rows rather than an SF Symbol because no symbol says "how much of a card is
+/// drawn", and the three clients have to be one drawing.
+struct SubagentGlyph: View {
+  let value: SubagentDisplay
+
+  private static let width: CGFloat = 17
+  private static let thickness: CGFloat = 2
+  private static let indent: CGFloat = 0.68
+  private static let hidden: CGFloat = 0.34
+
+  var body: some View {
+    VStack(alignment: .trailing, spacing: 4) {
+      Capsule().frame(width: Self.width, height: Self.thickness)
+      row(dimmed: value == .none)
+      row(dimmed: value != .all)
     }
+    .frame(width: Self.width, height: 16)
+  }
+
+  private func row(dimmed: Bool) -> some View {
+    Capsule()
+      .frame(width: Self.width * Self.indent, height: Self.thickness)
+      .opacity(dimmed ? Self.hidden : 1)
   }
 }

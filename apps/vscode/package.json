@@ -180,20 +180,20 @@
       {
         "command": "workerdeck.subagentsActive",
         "title": "Sub-agents: Hide Completed",
-        "category": "WorkerDeck",
-        "icon": "$(list-filter)"
+        "shortTitle": "Hide Completed",
+        "category": "WorkerDeck"
       },
       {
         "command": "workerdeck.subagentsAll",
         "title": "Sub-agents: Show All",
-        "category": "WorkerDeck",
-        "icon": "$(list-tree)"
+        "shortTitle": "All Sub-agents",
+        "category": "WorkerDeck"
       },
       {
         "command": "workerdeck.subagentsNone",
         "title": "Sub-agents: Hidden",
-        "category": "WorkerDeck",
-        "icon": "$(list-flat)"
+        "shortTitle": "Hide Sub-agents",
+        "category": "WorkerDeck"
       },
       {
         "command": "workerdeck.refreshSessions",
@@ -326,6 +326,32 @@
         "icon": "$(account)"
       }
     ],
+    "submenus": [
+      {
+        "id": "workerdeck.subagents.active",
+        "label": "Sub-agents",
+        "icon": {
+          "light": "media/subagents-active-light.svg",
+          "dark": "media/subagents-active-dark.svg"
+        }
+      },
+      {
+        "id": "workerdeck.subagents.all",
+        "label": "Sub-agents",
+        "icon": {
+          "light": "media/subagents-all-light.svg",
+          "dark": "media/subagents-all-dark.svg"
+        }
+      },
+      {
+        "id": "workerdeck.subagents.none",
+        "label": "Sub-agents",
+        "icon": {
+          "light": "media/subagents-none-light.svg",
+          "dark": "media/subagents-none-dark.svg"
+        }
+      }
+    ],
     "menus": {
       "editor/title": [
         {
@@ -366,29 +392,29 @@
           "group": "navigation@2"
         },
         {
-          "command": "workerdeck.subagentsActive",
+          "submenu": "workerdeck.subagents.active",
           "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'active'",
           "group": "navigation@3"
         },
         {
-          "command": "workerdeck.subagentsAll",
+          "submenu": "workerdeck.subagents.all",
           "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'all'",
           "group": "navigation@3"
         },
         {
-          "command": "workerdeck.subagentsNone",
+          "submenu": "workerdeck.subagents.none",
           "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'none'",
           "group": "navigation@3"
-        },
-        {
-          "command": "workerdeck.refreshSessions",
-          "when": "view == workerdeck.sessions",
-          "group": "navigation@4"
         },
         {
           "command": "workerdeck.resumeSession",
           "when": "view == workerdeck.sessions",
           "group": "1_workerdeck@1"
+        },
+        {
+          "command": "workerdeck.refreshSessions",
+          "when": "view == workerdeck.sessions",
+          "group": "1_workerdeck@2"
         },
         {
           "command": "workerdeck.addGateway",
@@ -418,6 +444,48 @@
         {
           "command": "workerdeck.host.actions",
           "when": "false"
+        }
+      ],
+      "workerdeck.subagents.active": [
+        {
+          "command": "workerdeck.subagentsAll",
+          "group": "1_subagents@1"
+        },
+        {
+          "command": "workerdeck.subagentsActive",
+          "group": "1_subagents@2"
+        },
+        {
+          "command": "workerdeck.subagentsNone",
+          "group": "1_subagents@3"
+        }
+      ],
+      "workerdeck.subagents.all": [
+        {
+          "command": "workerdeck.subagentsAll",
+          "group": "1_subagents@1"
+        },
+        {
+          "command": "workerdeck.subagentsActive",
+          "group": "1_subagents@2"
+        },
+        {
+          "command": "workerdeck.subagentsNone",
+          "group": "1_subagents@3"
+        }
+      ],
+      "workerdeck.subagents.none": [
+        {
+          "command": "workerdeck.subagentsAll",
+          "group": "1_subagents@1"
+        },
+        {
+          "command": "workerdeck.subagentsActive",
+          "group": "1_subagents@2"
+        },
+        {
+          "command": "workerdeck.subagentsNone",
+          "group": "1_subagents@3"
         }
       ]
     },

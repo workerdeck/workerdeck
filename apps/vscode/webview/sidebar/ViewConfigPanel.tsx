@@ -12,9 +12,9 @@ const GROUP_LABELS: Record<GroupBy, string> = {
 }
 
 const SUBAGENT_LABELS: Record<SubagentDisplay, string> = {
+  all: 'All sub-agents',
   active: 'Hide completed',
-  all: 'Show all',
-  none: 'Hide all',
+  none: 'Hide sub-agents',
 }
 
 const SORT_LABELS: Record<SortBy, string> = {

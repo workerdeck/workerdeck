@@ -131,7 +131,6 @@ export {
   SUBAGENT_DISPLAY_ORDER,
   SubagentDisplayIcon,
   SubagentToggle,
-  nextSubagentDisplay,
   type SubagentToggleProps,
 } from './components/agent/SubagentToggle.tsx'
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'

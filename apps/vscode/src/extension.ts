@@ -495,9 +495,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('workerdeck.hideFilter', () => sidebar.setFilterOpen(false)),
     vscode.commands.registerCommand('workerdeck.toggleFilter', () => sidebar.toggleFilter()),
 
-    vscode.commands.registerCommand('workerdeck.subagentsActive', () => sidebar.setSubagents('all')),
-    vscode.commands.registerCommand('workerdeck.subagentsAll', () => sidebar.setSubagents('none')),
-    vscode.commands.registerCommand('workerdeck.subagentsNone', () => sidebar.setSubagents('active')),
+    // Each command sets the state it names. They used to set the *next* one, which is what a
+    // press-to-cycle title button needs and the opposite of what a menu item means.
+    vscode.commands.registerCommand('workerdeck.subagentsActive', () => sidebar.setSubagents('active')),
+    vscode.commands.registerCommand('workerdeck.subagentsAll', () => sidebar.setSubagents('all')),
+    vscode.commands.registerCommand('workerdeck.subagentsNone', () => sidebar.setSubagents('none')),
 
     vscode.commands.registerCommand('workerdeck.showCompletedTasks', () => setTasksShowCompleted(true)),
     vscode.commands.registerCommand('workerdeck.hideCompletedTasks', () => setTasksShowCompleted(false)),

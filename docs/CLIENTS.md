@@ -482,10 +482,29 @@ it: what a sub-agent is doing is the most answerable thing a card can say, and a
 started closed on every row, on every client, unpersisted, hid it by default. How many rows draw
 is one preference instead - `ViewConfig.subagents`, `all` / `active` / `none`, default `active`
 (running and failed; a failed record is not a completed one) - read by `visibleSubagents` in
-protocol and offered as an icon-only cycling control, `SubagentToggle` in `packages/ui`. **This
-view has no header to put it in**, so here it is three `view/title` commands gated on one
-`workerdeck.sessionsSubagents` context key, the `showCompletedTasks`/`hideCompletedTasks` pair one
-state wider: the host owns the key and the `globalState` write, pushes `wd-subagents`, and reads
+protocol and offered as `SubagentToggle` in `packages/ui`: a glyph and a caret that opens a
+three-item menu. It was a press-to-cycle button first, and three stops is one more than a single
+glyph can report - the caret is what promises the other two. The glyph is the same drawing on
+every client: a session line at full strength over two child rows, greying the rows the card is
+not drawing. Nothing is struck through, because a sub-agent that is merely hidden has not failed.
+**This view has no header to put it in**, so here the trigger is the view title bar: three
+`contributes.submenus`, one per state, each gated on the same `workerdeck.sessionsSubagents`
+context key so exactly one is ever mounted, and each carrying that state's glyph as a light/dark
+SVG pair under `media/` (a command icon is not themed for you). Three submenus rather than one is
+what buys the icon-as-reading half of the pattern: a submenu's icon is static in the manifest, so
+the `when` clause is the only way it can follow the state. All three list the same three commands,
+whose `shortTitle` is what the menu draws; the title bar cannot tick the current item, which is
+the other reason the glyph has to report it. **Each command sets the state it names.** They used
+to set the *next* one - correct for the press-to-cycle button they were mounted in, and exactly
+backwards as menu items, where `Hide Completed` was setting `all`. The three labels are the
+dashboard's, in the dashboard's order (`all` / `active` / `none`), here and in the webview's own
+picker and in iOS's, because one control on three clients may not offer three vocabularies.
+The sessions title bar carries three buttons and no more - new, filter, sub-agents. **Refresh is
+in the overflow**, beside resume: the list is pushed over the socket, so a manual refresh is the
+thing you reach for when something has already gone wrong, and it was spending a permanent slot
+next to controls used every session. The commands survive for the palette, and the key is
+the `showCompletedTasks`/`hideCompletedTasks` pair one state wider: the host owns the key and the
+`globalState` write, pushes `wd-subagents`, and reads
 the webview's own `wd-view-config` back so the panel's picker and the title bar cannot disagree.
 Pressing a child selects the session and **hands the panel over to that agent's own work**
 (`wd-select-session`'s `subagentToolUseId` → `wd-open-subagent` → `SessionPanel.openSubagent`),
@@ -848,7 +867,10 @@ paints its label in the accent, which the card overrides to `.primary`; every ot
 row is explicit already. **Sub-agent rows are simply drawn**, as they are on every other client:
 there is no per-row disclosure and no `1/3` chip that was also its handle, and how many rows a
 card carries is `ViewConfig.subagents` - the icon-only `SubagentMenu` beside the funnel in the
-list's toolbar, persisted with the rest of the config. `ViewConfig`'s lenient `init(from:)` is
+list's toolbar, persisted with the rest of the config. Its glyph is `SubagentGlyph`, three
+capsules rather than an SF Symbol: no symbol says how much of a card is drawn, and the three
+clients have to be one drawing. No caret here - a toolbar item that opens a menu is iOS's own
+convention, and the dashboard's caret is paying for a header where that convention does not hold. `ViewConfig`'s lenient `init(from:)` is
 what lets that key be added: a config stored by an older build decodes with the new field at its
 default rather than failing and resetting every preference the person had. The claim is
 **pressed, not asserted**: `WorkerDeckAppUITests` runs the `UIPREVIEW=sessions` fixture and checks

@@ -20,11 +20,11 @@ final class SessionRowUITests: XCTestCase {
     let preference = app.descendants(matching: .any).matching(identifier: "Sub-agents").firstMatch
     XCTAssertTrue(preference.waitForExistence(timeout: 3))
     preference.tap()
-    app.buttons["Show all"].tap()
+    app.buttons["All sub-agents"].tap()
     XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'fable'")).firstMatch.waitForExistence(timeout: 3))
 
     preference.tap()
-    app.buttons["Hide all"].tap()
+    app.buttons["Hide sub-agents"].tap()
     XCTAssertFalse(steps.firstMatch.waitForExistence(timeout: 3), "hiding left sub-agent rows behind")
     XCTAssertTrue(app.navigationBars["Sessions"].exists, "the preference pushed a row")
 
