@@ -699,10 +699,18 @@ button.term-link {
 /* The head's own strip: the full lane, out of flow, so the head needs no
    footprint-cancelling margin - sticky confinement clamps the margin box, and
    a negative margin shrinks it to nothing, letting the head overshoot the
-   lane's end by its own height (two pinned prompts on screen at once). */
+   lane's end by its own height (two pinned prompts on screen at once).
+
+   The z-index is what makes the head's ground actually cover: the row it
+   overlays is a later sibling and carries `term-hoverable`, which is
+   `position: relative` for the row actions, so at `z-index: auto` the row's
+   text painted OVER the pinned head and the two read as one line of overlap.
+   Raising the strip - inside the lane's own stacking context, so it still
+   sits under nothing else - puts it back above the row it is there to hide. */
 [data-terminal] [data-sticky-lane] > [data-sticky-headlane] {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
 }
 

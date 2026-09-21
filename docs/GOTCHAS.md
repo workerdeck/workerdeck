@@ -1753,7 +1753,12 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   prompts on screen during handoff); the lane is positioned with `top`, never the `translateY`
   every other row gets (sticky resolves at layout time, a transform is paint-only); and
   `rangeExtractor` must compute the active prompt from the virtualizer's own offset, not a ref,
-  because the range pass runs before the render that would refresh it.
+  because the range pass runs before the render that would refresh it. A fourth: the head's sub-lane
+  carries `z-index: 1`. Without it the head's opaque ground did not actually cover - the real row is
+  a later sibling and carries `term-hoverable` (`position: relative`, for the row actions), so at
+  `z-index: auto` the row's own text painted OVER the pinned head and the two read as one line of
+  overlapping text. The lane above it is already a stacking context, so raising the sub-lane changes
+  nothing else.
 - **A focus-takeover guard keys on where the keyboard IS, not on how many times an effect ran.** A
   `mounted` ref (refuse first pass, follow after) is unsafe under React StrictMode: the dev-only
   remount preserves refs, so the second pass sees `mounted === true` and steals focus from a
