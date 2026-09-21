@@ -435,6 +435,16 @@ dormant one is woken through `parking.ensureLive`. The model sees the text insid
 transcript keeps the bare text with the origin, and clients caption the row. There is no
 request/response: a reply is another `peers_send` later, and the tool result says so.
 
+Both directions draw on their own kind of row, in the terminal theme's one non-ANSI tone, `peer`
+(cyan): `↦ Alpha: ...` for a message that arrived, `↤ Alpha: ...` for one this session sent.
+Neither collapses. Inbound is a `user` item, so it was always a top-level row, but it now also
+counts toward `transcriptProse` - a peer wrote it, so unlike the human's own prompt it can be
+unread. Outbound is a `peers_send` tool call, and `foldsTogether` refuses it in either position so
+it can never become one tick of `Ran 4 tools`; closed it is exactly one ellipsised line, open it is
+the full message plus the delivery result. The recipient's name only reaches a client inside that
+result's prose, so `peerDeliveredPrefix` / `peerDeliveredTo` (protocol) are the one format both
+sides agree on.
+
 Visibility is the session-scope rule with the sender's scope as the principal. Three guards bound
 an unattended exchange: a per-pair rate limit, a size cap that points at a file instead, and a hop
 chain that a human turn resets (`docs/GOTCHAS.md` §Peer messaging). Delegation with an

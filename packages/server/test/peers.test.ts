@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Runner, SendMessageOptions } from '@workerdeck/core'
-import type { PermissionRequest, SessionEvent, SessionEventBody, SessionInfo, SessionStatus } from '@workerdeck/protocol'
+import { runPeerTool, type Runner, type SendMessageOptions } from '@workerdeck/core'
+import { peerDeliveredTo, type PermissionRequest, type SessionEvent, type SessionEventBody, type SessionInfo, type SessionStatus } from '@workerdeck/protocol'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import { createPeerService } from '../src/services/peers.ts'
@@ -146,6 +146,16 @@ describe('peer service: send', () => {
     ])
     b.status = 'running'
     expect(await service.send('a', 'b', 'more')).toMatchObject({ delivered: true, queued: true })
+  })
+
+  it("names the target so the sender's transcript can draw the peer, not an id", async () => {
+    const { service, add } = rig()
+    add(new PeerRunner('a', { title: 'Alpha' }))
+    add(new PeerRunner('b', { title: 'Beta' }))
+    const result = await service.send('a', 'b', 'hello')
+    expect(result).toMatchObject({ delivered: true, sessionId: 'b', name: 'Beta' })
+    const spoken = await runPeerTool(service, 'a', 'peers_send', { sessionId: 'b', text: 'hello' })
+    expect(peerDeliveredTo(spoken.text)).toEqual({ sessionId: 'b', name: 'Beta' })
   })
 
   it('refuses self, oversize and closed targets, and reports a runner that throws', async () => {

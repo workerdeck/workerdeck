@@ -45,6 +45,22 @@ struct TranscriptTests {
           uuid: "s\(seq)")))
   }
 
+  @Test func aPeerMessageCarriesItsOriginOntoTheUserItem() {
+    let origin = MessageOrigin(sessionId: "sess-a", name: "Alpha", engine: .claude)
+    let state = reduce([
+      event(
+        1,
+        .userMessage(
+          UserMessageEvent(
+            message: ApiMessage(role: "user", content: .text("ping")), origin: origin,
+            uuid: "p1")))
+    ])
+    #expect(state.items == [.user(id: "p1", text: "ping", origin: origin)])
+    // The human's own prompt is what it always was: no origin.
+    let human = reduce([user(2, uuid: "h1", [.text("hello")])])
+    #expect(human.items == [.user(id: "h1", text: "hello")])
+  }
+
   /// A subagent streams concurrently with the thread that spawned it, so the
   /// in-flight item is a singleton **per agent**. Under one id these deltas weld
   /// two agents' half-sentences into a single row, and the first finished

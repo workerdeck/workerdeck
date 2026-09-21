@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { peerDeliveredPrefix } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import {
   foldsTogether,
+  peerOneLine,
+  peerNamesOf,
+  peerSendTarget,
+  peerSendText,
   planRun,
   runFailed,
   runSummary,
@@ -237,5 +242,64 @@ describe('runFailed', () => {
     expect(runFailed([{ ...call('Bash'), result: { text: 'no', isError: true } }])).toBe(true)
     expect(runFailed([call('Read')])).toBe(false)
     expect(runFailed([])).toBe(false)
+  })
+})
+
+describe('peer sends', () => {
+  const send = (id: string, input: Record<string, unknown>, result?: { text: string; isError?: boolean }): ToolCallItem => ({
+    kind: 'tool_call',
+    id,
+    name: 'mcp__workerdeck__peers_send',
+    input,
+    parentToolUseId: null,
+    status: 'settled',
+    ...(result ? { result: { text: result.text, isError: result.isError ?? false } } : {}),
+  })
+
+  it('never folds into a tool run, in either position', () => {
+    const bash: ToolCallItem = { kind: 'tool_call', id: 'b1', name: 'Bash', input: {}, parentToolUseId: null, status: 'settled' }
+    expect(foldsTogether(bash, send('s1', {}))).toBe(false)
+    expect(foldsTogether(send('s1', {}), bash)).toBe(false)
+    expect(foldsTogether(send('s1', {}), send('s2', {}))).toBe(false)
+    expect(foldsTogether(bash, bash)).toBe(true)
+  })
+
+  it('names the recipient from the tool reply, and falls back to the addressed id', () => {
+    expect(
+      peerSendTarget(
+        send('s1', { sessionId: 'sess-abcdefgh' }, { text: peerDeliveredPrefix('sess-abcdefgh', 'Alpha') + '; it was idle.' }),
+      ),
+    ).toBe('Alpha')
+    expect(
+      peerSendTarget(send('s2', { sessionId: 'sess-abcdefgh' }, { text: peerDeliveredPrefix('sess-abcdefgh') + '; it was idle.' })),
+    ).toBe('sess-abc')
+    expect(peerSendTarget(send('s3', { sessionId: 'sess-abcdefgh' }))).toBe('sess-abc')
+    expect(peerSendTarget(send('s4', { sessionId: 'sess-abcdefgh' }, { text: 'not delivered: nope', isError: true }))).toBe('sess-abc')
+  })
+
+  it('falls back to a name the rest of the transcript already knows', () => {
+    const incoming: TranscriptItem = {
+      kind: 'user',
+      id: 'u1',
+      text: 'ping',
+      origin: { kind: 'peer', sessionId: 'sess-abcdefgh', name: 'Beta' },
+    }
+    const names = peerNamesOf([incoming, send('s1', { sessionId: 'sess-abcdefgh' })])
+    expect(peerSendTarget(send('s2', { sessionId: 'sess-abcdefgh' }), names)).toBe('Beta')
+    expect(peerSendTarget(send('s3', { sessionId: 'sess-zzzzzzzz' }), names)).toBe('sess-zzz')
+    expect(peerSendTarget(send('s4', {}), names)).toBe('peer')
+  })
+
+  it('learns a name from a delivery receipt, for the peer that has not spoken yet', () => {
+    const receipt = send('s1', { sessionId: 'sess-abcdefgh' }, { text: peerDeliveredPrefix('sess-abcdefgh', 'Beta') + '; it was idle.' })
+    const names = peerNamesOf([receipt])
+    expect(names.get('sess-abcdefgh')).toBe('Beta')
+    expect(peerSendTarget(send('s2', { sessionId: 'sess-abcdefgh' }), names)).toBe('Beta')
+    expect(peerNamesOf([send('s3', { sessionId: 'sess-abcdefgh' }, { text: 'not delivered: nope', isError: true })]).size).toBe(0)
+  })
+
+  it('flattens the sent message to one line for the closed row', () => {
+    expect(peerOneLine(peerSendText(send('s1', { text: ' a\n\n  b ' })))).toBe('a b')
+    expect(peerSendText(send('s2', {}))).toBe('')
   })
 })

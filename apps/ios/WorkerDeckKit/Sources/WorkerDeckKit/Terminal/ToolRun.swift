@@ -10,6 +10,18 @@ import Foundation
 
 // MARK: - Membership
 
+/// A message to another session draws as itself, always. Folded into a run it
+/// becomes one tick of `Ran 4 tools`, which is exactly the collapse that hid
+/// the conversation the reader came for.
+public func isPeerSend(_ call: ToolCallItem) -> Bool {
+  isPeerSendTool(call.name)
+}
+
+public func isPeerSend(_ item: TranscriptItem) -> Bool {
+  if case .toolCall(let call) = item { return isPeerSend(call) }
+  return false
+}
+
 /// Do two consecutive tool calls belong to the same run?
 ///
 /// Same parent, and that is the whole rule - consecutiveness is enforced by the
@@ -17,9 +29,40 @@ import Foundation
 /// fragmenting around a failure hides it in a longer list rather than surfacing
 /// it). A subagent's calls are drawn stepped in behind a rule, so folding one
 /// together with a top-level call would count rows that are not adjacent on
-/// screen.
+/// screen. A peer send never folds, in either position.
 public func foldsTogether(_ a: ToolCallItem, _ b: ToolCallItem) -> Bool {
-  a.parentToolUseId == b.parentToolUseId
+  if isPeerSend(a) || isPeerSend(b) { return false }
+  return a.parentToolUseId == b.parentToolUseId
+}
+
+// MARK: - Peer traffic
+
+/// Who a peer message is from, as the row names them.
+public func peerName(_ origin: MessageOrigin) -> String {
+  origin.name ?? String(origin.sessionId.prefix(8))
+}
+
+/// Who a `peers_send` went to, read back out of the tool's own reply. Until the
+/// call settles there is no reply to read, so the row falls back to the id the
+/// model addressed.
+public func peerSendTarget(_ call: ToolCallItem) -> String {
+  if let result = call.result, !result.isError, let delivered = peerDeliveredTo(result.text) {
+    return delivered.name ?? String(delivered.sessionId.prefix(8))
+  }
+  if let sessionId = call.input["sessionId"]?.stringValue { return String(sessionId.prefix(8)) }
+  return "peer"
+}
+
+/// The message a `peers_send` carried, as the model wrote it.
+public func peerSendText(_ call: ToolCallItem) -> String {
+  call.input["text"]?.stringValue ?? ""
+}
+
+/// Whitespace runs to one space, trimmed: the closed row and the delivery line
+/// are each exactly one line, whatever the message's shape.
+public func peerOneLine(_ text: String) -> String {
+  text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+    .joined(separator: " ")
 }
 
 /// The family a tool is counted under in a run's breakdown: `shell` for either

@@ -1,10 +1,69 @@
+import { isPeerSendTool, peerDeliveredTo, type MessageOrigin } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { toolInputPreview } from '../../lib/format.ts'
 import { isShellTool } from '../../lib/tool-icon.ts'
 
 type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
+// A message to another session draws as itself, always. Folded into a run it becomes one tick of
+// `Ran 4 tools`, which is exactly the collapse that hid the conversation the reader came for.
+export function isPeerSend(item: TranscriptItem): boolean {
+  return item.kind === 'tool_call' && isPeerSendTool(item.name)
+}
+
+export function peerName(origin: MessageOrigin): string {
+  return origin.name ?? origin.sessionId.slice(0, 8)
+}
+
+// Every peer this transcript has named, by session id. A conversation names its peers twice over: an
+// arriving message carries the sender's name, a delivery receipt carries the recipient's. Either one
+// answers for the other direction, so a send that was only ever acknowledged by id still draws as a
+// name once the peer speaks, and a transcript recorded before the receipts carried names heals itself.
+export function peerNamesOf(items: readonly TranscriptItem[]): ReadonlyMap<string, string> {
+  const names = new Map<string, string>()
+  for (const item of items) {
+    if (item.kind === 'user') {
+      if (item.origin?.name) {
+        names.set(item.origin.sessionId, item.origin.name)
+      }
+      continue
+    }
+    if (item.kind === 'tool_call' && isPeerSendTool(item.name) && item.result && !item.result.isError) {
+      const delivered = peerDeliveredTo(item.result.text)
+      if (delivered?.name) {
+        names.set(delivered.sessionId, delivered.name)
+      }
+    }
+  }
+  return names
+}
+
+// Who a `peers_send` went to, read back out of the tool's own reply. Until the call settles there is
+// no reply to read, so the row falls back to what the rest of the transcript knows, then to the id the
+// model addressed.
+export function peerSendTarget(item: ToolCallItem, names?: ReadonlyMap<string, string>): string {
+  const delivered = item.result && !item.result.isError ? peerDeliveredTo(item.result.text) : undefined
+  const addressed = (item.input as { sessionId?: unknown } | null)?.sessionId
+  const sessionId = delivered?.sessionId ?? (typeof addressed === 'string' ? addressed : undefined)
+  if (sessionId === undefined) {
+    return 'peer'
+  }
+  return delivered?.name ?? names?.get(sessionId) ?? sessionId.slice(0, 8)
+}
+
+export function peerSendText(item: ToolCallItem): string {
+  const text = (item.input as { text?: unknown } | null)?.text
+  return typeof text === 'string' ? text : ''
+}
+
+export function peerOneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
 export function foldsTogether(a: ToolCallItem, b: ToolCallItem): boolean {
+  if (isPeerSend(a) || isPeerSend(b)) {
+    return false
+  }
   return a.parentToolUseId === b.parentToolUseId
 }
 

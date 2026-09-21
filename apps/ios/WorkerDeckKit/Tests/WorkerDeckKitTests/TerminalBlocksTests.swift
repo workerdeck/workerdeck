@@ -24,6 +24,16 @@ struct TerminalBlocksTests {
     .assistantText(id: id, text: body, streaming: false, parentToolUseId: parent)
   }
 
+  private func shape(_ blocks: [TerminalBlock]) -> [String] {
+    blocks.map { block in
+      switch block {
+      case .item(let leaf): return leaf.item.kind.rawValue
+      case .run(let run): return "run(\(run.run.count))"
+      case .task: return "task"
+      }
+    }
+  }
+
   // MARK: - Runs
 
   @Test("consecutive tool calls fold into one run")
@@ -62,6 +72,23 @@ struct TerminalBlocksTests {
     #expect(blocks.count == 1)
     guard case .run(let run) = blocks[0] else { Issue.record("expected one run"); return }
     #expect(run.run.count == 3)
+  }
+
+  @Test("a peer send stands alone, mid-run and either side of one")
+  func peerSendStandsAlone() {
+    // A message to another session is the transcript's headline, not one tick
+    // of `Ran 4 tools`: it is its own item block and breaks the run like prose.
+    let blocks = terminalBlocks([
+      .toolCall(call("a")), .toolCall(call("p", "mcp__workerdeck__peers_send")),
+      .toolCall(call("b", "Read")), .toolCall(call("c")),
+    ])
+    #expect(shape(blocks) == ["run(1)", "toolCall", "run(2)"])
+    #expect(blocks[1].key == "toolCall:p")
+    let peersOnly = terminalBlocks([
+      .toolCall(call("p", "peers_send")), .toolCall(call("l", "peers_list")),
+      .toolCall(call("k", "peers_peek")),
+    ])
+    #expect(shape(peersOnly) == ["toolCall", "run(2)"])
   }
 
   @Test("a subagent's call never folds with a top-level one")

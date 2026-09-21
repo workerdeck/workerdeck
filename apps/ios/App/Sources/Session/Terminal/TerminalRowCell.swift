@@ -412,16 +412,20 @@ enum TerminalTextRun {
         piece = NSMutableAttributedString(string: text)
       }
       let whole = NSRange(location: 0, length: piece.length)
-      // Applied over the top of whatever the inline markdown produced: the
-      // *traits* it carries (bold, italic, code) are honoured below by reading
-      // them back off the existing font, but the face and the grid are ours.
-      piece.enumerateAttribute(.font, in: whole) { value, range, _ in
-        let inline = value as? UIFont
+      // Applied over the top of whatever the planner's styled run carries: the
+      // traits are honoured, read off an existing font or off the inline
+      // presentation intent markdown parsing leaves behind (the bridge to
+      // NSAttributedString keeps the intent and sets no font), but the face and
+      // the grid are ours.
+      piece.enumerateAttributes(in: whole) { attributes, range, _ in
+        let inline = attributes[.font] as? UIFont
+        let intent = (attributes[.inlinePresentationIntent] as? NSNumber)
+          .map { InlinePresentationIntent(rawValue: $0.uintValue) } ?? []
         piece.addAttribute(
           .font,
           value: typography.uiFont(
-            bold: line.bold || inline?.isBold == true,
-            italic: line.italic || inline?.isItalic == true),
+            bold: line.bold || inline?.isBold == true || intent.contains(.stronglyEmphasized),
+            italic: line.italic || inline?.isItalic == true || intent.contains(.emphasized)),
           range: range)
       }
       piece.addAttributes(

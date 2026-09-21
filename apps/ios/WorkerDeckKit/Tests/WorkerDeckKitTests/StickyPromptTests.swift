@@ -51,6 +51,23 @@ struct StickyPromptTests {
     #expect(rows.rowIndex(forItem: 0) == prompts[0])
   }
 
+  @Test("a peer's message is not the human's prompt either")
+  func peerMessageIsNotAPrompt() {
+    // Another session wrote it. A turn is a thing a person started, and a
+    // header reading `Alpha: ...` would name a turn nobody here began.
+    let rows = TerminalRows.build(items: [
+      user("u0", "do the thing"),
+      answer("a0"),
+      .user(
+        id: "p1", text: "ping from Alpha",
+        origin: MessageOrigin(sessionId: "sess-a", name: "Alpha")),
+      answer("a1"),
+    ])
+    let prompts = rows.promptRows
+    #expect(prompts.count == 1)
+    #expect(rows.rowIndex(forItem: 0) == prompts[0])
+  }
+
   @Test("nothing is pinned while the prompt is on screen in its own right")
   func noPinWhileVisible() {
     // Two identical lines a pixel apart is the seam this theme exists not to

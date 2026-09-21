@@ -84,6 +84,10 @@
   --term-red: #f14c4c;
   --term-yellow: #d7ba7d;
   --term-magenta: #c586c0;
+  /* Peer traffic - a message from or to another session. Cyan is the one ANSI slot
+     the theme had left, and peer rows must not be confusable with a tool call
+     (blue), a success (green) or a wait (yellow). */
+  --term-peer: #56d4dd;
 
   /* Diff bands. Full-bleed backgrounds, so they are tuned to sit under body
      text rather than to be looked at: the CLI's added block is a dark green
@@ -123,6 +127,7 @@
   --term-red: #c62828;
   --term-yellow: #8a6d00;
   --term-magenta: #8b3a8b;
+  --term-peer: #0e7490;
 
   --term-add-fg: #12492a;
   --term-add-bg: #e2f6e5;
@@ -261,6 +266,9 @@
 }
 [data-terminal] [data-tone='magenta'] {
   color: var(--term-magenta);
+}
+[data-terminal] [data-tone='peer'] {
+  color: var(--term-peer);
 }
 
 /* Weight is the only other axis. A terminal has one type size, so emphasis has
@@ -409,6 +417,12 @@
      above it, swallowing everything in between. */
   user-select: text;
   cursor: text;
+}
+
+/* A peer's message is not what you typed, so it drops the prompt band: the peer
+   tone and the arrow carry it, and the band is reserved for the human's turn. */
+[data-terminal] .term-user[data-peer] {
+  background: none;
 }
 
 [data-terminal] .term-link {
@@ -1128,6 +1142,15 @@ button.term-link {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* A closed peer send: one row, ellipsised. The row must stay exactly one line
+   tall or the virtualizer's estimate for it is wrong. */
+.term-clip-1 {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .term-scrubber .term-scrub-ex {

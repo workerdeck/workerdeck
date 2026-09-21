@@ -56,6 +56,49 @@ struct ProtocolDecodingTests {
     #expect(block.content?.joinedText == "file.txt")
   }
 
+  @Test func decodesAPeerOriginOnAUserMessage() throws {
+    let event = try decodeEvent(
+      #"""
+      {"type":"user_message","seq":9,"ts":1722300000000,"parentToolUseId":null,"uuid":"p1",
+       "origin":{"kind":"peer","sessionId":"sess-a","name":"Alpha","engine":"codex",
+                 "hostId":"h1","hops":["sess-a"]},
+       "message":{"role":"user","content":"ping"}}
+      """#)
+    guard case .userMessage(let payload) = event.body else {
+      Issue.record("expected user_message, got \(event.body)")
+      return
+    }
+    #expect(
+      payload.origin
+        == MessageOrigin(
+          sessionId: "sess-a", name: "Alpha", engine: .codex, hostId: "h1", hops: ["sess-a"]))
+    #expect(payload.origin?.kind == "peer")
+  }
+
+  @Test func aUserMessageWithoutAnOriginIsTheHumans() throws {
+    let event = try decodeEvent(
+      #"{"type":"user_message","seq":9,"ts":1722300000000,"message":{"role":"user","content":"hi"}}"#)
+    guard case .userMessage(let payload) = event.body else {
+      Issue.record("expected user_message, got \(event.body)")
+      return
+    }
+    #expect(payload.origin == nil)
+  }
+
+  @Test func anEngineThisBuildDoesNotKnowDoesNotSinkThePeerMessage() throws {
+    let event = try decodeEvent(
+      #"""
+      {"type":"user_message","seq":9,"ts":1722300000000,
+       "origin":{"kind":"peer","sessionId":"sess-a","name":"Alpha","engine":"future"},
+       "message":{"role":"user","content":"ping"}}
+      """#)
+    guard case .userMessage(let payload) = event.body else {
+      Issue.record("expected user_message, got \(event.body)")
+      return
+    }
+    #expect(payload.origin == MessageOrigin(sessionId: "sess-a", name: "Alpha"))
+  }
+
   @Test func unknownEventTypeDegradesToUnknownNotError() throws {
     let event = try decodeEvent(
       #"{"type":"totally_new_event","seq":9,"ts":1722300000000,"stuff":{"a":1}}"#)

@@ -931,6 +931,14 @@ has the shape; these are the ways to get it wrong.
   answers `live: false` with its stored `info`. `send` is the only path through
   `parking.ensureLive`, and it goes through `Runner.sendMessage`, so every engine's mid-turn rule
   applies unchanged: claude buffers in `InputQueue`, codex `turn/steer`s, provider chains a turn.
+- **A peer's name travels twice, and a transcript resolves it from either.** `peers_send` answers
+  the model in prose, so the recipient's name only reaches a client inside
+  `peerDeliveredPrefix(sessionId, name)`, read back by `peerDeliveredTo`. That receipt names the
+  target; an arriving `user_message`'s `origin` names the sender. `peerNamesOf(items)` collects
+  both, and `peerSendTarget(item, names)` prefers the receipt, then what the rest of the transcript
+  knows, then the short id - so a send whose receipt predates the naming (or whose target had no
+  title yet) draws as a name the moment that peer speaks. A name never comes from a live sessions
+  list: the transcript has to read the same on replay as it did live.
 - **The loop guard is a hop chain reset by a human.** Each delivery carries `hops` (every session
   the exchange has passed through); the service remembers the last chain each session *received*
   and extends it when that session sends. A `user_message` with no `origin` clears it. Past

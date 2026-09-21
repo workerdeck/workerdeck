@@ -232,11 +232,16 @@ extension TerminalRows {
   /// the human's own `❯`), but it is the parent agent talking to its child. A
   /// turn is a thing a person started, so a sticky header naming a subagent's
   /// brief would answer a question nobody asked. `parentToolUseId` is the test.
+  ///
+  /// A **peer's message is excluded** for the same reason: it too is a
+  /// `user_message` on the wire, but another session wrote it, and pinning
+  /// `Alpha: ...` over the turn it started would name a turn nobody here
+  /// began. `origin` is the test.
   public var promptRows: [Int] {
     var found: [Int] = []
     for (index, row) in rows.enumerated() {
-      guard case .block(.item(let block)) = row, case .user(_, _, _, let parent) = block.item,
-        parent == nil
+      guard case .block(.item(let block)) = row,
+        case .user(_, _, _, let parent, let origin) = block.item, parent == nil, origin == nil
       else { continue }
       found.append(index)
     }
@@ -307,7 +312,7 @@ extension TranscriptRow {
 
 private func itemCopyText(_ item: TranscriptItem) -> String? {
   switch item {
-  case .user(_, let text, _, _):
+  case .user(_, let text, _, _, _):
     return text.isEmpty ? nil : text
   case .assistantText(_, let text, let streaming, _):
     // Not while streaming - the web hides its copy action there too: the text
@@ -331,6 +336,12 @@ private func itemCopyText(_ item: TranscriptItem) -> String? {
 }
 
 private func callCopyText(_ call: ToolCallItem) -> String? {
+  // A peer send is a message: what was said, never the address it was sent to
+  // or the delivery line it got back.
+  if isPeerSend(call) {
+    let text = peerSendText(call)
+    return text.isEmpty ? nil : text
+  }
   if let command = call.input["command"]?.stringValue { return command }
   let text = call.result?.text ?? ""
   return text.isEmpty ? nil : text

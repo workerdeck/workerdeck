@@ -25,6 +25,8 @@ the row-count rule the react reducer renders by and the runners count with
 **narrower** door beside it, and the one the unread badge counts through
 (`SessionInfo.proseCount`): assistant `text` blocks, a *failed* `turn_result`, a
 `session_error`, a `file_delivered` - output addressed to the human, not evidence of work.
+A `user_message` scores zero *unless* it carries an `origin`: the human cannot have an unread
+prompt of their own, but a peer session's message is news to them like any other.
 `thinking` and `tool_use` score zero there, which is the whole point: a session that tool-loops
 for a minute was ticking a badge 6, 7, 8 with nothing yet said. A successful `turn_result`
 scores zero too - it already carried its own prose, and counting both double-counts every

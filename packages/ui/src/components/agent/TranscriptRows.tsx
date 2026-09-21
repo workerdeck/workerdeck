@@ -9,6 +9,7 @@ import { resolveAffordances, type TerminalAffordances } from '../terminal/afford
 import { RunRow } from '../terminal/items.tsx'
 import { parentOf } from '../terminal/blocks.ts'
 import { briefPx, estimateBlockPx } from '../terminal/height.ts'
+import { PeerNamesProvider } from '../terminal/peer-names.tsx'
 import { TerminalScrubber } from '../terminal/scrubber.tsx'
 import { Scrubber } from './Scrubber.tsx'
 import { gapBefore, positionInRow, rowIndexForItem, type TranscriptRow } from './transcript-rows.ts'
@@ -318,64 +319,66 @@ export function TranscriptRows({
 
   return (
     <div ref={rowsRef} data-slot="transcript-rows" className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-      {virtualizer.getVirtualItems().map((virtualRow) => {
-        const row = rows[virtualRow.index]
-        const gapClass = virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index)) ? gap.className : undefined
-        const content =
-          'run' in row ? (
-            <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-              <RunRow items={row.run} />
-            </div>
-          ) : 'item' in row ? (
-            <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item, frameParentId))}>
-              <TranscriptItemView
-                item={row.item}
-                fileUrl={fileUrl}
-                attachmentUrl={attachmentUrl}
-                hostImage={hostImage}
+      <PeerNamesProvider items={items}>
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const row = rows[virtualRow.index]
+          const gapClass = virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index)) ? gap.className : undefined
+          const content =
+            'run' in row ? (
+              <div className={cn(read(boundary, row.index) && 'opacity-45')}>
+                <RunRow items={row.run} />
+              </div>
+            ) : 'item' in row ? (
+              <div className={cn(read(boundary, row.index) && 'opacity-45', nestedClass(row.item, frameParentId))}>
+                <TranscriptItemView
+                  item={row.item}
+                  fileUrl={fileUrl}
+                  attachmentUrl={attachmentUrl}
+                  hostImage={hostImage}
+                  terminal={terminal}
+                />
+              </div>
+            ) : 'text' in row && row.key === 'brief' ? (
+              <BriefRow text={row.text} terminal={terminal} />
+            ) : 'line' in row ? (
+              <RecapRow line={row.line} since={since} terminal={terminal} />
+            ) : (
+              <div className={cn(read(boundary, row.index) && 'opacity-45')}>
+                <TaskRow block={row} fileUrl={fileUrl} onOpenSubagent={onOpenSubagent} />
+              </div>
+            )
+          if (stickyPrompt && 'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined) {
+            const next = promptRows.find((index) => index > virtualRow.index)
+            const laneEnd = next === undefined ? virtualizer.getTotalSize() : (measurements[next]?.start ?? virtualRow.start)
+            return (
+              <StickyPromptLane
+                key={row.key}
+                top={virtualRow.start}
+                height={Math.max(laneEnd - virtualRow.start, 0)}
+                gapClass={gapClass}
+                gapPx={gap.px}
                 terminal={terminal}
+                scrollRoot={scrollElement}
+                index={virtualRow.index}
+                measureRef={virtualizer.measureElement}
+                head={terminal ? content : promptHeadText(row.item)}
+                content={content}
               />
-            </div>
-          ) : 'text' in row && row.key === 'brief' ? (
-            <BriefRow text={row.text} terminal={terminal} />
-          ) : 'line' in row ? (
-            <RecapRow line={row.line} since={since} terminal={terminal} />
-          ) : (
-            <div className={cn(read(boundary, row.index) && 'opacity-45')}>
-              <TaskRow block={row} fileUrl={fileUrl} onOpenSubagent={onOpenSubagent} />
-            </div>
-          )
-        if (stickyPrompt && 'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined) {
-          const next = promptRows.find((index) => index > virtualRow.index)
-          const laneEnd = next === undefined ? virtualizer.getTotalSize() : (measurements[next]?.start ?? virtualRow.start)
+            )
+          }
           return (
-            <StickyPromptLane
+            <div
               key={row.key}
-              top={virtualRow.start}
-              height={Math.max(laneEnd - virtualRow.start, 0)}
-              gapClass={gapClass}
-              gapPx={gap.px}
-              terminal={terminal}
-              scrollRoot={scrollElement}
-              index={virtualRow.index}
-              measureRef={virtualizer.measureElement}
-              head={terminal ? content : promptHeadText(row.item)}
-              content={content}
-            />
+              ref={virtualizer.measureElement}
+              data-index={virtualRow.index}
+              className={cn('absolute inset-x-0 top-0', gapClass)}
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
+              {content}
+            </div>
           )
-        }
-        return (
-          <div
-            key={row.key}
-            ref={virtualizer.measureElement}
-            data-index={virtualRow.index}
-            className={cn('absolute inset-x-0 top-0', gapClass)}
-            style={{ transform: `translateY(${virtualRow.start}px)` }}
-          >
-            {content}
-          </div>
-        )
-      })}
+        })}
+      </PeerNamesProvider>
       {scrubber && scrollElement?.parentElement
         ? createPortal(
             terminal ? (

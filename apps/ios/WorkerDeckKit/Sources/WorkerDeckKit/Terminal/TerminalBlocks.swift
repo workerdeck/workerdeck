@@ -130,7 +130,7 @@ public enum TerminalBlock: Equatable, Sendable {
 /// the same thing here.
 public func parentToolUseId(of item: TranscriptItem) -> String? {
   switch item {
-  case .user(_, _, _, let parent): return parent
+  case .user(_, _, _, let parent, _): return parent
   case .assistantText(_, _, _, let parent): return parent
   case .thinking(_, _, let parent): return parent
   case .toolCall(let call): return call.parentToolUseId
@@ -266,8 +266,10 @@ public func terminalBlocks(
 /// run grows and the virtualizer keeps the measurement it already has. A `Task`
 /// row sitting between two runs does not match here, which is why a task breaks
 /// a run - right, since the task is not adjacent to what follows it on screen.
+/// A peer send is a tool call on the wire and a message on the page: it is its
+/// own item block, never a run, so it breaks a run the way prose does.
 private func pushLeaf(_ out: inout [TerminalBlock], _ item: TranscriptItem, _ index: Int) {
-  if case .toolCall(let call) = item {
+  if case .toolCall(let call) = item, !isPeerSend(call) {
     if case .run(var previous) = out.last, let first = previous.run.first,
       foldsTogether(first, call)
     {
@@ -313,9 +315,11 @@ public func taskChildItems(_ block: TerminalTaskBlock) -> [TranscriptItem] {
 
 /// The theme's only spacing rule: one blank line between blocks, except between
 /// two tool calls - a collapsed task or run sits flush with the tool rows of the
-/// same turn.
+/// same turn. A peer send takes the blank line every other message gets rather
+/// than sitting flush against the run above it.
 public func needsBlank(_ previous: TranscriptItem, _ next: TranscriptItem) -> Bool {
-  !(previous.kind == .toolCall && next.kind == .toolCall)
+  if isPeerSend(previous) || isPeerSend(next) { return true }
+  return !(previous.kind == .toolCall && next.kind == .toolCall)
 }
 
 public func blockNeedsBlank(_ previous: TerminalBlock, _ next: TerminalBlock) -> Bool {

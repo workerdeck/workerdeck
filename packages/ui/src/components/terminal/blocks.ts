@@ -1,5 +1,5 @@
 import type { TranscriptItem } from '@workerdeck/react'
-import { foldsTogether } from './tool-run.ts'
+import { foldsTogether, isPeerSend } from './tool-run.ts'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
@@ -42,7 +42,7 @@ export function taskChildItems(block: TaskBlock): TranscriptItem[] {
 
 function pushLeaf(out: LeafBlock[], item: TranscriptItem, index: number): void {
   const previous = out.at(-1)
-  if (isRunCall(item)) {
+  if (isRunCall(item) && !isPeerSend(item)) {
     if (previous && 'run' in previous && foldsTogether(previous.run[0]!, item)) {
       previous.run.push(item)
       previous.indices.push(index)
@@ -112,13 +112,21 @@ export function terminalBlocks(items: readonly TranscriptItem[], offset = 0, fol
 }
 
 export function needsBlank(previous: TranscriptItem, next: TranscriptItem): boolean {
-  if (previous.kind === 'tool_call' && next.kind === 'tool_call') {
-    return false
+  if (isPeerSend(previous) || isPeerSend(next)) {
+    return true
   }
-  return true
+  return !(previous.kind === 'tool_call' && next.kind === 'tool_call')
+}
+
+function blockKind(block: TerminalBlock): string {
+  if (!('item' in block)) {
+    return 'tool_call'
+  }
+  // A peer send is a tool call on the wire and a message on the page, so it takes the blank line
+  // every other message gets rather than sitting flush against the run above it.
+  return isPeerSend(block.item) ? 'peer_send' : block.item.kind
 }
 
 export function blockNeedsBlank(previous: TerminalBlock, next: TerminalBlock): boolean {
-  const kind = (block: TerminalBlock) => ('item' in block ? block.item.kind : 'tool_call')
-  return !(kind(previous) === 'tool_call' && kind(next) === 'tool_call')
+  return !(blockKind(previous) === 'tool_call' && blockKind(next) === 'tool_call')
 }

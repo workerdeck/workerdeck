@@ -650,7 +650,7 @@ public func scrubberPeek(
 
   func excerptText(_ item: TranscriptItem) -> String {
     switch item {
-    case .user(_, let text, _, _): return text
+    case .user(_, let text, _, _, _): return text
     case .assistantText(_, let text, _, _): return text
     case .thinking(_, let text, _): return text
     case .notice(_, _, let text): return text

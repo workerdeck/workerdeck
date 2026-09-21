@@ -275,13 +275,22 @@ public enum TerminalPlanner {
     let nested = isNested(parentToolUseId(of: item), frameParentId: frameParentId)
 
     switch item {
-    case .user(_, let text, let attachments, _):
+    case .user(_, let text, let attachments, _, let origin):
       var lines: [TermLine] = []
+      // A peer's message drops the prompt band: the tone and the arrow carry
+      // it, and the band is reserved for the human's own turn.
+      let band: TermBand = origin == nil ? .user : .none
       if let attachments, !attachments.isEmpty {
         lines += wrapBody(
           attachments.map(\.name).joined(separator: ", "), metrics: metrics,
-          gutter: TermGlyph.prompt, gutterTone: .dim, tone: .dim, band: .user, nested: nested,
+          gutter: TermGlyph.prompt, gutterTone: .dim, tone: .dim, band: band, nested: nested,
           inOpen: inOpen)
+      }
+      if let origin {
+        lines += styledBody(
+          peerStyled(who: peerName(origin), text: text.isEmpty ? " " : text), metrics: metrics,
+          tone: .peer, gutter: TermGlyph.peerIn, gutterTone: .peer, nested: nested, inOpen: inOpen)
+        return lines
       }
       // One row per hard line, with the marker on the first only - a pasted
       // twenty-line prompt is one prompt, not twenty.
@@ -357,6 +366,10 @@ public enum TerminalPlanner {
     _ call: ToolCallItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool,
     frameParentId: String? = nil
   ) -> [TermLine] {
+    if isPeerSend(call) {
+      return planPeerSend(
+        call, metrics: metrics, expansion: expansion, inOpen: inOpen, frameParentId: frameParentId)
+    }
     let nested = isNested(call.parentToolUseId, frameParentId: frameParentId)
     let busy = callBusy(call)
     let tone = toolTone(call)
@@ -496,6 +509,79 @@ public enum TerminalPlanner {
         nested: nested, press: morePress, inOpen: wash)
     }
     return lines
+  }
+
+  /// A `peers_send`: what this session said to another, drawn as a message and
+  /// never as a tool - the port of web `PeerSendRow` (`items.tsx`).
+  ///
+  /// Closed it is exactly one line, `↤ Alpha: ...` ellipsised to the columns it
+  /// has; open it is the whole message and then the delivery line in faint. Both
+  /// states are planned (the first invariant in `TerminalPlan.swift`) and the
+  /// press is the call's own `ExpansionKey.call`, so it opens and closes like
+  /// any other result. A row whose open state would show nothing the closed one
+  /// did not - a message that fits, with no reply yet - carries no press, for
+  /// the reason `planToolCall` gives; the reply landing re-plans the row and the
+  /// press arrives with it.
+  static func planPeerSend(
+    _ call: ToolCallItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool,
+    frameParentId: String? = nil
+  ) -> [TermLine] {
+    let nested = isNested(call.parentToolUseId, frameParentId: frameParentId)
+    let tone: TermTone = callFailed(call) ? .red : .peer
+    let who = peerSendTarget(call)
+    let source = peerSendText(call).components(separatedBy: "\n")
+    let delivery = call.result.map { peerOneLine($0.text) } ?? ""
+
+    let closed = peerStyled(who: who, text: peerOneLine(peerSendText(call)))
+    let plain = String(closed.characters)
+    let cols = metrics.columns(gutter: 2, extra: nested ? nestedIndentCells * metrics.cell : 0)
+    let clipped = TerminalCells.clipped(plain, cols: cols)
+    let expandable = clipped != plain || source.count > 1 || !delivery.isEmpty
+    let key = ExpansionKey.call(call.id)
+    let open = expandable && expansion.isOpen(key)
+    let press: TermPress? = expandable ? .toggle(key) : nil
+    let wash = inOpen || open
+
+    guard open else {
+      var shown = closed
+      if clipped != plain {
+        // The styled head up to the character the clip kept, then the ellipsis:
+        // `text` and `attributed` stay the same characters.
+        let end = closed.index(closed.startIndex, offsetByCharacters: max(0, clipped.count - 1))
+        shown = AttributedString(closed[closed.startIndex..<end])
+        if !clipped.isEmpty { shown += AttributedString("…") }
+      }
+      return [
+        TermLine(
+          gutter: TermGlyph.peerOut, gutterTone: tone, text: clipped, attributed: shown,
+          tone: tone, nested: nested, press: press, inOpen: wash)
+      ]
+    }
+
+    let first = source.first ?? ""
+    var lines = styledBody(
+      peerStyled(who: who, text: first.isEmpty ? " " : first), metrics: metrics, tone: tone,
+      gutter: TermGlyph.peerOut, gutterTone: tone, nested: nested, press: press, inOpen: wash)
+    for line in source.dropFirst() {
+      lines += wrapBody(
+        line.isEmpty ? " " : line, metrics: metrics, gutter: "", tone: tone, nested: nested,
+        press: press, inOpen: wash)
+    }
+    if !delivery.isEmpty {
+      lines += wrapBody(
+        delivery, metrics: metrics, gutter: "", tone: .faint, nested: nested, press: press,
+        inOpen: wash)
+    }
+    return lines
+  }
+
+  /// `<who>: <text>` as one styled run with the name bold, so the measured
+  /// characters and the drawn ones are one string.
+  static func peerStyled(who: String, text: String) -> AttributedString {
+    var styled = AttributedString("\(who):")
+    styled.inlinePresentationIntent = .stronglyEmphasized
+    styled += AttributedString(" \(text)")
+    return styled
   }
 
   /// One image's box: exactly ``TermImage/boxLines`` planned lines, the first
@@ -735,7 +821,19 @@ public enum TerminalPlanner {
     gutter: String = "", gutterTone: TermTone = .dim, bold: Bool = false, nested: Bool = false,
     press: TermPress? = nil, inOpen: Bool = false
   ) -> [TermLine] {
-    let styled = MarkdownInline.attributed(source)
+    styledBody(
+      MarkdownInline.attributed(source), metrics: metrics, tone: tone, columns: columns,
+      indent: indent, gutter: gutter, gutterTone: gutterTone, bold: bold, nested: nested,
+      press: press, inOpen: inOpen)
+  }
+
+  /// Wrap an already-styled run: the characters wrap and are measured, the
+  /// styled run is sliced at the same offsets.
+  static func styledBody(
+    _ styled: AttributedString, metrics: TerminalMetrics, tone: TermTone, columns: Int = 2,
+    indent: Int = 0, gutter: String = "", gutterTone: TermTone = .dim, bold: Bool = false,
+    nested: Bool = false, press: TermPress? = nil, inOpen: Bool = false
+  ) -> [TermLine] {
     let plain = String(styled.characters)
     let extra = nested ? nestedIndentCells * metrics.cell : 0
     let cols = metrics.columns(gutter: columns, indent: indent, extra: extra)

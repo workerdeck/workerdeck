@@ -659,6 +659,22 @@ export type MessageOrigin = {
   hops?: string[]
 }
 
+// `peers_send` answers the model in prose, not in a structured result, so the recipient's name only
+// ever reaches a client inside that sentence. Both sides go through this pair rather than each
+// inventing a format: the engine writes the line, the transcript reads the name back out of it.
+export function peerDeliveredPrefix(sessionId: string, name?: string): string {
+  return `Delivered to ${name ? `${name} (${sessionId})` : sessionId}`
+}
+
+export function peerDeliveredTo(text: string): { sessionId: string; name?: string } | undefined {
+  const named = /^Delivered to (.+) \(([^()]+)\);/.exec(text)
+  if (named) {
+    return { sessionId: named[2]!, name: named[1]! }
+  }
+  const bare = /^Delivered to ([^()\s]+);/.exec(text)
+  return bare ? { sessionId: bare[1]! } : undefined
+}
+
 export type SessionInfo = {
   id: string
   sdkSessionId?: string
@@ -736,13 +752,17 @@ export function transcriptActivity(body: SessionEventBody): number {
 }
 
 // The narrower door beside transcriptActivity: output addressed to the human, not evidence of work.
-// `user_message` is deliberately absent: the human wrote it, so it can never be unread by them, and
-// counting it badged the sender's own prompt whenever they navigated away before the list next polled.
+// A `user_message` the human typed is deliberately absent: they wrote it, so it can never be unread by
+// them, and counting it badged the sender's own prompt whenever they navigated away before the list next
+// polled. One with an `origin` is the opposite case - a peer wrote it, the human has not seen it.
 export function transcriptProse(body: SessionEventBody): number {
   if ('parentToolUseId' in body && body.parentToolUseId != null) {
     return 0
   }
   switch (body.type) {
+    case 'user_message': {
+      return body.origin && !body.synthetic ? 1 : 0
+    }
     case 'assistant_message': {
       const content = body.message.content
       if (typeof content === 'string') {

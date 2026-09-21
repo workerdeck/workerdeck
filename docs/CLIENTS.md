@@ -984,6 +984,27 @@ has no say in - raw clipboard bytes over `UIPasteboard.image`, because a screens
 API takes PNG, and decoding to re-encode as JPEG would be a lossy round trip on the single thing
 people paste into an agent most.
 
+**Peer messaging** draws on the phone as it does on the web (`docs/ARCHITECTURE.md` §Peer
+messaging): `↦ Alpha: ...` for a message that arrived (a `user` item with an `origin`, off the
+prompt band, and never a `promptRows` entry, since a turn a peer started is not one the person
+did), `↤ Alpha: ...` for a `peers_send`, which the fold keeps out of every run as its own item
+block, so it takes a blank line either side like any message. Three things are this renderer's
+own. The closed send is one line by construction, `TerminalCells.clipped` to its columns where the
+web ellipsises with CSS, and both states are planned because the book must know every height. A
+send that fits and has no reply yet carries no press, by the rule `planToolCall` already applies
+(a target that visibly does nothing teaches the reader the theme is broken); the reply landing
+re-plans the row and the press arrives with it. And the bold name rides `TermLine.attributed` as
+an inline presentation intent, which `TerminalTextRun` reads alongside a font's traits: the bridge
+to `NSAttributedString` keeps the intent and sets no font, so a cell that read only fonts drew
+every inline `**bold**` at body weight.
+
+**The kit does not yet resolve a peer name from the transcript.** Web's `peerNamesOf` /
+`peerSendTarget(item, names)` (`docs/GOTCHAS.md` §Peer messaging) let a send that was only
+acknowledged by id draw as a name once that peer speaks; `ToolRun.swift`'s `peerSendTarget` reads
+the receipt alone, so the phone still shows the short id there. Porting it means threading the map
+through `TerminalPlanner`, whose contract is "a pure function of `(row, metrics, expansion)`" - the
+map is a session-level fact, so it belongs in that tuple, not in a static.
+
 **The phone draws no list selection**, deliberately: the dashboard paints a card blue and moves
 the blue down to a step when a sub-agent is framed, but that needs list and panel on screen
 together, and a `NavigationStack` push means the list is gone. So `--row-selected`,

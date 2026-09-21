@@ -779,8 +779,54 @@ const images: TranscriptItem[] = [
   }),
 ]
 
+const peers: TranscriptItem[] = [
+  item({
+    kind: 'user',
+    text: "do you know anything about a customer named Alice (Alice Ford)? In alpha's customers.txt she's listed alongside John Doe and Frank Mayer. Please reply with whatever you know from your project (/Users/atomic/projects/sandbox/beta), or say you have nothing.",
+    origin: { kind: 'peer', sessionId: 'sess-alpha-7f3c', name: 'Alpha', engine: 'claude' },
+  }),
+  item({
+    kind: 'assistant_text',
+    text: "I'll check the project files for Alice Ford and report only what's actually present.",
+    streaming: false,
+    parentToolUseId: null,
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'Bash',
+    input: { command: 'ls /Users/atomic/projects/sandbox/beta' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: 'sales.txt', isError: false },
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'Grep',
+    input: { pattern: 'Alice' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: '', isError: false },
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'mcp__workerdeck__peers_send',
+    input: {
+      sessionId: 'sess-alpha-7f3c',
+      text: 'I found no information about Alice Ford in /Users/atomic/projects/sandbox/beta. The only file, sales.txt, mentions Frank Mayer and John Doe.',
+    },
+    parentToolUseId: null,
+    status: 'settled',
+    result: {
+      text: 'Delivered to Alpha (sess-alpha-7f3c); it is mid-turn and will read the message between tool calls.',
+      isError: false,
+    },
+  }),
+  item({ kind: 'turn_result', subtype: 'success', isError: false, durationMs: 29_600, totalCostUsd: 0.004 }),
+]
+
 export const FIXTURES: { key: string; label: string; state: TranscriptState }[] = [
   { key: 'subagents', label: 'subagents (interleaved)', state: base(subagents, 'running') },
+  { key: 'peers', label: 'peer messages', state: base(peers, 'idle') },
   { key: 'run', label: 'live run', state: base(run, 'running') },
   { key: 'diff', label: 'file edit', state: base(diff, 'idle') },
   { key: 'markdown', label: 'markdown', state: base(markdown, 'idle') },

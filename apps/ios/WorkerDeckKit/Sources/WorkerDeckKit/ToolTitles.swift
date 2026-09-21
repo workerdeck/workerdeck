@@ -28,7 +28,17 @@ public enum ToolTitles {
     "CodexWebSearch": "Searching the web",
     "CodexImageGeneration": "Generating an image",
     "CodexImageView": "Viewing an image",
+    "peers_list": "Listing peer sessions",
+    "peers_peek": "Peeking at a peer session",
+    "peers_send": "Messaging a peer session",
+    "mcp__workerdeck__peers_list": "Listing peer sessions",
+    "mcp__workerdeck__peers_peek": "Peeking at a peer session",
+    "mcp__workerdeck__peers_send": "Messaging a peer session",
   ]
+
+  /// The peer tools both engines expose, under the bare name and the
+  /// MCP-prefixed one. Mirrors protocol's `PEER_SEND_TOOLS`.
+  public static let peerSendTools: Set<String> = ["peers_send", "mcp__workerdeck__peers_send"]
 
   /// Declared title → built-in table → nothing.
   public static func title(for name: String, titles: [String: String]? = nil) -> String? {
@@ -57,4 +67,10 @@ public enum ToolTitles {
     guard flat.count > maxChars else { return flat }
     return String(flat.prefix(maxChars - 1)) + "…"
   }
+}
+
+/// Is this call a message to another session? A client that draws peer traffic
+/// as its own kind of row has to recognise the call by name.
+public func isPeerSendTool(_ name: String) -> Bool {
+  ToolTitles.peerSendTools.contains(name)
 }

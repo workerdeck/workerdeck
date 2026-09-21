@@ -1,7 +1,7 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from 'react'
 import { cn } from '../../lib/utils.ts'
 
-export type Tone = 'fg' | 'bright' | 'dim' | 'faint' | 'mark' | 'blue' | 'green' | 'red' | 'yellow' | 'magenta'
+export type Tone = 'fg' | 'bright' | 'dim' | 'faint' | 'mark' | 'blue' | 'green' | 'red' | 'yellow' | 'magenta' | 'peer'
 
 export interface RowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   glyph?: ReactNode

@@ -195,6 +195,23 @@ describe('transcriptProse', () => {
         synthetic: true,
       }),
     ).toBe(0)
+    // A peer wrote this one, so the human has not read it: it badges like any other unread prose.
+    expect(
+      transcriptProse({
+        type: 'user_message',
+        message: { role: 'user', content: 'ping' },
+        parentToolUseId: null,
+        origin: { kind: 'peer', sessionId: 'sess-a', name: 'Alpha' },
+      }),
+    ).toBe(1)
+    expect(
+      transcriptProse({
+        type: 'user_message',
+        message: { role: 'user', content: 'ping' },
+        parentToolUseId: 'toolu_a',
+        origin: { kind: 'peer', sessionId: 'sess-a' },
+      }),
+    ).toBe(0)
     expect(
       transcriptProse({
         type: 'stream_delta',

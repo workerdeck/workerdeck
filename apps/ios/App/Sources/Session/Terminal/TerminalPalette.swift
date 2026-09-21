@@ -42,6 +42,8 @@ enum TerminalPalette {
     case .red: return dynamic(dark: 0xf1_4c_4c, light: 0xc6_28_28)
     case .yellow: return dynamic(dark: 0xd7_ba_7d, light: 0x8a_6d_00)
     case .magenta: return dynamic(dark: 0xc5_86_c0, light: 0x8b_3a_8b)
+    // Peer traffic. Cyan, the one ANSI slot the theme had left.
+    case .peer: return dynamic(dark: 0x56_d4_dd, light: 0x0e_74_90)
     case .diffAdd: return dynamic(dark: 0xb5_e8_a9, light: 0x12_49_2a)
     case .diffRemove: return dynamic(dark: 0xf0_a6_a6, light: 0x7a_1f_24)
     case .diffContext: return dynamic(dark: 0x9a_9a_9a, light: 0x4a_4a_4a)

@@ -53,6 +53,12 @@ describe('terminalBlocks', () => {
     expect(shape(terminalBlocks(items))).toEqual(['assistant_text', 'run(3)', 'assistant_text'])
   })
 
+  it('leaves a peer send standing alone, mid-run and either side of one', () => {
+    const items = [tool('Bash'), tool('mcp__workerdeck__peers_send'), tool('Read'), tool('Bash')]
+    expect(shape(terminalBlocks(items))).toEqual(['run(1)', 'tool_call', 'run(2)'])
+    expect(shape(terminalBlocks([tool('peers_send'), tool('peers_list'), tool('peers_peek')]))).toEqual(['tool_call', 'run(2)'])
+  })
+
   it('breaks a run on anything the model said between two calls', () => {
     const items = [tool('Bash'), text('that failed, trying again'), tool('Bash')]
     expect(shape(terminalBlocks(items))).toEqual(['run(1)', 'assistant_text', 'run(1)'])

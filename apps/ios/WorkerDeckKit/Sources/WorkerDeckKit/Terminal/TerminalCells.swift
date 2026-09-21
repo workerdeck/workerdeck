@@ -234,6 +234,29 @@ public enum TerminalCells {
     return (max(1, total), exact)
   }
 
+  /// `text` when it fits in `cols` cells, else the widest head that leaves the
+  /// last cell to an ellipsis - the theme's one truncation rule, counted in
+  /// cells rather than characters so a wide glyph cannot push the row past its
+  /// budget. The caller gets exactly one planned line out of it by construction.
+  public static func clipped(_ text: String, cols: Int) -> String {
+    guard cols > 0 else { return "" }
+    var width = 0
+    for character in text {
+      width += clusterCells(character).cells
+      if width > cols { break }
+    }
+    guard width > cols else { return text }
+    var head = ""
+    var used = 0
+    for character in text {
+      let size = clusterCells(character).cells
+      if used + size > cols - 1 { break }
+      head.append(character)
+      used += size
+    }
+    return head + "…"
+  }
+
   /// The rendered lines themselves - what the row **draws**.
   ///
   /// This is the iOS port's one real divergence from the web client, and it is a

@@ -197,10 +197,11 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
   /// prompt row, which is the one row in a transcript that must never be wrong
   /// about who said it. Defaulted rather than required (unlike the other kinds)
   /// because the overwhelming case genuinely has no parent; mirrors the react
-  /// reducer's optional field.
+  /// reducer's optional field. `origin` is set when a peer session wrote the
+  /// message: it draws as peer traffic, never as the human's prompt.
   case user(
     id: String, text: String, attachments: [MessageAttachment]? = nil,
-    parentToolUseId: String? = nil)
+    parentToolUseId: String? = nil, origin: MessageOrigin? = nil)
   case assistantText(id: String, text: String, streaming: Bool, parentToolUseId: String?)
   case thinking(id: String, text: String, parentToolUseId: String?)
   case toolCall(ToolCallItem)
@@ -218,7 +219,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
 
   public var id: String {
     switch self {
-    case .user(let id, _, _, _): return id
+    case .user(let id, _, _, _, _): return id
     case .assistantText(let id, _, _, _): return id
     case .thinking(let id, _, _): return id
     case .toolCall(let call): return call.id
@@ -692,7 +693,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
             items,
             .user(
               id: id, text: text, attachments: payload.attachments,
-              parentToolUseId: payload.parentToolUseId))
+              parentToolUseId: payload.parentToolUseId, origin: payload.origin))
         }
       default:
         break

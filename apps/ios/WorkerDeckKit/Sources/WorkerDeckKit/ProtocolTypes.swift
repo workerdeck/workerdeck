@@ -794,12 +794,95 @@ public struct FilePatch: Codable, Sendable, Equatable {
   }
 }
 
+/// Who wrote a `user_message` when it was not the person at the keyboard.
+/// Absent means the human; `peer` is another session on this or a sibling
+/// gateway, delivered through the peer tools. Mirrors protocol's `MessageOrigin`.
+public struct MessageOrigin: Sendable, Equatable {
+  public let kind: String
+  public let sessionId: String
+  public let name: String?
+  public let engine: ProfileEngine?
+  public let hostId: String?
+  public let hops: [String]?
+
+  public init(
+    kind: String = "peer", sessionId: String, name: String? = nil, engine: ProfileEngine? = nil,
+    hostId: String? = nil, hops: [String]? = nil
+  ) {
+    self.kind = kind
+    self.sessionId = sessionId
+    self.name = name
+    self.engine = engine
+    self.hostId = hostId
+    self.hops = hops
+  }
+}
+
+extension MessageOrigin: Decodable {
+  private enum CodingKeys: String, CodingKey {
+    case kind, sessionId, name, engine, hostId, hops
+  }
+
+  // An engine this build does not know must not sink the message it is stamped
+  // on: the name and the text are what the row draws, the engine is a detail.
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    kind = try c.decode(String.self, forKey: .kind)
+    sessionId = try c.decode(String.self, forKey: .sessionId)
+    name = try c.decodeIfPresent(String.self, forKey: .name)
+    engine = try? c.decodeIfPresent(ProfileEngine.self, forKey: .engine)
+    hostId = try c.decodeIfPresent(String.self, forKey: .hostId)
+    hops = try c.decodeIfPresent([String].self, forKey: .hops)
+  }
+}
+
+/// A `peers_send` answers the model in prose, so the recipient's name only ever
+/// reaches a client inside that sentence. Both sides go through this pair
+/// rather than each inventing a format: the engine writes the line
+/// (`peerDeliveredPrefix`), the transcript reads the name back out of it
+/// (`peerDeliveredTo`). Mirrors the protocol pair of the same names.
+public struct PeerDelivery: Sendable, Equatable {
+  public var sessionId: String
+  public var name: String?
+
+  public init(sessionId: String, name: String? = nil) {
+    self.sessionId = sessionId
+    self.name = name
+  }
+}
+
+public func peerDeliveredPrefix(sessionId: String, name: String? = nil) -> String {
+  "Delivered to \(name.map { "\($0) (\(sessionId))" } ?? sessionId)"
+}
+
+public func peerDeliveredTo(_ text: String) -> PeerDelivery? {
+  let range = NSRange(text.startIndex..., in: text)
+  if let named = peerDeliveredNamed.firstMatch(in: text, range: range),
+    let name = Range(named.range(at: 1), in: text),
+    let sessionId = Range(named.range(at: 2), in: text)
+  {
+    return PeerDelivery(sessionId: String(text[sessionId]), name: String(text[name]))
+  }
+  if let bare = peerDeliveredBare.firstMatch(in: text, range: range),
+    let sessionId = Range(bare.range(at: 1), in: text)
+  {
+    return PeerDelivery(sessionId: String(text[sessionId]))
+  }
+  return nil
+}
+
+private let peerDeliveredNamed = try! NSRegularExpression(
+  pattern: #"^Delivered to (.+) \(([^()]+)\);"#)
+private let peerDeliveredBare = try! NSRegularExpression(pattern: #"^Delivered to ([^()\s]+);"#)
+
 public struct UserMessageEvent: Decodable, Sendable, Equatable {
   public let message: ApiMessage
   public let parentToolUseId: String?
   public let replay: Bool?
   /// True for tool results and other synthetic user-role messages.
   public let synthetic: Bool?
+  /// Set when a peer session wrote this message rather than the human.
+  public let origin: MessageOrigin?
   /// Files sent with this message, by reference. `message` carries the typed text
   /// alone - the bytes went to the model, not into the event log.
   public let attachments: [MessageAttachment]?
@@ -814,13 +897,14 @@ public struct UserMessageEvent: Decodable, Sendable, Equatable {
 
   public init(
     message: ApiMessage, parentToolUseId: String? = nil, replay: Bool? = nil,
-    synthetic: Bool? = nil, attachments: [MessageAttachment]? = nil,
+    synthetic: Bool? = nil, origin: MessageOrigin? = nil, attachments: [MessageAttachment]? = nil,
     patch: FilePatch? = nil, uuid: String? = nil
   ) {
     self.message = message
     self.parentToolUseId = parentToolUseId
     self.replay = replay
     self.synthetic = synthetic
+    self.origin = origin
     self.attachments = attachments
     self.patch = patch
     self.uuid = uuid

@@ -22,7 +22,7 @@ struct TranscriptItemView: View {
 
   var body: some View {
     switch item {
-    case .user(_, let text, let attachments, _):
+    case .user(_, let text, let attachments, _, _):
       UserBubble(text: text, attachments: attachments ?? [])
     case .assistantText(_, let text, let streaming, let parentToolUseId):
       AssistantText(text: text, streaming: streaming)

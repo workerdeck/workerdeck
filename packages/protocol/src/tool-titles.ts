@@ -48,3 +48,12 @@ export function sanitizeToolTitle(title: string | undefined, name?: string): str
   const points = [...flat]
   return points.length > TOOL_TITLE_MAX_CHARS ? points.slice(0, TOOL_TITLE_MAX_CHARS - 1).join('') + '…' : flat
 }
+
+// The peer tools both engines expose, under the bare name and the MCP-prefixed one. A client that
+// draws peer traffic as its own kind of row has to recognise the call by name, so the list lives
+// here rather than in any one client.
+export const PEER_SEND_TOOLS = ['peers_send', 'mcp__workerdeck__peers_send'] as const
+
+export function isPeerSendTool(name: string): boolean {
+  return (PEER_SEND_TOOLS as readonly string[]).includes(name)
+}

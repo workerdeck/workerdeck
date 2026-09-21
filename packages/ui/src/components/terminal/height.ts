@@ -5,7 +5,7 @@ import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.
 import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { todoLine, todoPreview } from './todos.ts'
-import { planRun, runSummary, taskSummary } from './tool-run.ts'
+import { isPeerSend, peerName, planRun, runSummary, taskSummary } from './tool-run.ts'
 
 export type CellMetrics = {
   width: number
@@ -595,8 +595,9 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
         acc = add(acc, rowH(item.attachments.map((a) => a.name).join(', '), m, { extraPx }))
       }
       if (item.text) {
-        for (const line of item.text.split('\n')) {
-          acc = add(acc, rowH(line || ' ', m, { extraPx }))
+        const who = item.origin ? `${peerName(item.origin)}: ` : ''
+        for (const [index, line] of item.text.split('\n').entries()) {
+          acc = add(acc, rowH((index === 0 ? who : '') + (line || ' '), m, { extraPx }))
         }
       }
       return acc
@@ -608,6 +609,10 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
       return rowH(item.text, m, { extraPx })
     }
     case 'tool_call': {
+      // A closed peer send is exactly one ellipsised row, whatever the message's length.
+      if (isPeerSend(item)) {
+        return { px: m.line + extraPx, exact: true }
+      }
       return toolRowHeight(item, m, extraPx)
     }
     case 'turn_result': {

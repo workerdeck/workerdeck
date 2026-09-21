@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  peerDeliveredPrefix,
   transcriptProse,
   type MessageOrigin,
   type ProfileEngine,
@@ -27,7 +28,7 @@ export type PeerPeek = PeerSessionSummary & {
   recent: string[]
 }
 
-export type PeerSendResult = { delivered: true; sessionId: string; queued: boolean } | { delivered: false; reason: string }
+export type PeerSendResult = { delivered: true; sessionId: string; name?: string; queued: boolean } | { delivered: false; reason: string }
 
 export type PeerSendOptions = {
   hops?: string[]
@@ -132,10 +133,11 @@ export async function runPeerTool(peers: PeerDirectory, from: string, name: stri
         if (!result.delivered) {
           return { text: `not delivered: ${result.reason}`, isError: true }
         }
+        const head = peerDeliveredPrefix(result.sessionId, result.name)
         return {
           text: result.queued
-            ? `Delivered to ${result.sessionId}; it is mid-turn and will read the message between tool calls. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`
-            : `Delivered to ${result.sessionId}; it was idle and has started a turn on your message. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`,
+            ? `${head}; it is mid-turn and will read the message between tool calls. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`
+            : `${head}; it was idle and has started a turn on your message. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`,
           isError: false,
         }
       }

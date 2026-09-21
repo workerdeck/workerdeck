@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { MessageOrigin } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
@@ -8,13 +8,14 @@ import { PromptTokenText } from '../agent/PromptTokenText.tsx'
 import { BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
+import { usePeerNames } from './peer-names.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
 import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, imagePlaceholder } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
 import { useToolTitle } from '../agent/tool-titles.tsx'
 import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
-import { planRun, runFailed, runSummary } from './tool-run.ts'
+import { isPeerSend, peerName, peerOneLine, peerSendTarget, peerSendText, planRun, runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
@@ -41,26 +42,92 @@ export function peerLabel(origin: MessageOrigin): string {
   return `message from ${origin.engine ? `${origin.engine} session ` : 'session '}${who}`
 }
 
+export const PEER_IN_GLYPH = '↦'
+export const PEER_OUT_GLYPH = '↤'
+
+// The row peer traffic draws on, both directions. Never folded into a tool run and never summarised
+// away: one agent talking to another is the transcript's headline, not its evidence.
+function PeerRow({ glyph, who, body, tone = 'peer', clip }: { glyph: string; who: string; body: ReactNode; tone?: Tone; clip?: boolean }) {
+  const line = (
+    <>
+      <Ink tone={tone} bold>
+        {who}
+      </Ink>
+      {': '}
+      {body}
+    </>
+  )
+  return (
+    <Row glyph={glyph} glyphTone={tone} tone={tone}>
+      {clip ? <span className="term-clip-1">{line}</span> : line}
+    </Row>
+  )
+}
+
+export function PeerSendRow({ item }: { item: ToolCallItem }) {
+  const [open, setOpen] = useState(false)
+  const names = usePeerNames()
+  const reveal = useRevealOnOpen(open)
+  const lines = peerSendText(item).split('\n')
+  const failed = item.status === 'failed' || item.result?.isError === true
+  const tone: Tone = failed ? 'red' : 'peer'
+
+  return (
+    <WithActions actions={<BookmarkAction id={item.id} />}>
+      <div ref={reveal} className={open ? 'term-open' : undefined}>
+        <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
+          <PeerRow
+            glyph={PEER_OUT_GLYPH}
+            who={peerSendTarget(item, names)}
+            tone={tone}
+            clip={!open}
+            body={open ? lines[0] || ' ' : peerOneLine(lines.join(' '))}
+          />
+        </Pressable>
+        {open ? (
+          <div>
+            {lines.slice(1).map((line, index) => (
+              <Row key={index} tone={tone}>
+                {line || ' '}
+              </Row>
+            ))}
+            {item.result ? <Row tone="faint">{peerOneLine(item.result.text)}</Row> : null}
+          </div>
+        ) : null}
+      </div>
+    </WithActions>
+  )
+}
+
 export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user' }> }) {
   return (
     <WithActions actions={<BookmarkAction id={item.id} />}>
-      <div className="term-user">
-        {item.origin ? (
-          <Row glyph={PROMPT_GLYPH} glyphTone="dim" tone="dim">
-            {peerLabel(item.origin)}
-          </Row>
-        ) : null}
+      <div className="term-user" data-peer={item.origin ? '' : undefined}>
         {item.attachments?.length ? (
           <Row glyph={PROMPT_GLYPH} glyphTone="dim" tone="dim">
             {item.attachments.map((attachment) => attachment.name).join(', ')}
           </Row>
         ) : null}
         {item.text
-          ? item.text.split('\n').map((line, index) => (
-              <Row key={index} glyph={index === 0 ? PROMPT_GLYPH : undefined} glyphTone="dim" tone="fg">
-                {line ? <PromptTokenText text={line} /> : ' '}
-              </Row>
-            ))
+          ? item.text.split('\n').map((line, index) =>
+              item.origin && index === 0 ? (
+                <PeerRow
+                  key={index}
+                  glyph={PEER_IN_GLYPH}
+                  who={peerName(item.origin)}
+                  body={line ? <PromptTokenText text={line} /> : ' '}
+                />
+              ) : (
+                <Row
+                  key={index}
+                  glyph={!item.origin && index === 0 ? PROMPT_GLYPH : undefined}
+                  glyphTone="dim"
+                  tone={item.origin ? 'peer' : 'fg'}
+                >
+                  {line ? <PromptTokenText text={line} /> : ' '}
+                </Row>
+              ),
+            )
           : null}
       </div>
     </WithActions>
@@ -280,7 +347,10 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
 
 export function RunRow({ items }: { items: ToolCallItem[] }) {
   const plan = planRun(items)
-  return plan.kind === 'call' ? <ToolRow item={plan.item} /> : <ToolRunRow items={plan.items} />
+  if (plan.kind === 'summary') {
+    return <ToolRunRow items={plan.items} />
+  }
+  return isPeerSend(plan.item) ? <PeerSendRow item={plan.item} /> : <ToolRow item={plan.item} />
 }
 
 export function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {

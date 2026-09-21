@@ -67,6 +67,10 @@ public struct TerminalMetrics: Equatable, Sendable {
 /// tool output) and never for a grey.
 public enum TermTone: String, Equatable, Sendable {
   case fg, bright, dim, faint, mark, blue, green, red, yellow, magenta
+  /// Peer traffic, a message from or to another session. Cyan: the one ANSI
+  /// slot the theme had left, and one that cannot be read as a tool call
+  /// (blue), a success (green) or a wait (yellow).
+  case peer
   case diffAdd, diffRemove, diffContext, diffNumber
 }
 
@@ -212,6 +216,9 @@ public enum TermGlyph {
   public static let thinking = "✻"
   public static let notice = "!"
   public static let file = "⤓"
+  /// A message that arrived from another session, and one this session sent.
+  public static let peerIn = "↦"
+  public static let peerOut = "↤"
   public static let compaction = "≡"
   public static let compactionPending = "⋯"
   /// The catch-up seam.

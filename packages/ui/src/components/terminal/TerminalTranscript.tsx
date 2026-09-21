@@ -8,6 +8,7 @@ import {
   CompactionRow,
   FileRow,
   NoticeRow,
+  PeerSendRow,
   RunRow,
   ThinkingRow,
   ToolRow,
@@ -17,8 +18,9 @@ import {
 } from './items.tsx'
 import { blockNeedsBlank, taskChildItems, terminalBlocks, type TaskBlock } from './blocks.ts'
 import { usePulse } from '../agent/pulse.tsx'
+import { PeerNamesProvider } from './peer-names.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
-import { taskBrief, taskBusy, taskFailed, taskSummary } from './tool-run.ts'
+import { isPeerSend, taskBrief, taskBusy, taskFailed, taskSummary } from './tool-run.ts'
 import { BRIEF_LINES } from './height.ts'
 import { Blank, Row } from './row.tsx'
 import { TerminalSurface } from './surface.tsx'
@@ -44,7 +46,7 @@ export function TerminalItemView({ item, fileUrl }: { item: TranscriptItem; file
       return <ThinkingRow item={item} />
     }
     case 'tool_call': {
-      return <ToolRow item={item} />
+      return isPeerSend(item) ? <PeerSendRow item={item} /> : <ToolRow item={item} />
     }
     case 'turn_result': {
       return <TurnResultRow item={item} />
@@ -170,28 +172,30 @@ export function TerminalTranscript({ state, fileUrl, fontSize, lineHeight, affor
       bleed="1ch"
       className={cn('term-transcript', className)}
     >
-      {blocks.map((block, index) => (
-        <Fragment key={block.key}>
-          {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
-          {'run' in block ? (
-            <RunRow items={block.run} />
-          ) : 'item' in block ? (
-            <TerminalItemView item={block.item} fileUrl={fileUrl} />
-          ) : (
-            <TaskRow block={block} fileUrl={fileUrl} />
-          )}
-        </Fragment>
-      ))}
-      {working(state) ? (
-        <>
-          {state.items.length > 0 ? <Blank /> : null}
-          <WorkingRow
-            label={state.status === 'starting' ? 'Starting…' : 'Working…'}
-            startedAt={runStartedAt}
-            tokens={state.contextUsage?.totalTokens}
-          />
-        </>
-      ) : null}
+      <PeerNamesProvider items={state.items}>
+        {blocks.map((block, index) => (
+          <Fragment key={block.key}>
+            {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
+            {'run' in block ? (
+              <RunRow items={block.run} />
+            ) : 'item' in block ? (
+              <TerminalItemView item={block.item} fileUrl={fileUrl} />
+            ) : (
+              <TaskRow block={block} fileUrl={fileUrl} />
+            )}
+          </Fragment>
+        ))}
+        {working(state) ? (
+          <>
+            {state.items.length > 0 ? <Blank /> : null}
+            <WorkingRow
+              label={state.status === 'starting' ? 'Starting…' : 'Working…'}
+              startedAt={runStartedAt}
+              tokens={state.contextUsage?.totalTokens}
+            />
+          </>
+        ) : null}
+      </PeerNamesProvider>
     </TerminalSurface>
   )
 }
