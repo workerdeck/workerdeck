@@ -30,6 +30,7 @@ struct SessionView: View {
   @Environment(BookmarkModel.self) private var bookmarks
 
   /// The gateway this session belongs to - the watermark key's first half.
+  private let client: WorkerClient
   private let hostId: UUID
   /// The event a tapped notification was about, when this screen was opened by
   /// one. Resolved to a row once the replay hold lifts - see `focusTarget`.
@@ -146,6 +147,7 @@ struct SessionView: View {
     sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil,
     focusEpoch: Int? = nil, openSubagent: String? = nil, revealToolUseId: String? = nil
   ) {
+    self.client = client
     self.hostId = hostId
     self.focusSeq = focusSeq
     self.focusEpoch = focusEpoch
@@ -214,6 +216,9 @@ struct SessionView: View {
     .navigationBarTitleDisplayMode(.inline)
       .toolbar { toolbarMenu }
       .environment(\.fileDownloader, downloader)
+      .environment(
+        \.promptTokenNames,
+        PromptTokenNames(skills: completion.skillNames, sessions: completion.sessionNames))
       // The other end of the truncating attach: a row presses, this fetches, and
       // the text lands in transcript state rather than in the row that asked.
       .environment(\.toolResultFetcher, { vm.loadFullResult(toolUseId: $0) })
@@ -313,6 +318,16 @@ struct SessionView: View {
       // first turn.
       .task(id: vm.state.skills) {
         completion.skills = vm.state.skills ?? []
+      }
+      // The other sessions on this gateway, for `#`. Polled slowly on purpose: a
+      // name is not a reading, and this only has to be right when the menu opens.
+      .task(id: vm.sessionId) {
+        while !Task.isCancelled {
+          if let rows = try? await client.listSessions() {
+            completion.peers = PromptCompletionModel.peerSessions(rows, excluding: vm.sessionId)
+          }
+          try? await Task.sleep(for: .seconds(20))
+        }
       }
       // Path → fileId, so a tool card holding a `savedPath` can fetch its
       // picture without the transcript growing another prop.
@@ -740,6 +755,7 @@ struct SessionView: View {
             cwd: vm.cwd,
             hasCommands: !(vm.state.commands ?? []).isEmpty,
             hasSkills: (vm.state.skills ?? []).contains { $0.enabled },
+            hasSessions: completion.hasSessions,
             canBrowseFiles: completion.hasFileSearch,
             // Belt and braces: the reader already reports a smaller box when the
             // keyboard pushes the safe area up, but whether it does depends on

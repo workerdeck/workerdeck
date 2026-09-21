@@ -333,6 +333,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     factory,
     registry,
     parking,
+    peers,
     bridge,
     projects,
     queue,

@@ -62,6 +62,7 @@ extension View {
 // MARK: - Rows
 
 private struct UserBubble: View {
+  @Environment(\.promptTokenNames) private var promptTokenNames
   let text: String
   /// Sent with the message; references only, so the thumbnails are fetched.
   let attachments: [MessageAttachment]
@@ -79,7 +80,7 @@ private struct UserBubble: View {
           // Literal text, not markdown - what was typed is what was sent. The one
           // pass over it is token styling, so a message reads the same after sending
           // as it did in the composer.
-          Text(PromptTokenStyle.styled(text))
+          Text(PromptTokenStyle.styled(text, names: promptTokenNames))
             .font(.body)
             .textSelection(.enabled)
             .padding(.horizontal, 12)

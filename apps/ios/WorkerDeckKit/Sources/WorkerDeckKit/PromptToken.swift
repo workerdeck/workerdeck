@@ -1,7 +1,7 @@
 import Foundation
 
-/// The three prompt tokens - `@file`, `/command` and `$skill` - as one set of
-/// rules, used by both halves of the app: the composer (which completes them)
+/// The prompt tokens - `@file`, `/command`, `$skill` and `#session` - as one set
+/// of rules, used by both halves of the app: the composer (which completes them)
 /// and the transcript (which styles them once sent).
 ///
 /// Pure string work, so it lives here rather than in the app: this package is the
@@ -17,12 +17,15 @@ public struct PromptToken: Equatable, Sendable {
     /// for it mid-draft, and refusing to complete there just means typing the
     /// name out by hand.
     case command
-    /// `$name` - a skill. Codex's own sigil: its TUI completes skills on `$`
-    /// and reserves `/` for commands, and its bundled prompts refer to skills
-    /// that way in prose ("Use $pdf to …"). Unlike the other two this is not
-    /// syntax any engine parses - it is what the model reads - so the composer
-    /// resolves it to plain text rather than to a token.
+    /// `$name` - a skill. Codex's own sigil, and what the *model* reads: its
+    /// runner turns a `$name` naming a listed skill into a skill input item.
+    /// It is not a trigger, though - skills complete on `/` beside commands,
+    /// the way every other client offers them - so this kind is produced by
+    /// ``scan(_:skills:sessions:)`` and never by ``active(in:at:)``.
     case skill
+    /// `#name` - another session on this gateway. A hint the gateway resolves at
+    /// send: it messages nothing, and a name it cannot resolve stays plain text.
+    case session
   }
 
   public let kind: Kind
@@ -60,20 +63,27 @@ public enum PromptTokens {
   ///
   /// Stricter than ``active(in:at:)`` on purpose: a bare `@` is a token being
   /// typed, but in a sent message it is just an at sign.
-  public static func scan(_ text: String) -> [PromptToken] {
+  /// `$` and `#` are ordinary prose far more often than they are a token -
+  /// `$PATH`, `$5.00`, `#1`, a colour literal - and neither is saved by the
+  /// charset check that saves `/`. So both are gated on a list this client
+  /// holds: a skill the session reported, a session the gateway listed. Unset,
+  /// nothing of that kind is styled, which is what an older gateway gets.
+  public static func scan(
+    _ text: String, skills: Set<String> = [], sessions: Set<String> = []
+  ) -> [PromptToken] {
     var tokens: [PromptToken] = []
     for word in words(in: text) {
-      guard let kind = kind(ofWordAt: word.lowerBound, in: text) else { continue }
-      // Skills complete but are never *styled*. `$` is ordinary prose far more
-      // often than it is a skill - `$PATH`, `$5.00`, a shell snippet - and
-      // unlike `@` and `/` it is not syntax any engine parses, so a false
-      // positive would be colouring a word for no reason. The charset check
-      // that saves `/` here cannot save `$`: `5.00` passes it.
-      if kind == .skill { continue }
+      guard let kind = scanKind(ofWordAt: word.lowerBound, in: text) else { continue }
+      if kind == .skill, skills.isEmpty { continue }
+      if kind == .session, sessions.isEmpty { continue }
       let range = word.lowerBound..<trimmedEnd(of: word, in: text)
-      let body = text[text.index(after: range.lowerBound)..<range.upperBound]
+      let body = String(text[text.index(after: range.lowerBound)..<range.upperBound])
       guard !body.isEmpty else { continue }
       if kind == .command, body.unicodeScalars.contains(where: { !commandCharacters.contains($0) }) {
+        continue
+      }
+      if kind == .skill, !skills.contains(body) { continue }
+      if kind == .session, !(PeerMentions.isBody(body) && sessions.contains(PeerMentions.key(body))) {
         continue
       }
       tokens.append(PromptToken(kind: kind, range: range, text: String(text[range])))
@@ -88,8 +98,10 @@ public enum PromptTokens {
   /// spelling one out). The word still being typed at the very end of the draft is
   /// left alone: styling it as the user types would flicker between plain and
   /// styled on every keystroke, and would claim a path exists before it does.
-  public static func confirmed(in text: String) -> [PromptToken] {
-    scan(text).filter { $0.range.upperBound < text.endIndex }
+  public static func confirmed(
+    in text: String, skills: Set<String> = [], sessions: Set<String> = []
+  ) -> [PromptToken] {
+    scan(text, skills: skills, sessions: sessions).filter { $0.range.upperBound < text.endIndex }
   }
 
   // MARK: - Drafts
@@ -128,6 +140,7 @@ public enum PromptTokens {
     case .file: prefix = "@"
     case .command: prefix = "/"
     case .skill: prefix = "$"
+    case .session: prefix = String(PeerMentions.sigil)
     }
     let followedBySpace =
       token.range.upperBound < text.endIndex && text[token.range.upperBound].isWhitespace
@@ -201,9 +214,18 @@ public enum PromptTokens {
     switch text[start] {
     case "@": return .file
     case "/": return .command
-    case "$": return .skill
+    case PeerMentions.sigil: return .session
     default: return nil
     }
+  }
+
+  /// What ``scan(_:skills:sessions:)`` reads, which is the trigger set plus `$`:
+  /// a skill is not something you *start typing* any more (it completes on `/`),
+  /// but a sent message still carries the `$name` the pick inserted.
+  private static func scanKind(ofWordAt start: String.Index, in text: String) -> PromptToken.Kind? {
+    guard start < text.endIndex else { return nil }
+    if text[start] == "$" { return .skill }
+    return kind(ofWordAt: start, in: text)
   }
 
   private static func trimmedEnd(of word: Range<String.Index>, in text: String) -> String.Index {

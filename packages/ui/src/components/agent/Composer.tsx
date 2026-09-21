@@ -10,15 +10,15 @@ import {
   type Ref,
 } from 'react'
 import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
-import type { StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
-import { ArrowUp, FileText, Paperclip, RotateCw, SlidersHorizontal, Sparkles, Square, TriangleAlert, X } from 'lucide-react'
+import type { PeerSessionOption, StagedAttachment, UseAttachmentsResult } from '@workerdeck/react'
+import { ArrowUp, FileText, Paperclip, RotateCw, SlidersHorizontal, Sparkles, Square, TriangleAlert, Users, X } from 'lucide-react'
 import { Button } from '../ui/Button.tsx'
 import { Spinner } from '../ui/Spinner.tsx'
 import { PromptArea } from '../prompt-area/prompt-area.tsx'
 import { usePromptAreaState } from '../prompt-area/use-prompt-area-state.ts'
 import { plainTextToSegments } from '../prompt-area/prompt-area-engine.ts'
-import { commandTrigger, launchTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
-import { mergeComposerRows, rankComposerRows, skillTrailingText, type ClientCommand } from './composer-commands.ts'
+import { commandTrigger, hashtagTrigger, launchTrigger, mentionTrigger } from '../prompt-area/trigger-presets.ts'
+import { mergeComposerRows, rankComposerRows, rankPeerSessions, skillTrailingText, type ClientCommand } from './composer-commands.ts'
 import { useTranscriptVariant } from './transcript-variant.tsx'
 import type { TerminalAffordances } from '../terminal/affordances.tsx'
 import { PROMPT_GLYPH } from '../terminal/items.tsx'
@@ -49,6 +49,9 @@ export interface ComposerProps {
   // commands, and suppressed name-for-name by an engine command so the real one always wins.
   clientCommands?: ClientCommand[]
   onSearchFiles?: (query: string, options: { signal: AbortSignal }) => Promise<ComposerFileMatch[]>
+  // The other sessions on this gateway, offered on `#`. The token is a hint the gateway resolves at
+  // send: it never messages the named session, and an unresolvable name stays ordinary text.
+  peers?: readonly PeerSessionOption[]
   // Shell mode: `!` as the first character turns the composer into a host shell prompt. Omit to leave the
   // mode off entirely - the gateway only offers it to an operator on a session whose engine reaches a host cwd.
   onShellCommand?: (command: string) => void
@@ -75,6 +78,7 @@ export function Composer({
   skills,
   clientCommands,
   onSearchFiles,
+  peers,
   onShellCommand,
   attachments,
   toolbar,
@@ -172,6 +176,24 @@ export function Composer({
         }),
       )
     }
+    if (peers?.length) {
+      configured.push(
+        hashtagTrigger({
+          accessibilityLabel: 'session',
+          onSearch: (query: string): TriggerSuggestion[] =>
+            rankPeerSessions(query, peers).map((peer) => ({
+              value: peer.slug,
+              label: peer.label,
+              description: [peer.engine, peer.project, peer.status].filter(Boolean).join(' · '),
+              icon: <Users className="size-3.5 text-fg-3" />,
+            })),
+          onSelect: (suggestion) => suggestion.value,
+          chipStyle: 'inline',
+          chipClassName: 'font-mono',
+          emptyMessage: 'No matching sessions',
+        }),
+      )
+    }
     if (onShellCommand) {
       configured.push(
         launchTrigger({
@@ -182,7 +204,7 @@ export function Composer({
       )
     }
     return configured.length > 0 ? configured : undefined
-  }, [commands, skills, clientCommands, onSearchFiles, onShellCommand])
+  }, [commands, skills, clientCommands, onSearchFiles, peers, onShellCommand])
 
   const saveDraft = draft?.save
   useEffect(() => {
@@ -223,6 +245,7 @@ export function Composer({
   const hints = [
     triggers?.some((t) => t.char === '/') ? { key: '/', what: 'commands and skills' } : undefined,
     onSearchFiles ? { key: '@', what: 'mention a file' } : undefined,
+    peers?.length ? { key: '#', what: 'refer to another session' } : undefined,
     onShellCommand ? { key: '!', what: 'run a shell command' } : undefined,
     { key: '?', what: 'this list, on an empty composer' },
   ].filter((h) => h !== undefined)

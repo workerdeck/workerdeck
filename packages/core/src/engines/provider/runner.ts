@@ -33,7 +33,7 @@ import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
-import { peerMessageEnvelope, type PeerDirectory } from '../../lib/peers.ts'
+import { withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
 
 const SUPPORTED_PERMISSION_MODES: readonly PermissionMode[] = ['default', 'bypassPermissions', 'dontAsk']
@@ -309,7 +309,7 @@ export class AiSdkRunner implements Runner {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    const modelText = options?.origin ? peerMessageEnvelope(text, options.origin) : text
+    const modelText = withPeerContext(text, options)
     const files = (attachments ?? []).map((attachment) => ({
       type: 'file' as const,
       data: attachment.data,

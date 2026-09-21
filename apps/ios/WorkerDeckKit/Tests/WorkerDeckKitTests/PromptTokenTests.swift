@@ -46,34 +46,70 @@ struct PromptTokenTests {
     #expect(PromptTokens.active(in: "and/or") == nil)
   }
 
-  @Test func skillsCompleteOnDollarButAreNeverStyled() {
-    // Codex's own sigil: its TUI completes skills on `$` and keeps `/` for
-    // commands.
-    #expect(PromptTokens.active(in: "$scr")?.kind == .skill)
-    #expect(PromptTokens.active(in: "$scr")?.query == "scr")
-    #expect(PromptTokens.active(in: "please $scr")?.kind == .skill)
-    // A `$` inside a word is just a dollar sign.
-    #expect(PromptTokens.active(in: "US$5") == nil)
+  @Test func skillsCompleteOnSlashAndStyleOnlyWhenTheSessionListedThem() {
+    // `$` is codex's token, not a trigger: skills complete on `/` beside
+    // commands, which is what every other client does.
+    #expect(PromptTokens.active(in: "$scr") == nil)
+    #expect(PromptTokens.active(in: "please $scr") == nil)
 
-    // Completing is one thing; STYLING sent text is another. `$` is ordinary
-    // prose far more often than it is a skill, and unlike `/` and `@` it is not
-    // syntax any engine parses - so scan() must leave every one of these alone.
-    #expect(PromptTokens.scan("echo $PATH and $5.00").isEmpty)
+    // A sent `$name` styles, but only for a name the session actually listed:
+    // `$` is ordinary prose far more often than it is a skill.
+    #expect(PromptTokens.scan("echo $PATH and $5.00", skills: ["scratch-notes"]).isEmpty)
     #expect(PromptTokens.scan("$scratch-notes jot this down").isEmpty)
+    #expect(
+      PromptTokens.scan("$scratch-notes jot this down", skills: ["scratch-notes"]).map(\.kind)
+        == [.skill])
     // …while its neighbours still style.
     #expect(PromptTokens.scan("see @README.md").map(\.kind) == [.file])
   }
 
+  @Test func sessionsCompleteOnHashAndStyleOnlyWhenTheGatewayNamedThem() {
+    #expect(PromptTokens.active(in: "#Ast")?.kind == .session)
+    #expect(PromptTokens.active(in: "#Ast")?.query == "Ast")
+    #expect(PromptTokens.active(in: "commit what #Ast")?.kind == .session)
+    // A hash inside a word is just a hash.
+    #expect(PromptTokens.active(in: "issue#42") == nil)
+
+    let sessions: Set<String> = ["astra", "fix-login-bug"]
+    #expect(PromptTokens.scan("ask #Astra about it").isEmpty)
+    #expect(PromptTokens.scan("ask #Astra about it", sessions: sessions).map(\.text) == ["#Astra"])
+    // Folded the way the gateway folds it, and gated the way `$name` is.
+    #expect(PromptTokens.scan("ask #fix_login_bug", sessions: sessions).map(\.kind) == [.session])
+    #expect(PromptTokens.scan("#ff0000 and #1", sessions: sessions).isEmpty)
+    // Sentence punctuation belongs to the sentence.
+    #expect(PromptTokens.scan("ask #Astra.", sessions: sessions).map(\.text) == ["#Astra"])
+  }
+
+  @Test func acceptingASessionWritesTheHashToken() {
+    let text = "commit what #Ast"
+    let token = PromptTokens.active(in: text)!
+    let result = PromptTokens.apply("Astra", replacing: token, in: text)
+    #expect(result.text == "commit what #Astra ")
+  }
+
+  @Test func peerMentionSlugAndKeyFoldTheWayTheGatewayDoes() {
+    #expect(PeerMentions.slug(title: "Astra", id: "b7c1d9e2-aaaa") == "Astra")
+    #expect(PeerMentions.slug(title: "Fix login bug", id: "b7c1d9e2-aaaa") == "Fix-login-bug")
+    #expect(PeerMentions.slug(title: nil, id: "b7c1d9e2-aaaa") == "b7c1d9e2")
+    #expect(PeerMentions.slug(title: "///", id: "b7c1d9e2-aaaa") == "b7c1d9e2")
+    #expect(PeerMentions.key("Fix_Login  bug") == "fix-login-bug")
+    #expect(PeerMentions.key("ASTRA") == "astra")
+    #expect(PeerMentions.isBody("Astra"))
+    #expect(!PeerMentions.isBody("-x"))
+    #expect(!PeerMentions.isBody(""))
+  }
+
   @Test func acceptingASkillReplacesTheTokenWithLiteralText() {
-    let text = "please $scr"
+    let text = "please /scr"
     let token = PromptTokens.active(in: text)!
     // `replace` writes the literal verbatim - prefix included, nothing appended
     // - because what lands is prose the model reads, not a token to parse back.
     let result = PromptTokens.replace(with: "$scratch-notes ", replacing: token, in: text)
     #expect(result.text == "please $scratch-notes ")
     #expect(result.text.distance(from: result.text.startIndex, to: result.cursor) == 22)
-    // And it does not read back as a token, so the transcript won't colour it.
+    // It reads back as a skill token only where the session listed that skill.
     #expect(PromptTokens.scan(result.text).isEmpty)
+    #expect(PromptTokens.scan(result.text, skills: ["scratch-notes"]).map(\.kind) == [.skill])
   }
 
   @Test func readsTheTokenAroundACursorMidMessage() {

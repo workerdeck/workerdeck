@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { runPeerTool, type Runner, type SendMessageOptions } from '@workerdeck/core'
-import { peerDeliveredTo, type PermissionRequest, type SessionEvent, type SessionEventBody, type SessionInfo, type SessionStatus } from '@workerdeck/protocol'
+import {
+  peerDeliveredTo,
+  type PermissionRequest,
+  type SessionEvent,
+  type SessionEventBody,
+  type SessionInfo,
+  type SessionStatus,
+} from '@workerdeck/protocol'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import { createPeerService } from '../src/services/peers.ts'
@@ -221,5 +228,73 @@ describe('peer service: send', () => {
     expect(dormant.sent).toEqual([
       { text: 'wake up', options: { origin: { kind: 'peer', sessionId: 'a', engine: 'claude', hops: ['a'] } } },
     ])
+  })
+})
+
+describe('peer service: `#` mentions', () => {
+  it('resolves a name the sender can see, folding case and separators', async () => {
+    const { service, add } = rig()
+    add(new PeerRunner('a'))
+    add(new PeerRunner('b', { title: 'Astra' }))
+    add(new PeerRunner('c', { title: 'Fix login bug' }))
+    const mentions = await service.mentions('a', 'commit what #astra did, then ask #Fix-login-bug')
+    expect(mentions.map((m) => m.id)).toEqual(['b', 'c'])
+    expect(mentions[0]).toMatchObject({ typed: 'astra', id: 'b', name: 'Astra', engine: 'claude', status: 'idle', cwd: '/work/b' })
+  })
+
+  it('resolves a session id, whole or as an unambiguous prefix', async () => {
+    const { service, add } = rig()
+    add(new PeerRunner('a'))
+    add(new PeerRunner('b7c1d9e2', { title: 'Astra' }))
+    expect((await service.mentions('a', 'see #b7c1d9e2')).map((m) => m.id)).toEqual(['b7c1d9e2'])
+    expect((await service.mentions('a', 'see #b7c1')).map((m) => m.id)).toEqual(['b7c1d9e2'])
+    expect(await service.mentions('a', 'see #b7')).toEqual([])
+  })
+
+  it('names the other candidates when a title is shared rather than choosing in silence', async () => {
+    const { service, add } = rig()
+    add(new PeerRunner('a'))
+    const older = add(new PeerRunner('b', { title: 'Astra' }))
+    const newer = add(new PeerRunner('c', { title: 'Astra' }))
+    older.emit({ type: 'status_changed', status: 'idle' })
+    newer.emit({ type: 'status_changed', status: 'idle' })
+    newer.emit({ type: 'status_changed', status: 'idle' })
+    const mentions = await service.mentions('a', 'ask #Astra')
+    expect(mentions).toHaveLength(1)
+    expect(mentions[0]).toMatchObject({ id: 'c', ambiguousWith: ['b'] })
+  })
+
+  it('says nothing about an unknown name, the sender itself, or a peer outside its scope', async () => {
+    const { service, add } = rig()
+    add(new PeerRunner('a', { scope: { tenant: 't1' }, title: 'Mine' }))
+    add(new PeerRunner('b', { scope: { tenant: 't2' }, title: 'Theirs' }))
+    expect(await service.mentions('a', 'ask #Nobody about it')).toEqual([])
+    expect(await service.mentions('a', 'ask #Mine about it')).toEqual([])
+    expect(await service.mentions('a', 'ask #Theirs about it')).toEqual([])
+  })
+
+  it('dedupes a repeated name and caps how many sessions one message can pull in', async () => {
+    const { service, add } = rig()
+    add(new PeerRunner('a'))
+    for (const name of ['One', 'Two', 'Three', 'Four', 'Five']) {
+      add(new PeerRunner(name.toLowerCase(), { title: name }))
+    }
+    expect(await service.mentions('a', '#One and #one again')).toHaveLength(1)
+    expect(await service.mentions('a', '#One #Two #Three #Four #Five')).toHaveLength(4)
+  })
+
+  it('costs nothing when there is no `#` in the text at all', async () => {
+    // No registry: reaching for one would throw, which is the proof that the scan short-circuits.
+    const service = createPeerService({ refs: {} as LateBoundRefs, projects: new ProjectInfoService() })
+    expect(await service.mentions('a', 'just an ordinary message')).toEqual([])
+  })
+
+  it('never sets mentions on a peer delivery, however many names a model writes', async () => {
+    const { service, add } = rig()
+    add(new PeerRunner('a', { title: 'Astra' }))
+    const target = add(new PeerRunner('b', { title: 'Luna' }))
+    await service.send('a', 'b', 'please look at #Astra and #Luna')
+    expect(target.sent[0]?.options?.mentions).toBeUndefined()
+    expect(target.sent[0]?.options?.origin).toMatchObject({ kind: 'peer', sessionId: 'a' })
   })
 })

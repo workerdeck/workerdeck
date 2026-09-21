@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http'
 import type { WebSocket } from 'ws'
-import type { Runner } from '@workerdeck/core'
+import { isSlashCommand, type Runner } from '@workerdeck/core'
 import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { shellPermitted } from '../services/shell.ts'
@@ -68,15 +68,20 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
   const { attachmentStore, bridge } = ctx
   switch (frame.type) {
     case 'user_message': {
+      // The one place `mentions` is ever set: this frame is a person typing. A slash command is
+      // matched on the whole message by the CLI, so nothing may be appended to one, and a failure
+      // to resolve is silent - a hint must never lose the text it was a hint about.
+      const mentions = ctx.peers && !isSlashCommand(frame.text) ? await ctx.peers.mentions(runner.id, frame.text).catch(() => []) : []
+      const options = mentions.length > 0 ? { mentions } : undefined
       if (!frame.attachmentIds?.length) {
-        runner.sendMessage(frame.text)
+        runner.sendMessage(frame.text, undefined, options)
         return
       }
       const resolved = attachmentStore.resolve(runner.id, frame.attachmentIds)
       if (!resolved.ok) {
         throw new Error(`unknown attachment(s): ${resolved.missing.join(', ')}`)
       }
-      runner.sendMessage(frame.text, resolved.attachments)
+      runner.sendMessage(frame.text, resolved.attachments, options)
       return
     }
     case 'permission_decision': {

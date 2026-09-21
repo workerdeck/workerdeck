@@ -46,14 +46,7 @@ import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
-import {
-  PEER_MCP_SERVER,
-  PEER_TOOL_SHAPES,
-  PEER_TOOL_NAMES,
-  peerMessageEnvelope,
-  runPeerTool,
-  type PeerDirectory,
-} from '../../lib/peers.ts'
+import { PEER_MCP_SERVER, PEER_TOOL_SHAPES, PEER_TOOL_NAMES, withPeerContext, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
 import { SubagentTracker } from './subagents.ts'
 
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
@@ -221,7 +214,7 @@ export class SessionRunner implements Runner {
     if (context) {
       blocks.unshift({ type: 'text', text: context })
     }
-    const modelText = options?.origin ? peerMessageEnvelope(text, options.origin) : text
+    const modelText = withPeerContext(text, options)
     // A message may be attachments alone; an empty text block is not valid API input.
     const content = blocks.length
       ? ([...blocks, ...(modelText ? [{ type: 'text', text: modelText }] : [])] as unknown as SDKUserMessage['message']['content'])

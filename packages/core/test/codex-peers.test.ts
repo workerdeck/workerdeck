@@ -118,4 +118,20 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     const user = ofType(events, 'user_message').find((e) => !e.synthetic)!
     expect(user).toMatchObject({ message: { content: '/clear' }, origin: { kind: 'peer', sessionId: 'src-1' } })
   })
+
+  it("a person's `#` mention reaches turn/start after their words, and the transcript keeps the bare text", async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, () => {})
+    const runner = new CodexRunner({ cwd: '/tmp', connectFn: peer.connectFn })
+    const events = collect(runner)
+    void runner.start()
+    runner.sendMessage('commit what #Astra did', undefined, {
+      mentions: [{ typed: 'Astra', id: 'peer-1', name: 'Astra', status: 'idle', cwd: '/work/astra' }],
+    })
+    await vi.waitFor(() => expect(peer.requests.filter((r) => r.method === 'turn/start')).toHaveLength(1))
+    const start = peer.requests.find((r) => r.method === 'turn/start')!.params as { input: Array<{ type: string; text?: string }> }
+    expect(start.input[0]!.text).toContain('commit what #Astra did\n\n<peer-mentions>')
+    const user = ofType(events, 'user_message').find((e) => !e.synthetic)!
+    expect(user).toMatchObject({ message: { content: 'commit what #Astra did' } })
+  })
 })

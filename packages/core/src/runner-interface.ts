@@ -11,6 +11,7 @@ import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
 import type { CostLedgerState } from './lib/cost-ledger.ts'
 import type { LocalCommandResult } from './lib/local-command.ts'
+import type { PeerMention } from './lib/peers.ts'
 import type { ToolExecutionResult } from './executors/tool-executor.ts'
 
 export type SessionEventListener = (event: SessionEvent) => void
@@ -34,6 +35,9 @@ export type RunnerSnapshot = {
 
 export type SendMessageOptions = {
   origin?: MessageOrigin
+  // Set only for a message a person typed, and only by the gateway's own send path: `origin` means
+  // a model wrote this text, `mentions` means a human did, and the two are mutually exclusive.
+  mentions?: readonly PeerMention[]
 }
 
 export type PermissionDecision =

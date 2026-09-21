@@ -33,7 +33,7 @@ import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent, type ItemScope } from './subagents.ts'
 import { untrustedProjectNotice } from './trust.ts'
-import { peerMessageEnvelope, peerToolSpecs, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
+import { peerToolSpecs, runPeerTool, withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
 import type {
   AppServerCollabAgentToolCallItem,
   AppServerCommandApprovalParams,
@@ -799,7 +799,7 @@ export class CodexRunner implements Runner {
       })
       return
     }
-    const input = this.#buildInput(options?.origin ? peerMessageEnvelope(text, options.origin) : text, attachments ?? [])
+    const input = this.#buildInput(withPeerContext(text, options), attachments ?? [])
     const echo = () =>
       this.#emit({
         type: 'user_message',

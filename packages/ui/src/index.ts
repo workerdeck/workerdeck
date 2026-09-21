@@ -94,6 +94,7 @@ export { Composer, type ComposerFileMatch, type ComposerHandle, type ComposerPro
 export {
   mergeComposerRows,
   rankComposerRows,
+  rankPeerSessions,
   matchClientCommand,
   skillPrompt,
   type ClientCommand,
@@ -136,7 +137,7 @@ export {
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
 export { SessionEmptyState, type SessionEmptyStateProps } from './components/agent/SessionEmptyState.tsx'
-export { PromptTokenText } from './components/agent/PromptTokenText.tsx'
+export { PromptTokenText, SessionNamesProvider, SkillNamesProvider } from './components/agent/PromptTokenText.tsx'
 export { STATUS_META } from './components/agent/status.ts'
 export { ContextRing } from './components/agent/ContextRing.tsx'
 

@@ -982,6 +982,31 @@ has the shape; these are the ways to get it wrong.
   knows, then the short id - so a send whose receipt predates the naming (or whose target had no
   title yet) draws as a name the moment that peer speaks. A name never comes from a live sessions
   list: the transcript has to read the same on replay as it did live.
+- **`#Name` is a hint the gateway resolves, and only for a human.** The composer writes
+  `peerMentionSlug(title, id)` after the `#`; `PeerService.mentions` folds it with
+  `peerMentionKey` against `list(from)` - so scope, self-exclusion and newest-first ordering are
+  the *same* rules `peers_list` answers with - and `withPeerContext` appends
+  `peerMentionsEnvelope` to the **model input only**. The transcript keeps the bare typed text,
+  exactly as it does for `peerMessageEnvelope`. `routes/ws.ts`'s `user_message` is the only place
+  `SendMessageOptions.mentions` is ever set, which makes the invariant structural: **`origin` and
+  `mentions` are mutually exclusive - `origin` means a model wrote the text, `mentions` means a
+  human did.** `peers.send` must never set it, or a model could write `#Astra` and have the
+  gateway hand a third session an authoritative block about it. A slash command is skipped whole
+  (`isSlashCommand`), since the CLI matches a command on the entire message and codex's `/clear`
+  guard compares it exactly; resolution failures are swallowed, because a hint must never cost
+  the message it was a hint about; and an empty scan returns before the registry is touched, so
+  an ordinary message pays one regex pass. Unknown names, the sender's own name and out-of-scope
+  peers all resolve to *nothing at all* - silence, the same posture `peers_send` takes. A shared
+  title resolves to the most recently active and names the others in `also-matched`.
+  `escapeAttr` is stricter than it was for exactly this: a title is model-authored, so control
+  and format characters go, newlines collapse (a forged sibling row's only route), and the value
+  clamps.
+- **The client's `#` allowlist is a live list, and that is allowed here.** `scanPromptTokens`
+  badges a `#Name` only against the sessions this client can currently name, so a mention drawn
+  today draws plain once that peer is renamed. That does **not** break "a name never comes from a
+  live sessions list": the rule binds *substitution* - `peerSendTarget` drawing a name where an id
+  was - and here the characters on screen are `#Astra` either way. Never render a resolved title
+  in place of a typed token.
 - **The loop guard is a hop chain reset by a human.** Each delivery carries `hops` (every session
   the exchange has passed through); the service remembers the last chain each session *received*
   and extends it when that session sends. A `user_message` with no `origin` clears it. Past
@@ -1302,6 +1327,11 @@ has the shape; these are the ways to get it wrong.
   description, there is no `/skillname` any engine recognises. Skills ride their own `skills` event
   and `skillsList` capability, never `capabilities.commands`. A client may list or offer them as a
   typing aid; it may not render them as command chips.
+- **iOS has caught up on both halves.** Skills complete on `/` there too
+  (`PromptCompletionModel.showCommands` merges them and the pick still inserts codex's `$name`),
+  and `PromptTokens.scan` takes `skills` and `sessions` allowlists instead of hard-skipping
+  `.skill`, so a sent `$name`/`#Name` badges the way it does on the web. `$` is no longer a
+  trigger anywhere.
 - **Skills complete on `/`, alongside commands**, in one ranked list built by `mergeComposerRows`
   in `packages/ui/src/components/agent/composer-commands.ts` from three sources: engine commands,
   host client commands, and skills. They used to complete on codex's own `$` convention, dropped
@@ -1327,8 +1357,9 @@ has the shape; these are the ways to get it wrong.
   built before the connection's own `skills/list` has answered.
 - **`$name` is styled in a sent codex message, but only for a listed skill.** `scanPromptTokens`
   takes the session's skill names (`Transcript` provides them from `state.skills`), so `$10` is
-  never a badge and a session with no skills never badges. Swift's `PromptTokens.scan` still skips
-  `.skill`, pinned by a test; iOS has not caught up.
+  never a badge and a session with no skills never badges. `#Name` is gated the same way, on the
+  folded peer slugs (`SessionNamesProvider`), so `#ff0000` and `#1` never badge either. Swift
+  mirrors both through `PromptTokenNames` in the environment.
 - **Codex has skills and no commands; Claude has commands and no listable skills.** Claude's CLI
   reports skill names on `system_init` and nothing else (no descriptions, scope, or suggested
   prompt), not enough to fill a picker honestly, so `skillsList` is false there. The SDK's

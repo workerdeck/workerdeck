@@ -109,6 +109,24 @@ export function rankComposerRows(query: string, rows: readonly ComposerRow[]): C
   return scored.map(({ row }) => row)
 }
 
+// The `#` picker's ranking. Peers arrive most-recently-active first, and an empty query keeps that
+// order: which session moved last is the most useful thing the list can say before anything is typed.
+export function rankPeerSessions<T extends { slug: string; label: string }>(query: string, peers: readonly T[]): T[] {
+  const needle = query.trim()
+  if (!needle) {
+    return [...peers]
+  }
+  const scored: Array<{ score: number; index: number; peer: T }> = []
+  peers.forEach((peer, index) => {
+    const score = matchScore(needle, [peer.slug, peer.label, ...peer.slug.split('-')])
+    if (score > 0) {
+      scored.push({ score, index, peer })
+    }
+  })
+  scored.sort((a, b) => b.score - a.score || a.index - b.index)
+  return scored.map(({ peer }) => peer)
+}
+
 export function matchClientCommand(text: string, commands: readonly ClientCommand[]): { command: ClientCommand; args: string } | undefined {
   const match = /^\/([\w:-]+)[ \t]*([\s\S]*)$/.exec(text.trim())
   if (!match) {

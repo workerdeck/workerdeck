@@ -23,8 +23,8 @@ enum Markdown {
   /// Inline markdown plus `@file`/`/command` tinting - the one pipeline every
   /// block's text goes through, so a path in a bullet or a heading reads the
   /// same as one in a paragraph.
-  static func styledInline(_ text: String) -> AttributedString {
-    PromptTokenStyle.apply(to: inline(text))
+  static func styledInline(_ text: String, names: PromptTokenNames = .none) -> AttributedString {
+    PromptTokenStyle.apply(to: inline(text), names: names)
   }
 }
 
@@ -38,18 +38,19 @@ enum Markdown {
 /// the layout SwiftUI does with the result.
 struct MarkdownText: View {
   let text: String
+  @Environment(\.promptTokenNames) private var names
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       ForEach(Array(MarkdownBlocks.parse(text).enumerated()), id: \.offset) { _, block in
         switch block {
         case .prose(let prose):
-          Text(Markdown.styledInline(prose))
+          Text(Markdown.styledInline(prose, names: names))
             .font(bodyFont)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .heading(let level, let heading):
-          Text(Markdown.styledInline(heading))
+          Text(Markdown.styledInline(heading, names: names))
             .font(headingFont(level))
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,6 +87,7 @@ struct MarkdownText: View {
 /// the first line when an item wraps; the min-width keeps `•` and `10.`
 /// gutters from producing two different text edges in the same list.
 private struct ListBlock: View {
+  @Environment(\.promptTokenNames) private var names
   let items: [MarkdownListItem]
   /// Handed down rather than read from the environment: the marker and the item
   /// share one size, and the parent already decided what it is.
@@ -101,7 +103,7 @@ private struct ListBlock: View {
             // A right-aligned gutter is what keeps `•` and `10.` producing one
             // text edge.
             .frame(minWidth: 14, alignment: .trailing)
-          Text(Markdown.styledInline(item.text))
+          Text(Markdown.styledInline(item.text, names: names))
             .font(font)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,6 +134,7 @@ private struct ListBlock: View {
 /// A quote: the conventional bar, content dimmed a step so quoted material
 /// reads as reference rather than as the assistant speaking.
 private struct QuoteBlock: View {
+  @Environment(\.promptTokenNames) private var names
   let text: String
   let font: Font
 
@@ -140,7 +143,7 @@ private struct QuoteBlock: View {
       RoundedRectangle(cornerRadius: 1.5)
         .fill(Color.secondary.opacity(0.35))
         .frame(width: 3)
-      Text(Markdown.styledInline(text))
+      Text(Markdown.styledInline(text, names: names))
         .font(font)
         .foregroundStyle(.secondary)
         .textSelection(.enabled)

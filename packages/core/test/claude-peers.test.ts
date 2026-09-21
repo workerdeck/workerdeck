@@ -73,4 +73,22 @@ describe('SessionRunner: peer tools', () => {
     })
     expect((user as { synthetic?: boolean }).synthetic).toBeUndefined()
   })
+
+  it("a person's `#` mention rides the model input only, leaving the transcript exactly as typed", async () => {
+    const harness = fakeHarness()
+    const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn })
+    const events: SessionEvent[] = []
+    runner.subscribe((event) => events.push(event))
+    void runner.start()
+    runner.sendMessage('commit what #Astra did', undefined, {
+      mentions: [{ typed: 'Astra', id: 'peer-1', name: 'Astra', engine: 'codex', status: 'idle', cwd: '/work/astra' }],
+    })
+    await vi.waitFor(() => expect(harness.captured.inputs).toHaveLength(1))
+    const content = harness.captured.inputs[0]!.message.content as string
+    expect(content.startsWith('commit what #Astra did\n\n<peer-mentions>')).toBe(true)
+    expect(content).toContain('session="peer-1"')
+    const user = events.find((event) => event.type === 'user_message')!
+    expect(user).toMatchObject({ message: { role: 'user', content: 'commit what #Astra did' } })
+    expect(JSON.stringify(user)).not.toContain('peer-mentions')
+  })
 })

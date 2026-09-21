@@ -28,6 +28,7 @@ import {
   useClaudeSession,
   useDraft,
   useHostFileSearch,
+  usePeerSessions,
   useProfileUsage,
   useToolCallHost,
   type ClientToolHandler,
@@ -133,6 +134,9 @@ export interface SessionPanelProps {
   scrubber?: boolean
   // Bookmarked transcript item ids - the host owns membership and persistence.
   bookmarks?: readonly string[]
+  // `#` mentions of the other sessions on this gateway. On by default; an embedder whose people
+  // should not learn that the other sessions exist turns it off.
+  peerMentions?: boolean
   onToggleBookmark?: (itemId: string) => void
   // Where a file link in the transcript goes. Without it, such a link stays an ordinary anchor.
   onOpenFile?: FileLinkOpener
@@ -226,6 +230,7 @@ export function SessionPanel({
   terminalMetrics,
   scrubber = false,
   bookmarks,
+  peerMentions = true,
   onToggleBookmark,
   reveal,
   subagents,
@@ -499,6 +504,9 @@ export function SessionPanel({
     engine: state.engine,
   })
   const hostFiles = useHostFileSearch(client, state.cwd)
+  // Read here rather than taken as a prop, the way file search is: every embedding that has a
+  // gateway has the sessions list, and a host that has to wire it would be a host that forgets to.
+  const peers = usePeerSessions(client, sessionId, peerMentions)
   const draft = useDraft(client, sessionId)
   // Stable identity: an inline arrow here would bust the Composer's `triggers`
   // memo on every streaming re-render, and with it every prompt-area callback
@@ -699,6 +707,7 @@ export function SessionPanel({
                       fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
                       attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
                       canBrowseFiles={hostFiles.available}
+                      sessionNames={peers.names}
                       hostImage={hostImage}
                       variant={transcriptVariant}
                       density={transcriptDensity}
@@ -803,6 +812,7 @@ export function SessionPanel({
                         attachments={attachments}
                         draft={draft}
                         onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
+                        peers={peers.peers}
                         onShellCommand={shell ? runShell : undefined}
                         layout={controlsExternal ? 'inline' : 'stacked'}
                         toolbar={controlsExternal ? undefined : sessionControls}

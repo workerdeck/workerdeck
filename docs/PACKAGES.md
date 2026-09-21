@@ -224,6 +224,12 @@ is correct for a current reducer while every attach re-sends the whole cleared c
 the process's lifetime. The provider's `restore` recomputes it from the log for the same reason it
 recomputes `activityCount`: a rehydrated session that forgot where its last reset was would replay
 the cleared conversation to the first client that attached.
+`peer-mentions.ts` is the `#Name` rule both sides fold with - `peerMentionSlug` (what a composer
+writes for a session, falling back to the short id an untitled one already draws),
+`peerMentionKey` (the comparison fold, so `#astra` finds `Astra`) and `scanPeerMentions` (the
+boundary, sharing `PROMPT_SENTENCE_TAIL` with `scanPromptTokens` so one rule answers for every
+sigil). It is here rather than in `core` because a browser writes the token and a server resolves
+it, and two foldings would mean a name picked off a list that does not match itself.
 `session-list.ts` is the
 **sessions-list view model** (the `attention/working/idle/ended` buckets, the
 gateway/adapter/state/**project** facets, `filterRows`/`groupRows`/`subsetSummary`/`clearFilters`
@@ -918,7 +924,11 @@ whole session surface - transcript, composer (attachments; `/` for commands, cli
 skills, a skill resolving to a `$name` chip whose serialisation sigil differs from the `/` that
 opened the menu, via the prompt-area's per-suggestion `chipOptions` and `ChipSegment.sigil`, with
 the default prompt's remainder as editable text after it; `skillPrompt`'s fallback is the bare
-`$name`; `@` for files; `!` for shell; `?` for the shortcut list on an empty composer), and the
+`$name`; `@` for files; **`#` for another session on this gateway** - a pill whose text is
+`peerMentionSlug(title, id)`, drawn from `usePeerSessions` which the panel reads itself the way it
+reads host-file search, so no host has to wire it, and which the gateway resolves at send into a
+`<peer-mentions>` block on the model input alone (`docs/GOTCHAS.md` §Peer messaging); `!` for
+shell; `?` for the shortcut list on an empty composer), and the
 panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
 files) - each gated on the capability record, so one component is correct for every engine.
 `panelSurface: 'external'` hands that dialog surface to the embedder: no dialogs, no `⋯`

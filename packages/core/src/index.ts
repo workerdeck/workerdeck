@@ -40,14 +40,17 @@ export {
   installPeerDirectory,
   installedPeerDirectory,
   peerDirectoryHandle,
+  peerMentionsEnvelope,
   peerMessageEnvelope,
   peerSummary,
   peerToolSpecs,
   recentLines,
   runPeerTool,
+  withPeerContext,
 } from './lib/peers.ts'
 export type {
   PeerDirectory,
+  PeerMention,
   PeerPeek,
   PeerSendOptions,
   PeerSendResult,
@@ -63,7 +66,7 @@ export {
   normalizeMediaType,
 } from './lib/attachments.ts'
 export type { AttachmentInput, AttachmentKind } from './lib/attachments.ts'
-export { localCommandContext, localCommandTranscript } from './lib/local-command.ts'
+export { isSlashCommand, localCommandContext, localCommandTranscript } from './lib/local-command.ts'
 export type { LocalCommandResult } from './lib/local-command.ts'
 export { mcpStatusInfo, modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './lib/normalize.ts'
 export { getEngineAdapter } from './engines/adapter.ts'

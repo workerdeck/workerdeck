@@ -8,10 +8,19 @@ import {
   type PeerPeek,
   type PeerSendOptions,
   type PeerSendResult,
+  type PeerMention,
   type PeerSessionSummary,
   type Runner,
 } from '@workerdeck/core'
-import type { MessageOrigin, SessionEvent, SessionInfo } from '@workerdeck/protocol'
+import {
+  PEER_MENTION_MAX,
+  peerMentionKey,
+  peerMentionSlug,
+  scanPeerMentions,
+  type MessageOrigin,
+  type SessionEvent,
+  type SessionInfo,
+} from '@workerdeck/protocol'
 import { scopeMatches } from '../lib/scope.ts'
 import type { LateBoundRefs } from '../options.ts'
 import type { ProjectInfoService } from './project-info.ts'
@@ -40,6 +49,8 @@ function visible(from: SessionInfo, to: SessionInfo): boolean {
 
 export type PeerService = PeerDirectory & {
   watch(runner: Runner): () => void
+  // The `#Name` tokens in a message a person typed, resolved to the peers that session can see.
+  mentions(from: string, text: string): Promise<PeerMention[]>
 }
 
 // Session-to-session messaging inside one gateway. Visibility is the session-scope rule the HTTP routes enforce,
@@ -169,6 +180,59 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     return { delivered: true, sessionId, name: target.title, queued: before === 'running' || before === 'awaiting_approval' }
   }
 
+  // A session id is a handle a person may paste, so a full id and an unambiguous prefix resolve too.
+  const mentions = async (from: string, text: string): Promise<PeerMention[]> => {
+    const tokens = scanPeerMentions(text)
+    if (tokens.length === 0) {
+      return []
+    }
+    const rows = await list(from)
+    const byKey = new Map<string, PeerSessionSummary[]>()
+    const add = (key: string, row: PeerSessionSummary) => {
+      const held = byKey.get(key)
+      if (held) {
+        held.push(row)
+      } else {
+        byKey.set(key, [row])
+      }
+    }
+    for (const row of rows) {
+      add(peerMentionKey(peerMentionSlug(row.title, row.id)), row)
+      add(peerMentionKey(row.id), row)
+    }
+    const resolved: PeerMention[] = []
+    const seen = new Set<string>()
+    for (const token of tokens) {
+      const key = peerMentionKey(token.body)
+      const exact = byKey.get(key)
+      // `list` is newest-first, so a shared title resolves to the session that moved last and the
+      // envelope names the others rather than choosing silently.
+      const matches = exact ?? (key.length >= 4 ? rows.filter((row) => row.id.startsWith(key)) : [])
+      const target = matches[0]
+      if (!target || (matches.length > 1 && !exact)) {
+        continue
+      }
+      if (seen.has(target.id)) {
+        continue
+      }
+      seen.add(target.id)
+      const others = matches.slice(1, 4).map((row) => row.id)
+      resolved.push({
+        typed: token.body,
+        id: target.id,
+        name: target.title,
+        engine: target.engine,
+        status: target.status,
+        cwd: target.cwd,
+        ...(others.length ? { ambiguousWith: others } : {}),
+      })
+      if (resolved.length >= PEER_MENTION_MAX) {
+        break
+      }
+    }
+    return resolved
+  }
+
   const watch = (runner: Runner): (() => void) =>
     runner.subscribe((event) => {
       if (event.type === 'user_message' && !event.origin && !event.synthetic && event.parentToolUseId == null && !event.replay) {
@@ -176,5 +240,5 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       }
     }, runner.info().lastSeq)
 
-  return { list, peek, send, watch }
+  return { list, peek, send, mentions, watch }
 }

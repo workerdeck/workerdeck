@@ -8,10 +8,12 @@ import Observation
 /// `WorkerDeckKit`, where it can be unit-tested; this is the part that needs a
 /// client, a clock, and the session's capabilities.
 ///
-/// The three behave nothing alike, which is why they share a model rather than a
-/// code path. `/commands` arrive with the `capabilities` event and `$skills`
-/// with the `skills` event, so filtering both is local, synchronous and
-/// complete - and they stay separate keys because codex itself separates them.
+/// They behave nothing alike, which is why they share a model rather than a code
+/// path. `/` offers commands *and* skills in one ranked list - commands arrive
+/// with the `capabilities` event and skills with the `skills` event, so filtering
+/// both is local, synchronous and complete - and what a picked skill *inserts* is
+/// still codex's `$name`, which is the token the model reads. `#sessions` are the
+/// other sessions on this gateway, polled slowly because a name is not a reading.
 /// `@files` are a search
 /// against the host filesystem: debounced and single-flight, so a fast typist
 /// makes one request rather than eight, and a gateway without host files answers
@@ -23,15 +25,18 @@ final class PromptCompletionModel {
   enum Suggestion: Identifiable, Equatable {
     case file(HostFileMatch)
     case command(SlashCommandInfo)
-    /// A skill, offered under `$` - codex's own sigil. Resolves to prose, not
-    /// to a token: see `SkillInfo`, no engine parses `$skillname` as syntax.
+    /// A skill, offered on `/` beside commands. Resolves to prose, not to a
+    /// token: see `SkillInfo`, no engine parses `$skillname` as syntax.
     case skill(SkillInfo)
+    /// Another session on this gateway, offered on `#`.
+    case session(PeerSession)
 
     var id: String {
       switch self {
       case .file(let match): return "@\(match.relative)"
       case .command(let command): return "/\(command.name)"
       case .skill(let skill): return "skill:\(skill.name)"
+      case .session(let peer): return "session:\(peer.id)"
       }
     }
 
@@ -42,6 +47,7 @@ final class PromptCompletionModel {
       case .file(let match): return match.relative
       case .command(let command): return command.name
       case .skill(let skill): return Self.prompt(for: skill)
+      case .session(let peer): return peer.slug
       }
     }
 
@@ -61,6 +67,8 @@ final class PromptCompletionModel {
   /// True while a token is active - the composer shows the list only then.
   private(set) var isActive = false
 
+  /// The other sessions on this gateway, newest-first; empty until they load.
+  var peers: [PeerSession] = []
   /// Slash commands from `capabilities`; empty until that event lands.
   var commands: [SlashCommandInfo] = []
   /// Skills from the `skills` event; empty until that lands (for codex, on the
@@ -80,9 +88,14 @@ final class PromptCompletionModel {
   /// Whether `/` has anything to offer. Read by the empty state, which must not
   /// advertise a popover that would open empty.
   var hasCommands: Bool { !commands.isEmpty }
-  /// Whether `$` has anything to offer. Its own flag, not a variant of the
-  /// above: they are different keys offering different things.
+  /// Whether the `/` list carries skills as well as commands.
   var hasSkills: Bool { skills.contains { $0.enabled } }
+  /// Whether `#` has anything to offer.
+  var hasSessions: Bool { !peers.isEmpty }
+  /// The folded slugs a sent `#Name` may style against.
+  var sessionNames: Set<String> { Set(peers.map { PeerMentions.key($0.slug) }) }
+  /// The skill names a sent `$name` may style against.
+  var skillNames: Set<String> { Set(skills.map(\.name)) }
 
   /// Whether `@file` completion is on offer: the session's cwd is known and this
   /// gateway hasn't already 404'd the search. Read by the empty state, which must
@@ -105,8 +118,11 @@ final class PromptCompletionModel {
     }
     switch token.kind {
     case .command: showCommands(matching: token.query)
-    case .skill: showSkills(matching: token.query)
+    case .session: showSessions(matching: token.query)
     case .file: searchFiles(matching: token.query)
+    // `$` is not a trigger: a skill is picked off the `/` list and inserted as
+    // the `$name` the model reads.
+    case .skill: cancel()
     }
   }
 
@@ -127,6 +143,24 @@ final class PromptCompletionModel {
     return PromptTokens.apply(suggestion.value, replacing: token, in: text)
   }
 
+  /// The gateway's own session list, as the `#` picker needs it: this session
+  /// dropped, newest first. The gateway still resolves what was typed against the
+  /// sender's scope, so a stale row costs nothing worse than a plain-text name.
+  static func peerSessions(_ rows: [SessionInfo], excluding sessionId: String) -> [PeerSession] {
+    rows
+      .filter { $0.id != sessionId }
+      .sorted { ($0.lastActivityAt ?? $0.createdAt) > ($1.lastActivityAt ?? $1.createdAt) }
+      .map {
+        PeerSession(
+          id: $0.id,
+          slug: PeerMentions.slug(title: $0.title, id: $0.id),
+          label: sessionLabel($0),
+          engine: $0.engine,
+          status: $0.status,
+          project: $0.project?.name)
+      }
+  }
+
   func cancel() {
     task?.cancel()
     task = nil
@@ -137,34 +171,40 @@ final class PromptCompletionModel {
 
   // MARK: - The three halves
 
-  /// Local and immediate. Matches on the command name, its aliases, and the bare
-  /// name of a namespaced one - typing "wrapup" should find "dev:wrapup".
+  /// Local and immediate, and **one list**: engine commands first, then skills,
+  /// the order `mergeComposerRows` gives every other client. Matches on the
+  /// command name, its aliases, and the bare name of a namespaced one - typing
+  /// "wrapup" should find "dev:wrapup".
   private func showCommands(matching query: String) {
     task?.cancel()
     task = nil
     lastQuery = nil
     isActive = true
     let needle = query.lowercased()
-    suggestions =
+    let matchedCommands =
       commands
       .filter { needle.isEmpty || $0.matches(prefix: needle) }
-      .prefix(20)
       .map(Suggestion.command)
+    let matchedSkills =
+      skills
+      .filter { $0.enabled && (needle.isEmpty || $0.matches(prefix: needle)) }
+      .map(Suggestion.skill)
+    suggestions = Array((matchedCommands + matchedSkills).prefix(20))
   }
 
-  /// Local and immediate, like commands - but its own list under its own key.
-  /// `$` is codex's sigil for skills; `/` stays the CLI's commands.
-  private func showSkills(matching query: String) {
+  /// Local and immediate. The list arrives newest-first and an empty query keeps
+  /// that order: which session moved last is the most useful thing it can say.
+  private func showSessions(matching query: String) {
     task?.cancel()
     task = nil
     lastQuery = nil
     isActive = true
     let needle = query.lowercased()
     suggestions =
-      skills
-      .filter { $0.enabled && (needle.isEmpty || $0.matches(prefix: needle)) }
+      peers
+      .filter { needle.isEmpty || $0.matches(prefix: needle) }
       .prefix(20)
-      .map(Suggestion.skill)
+      .map(Suggestion.session)
   }
 
   private func searchFiles(matching query: String) {
@@ -201,6 +241,22 @@ final class PromptCompletionModel {
 extension SlashCommandInfo {
   fileprivate func matches(prefix needle: String) -> Bool {
     let candidates = [name] + (aliases ?? []) + name.split(separator: ":").map(String.init)
+    return candidates.contains { $0.lowercased().hasPrefix(needle) }
+  }
+}
+
+/// One other session, as the `#` picker needs it.
+struct PeerSession: Identifiable, Equatable, Sendable {
+  let id: String
+  /// What the composer writes after the `#`, and what the gateway folds to resolve it.
+  let slug: String
+  let label: String
+  let engine: ProfileEngine?
+  let status: SessionStatus
+  let project: String?
+
+  fileprivate func matches(prefix needle: String) -> Bool {
+    let candidates = [slug, label] + slug.split(separator: "-").map(String.init)
     return candidates.contains { $0.lowercased().hasPrefix(needle) }
   }
 }

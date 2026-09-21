@@ -1,4 +1,11 @@
-import type { ParkedExecution, Runner, RunnerSnapshot, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
+import type {
+  ParkedExecution,
+  Runner,
+  RunnerSnapshot,
+  SendMessageOptions,
+  SessionRunnerConfig,
+  ToolExecutionResult,
+} from '@workerdeck/core'
 import type { SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 
 // Parks the way the provider engine does, without the model SDK this package must never depend on.
@@ -179,7 +186,10 @@ export class ParkableRunner implements Runner {
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
   }
-  sendMessage(): void {}
+  sent: Array<{ text: string; options?: SendMessageOptions }> = []
+  sendMessage(text: string, _attachments?: unknown, options?: SendMessageOptions): void {
+    this.sent.push({ text, options })
+  }
   setTitle(title: string | undefined): void {
     this.#config = { ...this.#config, meta: { ...this.#config.meta, title } }
   }

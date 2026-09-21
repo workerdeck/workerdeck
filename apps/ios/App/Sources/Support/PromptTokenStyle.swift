@@ -10,17 +10,19 @@ import SwiftUI
 /// and after it is sent. This file only decides what the styling *is*.
 enum PromptTokenStyle {
   /// Style a plain, unparsed string - user messages, which are literal text.
-  static func styled(_ text: String) -> AttributedString {
-    apply(to: AttributedString(text))
+  static func styled(_ text: String, names: PromptTokenNames = .none) -> AttributedString {
+    apply(to: AttributedString(text), names: names)
   }
 
   /// Style an already-parsed string - assistant prose, after inline markdown.
   ///
   /// Scanning happens over the *rendered* characters rather than the source, so
   /// offsets survive markdown having eaten its own syntax (`**bold**` → `bold`).
-  static func apply(to attributed: AttributedString) -> AttributedString {
+  static func apply(to attributed: AttributedString, names: PromptTokenNames = .none)
+    -> AttributedString
+  {
     let plain = String(attributed.characters)
-    let tokens = PromptTokens.scan(plain)
+    let tokens = PromptTokens.scan(plain, skills: names.skills, sessions: names.sessions)
     guard !tokens.isEmpty else { return attributed }
 
     var result = attributed
@@ -39,16 +41,39 @@ enum PromptTokenStyle {
   /// middle of a sentence shouldn't outweigh it.
   static let font: Font = .system(.callout, design: .monospaced)
 
-  /// Two tokens, two meanings - a file is a reference, a command is an action -
-  /// so they are told apart by hue rather than by shape alone.
+  /// Four tokens, four meanings - a file is a reference, a command is an action,
+  /// a skill is a capability, a session is someone else - so they are told apart
+  /// by hue rather than by shape alone.
   static func color(_ kind: PromptToken.Kind) -> Color {
     switch kind {
     case .file: return .accentColor
     case .command: return .purple
-    // Unreachable from `scan` (which skips skills - `$` is ordinary prose too
-    // often to colour on sight) but the draft editor styles the token it is
-    // completing, and a distinct colour there says "this is not a command".
     case .skill: return .orange
+    case .session: return .green
     }
+  }
+}
+
+/// The two gated sigils' allowlists, carried down the transcript.
+///
+/// `$name` and `#Name` are ordinary prose far more often than they are tokens, so
+/// each is styled only against a list this client holds: the skills the session
+/// reported, the sessions the gateway listed. Empty means "style neither", which
+/// is what a session with no skills and a gateway with no peers gets.
+struct PromptTokenNames: Equatable {
+  var skills: Set<String> = []
+  var sessions: Set<String> = []
+
+  static let none = PromptTokenNames()
+}
+
+private struct PromptTokenNamesKey: EnvironmentKey {
+  static let defaultValue = PromptTokenNames.none
+}
+
+extension EnvironmentValues {
+  var promptTokenNames: PromptTokenNames {
+    get { self[PromptTokenNamesKey.self] }
+    set { self[PromptTokenNamesKey.self] = newValue }
   }
 }

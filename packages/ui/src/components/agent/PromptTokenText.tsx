@@ -4,14 +4,22 @@ import { cn } from '../../lib/utils.ts'
 
 const SkillNamesContext = createContext<readonly string[] | undefined>(undefined)
 
+const SessionNamesContext = createContext<readonly string[] | undefined>(undefined)
+
 // The skill names a `$name` in a sent message may resolve to; unset, nothing is a skill token.
 export function SkillNamesProvider({ names, children }: { names: readonly string[] | undefined; children: ReactNode }) {
   return <SkillNamesContext.Provider value={names}>{children}</SkillNamesContext.Provider>
 }
 
+// The folded peer slugs a `#Name` in a sent message may resolve to; unset, nothing is a session token.
+export function SessionNamesProvider({ names, children }: { names: readonly string[] | undefined; children: ReactNode }) {
+  return <SessionNamesContext.Provider value={names}>{children}</SessionNamesContext.Provider>
+}
+
 export function PromptTokenText({ text, className }: { text: string; className?: string }) {
   const skills = useContext(SkillNamesContext)
-  const tokens = scanPromptTokens(text, { skills })
+  const sessions = useContext(SessionNamesContext)
+  const tokens = scanPromptTokens(text, { skills, sessions })
   if (tokens.length === 0) {
     return <span className={className}>{text}</span>
   }

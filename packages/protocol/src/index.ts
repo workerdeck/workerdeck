@@ -1065,6 +1065,7 @@ export type QueueStatsResponse = { stats: QueueStats }
 
 export * from './checklist.ts'
 export * from './pricing.ts'
+export * from './peer-mentions.ts'
 export * from './session-list.ts'
 export * from './tool-titles.ts'
 export * from './usage.ts'

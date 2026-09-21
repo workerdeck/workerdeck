@@ -21,10 +21,12 @@ struct SessionEmptyState: View {
   /// yet is worse than not mentioning it.
   let hasCommands: Bool
   /// Whether the engine has reported skills the `/` popover can offer. Its own
-  /// flag, not a variant of `hasCommands`: what `/` does differs - a command is
-  /// submitted, a skill is typed for you to edit - and an engine can have one
-  /// without the other.
+  /// flag, not a variant of `hasCommands`: what picking one does differs - a
+  /// command is submitted, a skill is typed for you to edit - and an engine can
+  /// have one without the other.
   var hasSkills: Bool = false
+  /// Whether there is another session on this gateway to refer to.
+  var hasSessions: Bool = false
   let canBrowseFiles: Bool
   /// What the layout was actually offered, not what the screen is.
   let availableHeight: CGFloat
@@ -94,16 +96,20 @@ struct SessionEmptyState: View {
     // its history into the transcript (`resumeBackfill`), so a resumed session
     // doesn't reach this empty state - its history is on screen.
     var hints = [Hint(symbol: "text.bubble", text: "Tell me what to do")]
-    // Two keys, two hints - different features, not two spellings of one. `$` is
-    // codex's own sigil for skills; `/` stays the CLI's commands.
-    if hasCommands {
-      hints.append(Hint(symbol: "slash.circle", text: "Type / for the CLI's slash commands."))
-    }
-    if hasSkills {
-      hints.append(Hint(symbol: "sparkles", text: "Type $ to draft a message for a skill."))
+    // One key for both, the way every other client offers them: a command is
+    // submitted, a skill is typed for you to edit, and the list says which.
+    if hasCommands || hasSkills {
+      let text =
+        hasSkills
+        ? (hasCommands ? "Type / for commands and skills." : "Type / to draft a message for a skill.")
+        : "Type / for the CLI's slash commands."
+      hints.append(Hint(symbol: "slash.circle", text: text))
     }
     if canBrowseFiles {
       hints.append(Hint(symbol: "at", text: "Type @ to search this project's files."))
+    }
+    if hasSessions {
+      hints.append(Hint(symbol: "person.2", text: "Type # to refer to another session."))
     }
     return hints
   }

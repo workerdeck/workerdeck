@@ -89,10 +89,9 @@ private struct SuggestionRow: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     case .skill(let skill):
-      // Deliberately unlike the command row above: `$` rather than `/`, a
-      // different glyph, and a subtitle saying what picking it does. Codex's own
-      // TUI shows skills this way, and a row that looked like a command row
-      // would promise syntax no engine parses.
+      // Deliberately unlike the command row above, though both come off `/`: a
+      // glyph and a subtitle saying what picking it does, because a skill row
+      // that looked like a command row would promise syntax no engine parses.
       HStack(spacing: 9) {
         Image(systemName: "sparkles")
           .font(.caption)
@@ -106,6 +105,26 @@ private struct SuggestionRow: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
+        }
+        Spacer(minLength: 0)
+      }
+    case .session(let peer):
+      HStack(spacing: 9) {
+        Image(systemName: "person.2")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 1) {
+          Text(peer.label)
+            .font(.callout)
+            .lineLimit(1)
+          Text(
+            [peer.engine?.rawValue, peer.project, peer.status.rawValue]
+              .compactMap { $0 }
+              .joined(separator: " · ")
+          )
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
         }
         Spacer(minLength: 0)
       }

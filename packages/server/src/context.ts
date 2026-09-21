@@ -8,6 +8,7 @@ import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
 import type { HostFileRoots } from './services/host-files.ts'
 import type { SessionParkManager } from './services/parking.ts'
+import type { PeerService } from './services/peers.ts'
 import type { ProducedFileStore } from './services/produced-files.ts'
 import type { ProfileService } from './services/profiles.ts'
 import type { ProjectInfoService } from './services/project-info.ts'
@@ -29,6 +30,8 @@ export type ServerContext = {
 
   registry: SessionRegistry
   parking: SessionParkManager
+  // Undefined when peer messaging is off; the send path then resolves no `#` mentions.
+  peers: PeerService | undefined
   bridge: BridgeHub
   projects: ProjectInfoService
   queue: JobQueue | undefined
