@@ -7,13 +7,16 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const TEXT_EXT = /\.(ts|tsx|mjs|mts|js|jsx|md|swift|astro|css|html|json|ya?ml|sh|svg)$/
-const EM_DASH = '—'
-const EN_DASH = '–'
+// The two characters the sweep hunts for, so this file always trips its own check.
+const EM_DASH = '—' // wd-em-dash-ok
+const EN_DASH = '–' // wd-em-dash-ok
 const OPT_OUT = 'wd-em-dash-ok'
 const ALL = process.argv.includes('--all')
 
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter(Boolean)
+  return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+    .split('\n')
+    .filter(Boolean)
 }
 
 function targets() {
