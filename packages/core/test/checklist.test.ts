@@ -54,7 +54,12 @@ function assistant(content: unknown, parent: string | null = null) {
 }
 
 function taskCreate(id: string, subject: string, activeForm?: string) {
-  return { type: 'tool_use', id, name: 'TaskCreate', input: activeForm ? { subject, description: subject, activeForm } : { subject, description: subject } }
+  return {
+    type: 'tool_use',
+    id,
+    name: 'TaskCreate',
+    input: activeForm ? { subject, description: subject, activeForm } : { subject, description: subject },
+  }
 }
 
 function taskUpdate(id: string, taskId: string, status: string) {
@@ -64,7 +69,10 @@ function taskUpdate(id: string, taskId: string, status: string) {
 function created(toolUseId: string, taskId: string, subject: string, parent: string | null = null) {
   return {
     type: 'user',
-    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: `Task #${taskId} created successfully: ${subject}` }] },
+    message: {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: toolUseId, content: `Task #${taskId} created successfully: ${subject}` }],
+    },
     parent_tool_use_id: parent,
     uuid: nextUuid(),
     session_id: 'sdk-session-1',

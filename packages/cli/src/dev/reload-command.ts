@@ -48,7 +48,9 @@ export async function runReload(argv: string[]): Promise<number> {
     }
   }
   if (!stateDir) {
-    process.stderr.write('reload: this configuration has no state dir, so there is no pidfile to read.\n  Send SIGUSR2 to the gateway process instead.\n')
+    process.stderr.write(
+      'reload: this configuration has no state dir, so there is no pidfile to read.\n  Send SIGUSR2 to the gateway process instead.\n',
+    )
     return 1
   }
 

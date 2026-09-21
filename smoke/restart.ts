@@ -37,7 +37,6 @@ const configPath = join(root, 'gateway.config.mjs')
 
 mkdirSync(workDir, { recursive: true })
 
-
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }

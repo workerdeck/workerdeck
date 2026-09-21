@@ -66,7 +66,19 @@ async function startGateway(): Promise<void> {
   )
   child = spawn(
     process.execPath,
-    [...NODE_ARGS, '--config', configPath, '--port', String(PORT), '--host', '127.0.0.1', '--state-dir', stateDir, '--no-web', '--hot-reload'],
+    [
+      ...NODE_ARGS,
+      '--config',
+      configPath,
+      '--port',
+      String(PORT),
+      '--host',
+      '127.0.0.1',
+      '--state-dir',
+      stateDir,
+      '--no-web',
+      '--hot-reload',
+    ],
     { stdio: ['ignore', 'pipe', 'pipe'] },
   )
   const collect = (data: unknown) => {
