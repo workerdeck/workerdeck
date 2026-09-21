@@ -16,6 +16,22 @@ export function codexChildEnv(base: Record<string, string | undefined>, codexHom
   return env
 }
 
+// `request_user_input` - the tool behind `item/tool/requestUserInput`, which WorkerDeck already
+// answers as an `AskUserQuestion` permission request - is off by default and behind TWO gates,
+// and one without the other reads as the tool not existing: the first registers it at all, the
+// second lets the router run it outside Plan mode (without it a Default-mode call is refused with
+// "request_user_input is unavailable in Default mode" and the model reports the tool as
+// unavailable). Neither has a per-thread switch on the app-server, so they are spawn arguments.
+// An unrecognised `-c` key is ignored unless `--strict-config` is passed, so an older codex that
+// knows neither gate still starts. `questionBehavior` decides what an unattended session answers.
+export const APP_SERVER_ARGS = [
+  'app-server',
+  '-c',
+  'tools.experimental_request_user_input.enabled=true',
+  '-c',
+  'features.default_mode_request_user_input=true',
+] as const
+
 // `experimentalApi` gates the granular approval policy and there is no non-experimental fallback, so it is not per-call-site.
 export const INITIALIZE_PARAMS = {
   clientInfo: {

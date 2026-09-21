@@ -244,6 +244,16 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   Anything else gets a JSON-RPC -32601, not a hang. An unanswered approval waits forever unless
   `approvalTimeoutMs` (or gateway-wide `defaultApprovalTimeoutMs`) is set; unset/null/0 all mean
   never. Turn end, interrupt, child death and session close all sweep pending approvals.
+- **`request_user_input` needs two spawn-time gates too, and one without the other reads as the
+  tool not existing.** `tools.experimental_request_user_input.enabled=true` registers it;
+  `features.default_mode_request_user_input=true` lets the router run it outside Plan mode (with
+  only the first, a Default-mode call is refused with `request_user_input is unavailable in Default
+  mode` and the model answers "the tool is unavailable in the current mode"). Neither has a
+  per-thread switch, so both are `-c` arguments in `APP_SERVER_ARGS` (`engines/codex/connect.ts`),
+  on every spawn. `--strict-config` is deliberately NOT passed: an unrecognised `-c` key is ignored
+  without it, so an older codex that knows neither gate still starts. The receiving half was already
+  wired (`item/tool/requestUserInput` -> the `AskUserQuestion` convention, `questionBehavior`
+  policy-resolving it unattended).
 - **`availableDecisions` is per-request, experimental, and gates the accept side only.** The runner
   sends plain `accept` only when offered; an allow the request doesn't offer plain accept for is
   answered with denial, never silently widened into `acceptForSession` or a persistent execpolicy
