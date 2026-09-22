@@ -4,6 +4,7 @@ import { createVfs, type SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import type { WebFetchFn } from './web-fetch.ts'
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
+import { SHELL_TOOL_NAMES, SHELL_TOOL_SHAPES, runShellTool, type ShellDirectory } from '../../lib/shells.ts'
 
 export type ToolTrust = 'sandboxed' | 'authoritative'
 
@@ -26,6 +27,7 @@ export type ToolContextOptions = {
   onDispatch?: (executionId: string, toolName: string) => void
   onSettle?: (executionId: string, result: ToolExecutionResult) => void
   peers?: PeerDirectory
+  shells?: ShellDirectory
   // The runner does not exist while its tools are built, so the caller's own id is read at call time.
   selfId?: () => string
 }
@@ -117,6 +119,25 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
           inputSchema: z.object(PEER_TOOL_SHAPES[name].shape),
           execute: async (args) => {
             const output = await runPeerTool(peers, selfId(), name, args)
+            return output.isError ? { error: output.text } : { result: output.text }
+          },
+        }),
+      })
+    }
+  }
+
+  if (options.shells) {
+    const shells = options.shells
+    const selfId = options.selfId ?? (() => options.sessionId)
+    for (const name of SHELL_TOOL_NAMES) {
+      definitions.push({
+        name,
+        trust: 'authoritative',
+        tool: tool({
+          description: SHELL_TOOL_SHAPES[name].description,
+          inputSchema: z.object(SHELL_TOOL_SHAPES[name].shape),
+          execute: async (args) => {
+            const output = await runShellTool(shells, selfId(), name, args)
             return output.isError ? { error: output.text } : { result: output.text }
           },
         }),

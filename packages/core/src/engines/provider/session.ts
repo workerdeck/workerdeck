@@ -97,6 +97,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     onFileDelivered:
       options.capabilities?.deliverFiles === false || !isGranted('deliverFiles') ? undefined : (file) => runner?.emitFileDelivered(file),
     peers: options.config.peers,
+    shells: options.config.shells,
     selfId: () => runner?.id ?? 'pending',
   })
   const declaredServers = options.profile?.session?.mcpServers

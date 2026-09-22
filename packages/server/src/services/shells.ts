@@ -2,7 +2,16 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile, type FileHandle } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ttyText, type LocalShellSource, type Runner } from '@workerdeck/core'
+import {
+  SHELL_REFUSAL,
+  clampShellTail,
+  shellSummary,
+  shellTail,
+  ttyText,
+  type LocalShellSource,
+  type Runner,
+  type ShellDirectory,
+} from '@workerdeck/core'
 import {
   ENGINE_CAPABILITIES,
   SHELL_ARTIFACT_MAX_BYTES,
@@ -27,8 +36,9 @@ import {
   type ShellInfo,
   type ShellOwner,
 } from '@workerdeck/protocol'
+import { killProcessTrees, readProcessTable, type ProcessTable, type TreeKillDeps } from './process-tree.ts'
 
-export const SHELL_REFUSAL = 'shell commands are not available on this session'
+export { SHELL_REFUSAL }
 
 const NOTIFY_MS = 250
 const SWEEP_INTERVAL_MS = 60 * 60_000
@@ -50,7 +60,7 @@ export type ShellAttachment = { shell: ShellInfo; scrollback: string; detach: ()
 
 export type ShellOutputQuery = { view: 'text' | 'raw'; tail?: number }
 
-export type ShellErrorContext = { op: 'index' | 'artifact' | 'sweep' | 'listener'; sessionId?: string; shellId?: string }
+export type ShellErrorContext = { op: 'index' | 'artifact' | 'sweep' | 'listener' | 'kill'; sessionId?: string; shellId?: string }
 
 export type ShellRegistryOptions = {
   generation: string
@@ -64,6 +74,7 @@ export type ShellRegistryOptions = {
   tailRingBytes?: number
   tailFlushMs?: number
   sweepIntervalMs?: number
+  processTable?: ProcessTable
   onError?: (error: unknown, context: ShellErrorContext) => void
 }
 
@@ -136,6 +147,8 @@ type SessionShells = {
   pending: boolean
 }
 
+type KillTarget = { state: SessionShells; entry: ShellEntry }
+
 let ptyModule: PtyModule | null | undefined
 
 export async function loadPty(): Promise<PtyModule | null> {
@@ -148,6 +161,25 @@ export async function loadPty(): Promise<PtyModule | null> {
     ptyModule = null
   }
   return ptyModule
+}
+
+// The agent's read side over the same registry: a session sees its own shells and nothing else, so another session's
+// id reads as missing rather than as a refusal that would name it.
+export function createShellDirectory(registry: ShellRegistry): ShellDirectory {
+  return {
+    list: async (from) => registry.list(from).map(shellSummary),
+    read: async (from, shellId, options) => {
+      const info = registry.get(from, shellId)
+      if (!info) {
+        return undefined
+      }
+      const text = await registry.output(from, shellId, { view: 'text' })
+      if (text === undefined) {
+        return undefined
+      }
+      return { shell: shellSummary(info), ...shellTail(text, clampShellTail(options?.tail)) }
+    },
+  }
 }
 
 export function shellPermitted(shells: ShellRegistry | null, runner: Runner, operator: boolean): boolean {
@@ -353,12 +385,47 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     fire(entry)
   }
 
-  const kill = (state: SessionShells, entry: ShellEntry, reason: ShellEndReason): void => {
-    if (entry.info.status !== 'running') {
+  const treeDeps: TreeKillDeps = {
+    table: options.processTable ?? readProcessTable,
+    signal: (pid, name) => void process.kill(pid, name),
+    self: process.pid,
+  }
+
+  const killTrees = (entries: ShellEntry[]): void => {
+    const live = entries.flatMap((entry) => (entry.pid === undefined ? [] : [{ entry, pid: entry.pid }]))
+    if (live.length === 0) {
       return
     }
-    killGroup(entry)
-    settle(state, entry, reason)
+    const result = killProcessTrees(
+      live.map(({ pid }) => pid),
+      treeDeps,
+    )
+    for (const { entry, pid } of live) {
+      if (result.unreached.includes(pid)) {
+        try {
+          entry.child?.kill('SIGKILL')
+        } catch {}
+      }
+      const context: ShellErrorContext = { op: 'kill', sessionId: entry.info.sessionId, shellId: entry.info.id }
+      if (!result.scanned) {
+        report(new Error('no process table (ps), only the process group was signalled'), context)
+      } else if (result.foreign.includes(pid)) {
+        report(new Error(`pid ${pid} is no longer this shell's child and was left alone`), context)
+      }
+    }
+  }
+
+  const killEntries = (targets: KillTarget[], reason: ShellEndReason): number => {
+    const running = targets.filter(({ entry }) => entry.info.status === 'running')
+    killTrees(running.map(({ entry }) => entry))
+    for (const { state, entry } of running) {
+      settle(state, entry, reason)
+    }
+    return running.length
+  }
+
+  const kill = (state: SessionShells, entry: ShellEntry, reason: ShellEndReason): void => {
+    killEntries([{ state, entry }], reason)
   }
 
   const killSession = (sessionId: string, reason: ShellEndReason): void => {
@@ -366,9 +433,10 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     if (!state) {
       return
     }
-    for (const entry of runningIn(state)) {
-      kill(state, entry, reason)
-    }
+    killEntries(
+      runningIn(state).map((entry) => ({ state, entry })),
+      reason,
+    )
   }
 
   const spawn = async ({ runner, command, owner }: ShellSpawnInput): Promise<ShellSpawned> => {
@@ -519,24 +587,13 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
         clearInterval(sweeper)
         sweeper = undefined
       }
-      let killed = 0
-      for (const state of sessions.values()) {
-        for (const entry of runningIn(state)) {
-          kill(state, entry, reason)
-          killed++
-        }
-      }
-      return killed
+      return killEntries(
+        [...sessions.values()].flatMap((state) => runningIn(state).map((entry) => ({ state, entry }))),
+        reason,
+      )
     },
     killAllSync: () => {
-      for (const entry of runningAll()) {
-        if (entry.pid === undefined) {
-          continue
-        }
-        try {
-          process.kill(-entry.pid, 'SIGKILL')
-        } catch {}
-      }
+      killTrees(runningAll())
     },
     attach: async (sessionId, shellId, sink) => {
       const entry = find(sessionId, shellId)
@@ -1015,19 +1072,6 @@ function freshSession(sessionId: string): SessionShells {
 
 function runningIn(state: SessionShells): ShellEntry[] {
   return [...state.entries.values()].filter((entry) => entry.info.status === 'running')
-}
-
-function killGroup(entry: ShellEntry): void {
-  if (entry.pid === undefined) {
-    return
-  }
-  try {
-    process.kill(-entry.pid, 'SIGKILL')
-  } catch {
-    try {
-      entry.child?.kill('SIGKILL')
-    } catch {}
-  }
 }
 
 function sourceFor(entry: ShellEntry, artifact: LiveArtifact): LocalShellSource {

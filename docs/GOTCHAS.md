@@ -1305,7 +1305,8 @@ has the shape; these are the ways to get it wrong.
 - **Every `$` is a PTY with a tracked record; the transcript row, the REST routes and the card are
   views over it.** There is no pipe path, no interactive/non-interactive branch and no timer that
   changes how a command runs. `services/shells.ts` is the registry (spawn, list, kill, artifact,
-  index, generation) and the only place this package spawns a child.
+  index, generation) and the only place this package spawns a shell; `services/process-tree.ts`
+  runs `ps` at kill time, the one other subprocess.
 - **It goes through nothing.** A Bash tool call raises a permission card and honours
   `disableBypassPermissions`; a `$` command has none of that, it is a shell on whatever the gateway
   process can reach, in the session's cwd. It is its own switch (`shell: { enabled }`, CLI
@@ -1331,28 +1332,66 @@ has the shape; these are the ways to get it wrong.
 - **The force path kills too.** `installShutdown`'s second signal runs `killAllSync()` before
   `process.exit`; a detached group leader outlives a plain exit. The first signal names the running
   shells before the graceful close kills them.
-- **Killed by process group, and that is not the same as killed.** `process.kill(-pid)`, since a
-  bare kill leaves grandchildren (`sleep 9999 &`) running past the session. `session_closed` and a
-  park kill the session's shells through the registry's `watch(runner)`, installed once in
-  `onRegister` - a socket closing must only detach, never kill.
-- **A child that starts its own process group escapes the group kill, and the record still says
-  `killed`.** The group kill reaches only what stayed in the leader's group. A supervisor that
-  calls `setsid`/`setpgid` per child does not: observed with `$ box dev` (silkweave), where the
-  pty child led pgid P with one bun process in it, while the supervisor, the web dev server and
-  the API server each sat in a group of their own, so `process.kill(-P)` killed two of six and
-  **vite kept its port**. The `shells.test.ts` grandchild case passes because a plain `&` child
-  inherits the group; it does not prove the general claim. Read `endReason: 'killed'` as "the
-  group was signalled", never as "nothing it started is left". No fix yet: reaching the escapees
-  means tracking descendants (a pid scan at kill time, or a `PGID` recorded per descendant), and
-  the honest interim is that the reason string overpromises.
-- **A `/clear` leaves a running shell with no handle in the UI.** The transcript row is the only
-  surface a shell has until the session-list rows land (stage 3), and `conversation_reset` both
-  wipes the transcript and makes the queue unsubscribe, so the row never redraws. The process
-  keeps running, the record stays right, and `GET /sessions/:id/shells` plus
-  `POST .../shells/:shellId/kill` still answer, but nothing in any client draws them: the
-  operator is back to "the port is held by an orphan nobody can see", which is the complaint
-  this feature exists to answer. Until the session-list surface lands, the index at
-  `<stateDir>/shells/<sessionId>.json` is the read-only way to find what is still running.
+- **Killed by process tree, and that is not the same as killed.** `process.kill(-pid)` plus the
+  descendant closure (next bullet), since a bare kill leaves grandchildren (`sleep 9999 &`) running
+  past the session. `session_closed` and a park kill the session's shells through the registry's
+  `watch(runner)`, installed once in `onRegister` - a socket closing must only detach, never kill.
+- **A kill is the closure under the PTY child, found at kill time by `ps`, not only its group.**
+  The group kill alone reached only what stayed in the leader's group: a supervisor that calls
+  `setsid`/`setpgid` per child escaped it (observed with `$ box dev`, where `process.kill(-P)`
+  killed two of six and **vite kept its port**). Every kill path, `killAllSync` included, funnels
+  through `killProcessTrees` in `services/process-tree.ts`: read `ps -eo pid=,ppid=,pgid=`
+  synchronously, walk `ppid` down from the child, SIGSTOP the leader's group and every descendant
+  found so nothing can fork past the scan, rescan until the closure stops growing (bounded), then
+  SIGKILL the leader's group, every descendant by pid, and every group observed on the way (a group
+  can only be joined from inside its session, so an observed group holds nothing but the tree's
+  own orphans). Without `ps` (a minimal container) it degrades to the group kill alone and reports
+  it through `onError` (`op: 'kill'`), so the gateway log names each group-only kill. Guards that
+  hold whatever the table claims: never signal pid 0 or 1 (`-1` is the broadcast kill), never the
+  gateway's pid or its own group, and a root the table shows under a parent other than the gateway
+  is a recycled pid and is left alone, reported. `endReason: 'killed'` still means "signalled", not
+  "verified dead": there is no post-kill verification pass, and the wire union is locked. What it
+  does not reach: anything that had already left the tree before the kill, a double-forked daemon
+  reparented to init in a group of its own, since neither `ppid` nor an observed group leads to it.
+  The residual race: a descendant that exits between the scan and its SIGSTOP, and whose pid the
+  kernel hands to a new process inside that window, would be stopped and killed. The window is
+  microseconds and needs the pid space to wrap inside it, so it is practically nil, never zero.
+  The `shells.test.ts` escapee cases use node's `detached: true` (a `setsid`) as the grandchild;
+  they fail against the group kill alone, and the degrade case pins that the escapee really does
+  survive it.
+- **A `/clear` wipes the transcript row, so the session card is the surviving handle.**
+  `conversation_reset` both clears the transcript and makes the queue unsubscribe, so a running
+  shell's transcript row never redraws. The process keeps running and the record stays right. The
+  card rows (`sessionSteps`) are the handle that outlives a clear, in the web sidebar and the VS
+  Code sidebar; iOS has no card rows yet, so on the phone the REST routes and
+  `<stateDir>/shells/<sessionId>.json` are still the only way to find what is running.
+- **A shell reaches the session card only after `SHELL_PROMOTE_MS`, and the debounce is the
+  client's clock, not the server's.** `decorate` puts every tracked shell on `SessionInfo.shells`;
+  `promotedShells(info, now)` is what decides which of them draw, and it is called with the poll's
+  `now` (web) or the push's (VS Code). So `$ ls` never lands on a card, `$ npm run dev` lands after
+  three seconds, a clean exit de-promotes at once, and a non-zero exit lingers `SHELL_LINGER_MS`
+  with its code. The server's own filter in `decorate` is deliberately looser: it keeps the record,
+  the client decides the drawing. `sessionSteps` draws shells only when the caller passes the shell
+  options, and the kill glyph only when it passes `onKill`, so a read-only surface cannot grow a
+  kill button by accident.
+- **The agent reads shells through `shell_list`/`shell_read`, and the gate is the runner config, not
+  the tool.** `packages/core/src/lib/shells.ts` is the `peers.ts` twin: one `ShellDirectory`, one
+  set of shapes, three deliveries (claude through the same `workerdeck` `createSdkMcpServer`, so
+  they surface as `mcp__workerdeck__shell_read`; codex through `dynamicTools`; provider through
+  `tools.ts` with `trust: 'authoritative'`). `session-factory.buildRunner` stamps `shells` only
+  when the gateway has `shell.enabled` **and** the engine is `hostCwd`, so a session that could
+  never own a shell is never told the tools exist. The third ANDed condition, operator auth, is
+  per-principal and has no home on a runner config; it holds transitively today because only an
+  operator can spawn a `$`, `list` is keyed by session, and `read` answers a foreign `shellId`
+  with the same not-found it gives a nonexistent one. **Stage 4a breaks that transitivity**: the
+  moment an agent can start its own shell, `owner` stops being decorative and the gate needs a
+  real per-principal answer.
+- **`shell_read` returns the text view's tail, clamped, never raw bytes.** `SHELL_READ_DEFAULT_LINES`
+  when the agent asks for nothing, `SHELL_READ_MAX_LINES` as the ceiling, and an over-max `tail` is
+  clamped rather than rejected: rejecting burns a turn to teach the model a number it could have
+  been given. The clamp is applied twice, in `runShellTool` and again in the server directory, so a
+  direct caller cannot overrun it. The result is a one-line header plus the text, not JSON, because
+  JSON would escape every newline in the thing the agent is trying to read.
 - **Two budgets, never joined.** The model text is head + tail + pointer fixed at flush
   (`shellContextText`); the row is `SHELL_INLINE_LINES` and expands client-side through
   `GET /sessions/:id/shells/:shellId/output`. Expanding never reaches the model.

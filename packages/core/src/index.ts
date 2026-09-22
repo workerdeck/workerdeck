@@ -61,6 +61,30 @@ export type {
   PeerToolSpec,
 } from './lib/peers.ts'
 export {
+  SHELL_REFUSAL,
+  SHELL_TOOL_NAMES,
+  SHELL_TOOL_SHAPES,
+  clampShellTail,
+  installShellDirectory,
+  installedShellDirectory,
+  isShellToolName,
+  runShellTool,
+  shellDirectoryHandle,
+  shellReadText,
+  shellSummary,
+  shellTail,
+  shellToolSpecs,
+} from './lib/shells.ts'
+export type {
+  ShellDirectory,
+  ShellReadOptions,
+  ShellReadResult,
+  ShellSummary,
+  ShellToolName,
+  ShellToolOutput,
+  ShellToolSpec,
+} from './lib/shells.ts'
+export {
   SUPPORTED_ATTACHMENT_TYPES,
   attachmentContentBlocks,
   attachmentKind,

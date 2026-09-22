@@ -498,6 +498,13 @@ prompts only). `Runner.sendMessage` grew a third argument, `{ origin }`, for the
 directory reaches a runner as `peerDirectoryHandle()`, resolved per call from a process-wide slot,
 which is what keeps a hot-reload-carried runner pointed at the live registry.
 
+`src/lib/shells.ts` is the same file for shell reading: `ShellDirectory` (`list`, `read`, caller id
+first), `SHELL_TOOL_SHAPES` for `shell_list`/`shell_read`, `runShellTool`, and the
+`installShellDirectory`/`shellDirectoryHandle` pair over a process-wide slot. It owns `SHELL_REFUSAL`
+now (the server re-exports it), so the one refusal string covers the tool path too. `read` answers a
+shellId the caller does not own with the same `undefined` it gives a nonexistent one, and clamps
+`tail` between `SHELL_READ_DEFAULT_LINES` and `SHELL_READ_MAX_LINES` rather than rejecting it.
+
 `src/lib/instructions.ts` is the host-instruction seam: `SessionInstructions`
 (`string | ((context) => string)`), `resolveInstructions` and `composeInstructions`. All three
 runner configs carry `instructions`, each runner resolves it **once in its constructor**, after
@@ -729,7 +736,9 @@ the session POST answers 500 with the message, a job goes straight to `failed`.
 
 `shell: { enabled?, timeoutMs?, artifactDir?, artifactMaxBytes?, artifactTtlMs?,
 maxRunningPerSession? }` (default off, no wall clock) is the **only place this package spawns a
-child** - everything else that runs a process belongs to an engine. It backs `$` shell mode:
+shell** (`services/process-tree.ts` runs `ps` synchronously at kill time to find a shell's
+descendants, and nothing else) - everything else that runs a process belongs to an engine. It
+backs `$` shell mode:
 `services/shells.ts` is the shell registry, and every `$` is a PTY (`@lydell/node-pty`, an optional
 dependency) in the session's cwd with a tracked `ShellInfo` record, an on-disk artifact under
 `artifactDir` and a `LocalShellSource` handed to `runner.queueLocalCommand`, which draws and redraws
@@ -760,6 +769,13 @@ resets (watched through `onRegister`). On by default; `peers: { enabled: false }
 from every session. `createSessionFactory` stamps `peers` into the config in `buildRunner`, the
 one chokepoint, so parked and dormant rebuilds get it too, and `session-store.ts` strips it from
 records. Invariants in `docs/GOTCHAS.md` §Peer messaging.
+
+`services/shells.ts` also builds the server's `ShellDirectory` (`createShellDirectory`), reading the
+artifact's text view and slicing the trailing lines, so raw bytes never reach a model. The registry's
+maps are already keyed by session, so scope is structural rather than a check.
+`createSessionFactory` stamps `shells` in `buildRunner` only when the gateway has `shell.enabled`
+**and** the engine is `hostCwd`; the provider engine therefore never gets the tools. Invariants in
+`docs/GOTCHAS.md` §Shell sessions.
 
 ## `packages/client`
 

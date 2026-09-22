@@ -20,6 +20,7 @@ const HOST_ONLY_KEY_SET: Record<HostOnlyKey, true> = {
   historyFn: true,
   sessionInfoFn: true,
   peers: true,
+  shells: true,
   connectFn: true,
   codexHome: true,
   codexPathOverride: true,

@@ -32,3 +32,4 @@ export type { FileSessionStoreOptions, ParkedSessionRecord, SessionStore, Stored
 export { createFileProfileStore, createMemoryProfileStore, type ProfileStore } from './services/profile-store.ts'
 export { createShellRegistry, shellPermitted, SHELL_REFUSAL } from './services/shells.ts'
 export type { ShellRegistry, ShellRegistryOptions, ShellSink, StoredShellIndex, StoredShellRecord } from './services/shells.ts'
+export type { ProcessRow, ProcessTable } from './services/process-tree.ts'

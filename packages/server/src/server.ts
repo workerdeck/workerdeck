@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { getEngineAdapter, installPeerDirectory, peerDirectoryHandle } from '@workerdeck/core'
+import { getEngineAdapter, installPeerDirectory, installShellDirectory, peerDirectoryHandle, shellDirectoryHandle } from '@workerdeck/core'
 import type { EngineAdapter } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
 import {
@@ -43,7 +43,7 @@ import { createPeerService } from './services/peers.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
-import { createShellRegistry, type ShellRegistry } from './services/shells.ts'
+import { createShellDirectory, createShellRegistry, type ShellRegistry } from './services/shells.ts'
 import { isDormant, MemorySessionStore } from './services/session-store.ts'
 
 export type {
@@ -185,6 +185,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   if (peers) {
     installPeerDirectory(peers)
   }
+  installShellDirectory(shells ? createShellDirectory(shells) : undefined)
   const factory = createSessionFactory({
     adapterFor,
     profiles,
@@ -195,6 +196,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     approvalTimeoutMs: options.approvalTimeoutMs,
     requireApiKey: options.requireApiKey,
     peers: peers ? peerDirectoryHandle() : undefined,
+    shells: shells ? shellDirectoryHandle() : undefined,
     refs,
   })
 

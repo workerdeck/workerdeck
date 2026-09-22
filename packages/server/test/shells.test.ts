@@ -17,6 +17,7 @@ import {
   type ShellRegistryOptions,
   type StoredShellIndex,
 } from '../src/services/shells.ts'
+import { readProcessTable } from '../src/services/process-tree.ts'
 import { fakeRunner } from './helpers.ts'
 
 const pty = await loadPty()
@@ -80,6 +81,37 @@ function sleep(ms: number): Promise<void> {
 
 function readIndex(dir: string, sessionId: string): StoredShellIndex {
   return JSON.parse(readFileSync(join(dir, `${encodeURIComponent(sessionId)}.json`), 'utf8')) as StoredShellIndex
+}
+
+// The shape `$ box dev` had: a supervisor (node) whose child starts its own session, so the group kill reaches the
+// supervisor and never the child. `pidFile` names the child, `marker` appears only if it lives to write it.
+function escapee(cwd: string): { command: string; marker: string; pidFile: string } {
+  const marker = join(cwd, 'late')
+  const pidFile = join(cwd, 'escapee.pid')
+  const script = join(cwd, 'escapee.cjs')
+  writeFileSync(
+    script,
+    [
+      "const { spawn } = require('node:child_process')",
+      "const { writeFileSync } = require('node:fs')",
+      `const child = spawn('sh', ['-c', 'sleep 0.6; echo late > ${JSON.stringify(marker)}'], { detached: true, stdio: 'ignore' })`,
+      `writeFileSync(${JSON.stringify(pidFile)}, String(child.pid))`,
+      'setTimeout(() => {}, 30000)',
+    ].join('\n'),
+  )
+  return { command: `${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`, marker, pidFile }
+}
+
+async function pidFrom(file: string): Promise<number> {
+  await vi.waitFor(() => expect(existsSync(file)).toBe(true), { timeout: 4000 })
+  const pid = Number(readFileSync(file, 'utf8').trim())
+  expect(pid).toBeGreaterThan(1)
+  expect(() => process.kill(pid, 0)).not.toThrow()
+  return pid
+}
+
+function gone(pid: number): Promise<void> {
+  return vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow(), { timeout: 4000 })
 }
 
 function collectGarbage(): void {
@@ -166,6 +198,67 @@ withPty('kill', () => {
     await sleep(900)
     expect(existsSync(marker)).toBe(false)
     expect(shells.kill('s1', shell.id)).toMatchObject({ endReason: 'killed' })
+  })
+
+  it('reaches a grandchild that started its own session, which the group kill alone cannot', async () => {
+    const shells = makeRegistry()
+    const cwd = tempDir()
+    const { command, marker, pidFile } = escapee(cwd)
+    const { shell } = await shells.spawn({ runner: runner('s1', cwd), command, owner: 'user' })
+    const child = await pidFrom(pidFile)
+    expect(shells.kill('s1', shell.id)).toMatchObject({ status: 'exited', endReason: 'killed' })
+    await gone(child)
+    await sleep(800)
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  it('degrades to the group kill without a process table, keeps the record honest, and says so', async () => {
+    const onError = vi.fn()
+    const shells = makeRegistry({ processTable: () => null, onError })
+    const cwd = tempDir()
+    const { command, marker, pidFile } = escapee(cwd)
+    const { shell } = await shells.spawn({ runner: runner('s1', cwd), command, owner: 'user' })
+    await pidFrom(pidFile)
+    const plain = join(cwd, 'plain')
+    const grouped = await shells.spawn({
+      runner: runner('s1', cwd),
+      command: `(sleep 0.6; echo late > ${plain}) & sleep 30`,
+      owner: 'user',
+    })
+    await sleep(100)
+    expect(shells.kill('s1', shell.id)).toMatchObject({ status: 'exited', endReason: 'killed' })
+    expect(shells.kill('s1', grouped.shell.id)).toMatchObject({ status: 'exited', endReason: 'killed' })
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/process table/) }), {
+      op: 'kill',
+      sessionId: 's1',
+      shellId: shell.id,
+    })
+    await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 4000 })
+    expect(existsSync(plain)).toBe(false)
+  })
+
+  it('killAllSync reaches the same escapee on the force path', async () => {
+    const shells = makeRegistry()
+    const cwd = tempDir()
+    const { command, marker, pidFile } = escapee(cwd)
+    await shells.spawn({ runner: runner('s1', cwd), command, owner: 'user' })
+    const child = await pidFrom(pidFile)
+    shells.killAllSync()
+    await gone(child)
+    await sleep(800)
+    expect(existsSync(marker)).toBe(false)
+  })
+
+  it('sees the PTY child as its own direct child leading its own group, which the recycled-pid guard rests on', async () => {
+    const shells = makeRegistry()
+    const cwd = tempDir()
+    const pidFile = join(cwd, 'pid')
+    await shells.spawn({ runner: runner('s1', cwd), command: `echo $$ > ${pidFile}; exec sleep 30`, owner: 'user' })
+    const pid = await pidFrom(pidFile)
+    const table = readProcessTable()
+    expect(table).not.toBeNull()
+    expect(table!.find((row) => row.pid === pid)).toEqual({ pid, ppid: process.pid, pgid: pid })
+    expect(table!.find((row) => row.pid === process.pid)?.pgid).not.toBe(pid)
   })
 
   it('honours a configured wall clock as a timeout', async () => {

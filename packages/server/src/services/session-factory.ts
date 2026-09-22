@@ -5,7 +5,7 @@ import {
   type ProfileEngine,
   type ProfileInfo,
 } from '@workerdeck/protocol'
-import type { EngineAdapter, PeerDirectory, Runner, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
+import type { EngineAdapter, PeerDirectory, Runner, RunnerSnapshot, SessionRunnerConfig, ShellDirectory } from '@workerdeck/core'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { claudeSessionEnv, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
 import type { EngineRunnerContext, LateBoundRefs } from '../options.ts'
@@ -21,6 +21,7 @@ export type SessionFactoryDeps = {
   approvalTimeoutMs?: number | null
   requireApiKey?: boolean
   peers?: PeerDirectory
+  shells?: ShellDirectory
   refs: LateBoundRefs
 }
 
@@ -177,14 +178,19 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   }
 
   const buildRunner = async (built: SessionRunnerConfig, restore?: RunnerSnapshot, id?: string): Promise<Runner> => {
-    // Applied here rather than in buildRunnerConfig so a parked record, which stores its config, gets it too.
-    const config = deps.peers ? { ...built, peers: deps.peers } : built
-    const name = config.profile
+    const name = built.profile
     const profile = name !== undefined ? profiles.get(name) : undefined
     if (name !== undefined && !profile) {
       throw new Error(`unknown profile: ${name}`)
     }
     const capabilities = profile?.capabilities ?? adapterFor(profile?.engine).capabilities
+    // Applied here rather than in buildRunnerConfig so a parked record, which stores its config, gets it too. The shell
+    // tools are offered only where a shell of this session's could exist at all: enabled on the gateway, host cwd engine.
+    const config: SessionRunnerConfig = {
+      ...built,
+      ...(deps.peers ? { peers: deps.peers } : {}),
+      ...(deps.shells && capabilities.hostCwd === true ? { shells: deps.shells } : {}),
+    }
     if (config.instructions !== undefined && capabilities.systemInstructions === false) {
       throw new Error(`the ${engineOf(profile)} engine cannot deliver system instructions`)
     }

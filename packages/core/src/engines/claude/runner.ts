@@ -54,6 +54,7 @@ import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
 import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
 import { PEER_MCP_SERVER, PEER_TOOL_SHAPES, PEER_TOOL_NAMES, withPeerContext, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
+import { SHELL_TOOL_NAMES, SHELL_TOOL_SHAPES, runShellTool, type ShellDirectory } from '../../lib/shells.ts'
 import { SubagentTracker } from './subagents.ts'
 
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
@@ -77,6 +78,7 @@ export type SessionRunnerConfig = CreateSessionRequest & {
   historyFn?: HistoryFn
   sessionInfoFn?: SessionInfoFn
   peers?: PeerDirectory
+  shells?: ShellDirectory
 }
 
 type PendingApproval = {
@@ -453,15 +455,28 @@ export class SessionRunner implements Runner {
   #mcpServersOption(): Options['mcpServers'] {
     const declared = this.#config.mcpServers as Options['mcpServers']
     const peers = this.#config.peers
-    if (!peers) {
+    const shells = this.#config.shells
+    if (!peers && !shells) {
       return declared
     }
-    const tools = PEER_TOOL_NAMES.map((name) =>
-      sdkTool(name, PEER_TOOL_SHAPES[name].description, PEER_TOOL_SHAPES[name].shape, async (args) => {
-        const output = await runPeerTool(peers, this.id, name, args)
-        return { content: [{ type: 'text', text: output.text }], isError: output.isError }
-      }),
-    )
+    const tools = [
+      ...(peers
+        ? PEER_TOOL_NAMES.map((name) =>
+            sdkTool(name, PEER_TOOL_SHAPES[name].description, PEER_TOOL_SHAPES[name].shape, async (args) => {
+              const output = await runPeerTool(peers, this.id, name, args)
+              return { content: [{ type: 'text', text: output.text }], isError: output.isError }
+            }),
+          )
+        : []),
+      ...(shells
+        ? SHELL_TOOL_NAMES.map((name) =>
+            sdkTool(name, SHELL_TOOL_SHAPES[name].description, SHELL_TOOL_SHAPES[name].shape, async (args) => {
+              const output = await runShellTool(shells, this.id, name, args)
+              return { content: [{ type: 'text', text: output.text }], isError: output.isError }
+            }),
+          )
+        : []),
+    ]
     return { ...declared, [PEER_MCP_SERVER]: createSdkMcpServer({ name: PEER_MCP_SERVER, tools }) }
   }
 

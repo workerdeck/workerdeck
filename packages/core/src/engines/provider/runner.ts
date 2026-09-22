@@ -34,6 +34,7 @@ import { EventLog } from '../../lib/event-log.ts'
 import { LocalCommandQueue, localCommandEvent, type LocalCommandResult, type LocalShellSource } from '../../lib/local-command.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
+import type { ShellDirectory } from '../../lib/shells.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
 import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
 
@@ -59,6 +60,7 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   onClose?: () => void | Promise<void>
   restore?: RunnerSnapshot
   peers?: PeerDirectory
+  shells?: ShellDirectory
 }
 
 export type PendingToolCall = {

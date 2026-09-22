@@ -34,7 +34,8 @@ import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent, type ItemScope } from './subagents.ts'
 import { untrustedProjectNotice } from './trust.ts'
-import { peerToolSpecs, runPeerTool, withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
+import { isPeerToolName, peerToolSpecs, runPeerTool, withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
+import { isShellToolName, runShellTool, shellToolSpecs, type ShellDirectory } from '../../lib/shells.ts'
 import type {
   AppServerCollabAgentToolCallItem,
   AppServerCommandApprovalParams,
@@ -528,6 +529,7 @@ export type CodexRunnerConfig = CreateSessionRequest & {
   defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
   peers?: PeerDirectory
+  shells?: ShellDirectory
 }
 
 type QueuedTurn = { input: AppServerUserInput[] }
@@ -1155,8 +1157,9 @@ export class CodexRunner implements Runner {
       if (this.#instructions !== undefined) {
         options.developerInstructions = this.#instructions
       }
-      if (this.#config.peers) {
-        options.dynamicTools = peerToolSpecs().map((spec) => ({ type: 'function', ...spec }))
+      const dynamic = [...(this.#config.peers ? peerToolSpecs() : []), ...(this.#config.shells ? shellToolSpecs() : [])]
+      if (dynamic.length) {
+        options.dynamicTools = dynamic.map((spec) => ({ type: 'function', ...spec }))
       }
       const resuming = this.#resumableThreadId()
       let lostThread: string | undefined
@@ -1720,10 +1723,18 @@ export class CodexRunner implements Runner {
     if (channel) {
       return this.#requestApproval(channel, method, params, wireId)
     }
-    if (method === 'item/tool/call' && this.#config.peers) {
+    if (method === 'item/tool/call') {
       const call = params as AppServerDynamicToolCallParams
-      const output = await runPeerTool(this.#config.peers, this.id, call.tool, call.arguments)
-      return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
+      const peers = this.#config.peers
+      const shells = this.#config.shells
+      if (peers && isPeerToolName(call.tool)) {
+        const output = await runPeerTool(peers, this.id, call.tool, call.arguments)
+        return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
+      }
+      if (shells && isShellToolName(call.tool)) {
+        const output = await runShellTool(shells, this.id, call.tool, call.arguments)
+        return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
+      }
     }
     throw new JsonRpcError(-32601, `workerdeck does not handle server request '${method}'`)
   }
