@@ -163,9 +163,13 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         await this.#delegate.selectSession(msg.hostId, msg.sessionId, {
           subagentToolUseId: msg.subagentToolUseId,
           revealToolUseId: msg.revealToolUseId,
+          shellId: msg.shellId,
           target: msg.target,
         })
         return
+      }
+      case 'wd-kill-shell': {
+        return this.#killShell(msg.hostId, msg.sessionId, msg.shellId)
       }
       case 'wd-stop-session': {
         return this.#stopSession(msg.hostId, msg.sessionId)
@@ -274,6 +278,20 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       return
     }
     await this.#command(hostId, sessionId, (handle) => handle.clearContext())
+  }
+
+  async #killShell(hostId: string, sessionId: string, shellId: string): Promise<void> {
+    const host = this.#store.get(hostId)
+    const client = host && (await clientFor(this.#store, host))
+    if (!client) {
+      return
+    }
+    try {
+      await client.killShell(sessionId, shellId)
+    } catch (err) {
+      void vscode.window.showErrorMessage(`WorkerDeck: kill failed - ${err instanceof Error ? err.message : String(err)}`)
+    }
+    await this.#model.refresh()
   }
 
   async #renameSession(hostId: string, sessionId: string, title: string): Promise<void> {

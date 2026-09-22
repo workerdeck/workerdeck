@@ -30,11 +30,15 @@ export interface SessionBrowserProps {
   scope?: WorkspaceScope
   activeId?: string
   activeSubagentId?: string
+  activeShellId?: string
+  now?: number
   onSelect?: (row: SessionRow) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
+  onSelectShell?: (row: SessionRow, shellId: string) => void
+  onKillShell?: (row: SessionRow, shellId: string) => void
   emptyState?: React.ReactNode
   showControls?: boolean
   projectIcons?: Record<string, string>
@@ -52,11 +56,15 @@ export function SessionBrowser({
   scope,
   activeId,
   activeSubagentId,
+  activeShellId,
+  now,
   onSelect,
   onDelete,
   onRename,
   onClearContext,
   onSelectSubagent,
+  onSelectShell,
+  onKillShell,
   emptyState,
   showControls = true,
   projectIcons,
@@ -219,6 +227,8 @@ export function SessionBrowser({
                   row={row}
                   active={row.info.id === activeId}
                   activeSubagentId={activeSubagentId}
+                  activeShellId={activeShellId}
+                  now={now}
                   showGateway={gateways.length > 1 && config.groupBy !== 'gateway'}
                   showProject={config.groupBy !== 'project'}
                   subagents={config.subagents}
@@ -228,6 +238,8 @@ export function SessionBrowser({
                   onRename={onRename}
                   onClearContext={onClearContext}
                   onSelectSubagent={onSelectSubagent}
+                  onSelectShell={onSelectShell}
+                  onKillShell={onKillShell}
                 />
               ))}
             </div>
@@ -247,6 +259,8 @@ interface SessionRowItemProps {
   row: SessionRow
   active?: boolean
   activeSubagentId?: string
+  activeShellId?: string
+  now?: number
   showGateway?: boolean
   showProject?: boolean
   subagents?: SubagentDisplay
@@ -256,12 +270,16 @@ interface SessionRowItemProps {
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
+  onSelectShell?: (row: SessionRow, shellId: string) => void
+  onKillShell?: (row: SessionRow, shellId: string) => void
 }
 
 function SessionRowItem({
   row,
   active,
   activeSubagentId,
+  activeShellId,
+  now,
   showGateway,
   showProject = true,
   subagents,
@@ -271,6 +289,8 @@ function SessionRowItem({
   onRename,
   onClearContext,
   onSelectSubagent,
+  onSelectShell,
+  onKillShell,
 }: SessionRowItemProps) {
   const { info } = row
   const [editing, setEditing] = useState(false)
@@ -279,13 +299,16 @@ function SessionRowItem({
     <SessionItem
       row={row}
       active={active === true}
-      activeStepKey={activeSubagentId}
+      activeStepKey={activeShellId ?? activeSubagentId}
+      now={now}
       showGateway={showGateway}
       showProject={showProject}
       subagents={subagents}
       projectIcons={projectIcons}
       onSelect={() => onSelect?.(row)}
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
+      onSelectShell={onSelectShell ? (id) => onSelectShell(row, id) : undefined}
+      onKillShell={onKillShell ? (id) => onKillShell(row, id) : undefined}
       onRename={onRename ? (title) => onRename(row, title) : undefined}
       renameOn="external"
       editing={editing}

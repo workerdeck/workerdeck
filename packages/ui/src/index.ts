@@ -125,7 +125,7 @@ export { SessionBrowser, rowShapeClass, type SessionBrowserProps } from './compo
 export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
-export { type Step, StepRow, sessionSteps } from './components/agent/SessionSteps.tsx'
+export { type ShellStepOptions, type Step, type StepKind, StepRow, sessionSteps } from './components/agent/SessionSteps.tsx'
 export {
   SUBAGENT_DISPLAY_META,
   SUBAGENT_DISPLAY_ORDER,

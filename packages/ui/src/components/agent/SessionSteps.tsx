@@ -1,24 +1,41 @@
 import { ArrowRight, Check, CircleAlert } from 'lucide-react'
-import { isAgentRecord, subagentLabel, visibleSubagents } from '@workerdeck/protocol'
-import type { SessionInfo, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
+import { isAgentRecord, promotedShells, subagentLabel, visibleSubagents } from '@workerdeck/protocol'
+import type { SessionInfo, ShellInfo, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
+import { SHELL_GLYPH, SHELL_KILL_GLYPH, shellInfoFailed, shellInfoLabel, shellInfoStatusText, shellTitle } from '../terminal/shell-row.ts'
+
+export type StepKind = 'agent' | 'shell'
 
 export type Step = {
   key: string
+  kind: StepKind
   label: string
   noun: string
   state: 'done' | 'running' | 'failed'
   detail?: string
   title: string
   onSelect: () => void
+  onKill?: () => void
 }
 
-export function sessionSteps(info: SessionInfo, onSelect: (toolUseId: string) => void, show: SubagentDisplay = 'all'): Step[] {
-  return visibleSubagents(info, show)
+export type ShellStepOptions = {
+  now: number
+  onSelect: (shellId: string) => void
+  onKill?: (shellId: string) => void
+}
+
+export function sessionSteps(
+  info: SessionInfo,
+  onSelect: (toolUseId: string) => void,
+  show: SubagentDisplay = 'all',
+  shells?: ShellStepOptions,
+): Step[] {
+  const agents: Step[] = visibleSubagents(info, show)
     .filter(isAgentRecord)
     .map((sub) => ({
       key: sub.toolUseId,
+      kind: 'agent',
       label: subagentLabel(sub),
       noun: 'agent',
       state: stepState(sub.status),
@@ -26,6 +43,26 @@ export function sessionSteps(info: SessionInfo, onSelect: (toolUseId: string) =>
       title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
       onSelect: () => onSelect(sub.toolUseId),
     }))
+  if (shells === undefined) {
+    return agents
+  }
+  return [...agents, ...promotedShells(info, shells.now).map((shell) => shellStep(shell, shells))]
+}
+
+function shellStep(shell: ShellInfo, options: ShellStepOptions): Step {
+  const status = shellInfoStatusText(shell)
+  const running = shell.status === 'running'
+  return {
+    key: shell.id,
+    kind: 'shell',
+    label: shellInfoLabel(shell),
+    noun: 'shell',
+    state: shellInfoFailed(shell) ? 'failed' : running ? 'running' : 'done',
+    detail: running ? undefined : status,
+    title: `${shellTitle(shell)} · ${status}`,
+    onSelect: () => options.onSelect(shell.id),
+    onKill: running && options.onKill ? () => options.onKill?.(shell.id) : undefined,
+  }
 }
 
 function stepState(status: SubagentInfo['status']): Step['state'] {
@@ -43,33 +80,47 @@ function stepState(status: SubagentInfo['status']): Step['state'] {
 }
 
 export function StepRow({ step, active = false, onSelect }: { step: Step; active?: boolean; onSelect: () => void }) {
-  const body = step.state === 'failed' ? 'text-danger' : 'text-success'
+  const body = step.state === 'failed' ? 'text-danger' : step.kind === 'shell' ? 'text-[var(--wd-shell-accent)]' : 'text-success'
   return (
-    <button
-      type="button"
-      title={step.title}
-      aria-current={active || undefined}
-      onClick={(e) => {
-        e.stopPropagation()
-        onSelect()
-      }}
-      className={cn(
-        'flex w-full items-center gap-1.5 rounded-[4px] py-1 pr-2.5 pl-3.5',
-        'text-left text-micro outline-none',
-        active ? 'bg-row-selected' : 'hover:bg-row-active',
-        body,
-      )}
-    >
-      <StepIcon state={step.state} />
-      <span className="min-w-0 flex-1 truncate">{step.label}</span>
-      {step.detail ? <span className="shrink-0 tabular-nums text-fg-4">{step.detail}</span> : null}
-      <ArrowRight className="size-3.5 shrink-0 text-fg-4" />
-    </button>
+    <div className={cn('flex w-full items-center rounded-[4px] pr-1.5', active ? 'bg-row-selected' : 'hover:bg-row-active', body)}>
+      <button
+        type="button"
+        title={step.title}
+        aria-current={active || undefined}
+        onClick={(e) => {
+          e.stopPropagation()
+          onSelect()
+        }}
+        className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 pl-3.5 text-left text-micro outline-none"
+      >
+        <StepIcon step={step} />
+        <span className="min-w-0 flex-1 truncate">{step.label}</span>
+        {step.detail ? <span className="shrink-0 tabular-nums text-fg-4">{step.detail}</span> : null}
+        <ArrowRight className="size-3.5 shrink-0 text-fg-4" />
+      </button>
+      {step.onKill ? (
+        <button
+          type="button"
+          aria-label={`Kill ${step.label}`}
+          title="Kill this shell"
+          onClick={(e) => {
+            e.stopPropagation()
+            step.onKill?.()
+          }}
+          className="shrink-0 px-1 text-micro leading-none text-fg-4 outline-none hover:text-danger"
+        >
+          {SHELL_KILL_GLYPH}
+        </button>
+      ) : null}
+    </div>
   )
 }
 
-function StepIcon({ state }: { state: Step['state'] }) {
-  switch (state) {
+function StepIcon({ step }: { step: Step }) {
+  if (step.kind === 'shell') {
+    return <span className="w-[11px] shrink-0 text-center leading-none">{SHELL_GLYPH}</span>
+  }
+  switch (step.state) {
     case 'running': {
       return <Spinner className="size-[11px] shrink-0" />
     }

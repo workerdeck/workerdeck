@@ -198,6 +198,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                   /* Only THIS card's frame: `selected` is one object for the whole list, so
                      reading its `subagentToolUseId` unguarded turns every card grey. */
                   activeSubagentId={selectedIs(row)?.subagentToolUseId}
+                  activeShellId={selectedIs(row)?.shellId}
                   onSelect={(modifiers) =>
                     bridge.post({
                       kind: 'wd-select-session',
@@ -212,6 +213,22 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                       hostId: row.hostId,
                       sessionId: row.info.id,
                       subagentToolUseId,
+                    })
+                  }
+                  onSelectShell={(shellId) =>
+                    bridge.post({
+                      kind: 'wd-select-session',
+                      hostId: row.hostId,
+                      sessionId: row.info.id,
+                      shellId,
+                    })
+                  }
+                  onKillShell={(shellId) =>
+                    bridge.post({
+                      kind: 'wd-kill-shell',
+                      hostId: row.hostId,
+                      sessionId: row.info.id,
+                      shellId,
                     })
                   }
                   onRename={(title) =>

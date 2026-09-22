@@ -11,8 +11,11 @@ export function SessionCard({
   selected,
   inEditor = false,
   activeSubagentId,
+  activeShellId,
   onSelect,
   onSelectSubagent,
+  onSelectShell,
+  onKillShell,
   onRename,
   onMenu,
 }: {
@@ -24,8 +27,11 @@ export function SessionCard({
   selected: boolean
   inEditor?: boolean
   activeSubagentId?: string
+  activeShellId?: string
   onSelect: (modifiers: SelectModifiers) => void
   onSelectSubagent: (toolUseId: string) => void
+  onSelectShell: (shellId: string) => void
+  onKillShell: (shellId: string) => void
   onRename: (title: string) => void
   onMenu: () => void
 }) {
@@ -33,13 +39,15 @@ export function SessionCard({
     <SessionItem
       row={row}
       active={selected}
-      activeStepKey={activeSubagentId}
+      activeStepKey={activeShellId ?? activeSubagentId}
       showProject={showProject}
       showGateway={showGateway}
       subagents={subagents}
       projectIcons={projectIcons}
       onSelect={onSelect}
       onSelectSubagent={onSelectSubagent}
+      onSelectShell={onSelectShell}
+      onKillShell={onKillShell}
       onRename={onRename}
       actions={
         <>

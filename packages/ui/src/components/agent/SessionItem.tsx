@@ -23,6 +23,9 @@ export interface SessionItemProps {
   subagents?: SubagentDisplay
   onSelect?: (modifiers: SelectModifiers) => void
   onSelectSubagent?: (toolUseId: string) => void
+  onSelectShell?: (shellId: string) => void
+  onKillShell?: (shellId: string) => void
+  now?: number
   onRename?: (title: string) => void
   renameOn?: 'doubleClick' | 'external'
   editing?: boolean
@@ -43,6 +46,9 @@ export function SessionItem({
   subagents = 'active',
   onSelect,
   onSelectSubagent,
+  onSelectShell,
+  onKillShell,
+  now,
   onRename,
   renameOn = 'doubleClick',
   editing,
@@ -90,8 +96,12 @@ export function SessionItem({
   for (const extra of extras) {
     parts.push(<span key={extra}>{extra}</span>)
   }
-  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)), subagents)
-  const holdsOpenAgent = steps.some((s) => s.key === activeStepKey)
+  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)), subagents, {
+    now: now ?? Date.now(),
+    onSelect: (shellId) => (onSelectShell ? onSelectShell(shellId) : onSelect?.(NO_MODIFIERS)),
+    onKill: onKillShell,
+  })
+  const holdsOpenStep = steps.some((s) => s.key === activeStepKey)
 
   return (
     <div
@@ -117,7 +127,7 @@ export function SessionItem({
       className={cn(
         'group flex w-full cursor-pointer flex-col p-1 text-left outline-none',
         'rounded-[4px] transition-colors focus-visible:ring-2 focus-visible:ring-ring',
-        holdsOpenAgent ? 'bg-row-selected-weak' : active ? 'bg-row-selected' : 'hover:bg-row-hover',
+        holdsOpenStep ? 'bg-row-selected-weak' : active ? 'bg-row-selected' : 'hover:bg-row-hover',
         className,
       )}
     >

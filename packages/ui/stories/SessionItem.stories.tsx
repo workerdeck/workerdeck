@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { MoreHorizontal } from 'lucide-react'
 import { SessionItem } from '../src/components/agent/SessionItem.tsx'
-import { AGENTS, MIXED, makeRow } from './session-fixtures.ts'
+import { AGENTS, MIXED, SHELLS, makeRow } from './session-fixtures.ts'
 
 const meta: Meta<typeof SessionItem> = {
   title: 'Sessions/SessionItem',
@@ -18,6 +18,8 @@ const meta: Meta<typeof SessionItem> = {
   args: {
     onSelect: () => {},
     onSelectSubagent: () => {},
+    onSelectShell: () => {},
+    onKillShell: () => {},
     onRename: () => {},
     actions: (
       <button
@@ -120,6 +122,41 @@ function SelectionPlayground(args: React.ComponentProps<typeof SessionItem>) {
       </p>
     </div>
   )
+}
+
+export const Shells: Story = {
+  name: 'Shells · a running one and a failed one',
+  args: {
+    row: makeRow({ id: 'sh', title: 'Shell sessions', shells: SHELLS } as never),
+    subagents: 'all',
+  },
+}
+
+export const ShellsWithAgents: Story = {
+  name: 'Shells · under the agents',
+  args: {
+    row: makeRow({ id: 'sha', title: 'Shell sessions', subagents: AGENTS, shells: SHELLS } as never),
+    subagents: 'all',
+  },
+}
+
+export const ShellsReadOnly: Story = {
+  name: 'Shells · no kill offered',
+  args: {
+    row: makeRow({ id: 'shr', title: 'Shell sessions', shells: SHELLS } as never),
+    subagents: 'all',
+    onKillShell: undefined,
+  },
+}
+
+export const ShellSelected: Story = {
+  name: 'Shells · one drilled into',
+  args: {
+    row: makeRow({ id: 'shs', title: 'Shell sessions', subagents: AGENTS, shells: SHELLS } as never),
+    active: true,
+    activeStepKey: 'sh1',
+    subagents: 'all',
+  },
 }
 
 export const Ended: Story = {

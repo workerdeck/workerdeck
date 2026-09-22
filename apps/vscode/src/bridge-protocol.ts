@@ -148,7 +148,14 @@ export type SidebarToHost =
       sessionId: string
       subagentToolUseId?: string
       revealToolUseId?: string
+      shellId?: string
       target?: SurfaceTarget
+    }
+  | {
+      kind: 'wd-kill-shell'
+      hostId: string
+      sessionId: string
+      shellId: string
     }
   | {
       kind: 'wd-stop-session'

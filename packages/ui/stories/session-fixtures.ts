@@ -1,5 +1,5 @@
 import { sessionState } from '@workerdeck/protocol'
-import type { SessionInfo, SessionRow, SubagentInfo } from '@workerdeck/protocol'
+import type { SessionInfo, SessionRow, ShellInfo, SubagentInfo } from '@workerdeck/protocol'
 
 // Ages are offsets from *now*, never a frozen epoch: the card draws `formatRelativeTime`, so a fixed timestamp drifts while a fixed offset renders the same two characters forever.
 const MINUTE = 60_000
@@ -50,3 +50,37 @@ export const MIXED: SubagentInfo[] = [
   { toolUseId: 'b', agentType: 'fable', description: 'Fix base-url and re-run', status: 'running', toolCount: 7 },
   { toolUseId: 't1', description: 'Fix base-url and re-run', status: 'done', toolCount: 0 },
 ] as unknown as SubagentInfo[]
+
+export const SHELLS: ShellInfo[] = [
+  {
+    id: 'sh1',
+    sessionId: 'x',
+    ordinal: 1,
+    command: 'pnpm dev',
+    label: 'pnpm dev',
+    cwd: '/Users/atomic/projects/ai/workerdeck',
+    owner: 'user',
+    status: 'running',
+    startedAt: Date.now() - 6 * MINUTE,
+    bytes: 41_233,
+    cols: 120,
+    rows: 40,
+  },
+  {
+    id: 'sh2',
+    sessionId: 'x',
+    ordinal: 2,
+    command: 'pnpm test --filter @workerdeck/server',
+    label: 'pnpm test --filter @workerdeck/server',
+    cwd: '/Users/atomic/projects/ai/workerdeck',
+    owner: 'agent',
+    status: 'exited',
+    startedAt: Date.now() - 4 * MINUTE,
+    endedAt: Date.now() - 20_000,
+    exitCode: 1,
+    endReason: 'exit',
+    bytes: 8_912,
+    cols: 120,
+    rows: 40,
+  },
+]

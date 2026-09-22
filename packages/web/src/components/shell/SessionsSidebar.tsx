@@ -18,6 +18,7 @@ export function SessionsSidebar() {
   })
   // `strict: false` because this sidebar sits above the route that declares the param.
   const activeSubagentId = useSearch({ strict: false }).subagent
+  const activeShellId = useSearch({ strict: false }).shell
   const { snapshots, refresh } = useSessions()
   const rows = useSessionRows(snapshots)
   // `clientFor` is module scope and stable, so it is not a dependency that would re-fire the fetch.
@@ -56,6 +57,21 @@ export function SessionsSidebar() {
       params: { hostId: row.hostId, sessionId: row.info.id },
       search: { subagent: toolUseId, sn: ++subagentNonce.current },
     })
+
+  const shellNonce = useRef(0)
+  const openShell = (row: SessionRow, shellId: string) =>
+    void navigate({
+      to: '/sessions/$hostId/$sessionId',
+      params: { hostId: row.hostId, sessionId: row.info.id },
+      search: { shell: shellId, shn: ++shellNonce.current },
+    })
+
+  const killShell = (row: SessionRow, shellId: string) => {
+    void clientFor(row.hostId)
+      ?.killShell(row.info.id, shellId)
+      .then(() => refresh())
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Kill failed'))
+  }
 
   const rename = (row: SessionRow, title: string) => {
     void clientFor(row.hostId)
@@ -129,8 +145,11 @@ export function SessionsSidebar() {
             projectIcons={projectIcons}
             activeId={activeId}
             activeSubagentId={activeSubagentId}
+            activeShellId={activeShellId}
             onSelect={open}
             onSelectSubagent={openSubagent}
+            onSelectShell={openShell}
+            onKillShell={killShell}
             onRename={rename}
             onClearContext={(row) => {
               const client = clientFor(row.hostId)
