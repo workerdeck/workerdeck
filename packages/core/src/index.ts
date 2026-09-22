@@ -1,5 +1,7 @@
 export { SessionRunner } from './engines/claude/runner.ts'
 export { replaySlice, truncateResultBlocks } from './lib/replay.ts'
+export { composeInstructions, resolveInstructions } from './lib/instructions.ts'
+export type { InstructionsContext, SessionInstructions } from './lib/instructions.ts'
 export { AiSdkRunner } from './engines/provider/runner.ts'
 export type { AiSdkRunnerConfig, AiSdkSessionState, PendingToolCall, ToolCallOutput } from './engines/provider/runner.ts'
 export type { HistoryFn, QueryFn, SessionRunnerConfig } from './engines/claude/runner.ts'

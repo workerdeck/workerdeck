@@ -50,12 +50,6 @@ export class ProfileService {
       if (p.codexHome && !existsSync(p.codexHome)) {
         return `profile '${p.name}' codexHome does not exist: ${p.codexHome}`
       }
-      if (p.session?.instructions) {
-        return (
-          `profile '${p.name}' declares session.instructions, which the codex engine cannot ` +
-          'deliver - put instructions in the target repo’s AGENTS.md instead'
-        )
-      }
     } else if (!p.configDir || !existsSync(p.configDir)) {
       return `profile '${p.name}' configDir does not exist: ${p.configDir}`
     }

@@ -3,8 +3,9 @@ import { existsSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { ENGINE_CAPABILITIES, type ProfileInfo, type SdkSessionSummary } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '../adapter.ts'
-import { CodexRunner } from './runner.ts'
+import { CodexRunner, type CodexRunnerConfig } from './runner.ts'
 import { CODEX_CATALOG } from './catalog.ts'
+import { composeInstructions } from '../../lib/instructions.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { connectAppServer } from './process.ts'
 import type { AppServerConnectFn, AppServerThreadListResponse, AppServerThreadSummary } from './types.ts'
@@ -178,7 +179,7 @@ export const codexAdapter: EngineAdapter = {
     if (restore) {
       throw new Error('the codex engine cannot rebuild a parked session')
     }
-    const executable = (config as { codexPathOverride?: string }).codexPathOverride ?? resolveBundledCodexExecutable()
+    const executable = (config as CodexRunnerConfig).codexPathOverride ?? resolveBundledCodexExecutable()
     if (!executable) {
       throw new Error(NOT_INSTALLED)
     }
@@ -186,6 +187,7 @@ export const codexAdapter: EngineAdapter = {
       {
         ...config,
         codexHome: profile?.codexHome,
+        instructions: composeInstructions(profile?.session?.instructions, config.instructions),
         connectFn: (options) => connectAppServer({ executable, ...options }),
       },
       id,

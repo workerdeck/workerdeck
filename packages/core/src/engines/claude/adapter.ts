@@ -4,6 +4,7 @@ import { checkClaudeAuth } from './auth.ts'
 import { SessionRunner } from './runner.ts'
 import type { EngineAdapter } from '../adapter.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
+import { composeInstructions } from '../../lib/instructions.ts'
 
 export const claudeAdapter: EngineAdapter = {
   engine: 'claude',
@@ -25,11 +26,11 @@ export const claudeAdapter: EngineAdapter = {
     }
     return { available: 'unknown' }
   },
-  createRunner({ config, restore, id }) {
+  createRunner({ config, profile, restore, id }) {
     if (restore) {
       throw new Error('the Claude engine cannot rebuild a parked session')
     }
-    return new SessionRunner(config, id)
+    return new SessionRunner({ ...config, instructions: composeInstructions(profile?.session?.instructions, config.instructions) }, id)
   },
   async listSessions({ dir, limit, offset }) {
     const sessions = await sdkListSessions({ dir, limit, offset })

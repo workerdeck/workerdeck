@@ -4,6 +4,7 @@ import {
   type HostToolDefinition,
   type LanguageModel,
   type McpConnection,
+  type SessionInstructions,
   type Runner,
   type ToolExecutionCall,
   type ToolExecutor,
@@ -18,7 +19,7 @@ export type ProviderRunnerOptions = {
   tools?: Record<string, HostToolDefinition>
   mcp?: McpConnection
   mcpTools?: ToolSet
-  instructions?: string
+  instructions?: SessionInstructions
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
   seedVfs?: Record<string, string>
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean

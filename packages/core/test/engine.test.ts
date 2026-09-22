@@ -238,12 +238,12 @@ describe('createEngineSession grants', () => {
     expect(toolNames).not.toContain('crm__push')
   }, 30_000)
 
-  it("prefers the profile's instructions over the host's default", async () => {
+  it("puts the profile's instructions ahead of the host's default", async () => {
     const { instructions } = await assemble({
       profile: { name: 'p', engine: 'provider', session: { instructions: 'You are terse.' } },
       instructions: 'host default',
     })
-    expect(instructions).toBe('You are terse.')
+    expect(instructions).toBe('You are terse.\n\nhost default')
   }, 30_000)
 })
 

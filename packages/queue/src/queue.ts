@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import type {
-  ApiMessage,
-  CreateJobRequest,
-  CreateSessionRequest,
-  JobEvent,
-  JobInfo,
-  JobProgress,
-  JobUsage,
-  QueueStats,
-  SessionEvent,
+import {
+  pickCreateSessionRequest,
+  type ApiMessage,
+  type CreateJobRequest,
+  type CreateSessionRequest,
+  type JobEvent,
+  type JobInfo,
+  type JobProgress,
+  type JobUsage,
+  type QueueStats,
+  type SessionEvent,
 } from '@workerdeck/protocol'
 import { InMemoryQueueAdapter, type JobRecord, type QueueAdapter } from './adapter.ts'
 
@@ -345,8 +346,9 @@ export class JobQueue {
     const build = this.#options.buildRunnerConfig ?? ((req: CreateSessionRequest) => req)
     let runner: Runner
     try {
+      // Projected again here, not only at the HTTP door: a durable adapter can hold a record written before the door did.
       const request: CreateSessionRequest = {
-        ...record.request.session,
+        ...pickCreateSessionRequest(record.request.session),
         meta: { ...record.request.session.meta, jobId: id },
       }
       runner = await this.#options.createRunner(build(request))
