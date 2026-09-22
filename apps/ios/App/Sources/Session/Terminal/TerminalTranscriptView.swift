@@ -103,6 +103,7 @@ struct TerminalTranscriptView: View {
   /// process. Nil outside a live session, and the presses are then no-ops.
   @Environment(\.shellOutputFetcher) private var fetchShellOutput
   @Environment(\.shellKiller) private var killShell
+  @Environment(\.shellOpener) private var openShell
 
   private var typography: TerminalTypography { .session }
 
@@ -155,7 +156,7 @@ struct TerminalTranscriptView: View {
                     // No takeover from a takeover - web passes
                     // `onOpenSubagent={frame ? undefined : onOpenSubagent}`.
                     openSubagent: frame == nil ? onOpenSubagent : nil,
-                    fetchShell: fetchShellOutput, killShell: killShell)
+                    fetchShell: fetchShellOutput, killShell: killShell, openShell: openShell)
                 })
             },
             // Which item the long-press addresses is the kit's rule

@@ -22,8 +22,12 @@ import SwiftUI
 struct SessionStepRow: View {
   let step: Step
 
+  /// A shell is magenta, the `--wd-shell-accent` every client spends on shells,
+  /// and never the agents' green: the two kinds of step under a card are two
+  /// kinds of thing, and one colour for both would say they were not.
   private var body_: Color {
-    step.state == .failed ? TerminalPalette.color(.red) : TerminalPalette.color(.green)
+    if step.state == .failed { return TerminalPalette.color(.red) }
+    return step.kind == .shell ? TerminalPalette.color(.magenta) : TerminalPalette.color(.green)
   }
 
   var body: some View {
@@ -55,6 +59,17 @@ struct SessionStepRow: View {
 
   @ViewBuilder
   private var icon: some View {
+    // `$`, whatever the state: a shell's marker is what it is, and the state is
+    // already carried by the colour and by the trailing reading.
+    if step.kind == .shell {
+      Text(TerminalShell.glyph)
+    } else {
+      agentIcon
+    }
+  }
+
+  @ViewBuilder
+  private var agentIcon: some View {
     switch step.state {
     // A spinner, the same marker the card's own status glyph uses for the same
     // fact. `circle.dotted` was static, so the one row that was still moving

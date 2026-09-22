@@ -12,10 +12,20 @@ import Testing
 /// was on `running`.
 @Suite("SessionSteps")
 struct SessionStepsTests {
-  private func info(subagents: [SubagentInfo]?) -> SessionInfo {
+  private func info(subagents: [SubagentInfo]?, shells: [ShellInfo]? = nil) -> SessionInfo {
     SessionInfo(
       id: "sess-00000001", status: .idle, cwd: "/work/alpha", createdAt: 1_000, lastSeq: 0,
-      pendingPermissionCount: 0, lastActivityAt: 1_000, subagents: subagents)
+      pendingPermissionCount: 0, lastActivityAt: 1_000, subagents: subagents, shells: shells)
+  }
+
+  private func shell(
+    _ id: String = "sh_1", status: ShellStatus = .running, startedAt: Double = 0,
+    endedAt: Double? = nil, exitCode: Int? = nil, endReason: ShellEndReason? = nil
+  ) -> ShellInfo {
+    ShellInfo(
+      id: id, sessionId: "sess-00000001", ordinal: 2, command: "npm run dev",
+      label: "npm run dev", cwd: "/work/alpha", status: status, startedAt: startedAt,
+      endedAt: endedAt, exitCode: exitCode, endReason: endReason)
   }
 
   private func agent(
@@ -127,6 +137,57 @@ struct SessionStepsTests {
     let steps = sessionSteps(
       info(subagents: [agent("a1"), agent("a2", description: nil), task("t1")]))
     #expect(steps.map(\.label) == ["Explore · find the auth check", "Explore"])
+  }
+
+  // MARK: - Shells
+
+  /// Shells are a block after the agents, not interleaved by timestamp: a
+  /// `$ npm run dev` between two agents would read as part of the agent's work.
+  @Test("promoted shells follow the agents")
+  func shellsComeLast() {
+    let steps = sessionSteps(
+      info(subagents: [agent("a1")], shells: [shell("sh_1", startedAt: 0)]),
+      .all, now: 5_000)
+    #expect(steps.map(\.key) == ["a1", "sh_1"])
+    #expect(steps.map(\.kind) == [.agent, .shell])
+    #expect(steps[1].label == "npm run dev")
+    #expect(steps[1].noun == "shell")
+  }
+
+  /// `now` decides which shells earn a line, so omitting it means "this surface
+  /// has nowhere to send a shell press" rather than "this session has none".
+  @Test("without a clock there are no shell steps")
+  func shellsNeedANow() {
+    let steps = sessionSteps(info(subagents: [agent("a1")], shells: [shell(startedAt: 0)]))
+    #expect(steps.map(\.key) == ["a1"])
+  }
+
+  /// Only a running shell can be stopped from a card, and a kill glyph beside
+  /// anything else would promise something no client can do.
+  @Test("only a running shell is killable")
+  func onlyRunningIsKillable() {
+    let running = sessionSteps(info(subagents: nil, shells: [shell(startedAt: 0)]), .all, now: 5_000)
+    #expect(running.map(\.killable) == [true])
+    #expect(running[0].detail == nil)
+    #expect(running[0].state == .running)
+
+    let failed = shell(
+      "sh_2", status: .exited, startedAt: 0, endedAt: 4_000, exitCode: 1, endReason: .exit)
+    let settled = sessionSteps(info(subagents: nil, shells: [failed]), .all, now: 5_000)
+    #expect(settled.map(\.killable) == [false])
+    #expect(settled[0].state == .failed)
+    #expect(settled[0].detail == "exit 1")
+    #expect(settled[0].title == "#2 npm run dev · exit 1")
+  }
+
+  /// The `none` display is about sub-agents. A shell is not one, so hiding them
+  /// must not hide it: an operator who collapsed the agent lines did not ask to
+  /// stop being told a dev server is running.
+  @Test("hiding sub-agents keeps the shells")
+  func subagentDisplayDoesNotHideShells() {
+    let steps = sessionSteps(
+      info(subagents: [agent("a1")], shells: [shell(startedAt: 0)]), .none, now: 5_000)
+    #expect(steps.map(\.key) == ["sh_1"])
   }
 
   // MARK: - Job runs

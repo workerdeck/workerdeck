@@ -39,9 +39,53 @@ enum UIPreview: String {
   case steps
   case projects
   case sessions
+  case shell
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
+  }
+}
+
+/// The grid, fed a stream with no socket behind it.
+private struct ShellGridPreview: View {
+  @State private var screen = VTScreen(cols: 52, rows: 26)
+  @State private var revision = 0
+
+  private static let stream = [
+    "\u{1b}[1;32m$\u{1b}[0m ls -la\r\n",
+    "\u{1b}[34mdrwxr-xr-x\u{1b}[0m  6 tobias  staff   192 Sep 22 packages\r\n",
+    "\u{1b}[34mdrwxr-xr-x\u{1b}[0m 12 tobias  staff   384 Sep 22 apps\r\n",
+    "-rw-r--r--  1 tobias  staff  1052 Sep 22 CLAUDE.md\r\n",
+    "\r\n\u{1b}[38;5;208m256-colour\u{1b}[0m and \u{1b}[38;2;120;190;255mtrue colour\u{1b}[0m\r\n",
+    "\u{1b}[7m INVERSE BAR \u{1b}[0m \u{1b}[4munderline\u{1b}[0m \u{1b}[1mbold\u{1b}[0m\r\n\r\n",
+    // The same line, redrawn in place. A renderer that appended would show four.
+    "building [          ] 0%\r",
+    "building [###       ] 30%\r",
+    "building [#######   ] 70%\r",
+    "building [##########] 100%\r\n",
+    // Box drawing through the DEC special graphics charset, the way tmux does it.
+    "\u{1b}(0lqqqqqqqqqqqk\u{1b}(B\r\n\u{1b}(0x\u{1b}(B tmux pane \u{1b}(0x\u{1b}(B\r\n\u{1b}(0mqqqqqqqqqqqj\u{1b}(B\r\n",
+    "\u{1b}[33m警告\u{1b}[0m: 全角文字は二セル分\r\n",
+    "\u{1b}[31merror\u{1b}[0m: 1 test failed\r\n",
+    "$ ",
+  ]
+
+  var body: some View {
+    ShellGridView(
+      screen: screen, revision: revision, typography: TerminalTypography.session,
+      onMeasure: { _, _ in }
+    )
+    .background(Color(uiColor: .systemBackground))
+    .task {
+      // Fed a chunk at a time, on purpose: the parser has to survive a sequence
+      // split across frames, and a preview that wrote it all at once would never
+      // exercise that.
+      for chunk in Self.stream {
+        screen.feed(chunk)
+        revision += 1
+        try? await Task.sleep(for: .milliseconds(60))
+      }
+    }
   }
 }
 
@@ -968,6 +1012,18 @@ struct UIPreviewHarness: View {
 
     case .sessions:
       SessionsPreview()
+
+    case .shell:
+      // The shell drill-in's grid, which is otherwise only reachable with a
+      // gateway, a shell-enabled operator and a running PTY. The claim here is
+      // narrow and worth having: that `VTScreen` and `ShellGridView` agree about
+      // where a cell is. Everything in the canned stream is something a real
+      // program emits and a naive renderer gets wrong - SGR colour including the
+      // 256 cube and true colour, a `\r` progress bar redrawing one line, a box
+      // drawn with DEC special graphics, a CJK line whose glyphs are two cells
+      // wide, and a reverse-video bar whose background has to survive the
+      // trailing-blank trim.
+      ShellGridPreview()
 
     case .projects:
       // Every shape line two can take, because each one is a different rule and

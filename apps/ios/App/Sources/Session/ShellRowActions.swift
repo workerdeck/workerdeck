@@ -9,6 +9,9 @@ import SwiftUI
 /// gateway there to expand or to kill against.
 typealias ShellOutputFetcher = @MainActor (String) -> Void
 typealias ShellKiller = @MainActor (String) -> Void
+/// Open a shell's live terminal. Absent wherever there is no navigation stack
+/// to push onto, and the row's press then falls back to the inline expansion.
+typealias ShellOpener = @MainActor (String) -> Void
 
 private struct ShellOutputFetcherKey: EnvironmentKey {
   static let defaultValue: ShellOutputFetcher? = nil
@@ -16,6 +19,10 @@ private struct ShellOutputFetcherKey: EnvironmentKey {
 
 private struct ShellKillerKey: EnvironmentKey {
   static let defaultValue: ShellKiller? = nil
+}
+
+private struct ShellOpenerKey: EnvironmentKey {
+  static let defaultValue: ShellOpener? = nil
 }
 
 extension EnvironmentValues {
@@ -27,5 +34,10 @@ extension EnvironmentValues {
   var shellKiller: ShellKiller? {
     get { self[ShellKillerKey.self] }
     set { self[ShellKillerKey.self] = newValue }
+  }
+
+  var shellOpener: ShellOpener? {
+    get { self[ShellOpenerKey.self] }
+    set { self[ShellOpenerKey.self] = newValue }
   }
 }

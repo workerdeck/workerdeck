@@ -1,5 +1,6 @@
 import {
   contextReading,
+  logCoalesceKey,
   transcriptActivity,
   transcriptProse,
   type ChecklistItem,
@@ -55,7 +56,7 @@ export class EventLog {
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
     this.#lastActivityAt = event.ts
     this.#fold(event)
-    this.#events.push(event)
+    this.#retain(event)
     return event
   }
 
@@ -64,17 +65,31 @@ export class EventLog {
   }
 
   restore(events: readonly SessionEvent[], seq: number, lastActivityAt: number | undefined): void {
-    this.#events = [...events]
+    this.#events = []
     this.#seq = seq
     this.#activityCount = 0
     this.#proseCount = 0
     this.#contextUsage = undefined
     this.#checklist = undefined
     this.#resetSeq = 0
-    for (const event of this.#events) {
+    for (const event of events) {
       this.#fold(event)
+      this.#retain(event)
     }
     this.#lastActivityAt = lastActivityAt
+  }
+
+  #retain(event: SessionEvent): void {
+    const key = logCoalesceKey(event)
+    if (key !== undefined) {
+      for (let index = this.#events.length - 1; index >= 0; index--) {
+        if (logCoalesceKey(this.#events[index]!) === key) {
+          this.#events.splice(index, 1)
+          break
+        }
+      }
+    }
+    this.#events.push(event)
   }
 
   #fold(event: SessionEvent): void {

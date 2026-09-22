@@ -350,4 +350,17 @@ describe('promotedShells', () => {
     expect(promotedShells(info({ shells: [failed] }), 3000 + 60_000 - 1)).toEqual([failed])
     expect(promotedShells(info({ shells: [failed] }), 3000 + 60_000)).toEqual([])
   })
+
+  // A killed shell and one reconciled from a restart report no exit code at all, and the linger is for a failure the
+  // operator has not been told about yet. Both of these they already know.
+  it('does not linger a killed shell, which has no exit code', () => {
+    const killed = shell({ status: 'exited', startedAt: 0, endedAt: 3000, endReason: 'killed' })
+    expect(promotedShells(info({ shells: [killed] }), 3000)).toEqual([])
+    expect(promotedShells(info({ shells: [killed] }), 3001)).toEqual([])
+  })
+
+  it('does not linger a shell reconciled from a gateway restart', () => {
+    const stale = shell({ status: 'exited', startedAt: 0, endedAt: 3000, endReason: 'server_restarted' })
+    expect(promotedShells(info({ shells: [stale] }), 3000)).toEqual([])
+  })
 })

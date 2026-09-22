@@ -679,4 +679,61 @@ describe('shell sources on the runners', () => {
     expect(runner.snapshot()!.state).not.toHaveProperty('pendingLocalCommands')
     expect(shell.listeners()).toBe(0)
   })
+
+  it('keeps one row per shell in the log however often it ticks, while an attached watcher still sees every tick', async () => {
+    const harness = fakeHarness()
+    const runner = new SessionRunner({ cwd: '/tmp/project', queryFn: harness.queryFn })
+    const live: SessionEvent[] = []
+    runner.subscribe((e) => live.push(e))
+    void runner.start()
+    const shell = fakeShell(running(), 'booting')
+    runner.queueLocalCommand!(shell.source)
+    const first = ofType(live, 'user_message')[0]!
+    for (let n = 1; n <= 500; n++) {
+      shell.set({ info: { bytes: n }, text: numbered(n) })
+    }
+    expect(ofType(live, 'user_message')).toHaveLength(501)
+
+    const fresh: SessionEvent[] = []
+    runner.subscribe((e) => fresh.push(e))
+    const rows = ofType(fresh, 'user_message')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ uuid: first.uuid, seq: runner.info().lastSeq, shell: { id: 'sh_abc123def456', bytes: 500 } })
+    expect(rows[0]!.message.content).toBe(shellInlineText(rows[0]!.shell!, numbered(500)))
+    expect(runner.eventAt!(first.seq)).toBeUndefined()
+    expect(runner.eventAt!(rows[0]!.seq)).toBe(rows[0])
+    expect(runner.info().activityCount).toBe(0)
+    expect(runner.info().proseCount).toBe(0)
+
+    shell.set({ info: exited(0), text: numbered(500) })
+    const settled: SessionEvent[] = []
+    runner.subscribe((e) => settled.push(e))
+    expect(ofType(settled, 'user_message').map((e) => e.shell?.status)).toEqual(['exited'])
+  })
+
+  it('provider snapshots a ticking shell as one row, and a restore collapses a pile a snapshot may still hold', async () => {
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: streamText('ok') })
+    const runner = new AiSdkRunner({ languageModel: model })
+    void runner.start()
+    await waitFor(() => runner.info().status === 'idle')
+    const shell = fakeShell(running(), 'booting')
+    runner.queueLocalCommand!(shell.source)
+    for (let n = 1; n <= 200; n++) {
+      shell.set({ info: { bytes: n }, text: numbered(n) })
+    }
+    const snapshot = runner.snapshot()!
+    const rows = ofType([...snapshot.events], 'user_message')
+    expect(rows).toHaveLength(1)
+    const row = rows[0]!
+    expect(row).toMatchObject({ seq: snapshot.seq, shell: { bytes: 200 } })
+
+    const stale = (seq: number, bytes: number): SessionEvent => ({ ...row, seq, shell: { ...row.shell!, bytes } })
+    const pile = { ...snapshot, events: [...snapshot.events.filter((e) => e !== row), stale(row.seq - 2, 1), stale(row.seq - 1, 2), row] }
+    const resumed = new AiSdkRunner({ languageModel: model, restore: pile })
+    const replayed: SessionEvent[] = []
+    resumed.subscribe((e) => replayed.push(e))
+    expect(ofType(replayed, 'user_message')).toEqual([row])
+    expect(resumed.info().lastSeq).toBe(snapshot.seq)
+    expect(resumed.info().activityCount).toBe(runner.info().activityCount)
+  })
 })

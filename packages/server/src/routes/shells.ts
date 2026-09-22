@@ -19,6 +19,14 @@ export async function handleShells(
     json(res, 404, { error: SHELL_REFUSAL })
     return
   }
+  // Reading a shell is reading host output: the command, the cwd and every byte it printed. `canSee` on the session is
+  // not enough, because a scoped principal can see a session an operator ran `$` in. The `hostCwd` leg of
+  // `shellPermitted` is about whether a `$` may *run* and needs a live runner, which a parked session has not got, so
+  // reads gate on the operator leg alone and the kill arm below keeps the full check.
+  if (!operator) {
+    json(res, 403, { error: SHELL_REFUSAL })
+    return
+  }
   if (route.shellId === undefined) {
     if (req.method !== 'GET') {
       json(res, 405, { error: 'method not allowed' })

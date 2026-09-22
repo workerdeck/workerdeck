@@ -373,10 +373,12 @@ public enum TerminalPlanner {
     let toggle = TermPress.toggle(key)
     let failed = TerminalShell.failed(item)
 
+    // A running row's header opens the live terminal; an ended one has no
+    // terminal to open, so its press is the expansion like every other row's.
     var lines = wrapBody(
       TerminalShell.headerText(item), metrics: metrics, gutter: TerminalShell.glyph,
       gutterTone: failed ? .red : .magenta, tone: failed ? .red : .fg, band: .user,
-      pulsing: running, press: running ? .killShell(shellId: item.shell.id) : toggle,
+      pulsing: running, press: running ? .openShell(shellId: item.shell.id) : toggle,
       inOpen: wash)
 
     let body = TerminalShell.bodyLines(item, open: open)
@@ -389,6 +391,11 @@ public enum TerminalPlanner {
     if let footer = TerminalShell.footerText(item, open: open, shown: shown.count) {
       lines += wrapBody(
         footer, metrics: metrics, gutter: "", tone: .faint, press: toggle, inOpen: wash)
+    }
+    if running {
+      lines += wrapBody(
+        TerminalShell.killActionText, metrics: metrics, gutter: "", tone: .red,
+        press: .killShell(shellId: item.shell.id), inOpen: wash)
     }
     return lines
   }

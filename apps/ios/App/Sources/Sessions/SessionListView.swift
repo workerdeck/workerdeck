@@ -110,11 +110,11 @@ struct SessionListView: View {
   @ViewBuilder
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
-    case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal):
+    case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell):
       if let context = model?.context(for: hostId) {
         SessionView(
           sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
-          focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal)
+          focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal, openShell: shell)
       } else {
         missingHost
       }
@@ -412,7 +412,10 @@ struct SessionListView: View {
   /// row shape with one destination type, not a variant branch inside a row.
   @ViewBuilder
   private func stepRows(for row: SessionRow, show: SubagentDisplay) -> some View {
-    ForEach(sessionSteps(row.info, show)) { step in
+    // `now` at the body pass, which is what decides whether a shell has lasted
+    // long enough to earn a line. The list re-derives on every poll, so the
+    // debounce and the linger both advance without a timer of their own.
+    ForEach(sessionSteps(row.info, show, now: Date().timeIntervalSince1970 * 1000)) { step in
       let route = UUID(uuidString: row.hostId).map {
         SessionRoute.step(hostId: $0, sessionId: row.info.id, step: step)
       }

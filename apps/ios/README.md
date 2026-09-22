@@ -57,8 +57,20 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     character - a bullet that appeared as a paragraph and snapped into place a token later would
     be worse than not rendering it at all.
   - `Terminal/` - the terminal transcript's rules, ported from
-    `packages/ui/src/components/terminal/`. Pure and testable, which is the point: the geometry
-    of this theme is arithmetic, and arithmetic belongs where `swift test` can reach it.
+    `packages/ui/src/components/terminal/`, **plus the VT emulator the shell drill-in draws**.
+    Pure and testable, which is the point: the geometry of this theme is arithmetic, and
+    arithmetic belongs where `swift test` can reach it.
+    - `VTScreen.swift` / `VTTypes.swift` - a dependency-free terminal emulator: a resumable
+      parser, a cell grid, scrollback, the alternate screen, 256 colours and true colour, and the
+      keystroke encoder that knows about application cursor keys and bracketed paste. Written
+      rather than imported because this project takes **no third-party packages**, and pinned by
+      60 tests. Two properties carry the rest. The parser is **resumable across `feed` calls**: a
+      CSI arrives split over three socket frames often enough, and a parser that reset between
+      chunks would print escape codes at the reader. And wrap is **deferred** (the pending-wrap
+      flag), so a character written in the last column does not scroll early - the classic
+      off-by-one that double-spaces every full-width line.
+      What it deliberately does not do, for anyone reading a bug report: no reflow on resize, no
+      left/right margins, no mouse reporting (the modes are recorded, nothing is sent), no sixel.
     - `TerminalBlocks.swift` / `TerminalRows.swift` - the two folds (a run of consecutive tool
       calls is one row; a `Task` and everything its subagent produced is one row) and the row
       addressing over them. The load-bearing distinction: a run is built from **adjacency**, a
@@ -249,6 +261,13 @@ Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
     itself, and nothing under the cards path asks which variant it is in. (That is the lesson of
     the deleted `lines` variant, which survived only as an `isLines` branch duplicated across
     fifteen view bodies.)
+    - `Shell/` - the drill-in. `ShellTerminalModel` owns a `VTScreen` and the two directions of
+      the PTY; `ShellGridView` draws the grid in UIKit over the dirty rect and follows the tail
+      unless the reader has scrolled off it; `ShellKeyboard` is a `UIKeyInput` first responder,
+      not a text view, because a terminal's stdin is a stream the process echoes rather than a
+      document to edit - which is also why every autocorrect and smart-quote trait is off.
+      `ShellPalette` resolves **xterm's** sixteen and not `TerminalPalette`: the theme's green is
+      WorkerDeck's claim about a row, where `ls` asking for blue is the program's.
     - `TranscriptMetrics.swift` - the cell, **measured** over 200 characters rather than derived
       from the font size (a 12pt monospace face advances ~7.4pt, not 7.2). The cell keeps its
       exact fractional advance and only the **line** is rounded to a whole point: a fractional

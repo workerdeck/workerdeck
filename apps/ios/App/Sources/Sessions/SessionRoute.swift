@@ -23,9 +23,13 @@ enum SessionRoute: Hashable {
   ///   empty agent view; that was the bug on the web, and the fix was giving
   ///   the kinds different destinations rather than teaching the frame to cope.
   ///   Part of the identity for the same reason the other two are.
+  /// - Parameter shell: a `ShellInfo.id`, when this route came from a **shell**
+  ///   line under a session row - the session opens with that shell's terminal
+  ///   already pushed. The third sibling of `subagent` and `reveal` and never
+  ///   set with either: three kinds of step, three destinations.
   case session(
     hostId: UUID, sessionId: String, seq: Int? = nil, epoch: Int? = nil,
-    subagent: String? = nil, reveal: String? = nil)
+    subagent: String? = nil, reveal: String? = nil, shell: String? = nil)
   case create(hostId: UUID, seed: CreateSessionSeed)
 
   // Where a step line under a session row goes. Here rather than at the list,
@@ -33,7 +37,12 @@ enum SessionRoute: Hashable {
   // rule spelled twice, a test driving the preview proves only that the preview
   // agrees with itself.
   static func step(hostId: UUID, sessionId: String, step: Step) -> SessionRoute {
-    .session(hostId: hostId, sessionId: sessionId, subagent: step.key)
+    switch step.kind {
+    case .agent:
+      return .session(hostId: hostId, sessionId: sessionId, subagent: step.key)
+    case .shell:
+      return .session(hostId: hostId, sessionId: sessionId, shell: step.key)
+    }
   }
 }
 

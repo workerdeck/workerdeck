@@ -188,9 +188,9 @@ struct ShellTests {
 
   // MARK: - What the row says
 
-  @Test func theHeaderNamesTheCommandTheStatusAndTheKill() {
+  @Test func theHeaderNamesTheCommandAndTheStatus() {
     let running = ShellItem(id: "row", shell: shell(), text: "")
-    #expect(TerminalShell.headerText(running) == "npm test · running ✕")
+    #expect(TerminalShell.headerText(running) == "npm test · running")
     #expect(!TerminalShell.failed(running))
 
     let failed = ShellItem(
@@ -221,6 +221,12 @@ struct ShellTests {
     #expect(TerminalShell.label(item) == "npm test")
   }
 
+  /// The ordinal is what "shell #3" means to a person, and the long reading is
+  /// the only place there is room for it.
+  @Test func theTitleCarriesTheOrdinal() {
+    #expect(TerminalShell.title(shell()) == "#3 npm test")
+  }
+
   @Test func theFooterSaysWhatExpandingWillDoAndWhatItClipped() {
     let head = ShellItem(id: "row", shell: shell(), text: "one\ntwo", truncated: true)
     #expect(TerminalShell.footerText(head, open: false, shown: 2)?.contains("expand") == true)
@@ -246,27 +252,32 @@ struct ShellTests {
     let lines = TerminalPlanner.plan(
       item: .shell(item), metrics: metrics, expansion: TerminalExpansion(), inOpen: false)
     #expect(lines.first?.gutter == TerminalShell.glyph)
-    #expect(lines.first?.text == "npm test · running ✕")
-    // Header + SHELL_INLINE_LINES of body + the one affordance line.
-    #expect(lines.count == 1 + WorkerProtocol.shellInlineLines + 1)
-    #expect(lines.last?.text.contains("expand") == true)
+    #expect(lines.first?.text == "npm test · running")
+    // Header + SHELL_INLINE_LINES of body + the affordance + the kill line.
+    #expect(lines.count == 1 + WorkerProtocol.shellInlineLines + 2)
+    #expect(lines.last?.text == TerminalShell.killActionText)
   }
 
-  /// The header is the kill while the shell runs - the `✕` is drawn there, so
-  /// that is what pressing there does. Every other line toggles, so an open row
-  /// is still reachable.
-  @Test func theRunningHeaderPressesTheKillAndTheRestToggles() {
+  /// A running row's header opens the live terminal - the useful move, and the
+  /// place the reader can watch what they are about to stop - while the kill is
+  /// a line of its own. Two intents never share one line: this renderer presses
+  /// whole wrapped lines, so a second target inside one would be a coin toss.
+  /// Everything between them toggles, so an open row is still reachable.
+  @Test func theRunningHeaderOpensTheTerminalAndTheLastLineKills() {
     let item = ShellItem(id: "row", shell: shell(), text: "one", truncated: false)
     let running = TerminalPlanner.plan(
       item: .shell(item), metrics: metrics, expansion: TerminalExpansion(), inOpen: false)
-    #expect(running.first?.press == .killShell(shellId: "sh_abc123"))
-    #expect(running.last?.press == .toggle(.shell("sh_abc123")))
+    #expect(running.first?.press == .openShell(shellId: "sh_abc123"))
+    #expect(running.last?.press == .killShell(shellId: "sh_abc123"))
+    #expect(running.dropFirst().dropLast().allSatisfy { $0.press == .toggle(.shell("sh_abc123")) })
 
     var exited = item
     exited.shell = shell(status: .exited, endedAt: 2_000, exitCode: 0, endReason: .exit)
     let settled = TerminalPlanner.plan(
       item: .shell(exited), metrics: metrics, expansion: TerminalExpansion(), inOpen: false)
+    // No terminal to open and no process to stop: an ended row is uniform.
     #expect(settled.allSatisfy { $0.press == .toggle(.shell("sh_abc123")) })
+    #expect(!settled.contains { $0.text == TerminalShell.killActionText })
   }
 
   @Test func anOpenRowDrawsTheFetchedTextAndTheBlockCarriesItsKey() {
@@ -275,7 +286,8 @@ struct ShellTests {
     let expansion = TerminalExpansion(open: [.shell("sh_abc123")])
     let lines = TerminalPlanner.plan(
       item: .shell(item), metrics: metrics, expansion: expansion, inOpen: false)
-    #expect(lines.count == 1 + 40)
+    // Header + the 40 fetched lines + the running row's kill line.
+    #expect(lines.count == 1 + 40 + 1)
     #expect(lines.allSatisfy { $0.inOpen })
 
     let blocks = terminalBlocks([.shell(item)])
@@ -305,10 +317,33 @@ struct ShellTests {
       id: "killed", status: .exited, startedAt: now - 10_000, endedAt: now - 1_000,
       endReason: .killed)
 
+    let restarted = shell(
+      id: "restarted", status: .exited, startedAt: now - 10_000, endedAt: now - 1_000,
+      endReason: .serverRestarted)
+
     let promoted = promotedShells(
-      info([young, long, quickFail, slowFail, oldFail, cleanExit, killed]), now: now)
-    #expect(promoted.map(\.id) == ["long", "slow", "killed"])
+      info([young, long, quickFail, slowFail, oldFail, cleanExit, killed, restarted]), now: now)
+    #expect(promoted.map(\.id) == ["long", "slow"])
     #expect(promotedShells(info([]), now: now).isEmpty)
+  }
+
+  /// The linger is for a failure the operator has not been told about. A shell
+  /// they killed, and one a restart reconciled, both report **no exit code at
+  /// all** - and reading "not zero" as "failed" kept each of them on the card
+  /// for a minute wearing a failure's colour.
+  @Test func neitherAKillNorARestartLingersOnTheCard() {
+    func info(_ shells: [ShellInfo]) -> SessionInfo {
+      SessionInfo(
+        id: "sess-1", status: .idle, cwd: "/work", createdAt: 0, lastSeq: 0,
+        pendingPermissionCount: 0, shells: shells)
+    }
+    let now: Double = 100_000
+    for reason in [ShellEndReason.killed, .serverStopped, .serverRestarted] {
+      let ended = shell(
+        id: "sh", status: .exited, startedAt: now - 10_000, endedAt: now - 1_000,
+        endReason: reason)
+      #expect(promotedShells(info([ended]), now: now).isEmpty)
+    }
   }
 
   // MARK: - The composer

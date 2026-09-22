@@ -149,13 +149,24 @@ final class TerminalTranscriptModel {
   func press(
     _ press: TermPress, row: Int, fetch: ToolResultFetcher? = nil,
     openSubagent: ((String) -> Void)? = nil, fetchShell: ShellOutputFetcher? = nil,
-    killShell: ShellKiller? = nil
+    killShell: ShellKiller? = nil, openShell: ((String) -> Void)? = nil
   ) {
     // A kill has a process at the other end, so it never falls back to an
     // expansion the way the takeover does: with nothing wired, the honest answer
     // is that this surface cannot stop anything.
     if case .killShell(let shellId) = press {
       killShell?(shellId)
+      return
+    }
+    // Falls back to the expansion the way the takeover does, and for the same
+    // reason: with no navigation stack wired (the preview harness) the press
+    // has to do something the reader can see.
+    if case .openShell(let shellId) = press {
+      if let openShell {
+        openShell(shellId)
+      } else {
+        self.press(.toggle(.shell(shellId)), row: row, fetch: fetch, fetchShell: fetchShell)
+      }
       return
     }
     if case .openSubagent(let taskId) = press {

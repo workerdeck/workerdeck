@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { replayCoalesceKey } from '@workerdeck/protocol'
+import { logCoalesceKey, replayCoalesceKey, transcriptActivity, transcriptProse } from '@workerdeck/protocol'
 import type { RateLimitInfo, SessionEvent, SessionEventBody, ShellInfo } from '@workerdeck/protocol'
 import { applyEvent, initialTranscriptState, type TranscriptState } from '../src/lib/transcript.ts'
 
@@ -160,37 +160,7 @@ describe('replay coalescing is unobservable', () => {
   })
 
   it('coalesces two shell rows under one shell id to the last', () => {
-    const shellInfo = (over: { status: 'running' | 'exited'; bytes: number }): ShellInfo => ({
-      id: 'sh_1',
-      sessionId: 'sess-1',
-      ordinal: 1,
-      command: 'npm run dev',
-      label: 'npm run dev',
-      cwd: '/work',
-      owner: 'user',
-      startedAt: 0,
-      cols: 120,
-      rows: 40,
-      ...over,
-    })
-    const full = seqd([
-      {
-        type: 'user_message',
-        message: { role: 'user', content: '$ npm run dev' },
-        parentToolUseId: null,
-        synthetic: true,
-        uuid: 'row-1',
-        shell: shellInfo({ status: 'running', bytes: 10 }),
-      },
-      {
-        type: 'user_message',
-        message: { role: 'user', content: '$ npm run dev' },
-        parentToolUseId: null,
-        synthetic: true,
-        uuid: 'row-1',
-        shell: shellInfo({ status: 'exited', bytes: 40 }),
-      },
-    ])
+    const full = seqd([shellRow({ status: 'running', bytes: 10 }), shellRow({ status: 'exited', bytes: 40 })])
     expect(replayCoalesceKey(full[0]!)).toBe('shell:sh_1')
     const thin = coalesce(full)
     expect(thin).toHaveLength(1)
@@ -198,3 +168,102 @@ describe('replay coalescing is unobservable', () => {
     expect(fold(thin)).toEqual(fold(full))
   })
 })
+
+// The gateway's log rule: the latest event per key is kept, the one it supersedes is dropped at append time.
+function retainLog(events: SessionEvent[]): SessionEvent[] {
+  const log: SessionEvent[] = []
+  for (const event of events) {
+    const key = logCoalesceKey(event)
+    const index = key === undefined ? -1 : log.findIndex((held) => logCoalesceKey(held) === key)
+    if (index !== -1) {
+      log.splice(index, 1)
+    }
+    log.push(event)
+  }
+  return log
+}
+
+describe('log coalescing is a subset of replay coalescing', () => {
+  const shellRows = (events: SessionEvent[]): SessionEvent[] => events.filter((e) => e.type === 'user_message' && e.shell !== undefined)
+
+  it('keys the shell row exactly as the replay does, and nothing else', () => {
+    const row = shellRow({ status: 'running', bytes: 1 })
+    expect(logCoalesceKey(row)).toBe('shell:sh_1')
+    expect(logCoalesceKey(row)).toBe(replayCoalesceKey(row))
+    for (const body of [
+      usage(1),
+      { type: 'rate_limit', info: limit('five_hour', 1) } as SessionEventBody,
+      { type: 'status_changed', status: 'idle' } as SessionEventBody,
+      { type: 'context_compacted', uuid: 'c1', pending: true } as SessionEventBody,
+      { type: 'checklist', items: [] } as SessionEventBody,
+      { type: 'sdk_event', payload: { type: 'system', subtype: 'status' } } as SessionEventBody,
+      { type: 'user_message', message: { role: 'user', content: 'hi' }, parentToolUseId: null } as SessionEventBody,
+      {
+        type: 'user_message',
+        message: { role: 'user', content: '<local-command-stdout>$ ls</local-command-stdout>' },
+        parentToolUseId: null,
+        synthetic: true,
+        uuid: 'u1',
+      } as SessionEventBody,
+    ]) {
+      expect(logCoalesceKey(body)).toBeUndefined()
+    }
+  })
+
+  it('scores zero activity and prose, so the counters a restore recomputes match the ones the live log folded', () => {
+    for (const status of ['running', 'exited'] as const) {
+      expect(transcriptActivity(shellRow({ status, bytes: 1 }))).toBe(0)
+      expect(transcriptProse(shellRow({ status, bytes: 1 }))).toBe(0)
+    }
+  })
+
+  it('delivers the same coalesced replay from either log, from any afterSeq, and the same fold', () => {
+    const full = seqd([
+      { type: 'user_message', message: { role: 'user', content: 'start the server' }, parentToolUseId: null },
+      shellRow({ status: 'running', bytes: 1 }),
+      { type: 'status_changed', status: 'running' },
+      usage(1),
+      shellRow({ status: 'running', bytes: 2 }),
+      { type: 'user_message', message: { role: 'user', content: 'and the tests' }, parentToolUseId: null },
+      shellRow({ status: 'running', bytes: 3 }),
+      { type: 'status_changed', status: 'idle' },
+      usage(2),
+      shellRow({ status: 'exited', bytes: 4 }),
+      { type: 'user_message', message: { role: 'user', content: 'thanks' }, parentToolUseId: null },
+    ])
+    const log = retainLog(full)
+    expect(log).toHaveLength(full.length - 3)
+    expect(shellRows(log).map((e) => e.seq)).toEqual([10])
+    expect(log.map((e) => e.seq)).toEqual([1, 3, 4, 6, 8, 9, 10, 11])
+    for (let afterSeq = 0; afterSeq <= full.length; afterSeq++) {
+      const slice = (events: SessionEvent[]) => coalesce(events.filter((e) => e.seq > afterSeq))
+      expect(slice(log)).toEqual(slice(full))
+    }
+    expect(fold(log)).toEqual(fold(coalesce(full)))
+    expect(fold(log).items.filter((item) => item.kind === 'shell')).toHaveLength(1)
+  })
+})
+
+function shellRow(over: { status: 'running' | 'exited'; bytes: number }): SessionEventBody {
+  const shell: ShellInfo = {
+    id: 'sh_1',
+    sessionId: 'sess-1',
+    ordinal: 1,
+    command: 'npm run dev',
+    label: 'npm run dev',
+    cwd: '/work',
+    owner: 'user',
+    startedAt: 0,
+    cols: 120,
+    rows: 40,
+    ...over,
+  }
+  return {
+    type: 'user_message',
+    message: { role: 'user', content: '<local-command-stdout>$ npm run dev</local-command-stdout>' },
+    parentToolUseId: null,
+    synthetic: true,
+    uuid: 'row-1',
+    shell,
+  }
+}

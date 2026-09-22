@@ -752,14 +752,45 @@ transcript item, `promotedShells` for the list, and the four `/sessions/:id/shel
 `WorkerClient`. The row is `TerminalShell` + `TerminalPlanner.planShell`: the command, what the
 record says, the first `SHELL_INLINE_LINES` lines (bounded in chars too, and clipped on a line past
 `SHELL_INLINE_LINE_CHARS`), an expand that fetches the artifact's text view
-client-side (never a byte of model context) and a `\u{2715}` that kills. It **upserts by uuid** -
+client-side (never a byte of model context) and a `\u{2715} kill` line. It **upserts by uuid** -
 the gateway re-emits the same row as the shell ticks, and what the reader expanded is carried
 across those re-emits. A `running` row replayed out of the event log checks itself once against
 `GET shells/:id`, because the log can be older than the process; a 404 is an answer, and the row
-says the output expired rather than offering to kill something nobody can reach. The header's
-press *is* the kill while the shell runs (the web puts that `\u{2715}` in a hover overlay, and a
-thumb has no hover); every other line toggles. The drill-in terminal (attach, type, resize) is
-stage 2 and is not here yet.
+says the output expired rather than offering to kill something nobody can reach. A running row's
+**header opens the drill-in and its last line kills**; every line between them toggles. Two intents
+never share one line here, because this renderer presses whole wrapped lines and a second target
+inside one would be a coin toss under a thumb - the web can put both on one row because a pointer
+can hit either.
+
+**The drill-in is a native terminal**, and it has to be: `apps/ios/project.yml` takes zero
+third-party packages, so SwiftTerm was never on the table. `VTScreen` (`WorkerDeckKit/Terminal/`)
+is a dependency-free VT emulator - a resumable parser, a cell grid, scrollback, the alternate
+screen, 256 colours and true colour - pinned by 60 tests. It matters that the parser is
+**resumable across `feed` calls**: one CSI arrives split over three frames often enough, and a
+parser that reset between chunks would print escape codes at the reader.
+
+Around it, `ShellTerminalModel` owns the emulator and the two directions of the PTY; `ShellGridView`
+draws the grid in UIKit (`draw(_:)` over the dirty rect, so a thousand lines of scrollback cost
+nothing until they are looked at) and follows the tail unless the reader has scrolled off it;
+`ShellKeyboard` is a `UIKeyInput` first responder rather than a text view, because a terminal's
+stdin is a stream the process echoes, not a document to edit - and every autocorrect, smart quote
+and capitalisation is off for the same reason. The control strip carries what a software keyboard
+has not got and a command line needs: Escape, Tab, a **latched** Control (a phone cannot hold one
+key while striking another), `^C`, and the arrows.
+
+Three rules the phone shares with every other client. PTY bytes ride `shell_output` frames
+**straight to the emulator** and never reach the reducer, the event log, the transcript cache or a
+parking snapshot. Redraws are coalesced to 30Hz, so a `yes` costs thirty layouts a second rather
+than thousands. And an attach is **per socket**: a reconnect silently leaves the screen watching
+nothing, so the model re-attaches on `connectionChange(true)` at whatever size the pane is now.
+Leaving the screen detaches and **never kills** - a shell outlives the view that watched it, which
+is the whole point of the record.
+
+Colours are the one place the drill-in parts company with the theme. `ShellPalette` resolves
+xterm's default sixteen, not `TerminalPalette`: the theme's green means "this changed the
+workspace" and that is WorkerDeck's claim about a row, where `ls` asking for blue is the program's.
+The web pane overrides only foreground, background and cursor and inherits the rest from xterm, so
+matching xterm is what makes one shell read the same on a phone and in a browser.
 
 **A phone has no hover, so a wash *is* the affordance**: `TerminalPalette.uiPressable`, drawn by
 `BackdropView` behind any line that carries a press **and wears nothing else** - no band, not

@@ -92,8 +92,8 @@ export const InlineNarrow: Story = {
   },
 }
 
-// Shell mode is entered by typing `!` as the first character; there is no prop that forces it on,
-// so this story is the affordance rather than the state. Type `!` to see the magenta frame.
+// Shell mode is entered by typing `$` as the first character; there is no prop that forces it on,
+// so this story is the affordance rather than the state. Type `$` to see the magenta frame.
 export const ShellMode: Story = {
   args: {
     layout: 'stacked',

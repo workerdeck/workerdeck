@@ -1317,6 +1317,13 @@ has the shape; these are the ways to get it wrong.
   `protocol_error` text, so the surface is not an existence oracle. The gate is re-checked on every
   command; `attached.shell` is an offer, not the authorization. A gateway without
   `@lydell/node-pty` (an optional dependency) refuses with the same string.
+- **Reading a shell is gated too, and it is the leg that was missed.** `GET /sessions/:id/shells`
+  and its siblings return the command, the cwd and every byte the process printed, so `canSee` on
+  the session is not the gate: a scoped principal attached to a session an **operator** ran `$` in
+  would otherwise read all of it. Every arm of `routes/shells.ts` requires the operator leg. Only
+  that leg, and deliberately: the `hostCwd` half of `shellPermitted` is about whether a `$` may
+  *run* and needs a live runner, which a parked session has not got, so the kill arm keeps the full
+  check and the reads do not.
 - **No default wall clock.** `shell.timeoutMs` is honoured when set and nothing else ends a shell on
   its own; up to `SHELL_MAX_RUNNING_PER_SESSION` run at once, so a dev server and a test run coexist.
 - **The artifact is on disk under `<stateDir>/shells/`, index per session, spill per shell.** Small
@@ -1369,8 +1376,11 @@ has the shape; these are the ways to get it wrong.
   client's clock, not the server's.** `decorate` puts every tracked shell on `SessionInfo.shells`;
   `promotedShells(info, now)` is what decides which of them draw, and it is called with the poll's
   `now` (web) or the push's (VS Code). So `$ ls` never lands on a card, `$ npm run dev` lands after
-  three seconds, a clean exit de-promotes at once, and a non-zero exit lingers `SHELL_LINGER_MS`
-  with its code. The server's own filter in `decorate` is deliberately looser: it keeps the record,
+  three seconds, a clean exit de-promotes at once, and a **reported** non-zero exit lingers
+  `SHELL_LINGER_MS` with its code. Reported is the load-bearing word: a killed shell and one
+  reconciled from a restart carry no `exitCode` at all, so a `!== 0` test called both of them
+  failures and parked each on the card for a minute in red. The linger is for a failure the
+  operator has not already been told about. The server's own filter in `decorate` is deliberately looser: it keeps the record,
   the client decides the drawing. `sessionSteps` draws shells only when the caller passes the shell
   options, and the kill glyph only when it passes `onKill`, so a read-only surface cannot grow a
   kill button by accident.
@@ -1441,7 +1451,13 @@ has the shape; these are the ways to get it wrong.
 - **The transcript row is a synthetic `user_message` emitted more than once under one `uuid`**
   (`context_compacted`'s shape), carrying `shell: ShellInfo` and exactly one
   `<local-command-stdout|stderr>` element, so a client that ignores `shell` still renders a notice.
-  `replayCoalesceKey` keys on `shell:<id>` and a replay delivers only the last. Marking it synthetic
+  `replayCoalesceKey` keys on `shell:<id>` and a replay delivers only the last, and `logCoalesceKey`
+  keys the same so **the log itself holds only the last**: `EventLog.append` drops the emission the
+  new one supersedes, since a chatty shell ticks four times a second for as long as it runs and
+  nothing but the log's own retention bounds that pile (a `stream_delta` at least ends with its
+  turn). An attached socket still receives every tick; a cold attach, a resume and a parking
+  snapshot see one row per shell, in its latest state and at its latest `seq`, which is also
+  where a coalescing replay of the full log would have put it. Marking it synthetic
   zeroes `transcriptActivity`/`transcriptProse` so a `$ ls` never badges a session unread. Two
   reducer rules follow: the local-command check sits ahead of the `!event.synthetic` guard (inside
   it, a synthetic message renders nothing), and a message whose first text block starts with
@@ -1455,8 +1471,14 @@ has the shape; these are the ways to get it wrong.
   kill route re-checks `shellPermitted`.
 - **A backfilled row has no record.** A claude session resumed from the SDK store carries the flush
   text only, so it renders as a notice with no live state.
-- **iOS mirrors all of it**: `SessionCommand.shellCommand`, `AttachedFrame.shell`, `ShellInfo` and
-  both reducer rules in `Transcript.swift`. A fix on one side alone silently diverges the clients.
+- **iOS mirrors all of it**: `SessionCommand.shellCommand`, `AttachedFrame.shell`, `ShellInfo`,
+  both reducer rules in `Transcript.swift`, the four `shell_*` commands, the three frames, and the
+  drill-in over its own dependency-free emulator (`VTScreen`, since the app takes no third-party
+  packages). A fix on one side alone silently diverges the clients. Two phone-only shapes that are
+  not divergence but are worth knowing: a running row's **header opens the drill-in and its last
+  line kills**, because this renderer presses whole wrapped lines and a pointer's two targets on
+  one row are a coin toss under a thumb; and redraws are coalesced to 30Hz, so a `yes` costs thirty
+  layouts a second rather than thousands.
 - **A closing socket detaches and never kills.** `ws.on('close')` runs `detachShells` and nothing
   else; the registry's `watch(runner)` owns the close and park kills. A reader closing a tab must
   not end the dev server the session is running, and this is the single line in `routes/ws.ts` most

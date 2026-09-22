@@ -45,11 +45,22 @@ public enum TerminalShell {
   /// back, so leaving the mode never silently eats a character the reader typed.
   public static func exitDraft(_ draft: String) -> String { glyph + draft }
 
-  public static func label(_ item: ShellItem) -> String {
-    let label = item.shell.label
-    if !label.isEmpty { return label }
-    return item.shell.command.components(separatedBy: "\n").first ?? ""
+  /// The record's one-line name. Taken from `label` (the gateway's clip of the
+  /// first command line) and falling back to the command itself, because a row
+  /// with no name reads as a bug.
+  public static func label(_ shell: ShellInfo) -> String {
+    if !shell.label.isEmpty { return shell.label }
+    return shell.command.components(separatedBy: "\n").first ?? ""
   }
+
+  /// The long reading: `#3 npm run dev`. The ordinal is what "shell #3" means to
+  /// a person, so it belongs wherever there is room for it - a title, a strip,
+  /// an accessibility label - and nowhere there is not.
+  public static func title(_ shell: ShellInfo) -> String {
+    "#\(shell.ordinal) \(label(shell))"
+  }
+
+  public static func label(_ item: ShellItem) -> String { label(item.shell) }
 
   /// What the record says happened, in the words the reader needs.
   ///
@@ -58,8 +69,7 @@ public enum TerminalShell {
   /// and one that was restarted underneath it did **not** - so the copy for that
   /// case says the process may still be running, which is the honest reading of
   /// a record reconciled from a stale generation.
-  public static func statusText(_ item: ShellItem) -> String {
-    let shell = item.shell
+  public static func statusText(_ shell: ShellInfo) -> String {
     if shell.status == .running { return "running" }
     if let code = shell.exitCode { return code == 0 ? "exit 0" : "exit \(code)" }
     switch shell.endReason {
@@ -73,14 +83,26 @@ public enum TerminalShell {
     }
   }
 
-  public static func failed(_ item: ShellItem) -> Bool {
-    item.shell.status == .exited && item.shell.exitCode != 0
+  public static func statusText(_ item: ShellItem) -> String { statusText(item.shell) }
+
+  public static func failed(_ shell: ShellInfo) -> Bool {
+    shell.status == .exited && shell.exitCode != 0
   }
 
+  public static func failed(_ item: ShellItem) -> Bool { failed(item.shell) }
+
   public static func headerText(_ item: ShellItem) -> String {
-    let kill = item.shell.status == .running ? " \(killGlyph)" : ""
-    return "\(label(item)) · \(statusText(item))\(kill)"
+    "\(label(item)) · \(statusText(item))"
   }
+
+  /// The running row's own action line.
+  ///
+  /// A line of its own, and not a glyph on the header, because this renderer
+  /// presses whole wrapped lines: two intents on one line is a coin toss under
+  /// a thumb. So the header opens the terminal - the useful move, and where the
+  /// reader can then watch what they are about to stop - and stopping it is
+  /// this line. The web can afford both on one row because a pointer can.
+  public static let killActionText = "\(killGlyph) kill"
 
   public static func bodyLines(_ item: ShellItem, open: Bool) -> [String] {
     let source = open ? (item.expanded ?? item.text) : item.text

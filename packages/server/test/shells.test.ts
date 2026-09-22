@@ -462,9 +462,12 @@ withPty('index', () => {
       await expect(shells.output('s1', 'sh_abcdefghijkl', { view: 'text' })).resolves.toBe('listening\n')
       await shells.flush()
       expect(readIndex(dir, 's1').shells[0]).toMatchObject({ endReason: 'server_restarted', generation: 'gen-old' })
+      // Not on the card. The record is `exited` from this gateway's point of view, it carries no exit code to call a
+      // failure, and the pid on it is unkillable by rule (it may have been recycled), so a row would promise an action
+      // no client can take. The transcript row is where "may still be running" belongs.
       expect(
         shells.decorate({ id: 's1', status: 'idle', cwd: '/tmp', createdAt: 0, lastSeq: 0, pendingPermissionCount: 0 }).shells,
-      ).toHaveLength(1)
+      ).toBeUndefined()
     } finally {
       kill.mockRestore()
     }

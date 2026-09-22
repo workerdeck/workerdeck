@@ -81,7 +81,10 @@ public func promotedShells(_ info: SessionInfo, now: Double) -> [ShellInfo] {
     if shell.status == .running {
       return now - shell.startedAt >= WorkerProtocol.shellPromoteMs
     }
-    guard let endedAt = shell.endedAt, shell.exitCode != 0 else { return false }
+    // A *reported* non-zero exit. A killed shell and one reconciled from a
+    // gateway restart carry no exit code at all, and treating "not zero" as
+    // "failed" kept both on the card for a minute wearing a failure's colour.
+    guard let endedAt = shell.endedAt, let code = shell.exitCode, code != 0 else { return false }
     return endedAt - shell.startedAt >= WorkerProtocol.shellPromoteMs
       && now - endedAt < WorkerProtocol.shellLingerMs
   }

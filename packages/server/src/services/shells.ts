@@ -729,7 +729,10 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       const shells = [...state.entries.values()]
         .filter((entry) => {
           const { status, exitCode, endedAt } = entry.info
-          return status === 'running' || (exitCode !== 0 && endedAt !== undefined && now - endedAt < SHELL_LINGER_MS)
+          return (
+            status === 'running' ||
+            (typeof exitCode === 'number' && exitCode !== 0 && endedAt !== undefined && now - endedAt < SHELL_LINGER_MS)
+          )
         })
         .map((entry) => ({ ...entry.info }))
       return shells.length > 0 ? { ...info, shells } : info

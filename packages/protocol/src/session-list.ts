@@ -163,7 +163,10 @@ export function promotedShells(info: SessionInfo, now: number): ShellInfo[] {
     if (shell.status === 'running') {
       return now - shell.startedAt >= SHELL_PROMOTE_MS
     }
-    if (shell.endedAt === undefined || shell.exitCode === 0) {
+    // A *reported* non-zero exit, not merely "no zero": a killed shell and one reconciled from a restart carry no
+    // exitCode at all, and `!== 0` kept both on the card for a minute drawn as failures. The linger exists for the
+    // dev server that died on its own, which is the only case the operator has not already been told about.
+    if (shell.endedAt === undefined || typeof shell.exitCode !== 'number' || shell.exitCode === 0) {
       return false
     }
     return shell.endedAt - shell.startedAt >= SHELL_PROMOTE_MS && now - shell.endedAt < SHELL_LINGER_MS

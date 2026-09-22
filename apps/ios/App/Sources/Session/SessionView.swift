@@ -63,7 +63,7 @@ struct SessionView: View {
   /// The caret, and whether the keyboard is up. Here rather than in the composer
   /// because the picker overlay edits the same draft it does.
   @State private var selection = NSRange(location: 0, length: 0)
-  /// Shell mode, entered by typing `!` as the whole of an empty draft. Cleared on every
+  /// Shell mode, entered by typing `$` as the whole of an empty draft. Cleared on every
   /// attach, because the gateway's offer is re-made there and may not come back.
   @State private var isShellMode = false
   @State private var isComposerFocused = false
@@ -123,6 +123,16 @@ struct SessionView: View {
   /// waits out the same hold the transcript does. See `resolveTakeover()`.
   @State private var pendingSubagent: String?
 
+  /// The shell drill-in, the sub-agent takeover's sibling: the model for the
+  /// shell whose terminal is pushed, or nil for the conversation. A **model**
+  /// and not an id, because the emulator is the screen's state and has to
+  /// outlive one body pass; the push binding is its presence.
+  @State private var shellTerminal: ShellTerminalModel?
+  /// A drill-in asked for by the route (the sessions list's shell line), held
+  /// until the attach has landed - `attached.shell` is what says this principal
+  /// may reach a shell at all, and the record comes off the same frame.
+  @State private var pendingShell: String?
+
   /// Catch-up mode's whole state on this screen: where the reader had read to
   /// when they arrived, and when that was.
   ///
@@ -145,7 +155,8 @@ struct SessionView: View {
 
   init(
     sessionId: String, hostId: UUID, client: WorkerClient, focusSeq: Int? = nil,
-    focusEpoch: Int? = nil, openSubagent: String? = nil, revealToolUseId: String? = nil
+    focusEpoch: Int? = nil, openSubagent: String? = nil, revealToolUseId: String? = nil,
+    openShell: String? = nil
   ) {
     self.client = client
     self.hostId = hostId
@@ -153,6 +164,7 @@ struct SessionView: View {
     self.focusEpoch = focusEpoch
     self.revealToolUseId = revealToolUseId
     _pendingSubagent = State(initialValue: openSubagent)
+    _pendingShell = State(initialValue: openShell)
     _vm = State(initialValue: TranscriptViewModel(sessionId: sessionId, client: client))
   }
 
@@ -226,6 +238,7 @@ struct SessionView: View {
       // and the header's `✕` stops the process.
       .environment(\.shellOutputFetcher, { vm.loadShellOutput(shellId: $0) })
       .environment(\.shellKiller, { vm.killShell(shellId: $0) })
+      .environment(\.shellOpener, { openShell($0) })
       .environment(\.attachmentLoader, attachmentLoader)
       .environment(\.producedImageLoader, producedImages)
       // The other end of the ref'd attach: a box scrolls into view, this fetches
@@ -306,6 +319,7 @@ struct SessionView: View {
         resolveFocus()
         resolveReveal()
         resolveTakeover()
+        resolveShell()
       }
       // The cwd arrives with the session snapshot, which lands after this view
       // does - and changes on a resume into a different directory.
@@ -447,6 +461,12 @@ struct SessionView: View {
       // a navigation destination is presented by the enclosing stack, not by
       // this view's subtree, so the `.environment` writes above it do not
       // reliably reach the pushed screen.
+      // The shell drill-in, presented the same way and for the same reasons as
+      // the takeover below it. It reads no transcript, so it needs none of the
+      // row environment values - only the session, for the socket it borrows.
+      .navigationDestination(item: $shellTerminal) { model in
+        ShellTerminalView(model: model, vm: vm)
+      }
       .navigationDestination(item: $subagentId) { taskId in
         SubagentTakeoverView(taskId: taskId, hostId: hostId, vm: vm)
           .environment(\.toolResultFetcher, { vm.loadFullResult(toolUseId: $0) })
@@ -467,6 +487,41 @@ struct SessionView: View {
     // up across it would cover the frame's tail on arrival.
     dismissKeyboard()
     subagentId = taskId
+  }
+
+  /// Raise the drill-in from a running shell row's press, or from the card line
+  /// the route carried.
+  ///
+  /// The record is looked up so the screen can name the shell before a single
+  /// frame arrives; not finding one is not a refusal, because a shell the
+  /// transcript has never drawn (a card line on a session opened cold) is
+  /// exactly the case the attach is about to answer.
+  private func openShell(_ shellId: String) {
+    guard shellTerminal?.shellId != shellId else { return }
+    dismissKeyboard()
+    // Opened at the shell's own spawn size. The pane measures itself on its
+    // first layout and resizes from there, so seeding it with a phone-shaped
+    // guess would only send one extra SIGWINCH.
+    shellTerminal = ShellTerminalModel(
+      shellId: shellId, shell: shellRecord(shellId), session: vm,
+      cols: WorkerProtocol.shellCols, rows: WorkerProtocol.shellRows)
+  }
+
+  /// What this screen already knows about a shell: the transcript's row first,
+  /// then the card's rollup. Either is the same record the gateway minted.
+  private func shellRecord(_ shellId: String) -> ShellInfo? {
+    for item in vm.state.items {
+      if case .shell(let row) = item, row.shell.id == shellId { return row.shell }
+    }
+    return vm.session?.shells?.first { $0.id == shellId }
+  }
+
+  /// Open the drill-in a route asked for, once the attach has landed - the same
+  /// hold the takeover waits out, for the same reason.
+  private func resolveShell() {
+    guard let shellId = pendingShell, vm.session != nil, !vm.replaying else { return }
+    pendingShell = nil
+    openShell(shellId)
   }
 
   /// Open the takeover a route asked for - the sessions list's agent line -

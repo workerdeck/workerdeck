@@ -942,6 +942,10 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
   }
 }
 
+export function logCoalesceKey(body: SessionEventBody): string | undefined {
+  return body.type === 'user_message' && body.shell ? replayCoalesceKey(body) : undefined
+}
+
 export function replayRetains(body: SessionEventBody): boolean {
   if (body.type !== 'stream_delta') {
     return true

@@ -165,6 +165,13 @@ public final class SessionHandle {
     /// The server speaks a different `PROTOCOL_VERSION` than `WorkerProtocol.version`.
     /// A warning, not a disconnect - decoding is lenient by design.
     case protocolMismatch(serverVersion: Int)
+    /// A shell's stream opened: the record, the size it is now at, and the
+    /// scrollback to replay before the first `shellOutput`.
+    case shellAttached(ShellAttachedFrame)
+    /// PTY bytes. **Never** routed into the transcript: one consumer reads this
+    /// stream and hands these two cases to the terminal and nothing else.
+    case shellOutput(shellId: String, data: String)
+    case shellDetached(shellId: String, reason: String)
   }
 
   public let sessionId: String
@@ -251,6 +258,58 @@ public final class SessionHandle {
   /// next message. Send only when the `attached` frame set `shell`.
   public func runShell(_ command: String) {
     enqueue(.shellCommand(command: command))
+  }
+
+  /// Subscribe to a shell's live PTY stream at this client's pane size. The
+  /// stream arrives as ``Event/shellAttached(_:)`` then ``Event/shellOutput(shellId:data:)``.
+  ///
+  /// **Attaching resizes the shell** and the last attach wins, so a phone
+  /// attaching to a shell a dashboard is watching narrows it for both. That is
+  /// the protocol's rule, not this client's choice.
+  public func attachShell(_ shellId: String, cols: Int, rows: Int) {
+    enqueue(.shellAttach(shellId: shellId, cols: cols, rows: rows))
+  }
+
+  /// Type into a shell. Longer input is split into
+  /// ``WorkerProtocol/shellInputMax`` frames rather than refused, so a paste of
+  /// any size lands in order.
+  public func writeShell(_ shellId: String, _ data: String) {
+    guard !data.isEmpty else { return }
+    for chunk in Self.chunk(data, max: WorkerProtocol.shellInputMax) {
+      enqueue(.shellInput(shellId: shellId, data: chunk))
+    }
+  }
+
+  public func resizeShell(_ shellId: String, cols: Int, rows: Int) {
+    enqueue(.shellResize(shellId: shellId, cols: cols, rows: rows))
+  }
+
+  /// Stop receiving a shell's output. The shell keeps running: closing the view
+  /// is not stopping the process, and nothing but an explicit kill ends it.
+  public func detachShell(_ shellId: String) {
+    enqueue(.shellDetach(shellId: shellId))
+  }
+
+  /// Splits on **UTF-8 length**, which is what the gateway bounds, and never
+  /// mid-scalar. A chunk boundary inside an escape sequence is harmless: the
+  /// PTY is a byte stream and the emulator on the far side resumes mid-sequence.
+  nonisolated static func chunk(_ data: String, max: Int) -> [String] {
+    guard data.utf8.count > max else { return [data] }
+    var chunks: [String] = []
+    var current = ""
+    var bytes = 0
+    for character in data {
+      let width = String(character).utf8.count
+      if bytes + width > max, !current.isEmpty {
+        chunks.append(current)
+        current = ""
+        bytes = 0
+      }
+      current.append(character)
+      bytes += width
+    }
+    if !current.isEmpty { chunks.append(current) }
+    return chunks
   }
 
   public func setPermissionMode(_ mode: PermissionMode) {
@@ -396,6 +455,12 @@ public final class SessionHandle {
       break
     case .protocolError(let message):
       continuation.yield(.protocolError(message))
+    case .shellAttached(let attached):
+      continuation.yield(.shellAttached(attached))
+    case .shellOutput(let shellId, let data):
+      continuation.yield(.shellOutput(shellId: shellId, data: data))
+    case .shellDetached(let shellId, let reason):
+      continuation.yield(.shellDetached(shellId: shellId, reason: reason))
     case .unknown:
       // A frame type this mirror doesn't model - ignore, never an error.
       break

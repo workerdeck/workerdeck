@@ -158,10 +158,11 @@ public struct TerminalExpansion: Equatable, Sendable {
       return true
     case .expandFull(let id):
       return full.insert(id).inserted
-    case .openSubagent, .killShell:
-      // Not an expansion at all: the takeover is a navigation and the kill is a
-      // REST call, both handled by the screen. Reaching here means a caller fed
-      // a press to the wrong interpreter; opening nothing is the honest no-op.
+    case .openSubagent, .killShell, .openShell:
+      // Not expansions at all: two navigations and a REST call with a process at
+      // the other end, all handled by the screen. Reaching here means a caller
+      // fed a press to the wrong interpreter; opening nothing is the honest
+      // no-op.
       return false
     }
   }
@@ -287,6 +288,10 @@ public enum TermPress: Equatable, Sendable {
   /// process at the other end - so the screen handles it, the way it handles
   /// ``openSubagent(taskId:)``, and confirms before it fires.
   case killShell(shellId: String)
+  /// Open a shell's live terminal. The sibling of ``openSubagent(taskId:)`` and
+  /// a navigation for the same reason, and like it the screen handles it because
+  /// the screen is the only thing holding a navigation stack.
+  case openShell(shellId: String)
 }
 
 // MARK: - One walk of a block

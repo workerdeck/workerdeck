@@ -149,6 +149,16 @@ final class TranscriptViewModel {
   /// the row re-draws or is pressed.
   private var verifiedShells: Set<String> = []
   private var fetchingShells: Set<String> = []
+  /// The open drill-in, and the shell it is watching.
+  ///
+  /// **One, not a dictionary.** A drill-in is a pushed screen, so the phone can
+  /// only ever have one of them up; a map keyed by shell id would model a
+  /// concurrency this navigation stack cannot produce, and would quietly keep
+  /// feeding a screen that had been popped. Weak, because the model belongs to
+  /// the view that pushed it: when that view goes, so does the sink, and the
+  /// frames still in flight land on nothing rather than on a zombie.
+  @ObservationIgnored private weak var shellSink: (any ShellStreamSink)?
+  @ObservationIgnored private var shellSinkId: String?
 
   init(sessionId: String, client: WorkerClient) {
     self.sessionId = sessionId
@@ -374,6 +384,11 @@ final class TranscriptViewModel {
         profile?.openedAt = ProcessInfo.processInfo.systemUptime
       }
       connection = connected ? .live : .reconnecting
+      // An attach is per socket, so a reconnect silently leaves an open
+      // drill-in watching nothing. The model re-attaches rather than this
+      // deciding for it: only the model knows the pane's current size, and the
+      // attach is what applies it.
+      if connected { shellSink?.shellReconnected() }
     case .reconnectAttempt(let attempts):
       // The handle retries forever, so "offline" is a judgement about how long
       // it has been failing, not a state it reports. Three in a row is ~3.5s of
@@ -384,7 +399,21 @@ final class TranscriptViewModel {
       lastProtocolError = message
     case .protocolMismatch(let serverVersion):
       protocolMismatch = serverVersion
+    case .shellAttached(let frame):
+      shellSinkMatching(frame.shellId)?.shellAttached(frame)
+    case .shellOutput(let shellId, let data):
+      // Straight to the emulator. These frames carry no `seq` and must never
+      // reach `applyEvent`, `state` or `revision`: PTY bytes are not transcript
+      // content, and one `yes` would otherwise redraw the whole session at the
+      // rate a pipe can fill.
+      shellSinkMatching(shellId)?.shellOutput(data)
+    case .shellDetached(let shellId, let reason):
+      shellSinkMatching(shellId)?.shellDetached(reason: reason)
     }
+  }
+
+  private func shellSinkMatching(_ shellId: String) -> (any ShellStreamSink)? {
+    shellSinkId == shellId ? shellSink : nil
   }
 
   /// Fetch this session's profile catalog, once, and only when it could matter.
@@ -664,6 +693,44 @@ final class TranscriptViewModel {
       self.state = hydrated
       self.revision &+= 1
     }
+  }
+
+  // MARK: - The drill-in's stream
+
+  /// Point the drill-in at a shell and subscribe this socket to its PTY.
+  ///
+  /// Registering the sink before the command goes out is deliberate: the
+  /// `shell_attached` answer can be the very next frame, and a sink installed
+  /// after it would miss the scrollback that makes the screen worth opening.
+  func attachShell(_ shellId: String, sink: any ShellStreamSink, cols: Int, rows: Int) {
+    shellSink = sink
+    shellSinkId = shellId
+    handle?.attachShell(shellId, cols: cols, rows: rows)
+  }
+
+  func writeShell(_ shellId: String, _ data: String) {
+    handle?.writeShell(shellId, data)
+  }
+
+  func resizeShell(_ shellId: String, cols: Int, rows: Int) {
+    handle?.resizeShell(shellId, cols: cols, rows: rows)
+  }
+
+  /// The gateway's own record for a shell, fetched fresh. The drill-in asks
+  /// after a detach, because the detach reason is only how *this socket* found
+  /// out and the record is the authority on what actually happened.
+  func shellRecord(_ shellId: String) async -> ShellInfo? {
+    try? await client.getShell(sessionId: sessionId, shellId: shellId)
+  }
+
+  /// Stop watching. **Never stops the process**: leaving the screen is not
+  /// killing the shell, and the gateway treats a detach and a socket close the
+  /// same way for exactly that reason.
+  func detachShell(_ shellId: String) {
+    guard shellSinkId == shellId else { return }
+    shellSink = nil
+    shellSinkId = nil
+    handle?.detachShell(shellId)
   }
 
   /// Stop a running shell. The gateway re-emits the row under the same uuid, so

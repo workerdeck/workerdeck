@@ -66,6 +66,24 @@ only**: a Claude log's thinking blocks arrive empty and are backfilled from the 
 the same rule there would erase every thought - unreachable today (only that engine snapshots)
 but an obligation any engine inherits with `park()`. Proof in
 `packages/react/test/snapshot-retain.test.ts`, the same fold-equality property as the coalescer.
+`logCoalesceKey(event)` is the store-side claim pointed at the **live log** rather than at a
+snapshot, and it is a declared subset of `replayCoalesceKey`: for the events it keys, `EventLog`
+drops the event the new one supersedes at append time (and on restore, so a snapshot written
+before the rule collapses on resume), where the replay would only have skipped it on the way out.
+Today it keys exactly one thing, the shell row: a running `$` re-emits its `user_message` under
+one `uuid` every notify tick for as long as it runs, and unlike a stream delta that pile has no
+turn to end it, so the log, every attached socket's replay and every parking snapshot were
+growing by a row per tick for the life of a dev server. The other coalesced kinds are bounded by
+turn count and deliberately stay in the log, since a server-side subscriber replaying without
+`coalesceReplay` may act on a *transition* (`parking.ts` on `status_changed`), where a fresh
+transcript reader only needs the final state. The property, pinned in
+`packages/react/test/replay-coalesce.test.ts`: a coalescing replay from the coalesced log and
+from the full log deliver the same events for **every** `afterSeq`, so no client, resuming or
+cold, can tell; the log's `seq` stays monotonic and its last event is still its highest, which
+the replay hold depends on; `eventAt(seq)` of a superseded row answers `undefined`, which only
+the tool-result route reads and a shell row never carries a `tool_result`; and the row is
+synthetic, so the `activityCount`/`proseCount` a restore recomputes are bit-identical. The live
+path is untouched: an attached socket still receives every tick.
 `replayCoalesceKey(event)` is the third of the same family and the same shape of claim: which
 events are **last-write-wins on replay**, so the gateway can drop the fifty stale context and
 rate-limit polls a long session accumulates instead of shipping them all and having the client

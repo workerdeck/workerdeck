@@ -18,6 +18,14 @@ public enum WorkerProtocol {
   public static let shellCommandMax = 4000
   /// Mirror of SHELL_LABEL_MAX.
   public static let shellLabelMax = 80
+  /// Mirror of SHELL_INPUT_MAX - the most a single `shell_input` frame may carry.
+  /// The drill-in chunks a paste rather than letting the gateway refuse it.
+  public static let shellInputMax = 4096
+  /// Mirror of SHELL_COLS and SHELL_ROWS, the size a shell is spawned at. A
+  /// client's own size applies on attach and the last attach wins, so these are
+  /// only what an unattached shell ran at.
+  public static let shellCols = 120
+  public static let shellRows = 40
   /// Mirror of SHELL_INLINE_LINES - how much of a shell's output the row carries.
   public static let shellInlineLines = 8
   /// Mirror of SHELL_PROMOTE_MS.
@@ -1346,6 +1354,20 @@ public enum SessionCommand: Sendable, Equatable {
   /// Run a `$` shell command on the host, as a tracked PTY, in the session's cwd. Offered only when
   /// `AttachedFrame.shell` is true; the gateway re-checks and refuses otherwise.
   case shellCommand(command: String)
+  /// Subscribe this socket to a shell's live PTY stream at the given size. The
+  /// server answers with `shell_attached` carrying the scrollback, then streams
+  /// `shell_output`. Attaching resizes the shell: the last attach wins, which is
+  /// the rule that lets a phone and a dashboard share one shell without
+  /// fighting over its width.
+  case shellAttach(shellId: String, cols: Int, rows: Int)
+  /// Keystrokes for a shell's stdin. Bounded by
+  /// ``WorkerProtocol/shellInputMax`` per frame, and refused outright once the
+  /// shell has exited.
+  case shellInput(shellId: String, data: String)
+  case shellResize(shellId: String, cols: Int, rows: Int)
+  /// Stop receiving output. Never kills the shell: only ``WorkerClient/killShell(sessionId:shellId:)``
+  /// and the gateway's own lifecycle do that.
+  case shellDetach(shellId: String)
   case close
 }
 
@@ -1353,6 +1375,7 @@ extension SessionCommand: Encodable {
   private enum CodingKeys: String, CodingKey {
     case type, text, requestId, behavior, updatedInput, message, interrupt, mode, model
     case executionId, output, logs, reason, error, attachmentIds, command
+    case shellId, cols, rows, data
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -1393,6 +1416,23 @@ extension SessionCommand: Encodable {
     case .shellCommand(let command):
       try container.encode("shell_command", forKey: .type)
       try container.encode(command, forKey: .command)
+    case .shellAttach(let shellId, let cols, let rows):
+      try container.encode("shell_attach", forKey: .type)
+      try container.encode(shellId, forKey: .shellId)
+      try container.encode(cols, forKey: .cols)
+      try container.encode(rows, forKey: .rows)
+    case .shellInput(let shellId, let data):
+      try container.encode("shell_input", forKey: .type)
+      try container.encode(shellId, forKey: .shellId)
+      try container.encode(data, forKey: .data)
+    case .shellResize(let shellId, let cols, let rows):
+      try container.encode("shell_resize", forKey: .type)
+      try container.encode(shellId, forKey: .shellId)
+      try container.encode(cols, forKey: .cols)
+      try container.encode(rows, forKey: .rows)
+    case .shellDetach(let shellId):
+      try container.encode("shell_detach", forKey: .type)
+      try container.encode(shellId, forKey: .shellId)
     case .close:
       try container.encode("close", forKey: .type)
     }
@@ -1407,7 +1447,7 @@ public struct AttachedFrame: Decodable, Sendable, Equatable {
   public let session: SessionInfo
   /// Events with seq > the client's `afterSeq` follow as `event` frames.
   public let replayingFrom: Int
-  /// Whether this principal may run `!` shell commands on this session: the gateway's
+  /// Whether this principal may run `$` shell commands on this session: the gateway's
   /// `shell` config, operator privilege and the engine's host cwd, ANDed. Omitted rather
   /// than sent false, and absent entirely from a gateway that predates the feature -
   /// so nil means no, and the composer offers the mode only on an explicit true.
@@ -1438,19 +1478,53 @@ public struct ToolCallRequestFrame: Decodable, Sendable, Equatable {
   }
 }
 
+/// The answer to `shell_attach`: the record, the size the shell is now at, and
+/// everything it has printed so far.
+///
+/// `scrollback` is raw PTY text (escape sequences included, up to
+/// SHELL_ATTACH_REPLAY_BYTES of it) and is fed to the emulator exactly like a
+/// `shell_output` frame. It is deliberately **not** the row's stripped `text`
+/// view: a terminal that replayed stripped text would lose the colours and the
+/// cursor addressing that made the last screen mean something.
+public struct ShellAttachedFrame: Decodable, Sendable, Equatable {
+  public let shellId: String
+  public let shell: ShellInfo
+  public let cols: Int
+  public let rows: Int
+  public let scrollback: String
+
+  public init(shellId: String, shell: ShellInfo, cols: Int, rows: Int, scrollback: String) {
+    self.shellId = shellId
+    self.shell = shell
+    self.cols = cols
+    self.rows = rows
+    self.scrollback = scrollback
+  }
+}
+
 public enum ServerFrame: Sendable, Equatable {
   case attached(AttachedFrame)
   case event(SessionEvent)
   case toolCallRequest(ToolCallRequestFrame)
   case toolCallCanceled(executionId: String, reason: String)
   case protocolError(message: String)
+  case shellAttached(ShellAttachedFrame)
+  /// A chunk of a shell's PTY output. **Ephemeral**, the `tool_call_request`
+  /// rule: these frames carry no `seq`, are never replayed, and must never reach
+  /// the transcript reducer, the event log or a parking snapshot. They go to the
+  /// emulator and nowhere else.
+  case shellOutput(shellId: String, data: String)
+  /// The stream ended: the shell exited, the session parked, or the gateway
+  /// dropped this sink for backpressure. `reason` is a fixed string, not prose
+  /// to parse.
+  case shellDetached(shellId: String, reason: String)
   /// A frame type this mirror doesn't model - ignore, never a stream error.
   case unknown(type: String, raw: JSONValue)
 }
 
 extension ServerFrame: Decodable {
   private enum CodingKeys: String, CodingKey {
-    case type, event, executionId, reason, message
+    case type, event, executionId, reason, message, shellId, data
   }
 
   public init(from decoder: Decoder) throws {
@@ -1470,6 +1544,16 @@ extension ServerFrame: Decodable {
           reason: try container.decode(String.self, forKey: .reason))
       case "protocol_error":
         self = .protocolError(message: try container.decode(String.self, forKey: .message))
+      case "shell_attached":
+        self = .shellAttached(try ShellAttachedFrame(from: decoder))
+      case "shell_output":
+        self = .shellOutput(
+          shellId: try container.decode(String.self, forKey: .shellId),
+          data: try container.decode(String.self, forKey: .data))
+      case "shell_detached":
+        self = .shellDetached(
+          shellId: try container.decode(String.self, forKey: .shellId),
+          reason: try container.decode(String.self, forKey: .reason))
       default:
         self = .unknown(type: type, raw: (try? JSONValue(from: decoder)) ?? .null)
       }

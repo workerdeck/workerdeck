@@ -210,6 +210,21 @@ withPty('shell_command spawns a tracked PTY', () => {
     ws.close()
   })
 
+  // Reading a shell is reading host output, so `canSee` on the session is not the gate: a scoped principal attached to
+  // a session an operator ran `$` in could otherwise list every command and fetch every byte it printed.
+  it('refuses the read routes to a scoped principal', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startShellServer(harness)
+    const id = await createSession(base, 'alice-a', { cwd: tempDir() })
+    const { ws } = await attachSocket(wsBase, id, 'alice-a')
+    for (const path of [`/sessions/${id}/shells`, `/sessions/${id}/shells/sh_1`, `/sessions/${id}/shells/sh_1/output`]) {
+      const res = await get(base, path, 'alice-a')
+      expect(res.status).toBe(403)
+      expect(((await res.json()) as { error: string }).error).toBe('shell commands are not available on this session')
+    }
+    ws.close()
+  })
+
   it('kills the shell when the engine refuses the row', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness, {
