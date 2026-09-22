@@ -45,7 +45,7 @@ describe('drain', () => {
   it('returns immediately when nothing is running', async () => {
     const { server } = await startWith('idle')
     const report = await server.drain({ timeoutMs: 2_000, pollMs: 10 })
-    expect(report).toEqual({ working: [], awaitingHuman: [], timedOut: false })
+    expect(report).toEqual({ working: [], awaitingHuman: [], timedOut: false, shells: [] })
   })
 
   it('waits for a running turn and reports when it finishes', async () => {

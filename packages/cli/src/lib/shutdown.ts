@@ -22,11 +22,18 @@ export function installShutdown({
   const shutdown = (signal: string): void => {
     if (shuttingDown) {
       process.stdout.write(`\n[workerdeck] ${signal} again - terminating now\n`)
+      // Shell children are detached group leaders, so a plain exit orphans every one of them.
+      current().server.shells?.killAllSync()
       process.exit(130)
     }
     shuttingDown = true
     log(`\n[workerdeck] ${signal} - shutting down (press again to stop now)`)
     const instance = current()
+    const running = instance.server.shells?.running() ?? []
+    if (running.length > 0) {
+      const named = running.map((shell) => `#${shell.ordinal} ${shell.label} (session ${shell.sessionId.slice(0, 8)})`).join(', ')
+      log(`[workerdeck] ${running.length} shell(s) still running and will be stopped: ${named}`)
+    }
     instance
       .drain({
         onProgress: (report) => {

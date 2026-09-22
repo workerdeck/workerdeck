@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { WorkerDeckClient, SessionHandle } from '@workerdeck/client'
 import { DEFAULT_PRICING, PROTOCOL_VERSION, mergePricing } from '@workerdeck/protocol'
-import type { AttachedFrame, ModelOption, PermissionMode, PricingTable, SessionEvent } from '@workerdeck/protocol'
+import type { AttachedFrame, ModelOption, PermissionMode, PricingTable, SessionEvent, ShellInfo } from '@workerdeck/protocol'
 import {
   applyEvent,
   blockText,
   initialTranscriptState,
+  hydrateShellOutput,
+  hydrateShellRow,
   hydrateToolResult,
   seedFromSessionInfo,
   type TranscriptState,
@@ -15,13 +17,23 @@ import { attachSeedToken, planAttach, shouldWriteParting } from '../lib/attach-p
 
 type SeedAction = { type: 'transcript_seed'; state: TranscriptState }
 type HydrateAction = { type: 'transcript_hydrate_result'; toolUseId: string; text: string }
+type ShellRowAction = { type: 'transcript_hydrate_shell'; shellId: string; shell: ShellInfo | undefined }
+type ShellOutputAction = { type: 'transcript_hydrate_shell_output'; shellId: string; text: string }
 
-function reduce(state: TranscriptState, action: SessionEvent | AttachedFrame | SeedAction | HydrateAction): TranscriptState {
+type TranscriptAction = SessionEvent | AttachedFrame | SeedAction | HydrateAction | ShellRowAction | ShellOutputAction
+
+function reduce(state: TranscriptState, action: TranscriptAction): TranscriptState {
   if (action.type === 'transcript_seed') {
     return action.state
   }
   if (action.type === 'transcript_hydrate_result') {
     return hydrateToolResult(state, action.toolUseId, action.text)
+  }
+  if (action.type === 'transcript_hydrate_shell') {
+    return hydrateShellRow(state, action.shellId, action.shell)
+  }
+  if (action.type === 'transcript_hydrate_shell_output') {
+    return hydrateShellOutput(state, action.shellId, action.text)
   }
   return action.type === 'attached' ? seedFromSessionInfo(state, action.session) : applyEvent(state, action)
 }
@@ -58,7 +70,7 @@ export type UseClaudeSessionResult = {
   connection: ConnectionState
   replaying: boolean
   protocolMismatch?: number
-  // The gateway offers `!` shell mode to this principal on this session. Absent from an older gateway, so falsy by default.
+  // The gateway offers `$` shell mode to this principal on this session. Absent from an older gateway, so falsy by default.
   shell: boolean
   // The gateway's rate table, its own overrides merged over the bundled one, for every figure this client prices itself.
   pricing: PricingTable
@@ -76,6 +88,11 @@ export type UseClaudeSessionResult = {
   closeSession: () => void
   reconnectNow: () => void
   loadFullResult: (toolUseId: string) => Promise<boolean>
+  // The artifact's text view, fetched for one expanded row. It never reaches the model: the two budgets never touch.
+  loadShellOutput: (shellId: string) => Promise<boolean>
+  // A `running` row is a claim from the event log, which can be older than the process. Fetched once per shell id.
+  verifyShell: (shellId: string) => Promise<boolean>
+  killShell: (shellId: string) => Promise<boolean>
 }
 
 export function useClaudeSession(
@@ -217,6 +234,62 @@ export function useClaudeSession(
     [client, sessionId],
   )
 
+  const verifiedRef = useRef(new Set<string>())
+  useEffect(() => {
+    verifiedRef.current = new Set<string>()
+  }, [sessionId])
+
+  const loadShellOutput = useCallback(
+    async (shellId: string): Promise<boolean> => {
+      if (!sessionId) {
+        return false
+      }
+      try {
+        const text = await client.shellOutput(sessionId, shellId, { view: 'text' })
+        dispatch({ type: 'transcript_hydrate_shell_output', shellId, text })
+        return true
+      } catch {
+        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: undefined })
+        return false
+      }
+    },
+    [client, sessionId],
+  )
+
+  const verifyShell = useCallback(
+    async (shellId: string): Promise<boolean> => {
+      if (!sessionId || verifiedRef.current.has(shellId)) {
+        return false
+      }
+      verifiedRef.current.add(shellId)
+      try {
+        const record = await client.getShell(sessionId, shellId)
+        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: record })
+        return true
+      } catch {
+        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: undefined })
+        return false
+      }
+    },
+    [client, sessionId],
+  )
+
+  const killShell = useCallback(
+    async (shellId: string): Promise<boolean> => {
+      if (!sessionId) {
+        return false
+      }
+      try {
+        const record = await client.killShell(sessionId, shellId)
+        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: record })
+        return true
+      } catch {
+        return false
+      }
+    },
+    [client, sessionId],
+  )
+
   return useMemo(
     () => ({
       state,
@@ -240,8 +313,26 @@ export function useClaudeSession(
       closeSession: () => handleRef.current?.closeSession(),
       reconnectNow,
       loadFullResult,
+      loadShellOutput,
+      verifyShell,
+      killShell,
     }),
-    [state, connected, connection, replaying, protocolMismatch, shell, pricing, models, handleState, reconnectNow, loadFullResult],
+    [
+      state,
+      connected,
+      connection,
+      replaying,
+      protocolMismatch,
+      shell,
+      pricing,
+      models,
+      handleState,
+      reconnectNow,
+      loadFullResult,
+      loadShellOutput,
+      verifyShell,
+      killShell,
+    ],
   )
 }
 

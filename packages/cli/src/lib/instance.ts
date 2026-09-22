@@ -207,6 +207,11 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   // so management stays refused rather than silently forgetting every profile on restart.
   const profileStore = config.profileStore && config.stateDir ? createFileProfileStore(join(config.stateDir, 'profiles.json')) : undefined
 
+  const shell = { ...config.options.shell }
+  if (config.stateDir && shell.artifactDir === undefined) {
+    shell.artifactDir = join(config.stateDir, 'shells')
+  }
+
   const spend = { ...config.options.spend }
   if (config.stateDir && !spend.store) {
     spend.store = createFileSpendStore(join(config.stateDir, 'spend.json'), (error) => {
@@ -220,6 +225,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
     parking,
+    shell,
     spend,
     // Composed, not replaced: turning push on must not unhook a config file's own observer.
     notifications:

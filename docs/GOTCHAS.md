@@ -1213,28 +1213,59 @@ has the shape; these are the ways to get it wrong.
 - These routes are **operator-privileged**: authorized by the auth key alone, outside the agent
   permission flow, which is why writing is its own separate flag.
 
-## Shell mode (`!` in the composer, `shell_command`)
+## Shell sessions (`$` in the composer, `shell_command`, the shell record)
 
+- **Every `$` is a PTY with a tracked record; the transcript row, the REST routes and the card are
+  views over it.** There is no pipe path, no interactive/non-interactive branch and no timer that
+  changes how a command runs. `services/shells.ts` is the registry (spawn, list, kill, artifact,
+  index, generation) and the only place this package spawns a child.
 - **It goes through nothing.** A Bash tool call raises a permission card and honours
-  `disableBypassPermissions`; a `!` command has none of that, it is a shell on whatever the gateway
+  `disableBypassPermissions`; a `$` command has none of that, it is a shell on whatever the gateway
   process can reach, in the session's cwd. It is its own switch (`shell: { enabled }`, CLI
   `--shell`), off by default, never inferred from `hostFiles` or `allowedCwdRoots`.
 - **Three ANDed conditions, one refusal string.** `shell.enabled`, `auth.isOperator(authCtx)`, and
-  the engine's `hostCwd === true`. A scoped principal is never an operator (`services/auth.ts`); the
-  provider engine is `hostCwd: false`. All three failures return the same `protocol_error` text, so
-  the surface is not an existence oracle. The gate is re-checked on every command; `attached.shell`
-  is an offer, not the authorization.
-- **Advertised per attachment, not per engine.** `EngineCapabilities` is a static per-engine table
-  and cannot express config x operator x cwd. `AttachedFrame.shell?: boolean` is the only place
-  that knows all three; omitted rather than sent false, additive, no `PROTOCOL_VERSION` bump needed.
-- **`!` does not start a turn.** `runner.sendMessage()` wakes the model, so routing shell output
-  through it would earn a reply to every `ls`. The CLI buffers the output and prepends it, wrapped
-  in `<local-command-caveat>`, to the next real message. `Runner.queueLocalCommand` emits the
-  transcript row now, holds the model-facing text, flushes it as a hidden leading block on the next
-  `sendMessage`. The emitted `user_message` event stays the user's own text.
+  the engine's `hostCwd === true` (`shellPermitted`). A scoped principal is never an operator
+  (`services/auth.ts`); the provider engine is `hostCwd: false`. All three failures return the same
+  `protocol_error` text, so the surface is not an existence oracle. The gate is re-checked on every
+  command; `attached.shell` is an offer, not the authorization. A gateway without
+  `@lydell/node-pty` (an optional dependency) refuses with the same string.
+- **No default wall clock.** `shell.timeoutMs` is honoured when set and nothing else ends a shell on
+  its own; up to `SHELL_MAX_RUNNING_PER_SESSION` run at once, so a dev server and a test run coexist.
+- **The artifact is on disk under `<stateDir>/shells/`, index per session, spill per shell.** Small
+  outputs live inline in the index; `SHELL_SPILL_BYTES` decides. The cap stops the file, never the
+  process; the tail ring keeps advancing. Without a state dir the index is memory-only and every
+  shell reconciles as ended on the next boot.
+- **Reconcile by generation, never by pid.** A record `running` under a generation that is not this
+  one becomes `server_restarted`, and the copy says the process may still be alive. The pid on the
+  record is for killing only: a recycled pid would kill an innocent process.
+- **Hot reload is a restart for shells and bumps the same generation.** `close()` kills the groups
+  and flushes the index before the next generation starts; carrying a PTY is out. The reload line
+  counts them.
+- **The force path kills too.** `installShutdown`'s second signal runs `killAllSync()` before
+  `process.exit`; a detached group leader outlives a plain exit. The first signal names the running
+  shells before the graceful close kills them.
+- **Killed by process group.** `process.kill(-pid)`, since a bare kill leaves grandchildren
+  (`sleep 9999 &`) running past the session. `session_closed` and a park kill the session's shells
+  through the registry's `watch(runner)`, installed once in `onRegister` - a socket closing must
+  only detach, never kill.
+- **Two budgets, never joined.** The model text is head + tail + pointer fixed at flush
+  (`shellContextText`); the row is `SHELL_INLINE_LINES` and expands client-side through
+  `GET /sessions/:id/shells/:shellId/output`. Expanding never reaches the model.
+- **A running shell flushes once with its tail, then as a status line, then once more on exit.**
+  Nothing streams into context on its own.
+- **`$` does not start a turn.** `runner.sendMessage()` wakes the model, so routing shell output
+  through it would earn a reply to every `ls`. The output is buffered and prepended, wrapped in
+  `<local-command-caveat>`, to the next real message. `Runner.queueLocalCommand` takes the
+  registry's `LocalShellSource`, emits the transcript row now, re-emits it as the shell changes, and
+  flushes the model-facing text as a hidden leading block on the next `sendMessage`. It throws
+  before it pushes on a closed (provider: also a parked) session, so `routes/ws.ts` kills the shell
+  it just spawned rather than leaving it running with no row.
 - **The buffer is dropped on every context reset**: `clearContext()`, a `conversation_reset` from
   any engine, and `close()`. Shell output that outlived the conversation it described would read as
   current to the model.
+- **Advertised per attachment, not per engine.** `EngineCapabilities` is a static per-engine table
+  and cannot express config x operator x cwd. `AttachedFrame.shell?: boolean` is the only place
+  that knows all three; omitted rather than sent false, additive, no `PROTOCOL_VERSION` bump needed.
 - **A compaction is one row with two halves, and the boundary's own uuid is not that row's id.**
   Both engines announce a compaction before finishing one (claude: `system/status`
   `status: 'compacting'` then `compact_result`; codex: `item/started` for `contextCompaction`). It
@@ -1254,22 +1285,25 @@ has the shape; these are the ways to get it wrong.
   friends on message text, and a leading caveat block would break the match or lose the output, so
   `sendMessage` skips the flush for text matching `/^\s*\/[A-Za-z]/` and waits for the next plain
   message. Codex and provider have no slash commands and flush unconditionally.
-- **One child per session, killed by process group.** A second `shell_command` while one is running
-  is rejected, not queued. The child is `spawn('/bin/sh', ['-c', cmd])` (never `shell: true`),
-  `detached: true` so it leads a process group; timeout, `session_closed`, park and server shutdown
-  all `SIGKILL` the group, since a bare `child.kill()` leaves grandchildren (`sleep 9999 &`)
-  running past the session. Output is a shared head-keep budget across both streams with an
-  explicit truncation marker; the cap does not kill the process, the timeout bounds time.
-- **The transcript row is a synthetic `user_message` carrying exactly one
-  `<local-command-stdout|stderr>` element**, the shape `react`'s reducer turns into a `notice`.
-  Marking it synthetic zeroes `transcriptActivity`/`transcriptProse` so a `!ls` never badges a
-  session unread. Two reducer rules follow: the local-command check sits ahead of the
-  `!event.synthetic` guard (inside it, a synthetic message renders nothing), and a message whose
-  first text block starts with `<local-command-caveat>` is split into notices with the user's own
-  text still drawn beside it, because on resume the SDK hands the flush and the next message back
-  as one message, which `isSyntheticUserText` marks synthetic whole.
-- **iOS mirrors all of it**: `SessionCommand.shellCommand`, `AttachedFrame.shell`, and both reducer
-  rules in `Transcript.swift`. A fix on one side alone silently diverges the clients.
+- **The transcript row is a synthetic `user_message` emitted more than once under one `uuid`**
+  (`context_compacted`'s shape), carrying `shell: ShellInfo` and exactly one
+  `<local-command-stdout|stderr>` element, so a client that ignores `shell` still renders a notice.
+  `replayCoalesceKey` keys on `shell:<id>` and a replay delivers only the last. Marking it synthetic
+  zeroes `transcriptActivity`/`transcriptProse` so a `$ ls` never badges a session unread. Two
+  reducer rules follow: the local-command check sits ahead of the `!event.synthetic` guard (inside
+  it, a synthetic message renders nothing), and a message whose first text block starts with
+  `<local-command-caveat>` is split into notices with the user's own text still drawn beside it,
+  because on resume the SDK hands the flush and the next message back as one message, which
+  `isSyntheticUserText` marks synthetic whole.
+- **A `running` row verifies itself against the record on first render.** The log can be older than
+  the process (a parking snapshot replayed after a restart), so the client fetches
+  `GET /sessions/:id/shells/:shellId` once and hydrates from it; a 404 means the output was swept or
+  the gateway never tracked that shell. Reads are visible to anyone who can see the session; the
+  kill route re-checks `shellPermitted`.
+- **A backfilled row has no record.** A claude session resumed from the SDK store carries the flush
+  text only, so it renders as a notice with no live state.
+- **iOS mirrors all of it**: `SessionCommand.shellCommand`, `AttachedFrame.shell`, `ShellInfo` and
+  both reducer rules in `Transcript.swift`. A fix on one side alone silently diverges the clients.
 
 ## Message attachments (`/v1/sessions/:id/attachments`)
 
@@ -1278,7 +1312,8 @@ has the shape; these are the ways to get it wrong.
   a photo into `user_message` would be paid for on every attach, forever. An attachment is uploaded
   first, the command names it by id, and what lands in the log is a `MessageAttachment` reference.
   `SessionRunner.sendMessage` builds the content blocks from the bytes and emits the refs. Never
-  put `data` on a `SessionEvent`.
+  put `data` on a `SessionEvent`. Shell output is the second store that follows this rule: the
+  artifact is on disk and the row names it.
 - **The attachment store is in-memory, so a restart outlives it.** The `MessageAttachment`
   reference survives in the log, but `GET {basePath}/sessions/:id/attachments/:attachmentId` 404s
   afterwards: a message can outlive the bytes it names.

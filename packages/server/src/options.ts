@@ -17,6 +17,7 @@ import type { PeerServiceOptions } from './services/peers.ts'
 import type { ProfileStore } from './services/profile-store.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionStore } from './services/session-store.ts'
+import type { ShellRegistry } from './services/shells.ts'
 import type { SpendStore } from './services/spend-ledger.ts'
 
 export type SdkSessionLister = (options: { dir?: string; limit?: number; offset?: number }) => Promise<SdkSessionSummary[]>
@@ -35,14 +36,18 @@ export type WorkerServerOptions = {
     maxEntries?: number
     ignore?: string[]
   }
-  // `!` shell mode: the command runs on the host in the session's cwd and its output lands in the transcript and
-  // the model's context. It goes through NO permission flow - no permission card, no allowlist, no
+  // `$` shell mode: the command runs on the host in a PTY in the session's cwd and its output lands in the transcript
+  // and the model's context. It goes through NO permission flow - no permission card, no allowlist, no
   // disableBypassPermissions - hence its own switch, default off, offered to operators only (never a scoped
-  // principal) on engines with a host cwd. Defaults: 120s wall clock, 32 KiB of captured output.
+  // principal) on engines with a host cwd. No default wall clock; without `artifactDir` the shell index is
+  // memory-only and every shell reconciles as ended on the next boot.
   shell?: {
     enabled?: boolean
     timeoutMs?: number
-    maxOutputBytes?: number
+    artifactDir?: string
+    artifactMaxBytes?: number
+    artifactTtlMs?: number
+    maxRunningPerSession?: number
   }
   attachments?: {
     maxFileBytes?: number
@@ -139,6 +144,8 @@ export type DrainReport = {
   awaitingHuman: string[]
   // True when the deadline passed with work still running.
   timedOut: boolean
+  // Shells still running; a graceful close() kills them, so the CLI names them before it does.
+  shells: { sessionId: string; id: string; label: string }[]
 }
 
 export type DrainOptions = {
@@ -154,6 +161,8 @@ export type WorkerServer = {
   queue?: JobQueue
   bridge: BridgeHub
   parking: SessionParkManager
+  // Null unless `shell.enabled`. The CLI's force-shutdown path reaches `killAllSync` through it.
+  shells: ShellRegistry | null
   listen: (port: number, host?: string) => Promise<{ port: number }>
   // Let running turns finish before `close()`. A courtesy, never a correctness requirement: records are written
   // continuously, so a hard stop already loses nothing. Refuses new sessions for as long as it runs.

@@ -14,7 +14,7 @@ import type { ProfileService } from './services/profiles.ts'
 import type { ProjectInfoService } from './services/project-info.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionFactory } from './services/session-factory.ts'
-import type { ShellService } from './services/shell.ts'
+import type { ShellRegistry } from './services/shells.ts'
 
 export type ServerContext = {
   options: WorkerServerOptions
@@ -43,7 +43,9 @@ export type ServerContext = {
   maxHostFileBytes: number
   maxHostDirEntries: number
 
-  shell: ShellService | null
+  shells: ShellRegistry | null
+  // Minted per `createWorkerServer`; a shell record stamped with another one was started by a gateway that is gone.
+  generation: string
   // The accepted subset of `options.pricing.overrides`, as clients are told them.
   pricingOverrides: PricingOverrides | undefined
 }

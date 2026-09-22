@@ -39,6 +39,12 @@
       }
     },
     {
+      "files": ["packages/core/src/lib/tty-text.ts"],
+      "rules": {
+        "no-control-regex": "off"
+      }
+    },
+    {
       "files": ["packages/ui/dev/**"],
       "rules": {
         "no-underscore-dangle": "off"

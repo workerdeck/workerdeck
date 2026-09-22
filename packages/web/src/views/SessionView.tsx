@@ -13,8 +13,8 @@ import {
   CopyButton,
   toast,
 } from '@workerdeck/ui'
-import { SessionWorkspace, TerminalPane } from '@workerdeck/ui/workspace'
-import { SquareTerminal, Trash2, X } from 'lucide-react'
+import { SessionWorkspace } from '@workerdeck/ui/workspace'
+import { Trash2 } from 'lucide-react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
 import { getCatchUp, getFontSize, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
@@ -63,17 +63,6 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   const [panelFontSize] = useState(getFontSize)
   // Read once: the workspace owns the live value, and re-seeding mid-session would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
-  const [terminalOpen, setTerminalOpen] = useState(false)
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === '`' && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault()
-        setTerminalOpen((open) => !open)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
 
   useEffect(() => {
     if (!error) {
@@ -149,23 +138,6 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       defaultRailWidth={rail.width}
       defaultRailCollapsed={rail.collapsed}
       onRailChange={setRail}
-      terminal={
-        terminalOpen
-          ? ({ handle }) => (
-              <div className="flex min-h-0 flex-1 flex-col">
-                <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface px-2 py-1">
-                  <SquareTerminal className="size-3.5 text-fg-3" />
-                  <span className="text-label text-fg-3">Terminal</span>
-                  <span className="flex-1" />
-                  <Button variant="ghost" size="icon-sm" aria-label="Close terminal" onClick={() => setTerminalOpen(false)}>
-                    <X className="size-3.5 text-fg-3" />
-                  </Button>
-                </div>
-                <TerminalPane handle={handle} className="flex-1" />
-              </div>
-            )
-          : undefined
-      }
       unseen={unseen}
       onVitals={(vitals) => {
         // Only `itemCount`: the socket is its sole source, and `activity`/`turns` ride the effect above instead.
@@ -186,15 +158,6 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
             </span>
           ) : null}
           <span className="flex-1" />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Toggle terminal"
-            aria-pressed={terminalOpen}
-            onClick={() => setTerminalOpen((open) => !open)}
-          >
-            <SquareTerminal className={terminalOpen ? 'size-4 text-fg-1' : 'size-4 text-fg-3'} />
-          </Button>
           <CopyButton value={sessionId} aria-label="Copy session id" />
           <AlertDialog>
             <AlertDialogTrigger

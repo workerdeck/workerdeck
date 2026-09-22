@@ -4,6 +4,7 @@ import { compactionText, formatBytes, formatCost, formatDuration, toolInputPrevi
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
 import { IMAGE_BOX_LINES } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
+import { shellBodyLines, shellFooterText, shellHeaderText } from './shell-row.ts'
 import { todoLine, todoPreview } from './todos.ts'
 import { isPeerSend, peerName, planRun, runSummary, taskSummary } from './tool-run.ts'
 
@@ -633,6 +634,19 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
     case 'file_delivered': {
       const text = `${item.path} · ${formatBytes(item.bytes)}` + (item.description ? ` · ${item.description}` : '')
       return rowH(text, m, { extraPx })
+    }
+    case 'shell': {
+      // Collapsed, as the row first draws: expanding is a state change the epoch's cache is invalidated by anyway.
+      const lines = shellBodyLines(item, false)
+      let acc = rowH(shellHeaderText(item), m, { extraPx })
+      for (const line of lines) {
+        acc = add(acc, rowH(line || ' ', m, { indentCells: 3, gutterCells: 3, extraPx }))
+      }
+      const footer = shellFooterText(item, false, lines.length)
+      if (footer) {
+        acc = add(acc, rowH(footer, m, { indentCells: 3, gutterCells: 3, extraPx }))
+      }
+      return acc
     }
     default: {
       return { px: 0, exact: false }

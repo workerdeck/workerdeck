@@ -1,16 +1,12 @@
 import type { IncomingMessage } from 'node:http'
 import type { WebSocket } from 'ws'
 import { isSlashCommand, type Runner } from '@workerdeck/core'
-import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, TERMINAL_INPUT_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
+import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
-import { shellPermitted } from '../services/shell.ts'
-import { clampSize, spawnTerminal, type TerminalChild } from '../services/terminal.ts'
+import { shellPermitted, SHELL_REFUSAL } from '../services/shells.ts'
 
 // What the upgrade established about the principal; computed once there so the attach never re-authenticates.
 export type AttachAccess = { operator: boolean }
-
-// Per-connection terminal state. One PTY per socket at most, and it dies with the socket.
-type TerminalSlot = { child: TerminalChild | undefined; busy: boolean }
 
 export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage, access: AttachAccess): void {
   const { bridge, parking } = ctx
@@ -30,7 +26,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     protocolVersion: PROTOCOL_VERSION,
     session: ctx.projects.withProject(runner.info()),
     replayingFrom: afterSeq,
-    ...(shellPermitted(ctx.shell, runner, access.operator) ? { shell: true } : {}),
+    ...(shellPermitted(ctx.shells, runner, access.operator) ? { shell: true } : {}),
     ...(ctx.pricingOverrides ? { pricingOverrides: ctx.pricingOverrides } : {}),
   })
   const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
@@ -39,16 +35,6 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     imageRefs,
   })
   const detachBridge = bridge.attach(runner.id, send)
-  const terminal: TerminalSlot = { child: undefined, busy: false }
-  const killTerminal = (reason: string): void => {
-    terminal.child?.kill(reason)
-    terminal.child = undefined
-  }
-  const unwatchTerminal = runner.subscribe((event) => {
-    if (event.type === 'session_closed' || (event.type === 'status_changed' && event.status === 'parked')) {
-      killTerminal(event.type === 'session_closed' ? 'session closed' : 'session parked')
-    }
-  }, runner.info().lastSeq)
 
   // After the replay is wired, so a fresh reading arrives as a live event behind the history rather than racing it.
   // The replay faithfully re-installs whatever this session last heard, which on an idle session can be days old,
@@ -64,7 +50,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
       send({ type: 'protocol_error', message: 'invalid JSON frame' })
       return
     }
-    handleCommand(ctx, frame, runner, access, { send, terminal }).catch((error: unknown) => {
+    handleCommand(ctx, frame, runner, access).catch((error: unknown) => {
       send({
         type: 'protocol_error',
         message: error instanceof Error ? error.message : 'command failed',
@@ -73,22 +59,12 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   })
   ws.on('close', () => {
     unsubscribe()
-    unwatchTerminal()
-    killTerminal('client detached')
     detachBridge()
     parking.onDetach(runner.id)
   })
 }
 
-type Connection = { send: (frame: ServerFrame) => void; terminal: TerminalSlot }
-
-async function handleCommand(
-  ctx: ServerContext,
-  frame: ClientFrame,
-  runner: Runner,
-  access: AttachAccess,
-  conn: Connection,
-): Promise<void> {
+async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner, access: AttachAccess): Promise<void> {
   const { attachmentStore, bridge } = ctx
   switch (frame.type) {
     case 'user_message': {
@@ -158,8 +134,8 @@ async function handleCommand(
       return
     }
     case 'shell_command': {
-      if (!shellPermitted(ctx.shell, runner, access.operator) || ctx.shell === null) {
-        throw new Error('shell commands are not available on this session')
+      if (!shellPermitted(ctx.shells, runner, access.operator) || ctx.shells === null) {
+        throw new Error(SHELL_REFUSAL)
       }
       if (typeof frame.command !== 'string' || frame.command.includes('\0')) {
         throw new Error('shell command must be a string')
@@ -173,55 +149,14 @@ async function handleCommand(
       if (!runner.queueLocalCommand) {
         throw new Error(`the ${runner.info().engine ?? 'claude'} engine cannot take shell output`)
       }
-      const result = await ctx.shell.run(runner.id, runner.info().cwd, frame.command)
-      runner.queueLocalCommand(result)
-      return
-    }
-    case 'terminal_open': {
-      // The same three ANDed conditions and the same refusal string as `!`, re-checked per command:
-      // a terminal is a shell by another transport, never a second, looser door.
-      if (!shellPermitted(ctx.shell, runner, access.operator) || ctx.shell === null) {
-        throw new Error('shell commands are not available on this session')
-      }
-      if (conn.terminal.child || conn.terminal.busy) {
-        throw new Error('a terminal is already open on this connection')
-      }
-      if (frame.command !== undefined && (typeof frame.command !== 'string' || frame.command.includes('\0'))) {
-        throw new Error('terminal command must be a string')
-      }
-      const size = clampSize({ cols: frame.cols, rows: frame.rows })
-      conn.terminal.busy = true
+      const { shell, source } = await ctx.shells.spawn({ runner, command: frame.command, owner: 'user' })
       try {
-        conn.terminal.child = await spawnTerminal({
-          command: frame.command,
-          cwd: runner.info().cwd,
-          size,
-          onData: (data) => conn.send({ type: 'terminal_output', data }),
-          onExit: (exitCode, signal) => {
-            conn.terminal.child = undefined
-            conn.send({ type: 'terminal_exit', exitCode, signal })
-          },
-        })
-      } finally {
-        conn.terminal.busy = false
+        runner.queueLocalCommand(source)
+      } catch (error) {
+        // queueLocalCommand throws before it pushes, so without this the shell would run with no transcript row.
+        ctx.shells.kill(runner.id, shell.id)
+        throw error
       }
-      conn.send({ type: 'terminal_opened', cols: size.cols, rows: size.rows })
-      return
-    }
-    case 'terminal_input': {
-      if (typeof frame.data !== 'string' || frame.data.length > TERMINAL_INPUT_MAX) {
-        throw new Error(`terminal input must be a string under ${TERMINAL_INPUT_MAX} characters`)
-      }
-      conn.terminal.child?.write(frame.data)
-      return
-    }
-    case 'terminal_resize': {
-      conn.terminal.child?.resize({ cols: frame.cols, rows: frame.rows })
-      return
-    }
-    case 'terminal_close': {
-      conn.terminal.child?.kill('closed by client')
-      conn.terminal.child = undefined
       return
     }
     case 'close': {

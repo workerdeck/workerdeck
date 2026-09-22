@@ -3,7 +3,7 @@ import { formatCost, formatDuration, toolInputPreview } from '../../lib/format.t
 import { parentOf } from '../terminal/blocks.ts'
 
 export type Lane = 'l' | 'r' | 'f'
-export type MarkKind = 'user' | 'subagent' | 'turn' | 'turnFailed' | 'toolFailed' | 'error' | 'approval' | 'recap' | 'bookmark'
+export type MarkKind = 'user' | 'subagent' | 'shell' | 'turn' | 'turnFailed' | 'toolFailed' | 'error' | 'approval' | 'recap' | 'bookmark'
 
 export type Mark = {
   kind: MarkKind
@@ -32,6 +32,7 @@ export function nearestMember(cluster: Cluster, y: number): Mark | undefined {
 export const LANE: Record<MarkKind, Lane> = {
   user: 'l',
   subagent: 'l',
+  shell: 'l',
   turn: 'r',
   turnFailed: 'r',
   toolFailed: 'r',
@@ -50,12 +51,14 @@ export const LOUDNESS: Record<MarkKind, number> = {
   turn: 2,
   bookmark: 1,
   subagent: 1,
+  shell: 1,
   recap: 0,
 }
 
 export const KIND_NAME: Record<MarkKind, string> = {
   user: 'you',
   subagent: 'sub-agent',
+  shell: 'shell',
   turn: 'response · turn end',
   turnFailed: 'turn failed',
   toolFailed: 'tool failed',
@@ -78,6 +81,9 @@ export function excerpt(item: TranscriptItem): string {
     case 'thinking':
     case 'notice': {
       return item.text
+    }
+    case 'shell': {
+      return item.shell.command
     }
     case 'tool_call': {
       return `${item.name}(${toolInputPreview(item.input)})`
@@ -139,6 +145,8 @@ export function buildMarks(
       closeSegment()
     } else if (item.kind === 'notice' && item.level === 'error') {
       marks.push({ kind: 'error', itemIndex: index })
+    } else if (item.kind === 'shell') {
+      marks.push({ kind: 'shell', itemIndex: index })
     } else if (
       item.kind === 'tool_call' &&
       parentOf(item) === frameParentId &&

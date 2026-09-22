@@ -17,6 +17,7 @@ import type {
   SessionEvent,
   SessionInfo,
   SessionStatus,
+  ShellInfo,
   SkillInfo,
   SlashCommandInfo,
   ToolExecutionBackend,
@@ -89,6 +90,16 @@ export type TranscriptItem =
       error?: string
     }
   | { kind: 'file_delivered'; id: string; path: string; bytes: number; description?: string }
+  | {
+      kind: 'shell'
+      id: string
+      shell: ShellInfo
+      text: string
+      truncated: boolean
+      expanded?: string
+      // The record is gone from the gateway: swept past its TTL, or minted by a gateway this client is not talking to.
+      missing?: boolean
+    }
 
 export type ProducedFileRef = {
   fileId: string
@@ -144,6 +155,50 @@ const STREAMING_THINKING_ID = 'streaming-thinking'
 const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>$/
 const LOCAL_COMMAND_ELEMENT = /<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>/g
 const LOCAL_COMMAND_CAVEAT = '<local-command-caveat>'
+
+const SHELL_MORE_LINES = /^\[\.\.\. [\d,]+ more lines \.\.\.\]$/
+const SHELL_END_LINE = /^\[(exit -?\d+|killed|timed out|ended|failed to start)[^\]]*\]$/
+
+export type ShellItem = Extract<TranscriptItem, { kind: 'shell' }>
+
+// The row's text is core's `shellInlineText`: one framed element whose first line is the command and whose
+// last is the end line, both of which the row draws from the record instead.
+export function shellRowText(shell: ShellInfo, text: string): { text: string; truncated: boolean } {
+  const body = LOCAL_COMMAND_OUTPUT.exec(text.trim())?.[2] ?? text
+  const lines = body.split('\n')
+  if (lines[0]?.startsWith('$ ')) {
+    lines.shift()
+  }
+  if (shell.status === 'exited' && lines.length > 0 && SHELL_END_LINE.test(lines[lines.length - 1]!)) {
+    lines.pop()
+  }
+  let truncated = false
+  const kept = lines.filter((line) => {
+    if (!SHELL_MORE_LINES.test(line)) {
+      return true
+    }
+    truncated = true
+    return false
+  })
+  return { text: kept.join('\n').trimEnd(), truncated }
+}
+
+function shellItem(id: string, shell: ShellInfo, text: string, previous: ShellItem | undefined): ShellItem {
+  const row = shellRowText(shell, text)
+  return {
+    kind: 'shell',
+    id,
+    shell,
+    text: row.text,
+    truncated: row.truncated,
+    // Carried across the re-emit: a row the reader expanded must not collapse under them when the shell ticks.
+    ...(previous?.expanded !== undefined && { expanded: previous.expanded }),
+  }
+}
+
+function findShell(items: readonly TranscriptItem[], shellId: string): ShellItem | undefined {
+  return items.find((item): item is ShellItem => item.kind === 'shell' && item.shell.id === shellId)
+}
 
 const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/
 const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/
@@ -278,6 +333,24 @@ export function hydrateToolResult(state: TranscriptState, toolUseId: string, tex
     }
   })
   return changed ? { ...state, items } : state
+}
+
+// `shell` absent is the 404: the record was swept or belongs to a gateway generation this one cannot answer for.
+export function hydrateShellRow(state: TranscriptState, shellId: string, shell: ShellInfo | undefined): TranscriptState {
+  const current = findShell(state.items, shellId)
+  if (!current) {
+    return state
+  }
+  const next: ShellItem = shell === undefined ? { ...current, missing: true } : { ...current, shell, missing: undefined }
+  return { ...state, items: state.items.map((item) => (item === current ? next : item)) }
+}
+
+export function hydrateShellOutput(state: TranscriptState, shellId: string, text: string): TranscriptState {
+  const current = findShell(state.items, shellId)
+  if (!current) {
+    return state
+  }
+  return { ...state, items: state.items.map((item) => (item === current ? { ...current, expanded: text, missing: undefined } : item)) }
 }
 
 export function applyEvent(state: TranscriptState, event: SessionEvent): TranscriptState {
@@ -426,7 +499,10 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           // on resume the SDK hands back the shell output and the user's own text as one message, which
           // `isSyntheticUserText` then marks synthetic whole. Without this the user's own words vanish on reload.
           const localOutput = LOCAL_COMMAND_OUTPUT.exec(text.trim())
-          if (localOutput) {
+          if (event.shell) {
+            const existing = items.find((item): item is ShellItem => item.kind === 'shell' && item.id === rowId)
+            items = upsert(items, shellItem(rowId, event.shell, text, existing))
+          } else if (localOutput) {
             items = upsert(items, {
               kind: 'notice',
               id: rowId,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { replayCoalesceKey } from '@workerdeck/protocol'
-import type { RateLimitInfo, SessionEvent, SessionEventBody } from '@workerdeck/protocol'
+import type { RateLimitInfo, SessionEvent, SessionEventBody, ShellInfo } from '@workerdeck/protocol'
 import { applyEvent, initialTranscriptState, type TranscriptState } from '../src/lib/transcript.ts'
 
 function seqd(bodies: SessionEventBody[]): SessionEvent[] {
@@ -157,5 +157,44 @@ describe('replay coalescing is unobservable', () => {
       { type: 'model_changed', model: undefined },
     ])
     expect(fold(models).model).toBe('chosen')
+  })
+
+  it('coalesces two shell rows under one shell id to the last', () => {
+    const shellInfo = (over: { status: 'running' | 'exited'; bytes: number }): ShellInfo => ({
+      id: 'sh_1',
+      sessionId: 'sess-1',
+      ordinal: 1,
+      command: 'npm run dev',
+      label: 'npm run dev',
+      cwd: '/work',
+      owner: 'user',
+      startedAt: 0,
+      cols: 120,
+      rows: 40,
+      ...over,
+    })
+    const full = seqd([
+      {
+        type: 'user_message',
+        message: { role: 'user', content: '$ npm run dev' },
+        parentToolUseId: null,
+        synthetic: true,
+        uuid: 'row-1',
+        shell: shellInfo({ status: 'running', bytes: 10 }),
+      },
+      {
+        type: 'user_message',
+        message: { role: 'user', content: '$ npm run dev' },
+        parentToolUseId: null,
+        synthetic: true,
+        uuid: 'row-1',
+        shell: shellInfo({ status: 'exited', bytes: 40 }),
+      },
+    ])
+    expect(replayCoalesceKey(full[0]!)).toBe('shell:sh_1')
+    const thin = coalesce(full)
+    expect(thin).toHaveLength(1)
+    expect(thin[0]?.seq).toBe(full[1]!.seq)
+    expect(fold(thin)).toEqual(fold(full))
   })
 })

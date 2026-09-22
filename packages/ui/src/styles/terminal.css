@@ -1152,6 +1152,13 @@ button.term-link {
 .term-scrubber .term-scrub-mark[data-kind='subagent'] {
   background: linear-gradient(to bottom, var(--term-green) 0 2px, color-mix(in srgb, var(--term-green) 25%, transparent) 2px);
 }
+/* A shell run, in the input lane because a `$` command is something you did:
+   the composer's own magenta, at the bookmark's loudness so a long log never
+   shouts over a failed turn. Drawn as an extent like the marks it shares the
+   lane with. */
+.term-scrubber .term-scrub-mark[data-kind='shell'] {
+  background: linear-gradient(to bottom, var(--wd-shell-accent) 0 2px, color-mix(in srgb, var(--wd-shell-accent) 25%, transparent) 2px);
+}
 .term-scrubber .term-scrub-mark[data-kind='turn'] {
   background: linear-gradient(to bottom, var(--term-fg) 0 2px, color-mix(in srgb, var(--term-fg) 25%, transparent) 2px);
 }

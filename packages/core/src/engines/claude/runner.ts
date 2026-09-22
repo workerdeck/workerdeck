@@ -29,7 +29,13 @@ import {
 import { type AttachmentInput, attachmentContentBlocks, attachmentRef } from '../../lib/attachments.ts'
 import { TaskChecklist, checklistFromBody, sameChecklist } from '../../lib/checklist.ts'
 import { InputQueue } from '../../lib/input-queue.ts'
-import { isSlashCommand, localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
+import {
+  LocalCommandQueue,
+  isSlashCommand,
+  localCommandEvent,
+  type LocalCommandResult,
+  type LocalShellSource,
+} from '../../lib/local-command.ts'
 import {
   type UsageRateLimits,
   defaultModelFromSdk,
@@ -98,7 +104,7 @@ export class SessionRunner implements Runner {
   #cost = new CostLedger()
   #numTurns: number | undefined
   #input = new InputQueue()
-  #pendingLocalCommands: string[] = []
+  #localCommands = new LocalCommandQueue((text, uuid, shell) => this.#emit(localCommandEvent(text, uuid, shell)))
   // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
   // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
   // correlating here is what lets one row settle rather than two rows appear.
@@ -235,25 +241,15 @@ export class SessionRunner implements Runner {
     })
   }
 
-  queueLocalCommand(result: LocalCommandResult): void {
+  queueLocalCommand(input: LocalCommandResult | LocalShellSource): void {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    const text = localCommandTranscript(result)
-    this.#pendingLocalCommands.push(text)
-    this.#emit({
-      type: 'user_message',
-      message: { role: 'user', content: text },
-      parentToolUseId: null,
-      synthetic: true,
-      uuid: randomUUID(),
-    })
+    this.#localCommands.push(input)
   }
 
   #takeLocalCommands(): string | undefined {
-    const context = localCommandContext(this.#pendingLocalCommands)
-    this.#pendingLocalCommands = []
-    return context
+    return this.#localCommands.take()
   }
 
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
@@ -297,7 +293,7 @@ export class SessionRunner implements Runner {
     if (this.#status === 'closed' || this.#status === 'failed') {
       throw new Error('session is closed')
     }
-    this.#pendingLocalCommands = []
+    this.#localCommands.clear()
     this.sendMessage('/clear')
   }
 
@@ -327,7 +323,7 @@ export class SessionRunner implements Runner {
       return
     }
     this.#closed = true
-    this.#pendingLocalCommands = []
+    this.#localCommands.clear()
     for (const [id, pending] of this.#pending) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
     }
@@ -525,7 +521,7 @@ export class SessionRunner implements Runner {
       this.#emit(body)
       if (body.type === 'conversation_reset') {
         this.#cost.rollover()
-        this.#pendingLocalCommands = []
+        this.#localCommands.clear()
         if (body.sdkSessionId) {
           this.#sdkSessionId = body.sdkSessionId
         }

@@ -168,6 +168,7 @@ export async function runHotReload(flags: CliFlags): Promise<number | 'unsupport
           orphans.push(released)
         }
       }
+      const endedShells = instance.server.shells?.running().length ?? 0
       await instance.close()
       generation += 1
       instance = await start(orphans)
@@ -177,7 +178,8 @@ export async function runHotReload(flags: CliFlags): Promise<number | 'unsupport
       line(
         `[workerdeck] reloaded on ${trigger}: gen ${generation} in ${Date.now() - started}ms, ` +
           `${adopted.size} carried${persisted.length ? `, persisted ${persisted.join(', ')}` : ''}` +
-          `${dropped.length ? `, dropped ${dropped.join(', ')}` : ''}${ended.length ? `, ended while held ${ended.join(', ')}` : ''}`,
+          `${dropped.length ? `, dropped ${dropped.join(', ')}` : ''}${ended.length ? `, ended while held ${ended.join(', ')}` : ''}` +
+          `${endedShells > 0 ? `, ended ${endedShells} shell(s)` : ''}`,
       )
     } catch (error) {
       line(`[workerdeck] reload failed at gen ${generation}: ${error instanceof Error ? error.message : String(error)}`)

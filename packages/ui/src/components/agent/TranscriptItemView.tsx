@@ -1,5 +1,6 @@
 import type { MessageAttachment } from '@workerdeck/protocol'
-import type { TranscriptItem } from '@workerdeck/react'
+import { useEffect, useState } from 'react'
+import type { ShellItem, TranscriptItem } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { compactionText, formatCost, formatDuration, formatRelativeTime } from '../../lib/format.ts'
 import { FileCard } from './FileCard.tsx'
@@ -11,6 +12,8 @@ import { ToolCallCard } from './ToolCallCard.tsx'
 import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { peerLabel } from '../terminal/items.tsx'
+import { useShellActions } from './shell-actions.tsx'
+import { shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from '../terminal/shell-row.ts'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
   return (
@@ -107,10 +110,69 @@ export function TranscriptItemView({
     case 'file_delivered': {
       return <FileCard item={item} href={fileUrl?.(item.path)} />
     }
+    case 'shell': {
+      return <ShellCard item={item} />
+    }
     default: {
       return null
     }
   }
+}
+
+function ShellCard({ item }: { item: ShellItem }) {
+  const [open, setOpen] = useState(false)
+  const actions = useShellActions()
+  const running = item.shell.status === 'running'
+  const failed = shellFailed(item)
+  const lines = shellBodyLines(item, open)
+  const footer = shellFooterText(item, open, lines.length)
+
+  const shellId = item.shell.id
+  const verify = actions.verify
+  useEffect(() => {
+    if (running) {
+      void verify(shellId)
+    }
+  }, [running, shellId, verify])
+
+  return (
+    <div data-slot="shell" className="overflow-hidden rounded-md border border-border bg-surface">
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <span className="font-mono text-label text-[var(--wd-shell-accent)]">$</span>
+        <button
+          type="button"
+          aria-expanded={open}
+          className="min-w-0 flex-1 truncate text-left font-mono text-label text-fg-1"
+          onClick={() => {
+            const next = !open
+            setOpen(next)
+            if (next && item.truncated && item.expanded === undefined && !item.missing) {
+              void actions.loadOutput(shellId)
+            }
+          }}
+        >
+          {shellLabel(item)}
+        </button>
+        <span className={cn('shrink-0 text-label', failed ? 'text-danger' : 'text-fg-4')}>{shellStatusText(item)}</span>
+        {running ? (
+          <button
+            type="button"
+            aria-label="Kill this shell"
+            className="shrink-0 text-label text-fg-3"
+            onClick={() => void actions.kill(shellId)}
+          >
+            ✕
+          </button>
+        ) : null}
+      </div>
+      {lines.length > 0 ? (
+        <pre className="overflow-x-auto border-t border-border px-3 py-2 font-mono text-label whitespace-pre-wrap text-fg-2">
+          {lines.join('\n')}
+        </pre>
+      ) : null}
+      {footer ? <div className="px-3 pb-2 text-label text-fg-4">{footer}</div> : null}
+    </div>
+  )
 }
 
 function CompactionRow({ item }: { item: Extract<TranscriptItem, { kind: 'compaction' }> }) {

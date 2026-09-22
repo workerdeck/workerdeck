@@ -10,6 +10,7 @@ import { handleAttachments } from './attachments.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
+import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
 
 export async function handleSessions(
@@ -100,6 +101,10 @@ export async function handleSessions(
   }
   if (route.produced) {
     await handleProducedFiles(ctx, req, res, route.id, route.producedFileId)
+    return
+  }
+  if (route.shells) {
+    await handleShells(ctx, req, res, route, runner ?? null, authSvc.isOperator(auth))
     return
   }
   if (route.projectIcon) {

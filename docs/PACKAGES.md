@@ -695,12 +695,17 @@ client-registered tool - the server declares the schema, the client handles the 
 credential lookup) belongs there with `onClose` as the disposer, and a rejection fails the create:
 the session POST answers 500 with the message, a job goes straight to `failed`.
 
-`shell: { enabled?, timeoutMs?, maxOutputBytes? }` (default off, 120s, 32 KiB) is the **only place
-this package spawns a child** - everything else that runs a process belongs to an engine. It backs
-`!` shell mode: `services/shell.ts` runs one `/bin/sh -c` per session in the session's cwd and hands
-the result to `runner.queueLocalCommand`. Operator-only, off by default, and outside the permission
-flow entirely - the invariants are in `docs/GOTCHAS.md` § Shell mode and you should read them before
-touching it. `attachClient` takes an `AttachAccess { operator }` computed at upgrade time rather than
+`shell: { enabled?, timeoutMs?, artifactDir?, artifactMaxBytes?, artifactTtlMs?,
+maxRunningPerSession? }` (default off, no wall clock) is the **only place this package spawns a
+child** - everything else that runs a process belongs to an engine. It backs `$` shell mode:
+`services/shells.ts` is the shell registry, and every `$` is a PTY (`@lydell/node-pty`, an optional
+dependency) in the session's cwd with a tracked `ShellInfo` record, an on-disk artifact under
+`artifactDir` and a `LocalShellSource` handed to `runner.queueLocalCommand`, which draws and redraws
+one transcript row. Records reconcile by generation on boot, never by pid. `routes/shells.ts` serves
+`GET shells`, `GET shells/:shellId`, `GET shells/:shellId/output?view=text|raw&tail=` and
+`POST shells/:shellId/kill`. Operator-only, off by default, and outside the permission flow entirely
+- the invariants are in `docs/GOTCHAS.md` § Shell sessions and you should read them before touching
+it. `attachClient` takes an `AttachAccess { operator }` computed at upgrade time rather than
 re-authenticating, and re-checks the gate on every `shell_command`.
 
 
@@ -793,7 +798,7 @@ erases the turn's cause, and protocol's `transcriptActivity` counts a non-synthe
 as one row, so suppression would silently disagree with the unread count. CLI-side local command
 output arrives as user text in `<local-command-stdout|stderr>` tags and renders as an info/error
 notice - and that check sits **ahead** of the `!event.synthetic` guard, not inside it, because a
-`!` shell run is emitted synthetic so it scores zero activity and zero prose while still being the
+`$` shell run is emitted synthetic so it scores zero activity and zero prose while still being the
 one synthetic message a person is meant to see. On resume the SDK returns the deferred shell flush
 and the next user message as a *single* message that `isSyntheticUserText` marks synthetic whole,
 so a text block starting `<local-command-caveat>` is split into per-element notices (`<uuid>#<i>`)
@@ -927,7 +932,7 @@ the default prompt's remainder as editable text after it; `skillPrompt`'s fallba
 `$name`; `@` for files; **`#` for another session on this gateway** - a pill whose text is
 `peerMentionSlug(title, id)`, drawn from `usePeerSessions` which the panel reads itself the way it
 reads host-file search, so no host has to wire it, and which the gateway resolves at send into a
-`<peer-mentions>` block on the model input alone (`docs/GOTCHAS.md` §Peer messaging); `!` for
+`<peer-mentions>` block on the model input alone (`docs/GOTCHAS.md` §Peer messaging); `$` for
 shell; `?` for the shortcut list on an empty composer), and the
 panels behind its status bar and `⋯` menu (session info, context, plan usage, MCP, project
 files) - each gated on the capability record, so one component is correct for every engine.
@@ -1266,7 +1271,7 @@ without a side border that would take the `❯` off the column. The bottom rule 
 seam in it. It lives
 in `Composer.tsx` keyed on the panel-wide variant context - it had been CSS overrides in the VS
 Code webview, which meant only that one host had it. **Shell mode** rides the same one component:
-`onShellCommand` (omit it and the mode does not exist) plus a `launchTrigger('!')` at line start,
+`onShellCommand` (omit it and the mode does not exist) plus a `launchTrigger({ char: '$' })` at line start,
 which suppresses the character and flips a flag rather than typing anything. Both variants then
 recolour the frame and the gutter glyph to `--wd-shell-accent` - a magenta of its own, because
 shell mode must read as neither focus (blue) nor error (red) - and Escape and

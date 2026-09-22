@@ -10,6 +10,7 @@ import {
   NoticeRow,
   PeerSendRow,
   RunRow,
+  ShellRow,
   ThinkingRow,
   ToolRow,
   TurnResultRow,
@@ -59,6 +60,9 @@ export function TerminalItemView({ item, fileUrl }: { item: TranscriptItem; file
     }
     case 'file_delivered': {
       return <FileRow item={item} href={fileUrl?.(item.path)} />
+    }
+    case 'shell': {
+      return <ShellRow item={item} />
     }
     default: {
       return null

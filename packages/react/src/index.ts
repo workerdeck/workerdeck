@@ -29,8 +29,15 @@ export { useToolCallHost } from './hooks/use-tool-host.ts'
 export type { UseToolCallHostOptions } from './hooks/use-tool-host.ts'
 export { createToolCallHost } from './lib/tool-host.ts'
 export type { ClientToolHandler, ClientToolResult, ToolCallHostOptions, ToolHostExecution, ToolHostRunner } from './lib/tool-host.ts'
-export { applyEvent, hydrateToolResult, initialTranscriptState, rateLimitWindows, seedFromSessionInfo } from './lib/transcript.ts'
-export type { ProducedFileRef, ToolResultImageRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
+export {
+  applyEvent,
+  hydrateShellOutput,
+  hydrateShellRow,
+  hydrateToolResult,
+  initialTranscriptState,
+  rateLimitWindows,
+  seedFromSessionInfo,
+  shellRowText,
+} from './lib/transcript.ts'
+export type { ProducedFileRef, ShellItem, ToolResultImageRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
 export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './lib/recap.ts'
-export { useTerminal } from './hooks/use-terminal.ts'
-export type { TerminalSize, TerminalStatus, UseTerminalOptions, UseTerminalResult } from './hooks/use-terminal.ts'

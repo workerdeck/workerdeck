@@ -10,7 +10,7 @@ import type {
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
 import type { CostLedgerState } from './lib/cost-ledger.ts'
-import type { LocalCommandResult } from './lib/local-command.ts'
+import type { LocalCommandResult, LocalShellSource } from './lib/local-command.ts'
 import type { PeerMention } from './lib/peers.ts'
 import type { ToolExecutionResult } from './executors/tool-executor.ts'
 
@@ -57,7 +57,7 @@ export interface Runner {
   ): () => void
   eventAt?(seq: number): SessionEvent | undefined
   sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void
-  queueLocalCommand?(result: LocalCommandResult): void
+  queueLocalCommand?(input: LocalCommandResult | LocalShellSource): void
   // Re-reads the account's rate-limit windows and re-emits them as `rate_limit` events. Optional because only the
   // claude engine has a control request for it. Throttled by the implementation: an attach is a client's arrival,
   // not a reason to ask the CLI anything a second time within the minute.

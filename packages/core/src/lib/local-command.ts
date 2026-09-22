@@ -1,8 +1,53 @@
+import { randomUUID } from 'node:crypto'
+import {
+  SHELL_CONTEXT_FLUSH_MAX_CHARS,
+  SHELL_CONTEXT_HEAD_CHARS,
+  SHELL_CONTEXT_HEAD_LINES,
+  SHELL_CONTEXT_TAIL_CHARS,
+  SHELL_CONTEXT_TAIL_LINES,
+  SHELL_INLINE_LINES,
+  type SessionEventBody,
+  type ShellInfo,
+} from '@workerdeck/protocol'
+import { countLines, headTail, splitLines } from './tty-text.ts'
+
 export type LocalCommandResult = {
   command: string
   stdout: string
   stderr: string
   exitCode: number
+}
+
+export type LocalShellSource = {
+  info(): ShellInfo
+  text(): string
+  subscribe(listener: () => void): () => void
+}
+
+export type ShellContextOptions = {
+  previous?: { lines: number }
+  collapsed?: boolean
+}
+
+export type LocalCommandEvent = Extract<SessionEventBody, { type: 'user_message' }>
+
+export type LocalCommandEmit = (text: string, uuid: string, shell: ShellInfo | undefined) => void
+
+type QueueEntry =
+  | { kind: 'text'; text: string }
+  | { kind: 'shell'; source: LocalShellSource; unsubscribe: () => void; flushedLines?: number }
+
+type Rendered = { full: string; collapsed?: () => string; settled: boolean; lines: number }
+
+const OUTPUT_POINTER = 'the full output is in the transcript'
+
+const TAIL_ONLY = { headLines: 0, headChars: 0, tailLines: SHELL_CONTEXT_TAIL_LINES, tailChars: SHELL_CONTEXT_TAIL_CHARS }
+
+const HEAD_AND_TAIL = {
+  headLines: SHELL_CONTEXT_HEAD_LINES,
+  headChars: SHELL_CONTEXT_HEAD_CHARS,
+  tailLines: SHELL_CONTEXT_TAIL_LINES,
+  tailChars: SHELL_CONTEXT_TAIL_CHARS,
 }
 
 const LOCAL_COMMAND_CAVEAT =
@@ -37,4 +82,253 @@ export function localCommandContext(pending: readonly string[]): string | undefi
 
 export function isSlashCommand(text: string): boolean {
   return /^\s*\/[A-Za-z]/.test(text)
+}
+
+export function isLocalShellSource(input: LocalCommandResult | LocalShellSource): input is LocalShellSource {
+  return typeof (input as LocalShellSource).subscribe === 'function'
+}
+
+export function localCommandEvent(text: string, uuid: string, shell: ShellInfo | undefined): LocalCommandEvent {
+  return {
+    type: 'user_message',
+    message: { role: 'user', content: text },
+    parentToolUseId: null,
+    synthetic: true,
+    uuid,
+    ...(shell ? { shell } : {}),
+  }
+}
+
+export function shellInlineText(shell: ShellInfo, text: string): string {
+  const lines = splitLines(text)
+  const body = [`$ ${shell.command}`, ...lines.slice(0, SHELL_INLINE_LINES)]
+  if (lines.length > SHELL_INLINE_LINES) {
+    body.push(`[... ${count(lines.length - SHELL_INLINE_LINES)} more lines ...]`)
+  }
+  const end = shellEndLine(shell)
+  if (end) {
+    body.push(end)
+  }
+  return frame(shellTag(shell), body)
+}
+
+export function shellContextText(shell: ShellInfo, text: string, options: ShellContextOptions = {}): string {
+  const body = [`$ ${shell.command}`]
+  if (shell.status === 'running') {
+    body.push(runningStatusLine(shell, text, options))
+    if (!options.collapsed && !options.previous) {
+      const part = headTail(text, TAIL_ONLY)
+      const shown = part.omittedLines > 0 ? part.tail : part.head
+      if (part.omittedLines > 0) {
+        body.push(`[last ${count(part.totalLines - part.omittedLines)} of ${count(part.totalLines)} lines]`)
+      }
+      if (shown) {
+        body.push(shown)
+      }
+    }
+  } else if (options.collapsed) {
+    const part = headTail(text, { headLines: 0, headChars: 0, tailLines: 0, tailChars: 0 })
+    if (part.totalLines > 0) {
+      body.push(omissionLine(shell, part.totalLines, part.totalLines, part.totalBytes))
+    }
+  } else {
+    const part = headTail(text, HEAD_AND_TAIL)
+    if (part.head) {
+      body.push(part.head)
+    }
+    if (part.omittedLines > 0) {
+      body.push(omissionLine(shell, part.omittedLines, part.totalLines, part.totalBytes))
+    }
+    if (part.tail) {
+      body.push(part.tail)
+    }
+  }
+  const end = shellEndLine(shell)
+  if (end) {
+    body.push(end)
+  }
+  return frame(shellTag(shell), body)
+}
+
+export class LocalCommandQueue {
+  #entries: QueueEntry[] = []
+  readonly #emit: LocalCommandEmit
+
+  constructor(emit: LocalCommandEmit) {
+    this.#emit = emit
+  }
+
+  push(input: LocalCommandResult | LocalShellSource): void {
+    if (!isLocalShellSource(input)) {
+      const text = localCommandTranscript(input)
+      this.#entries.push({ kind: 'text', text })
+      this.#emit(text, randomUUID(), undefined)
+      return
+    }
+    const uuid = randomUUID()
+    const row = () => {
+      const info = { ...input.info() }
+      this.#emit(shellInlineText(info, input.text()), uuid, info)
+    }
+    row()
+    const unsubscribe = input.subscribe(row)
+    this.#entries.push({ kind: 'shell', source: input, unsubscribe })
+  }
+
+  take(): string | undefined {
+    if (this.#entries.length === 0) {
+      return undefined
+    }
+    const rendered = this.#entries.map((entry) => render(entry))
+    const texts = capped(rendered)
+    const remaining: QueueEntry[] = []
+    this.#entries.forEach((entry, i) => {
+      if (entry.kind === 'text') {
+        return
+      }
+      if (rendered[i]!.settled) {
+        entry.unsubscribe()
+        return
+      }
+      entry.flushedLines = rendered[i]!.lines
+      remaining.push(entry)
+    })
+    this.#entries = remaining
+    return localCommandContext(texts)
+  }
+
+  materialize(): string[] {
+    return capped(this.#entries.map((entry) => render(entry)))
+  }
+
+  restore(texts: readonly string[]): void {
+    for (const text of texts) {
+      this.#entries.push({ kind: 'text', text })
+    }
+  }
+
+  clear(): void {
+    for (const entry of this.#entries) {
+      if (entry.kind === 'shell') {
+        entry.unsubscribe()
+      }
+    }
+    this.#entries = []
+  }
+}
+
+function render(entry: QueueEntry): Rendered {
+  if (entry.kind === 'text') {
+    return { full: entry.text, settled: true, lines: 0 }
+  }
+  const info = entry.source.info()
+  const text = entry.source.text()
+  const previous = entry.flushedLines === undefined ? undefined : { lines: entry.flushedLines }
+  return {
+    full: shellContextText(info, text, { previous }),
+    collapsed: () => shellContextText(info, text, { previous, collapsed: true }),
+    settled: info.status !== 'running',
+    lines: countLines(text),
+  }
+}
+
+// Newest first keep their bodies; once the budget is spent, older shells collapse to their status line and pointer.
+function capped(rendered: readonly Rendered[]): string[] {
+  const texts: string[] = Array.from({ length: rendered.length })
+  let budget = SHELL_CONTEXT_FLUSH_MAX_CHARS
+  for (let i = rendered.length - 1; i >= 0; i--) {
+    const entry = rendered[i]!
+    const text = entry.collapsed === undefined || entry.full.length <= budget ? entry.full : entry.collapsed()
+    texts[i] = text
+    budget -= text.length
+  }
+  return texts
+}
+
+function frame(tag: string, body: readonly string[]): string {
+  return `<${tag}>${body.join('\n')}</${tag}>`
+}
+
+function shellTag(shell: ShellInfo): string {
+  return shell.status === 'running' || shell.exitCode === 0 ? 'local-command-stdout' : 'local-command-stderr'
+}
+
+function shellName(shell: ShellInfo): string {
+  return `shell #${shell.ordinal} (${shell.id})`
+}
+
+function shellEndLine(shell: ShellInfo): string | undefined {
+  if (shell.status === 'running' || shell.exitCode === 0) {
+    return undefined
+  }
+  if (typeof shell.exitCode === 'number') {
+    return `[exit ${shell.exitCode}]`
+  }
+  switch (shell.endReason) {
+    case 'killed': {
+      return '[killed]'
+    }
+    case 'timeout': {
+      return '[timed out]'
+    }
+    case 'server_stopped': {
+      return '[killed: the gateway stopped]'
+    }
+    case 'server_restarted': {
+      return '[ended: the gateway restarted; the process may still be running]'
+    }
+    case 'spawn_failed': {
+      return '[failed to start]'
+    }
+    default: {
+      return '[ended]'
+    }
+  }
+}
+
+function omissionLine(shell: ShellInfo, omitted: number, total: number, bytes: number): string {
+  const span =
+    omitted === total
+      ? `all ${count(total)} lines omitted (${size(bytes)})`
+      : `${count(omitted)} of ${count(total)} lines omitted (${size(bytes)} in all)`
+  return `[${shellName(shell)}: ${span}; ${OUTPUT_POINTER}]`
+}
+
+function runningStatusLine(shell: ShellInfo, text: string, options: ShellContextOptions): string {
+  const lines = countLines(text)
+  const progress = options.previous
+    ? lines > options.previous.lines
+      ? `${count(lines - options.previous.lines)} new lines since the last message`
+      : 'no new lines since the last message'
+    : `${count(lines)} lines so far`
+  return (
+    `[${shellName(shell)} is still running as of the time this was written (started ${elapsed(Date.now() - shell.startedAt)} ago, ${progress}). ` +
+    `Nothing from it streams into this conversation; ${OUTPUT_POINTER}.]`
+  )
+}
+
+function count(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
+function size(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`
+  }
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KiB`
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
+}
+
+function elapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  if (seconds < 60) {
+    return `${seconds}s`
+  }
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) {
+    return `${minutes}m ${seconds % 60}s`
+  }
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }

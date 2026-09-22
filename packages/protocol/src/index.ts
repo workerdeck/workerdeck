@@ -271,6 +271,7 @@ export type SessionEventBody =
       patch?: FilePatch
       uuid?: string
       origin?: MessageOrigin
+      shell?: ShellInfo
     }
   | {
       type: 'stream_delta'
@@ -332,6 +333,31 @@ export type SessionEvent = SessionEventBody & {
   ts: number
 }
 
+export type ShellOwner = 'user' | 'agent'
+export type ShellStatus = 'running' | 'exited'
+export type ShellEndReason = 'exit' | 'killed' | 'timeout' | 'server_stopped' | 'server_restarted' | 'spawn_failed'
+
+export type ShellInfo = {
+  id: string
+  sessionId: string
+  ordinal: number
+  command: string
+  label: string
+  cwd: string
+  owner: ShellOwner
+  status: ShellStatus
+  startedAt: number
+  endedAt?: number
+  exitCode?: number
+  signal?: number
+  endReason?: ShellEndReason
+  bytes: number
+  capped?: boolean
+  cols: number
+  rows: number
+  agentWrite?: boolean
+}
+
 export type SessionCommand =
   | {
       type: 'user_message'
@@ -364,21 +390,39 @@ export type SessionCommand =
       logs?: string[]
     }
   | { type: 'shell_command'; command: string }
-  | { type: 'terminal_open'; command?: string; cols: number; rows: number }
-  | { type: 'terminal_input'; data: string }
-  | { type: 'terminal_resize'; cols: number; rows: number }
-  | { type: 'terminal_close' }
+  | { type: 'shell_attach'; shellId: string; cols: number; rows: number }
+  | { type: 'shell_input'; shellId: string; data: string }
+  | { type: 'shell_resize'; shellId: string; cols: number; rows: number }
+  | { type: 'shell_detach'; shellId: string }
   | { type: 'close' }
 
 export const SHELL_COMMAND_MAX = 4000
-
-// A terminal is bound to one WebSocket, never to the session: its bytes never enter the event log,
-// so they are never replayed to a second client nor captured into a parking snapshot.
-export const TERMINAL_INPUT_MAX = 4096
-export const TERMINAL_MIN_COLS = 1
-export const TERMINAL_MAX_COLS = 1000
-export const TERMINAL_MIN_ROWS = 1
-export const TERMINAL_MAX_ROWS = 500
+export const SHELL_COLS = 120
+export const SHELL_ROWS = 40
+export const SHELL_MIN_COLS = 1
+export const SHELL_MAX_COLS = 1000
+export const SHELL_MIN_ROWS = 1
+export const SHELL_MAX_ROWS = 500
+export const SHELL_INPUT_MAX = 4096
+export const SHELL_LABEL_MAX = 80
+export const SHELL_INLINE_LINES = 8
+export const SHELL_PROMOTE_MS = 3000
+export const SHELL_LINGER_MS = 60_000
+export const SHELL_MAX_RUNNING_PER_SESSION = 8
+export const SHELL_MAX_RUNNING_TOTAL = 32
+export const SHELL_SPILL_BYTES = 64 * 1024
+export const SHELL_TAIL_RING_BYTES = 64 * 1024
+export const SHELL_TAIL_FLUSH_MS = 5000
+export const SHELL_ARTIFACT_MAX_BYTES = 16 * 1024 * 1024
+export const SHELL_ARTIFACT_TTL_MS = 7 * 24 * 60 * 60 * 1000
+export const SHELL_ATTACH_REPLAY_BYTES = 256 * 1024
+export const SHELL_CONTEXT_HEAD_LINES = 40
+export const SHELL_CONTEXT_HEAD_CHARS = 4096
+export const SHELL_CONTEXT_TAIL_LINES = 80
+export const SHELL_CONTEXT_TAIL_CHARS = 12288
+export const SHELL_CONTEXT_FLUSH_MAX_CHARS = 49152
+export const SHELL_READ_DEFAULT_LINES = 200
+export const SHELL_READ_MAX_LINES = 2000
 
 export type AttachedFrame = {
   type: 'attached'
@@ -409,9 +453,9 @@ export type ServerFrame =
   | { type: 'event'; event: SessionEvent }
   | ToolCallRequestFrame
   | { type: 'tool_call_canceled'; executionId: string; reason: string }
-  | { type: 'terminal_opened'; cols: number; rows: number }
-  | { type: 'terminal_output'; data: string }
-  | { type: 'terminal_exit'; exitCode: number; signal?: number }
+  | { type: 'shell_attached'; shellId: string; shell: ShellInfo; cols: number; rows: number; scrollback: string }
+  | { type: 'shell_output'; shellId: string; data: string }
+  | { type: 'shell_detached'; shellId: string; reason: string }
   | { type: 'protocol_error'; message: string }
 
 export type ClientFrame = SessionCommand
@@ -733,6 +777,7 @@ export type SessionInfo = {
   contextUsage?: ContextReading
   scope?: Record<string, string>
   project?: ProjectInfo
+  shells?: ShellInfo[]
 }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
@@ -837,6 +882,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     }
     case 'context_compacted': {
       return `context_compacted:${body.uuid}`
+    }
+    case 'user_message': {
+      return body.shell ? `shell:${body.shell.id}` : undefined
     }
     case 'checklist': {
       return 'checklist'

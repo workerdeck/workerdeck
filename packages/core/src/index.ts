@@ -66,8 +66,19 @@ export {
   normalizeMediaType,
 } from './lib/attachments.ts'
 export type { AttachmentInput, AttachmentKind } from './lib/attachments.ts'
-export { isSlashCommand, localCommandContext, localCommandTranscript } from './lib/local-command.ts'
-export type { LocalCommandResult } from './lib/local-command.ts'
+export {
+  LocalCommandQueue,
+  isLocalShellSource,
+  isSlashCommand,
+  localCommandContext,
+  localCommandEvent,
+  localCommandTranscript,
+  shellContextText,
+  shellInlineText,
+} from './lib/local-command.ts'
+export type { LocalCommandEmit, LocalCommandEvent, LocalCommandResult, LocalShellSource, ShellContextOptions } from './lib/local-command.ts'
+export { countLines, headTail, splitLines, ttyText } from './lib/tty-text.ts'
+export type { HeadTail, HeadTailOptions } from './lib/tty-text.ts'
 export { mcpStatusInfo, modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './lib/normalize.ts'
 export { getEngineAdapter } from './engines/adapter.ts'
 export type { EngineAdapter, EngineAvailability, EngineRunnerRequest, ModelCatalog } from './engines/adapter.ts'

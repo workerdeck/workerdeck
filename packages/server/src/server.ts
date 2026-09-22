@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -42,7 +43,7 @@ import { createPeerService } from './services/peers.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
 import { createSessionFactory } from './services/session-factory.ts'
-import { createShellService } from './services/shell.ts'
+import { createShellRegistry, type ShellRegistry } from './services/shells.ts'
 import { isDormant, MemorySessionStore } from './services/session-store.ts'
 
 export type {
@@ -69,7 +70,7 @@ const USAGE_STALE_MS = 5 * 60_000
 // `sessionState` is the vocabulary the dashboard, the session list and `workerdeck guard` already sort by, and it
 // draws exactly the line a drain needs: `working` covers starting/running and running subagents, while `attention`
 // covers a pending approval. Re-spelling that set here is how the two definitions would drift apart.
-function surveyDrain(registry: SessionRegistry): DrainReport {
+function surveyDrain(registry: SessionRegistry, shells: ShellRegistry | null): DrainReport {
   const working: string[] = []
   const awaitingHuman: string[] = []
   for (const info of registry.list()) {
@@ -80,7 +81,8 @@ function surveyDrain(registry: SessionRegistry): DrainReport {
       awaitingHuman.push(info.id)
     }
   }
-  return { working, awaitingHuman, timedOut: false }
+  const running = (shells?.running() ?? []).map(({ sessionId, id, label }) => ({ sessionId, id, label }))
+  return { working, awaitingHuman, timedOut: false, shells: running }
 }
 
 function sameDrain(a: DrainReport, b: DrainReport): boolean {
@@ -164,7 +166,21 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
 
   const refs: LateBoundRefs = {}
-  const projects = new ProjectInfoService()
+  const generation = randomUUID()
+  const shells =
+    options.shell?.enabled === true
+      ? createShellRegistry({
+          generation,
+          artifactDir: options.shell.artifactDir ?? null,
+          timeoutMs: options.shell.timeoutMs,
+          artifactMaxBytes: options.shell.artifactMaxBytes,
+          artifactTtlMs: options.shell.artifactTtlMs,
+          maxRunningPerSession: options.shell.maxRunningPerSession,
+          onError: (error, context) =>
+            console.warn(`[workerdeck] shell ${context.op} error (${context.shellId ?? context.sessionId ?? '-'}): ${String(error)}`),
+        })
+      : null
+  const projects = new ProjectInfoService({ decorate: (info) => (shells ? shells.decorate(info) : info) })
   const peers = options.peers?.enabled === false ? undefined : createPeerService({ refs, projects, options: options.peers })
   if (peers) {
     installPeerDirectory(peers)
@@ -194,7 +210,6 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     decorateInfo: (info) => projects.withProject(info),
   })
   const producedFiles = new ProducedFileStore()
-  const shell = options.shell?.enabled === true ? createShellService(options.shell) : null
   const registry = new SessionRegistry({
     // Every watcher here hands back its detach, and the registry runs them when the runner leaves. A hot reload is
     // the case that needs it: the runner outlives this server, and these closures would otherwise keep delivering
@@ -205,7 +220,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         producedFiles.watch(runner),
         profileUsage.watch(runner),
         spendLedger.watch(runner),
-        shell?.watch(runner),
+        shells?.watch(runner),
         peers?.watch(runner),
       ]
       const profile = runner.info().profile
@@ -343,7 +358,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     hostFilesWritable: options.hostFiles?.write === true,
     maxHostFileBytes: options.hostFiles?.maxFileBytes ?? 1024 * 1024,
     maxHostDirEntries: options.hostFiles?.maxEntries ?? 5000,
-    shell,
+    shells,
+    generation,
     pricingOverrides: Object.keys(pricing.overrides).length > 0 ? pricing.overrides : undefined,
   }
 
@@ -527,10 +543,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     queue,
     bridge,
     parking,
+    shells,
     listen: async (port, host) => {
       await profiles.refreshStored()
       await profiles.seedStore()
       await parking.hydrate()
+      await shells?.hydrate()
       return new Promise((resolve, reject) => {
         server.once('error', reject)
         server.listen(port, host, () => {
@@ -567,11 +585,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       const { timeoutMs = 30_000, pollMs = 250, onProgress } = drainOptions
       draining = true
       const deadline = Date.now() + timeoutMs
-      let report = surveyDrain(registry)
+      let report = surveyDrain(registry, shells)
       onProgress?.(report)
       while (report.working.length > 0 && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, pollMs))
-        const next = surveyDrain(registry)
+        const next = surveyDrain(registry, shells)
         // Only speak when something actually changed: a shutdown that reports on its own progress should be
         // readable, not a per-tick redraw of the same two lines.
         if (!sameDrain(next, report)) {
@@ -579,7 +597,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         }
         report = next
       }
-      report = { ...surveyDrain(registry), timedOut: false }
+      report = { ...surveyDrain(registry, shells), timedOut: false }
       report.timedOut = report.working.length > 0
       onProgress?.(report)
       return report
@@ -587,11 +605,14 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     close: () => {
       closing ??= new Promise((resolve) => {
         queue?.close()
+        // Before the runners close: their `session_closed` would settle every shell as `killed`, and a graceful stop is
+        // `server_stopped`. The index lands through `flushed` below, ahead of resolving.
+        shells?.killAll('server_stopped')
+        const flushed = shells?.flush().catch(() => {}) ?? Promise.resolve()
         // Ordering is load-bearing: parking's `#closed` guard must be set before the registry closes runners with
         // reason 'server', or shutdown discards every dormant record. See docs/GOTCHAS.md.
         parking.close()
         registry.closeAll()
-        shell?.killAll()
         // `wss` is `noServer`, so `wss.close()` only waits for `clients` to empty, and `server.closeAllConnections()`
         // never reaches an upgraded socket: close every client ourselves, then terminate what has not acknowledged.
         for (const ws of wss.clients) {
@@ -604,7 +625,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           }
         }, SOCKET_CLOSE_GRACE_MS)
         force.unref()
-        const deadline = setTimeout(() => resolve(), CLOSE_DEADLINE_MS)
+        const finish = (): void => void flushed.then(() => resolve())
+        const deadline = setTimeout(finish, CLOSE_DEADLINE_MS)
         deadline.unref()
         const drained = Promise.all([
           new Promise<void>((done) => wss.close(() => done())),
@@ -614,7 +636,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         void drained.then(() => {
           clearTimeout(force)
           clearTimeout(deadline)
-          resolve()
+          finish()
         })
       })
       return closing

@@ -1,4 +1,5 @@
-import type { SessionInfo, SubagentInfo } from './index.ts'
+import { SHELL_LINGER_MS, SHELL_PROMOTE_MS } from './index.ts'
+import type { SessionInfo, ShellInfo, SubagentInfo } from './index.ts'
 
 export type SessionState = 'attention' | 'working' | 'idle' | 'ended'
 
@@ -155,6 +156,18 @@ export function projectSubpath(row: Pick<SessionRow, 'info'>): string | undefine
 
 export function isJobRun(info: SessionInfo): boolean {
   return typeof info.meta?.jobId === 'string'
+}
+
+export function promotedShells(info: SessionInfo, now: number): ShellInfo[] {
+  return (info.shells ?? []).filter((shell) => {
+    if (shell.status === 'running') {
+      return now - shell.startedAt >= SHELL_PROMOTE_MS
+    }
+    if (shell.endedAt === undefined || shell.exitCode === 0) {
+      return false
+    }
+    return shell.endedAt - shell.startedAt >= SHELL_PROMOTE_MS && now - shell.endedAt < SHELL_LINGER_MS
+  })
 }
 
 function matchesSearch(row: SessionRow, needle: string): boolean {

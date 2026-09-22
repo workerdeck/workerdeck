@@ -30,7 +30,7 @@ import { formatBytes } from '../../lib/format.ts'
 export type ComposerFileMatch = { path: string; relative: string }
 
 const SHELL_PLACEHOLDER = 'Run a command on the host…'
-const SHELL_HINT = '! shell mode · esc to exit'
+const SHELL_HINT = '$ shell mode · esc to exit'
 
 export type ComposerHandle = {
   insertText: (text: string) => void
@@ -52,7 +52,7 @@ export interface ComposerProps {
   // The other sessions on this gateway, offered on `#`. The token is a hint the gateway resolves at
   // send: it never messages the named session, and an unresolvable name stays ordinary text.
   peers?: readonly PeerSessionOption[]
-  // Shell mode: `!` as the first character turns the composer into a host shell prompt. Omit to leave the
+  // Shell mode: `$` as the first character turns the composer into a host shell prompt. Omit to leave the
   // mode off entirely - the gateway only offers it to an operator on a session whose engine reaches a host cwd.
   onShellCommand?: (command: string) => void
   attachments?: UseAttachmentsResult
@@ -197,7 +197,7 @@ export function Composer({
     if (onShellCommand) {
       configured.push(
         launchTrigger({
-          char: '!',
+          char: '$',
           accessibilityLabel: 'shell mode',
           onActivate: () => setShellMode(true),
         }),
@@ -237,8 +237,13 @@ export function Composer({
     focus()
   }
 
-  const leaveShellMode = () => {
+  // Escape puts the `$` the trigger swallowed back: the person meant to type it. Backspace does not, because
+  // backspace on an empty composer is a delete and leaving nothing behind is what a delete means.
+  const leaveShellMode = (restore: boolean) => {
     setShellMode(false)
+    if (restore) {
+      bind.ref.current?.setText(`$${plainText}`)
+    }
     focus()
   }
 
@@ -246,18 +251,18 @@ export function Composer({
     triggers?.some((t) => t.char === '/') ? { key: '/', what: 'commands and skills' } : undefined,
     onSearchFiles ? { key: '@', what: 'mention a file' } : undefined,
     peers?.length ? { key: '#', what: 'refer to another session' } : undefined,
-    onShellCommand ? { key: '!', what: 'run a shell command' } : undefined,
+    onShellCommand ? { key: '$', what: 'run a shell command' } : undefined,
     { key: '?', what: 'this list, on an empty composer' },
   ].filter((h) => h !== undefined)
   // Escape and backspace-on-empty both leave, because both are what a person reaches for when the
-  // pink frame was not what they meant. Backspace only when there is nothing left to delete.
+  // magenta frame was not what they meant. Backspace only when there is nothing left to delete.
   const shellKeys = shellMode
     ? {
-        onEscape: leaveShellMode,
+        onEscape: () => leaveShellMode(true),
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
           if (e.key === 'Backspace' && isEmpty) {
             e.preventDefault()
-            leaveShellMode()
+            leaveShellMode(false)
           }
         },
       }
@@ -329,8 +334,8 @@ export function Composer({
   ) : null
 
   const gutter = shellMode ? (
-    <GlyphButton gutter label="Leave shell mode" tone="magenta" onClick={leaveShellMode}>
-      !
+    <GlyphButton gutter label="Leave shell mode" tone="magenta" onClick={() => leaveShellMode(false)}>
+      $
     </GlyphButton>
   ) : busy ? (
     <GlyphButton gutter label="Interrupt" tone="yellow" onClick={onInterrupt}>
@@ -468,7 +473,7 @@ export function Composer({
         {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
         {inline ? (
           <div className="flex items-end gap-1 p-1">
-            {shellMode ? <ShellBadge onLeave={leaveShellMode} /> : attach}
+            {shellMode ? <ShellBadge onLeave={() => leaveShellMode(false)} /> : attach}
             <PromptArea
               {...bind}
               triggers={triggers}
@@ -505,7 +510,7 @@ export function Composer({
             />
             <div className="flex items-center justify-between gap-2 px-2 pb-2">
               <div className="flex min-w-0 items-center gap-1">
-                {shellMode ? <ShellBadge onLeave={leaveShellMode} /> : attach}
+                {shellMode ? <ShellBadge onLeave={() => leaveShellMode(false)} /> : attach}
                 {shellMode ? <span className="text-label text-text-muted">{SHELL_HINT}</span> : toolbar}
               </div>
               {submitButton}
@@ -635,7 +640,7 @@ function ShellBadge({ onLeave }: { onLeave: () => void }) {
       onClick={onLeave}
       className="shrink-0 rounded px-1.5 py-0.5 font-mono text-label font-semibold text-[var(--wd-shell-accent)]"
     >
-      !
+      $
     </button>
   )
 }

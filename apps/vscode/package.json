@@ -702,7 +702,7 @@
           "type": "boolean",
           "default": false,
           "scope": "machine",
-          "description": "Let `!` commands typed in the composer run on this machine. Off by default and its own switch: unlike an agent's Bash tool, a `!` command goes through no permission prompt at all."
+          "description": "Let `$` commands typed in the composer run on this machine. Off by default and its own switch: unlike an agent's Bash tool, a `$` command goes through no permission prompt at all."
         },
         "workerdeck.host.binaryPath": {
           "type": "string",

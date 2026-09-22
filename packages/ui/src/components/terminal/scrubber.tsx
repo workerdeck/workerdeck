@@ -7,7 +7,7 @@ import { parentOf } from './blocks.ts'
 import { TerminalSurface } from './surface.tsx'
 
 type Lane = 'l' | 'r' | 'f'
-type MarkKind = 'user' | 'subagent' | 'turn' | 'turnFailed' | 'toolFailed' | 'error' | 'approval' | 'recap' | 'bookmark'
+type MarkKind = 'user' | 'subagent' | 'shell' | 'turn' | 'turnFailed' | 'toolFailed' | 'error' | 'approval' | 'recap' | 'bookmark'
 
 type Mark = {
   kind: MarkKind
@@ -31,6 +31,7 @@ function nearestMember(cluster: Cluster, y: number): Mark | undefined {
 const LANE: Record<MarkKind, Lane> = {
   user: 'l',
   subagent: 'l',
+  shell: 'l',
   turn: 'r',
   turnFailed: 'r',
   toolFailed: 'r',
@@ -49,12 +50,14 @@ const LOUDNESS: Record<MarkKind, number> = {
   turn: 2,
   bookmark: 1,
   subagent: 1,
+  shell: 1,
   recap: 0,
 }
 
 const KIND_NAME: Record<MarkKind, string> = {
   user: 'you',
   subagent: 'sub-agent',
+  shell: 'shell',
   turn: 'response · turn end',
   turnFailed: 'turn failed',
   toolFailed: 'tool failed',
@@ -83,6 +86,9 @@ function excerpt(item: TranscriptItem): string {
     case 'thinking':
     case 'notice': {
       return item.text
+    }
+    case 'shell': {
+      return item.shell.command
     }
     case 'tool_call': {
       return `${item.name}(${toolInputPreview(item.input)})`
@@ -174,6 +180,8 @@ export function buildClusters(props: TerminalScrubberProps, railH: number): Clus
       closeSegment()
     } else if (item.kind === 'notice' && item.level === 'error') {
       marks.push({ kind: 'error', itemIndex: index, rowIndex: rowIndexFor(index) })
+    } else if (item.kind === 'shell') {
+      marks.push({ kind: 'shell', itemIndex: index, rowIndex: rowIndexFor(index) })
     } else if (
       item.kind === 'tool_call' &&
       (item.status === 'failed' || item.result?.isError === true) &&

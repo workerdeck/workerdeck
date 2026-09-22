@@ -20,6 +20,7 @@ import type {
   ProfileInfo,
   QueueStats,
   ResolvePermissionRequest,
+  ShellInfo,
   UpdateSessionRequest,
   SubmitExecutionResultRequest,
   SubmitExecutionResultResponse,
@@ -258,6 +259,39 @@ export class WorkerDeckClient {
   async queueStats(): Promise<QueueStats> {
     const body = await this.#call('GET', '/queue')
     return (body as { stats: QueueStats }).stats
+  }
+
+  async listShells(sessionId: string): Promise<ShellInfo[]> {
+    const body = await this.#call('GET', `/sessions/${encodeURIComponent(sessionId)}/shells`)
+    return (body as { shells: ShellInfo[] }).shells
+  }
+
+  async getShell(sessionId: string, shellId: string): Promise<ShellInfo> {
+    const body = await this.#call('GET', `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}`)
+    return (body as { shell: ShellInfo }).shell
+  }
+
+  async shellOutput(sessionId: string, shellId: string, options?: { view?: 'text' | 'raw'; tail?: number }): Promise<string> {
+    const search = new URLSearchParams()
+    if (options?.view) {
+      search.set('view', options.view)
+    }
+    if (options?.tail !== undefined) {
+      search.set('tail', String(options.tail))
+    }
+    const qs = search.size > 0 ? `?${search.toString()}` : ''
+    const path = `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}/output${qs}`
+    const res = await this.#callRaw(
+      `${this.#options.baseUrl}${path}`,
+      { headers: { ...this.#options.headers } },
+      'shell output request failed',
+    )
+    return await res.text()
+  }
+
+  async killShell(sessionId: string, shellId: string): Promise<ShellInfo> {
+    const body = await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}/kill`)
+    return (body as { shell: ShellInfo }).shell
   }
 
   attach(sessionId: string, options?: AttachOptions): SessionHandle {

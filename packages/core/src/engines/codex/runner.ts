@@ -21,7 +21,7 @@ import {
 } from '@workerdeck/protocol'
 import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
 import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
-import { localCommandContext, localCommandTranscript, type LocalCommandResult } from '../../lib/local-command.ts'
+import { LocalCommandQueue, localCommandEvent, type LocalCommandResult, type LocalShellSource } from '../../lib/local-command.ts'
 import { parseUnifiedDiff } from '../../lib/patch.ts'
 import type { PermissionDecision, Runner, SendMessageOptions, SessionEventListener } from '../../runner-interface.ts'
 import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
@@ -603,7 +603,7 @@ export class CodexRunner implements Runner {
   #planType: string | undefined
   #resolvedEffort: string | undefined
   #queue: QueuedTurn[] = []
-  #pendingLocalCommands: string[] = []
+  #localCommands = new LocalCommandQueue((text, uuid, shell) => this.#emit(localCommandEvent(text, uuid, shell)))
   #turnChain: Promise<void> = Promise.resolve()
   #activeTurn: ActiveTurn | undefined
   #connection: AppServerConnection | undefined
@@ -901,27 +901,18 @@ export class CodexRunner implements Runner {
     if (text) {
       parts.push({ type: 'text', text })
     }
-    const context = localCommandContext(this.#pendingLocalCommands)
-    this.#pendingLocalCommands = []
+    const context = this.#localCommands.take()
     if (context) {
       parts.unshift({ type: 'text', text: context })
     }
     return withSkillItems(parts, this.#skillPaths)
   }
 
-  queueLocalCommand(result: LocalCommandResult): void {
+  queueLocalCommand(input: LocalCommandResult | LocalShellSource): void {
     if (this.#closed) {
       throw new Error('session is closed')
     }
-    const text = localCommandTranscript(result)
-    this.#pendingLocalCommands.push(text)
-    this.#emit({
-      type: 'user_message',
-      message: { role: 'user', content: text },
-      parentToolUseId: null,
-      synthetic: true,
-      uuid: randomUUID(),
-    })
+    this.#localCommands.push(input)
   }
 
   resolvePermission(requestId: string, decision: PermissionDecision): boolean {
@@ -985,7 +976,7 @@ export class CodexRunner implements Runner {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'the conversation was cleared' }, 'policy')
     }
     this.#resumedHistory = undefined
-    this.#pendingLocalCommands = []
+    this.#localCommands.clear()
     this.#emit({ type: 'conversation_reset', sdkSessionId: this.#resumableThreadId() })
   }
 
@@ -1046,7 +1037,7 @@ export class CodexRunner implements Runner {
     }
     this.#closed = true
     this.#queue.length = 0
-    this.#pendingLocalCommands = []
+    this.#localCommands.clear()
     for (const [id, pending] of this.#approvals) {
       this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
     }

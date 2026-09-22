@@ -26,18 +26,22 @@ type Resolution = {
 
 export class ProjectInfoService {
   readonly #ttlMs: number
+  readonly #decorate: (info: SessionInfo) => SessionInfo
   readonly #byCwd = new Map<string, Resolution>()
 
-  constructor(options: { ttlMs?: number } = {}) {
+  // `decorate` runs after the project lookup on every info this service hands out: `withProject` is the one funnel
+  // every SessionInfo leaves the server through, so the shell list rides it rather than a second call at every site.
+  constructor(options: { ttlMs?: number; decorate?: (info: SessionInfo) => SessionInfo } = {}) {
     this.#ttlMs = options.ttlMs ?? DEFAULT_TTL_MS
+    this.#decorate = options.decorate ?? ((info) => info)
   }
 
   withProject(info: SessionInfo): SessionInfo {
     if (!info.cwd) {
-      return info
+      return this.#decorate(info)
     }
     const project = this.#resolve(info.cwd).project
-    return project ? { ...info, project } : info
+    return this.#decorate(project ? { ...info, project } : info)
   }
 
   iconFor(cwd: string): ResolvedProjectIcon | undefined {

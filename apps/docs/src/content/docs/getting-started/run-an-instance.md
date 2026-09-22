@@ -96,27 +96,33 @@ containment is decided on the resolved real path - a symlink pointing at `~/.ssh
 followed - but everything genuinely *inside* a root is readable. Point it at your projects, not
 your home directory.
 
-## Shell mode (`!` in the composer)
+## Shell mode (`$` in the composer)
 
 ```bash
 npx workerdeck --cwd-root ~/projects --shell
 ```
 
-With `--shell`, typing `!` as the first character of the composer turns it into a shell prompt:
+With `--shell`, typing `$` as the first character of the composer turns it into a shell prompt:
 the rest of the line runs on the host, in the session's working directory, and the output lands
-in the transcript. It is Claude Code's own `!` mode, on the remote surfaces. As in the CLI, the
-command does **not** start a turn - the output reaches the model with your next message, so you
-can run `!git status` and then ask about it.
+in the transcript. As in Claude Code's own shell mode, the command does **not** start a turn - the
+output reaches the model with your next message, so you can run `$ git status` and then ask about
+it.
 
-**This is not the agent's Bash tool.** A tool call raises a permission prompt you can deny. A `!`
+Every command is a real terminal (a PTY), tracked as a shell record: the transcript row names it,
+bounds the output to a few lines and expands to the whole capture, and the record says whether the
+command is still running, what it exited with, or that the gateway was restarted under it. Long
+commands keep running; a stop names them before it kills them.
+
+**This is not the agent's Bash tool.** A tool call raises a permission prompt you can deny. A `$`
 command goes through nothing at all: no prompt, no allowlist, no `disableBypassPermissions`. It is
 a shell on whatever the gateway process can reach. That is why it is off by default and why it is
 its own flag rather than something `--cwd-root` implies.
 
 Only an **operator** - a caller holding the auth key, with no session scope - is ever offered it;
 an embedded end-user session is not, and neither is a sandboxed provider session, which has no host
-working directory to run in. One command runs at a time per session, capped at 120 seconds and
-32 KiB of output, and it is killed with its process group when the session closes or parks.
+working directory to run in. There is no default time limit; the captured output is capped on disk
+rather than in the running process, and every shell is killed with its process group when the
+session closes or parks.
 
 ## Options
 

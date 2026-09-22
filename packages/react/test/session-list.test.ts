@@ -12,12 +12,13 @@ import {
   projectName,
   projectSubpath,
   projectsOf,
+  promotedShells,
   scopeActive,
   sessionLabel,
   sessionState,
   subsetSummary,
 } from '@workerdeck/protocol'
-import type { SessionInfo, SessionRow, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
+import type { SessionInfo, SessionRow, ShellInfo, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 
 function info(over: Partial<SessionInfo> = {}): SessionInfo {
   return {
@@ -309,5 +310,44 @@ describe('project facet', () => {
     expect(subsetSummary(filtered, undefined, 1, 2)?.causes).toEqual(['1 filter'])
     expect(hasFacetFilter(filtered)).toBe(true)
     expect(clearFilters(filtered).projects).toEqual([])
+  })
+})
+
+function shell(over: Partial<ShellInfo> = {}): ShellInfo {
+  return {
+    id: 'sh_1',
+    sessionId: 'sess-00000001',
+    ordinal: 1,
+    command: 'npm run dev',
+    label: 'npm run dev',
+    cwd: '/work/alpha',
+    owner: 'user',
+    status: 'running',
+    startedAt: 0,
+    bytes: 0,
+    cols: 120,
+    rows: 40,
+    ...over,
+  }
+}
+
+describe('promotedShells', () => {
+  it('keeps a running shell hidden until the debounce elapses', () => {
+    const running = shell({ status: 'running', startedAt: 1000 })
+    expect(promotedShells(info({ shells: [running] }), 1000 + 2999)).toEqual([])
+    expect(promotedShells(info({ shells: [running] }), 1000 + 3000)).toEqual([running])
+  })
+
+  it('vanishes a zero exit immediately, even long after it ran', () => {
+    const clean = shell({ status: 'exited', startedAt: 0, endedAt: 10_000, exitCode: 0 })
+    expect(promotedShells(info({ shells: [clean] }), 10_000)).toEqual([])
+    expect(promotedShells(info({ shells: [clean] }), 10_001)).toEqual([])
+  })
+
+  it('lingers a non-zero exit for SHELL_LINGER_MS, then drops it', () => {
+    const failed = shell({ status: 'exited', startedAt: 0, endedAt: 3000, exitCode: 1 })
+    expect(promotedShells(info({ shells: [failed] }), 3000)).toEqual([failed])
+    expect(promotedShells(info({ shells: [failed] }), 3000 + 60_000 - 1)).toEqual([failed])
+    expect(promotedShells(info({ shells: [failed] }), 3000 + 60_000)).toEqual([])
   })
 })

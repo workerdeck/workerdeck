@@ -10,6 +10,9 @@ export type SessionRoute = {
   mcpServer?: string
   produced?: boolean
   producedFileId?: string
+  shells?: boolean
+  shellId?: string
+  shellAction?: 'output' | 'kill'
   resultSeq?: number
   projectIcon?: boolean
 }
@@ -45,6 +48,18 @@ export function parseSessionRoute(basePath: string, url: string): SessionRoute |
       id: decodeURIComponent(parts[0]!),
       produced: true,
       producedFileId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
+    }
+  }
+  if (parts[1] === 'shells' && parts.length <= 4) {
+    const action = parts[3]
+    if (action !== undefined && action !== 'output' && action !== 'kill') {
+      return null
+    }
+    return {
+      id: decodeURIComponent(parts[0]!),
+      shells: true,
+      shellId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
+      shellAction: action,
     }
   }
   if (parts.length === 3 && parts[1] === 'project' && parts[2] === 'icon') {

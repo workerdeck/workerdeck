@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { MessageOrigin } from '@workerdeck/protocol'
-import type { TranscriptItem } from '@workerdeck/react'
+import type { ShellItem, TranscriptItem } from '@workerdeck/react'
 import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
@@ -17,6 +17,8 @@ import { useToolTitle } from '../agent/tool-titles.tsx'
 import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
 import { isPeerSend, peerName, peerOneLine, peerSendTarget, peerSendText, planRun, runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
+import { useShellActions } from '../agent/shell-actions.tsx'
+import { SHELL_GLYPH, SHELL_KILL_GLYPH, shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from './shell-row.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
@@ -383,6 +385,87 @@ export function NoticeRow({ item }: { item: Extract<TranscriptItem, { kind: 'not
     <Row glyph="!" glyphTone={error ? 'red' : 'yellow'} tone={error ? 'red' : 'dim'}>
       {item.text}
     </Row>
+  )
+}
+
+export function ShellRow({ item }: { item: ShellItem }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const actions = useShellActions()
+  const reveal = useRevealOnOpen(open)
+  const running = item.shell.status === 'running'
+  const failed = shellFailed(item)
+  const tone: Tone = failed ? 'red' : running ? 'magenta' : 'dim'
+  const lines = shellBodyLines(item, open)
+  const footer = shellFooterText(item, open, lines.length)
+
+  const shellId = item.shell.id
+  const verify = actions.verify
+  useEffect(() => {
+    if (running) {
+      void verify(shellId)
+    }
+  }, [running, shellId, verify])
+
+  const press = () => {
+    const next = !open
+    setOpen(next)
+    if (!next || !item.truncated || item.expanded !== undefined || item.missing) {
+      return
+    }
+    setBusy(true)
+    void actions.loadOutput(shellId).finally(() => setBusy(false))
+  }
+
+  return (
+    <div ref={reveal} className={open ? 'term-open' : undefined}>
+      <WithActions
+        actions={
+          <>
+            <BookmarkAction id={item.id} />
+            <CopyAction text={item.shell.command} label="Copy command" />
+          </>
+        }
+      >
+        <Pressable onPress={press} expanded={open}>
+          <Row glyph={SHELL_GLYPH} glyphTone={tone} tone="fg">
+            <Ink bold tone="bright">
+              {shellLabel(item)}
+            </Ink>
+            <Ink tone={failed ? 'red' : 'faint'}>
+              {' · '}
+              {shellStatusText(item)}
+            </Ink>
+            {running ? (
+              <button
+                type="button"
+                aria-label="Kill this shell"
+                title="Kill this shell"
+                className="term-press term-link"
+                data-tone="red"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void actions.kill(shellId)
+                }}
+              >
+                {' '}
+                {SHELL_KILL_GLYPH}
+              </button>
+            ) : null}
+          </Row>
+        </Pressable>
+        {lines.map((line, index) => (
+          <Row key={index} indent={1} columns={3} glyph={index === 0 ? '⎿' : undefined} tone={failed ? 'red' : 'dim'}>
+            {line || ' '}
+          </Row>
+        ))}
+        {footer || busy ? (
+          <Row indent={1} columns={3} tone="faint">
+            {busy ? '… fetching the full output' : footer}
+          </Row>
+        ) : null}
+      </WithActions>
+    </div>
   )
 }
 
