@@ -49,7 +49,13 @@ export function SubagentToggle({ value, onChange, className }: SubagentTogglePro
     <Menu>
       <MenuTrigger
         render={
-          <Button variant="ghost" size="icon-sm" aria-label={`Sub-agents: ${meta.label}`} title={meta.hint} className={cn('w-9 gap-0.5', className)}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Sub-agents: ${meta.label}`}
+            title={meta.hint}
+            className={cn('w-9 gap-0.5', className)}
+          >
             <SubagentDisplayIcon value={value} className="size-4" />
             <ChevronDown className="size-2.5 text-fg-4" />
           </Button>
