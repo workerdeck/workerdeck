@@ -3,6 +3,7 @@ import { sanitizeToolTitle } from '@workerdeck/protocol'
 import type { McpServerConfigWire, McpServerStatusInfo, McpServerToolInfo, ProfileInfo, SessionCapability } from '@workerdeck/protocol'
 import { createVfs } from '@workerdeck/sandbox'
 import { AiSdkRunner, type AiSdkRunnerConfig } from './runner.ts'
+import { composeInstructions, type SessionInstructions } from '../../lib/instructions.ts'
 import {
   createToolContext,
   withHostTools,
@@ -29,7 +30,7 @@ export type EngineSessionOptions = {
   mcp?: McpConnection
   mcpTools?: ToolSet
   tools?: Record<string, HostToolDefinition>
-  instructions?: string
+  instructions?: SessionInstructions
   executionLimits?: { timeoutMs?: number; memoryLimitBytes?: number }
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
   approvalTimeoutMs?: number | null
@@ -109,7 +110,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     {
       ...options.config,
       languageModel: options.resolveModel(options.profile, options.config),
-      instructions: options.profile?.session?.instructions ?? options.instructions ?? options.config.instructions,
+      instructions: composeInstructions(options.profile?.session?.instructions, options.instructions, options.config.instructions),
       tools: context.tools,
       vfs,
       executor,

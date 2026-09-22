@@ -26,7 +26,17 @@ const { port } = await worker.listen(8787)
 - `allowedCwdRoots` - session `cwd` must resolve inside one of these roots; strongly recommended.
 - `buildRunnerConfig` - map/patch the incoming `CreateSessionRequest` into the runner config:
   inject `env`, tool policy, per-skill constraints. The server trusts its host app, so this hook
-  plus your auth is where you clamp what clients may request.
+  plus your auth is where you clamp what clients may request. The request reaching it has already
+  been projected onto the protocol's own key set, so a client cannot smuggle a host-only field
+  (`env`, `extraOptions`, `instructions`, an executable path) into the config by putting it in the
+  JSON body.
+- `instructions` - a system instruction the model reads and the transcript never shows, set here
+  and nowhere else. Either a string or `(context) => string`, resolved once per runner against
+  `{ sessionId, cwd, profile }`, so an instruction can name the session it is running in. It
+  reaches claude as an append to the Claude Code preset, codex as `developerInstructions` and a
+  provider session as the agent's instructions, and it survives `/clear`, compaction and a resume.
+  It is deliberately **not** persisted with a parked session: put the durable part in `meta` and
+  derive the text from it, so a dormant wake rebuilds the same instruction under the same id.
 
 The full options reference lives at [Server](/workerdeck/docs/reference/server/).
 
