@@ -222,6 +222,10 @@ struct SessionView: View {
       // The other end of the truncating attach: a row presses, this fetches, and
       // the text lands in transcript state rather than in the row that asked.
       .environment(\.toolResultFetcher, { vm.loadFullResult(toolUseId: $0) })
+      // The `$` row's two presses: expanding fetches the artifact's text view,
+      // and the header's `✕` stops the process.
+      .environment(\.shellOutputFetcher, { vm.loadShellOutput(shellId: $0) })
+      .environment(\.shellKiller, { vm.killShell(shellId: $0) })
       .environment(\.attachmentLoader, attachmentLoader)
       .environment(\.producedImageLoader, producedImages)
       // The other end of the ref'd attach: a box scrolls into view, this fetches
@@ -689,14 +693,14 @@ struct SessionView: View {
         attachments: attachments,
         canAddMedia: !acceptedKinds.isEmpty && !isShellMode,
         isShellMode: isShellMode,
-        onLeadingTrigger: enterShellMode(on:),
+        onLeadingTrigger: shellTrigger(on:),
         onEdit: { text, caret in
           completion.update(for: text, cursor: Range(caret, in: text)?.lowerBound)
         },
         onSend: send,
         onStop: { vm.interrupt() },
         onAddMedia: { sheet = .addMedia },
-        onExitShell: { isShellMode = false })
+        onExitShell: exitShellMode)
     }
     .padding(.horizontal, docked ? 0 : gutter)
     .padding(.top, 8)
@@ -800,15 +804,35 @@ struct SessionView: View {
     selection = NSRange(location: result.cursor.utf16Offset(in: result.text), length: 0)
   }
 
-  /// `!` typed as the first character of an empty field flips the composer into shell mode
+  /// `$` typed as the first character of an empty field flips the composer into shell mode
   /// and is **swallowed before it is inserted**, exactly as the desktop composer's launch
   /// trigger suppresses it. The field guarantees the "first character, empty field" part, so
-  /// a `!` typed inside a sentence is just a `!`.
-  private func enterShellMode(on character: String) -> Bool {
-    guard !isShellMode, vm.canRunShell, character == "!" else { return false }
-    isShellMode = true
-    completion.cancel()
-    return true
+  /// a `$` typed inside a sentence is just a `$`, and `!ls` is a message that says `!ls`.
+  ///
+  /// The rule itself is the kit's (`TerminalShell.composerTrigger`), shared with
+  /// every other client: backspace on an empty shell prompt leaves the mode and
+  /// leaves the field empty, where the deliberate exit puts the `$` back.
+  private func shellTrigger(on character: String) -> Bool {
+    switch TerminalShell.composerTrigger(
+      character: character, isShellMode: isShellMode, canRunShell: vm.canRunShell)
+    {
+    case .enter:
+      isShellMode = true
+      completion.cancel()
+      return true
+    case .leave:
+      isShellMode = false
+      return true
+    case .pass:
+      return false
+    }
+  }
+
+  /// Leaving shell mode on purpose - the gutter `$`, this phone's Escape.
+  private func exitShellMode() {
+    isShellMode = false
+    draft = TerminalShell.exitDraft(draft)
+    selection = NSRange(location: (draft as NSString).length, length: 0)
   }
 
   private func send() {

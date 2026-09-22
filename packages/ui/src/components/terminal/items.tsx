@@ -5,7 +5,7 @@ import { compactionText, formatBytes, formatCost, formatDuration, toolInputPrevi
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { PromptTokenText } from '../agent/PromptTokenText.tsx'
-import { BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
+import { BookmarkAction, CopyAction, OpenShellAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { usePeerNames } from './peer-names.tsx'
@@ -422,6 +422,7 @@ export function ShellRow({ item }: { item: ShellItem }) {
       <WithActions
         actions={
           <>
+            {actions.open ? <OpenShellAction onOpen={() => actions.open?.(shellId)} /> : null}
             <BookmarkAction id={item.id} />
             <CopyAction text={item.shell.command} label="Copy command" />
           </>

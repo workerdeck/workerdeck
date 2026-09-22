@@ -68,6 +68,25 @@ public func runningSubagents(_ info: SessionInfo) -> [SubagentInfo] {
   (info.subagents ?? []).filter { $0.status == .running }
 }
 
+/// The shells a list row draws - the mirror of protocol's `promotedShells`.
+///
+/// A row is not a shell log: a `$ ls` that ran for 40ms and exited 0 is noise on
+/// a card, and every client must agree on which ones earn a line. Running counts
+/// once it has lasted ``WorkerProtocol/shellPromoteMs`` (that is what separates
+/// `npm run dev` from `ls`); a failure counts for
+/// ``WorkerProtocol/shellLingerMs`` after it ended, and only if it ran long
+/// enough to have been promoted while it lived.
+public func promotedShells(_ info: SessionInfo, now: Double) -> [ShellInfo] {
+  (info.shells ?? []).filter { shell in
+    if shell.status == .running {
+      return now - shell.startedAt >= WorkerProtocol.shellPromoteMs
+    }
+    guard let endedAt = shell.endedAt, shell.exitCode != 0 else { return false }
+    return endedAt - shell.startedAt >= WorkerProtocol.shellPromoteMs
+      && now - endedAt < WorkerProtocol.shellLingerMs
+  }
+}
+
 /// How much of a session's sub-agent list its card draws. A layout preference,
 /// not a facet filter, so `clearFilters` preserves it the way it preserves
 /// grouping and sort. Mirror of protocol's `SubagentDisplay`.

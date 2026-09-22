@@ -156,7 +156,7 @@ const LOCAL_COMMAND_OUTPUT = /^<local-command-(stdout|stderr)>([\s\S]*?)<\/local
 const LOCAL_COMMAND_ELEMENT = /<local-command-(stdout|stderr)>([\s\S]*?)<\/local-command-\1>/g
 const LOCAL_COMMAND_CAVEAT = '<local-command-caveat>'
 
-const SHELL_MORE_LINES = /^\[\.\.\. [\d,]+ more lines \.\.\.\]$/
+const SHELL_MORE_OUTPUT = /^\[\.\.\. more output \.\.\.\]$/
 const SHELL_END_LINE = /^\[(exit -?\d+|killed|timed out|ended|failed to start)[^\]]*\]$/
 
 export type ShellItem = Extract<TranscriptItem, { kind: 'shell' }>
@@ -174,7 +174,7 @@ export function shellRowText(shell: ShellInfo, text: string): { text: string; tr
   }
   let truncated = false
   const kept = lines.filter((line) => {
-    if (!SHELL_MORE_LINES.test(line)) {
+    if (!SHELL_MORE_OUTPUT.test(line)) {
       return true
     }
     truncated = true

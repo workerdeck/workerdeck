@@ -113,6 +113,12 @@ bounds the output to a few lines and expands to the whole capture, and the recor
 command is still running, what it exited with, or that the gateway was restarted under it. Long
 commands keep running; a stop names them before it kills them.
 
+A row also **opens as a terminal**. The row's `⤢` action drills into a full pane on that PTY: the
+scrollback is replayed into it, what you type goes to the process, and resizing the pane resizes
+the shell, so `$ vim`, `$ top` or a prompt waiting on an answer all work. The shell outlives the
+pane and the browser tab - leaving detaches, it does not kill - and several clients can attach to
+one shell at once, sharing a size. Kill is still explicit, from the row or the pane.
+
 **This is not the agent's Bash tool.** A tool call raises a permission prompt you can deny. A `$`
 command goes through nothing at all: no prompt, no allowlist, no `disableBypassPermissions`. It is
 a shell on whatever the gateway process can reach. That is why it is off by default and why it is

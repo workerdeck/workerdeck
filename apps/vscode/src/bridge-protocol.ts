@@ -35,7 +35,7 @@ export type SurfaceTarget = 'editor' | 'editor-beside'
 export type SidebarState = {
   hosts: WireHost[]
   sessions: Record<string, SessionInfo[]>
-  selected?: { hostId: string; sessionId: string; subagentToolUseId?: string }
+  selected?: { hostId: string; sessionId: string; subagentToolUseId?: string; shellId?: string }
   scope?: WorkspaceScope
   unseen?: Record<string, number>
   // `host:session` keys of the sessions an editor tab holds.
@@ -94,6 +94,10 @@ export type PanelToHost =
       kind: 'wd-subagent-open'
       toolUseId?: string
     }
+  | {
+      kind: 'wd-shell-open'
+      shellId?: string
+    }
 
 export type HostToPanel =
   | TransportToWebview
@@ -127,6 +131,11 @@ export type HostToPanel =
   | {
       kind: 'wd-reveal-tool-use'
       toolUseId: string
+      nonce: number
+    }
+  | {
+      kind: 'wd-open-shell'
+      shellId: string
       nonce: number
     }
 

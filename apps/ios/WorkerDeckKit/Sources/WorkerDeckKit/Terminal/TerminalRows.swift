@@ -332,6 +332,9 @@ private func itemCopyText(_ item: TranscriptItem) -> String? {
   case .compaction:
     // Drawn verbatim and nobody typed it, like the done-line above.
     return nil
+  case .shell(let item):
+    // The command, never the output: it is what the reader would run again.
+    return item.shell.command.isEmpty ? nil : item.shell.command
   }
 }
 

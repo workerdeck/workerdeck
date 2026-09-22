@@ -8,8 +8,11 @@ import {
   shellFailed,
   shellFooterText,
   shellHeaderText,
+  shellInfoFailed,
+  shellInfoStatusText,
   shellLabel,
   shellStatusText,
+  shellTitle,
 } from '../src/components/terminal/shell-row.ts'
 
 function shell(overrides: Partial<ShellInfo> = {}): ShellInfo {
@@ -63,6 +66,19 @@ describe('the shell row', () => {
     expect(shellFooterText(item(), false, 2)).toBeUndefined()
     expect(shellFooterText(item({ truncated: true }), false, 2)).toContain('expand')
     expect(shellFooterText(item({ missing: true }), false, 2)).toBe(SHELL_MISSING)
+  })
+
+  it('titles the drill-in strip by ordinal and label', () => {
+    expect(shellTitle(shell())).toBe('#3 npm run dev')
+    expect(shellTitle(shell({ label: '', command: 'pnpm test\nmore' }))).toBe('#3 pnpm test')
+  })
+
+  it('reads a record with no row the same way the row does', () => {
+    const record = shell({ status: 'exited', exitCode: 2, endedAt: 2000, endReason: 'exit' })
+    expect(shellInfoStatusText(record)).toBe('exit 2')
+    expect(shellInfoFailed(record)).toBe(true)
+    expect(shellInfoStatusText(shell())).toBe('running')
+    expect(shellInfoFailed(shell())).toBe(false)
   })
 
   it('marks a shell row in the input lane', () => {

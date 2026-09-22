@@ -23,6 +23,7 @@ export type SurfaceDelegate = {
   openPanel: (surface: AnySurface, panel: SessionSurfacePanel) => Promise<void>
   vitals: (surface: AnySurface) => void
   subagent: (surface: AnySurface) => void
+  shell: (surface: AnySurface) => void
   unseen: (hostId: string, sessionId: string) => { itemCount: number; since: number } | undefined
   visibilityChanged: (surface: AnySurface) => void
   focused: (surface: AnySurface) => void
@@ -42,12 +43,12 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   protected readonly delegate: SurfaceDelegate
 
   #focusPending = false
-  // The single read-request slot: `openSubagent` and `reveal` go to different panel APIs
-  // but at most one can ever be pending - asking for either withdraws the other. One slot
+  // The single read-request slot: `openSubagent`, `reveal` and `openShell` go to different panel
+  // APIs but at most one can ever be pending - asking for any withdraws the others. One slot
   // makes that mutual exclusion structural. The shared nonce is strictly increasing, so a
   // repeated ask of the same kind still reads as new on the webview side ("asking twice
-  // means twice": `openSubagent`/`reveal` land in props).
-  #pending: { kind: 'wd-open-subagent' | 'wd-reveal-tool-use'; toolUseId: string } | undefined
+  // means twice": `openSubagent`/`reveal`/`openShell` land in props).
+  #pending: { kind: 'wd-open-subagent' | 'wd-reveal-tool-use' | 'wd-open-shell'; id: string } | undefined
   #pendingNonce = 0
   #session: SessionRef | undefined
   // The catch-up boundary, frozen when the session was taken on.
@@ -60,6 +61,7 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
 
   vitals: SessionVitals | undefined
   subagentToolUseId: string | undefined
+  shellId: string | undefined
 
   protected readonly bundle = 'main.js'
 
@@ -130,6 +132,7 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
     if (!session || !this.#session || !sameSession(this.#session, session.host.id, session.sessionId)) {
       this.vitals = undefined
       this.subagentToolUseId = undefined
+      this.shellId = undefined
     }
     this.#session = session
     this.#unseen = session ? this.delegate.unseen(session.host.id, session.sessionId) : undefined
@@ -183,12 +186,17 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   }
 
   openSubagent(toolUseId: string): void {
-    this.#pending = { kind: 'wd-open-subagent', toolUseId }
+    this.#pending = { kind: 'wd-open-subagent', id: toolUseId }
     this.#flushPending()
   }
 
   reveal(toolUseId: string): void {
-    this.#pending = { kind: 'wd-reveal-tool-use', toolUseId }
+    this.#pending = { kind: 'wd-reveal-tool-use', id: toolUseId }
+    this.#flushPending()
+  }
+
+  openShell(shellId: string): void {
+    this.#pending = { kind: 'wd-open-shell', id: shellId }
     this.#flushPending()
   }
 
@@ -201,13 +209,20 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
       return
     }
     this.#pending = undefined
-    this.post({ kind: pending.kind, toolUseId: pending.toolUseId, nonce: ++this.#pendingNonce })
+    const nonce = ++this.#pendingNonce
+    this.post(
+      pending.kind === 'wd-open-shell'
+        ? { kind: pending.kind, shellId: pending.id, nonce }
+        : { kind: pending.kind, toolUseId: pending.id, nonce },
+    )
   }
 
   protected override onReady(): void {
     // Safe ahead of the flushes below: a queued frame is re-posted straight after.
     this.subagentToolUseId = undefined
+    this.shellId = undefined
     this.delegate.subagent(this)
+    this.delegate.shell(this)
     this.pushSession()
   }
 
@@ -231,6 +246,11 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
       case 'wd-subagent-open': {
         this.subagentToolUseId = msg.toolUseId
         this.delegate.subagent(this)
+        return
+      }
+      case 'wd-shell-open': {
+        this.shellId = msg.shellId
+        this.delegate.shell(this)
         return
       }
       case 'wd-focus': {

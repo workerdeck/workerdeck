@@ -37,7 +37,7 @@ final class TranscriptViewModel {
   private(set) var session: SessionInfo?
   /// Server `PROTOCOL_VERSION` when it disagrees with the mirror in the kit.
   private(set) var protocolMismatch: Int?
-  /// Whether this gateway offers `!` shell mode to this principal on this session.
+  /// Whether this gateway offers `$` shell mode to this principal on this session.
   /// Re-read on every attach, because the answer is about the connection and not the
   /// session: an old gateway, a scoped key or a sandboxed engine all mean no.
   private(set) var canRunShell = false
@@ -144,6 +144,11 @@ final class TranscriptViewModel {
   /// Tool results whose rest is in flight - one fetch per row, however many
   /// times it is pressed.
   private var fetchingResults: Set<String> = []
+  /// Shells whose record has already been checked against the gateway, and
+  /// shells whose output is in flight - one round trip each, however many times
+  /// the row re-draws or is pressed.
+  private var verifiedShells: Set<String> = []
+  private var fetchingShells: Set<String> = []
 
   init(sessionId: String, client: WorkerClient) {
     self.sessionId = sessionId
@@ -314,6 +319,7 @@ final class TranscriptViewModel {
     replayBuffer = nil
     state = buffer
     revision &+= 1
+    verifyReplayedShells()
   }
 
   private func apply(_ event: SessionHandle.Event) {
@@ -352,6 +358,13 @@ final class TranscriptViewModel {
         seqIndex.note(seq: sessionEvent.seq, before: before, after: state.items)
         revision &+= 1
           }
+      // Replayed only: a row that arrived live is the record, and asking the
+      // gateway about something it told us a moment ago is a round trip per `$`.
+      if case .userMessage(let payload) = sessionEvent.body, payload.replay == true,
+        let shell = payload.shell, shell.status == .running
+      {
+        verifyShell(shell.id)
+      }
       if case .systemInit(let info) = sessionEvent.body, initModel == nil {
         initModel = info.model
         defaultPermissionMode = info.permissionMode
@@ -536,7 +549,7 @@ final class TranscriptViewModel {
 
   func interrupt() { handle?.interrupt() }
 
-  /// Run a `!` shell command on the host. Not a turn - the output arrives as its own
+  /// Run a `$` shell command on the host. Not a turn - the output arrives as its own
   /// transcript row and reaches the model with the next message, so nothing is appended
   /// locally and `send` is not involved.
   func runShell(_ command: String) {
@@ -608,6 +621,76 @@ final class TranscriptViewModel {
       guard hydrated != self.state else { return }
       self.state = hydrated
       self.revision &+= 1
+    }
+  }
+
+  /// Check a `running` shell row against the gateway's own record, once.
+  ///
+  /// A row's `shell` came off the event log, and the log can be older than the
+  /// process: a parking snapshot replayed after a restart still says `running`
+  /// about something that died with the last generation. A 404 is an answer -
+  /// the record was swept or belongs to a gateway this client is not talking to
+  /// - and the row says so rather than drawing a kill affordance for a process
+  /// nobody can reach.
+  func verifyShell(_ shellId: String) {
+    guard !verifiedShells.contains(shellId) else { return }
+    verifiedShells.insert(shellId)
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      let shell = try? await self.client.getShell(sessionId: self.sessionId, shellId: shellId)
+      self.hydrateShell(shellId: shellId, shell: shell)
+    }
+  }
+
+  /// Fetch a shell's whole text view for a row the reader opened.
+  ///
+  /// Client-side and off the model's budget entirely: what a person expands
+  /// never adds a byte to what the engine reads, which is the whole point of the
+  /// row being bounded in the first place.
+  func loadShellOutput(shellId: String) {
+    guard !fetchingShells.contains(shellId) else { return }
+    fetchingShells.insert(shellId)
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      defer { self.fetchingShells.remove(shellId) }
+      guard
+        let text = try? await self.client.shellOutput(sessionId: self.sessionId, shellId: shellId)
+      else {
+        self.hydrateShell(shellId: shellId, shell: nil)
+        return
+      }
+      let hydrated = hydrateShellOutput(self.state, shellId: shellId, text: text)
+      guard hydrated != self.state else { return }
+      self.state = hydrated
+      self.revision &+= 1
+    }
+  }
+
+  /// Stop a running shell. The gateway re-emits the row under the same uuid, so
+  /// the settled record lands through the event stream too; hydrating the answer
+  /// is what makes the press feel answered before it does.
+  func killShell(shellId: String) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      guard
+        let shell = try? await self.client.killShell(sessionId: self.sessionId, shellId: shellId)
+      else { return }
+      self.hydrateShell(shellId: shellId, shell: shell)
+    }
+  }
+
+  private func hydrateShell(shellId: String, shell: ShellInfo?) {
+    let hydrated = hydrateShellRow(state, shellId: shellId, shell: shell)
+    guard hydrated != state else { return }
+    state = hydrated
+    revision &+= 1
+  }
+
+  /// Every running shell the replay left on screen, checked once the hold ends.
+  private func verifyReplayedShells() {
+    for item in state.items {
+      guard case .shell(let row) = item, row.shell.status == .running else { continue }
+      verifyShell(row.shell.id)
     }
   }
 

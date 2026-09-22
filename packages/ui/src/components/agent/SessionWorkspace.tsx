@@ -27,6 +27,9 @@ export interface SessionWorkspaceProps {
   reveal?: SessionPanelProps['reveal']
   subagents?: SessionPanelProps['subagents']
   onSubagentChange?: SessionPanelProps['onSubagentChange']
+  openShell?: SessionPanelProps['openShell']
+  shells?: SessionPanelProps['shells']
+  onShellChange?: SessionPanelProps['onShellChange']
   statusPlacement?: SessionPanelProps['statusPlacement']
   controlsSurface?: SessionPanelProps['controlsSurface']
   fontSize?: SessionPanelProps['fontSize']
@@ -61,6 +64,9 @@ export function SessionWorkspace({
   reveal,
   subagents,
   onSubagentChange,
+  openShell,
+  shells,
+  onShellChange,
   statusPlacement,
   controlsSurface,
   fontSize,
@@ -221,6 +227,9 @@ export function SessionWorkspace({
             reveal={reveal}
             subagents={subagents}
             onSubagentChange={onSubagentChange}
+            openShell={openShell}
+            shells={shells}
+            onShellChange={onShellChange}
             controlsSurface={controlsSurface}
             fontSize={fontSize}
             onLinkClick={onLinkClick}

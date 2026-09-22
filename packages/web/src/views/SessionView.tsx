@@ -49,7 +49,7 @@ export function SessionView() {
 
 function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessionId: string; client: WorkerDeckClient }) {
   const navigate = useNavigate()
-  const { subagent, sn, reveal, rn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
+  const { subagent, sn, reveal, rn, shell, shn } = useSearch({ from: '/sessions/$hostId/$sessionId' })
   // The workspace asks for this record too and nothing de-dupes, but one small GET beats threading the panel's
   // session state back out through a prop nobody else wants.
   const { info, error } = useSessionInfo(client, sessionId)
@@ -126,6 +126,21 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
           to: '/sessions/$hostId/$sessionId',
           params: { hostId, sessionId },
           search: toolUseId === undefined ? {} : (prev) => ({ subagent: toolUseId, sn: prev.sn }),
+          replace: true,
+        })
+      }}
+      openShell={shell ? { shellId: shell, nonce: shn ?? 0 } : undefined}
+      shells={polled?.shells}
+      // The same three rules as the sub-agent pair above, plus: `subagent`/`sn` ride through untouched, so the
+      // sub-agent frame reads its own unchanged nonce and stays inert.
+      onShellChange={(shellId) => {
+        if (shellId === shell) {
+          return
+        }
+        void navigate({
+          to: '/sessions/$hostId/$sessionId',
+          params: { hostId, sessionId },
+          search: (prev) => ({ subagent: prev.subagent, sn: prev.sn, shell: shellId, shn: prev.shn }),
           replace: true,
         })
       }}

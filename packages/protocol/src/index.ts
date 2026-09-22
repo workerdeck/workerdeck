@@ -406,6 +406,8 @@ export const SHELL_MAX_ROWS = 500
 export const SHELL_INPUT_MAX = 4096
 export const SHELL_LABEL_MAX = 80
 export const SHELL_INLINE_LINES = 8
+export const SHELL_INLINE_LINE_CHARS = 512
+export const SHELL_INLINE_CHARS = 2048
 export const SHELL_PROMOTE_MS = 3000
 export const SHELL_LINGER_MS = 60_000
 export const SHELL_MAX_RUNNING_PER_SESSION = 8
@@ -429,7 +431,7 @@ export type AttachedFrame = {
   protocolVersion: number
   session: SessionInfo
   replayingFrom: number
-  // Whether this principal may run `!` commands on this session: server config x operator x hostCwd.
+  // Whether this principal may run `$` shell commands on this session: server config x operator x hostCwd.
   // Additive, so no PROTOCOL_VERSION bump; an older gateway omits it and the client never offers the mode.
   shell?: boolean
   // The operator's rate overrides alone, never the bundled table: a client merges them over its own

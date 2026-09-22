@@ -827,6 +827,9 @@
 .wd-scrubber .wd-scrub-mark[data-kind='subagent'] {
   background: var(--success);
 }
+.wd-scrubber .wd-scrub-mark[data-kind='shell'] {
+  background: var(--wd-shell-accent);
+}
 .wd-scrubber .wd-scrub-mark[data-kind='turn'] {
   background: var(--fg-3);
 }

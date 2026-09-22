@@ -99,6 +99,10 @@ struct TerminalTranscriptView: View {
   /// the boxes then rest on their placeholder - correct there, since nothing
   /// refs a replay nobody asked for.
   @Environment(\.terminalImageLoader) private var imageLoader
+  /// How a `$` row fetches its full output, and how its header's `✕` stops the
+  /// process. Nil outside a live session, and the presses are then no-ops.
+  @Environment(\.shellOutputFetcher) private var fetchShellOutput
+  @Environment(\.shellKiller) private var killShell
 
   private var typography: TerminalTypography { .session }
 
@@ -150,7 +154,8 @@ struct TerminalTranscriptView: View {
                     $0, row: index, fetch: fetchToolResult,
                     // No takeover from a takeover - web passes
                     // `onOpenSubagent={frame ? undefined : onOpenSubagent}`.
-                    openSubagent: frame == nil ? onOpenSubagent : nil)
+                    openSubagent: frame == nil ? onOpenSubagent : nil,
+                    fetchShell: fetchShellOutput, killShell: killShell)
                 })
             },
             // Which item the long-press addresses is the kit's rule

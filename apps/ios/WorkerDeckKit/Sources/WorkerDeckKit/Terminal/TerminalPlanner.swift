@@ -342,6 +342,9 @@ public enum TerminalPlanner {
         gutterTone: failed ? .red : .yellow, tone: failed ? .red : .faint, nested: nested,
         inOpen: inOpen)
 
+    case .shell(let item):
+      return planShell(item, metrics: metrics, expansion: expansion, inOpen: inOpen)
+
     case .fileDelivered(_, let path, let bytes, let description):
       var body = "\(path) · \(TermFmt.bytes(bytes))"
       if let description, !description.isEmpty { body += " · \(description)" }
@@ -349,6 +352,45 @@ public enum TerminalPlanner {
         body, metrics: metrics, gutter: TermGlyph.file, gutterTone: .blue, tone: .dim,
         inOpen: inOpen)
     }
+  }
+
+  /// A `$` row: the command and what the record says about it, then the output
+  /// the gateway inlined - and, open, the whole text view once a fetch has
+  /// landed.
+  ///
+  /// **The header's press is the kill while the shell runs**, which is the one
+  /// place this renderer gives a block two meanings. The web row puts a `✕` in a
+  /// hover overlay; a thumb has no hover, so the glyph is drawn in the header
+  /// and the header is what it does. Every other line toggles, so a running
+  /// shell with output can still be opened, and an exited row is uniform again.
+  static func planShell(
+    _ item: ShellItem, metrics: TerminalMetrics, expansion: TerminalExpansion, inOpen: Bool
+  ) -> [TermLine] {
+    let running = item.shell.status == .running
+    let key = ExpansionKey.shell(item.shell.id)
+    let open = expansion.isOpen(key)
+    let wash = inOpen || open
+    let toggle = TermPress.toggle(key)
+    let failed = TerminalShell.failed(item)
+
+    var lines = wrapBody(
+      TerminalShell.headerText(item), metrics: metrics, gutter: TerminalShell.glyph,
+      gutterTone: failed ? .red : .magenta, tone: failed ? .red : .fg, band: .user,
+      pulsing: running, press: running ? .killShell(shellId: item.shell.id) : toggle,
+      inOpen: wash)
+
+    let body = TerminalShell.bodyLines(item, open: open)
+    let shown = open ? body : Array(body.prefix(WorkerProtocol.shellInlineLines))
+    for line in shown {
+      lines += wrapBody(
+        line.isEmpty ? " " : line, metrics: metrics, gutter: "", tone: .dim, band: .output,
+        press: toggle, inOpen: wash)
+    }
+    if let footer = TerminalShell.footerText(item, open: open, shown: shown.count) {
+      lines += wrapBody(
+        footer, metrics: metrics, gutter: "", tone: .faint, press: toggle, inOpen: wash)
+    }
+    return lines
   }
 
   /// A tool call: its header, then either the diff it produced or a preview of

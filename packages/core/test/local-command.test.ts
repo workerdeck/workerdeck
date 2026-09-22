@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import { SHELL_CONTEXT_HEAD_CHARS, SHELL_CONTEXT_TAIL_CHARS, type SessionEvent, type ShellInfo } from '@workerdeck/protocol'
+import {
+  SHELL_CONTEXT_HEAD_CHARS,
+  SHELL_CONTEXT_TAIL_CHARS,
+  SHELL_INLINE_CHARS,
+  SHELL_INLINE_LINE_CHARS,
+  SHELL_INLINE_LINES,
+  type SessionEvent,
+  type ShellInfo,
+} from '@workerdeck/protocol'
 import {
   AiSdkRunner,
   CodexRunner,
@@ -318,11 +326,79 @@ function collectQueue() {
   return { queue, emitted }
 }
 
+// A string the function can only read through the methods this records; the row must never read more than a
+// bounded prefix, however large the text view is, because it is rebuilt on every notify tick.
+function probe(text: string): { text: string; reads: Array<{ method: string; args: unknown[] }> } {
+  const reads: Array<{ method: string; args: unknown[] }> = []
+  const proxied = new Proxy(new String(text), {
+    get(target, prop) {
+      if (prop === 'length') {
+        return text.length
+      }
+      if (prop === Symbol.toPrimitive || prop === 'valueOf' || prop === 'toString') {
+        return () => {
+          reads.push({ method: 'toPrimitive', args: [] })
+          return text
+        }
+      }
+      const method = typeof prop === 'string' ? (text as unknown as Record<string, unknown>)[prop] : undefined
+      if (typeof method === 'function') {
+        return (...args: unknown[]) => {
+          reads.push({ method: prop as string, args })
+          return (method as (...a: unknown[]) => unknown).apply(text, args)
+        }
+      }
+      return Reflect.get(target, prop)
+    },
+  })
+  return { text: proxied as unknown as string, reads }
+}
+
 describe('shellInlineText', () => {
   it('shows the command and the first SHELL_INLINE_LINES lines of a running shell as stdout', () => {
     const text = shellInlineText(running(), numbered(12))
     expect(LOCAL_COMMAND_OUTPUT.exec(text)?.[1]).toBe('stdout')
-    expect(bodyOf(text)).toBe(`$ npm test\n${numbered(8)}\n[... 4 more lines ...]`)
+    expect(bodyOf(text)).toBe(`$ npm test\n${numbered(8)}\n[... more output ...]`)
+    expect(bodyOf(shellInlineText(running(), numbered(8)))).toBe(`$ npm test\n${numbered(8)}`)
+    expect(bodyOf(shellInlineText(running(), `${numbered(8)}\n`))).toBe(`$ npm test\n${numbered(8)}`)
+    expect(bodyOf(shellInlineText(running(), `${numbered(8)}\n\n`))).toBe(`$ npm test\n${numbered(8)}\n[... more output ...]`)
+  })
+
+  it('clips a line past SHELL_INLINE_LINE_CHARS, ends the row on it, and stays under the cap whatever the output', () => {
+    const line = 'x'.repeat(6 * 1024 * 1024)
+    const text = shellInlineText(running(), line)
+    expect(bodyOf(text)).toBe(`$ npm test\n${'x'.repeat(SHELL_INLINE_LINE_CHARS)} [...]\n[... more output ...]`)
+    expect(text.length).toBeLessThan(SHELL_INLINE_CHARS)
+    const second = shellInlineText(exited(1), `one\n${line}\nthree`)
+    expect(bodyOf(second)).toBe(`$ npm test\none\n${'x'.repeat(SHELL_INLINE_LINE_CHARS)} [...]\n[... more output ...]\n[exit 1]`)
+    const exact = 'y'.repeat(SHELL_INLINE_LINE_CHARS)
+    expect(bodyOf(shellInlineText(running(), `${exact}\nz`))).toBe(`$ npm test\n${exact}\nz`)
+  })
+
+  it('stops at SHELL_INLINE_CHARS before it runs out of lines', () => {
+    const wide = numbered(SHELL_INLINE_LINES, 'w', 500)
+    const body = bodyOf(shellInlineText(running(), wide)).split('\n')
+    expect(body[0]).toBe('$ npm test')
+    expect(body.at(-1)).toBe('[... more output ...]')
+    const shown = body.slice(1, -1)
+    expect(shown.length).toBeGreaterThan(1)
+    expect(shown.length).toBeLessThan(SHELL_INLINE_LINES)
+    expect(shown.join('\n').length).toBeLessThanOrEqual(SHELL_INLINE_CHARS)
+    expect(shown).toEqual(wide.split('\n').slice(0, shown.length))
+  })
+
+  it('reads a bounded prefix of the text view, never the whole of it', () => {
+    const window = SHELL_INLINE_LINES * (SHELL_INLINE_LINE_CHARS + 1)
+    for (const text of [numbered(50_000), 'x'.repeat(6 * 1024 * 1024), `${numbered(3)}\n${'y'.repeat(100_000)}\n${numbered(9)}`]) {
+      const probed = probe(text)
+      expect(shellInlineText(running(), probed.text)).toBe(shellInlineText(running(), text))
+      expect(probed.reads.length).toBeGreaterThan(0)
+      for (const read of probed.reads) {
+        expect(read.method).toBe('slice')
+        expect(read.args[0]).toBe(0)
+        expect(read.args[1]).toBeLessThanOrEqual(window)
+      }
+    }
   })
 
   it('is stderr with an exit line after a non-zero exit, stdout after a clean one', () => {
@@ -363,6 +439,14 @@ describe('shellContextText', () => {
     expect(pointer).toMatch(
       /^\[shell #3 \(sh_abc123def456\): \d+ of 400 lines omitted \(\d+ KiB in all\); the full output is in the transcript\]$/,
     )
+  })
+
+  it('stays inside the head and tail budgets when the output is one enormous line', () => {
+    const line = 'x'.repeat(6 * 1024 * 1024)
+    const command = '$ npm test\n'.length
+    expect(shellContextText(exited(1), line).length).toBeLessThan(command + SHELL_CONTEXT_HEAD_CHARS + SHELL_CONTEXT_TAIL_CHARS + 300)
+    expect(shellContextText(running(), line).length).toBeLessThan(command + SHELL_CONTEXT_TAIL_CHARS + 400)
+    expect(shellContextText(running(), line, { previous: { lines: 1 } })).not.toContain('xxxx')
   })
 
   it('carries a small output whole, without a pointer', () => {

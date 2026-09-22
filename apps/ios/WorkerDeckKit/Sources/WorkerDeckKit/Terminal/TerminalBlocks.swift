@@ -135,7 +135,7 @@ public func parentToolUseId(of item: TranscriptItem) -> String? {
   case .thinking(_, _, let parent): return parent
   case .toolCall(let call): return call.parentToolUseId
   case .compaction(let item): return item.parentToolUseId
-  case .turnResult, .notice, .fileDelivered: return nil
+  case .turnResult, .notice, .fileDelivered, .shell: return nil
   }
 }
 

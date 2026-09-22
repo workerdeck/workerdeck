@@ -68,6 +68,7 @@ export function App({
   const [held, setHeld] = useState<{ title: string } | undefined>(undefined)
   const [openSubagent, setOpenSubagent] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
+  const [openShell, setOpenShell] = useState<{ shellId: string; nonce: number } | undefined>(undefined)
   const controls = useRef<SessionControls | undefined>(undefined)
   // Switching sessions remounts the panel and React flushes the new `onControls` on its own schedule, which can be
   // after a `wd-focus-composer` lands - so the request is recorded and retried rather than fired at whatever is mounted.
@@ -88,6 +89,7 @@ export function App({
           setHeld(msg.held)
           setOpenSubagent(undefined)
           setReveal(undefined)
+          setOpenShell(undefined)
           // What an editor tab hands the serializer on window reload; harmless in the bottom panel.
           const session = msg.session
           bridge.setState<SurfaceState | undefined>(
@@ -108,6 +110,8 @@ export function App({
           setOpenSubagent({ toolUseId: msg.toolUseId, nonce: msg.nonce })
         } else if (msg.kind === 'wd-reveal-tool-use') {
           setReveal({ toolUseId: msg.toolUseId, nonce: msg.nonce })
+        } else if (msg.kind === 'wd-open-shell') {
+          setOpenShell({ shellId: msg.shellId, nonce: msg.nonce })
         }
       }),
     [bridge],
@@ -192,6 +196,8 @@ export function App({
         onOpenPanel={(panel) => bridge.post({ kind: 'wd-open-panel', panel })}
         onVitals={(vitals) => bridge.post({ kind: 'wd-vitals', vitals })}
         onSubagentChange={(toolUseId) => bridge.post({ kind: 'wd-subagent-open', toolUseId })}
+        openShell={openShell}
+        onShellChange={(shellId) => bridge.post({ kind: 'wd-shell-open', shellId })}
       />
       <Toaster />
     </div>

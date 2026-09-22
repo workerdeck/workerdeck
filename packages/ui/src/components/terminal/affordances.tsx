@@ -97,6 +97,24 @@ export function OpenSubagentAction({ onOpen, label = 'Open sub-agent' }: { onOpe
   )
 }
 
+export function OpenShellAction({ onOpen, label = 'Open terminal' }: { onOpen: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      className="term-action"
+      title={label}
+      aria-label={label}
+      data-tone="magenta"
+      onClick={(event) => {
+        event.stopPropagation()
+        onOpen()
+      }}
+    >
+      ⤢
+    </button>
+  )
+}
+
 export function CopyAction({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
   return (

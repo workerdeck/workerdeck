@@ -643,6 +643,11 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// nothing, never an empty ring, which claims the context is empty rather than
   /// unknown. Also absent on an older gateway.
   public let contextUsage: ContextReading?
+  /// The session's tracked shells, decorated by the gateway: everything still
+  /// running, plus non-zero exits for a while after. Absent and empty mean the
+  /// same thing. `promotedShells` is what a list row draws from it - never the
+  /// raw array, which carries shells too young to be worth a line.
+  public let shells: [ShellInfo]?
 
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
   /// The record to render from: the runner-reported copy when present, else the
@@ -664,7 +669,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     lastActivityAt: Double? = nil,
     subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
     scope: [String: String]? = nil,
-    project: ProjectInfo? = nil, contextUsage: ContextReading? = nil
+    project: ProjectInfo? = nil, contextUsage: ContextReading? = nil,
+    shells: [ShellInfo]? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -695,6 +701,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.scope = scope
     self.project = project
     self.contextUsage = contextUsage
+    self.shells = shells
   }
 }
 
@@ -1097,6 +1104,21 @@ public struct ListSessionFilesResponse: Decodable, Sendable {
 
 public struct McpServersResponse: Decodable, Sendable {
   public let servers: [McpServerStatusInfo]
+}
+
+/// Which derived view of a shell's artifact to fetch: `text` for a row (ANSI
+/// stripped, overwrites resolved), `raw` for a terminal that redraws the bytes.
+public enum ShellOutputView: String, Sendable {
+  case text
+  case raw
+}
+
+public struct ListShellsResponse: Decodable, Sendable {
+  public let shells: [ShellInfo]
+}
+
+public struct ShellResponse: Decodable, Sendable {
+  public let shell: ShellInfo
 }
 
 public struct UploadAttachmentResponse: Decodable, Sendable {

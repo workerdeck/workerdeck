@@ -194,6 +194,12 @@ importers:
       '@workerdeck/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@xterm/addon-fit':
+        specifier: ^0.11.0
+        version: 0.11.0
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
       ai:
         specifier: ^7.0.106
         version: 7.0.106(zod@4.6.5)
@@ -263,6 +269,12 @@ importers:
       '@workerdeck/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@xterm/addon-fit':
+        specifier: ^0.11.0
+        version: 0.11.0
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
       concurrently:
         specifier: ^10.0.5
         version: 10.0.5

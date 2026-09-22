@@ -1,19 +1,9 @@
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WebSocket } from 'ws'
-import {
-  ENGINE_CAPABILITIES,
-  SHELL_COMMAND_MAX,
-  SHELL_INLINE_LINES,
-  type ServerFrame,
-  type SessionInfo,
-  type ShellInfo,
-} from '@workerdeck/protocol'
-import { createWorkerServer, sandboxedProviderProfile, type WorkerServer, type WorkerServerOptions } from '../src/index.ts'
+import { ENGINE_CAPABILITIES, SHELL_COMMAND_MAX, SHELL_INLINE_LINES, type ServerFrame, type ShellInfo } from '@workerdeck/protocol'
+import { sandboxedProviderProfile } from '../src/index.ts'
 import { loadPty } from '../src/services/shells.ts'
-import { fakeHarness, fakeRunner, frameCollector, listenOn } from './helpers.ts'
+import { fakeHarness, fakeRunner } from './helpers.ts'
+import { attachSocket, createSession, get, isError, shellFixture, shellRow, waitForExit } from './shell-helpers.ts'
 
 const pty = await loadPty()
 if (pty === null) {
@@ -21,88 +11,12 @@ if (pty === null) {
 }
 const withPty = describe.skipIf(pty === null)
 
-let running: WorkerServer | undefined
-const dirs: string[] = []
-afterEach(async () => {
-  await running?.close()
-  running = undefined
-  while (dirs.length) {
-    rmSync(dirs.pop()!, { recursive: true, force: true })
-  }
-})
-
-function tempDir(): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'wd-shell-ws-')))
-  dirs.push(dir)
-  return dir
-}
-
-const PRINCIPALS: Record<string, unknown> = {
-  operator: {},
-  'alice-a': { scope: { space: 'a', user: 'alice' } },
-}
-
-async function startServer(harness: ReturnType<typeof fakeHarness>, extra: Partial<WorkerServerOptions> = {}) {
-  running = createWorkerServer({
-    authenticate: (req) => {
-      const token = (req.headers.authorization ?? '').replace(/^Bearer /, '')
-      const url = new URL(req.url ?? '/', 'http://internal')
-      return PRINCIPALS[token || (url.searchParams.get('key') ?? '')] ?? null
-    },
-    allowedCwdRoots: [realpathSync(tmpdir())],
-    buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
-    ...extra,
-  })
-  return listenOn(running)
-}
-
-async function startShellServer(harness: ReturnType<typeof fakeHarness>, extra: Partial<WorkerServerOptions> = {}) {
-  return startServer(harness, { shell: { enabled: true, artifactDir: tempDir() }, ...extra })
-}
-
-async function createSession(base: string, token: string, body: Record<string, unknown>): Promise<string> {
-  const res = await fetch(`${base}/sessions`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  expect(res.status).toBe(201)
-  return ((await res.json()) as { session: SessionInfo }).session.id
-}
-
-async function attach(wsBase: string, id: string, token: string) {
-  const ws = new WebSocket(`${wsBase}/sessions/${id}/ws?key=${token}`)
-  const collector = frameCollector(ws)
-  const attached = (await collector.waitFor((f) => f.type === 'attached')) as Extract<ServerFrame, { type: 'attached' }>
-  return { ws, collector, attached }
-}
-
-function isError(frame: ServerFrame): frame is Extract<ServerFrame, { type: 'protocol_error' }> {
-  return frame.type === 'protocol_error'
-}
-
-function shellRow(frame: ServerFrame): { text: string; shell: ShellInfo } | undefined {
-  if (frame.type !== 'event' || frame.event.type !== 'user_message' || !frame.event.synthetic || !frame.event.shell) {
-    return undefined
-  }
-  const content = frame.event.message.content
-  return typeof content === 'string' ? { text: content, shell: frame.event.shell } : undefined
-}
+const fx = shellFixture('wd-shell-ws-')
+const { tempDir, startServer, startShellServer } = fx
+afterEach(fx.cleanup)
 
 function localOutput(frame: ServerFrame): string | undefined {
   return shellRow(frame)?.text
-}
-
-async function waitForExit(collector: ReturnType<typeof frameCollector>, command: string) {
-  const frame = await collector.waitFor((f) => {
-    const row = shellRow(f)
-    return row?.shell.command === command && row.shell.status === 'exited'
-  }, 8000)
-  return shellRow(frame)!
-}
-
-async function get(base: string, path: string, token = 'operator') {
-  return fetch(`${base}${path}`, { headers: { authorization: `Bearer ${token}` } })
 }
 
 describe('shell_command over WS', () => {
@@ -110,7 +24,7 @@ describe('shell_command over WS', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
-    const { ws, collector, attached } = await attach(wsBase, id, 'operator')
+    const { ws, collector, attached } = await attachSocket(wsBase, id, 'operator')
     expect('shell' in attached).toBe(false)
 
     ws.send(JSON.stringify({ type: 'shell_command', command: 'echo hi' }))
@@ -124,7 +38,7 @@ describe('shell_command over WS', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'alice-a', { cwd: tempDir() })
-    const { ws, collector, attached } = await attach(wsBase, id, 'alice-a')
+    const { ws, collector, attached } = await attachSocket(wsBase, id, 'alice-a')
     expect('shell' in attached).toBe(false)
     ws.send(JSON.stringify({ type: 'shell_command', command: 'echo hi' }))
     const error = await collector.waitFor(isError)
@@ -147,7 +61,7 @@ describe('shell_command over WS', () => {
       },
     })
     const id = await createSession(base, 'operator', { profile: 'sandboxed' })
-    const { ws, collector, attached } = await attach(wsBase, id, 'operator')
+    const { ws, collector, attached } = await attachSocket(wsBase, id, 'operator')
     expect('shell' in attached).toBe(false)
     ws.send(JSON.stringify({ type: 'shell_command', command: 'echo hi' }))
     const error = await collector.waitFor(isError)
@@ -160,7 +74,7 @@ describe('shell_command over WS', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
-    const { ws, collector } = await attach(wsBase, id, 'operator')
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
 
     ws.send(JSON.stringify({ type: 'shell_command', command: '   ' }))
     const empty = await collector.waitFor(isError)
@@ -173,14 +87,17 @@ describe('shell_command over WS', () => {
     ws.close()
   })
 
-  it('answers the stage 2 socket commands with a protocol error', async () => {
+  it('names an unknown shell on attach, input and resize', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
-    const { ws, collector } = await attach(wsBase, id, 'operator')
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
     ws.send(JSON.stringify({ type: 'shell_attach', shellId: 'nope', cols: 80, rows: 24 }))
-    const error = await collector.waitFor(isError)
-    expect(isError(error) && error.message).toBe('unknown command: shell_attach')
+    ws.send(JSON.stringify({ type: 'shell_input', shellId: 'nope', data: 'x' }))
+    ws.send(JSON.stringify({ type: 'shell_resize', shellId: 'nope', cols: 80, rows: 24 }))
+    await vi.waitFor(() => expect(collector.frames.filter(isError)).toHaveLength(3))
+    expect(collector.frames.filter(isError).map((f) => f.message)).toEqual(['unknown shell', 'unknown shell', 'unknown shell'])
+    expect(collector.frames.some((f) => f.type === 'shell_attached')).toBe(false)
     ws.close()
   })
 })
@@ -191,7 +108,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const { base, wsBase } = await startShellServer(harness)
     const cwd = tempDir()
     const id = await createSession(base, 'operator', { cwd })
-    const { ws, collector, attached } = await attach(wsBase, id, 'operator')
+    const { ws, collector, attached } = await attachSocket(wsBase, id, 'operator')
     expect(attached.shell).toBe(true)
 
     ws.send(JSON.stringify({ type: 'shell_command', command: 'pwd; echo done' }))
@@ -217,7 +134,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
-    const { ws, collector } = await attach(wsBase, id, 'operator')
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
     ws.send(JSON.stringify({ type: 'shell_command', command: 'echo bad >&2; exit 2' }))
     const row = await waitForExit(collector, 'echo bad >&2; exit 2')
     expect(row.text).toBe('<local-command-stderr>$ echo bad >&2; exit 2\nbad\n[exit 2]</local-command-stderr>')
@@ -228,14 +145,14 @@ withPty('shell_command spawns a tracked PTY', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
-    const { ws, collector } = await attach(wsBase, id, 'operator')
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
     const command = 'i=1; while [ $i -le 200 ]; do echo line$i; i=$((i+1)); done'
     ws.send(JSON.stringify({ type: 'shell_command', command }))
     const row = await waitForExit(collector, command)
     const lines = row.text.split('\n')
     expect(lines[1]).toBe('line1')
     expect(lines).toHaveLength(SHELL_INLINE_LINES + 2)
-    expect(lines.at(-1)).toContain(`[... ${200 - SHELL_INLINE_LINES} more lines ...]`)
+    expect(lines.at(-1)).toContain('[... more output ...]')
 
     const res = await get(base, `/sessions/${id}/shells/${row.shell.id}/output`)
     expect(res.status).toBe(200)
@@ -253,7 +170,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'operator', { cwd: tempDir() })
-    const { ws, collector } = await attach(wsBase, id, 'operator')
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
     ws.send(JSON.stringify({ type: 'shell_command', command: 'echo first' }))
     await waitForExit(collector, 'echo first')
     ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
@@ -283,7 +200,7 @@ withPty('shell_command spawns a tracked PTY', () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)
     const id = await createSession(base, 'alice-a', { cwd: tempDir() })
-    const { ws } = await attach(wsBase, id, 'alice-a')
+    const { ws } = await attachSocket(wsBase, id, 'alice-a')
     const res = await fetch(`${base}/sessions/${id}/shells/anything/kill`, {
       method: 'POST',
       headers: { authorization: 'Bearer alice-a' },
@@ -309,7 +226,7 @@ withPty('shell_command spawns a tracked PTY', () => {
       },
     })
     const id = await createSession(base, 'operator', { profile: 'hosted', cwd: tempDir() })
-    const { ws, collector } = await attach(wsBase, id, 'operator')
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
     ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
     const error = await collector.waitFor(isError)
     expect(isError(error) && error.message).toBe('session is closed')

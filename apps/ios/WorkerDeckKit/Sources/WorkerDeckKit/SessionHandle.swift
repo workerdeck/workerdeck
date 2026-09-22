@@ -246,7 +246,7 @@ public final class SessionHandle {
     enqueue(.clearContext)
   }
 
-  /// Run a `!` shell command on the host, in the session's cwd. It does not start a
+  /// Run a `$` shell command on the host, as a tracked PTY, in the session's cwd. It does not start a
   /// turn: the output appears in the transcript at once and reaches the model with the
   /// next message. Send only when the `attached` frame set `shell`.
   public func runShell(_ command: String) {

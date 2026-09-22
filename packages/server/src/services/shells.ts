@@ -565,7 +565,13 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       if (entry.info.status === 'running') {
         entry.sinks.add(proxy)
       }
-      const replay = await entry.artifact.replay(SHELL_ATTACH_REPLAY_BYTES)
+      let replay: Buffer
+      try {
+        replay = await entry.artifact.replay(SHELL_ATTACH_REPLAY_BYTES)
+      } catch (error) {
+        entry.sinks.delete(proxy)
+        throw error
+      }
       live = true
       if (ended !== undefined) {
         const reason = ended
@@ -844,14 +850,16 @@ class LiveArtifact {
     await rm(this.#paths.tail, { force: true })
   }
 
+  // Only the new chunk is searched: `#pending` holds no newline by construction, and scanning it again per chunk
+  // made one long line quadratic.
   #textAppend(data: string): void {
-    this.#pending += data
-    const newline = this.#pending.lastIndexOf('\n')
+    const newline = data.lastIndexOf('\n')
     if (newline === -1) {
+      this.#pending += data
       return
     }
-    this.#done += ttyText(this.#pending.slice(0, newline + 1))
-    this.#pending = this.#pending.slice(newline + 1)
+    this.#done += ttyText(this.#pending + data.slice(0, newline + 1))
+    this.#pending = data.slice(newline + 1)
   }
 
   #ringPush(chunk: Buffer): void {

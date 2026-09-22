@@ -31,12 +31,16 @@ const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sessions/$hostId/$sessionId',
   component: SessionView,
-  // `sn`/`rn` are nonces: without them a repeat of the same id is a props-equal no-op, and asking twice must count twice.
-  validateSearch: (search: Record<string, unknown>): { subagent?: string; sn?: number; reveal?: string; rn?: number } => ({
+  // `sn`/`rn`/`shn` are nonces: without them a repeat of the same id is a props-equal no-op, and asking twice must count twice.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { subagent?: string; sn?: number; reveal?: string; rn?: number; shell?: string; shn?: number } => ({
     subagent: typeof search.subagent === 'string' ? search.subagent : undefined,
     sn: typeof search.sn === 'number' ? search.sn : undefined,
     reveal: typeof search.reveal === 'string' ? search.reveal : undefined,
     rn: typeof search.rn === 'number' ? search.rn : undefined,
+    shell: typeof search.shell === 'string' ? search.shell : undefined,
+    shn: typeof search.shn === 'number' ? search.shn : undefined,
   }),
 })
 

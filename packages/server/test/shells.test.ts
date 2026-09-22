@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setFlagsFromString } from 'node:v8'
+import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ttyText, type Runner } from '@workerdeck/core'
 import type { SessionEvent, SessionEventBody, ShellInfo } from '@workerdeck/protocol'
@@ -78,6 +80,18 @@ function sleep(ms: number): Promise<void> {
 
 function readIndex(dir: string, sessionId: string): StoredShellIndex {
   return JSON.parse(readFileSync(join(dir, `${encodeURIComponent(sessionId)}.json`), 'utf8')) as StoredShellIndex
+}
+
+function collectGarbage(): void {
+  setFlagsFromString('--expose-gc')
+  ;(runInNewContext('gc') as () => void)()
+}
+
+// The sink lives only in this frame, so once the attach has failed nothing but a leaked proxy could keep it reachable.
+async function attachDoomed(shells: ShellRegistry, sessionId: string, shellId: string): Promise<WeakRef<object>> {
+  const sink = { write: () => {}, end: () => {} }
+  await expect(shells.attach(sessionId, shellId, sink)).rejects.toThrow(/EISDIR/)
+  return new WeakRef(sink)
 }
 
 withPty('spawn', () => {
@@ -417,6 +431,22 @@ withPty('attach', () => {
     const late = await shells.attach('s1', shell.id, { write: () => {}, end: () => {} })
     expect(late.scrollback).toBe('first\r\nsecond\r\n')
     expect(late.shell.status).toBe('exited')
+  })
+
+  it('hands a failed replay to the caller and leaves no sink behind it', async () => {
+    const dir = tempDir()
+    const shells = makeRegistry({ artifactDir: dir, spillBytes: 8 })
+    const { shell } = await shells.spawn({ runner: runner('s1'), command: 'echo spilled past the threshold; sleep 30', owner: 'user' })
+    const raw = join(dir, 's1', `${shell.id}.raw`)
+    await vi.waitFor(() => expect(existsSync(raw)).toBe(true))
+    await shells.flush()
+    rmSync(raw)
+    mkdirSync(raw)
+    const doomed = await attachDoomed(shells, 's1', shell.id)
+    await sleep(0)
+    collectGarbage()
+    expect(doomed.deref()).toBeUndefined()
+    expect(shells.get('s1', shell.id)?.status).toBe('running')
   })
 
   it('writes input to the PTY and applies a clamped resize', async () => {

@@ -172,6 +172,11 @@ export function activate(context: vscode.ExtensionContext): void {
         model.setSelectedSubagent(surface.subagentToolUseId)
       }
     },
+    shell: (surface) => {
+      if (surface === registry.focused) {
+        model.setSelectedShell(surface.shellId)
+      }
+    },
     unseen: (hostId, sessionId) => {
       const mark = watermarks.get(hostId, sessionId)
       return mark ? { itemCount: mark.itemCount, since: mark.seenAt } : undefined
@@ -259,7 +264,9 @@ export function activate(context: vscode.ExtensionContext): void {
     const surface = registry.focused
     const session = surface.session
     model.setSelected(
-      session ? { hostId: session.host.id, sessionId: session.sessionId, subagentToolUseId: surface.subagentToolUseId } : undefined,
+      session
+        ? { hostId: session.host.id, sessionId: session.sessionId, subagentToolUseId: surface.subagentToolUseId, shellId: surface.shellId }
+        : undefined,
     )
   }
   const selectSession = async (hostId: string, sessionId: string, options: SelectOptions = {}) => {
@@ -267,7 +274,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!ref) {
       return
     }
-    const composerFocus = !options.subagentToolUseId && !options.revealToolUseId
+    const composerFocus = !options.subagentToolUseId && !options.revealToolUseId && !options.shellId
     let surface: AnySurface
     const tab = registry.tabFor(hostId, sessionId)
     if (tab) {
@@ -291,6 +298,8 @@ export function activate(context: vscode.ExtensionContext): void {
       surface.openSubagent(options.subagentToolUseId)
     } else if (options.revealToolUseId) {
       surface.reveal(options.revealToolUseId)
+    } else if (options.shellId) {
+      surface.openShell(options.shellId)
     }
   }
   sidebar = new SidebarProvider(context, context.extensionUri, store, model, {

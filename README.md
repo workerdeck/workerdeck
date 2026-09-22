@@ -126,8 +126,10 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **`$` for a shell, as in the CLI.** Type `$` first in the composer and the rest of the line runs
   on the host in the session's cwd, in a real terminal, with the output in the transcript and in
   the model's next context - no turn spent, no permission card, no rewording by the agent. Every
-  command is a tracked shell record you can list, expand and kill. Which is exactly why it is
-  `--shell`, off by default, and offered to an operator only.
+  command is a tracked shell record you can list, expand and kill, and any row opens as a full
+  terminal: keystrokes go to the PTY, the pane resizes it, and several clients can watch and drive
+  the same shell at once. Which is exactly why it is `--shell`, off by default, and offered to an
+  operator only.
 - **Sessions that can talk to each other.** Every session, on any engine, gets three tools:
   `peers_list`, `peers_peek` (status, checklist, the last few lines, without interrupting) and
   `peers_send`. A message lands as a peer-stamped message that never cuts into a running turn, so a

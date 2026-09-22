@@ -740,6 +740,17 @@ one transcript row. Records reconcile by generation on boot, never by pid. `rout
 it. `attachClient` takes an `AttachAccess { operator }` computed at upgrade time rather than
 re-authenticating, and re-checks the gate on every `shell_command`.
 
+`routes/ws.ts` carries the drill-in arms beside `shell_command` - `shell_attach`, `shell_input`,
+`shell_resize`, `shell_detach` - and answers on the three ephemeral frames (`shell_attached`,
+`shell_output`, `shell_detached`) that are never logged or replayed. Per-socket state is
+`Client { send, open, buffered, shells: Map<shellId, detach> }`, deliberately not the old
+`Connection` type and deliberately carrying no reference to the raw `ws`: a handler that can reach
+the socket can write past `send`'s OPEN guard, and every arm here needs `buffered()` rather than the
+socket itself. `permittedShells` is the one gate for `shell_command`, `shell_attach`, `shell_input`
+and `shell_resize`. `shell_detach` is ungated on purpose: it runs an entry from this socket's own
+table and nothing else, so a non-permitted socket has no entry to run and gets neither an effect nor
+an oracle for whether the shell exists.
+
 
 `services/peers.ts` is the server's `PeerDirectory`: visibility by `scopeMatches` with the
 sender's scope as principal, `list` over the registry plus dormant records, `peek` off a live
@@ -908,6 +919,14 @@ and knowing *when* to call it is the next problem - the agent is editing this sa
 something a tree can guess. `useOpenFiles` fires its reads from an effect keyed on "which tabs are
 still loading" rather than on `open` itself, which is what keeps the reducer pure and stops a tab
 that was opened, closed and reopened from carrying a stale in-flight request.
+
+`useShellTerminal(handle, shellId, { onData, onEnded, onAttached })` is the drill-in half of shell
+mode: `attach`/`write`/`resize`/`detach` over the handle's shell frames, re-attaching itself across a
+reconnect and detaching on unmount so no caller has to remember to. **PTY bytes go through the
+`onData` ref callback and never through React state** - a `npm run dev` writing a line per frame
+would otherwise re-render the transcript at the shell's output rate. Only `status`, the `ShellInfo`
+record and the detach reason are state, and the invariants around the three frames are in
+`docs/GOTCHAS.md` § Shell sessions.
 
 ## `packages/ui`
 
@@ -1649,6 +1668,17 @@ Highlighting is untouched by that: Monarch grammars (`languages/definitions/*`) 
 main-thread mechanism, and TS/JSON/CSS files still colour correctly. The alias lives in `web`'s
 config and not behind a hand-written Monaco entry because such an entry must also import two CSS
 files and monaco's exports map (`"./*": "./esm/vs/*.js"`) cannot resolve a `.css` subpath at all.
+
+Shell drill-in is three pieces here. `use-shell-frame.ts` is the sub-agent frame's twin
+(nonce-keyed entry, Escape leaves, the report deduped through a ref, leaving reveals the `$` row it
+came from), `ShellStrip` is the frame's header in both variants, and `ShellTerminal` wraps
+`useShellTerminal` around an xterm instance. `ShellTerminal` ships from `@workerdeck/ui/workspace`
+for the `CodeEditor`/Monaco reason and on the same terms: `@xterm/xterm` and `@xterm/addon-fit` are
+**optional peers**, loaded by a memoised dynamic `import()` so one promise serves every pane and a
+`SessionPanel`-only host installs neither. It fits on attach only - a mid-stream refit reflows a
+cursor-addressed screen under the writer - and resets the screen before writing each
+`shell_attached` scrollback.
+
 ## `packages/web`
 
 dashboard (TanStack Router, hash history); create forms are engine-aware via
@@ -1736,7 +1766,11 @@ module-scope store for the same reason `useSessions` is: the sidebar, the empty 
 job's page mount it at once, and three copies would be three queue sockets answering from
 three snapshots. The
 session runner is `@workerdeck/ui`'s `SessionWorkspace` - the dashboard adds only the header, so a
-session feature belongs in `ui`/`react` and every embedder gets it too. The sessions list is
+session feature belongs in `ui`/`react` and every embedder gets it too. The open shell is a URL
+round trip like the sub-agent one, `?shell=<id>&shn=<nonce>`: the nonce is what makes asking twice
+for the same shell count twice, and the withdrawal must spread `subagent`/`sn` through unchanged
+rather than withdrawing with `search: {}` the way the sub-agent branch does (`docs/GOTCHAS.md`
+§ Shell sessions has the ping-pong that causes). The sessions list is
 `SessionBrowser` over protocol's view model, with `useViewConfig` persisting the
 filter/group/sort (minus `search`, which always starts empty, and `scoped`, which a dashboard
 has no folders to mean anything against). Unread rides `useUnseen` - one module-scope

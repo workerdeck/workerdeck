@@ -658,6 +658,7 @@ public func scrubberPeek(
     case .turnResult: return doneLine(item) ?? ""
     case .fileDelivered(_, let path, _, _): return path
     case .compaction(let item): return TermFmt.compaction(item)
+    case .shell(let item): return TerminalShell.headerText(item)
     }
   }
 

@@ -148,8 +148,16 @@ final class TerminalTranscriptModel {
   ///   layer's version of the same honesty.
   func press(
     _ press: TermPress, row: Int, fetch: ToolResultFetcher? = nil,
-    openSubagent: ((String) -> Void)? = nil
+    openSubagent: ((String) -> Void)? = nil, fetchShell: ShellOutputFetcher? = nil,
+    killShell: ShellKiller? = nil
   ) {
+    // A kill has a process at the other end, so it never falls back to an
+    // expansion the way the takeover does: with nothing wired, the honest answer
+    // is that this surface cannot stop anything.
+    if case .killShell(let shellId) = press {
+      killShell?(shellId)
+      return
+    }
     if case .openSubagent(let taskId) = press {
       if let openSubagent {
         openSubagent(taskId)
@@ -175,6 +183,12 @@ final class TerminalTranscriptModel {
     // on; it is one block's walk, on a press.
     let opened = expansion.apply(press, subtree: subtreeKeys(at: row))
     remeasure()
+    // Opening a shell row is a network round trip whenever the gateway inlined
+    // only a head - the same shape as a truncated tool result, except the text
+    // is fetched from the artifact rather than from the event log.
+    if opened, case .toggle(.shell(let shellId)) = press, let shell = truncatedShell(shellId) {
+      fetchShell?(shell.shell.id)
+    }
     guard opened else { return }
     revealNonce += 1
     reveal = TranscriptRevealRequest(row: row, nonce: revealNonce)
@@ -186,6 +200,15 @@ final class TerminalTranscriptModel {
   private func subtreeKeys(at row: Int) -> Set<ExpansionKey> {
     guard row >= 0, row < rows.count else { return [] }
     return expansionKeys(of: rows[row])
+  }
+
+  /// The shell behind an id, when the row holds only the inlined head.
+  private func truncatedShell(_ id: String) -> ShellItem? {
+    for item in items {
+      guard case .shell(let shell) = item, shell.shell.id == id else { continue }
+      return shell.truncated && shell.expanded == nil ? shell : nil
+    }
+    return nil
   }
 
   /// The call behind an id, when its result is still only a head.

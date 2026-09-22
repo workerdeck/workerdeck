@@ -43,15 +43,16 @@ struct ComposerView: View {
   /// `onEdit` that detects the leading `!` also drives the completion list.
   let isShellMode: Bool
   /// Offered the first character typed into an empty field, before it is inserted.
-  /// True swallows it - that is how `!` enters shell mode without becoming part of the
+  /// True swallows it - that is how `$` enters shell mode without becoming part of the
   /// command. See `RichTextEditor.onLeadingTrigger`.
   let onLeadingTrigger: (String) -> Bool
   let onEdit: (String, NSRange) -> Void
   let onSend: () -> Void
   let onStop: () -> Void
   let onAddMedia: () -> Void
-  /// Leave shell mode. A phone has no Escape key, so the `!` in the gutter is the way
-  /// out - the same glyph that says which mode you are in undoes it.
+  /// Leave shell mode. A phone has no Escape key, so the `$` in the gutter is the way
+  /// out - the same glyph that says which mode you are in undoes it, and leaves the
+  /// literal `$` in the field the way Escape does on the desktop.
   let onExitShell: () -> Void
 
   @ViewBuilder
@@ -144,7 +145,7 @@ struct ComposerView: View {
   /// What the mode is and how to leave it. Rendered only while shell mode is on, so the
   /// composer's resting height is untouched.
   private var shellHint: some View {
-    Text("shell mode · tap ! to exit")
+    Text("shell mode · tap $ to exit")
       .font(.system(size: style.base.pointSize * 0.85, design: .monospaced))
       .foregroundStyle(TerminalPalette.color(.dim))
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -176,7 +177,8 @@ struct ComposerView: View {
   private var gutterGlyph: some View {
     if isShellMode {
       TermGlyphButton(
-        glyph: "!", label: "Leave shell mode", tint: TerminalPalette.color(.magenta),
+        glyph: TerminalShell.glyph, label: "Leave shell mode",
+        tint: TerminalPalette.color(.magenta),
         action: onExitShell, glyphSize: style.base.pointSize)
     } else if isBusy {
       TermGlyphButton(

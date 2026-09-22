@@ -1,3 +1,4 @@
+import type { ShellInfo } from '@workerdeck/protocol'
 import type { ShellItem } from '@workerdeck/react'
 
 export const SHELL_GLYPH = '$'
@@ -8,12 +9,27 @@ export const SHELL_EXPAND_CHARS = 100_000
 
 export const SHELL_MISSING = 'output expired or not tracked by this gateway'
 
+export function shellInfoLabel(shell: ShellInfo): string {
+  return shell.label || shell.command.split('\n')[0] || ''
+}
+
+export function shellTitle(shell: ShellInfo): string {
+  return `#${shell.ordinal} ${shellInfoLabel(shell)}`
+}
+
 export function shellLabel(item: ShellItem): string {
-  return item.shell.label || item.shell.command.split('\n')[0] || ''
+  return shellInfoLabel(item.shell)
 }
 
 export function shellStatusText(item: ShellItem): string {
-  const shell = item.shell
+  return shellInfoStatusText(item.shell)
+}
+
+export function shellInfoFailed(shell: ShellInfo): boolean {
+  return shell.status === 'exited' && shell.exitCode !== 0
+}
+
+export function shellInfoStatusText(shell: ShellInfo): string {
   if (shell.status === 'running') {
     return 'running'
   }
@@ -43,7 +59,7 @@ export function shellStatusText(item: ShellItem): string {
 }
 
 export function shellFailed(item: ShellItem): boolean {
-  return item.shell.status === 'exited' && item.shell.exitCode !== 0
+  return shellInfoFailed(item.shell)
 }
 
 export function shellHeaderText(item: ShellItem): string {

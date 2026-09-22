@@ -20,6 +20,7 @@ public enum TranscriptItemKind: String, Sendable, Equatable {
   case notice
   case fileDelivered
   case compaction
+  case shell
 }
 
 /// Lifecycle of a tool call.
@@ -140,6 +141,42 @@ public enum CompactionTrigger: String, Sendable, Equatable {
   case auto
 }
 
+/// One `$` invocation, drawn as one row - the port of the react reducer's
+/// `ShellItem`.
+///
+/// The gateway emits the **same `uuid`** for a shell every time the record
+/// changes, so the row upserts in place; a second row for one shell is the bug
+/// this shape exists to avoid. ``expanded`` is carried across those re-emits,
+/// because a row the reader opened must not collapse under them when the shell
+/// ticks.
+public struct ShellItem: Sendable, Equatable, Identifiable {
+  /// The transcript row's id (the message uuid), not the shell's.
+  public var id: String
+  public var shell: ShellInfo
+  /// The inline lines, with the command line and the end line stripped: the row
+  /// draws both of those from the record instead.
+  public var text: String
+  /// The inline text is a head - the gateway said so with its omission line.
+  public var truncated: Bool
+  /// The whole text view, once a press fetched it.
+  public var expanded: String?
+  /// The record is gone from the gateway: swept past its TTL, or minted by a
+  /// gateway this client is not talking to.
+  public var missing: Bool
+
+  public init(
+    id: String, shell: ShellInfo, text: String, truncated: Bool = false,
+    expanded: String? = nil, missing: Bool = false
+  ) {
+    self.id = id
+    self.shell = shell
+    self.text = text
+    self.truncated = truncated
+    self.expanded = expanded
+    self.missing = missing
+  }
+}
+
 public struct ToolCallItem: Sendable, Equatable, Identifiable {
   /// The `tool_use` block id; also the executionId for calls the model made.
   public var id: String
@@ -216,6 +253,9 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
   /// The engine summarised earlier turns to fit the window (`context_compacted`).
   /// A boundary, not a reset - everything before it is still here.
   case compaction(CompactionItem)
+  /// A tracked shell (`user_message` carrying a `shell`), redrawn in place as it
+  /// runs and ends.
+  case shell(ShellItem)
 
   public var id: String {
     switch self {
@@ -227,6 +267,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
     case .notice(let id, _, _): return id
     case .fileDelivered(let id, _, _, _): return id
     case .compaction(let item): return item.id
+    case .shell(let item): return item.id
     }
   }
 
@@ -240,6 +281,7 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
     case .notice: return .notice
     case .fileDelivered: return .fileDelivered
     case .compaction: return .compaction
+    case .shell: return .shell
     }
   }
 }
@@ -390,6 +432,64 @@ private let localCommandElement = try! NSRegularExpression(
 
 /// (Mirrors `LOCAL_COMMAND_CAVEAT`.)
 private let localCommandCaveat = "<local-command-caveat>"
+
+/// The omission line core writes after the row's bounded head; it carries no
+/// count, since counting the rest would cost a pass over the whole output.
+/// (Mirrors `SHELL_MORE_OUTPUT`.)
+private let shellMoreOutput = try! NSRegularExpression(
+  pattern: #"^\[\.\.\. more output \.\.\.\]$"#)
+
+/// The end line core writes after an exited shell's output.
+/// (Mirrors `SHELL_END_LINE`.)
+private let shellEndLine = try! NSRegularExpression(
+  pattern: #"^\[(exit -?\d+|killed|timed out|ended|failed to start)[^\]]*\]$"#)
+
+private func matchesWhole(_ regex: NSRegularExpression, _ line: String) -> Bool {
+  regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil
+}
+
+/// What a shell row draws, out of the framed text the event carried.
+///
+/// The text is core's `shellInlineText`: one `<local-command-*>` element whose
+/// first line is the command and whose last is the end line. The row draws both
+/// of those from the **record** instead, so they come off here rather than being
+/// printed twice in two spellings. The omission line goes too, and comes back as
+/// ``ShellItem/truncated`` - the affordance, not a line of body text.
+/// (Mirrors `shellRowText`.)
+public func shellRowText(_ shell: ShellInfo, _ text: String) -> (text: String, truncated: Bool) {
+  let body = matchLocalCommandOutput(trimmed(text))?.body ?? text
+  var lines = body.components(separatedBy: "\n")
+  if lines.first?.hasPrefix("$ ") == true { lines.removeFirst() }
+  if shell.status == .exited, let last = lines.last, matchesWhole(shellEndLine, last) {
+    lines.removeLast()
+  }
+  var truncated = false
+  let kept = lines.filter { line in
+    guard matchesWhole(shellMoreOutput, line) else { return true }
+    truncated = true
+    return false
+  }
+  var joined = kept.joined(separator: "\n")
+  while let last = joined.last, last.isWhitespace { joined.removeLast() }
+  return (joined, truncated)
+}
+
+private func shellItem(
+  id: String, shell: ShellInfo, text: String, previous: ShellItem?
+) -> ShellItem {
+  let row = shellRowText(shell, text)
+  return ShellItem(
+    id: id, shell: shell, text: row.text, truncated: row.truncated, expanded: previous?.expanded,
+    missing: false)
+}
+
+private func findShell(_ items: [TranscriptItem], shellId: String) -> (Int, ShellItem)? {
+  for (index, item) in items.enumerated() {
+    guard case .shell(let shell) = item, shell.shell.id == shellId else { continue }
+    return (index, shell)
+  }
+  return nil
+}
 
 /// JS-`trim()`-equivalent whitespace stripping.
 private func trimmed(_ value: String) -> String {
@@ -548,6 +648,47 @@ public func hydrateToolResult(
   return next
 }
 
+/// Re-state a shell row from the gateway's own record - what a `running` row
+/// asks for on its first render.
+///
+/// The row's `shell` came off the event log, which may be older than the
+/// process: a parking snapshot replayed after a restart still says `running`.
+/// `shell` **absent is the 404**: the record was swept past its TTL or belongs
+/// to a generation this gateway cannot answer for, and the row says so rather
+/// than claiming a process is alive.
+public func hydrateShellRow(
+  _ state: TranscriptState, shellId: String, shell: ShellInfo?
+) -> TranscriptState {
+  guard let (index, current) = findShell(state.items, shellId: shellId) else { return state }
+  var updated = current
+  if let shell {
+    updated.shell = shell
+    updated.missing = false
+  } else {
+    updated.missing = true
+  }
+  guard updated != current else { return state }
+  var next = state
+  next.items[index] = .shell(updated)
+  return next
+}
+
+/// Put a shell's whole text view into transcript state, the way
+/// ``hydrateToolResult(_:toolUseId:text:)`` does for a truncated result - and
+/// for the same reason: the row is not the only reader of the item.
+public func hydrateShellOutput(
+  _ state: TranscriptState, shellId: String, text: String
+) -> TranscriptState {
+  guard let (index, current) = findShell(state.items, shellId: shellId) else { return state }
+  var updated = current
+  updated.expanded = text
+  updated.missing = false
+  guard updated != current else { return state }
+  var next = state
+  next.items[index] = .shell(updated)
+  return next
+}
+
 /// The session's own windows in reading order - the merge fold with no profile
 /// side. What a caller holding no gateway account state renders. (Mirrors the
 /// react reducer's `rateLimitWindows`.)
@@ -674,7 +815,16 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
       // and the second swallowed the user's own words. Mirrors `transcript.ts`.
       case .text(let text):
         let id = payload.uuid ?? "user-\(event.seq)"
-        if let local = matchLocalCommandOutput(trimmed(text)) {
+        if let shell = payload.shell {
+          var previous: ShellItem?
+          if case .shell(let existing)? = items.first(where: {
+            $0.id == id && $0.kind == .shell
+          }) {
+            previous = existing
+          }
+          items = upsert(
+            items, .shell(shellItem(id: id, shell: shell, text: text, previous: previous)))
+        } else if let local = matchLocalCommandOutput(trimmed(text)) {
           items = upsert(
             items,
             .notice(id: id, level: local.stream == "stderr" ? .error : .info,

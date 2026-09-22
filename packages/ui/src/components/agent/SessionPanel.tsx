@@ -20,6 +20,7 @@ import {
   type PermissionRequest,
   type RateLimitInfo,
   type SessionTask,
+  type ShellInfo,
   type SkillInfo,
   type SubagentInfo,
 } from '@workerdeck/protocol'
@@ -60,6 +61,9 @@ import { PermissionModeSelect, permissionModeChoices, type PermissionModeChoice 
 import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { SubagentStrip } from './SubagentStrip.tsx'
 import { useSubagentFrame } from './use-subagent-frame.ts'
+import { ShellStrip } from './ShellStrip.tsx'
+import { ShellTerminal } from './ShellTerminal.tsx'
+import { useShellFrame } from './use-shell-frame.ts'
 import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
 import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
 import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
@@ -144,8 +148,12 @@ export interface SessionPanelProps {
   reveal?: { toolUseId: string; nonce: number }
   openSubagent?: { toolUseId: string; nonce: number }
   onSubagentChange?: (toolUseId: string | undefined) => void
+  // Host request to drill in to a shell's terminal; `shellId: undefined` withdraws it (Back/Forward).
+  openShell?: { shellId: string; nonce: number }
+  onShellChange?: (shellId: string | undefined) => void
   // The attach frame's `state.session` never refreshes, so a host that polls the sessions list passes the live records here.
   subagents?: SubagentInfo[]
+  shells?: ShellInfo[]
   stickyPrompt?: boolean
   transcriptDensity?: TranscriptDensity
   transcriptFont?: TranscriptFont
@@ -235,8 +243,11 @@ export function SessionPanel({
   onToggleBookmark,
   reveal,
   subagents,
+  shells,
   openSubagent,
   onSubagentChange,
+  openShell,
+  onShellChange,
   stickyPrompt = false,
   controlsSurface = 'internal',
   onControls,
@@ -288,9 +299,17 @@ export function SessionPanel({
     verifyShell,
     killShell,
   } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError, cacheTranscript })
+  const {
+    shellId: framedShellId,
+    enterShell,
+    leaveShell,
+    returnReveal: shellReturnReveal,
+    shell: framedShell,
+    label: framedShellLabel,
+  } = useShellFrame({ sessionId, items: state.items, session: state.session, shells, reveal, openShell, onShellChange })
   const shellActions = useMemo(
-    () => ({ loadOutput: loadShellOutput, verify: verifyShell, kill: killShell }),
-    [loadShellOutput, verifyShell, killShell],
+    () => ({ loadOutput: loadShellOutput, verify: verifyShell, kill: killShell, open: enterShell }),
+    [loadShellOutput, verifyShell, killShell, enterShell],
   )
   useEffect(() => setProtocolError(undefined), [sessionId])
   const {
@@ -302,6 +321,15 @@ export function SessionPanel({
     task: subagentTask,
     fallbackLabel: subagentFallbackLabel,
   } = useSubagentFrame({ sessionId, items: state.items, session: state.session, reveal, openSubagent, onSubagentChange })
+
+  // Two frames, one reveal slot: the more recent exit wins, so leaving a shell never lands on the
+  // row a sub-agent frame left behind.
+  const frameReturnReveal = useMemo(() => {
+    if (returnReveal && shellReturnReveal) {
+      return returnReveal.nonce >= shellReturnReveal.nonce ? returnReveal : shellReturnReveal
+    }
+    return returnReveal ?? shellReturnReveal
+  }, [returnReveal, shellReturnReveal])
 
   const [caughtUp, setCaughtUp] = useState(false)
   useEffect(() => {
@@ -698,7 +726,18 @@ export function SessionPanel({
                         {protocolError}
                       </Notice>
                     ) : null}
-                    {subagentId !== undefined ? (
+                    {framedShellId !== undefined ? (
+                      <ShellStrip
+                        shell={framedShell}
+                        label={framedShellLabel}
+                        onBack={leaveShell}
+                        onKill={() => void killShell(framedShellId)}
+                        terminal={terminal}
+                        fontSize={effectiveTermFontSize}
+                        lineHeight={effectiveTermLineHeight}
+                      />
+                    ) : null}
+                    {framedShellId === undefined && subagentId !== undefined ? (
                       <SubagentStrip
                         task={subagentTask}
                         items={subagentFrameItems}
@@ -709,34 +748,38 @@ export function SessionPanel({
                         lineHeight={effectiveTermLineHeight}
                       />
                     ) : null}
-                    <BookmarkProvider value={bookmarkHandle}>
-                      <Transcript
-                        key={subagentId ?? 'session'}
-                        state={state}
-                        fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-                        attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
-                        canBrowseFiles={hostFiles.available}
-                        sessionNames={peers.names}
-                        hostImage={hostImage}
-                        variant={transcriptVariant}
-                        density={transcriptDensity}
-                        fontSize={effectiveTermFontSize}
-                        lineHeight={effectiveTermLineHeight}
-                        affordances={affordances}
-                        stickyPrompt={stickyPrompt}
-                        scrubber={scrubber}
-                        bookmarks={bookmarks}
-                        replaying={replaying}
-                        catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
-                        reveal={taskReveal ?? returnReveal ?? reveal}
-                        frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
-                        onOpenSubagent={enterSubagent}
-                        emptyState={emptyState}
-                        jumpToRecapRef={jumpToRecap}
-                        repinRef={repinTranscript}
-                      />
-                    </BookmarkProvider>
-                    {catchUp && newCount > 0 && !replaying && subagentId === undefined ? (
+                    {framedShellId !== undefined ? (
+                      <ShellTerminal key={framedShellId} handle={handle} shellId={framedShellId} fontSize={effectiveTermFontSize} />
+                    ) : (
+                      <BookmarkProvider value={bookmarkHandle}>
+                        <Transcript
+                          key={subagentId ?? 'session'}
+                          state={state}
+                          fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+                          attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+                          canBrowseFiles={hostFiles.available}
+                          sessionNames={peers.names}
+                          hostImage={hostImage}
+                          variant={transcriptVariant}
+                          density={transcriptDensity}
+                          fontSize={effectiveTermFontSize}
+                          lineHeight={effectiveTermLineHeight}
+                          affordances={affordances}
+                          stickyPrompt={stickyPrompt}
+                          scrubber={scrubber}
+                          bookmarks={bookmarks}
+                          replaying={replaying}
+                          catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
+                          reveal={taskReveal ?? frameReturnReveal ?? reveal}
+                          frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
+                          onOpenSubagent={enterSubagent}
+                          emptyState={emptyState}
+                          jumpToRecapRef={jumpToRecap}
+                          repinRef={repinTranscript}
+                        />
+                      </BookmarkProvider>
+                    )}
+                    {catchUp && newCount > 0 && !replaying && subagentId === undefined && framedShellId === undefined ? (
                       <div className="px-3 pb-1">
                         <div
                           data-slot="catch-up"
@@ -807,7 +850,7 @@ export function SessionPanel({
                         </PromptSurface>
                       </div>
                     ) : null}
-                    {readOnly || subagentId !== undefined ? null : (
+                    {readOnly || subagentId !== undefined || framedShellId !== undefined ? null : (
                       <>
                         <Composer
                           ref={composerRef}

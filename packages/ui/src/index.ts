@@ -134,6 +134,17 @@ export {
   type SubagentToggleProps,
 } from './components/agent/SubagentToggle.tsx'
 export { SubagentStrip } from './components/agent/SubagentStrip.tsx'
+export { ShellStrip, type ShellStripProps } from './components/agent/ShellStrip.tsx'
+export { useShellFrame, type ShellFrame, type ShellFrameOptions } from './components/agent/use-shell-frame.ts'
+export { ShellActionsProvider, useShellActions, type ShellActions } from './components/agent/shell-actions.tsx'
+export {
+  SHELL_GLYPH,
+  SHELL_KILL_GLYPH,
+  shellInfoFailed,
+  shellInfoLabel,
+  shellInfoStatusText,
+  shellTitle,
+} from './components/terminal/shell-row.ts'
 export { ProjectIcon } from './components/agent/ProjectIcon.tsx'
 export { SessionEmptyState, type SessionEmptyStateProps } from './components/agent/SessionEmptyState.tsx'
 export { PromptTokenText, SessionNamesProvider, SkillNamesProvider } from './components/agent/PromptTokenText.tsx'

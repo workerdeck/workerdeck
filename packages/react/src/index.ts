@@ -41,3 +41,11 @@ export {
 } from './lib/transcript.ts'
 export type { ProducedFileRef, ShellItem, ToolResultImageRef, TranscriptItem, TranscriptState } from './lib/transcript.ts'
 export { recapLine, summarizeSince, type RecapInput, type RecapSummary } from './lib/recap.ts'
+export { useShellTerminal } from './hooks/use-shell-terminal.ts'
+export type {
+  ShellAttachment,
+  ShellTerminalSize,
+  ShellTerminalStatus,
+  UseShellTerminalOptions,
+  UseShellTerminalResult,
+} from './hooks/use-shell-terminal.ts'

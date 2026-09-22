@@ -59,6 +59,17 @@ export class SessionsModel implements vscode.Disposable {
     this.#onDidChange.fire()
   }
 
+  setSelectedShell(shellId: string | undefined): void {
+    if (!this.#selected) {
+      return
+    }
+    if (this.#selected.shellId === shellId) {
+      return
+    }
+    this.#selected = { ...this.#selected, shellId }
+    this.#onDidChange.fire()
+  }
+
   setWatching(key: string, watching: boolean): void {
     const before = this.#watchers.size
     if (watching) {

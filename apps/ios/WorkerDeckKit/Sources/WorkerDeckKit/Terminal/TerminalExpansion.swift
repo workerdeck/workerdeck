@@ -31,6 +31,10 @@ public enum ExpansionKey: Hashable, Sendable {
   /// `useState` in `BriefRow`, which this renderer cannot afford (a height the
   /// book does not know is a frame the layout gets wrong).
   case brief(String)
+  /// One shell row's output, by the **shell's** id rather than the row's: the
+  /// record is what the press fetches and what a kill names, and the row it is
+  /// drawn in is an event-log detail.
+  case shell(String)
 }
 
 extension ExpansionKey: CustomStringConvertible {
@@ -42,6 +46,7 @@ extension ExpansionKey: CustomStringConvertible {
     case .task(let id): return "task:\(id)"
     case .call(let id): return "call:\(id)"
     case .brief(let id): return "brief:\(id)"
+    case .shell(let id): return "shell:\(id)"
     }
   }
 }
@@ -153,10 +158,10 @@ public struct TerminalExpansion: Equatable, Sendable {
       return true
     case .expandFull(let id):
       return full.insert(id).inserted
-    case .openSubagent:
-      // Not an expansion at all: the takeover is a navigation, handled by the
-      // screen that has somewhere to push. Reaching here means a caller fed a
-      // press to the wrong interpreter; opening nothing is the honest no-op.
+    case .openSubagent, .killShell:
+      // Not an expansion at all: the takeover is a navigation and the kill is a
+      // REST call, both handled by the screen. Reaching here means a caller fed
+      // a press to the wrong interpreter; opening nothing is the honest no-op.
       return false
     }
   }
@@ -184,7 +189,7 @@ public struct TerminalExpansion: Equatable, Sendable {
   private mutating func close(_ key: ExpansionKey, subtree: Set<ExpansionKey>) {
     var closing: Set<ExpansionKey> = [key]
     switch key {
-    case .call, .brief: break
+    case .call, .brief, .shell: break
     case .run, .task: closing.formUnion(subtree)
     }
     open.subtract(closing)
@@ -278,6 +283,10 @@ public enum TermPress: Equatable, Sendable {
   /// the plan like every other (`planTask` attaches it); what *handles* it is
   /// the session screen, the only place that has a navigation stack to push.
   case openSubagent(taskId: String)
+  /// Stop a running shell. Not an expansion at all - it is a REST call with a
+  /// process at the other end - so the screen handles it, the way it handles
+  /// ``openSubagent(taskId:)``, and confirms before it fires.
+  case killShell(shellId: String)
 }
 
 // MARK: - One walk of a block
@@ -394,7 +403,8 @@ public func expansionKeys(of block: TerminalBlock) -> Set<ExpansionKey> {
 func expansionKeys(of block: TerminalBlock, calls: [BlockCall]) -> Set<ExpansionKey> {
   var keys: Set<ExpansionKey> = []
   switch block {
-  case .item: break
+  case .item(let leaf):
+    if case .shell(let item) = leaf.item { keys.insert(.shell(item.shell.id)) }
   case .run(let run):
     if let key = run.expansionKey { keys.insert(key) }
   case .task(let task):

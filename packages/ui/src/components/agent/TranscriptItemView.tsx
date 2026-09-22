@@ -154,6 +154,17 @@ function ShellCard({ item }: { item: ShellItem }) {
           {shellLabel(item)}
         </button>
         <span className={cn('shrink-0 text-label', failed ? 'text-danger' : 'text-fg-4')}>{shellStatusText(item)}</span>
+        {actions.open ? (
+          <button
+            type="button"
+            aria-label="Open terminal"
+            title="Open terminal"
+            className="shrink-0 text-label text-fg-3 hover:text-fg-1"
+            onClick={() => actions.open?.(shellId)}
+          >
+            ⤢
+          </button>
+        ) : null}
         {running ? (
           <button
             type="button"

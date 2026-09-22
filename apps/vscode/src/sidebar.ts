@@ -16,7 +16,7 @@ const FILTER_OPEN_KEY = 'workerdeck.filterOpen.v1'
 
 export const SUBAGENTS_CONTEXT_KEY = 'workerdeck.sessionsSubagents'
 
-export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; target?: SurfaceTarget }
+export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; shellId?: string; target?: SurfaceTarget }
 
 export type SidebarDelegate = {
   selectSession: (hostId: string, sessionId: string, options?: SelectOptions) => Promise<void>

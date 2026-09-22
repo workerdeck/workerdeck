@@ -1338,6 +1338,15 @@ has the shape; these are the ways to get it wrong.
 - **Two budgets, never joined.** The model text is head + tail + pointer fixed at flush
   (`shellContextText`); the row is `SHELL_INLINE_LINES` and expands client-side through
   `GET /sessions/:id/shells/:shellId/output`. Expanding never reaches the model.
+- **The row is bounded in bytes, not only in lines, and reads a bounded prefix of the text view.**
+  It is rebuilt on every notify tick (4 Hz) and rides the event log, every attached socket and every
+  parking snapshot, so `shellInlineText` never scans the whole text: `SHELL_INLINE_LINE_CHARS` per
+  line, `SHELL_INLINE_CHARS` for the row, and a line past the line budget is clipped (` [...]`) and
+  ends the row, because finding its end would mean scanning the rest. The omission marker is
+  `[... more output ...]` with no count, since a line count is a pass over the whole output; both
+  reducers (`SHELL_MORE_OUTPUT` in react, `shellMoreOutput` in the kit) strip that exact line. The
+  artifact's text view is incremental for the same reason: `#textAppend` searches only the new chunk
+  for a newline, since re-scanning the pending line per chunk made one long line quadratic.
 - **A running shell flushes once with its tail, then as a status line, then once more on exit.**
   Nothing streams into context on its own.
 - **`$` does not start a turn.** `runner.sendMessage()` wakes the model, so routing shell output
@@ -1391,6 +1400,45 @@ has the shape; these are the ways to get it wrong.
   text only, so it renders as a notice with no live state.
 - **iOS mirrors all of it**: `SessionCommand.shellCommand`, `AttachedFrame.shell`, `ShellInfo` and
   both reducer rules in `Transcript.swift`. A fix on one side alone silently diverges the clients.
+- **A closing socket detaches and never kills.** `ws.on('close')` runs `detachShells` and nothing
+  else; the registry's `watch(runner)` owns the close and park kills. A reader closing a tab must
+  not end the dev server the session is running, and this is the single line in `routes/ws.ts` most
+  likely to be "tidied" into a kill.
+- **The three drill-in frames are ephemeral**, the `tool_call_request` rule again: `shell_attached`,
+  `shell_output` and `shell_detached` are sent to one socket, in the moment, and are never logged,
+  never replayed, never snapshotted. PTY bytes reach no event log, no transcript reducer, no
+  transcript cache and no parking snapshot. The bounded row is the only shell output that is
+  persistent state, and it comes the other way, through the event log.
+- **Every `shell_attached` means "reset the terminal, then write the scrollback".** A re-attach on
+  the same socket silently replaces the earlier attachment (`attachShell` detaches the old entry
+  before it registers the new one) and answers with a fresh full frame, so a client that appends
+  instead of resetting draws every byte twice. `ShellTerminal`'s `onAttached` is the reference:
+  `instance.reset()` then `write(scrollback)`.
+- **The scrollback is gapless by construction.** `registry.attach` adds a buffering proxy sink
+  *before* it reads the artifact replay and flips it live after, so bytes written during the read
+  are queued and appended rather than lost between the history and the live stream. A failed replay
+  removes that proxy before it throws; leaving it in place left a buffer growing until the shell
+  ended.
+- **Backpressure is retriable, and is not the shell ending.** `SHELL_SOCKET_BUFFERED_MAX` is 4 MiB
+  of `ws.bufferedAmount`; crossing it sends `shell_detached { reason: 'backpressure' }` and
+  detaches. The whole socket's backlog counts, transcript frames included, so attaching while a big
+  `afterSeq=0` replay is still draining can trip it with nothing to do with the shell. The fix is to
+  re-attach. Rendering it as "the command exited" is wrong twice: the process is still running, and
+  the reader is told to stop waiting for it.
+- **`shell_detached` only ever reports a transition.** Attaching to an already-exited shell sends
+  one `shell_attached` with `status: 'exited'`, its scrollback, and no detach frame ever after,
+  because there is nothing to detach from. No detach frame is sent for a client-initiated
+  `shell_detach`, for an attachment replaced by a re-attach, or for a socket close: in all three the
+  client already knows.
+- **`shell_attached.cols/rows` are the record's after clamping**, not what the client asked for
+  (`clampSize`, `SHELL_MIN/MAX_COLS/ROWS`). Last attach wins and the record follows it, so two
+  clients on one shell share one size and the second one to attach sets it. For an exited shell they
+  are the size it ran at, which is what the scrollback was laid out against.
+- **The web URL round trip must carry `subagent`/`sn` through unchanged.** The sub-agent branch
+  withdraws with `search: {}`, and copying that for the shell branch drops them, which flips
+  `openSubagent.nonce` to `undefined`; `useSubagentFrame` keys on the nonce alone, so that fires
+  `leaveSubagent`, which reports, which navigates, which drops `shell` - a two-frame ping-pong
+  between the two frames with the reader in neither.
 
 ## Message attachments (`/v1/sessions/:id/attachments`)
 

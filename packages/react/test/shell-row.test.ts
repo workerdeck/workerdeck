@@ -50,9 +50,9 @@ describe('the shell transcript row', () => {
   it('strips the command line, the omission marker and the end line', () => {
     const parsed = shellRowText(
       shell({ status: 'exited', exitCode: 1, endReason: 'exit', endedAt: 2000 }),
-      '<local-command-stderr>$ npm test\nfail one\nfail two\n[... 412 more lines ...]\n[exit 1]</local-command-stderr>',
+      '<local-command-stderr>$ npm test\nfail one\nfail two [...]\n[... more output ...]\n[exit 1]</local-command-stderr>',
     )
-    expect(parsed).toEqual({ text: 'fail one\nfail two', truncated: true })
+    expect(parsed).toEqual({ text: 'fail one\nfail two [...]', truncated: true })
   })
 
   it('keeps a running row untruncated when nothing was omitted', () => {

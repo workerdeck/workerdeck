@@ -203,6 +203,49 @@ public struct WorkerClient: Sendable {
       body: decision)
   }
 
+  // MARK: - Shells
+
+  /// Every tracked shell of a session, newest first.
+  public func listShells(sessionId: String) async throws -> [ShellInfo] {
+    let data = try await call("GET", "/sessions/\(Self.encodeComponent(sessionId))/shells")
+    return try decode(ListShellsResponse.self, from: data).shells
+  }
+
+  /// One shell's record. **A 404 is an answer, not a malfunction**: the record
+  /// was swept past its TTL, or it belongs to a gateway generation this one
+  /// cannot speak for. That is what a `running` row's first-render check is for
+  /// - the event log's claim may be older than the process.
+  public func getShell(sessionId: String, shellId: String) async throws -> ShellInfo {
+    let data = try await call(
+      "GET",
+      "/sessions/\(Self.encodeComponent(sessionId))/shells/\(Self.encodeComponent(shellId))")
+    return try decode(ShellResponse.self, from: data).shell
+  }
+
+  /// A shell's captured output. `text` is the stripped view a row draws; `raw`
+  /// is the PTY bytes a terminal would replay. `tail` bounds it to the last N
+  /// bytes, which is what a row expanding a dev server's log wants.
+  public func shellOutput(
+    sessionId: String, shellId: String, view: ShellOutputView = .text, tail: Int? = nil
+  ) async throws -> String {
+    var suffix = "?view=\(view.rawValue)"
+    if let tail { suffix += "&tail=\(tail)" }
+    let data = try await call(
+      "GET",
+      "/sessions/\(Self.encodeComponent(sessionId))/shells/\(Self.encodeComponent(shellId))/output\(suffix)"
+    )
+    return String(decoding: data, as: UTF8.self)
+  }
+
+  /// Kill a running shell's process group. Answers with the settled record.
+  @discardableResult
+  public func killShell(sessionId: String, shellId: String) async throws -> ShellInfo {
+    let data = try await call(
+      "POST",
+      "/sessions/\(Self.encodeComponent(sessionId))/shells/\(Self.encodeComponent(shellId))/kill")
+    return try decode(ShellResponse.self, from: data).shell
+  }
+
   // MARK: - Profiles
 
   /// The profiles this caller may use, plus whether it may create new ones.

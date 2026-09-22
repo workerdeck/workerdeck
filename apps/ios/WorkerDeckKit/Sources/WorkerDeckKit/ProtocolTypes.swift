@@ -14,8 +14,105 @@ import Foundation
 public enum WorkerProtocol {
   /// Mirror of PROTOCOL_VERSION. Compare against `AttachedFrame.protocolVersion`.
   public static let version = 1
-  /// Mirror of SHELL_COMMAND_MAX - the longest `!` command the gateway accepts.
+  /// Mirror of SHELL_COMMAND_MAX - the longest `$` command the gateway accepts.
   public static let shellCommandMax = 4000
+  /// Mirror of SHELL_LABEL_MAX.
+  public static let shellLabelMax = 80
+  /// Mirror of SHELL_INLINE_LINES - how much of a shell's output the row carries.
+  public static let shellInlineLines = 8
+  /// Mirror of SHELL_PROMOTE_MS.
+  public static let shellPromoteMs: Double = 3_000
+  /// Mirror of SHELL_LINGER_MS.
+  public static let shellLingerMs: Double = 60_000
+}
+
+// MARK: - Shells
+
+public enum ShellOwner: String, Decodable, Sendable, Equatable, Hashable {
+  case user
+  case agent
+}
+
+public enum ShellStatus: String, Decodable, Sendable, Equatable, Hashable {
+  case running
+  case exited
+}
+
+/// Why a shell stopped. The one union in this mirror that decodes **leniently**,
+/// and deliberately: the closed list is protocol 1's final one, so a gateway
+/// sending anything else is ahead of this build, and widening the Swift side
+/// later would otherwise cost a `PROTOCOL_VERSION` bump (the `ChecklistStatus`
+/// argument, applied before it can bite). An unrecognised reason reads as
+/// ``unknown`` and the row says "ended", never a failed decode that would take
+/// the whole message down with it.
+public enum ShellEndReason: String, Decodable, Sendable, Equatable, Hashable {
+  case exit
+  case killed
+  case timeout
+  case serverStopped = "server_stopped"
+  case serverRestarted = "server_restarted"
+  case spawnFailed = "spawn_failed"
+  case unknown
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = ShellEndReason(rawValue: raw) ?? .unknown
+  }
+}
+
+/// One tracked shell - the record every `$` invocation gets, and the entity the
+/// transcript row, the session list and (later) the drill-in are all views over.
+public struct ShellInfo: Decodable, Sendable, Equatable, Hashable, Identifiable {
+  /// Gateway-minted (`sh_` + base32), never the pid.
+  public let id: String
+  public let sessionId: String
+  /// Per-session counter - what "shell #3" means to a person and to the model.
+  public let ordinal: Int
+  public let command: String
+  /// First line of `command`, clipped to ``WorkerProtocol/shellLabelMax``.
+  public let label: String
+  public let cwd: String
+  public let owner: ShellOwner
+  public let status: ShellStatus
+  public let startedAt: Double
+  public let endedAt: Double?
+  public let exitCode: Int?
+  public let signal: Int?
+  public let endReason: ShellEndReason?
+  /// Raw bytes captured so far.
+  public let bytes: Int
+  /// The artifact hit its cap; only the tail ring advanced after.
+  public let capped: Bool?
+  public let cols: Int
+  public let rows: Int
+  public let agentWrite: Bool?
+
+  public init(
+    id: String, sessionId: String, ordinal: Int, command: String, label: String, cwd: String,
+    owner: ShellOwner = .user, status: ShellStatus = .running, startedAt: Double,
+    endedAt: Double? = nil, exitCode: Int? = nil, signal: Int? = nil,
+    endReason: ShellEndReason? = nil, bytes: Int = 0, capped: Bool? = nil, cols: Int = 120,
+    rows: Int = 40, agentWrite: Bool? = nil
+  ) {
+    self.id = id
+    self.sessionId = sessionId
+    self.ordinal = ordinal
+    self.command = command
+    self.label = label
+    self.cwd = cwd
+    self.owner = owner
+    self.status = status
+    self.startedAt = startedAt
+    self.endedAt = endedAt
+    self.exitCode = exitCode
+    self.signal = signal
+    self.endReason = endReason
+    self.bytes = bytes
+    self.capped = capped
+    self.cols = cols
+    self.rows = rows
+    self.agentWrite = agentWrite
+  }
 }
 
 // MARK: - Session lifecycle
@@ -894,11 +991,14 @@ public struct UserMessageEvent: Decodable, Sendable, Equatable {
   /// hang a diff off the wrong row.
   public let patch: FilePatch?
   public let uuid: String?
+  /// The tracked shell this message *is*, when it is a `$` row. The gateway
+  /// re-emits the same `uuid` as the shell ticks, so the row upserts in place.
+  public let shell: ShellInfo?
 
   public init(
     message: ApiMessage, parentToolUseId: String? = nil, replay: Bool? = nil,
     synthetic: Bool? = nil, origin: MessageOrigin? = nil, attachments: [MessageAttachment]? = nil,
-    patch: FilePatch? = nil, uuid: String? = nil
+    patch: FilePatch? = nil, uuid: String? = nil, shell: ShellInfo? = nil
   ) {
     self.message = message
     self.parentToolUseId = parentToolUseId
@@ -908,6 +1008,27 @@ public struct UserMessageEvent: Decodable, Sendable, Equatable {
     self.attachments = attachments
     self.patch = patch
     self.uuid = uuid
+    self.shell = shell
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    message = try c.decode(ApiMessage.self, forKey: .message)
+    parentToolUseId = try c.decodeIfPresent(String.self, forKey: .parentToolUseId)
+    replay = try c.decodeIfPresent(Bool.self, forKey: .replay)
+    synthetic = try c.decodeIfPresent(Bool.self, forKey: .synthetic)
+    origin = try c.decodeIfPresent(MessageOrigin.self, forKey: .origin)
+    attachments = try c.decodeIfPresent([MessageAttachment].self, forKey: .attachments)
+    patch = try c.decodeIfPresent(FilePatch.self, forKey: .patch)
+    uuid = try c.decodeIfPresent(String.self, forKey: .uuid)
+    // `try?`: a record this build cannot parse must degrade to the
+    // local-command notice every older client already draws, never take the
+    // message it rides on down to `.unknown`.
+    shell = try? c.decodeIfPresent(ShellInfo.self, forKey: .shell)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case message, parentToolUseId, replay, synthetic, origin, attachments, patch, uuid, shell
   }
 }
 
@@ -1222,7 +1343,7 @@ public enum SessionCommand: Sendable, Equatable {
   case setModel(String?)
   case toolCallResult(executionId: String, output: ToolExecutionOutput, logs: [String]? = nil)
   case toolCallError(executionId: String, reason: String, error: String, logs: [String]? = nil)
-  /// Run a `!` shell command on the host, in the session's cwd. Offered only when
+  /// Run a `$` shell command on the host, as a tracked PTY, in the session's cwd. Offered only when
   /// `AttachedFrame.shell` is true; the gateway re-checks and refuses otherwise.
   case shellCommand(command: String)
   case close

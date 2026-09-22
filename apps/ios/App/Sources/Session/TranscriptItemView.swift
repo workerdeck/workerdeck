@@ -43,6 +43,8 @@ struct TranscriptItemView: View {
       FileDeliveredCard(path: path, bytes: bytes, description: description)
     case .compaction(let item):
       CompactionRow(item: item)
+    case .shell(let item):
+      ShellRow(item: item)
     }
   }
 }
@@ -193,6 +195,30 @@ private struct NoticeRow: View {
       .textSelection(.enabled)
       .frame(maxWidth: .infinity, alignment: .center)
       .padding(.vertical, 2)
+  }
+}
+
+/// A `$` row in the cards variant: the command, what the record says about it,
+/// and the lines the gateway inlined. No kill and no expansion - those are
+/// presses on a plan, which this renderer does not have; the terminal variant is
+/// where a shell is worked with.
+private struct ShellRow: View {
+  let item: ShellItem
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text("\(TerminalShell.glyph) \(TerminalShell.label(item)) · \(TerminalShell.statusText(item))")
+        .font(.caption.monospaced())
+        .foregroundStyle(TerminalShell.failed(item) ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary))
+      if !item.text.isEmpty {
+        Text(item.text)
+          .font(.caption2.monospaced())
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.vertical, 2)
   }
 }
 

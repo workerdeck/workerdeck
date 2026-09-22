@@ -470,6 +470,10 @@
   padding: 0;
   cursor: pointer;
 }
+/* The shell drill-in, in the same magenta as the row's `$`. */
+[data-terminal] .term-action[data-tone='magenta'] {
+  color: var(--term-magenta);
+}
 [data-terminal] .term-action:hover {
   color: var(--term-fg);
 }

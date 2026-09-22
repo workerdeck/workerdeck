@@ -4,6 +4,8 @@ export type ShellActions = {
   loadOutput: (shellId: string) => Promise<boolean>
   verify: (shellId: string) => Promise<boolean>
   kill: (shellId: string) => Promise<boolean>
+  // Drill in to the shell's terminal. Absent when the host has no frame to open one in.
+  open?: (shellId: string) => void
 }
 
 const NOOP: ShellActions = {

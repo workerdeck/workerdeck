@@ -5,11 +5,13 @@ import {
   SHELL_CONTEXT_HEAD_LINES,
   SHELL_CONTEXT_TAIL_CHARS,
   SHELL_CONTEXT_TAIL_LINES,
+  SHELL_INLINE_CHARS,
+  SHELL_INLINE_LINE_CHARS,
   SHELL_INLINE_LINES,
   type SessionEventBody,
   type ShellInfo,
 } from '@workerdeck/protocol'
-import { countLines, headTail, splitLines } from './tty-text.ts'
+import { countLines, headTail } from './tty-text.ts'
 
 export type LocalCommandResult = {
   command: string
@@ -39,7 +41,15 @@ type QueueEntry =
 
 type Rendered = { full: string; collapsed?: () => string; settled: boolean; lines: number }
 
+type InlineHead = { lines: string[]; more: boolean }
+
 const OUTPUT_POINTER = 'the full output is in the transcript'
+
+const INLINE_MORE = '[... more output ...]'
+
+const INLINE_CLIPPED = ' [...]'
+
+const INLINE_SCAN_CHARS = SHELL_INLINE_LINES * (SHELL_INLINE_LINE_CHARS + 1)
 
 const TAIL_ONLY = { headLines: 0, headChars: 0, tailLines: SHELL_CONTEXT_TAIL_LINES, tailChars: SHELL_CONTEXT_TAIL_CHARS }
 
@@ -100,10 +110,10 @@ export function localCommandEvent(text: string, uuid: string, shell: ShellInfo |
 }
 
 export function shellInlineText(shell: ShellInfo, text: string): string {
-  const lines = splitLines(text)
-  const body = [`$ ${shell.command}`, ...lines.slice(0, SHELL_INLINE_LINES)]
-  if (lines.length > SHELL_INLINE_LINES) {
-    body.push(`[... ${count(lines.length - SHELL_INLINE_LINES)} more lines ...]`)
+  const head = inlineHead(text)
+  const body = [`$ ${shell.command}`, ...head.lines]
+  if (head.more) {
+    body.push(INLINE_MORE)
   }
   const end = shellEndLine(shell)
   if (end) {
@@ -247,6 +257,34 @@ function capped(rendered: readonly Rendered[]): string[] {
 
 function frame(tag: string, body: readonly string[]): string {
   return `<${tag}>${body.join('\n')}</${tag}>`
+}
+
+// The row is rebuilt on every notify tick and rides the event log, so it reads a bounded prefix of the text view and
+// never the whole of it: a line past the line budget is clipped and ends the row, since finding its end would mean
+// scanning the rest.
+function inlineHead(text: string): InlineHead {
+  const total = text.length
+  const window = total > INLINE_SCAN_CHARS ? text.slice(0, INLINE_SCAN_CHARS) : text
+  const lines: string[] = []
+  let at = 0
+  let chars = 0
+  while (lines.length < SHELL_INLINE_LINES && at < total) {
+    const segment = window.slice(at, at + SHELL_INLINE_LINE_CHARS + 1)
+    const newline = segment.indexOf('\n')
+    const clipped = newline === -1 && segment.length > SHELL_INLINE_LINE_CHARS
+    const line = clipped ? segment.slice(0, SHELL_INLINE_LINE_CHARS) + INLINE_CLIPPED : newline === -1 ? segment : segment.slice(0, newline)
+    const next = chars + line.length + (lines.length > 0 ? 1 : 0)
+    if (lines.length > 0 && next > SHELL_INLINE_CHARS) {
+      return { lines, more: true }
+    }
+    lines.push(line)
+    chars = next
+    if (clipped) {
+      return { lines, more: true }
+    }
+    at = newline === -1 ? total : at + newline + 1
+  }
+  return { lines, more: at < total }
 }
 
 function shellTag(shell: ShellInfo): string {

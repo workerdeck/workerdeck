@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
+import '@xterm/xterm/css/xterm.css'
 import { Bridge } from './bridge.ts'
 import { syncVsCodeTheme } from './theme.ts'
 import { App } from './App.tsx'

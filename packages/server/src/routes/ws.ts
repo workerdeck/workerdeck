@@ -3,10 +3,16 @@ import type { WebSocket } from 'ws'
 import { isSlashCommand, type Runner } from '@workerdeck/core'
 import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
-import { shellPermitted, SHELL_REFUSAL } from '../services/shells.ts'
+import { shellPermitted, SHELL_REFUSAL, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
 
 // What the upgrade established about the principal; computed once there so the attach never re-authenticates.
 export type AttachAccess = { operator: boolean }
+
+// One per socket: its send path, its outbound backlog, and the shells it is attached to (shell id to the registry's detach).
+type Client = { send: (frame: ServerFrame) => void; open: () => boolean; buffered: () => number; shells: Map<string, () => void> }
+
+export const SHELL_SOCKET_BUFFERED_MAX = 4 * 1024 * 1024
+export const SHELL_DETACHED_BACKPRESSURE = 'backpressure'
 
 export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage, access: AttachAccess): void {
   const { bridge, parking } = ctx
@@ -20,6 +26,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
       ws.send(JSON.stringify(frame))
     }
   }
+  const client: Client = { send, open: () => ws.readyState === ws.OPEN, buffered: () => ws.bufferedAmount, shells: new Map() }
 
   send({
     type: 'attached',
@@ -50,7 +57,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
       send({ type: 'protocol_error', message: 'invalid JSON frame' })
       return
     }
-    handleCommand(ctx, frame, runner, access).catch((error: unknown) => {
+    handleCommand(ctx, frame, runner, access, client).catch((error: unknown) => {
       send({
         type: 'protocol_error',
         message: error instanceof Error ? error.message : 'command failed',
@@ -58,13 +65,15 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     })
   })
   ws.on('close', () => {
+    // Detach only. The registry's watch(runner) owns the close and park kills; a socket going away must not end a shell.
+    detachShells(client)
     unsubscribe()
     detachBridge()
     parking.onDetach(runner.id)
   })
 }
 
-async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner, access: AttachAccess): Promise<void> {
+async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Runner, access: AttachAccess, client: Client): Promise<void> {
   const { attachmentStore, bridge } = ctx
   switch (frame.type) {
     case 'user_message': {
@@ -134,9 +143,7 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       return
     }
     case 'shell_command': {
-      if (!shellPermitted(ctx.shells, runner, access.operator) || ctx.shells === null) {
-        throw new Error(SHELL_REFUSAL)
-      }
+      const shells = permittedShells(ctx, runner, access)
       if (typeof frame.command !== 'string' || frame.command.includes('\0')) {
         throw new Error('shell command must be a string')
       }
@@ -149,14 +156,30 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       if (!runner.queueLocalCommand) {
         throw new Error(`the ${runner.info().engine ?? 'claude'} engine cannot take shell output`)
       }
-      const { shell, source } = await ctx.shells.spawn({ runner, command: frame.command, owner: 'user' })
+      const { shell, source } = await shells.spawn({ runner, command: frame.command, owner: 'user' })
       try {
         runner.queueLocalCommand(source)
       } catch (error) {
         // queueLocalCommand throws before it pushes, so without this the shell would run with no transcript row.
-        ctx.shells.kill(runner.id, shell.id)
+        shells.kill(runner.id, shell.id)
         throw error
       }
+      return
+    }
+    case 'shell_attach': {
+      await attachShell(permittedShells(ctx, runner, access), client, runner.id, frame.shellId, { cols: frame.cols, rows: frame.rows })
+      return
+    }
+    case 'shell_input': {
+      permittedShells(ctx, runner, access).write(runner.id, frame.shellId, frame.data)
+      return
+    }
+    case 'shell_resize': {
+      permittedShells(ctx, runner, access).resize(runner.id, frame.shellId, { cols: frame.cols, rows: frame.rows })
+      return
+    }
+    case 'shell_detach': {
+      detachShell(client, frame.shellId)
       return
     }
     case 'close': {
@@ -167,4 +190,58 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       throw new Error(`unknown command: ${(frame as { type?: string }).type}`)
     }
   }
+}
+
+function permittedShells(ctx: ServerContext, runner: Runner, access: AttachAccess): ShellRegistry {
+  if (ctx.shells === null || !shellPermitted(ctx.shells, runner, access.operator)) {
+    throw new Error(SHELL_REFUSAL)
+  }
+  return ctx.shells
+}
+
+async function attachShell(shells: ShellRegistry, client: Client, sessionId: string, shellId: string, size: ShellSize): Promise<void> {
+  shells.resize(sessionId, shellId, size)
+  let detach: (() => void) | undefined
+  const drop = (reason: string): void => {
+    if (detach === undefined || client.shells.get(shellId) !== detach) {
+      return
+    }
+    client.shells.delete(shellId)
+    detach()
+    client.send({ type: 'shell_detached', shellId, reason })
+  }
+  const sink: ShellSink = {
+    write: (data) => {
+      if (client.buffered() > SHELL_SOCKET_BUFFERED_MAX) {
+        drop(SHELL_DETACHED_BACKPRESSURE)
+        return
+      }
+      client.send({ type: 'shell_output', shellId, data })
+    },
+    end: drop,
+  }
+  const attached = await shells.attach(sessionId, shellId, sink)
+  if (!client.open()) {
+    attached.detach()
+    return
+  }
+  detachShell(client, shellId)
+  if (attached.shell.status === 'running') {
+    detach = attached.detach
+    client.shells.set(shellId, detach)
+  }
+  const { shell, scrollback } = attached
+  client.send({ type: 'shell_attached', shellId, shell, cols: shell.cols, rows: shell.rows, scrollback })
+}
+
+function detachShell(client: Client, shellId: string): void {
+  client.shells.get(shellId)?.()
+  client.shells.delete(shellId)
+}
+
+function detachShells(client: Client): void {
+  for (const detach of client.shells.values()) {
+    detach()
+  }
+  client.shells.clear()
 }
