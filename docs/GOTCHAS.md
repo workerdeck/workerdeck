@@ -1331,10 +1331,28 @@ has the shape; these are the ways to get it wrong.
 - **The force path kills too.** `installShutdown`'s second signal runs `killAllSync()` before
   `process.exit`; a detached group leader outlives a plain exit. The first signal names the running
   shells before the graceful close kills them.
-- **Killed by process group.** `process.kill(-pid)`, since a bare kill leaves grandchildren
-  (`sleep 9999 &`) running past the session. `session_closed` and a park kill the session's shells
-  through the registry's `watch(runner)`, installed once in `onRegister` - a socket closing must
-  only detach, never kill.
+- **Killed by process group, and that is not the same as killed.** `process.kill(-pid)`, since a
+  bare kill leaves grandchildren (`sleep 9999 &`) running past the session. `session_closed` and a
+  park kill the session's shells through the registry's `watch(runner)`, installed once in
+  `onRegister` - a socket closing must only detach, never kill.
+- **A child that starts its own process group escapes the group kill, and the record still says
+  `killed`.** The group kill reaches only what stayed in the leader's group. A supervisor that
+  calls `setsid`/`setpgid` per child does not: observed with `$ box dev` (silkweave), where the
+  pty child led pgid P with one bun process in it, while the supervisor, the web dev server and
+  the API server each sat in a group of their own, so `process.kill(-P)` killed two of six and
+  **vite kept its port**. The `shells.test.ts` grandchild case passes because a plain `&` child
+  inherits the group; it does not prove the general claim. Read `endReason: 'killed'` as "the
+  group was signalled", never as "nothing it started is left". No fix yet: reaching the escapees
+  means tracking descendants (a pid scan at kill time, or a `PGID` recorded per descendant), and
+  the honest interim is that the reason string overpromises.
+- **A `/clear` leaves a running shell with no handle in the UI.** The transcript row is the only
+  surface a shell has until the session-list rows land (stage 3), and `conversation_reset` both
+  wipes the transcript and makes the queue unsubscribe, so the row never redraws. The process
+  keeps running, the record stays right, and `GET /sessions/:id/shells` plus
+  `POST .../shells/:shellId/kill` still answer, but nothing in any client draws them: the
+  operator is back to "the port is held by an orphan nobody can see", which is the complaint
+  this feature exists to answer. Until the session-list surface lands, the index at
+  `<stateDir>/shells/<sessionId>.json` is the read-only way to find what is still running.
 - **Two budgets, never joined.** The model text is head + tail + pointer fixed at flush
   (`shellContextText`); the row is `SHELL_INLINE_LINES` and expands client-side through
   `GET /sessions/:id/shells/:shellId/output`. Expanding never reaches the model.
