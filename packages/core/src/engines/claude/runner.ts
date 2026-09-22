@@ -52,6 +52,7 @@ import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
+import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
 import { PEER_MCP_SERVER, PEER_TOOL_SHAPES, PEER_TOOL_NAMES, withPeerContext, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
 import { SubagentTracker } from './subagents.ts'
 
@@ -70,6 +71,7 @@ export type SessionRunnerConfig = CreateSessionRequest & {
   env?: Record<string, string | undefined>
   pathToClaudeCodeExecutable?: string
   extraOptions?: Partial<Options>
+  instructions?: SessionInstructions
   defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
   historyFn?: HistoryFn
@@ -89,6 +91,7 @@ export class SessionRunner implements Runner {
 
   #config: SessionRunnerConfig
   readonly #cwd: string
+  readonly #instructions: string | undefined
   #log = new EventLog()
   #subscribers = new SubscriberSet()
   #tasks = new TaskChecklist()
@@ -131,6 +134,10 @@ export class SessionRunner implements Runner {
     this.#permissionMode = config.permissionMode
     this.id = id
     this.createdAt = Date.now()
+    this.#instructions = resolveInstructions(config.instructions, { sessionId: id, cwd: config.cwd, profile: config.profile })
+    if (this.#instructions !== undefined && config.extraOptions?.systemPrompt !== undefined) {
+      throw new Error('instructions and extraOptions.systemPrompt both set - the host must pick one')
+    }
   }
 
   get status(): SessionStatus {
@@ -436,6 +443,9 @@ export class SessionRunner implements Runner {
       pathToClaudeCodeExecutable: c.pathToClaudeCodeExecutable,
       ...(c.permissionMode === 'bypassPermissions' || c.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
       ...c.extraOptions,
+      ...(this.#instructions === undefined
+        ? {}
+        : { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: this.#instructions } }),
     }
     return options
   }

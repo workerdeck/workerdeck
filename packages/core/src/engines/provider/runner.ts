@@ -35,6 +35,7 @@ import { LocalCommandQueue, localCommandEvent, type LocalCommandResult, type Loc
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
+import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
 
 const SUPPORTED_PERMISSION_MODES: readonly PermissionMode[] = ['default', 'bypassPermissions', 'dontAsk']
 
@@ -43,7 +44,7 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   cwd?: string
   languageModel: LanguageModel
   tools?: ToolSet
-  instructions?: string
+  instructions?: SessionInstructions
   maxSteps?: number
   executor?: ToolExecutor
   executableTools?: string[]
@@ -88,6 +89,7 @@ export class AiSdkRunner implements Runner {
   readonly createdAt: number
 
   #config: AiSdkRunnerConfig
+  readonly #instructions: string | undefined
   #model: LanguageModel
   #log = new EventLog()
   #subscribers = new SubscriberSet()
@@ -127,6 +129,7 @@ export class AiSdkRunner implements Runner {
     this.#modelAlias = config.model
     this.id = config.restore?.id ?? id
     this.createdAt = config.restore?.createdAt ?? Date.now()
+    this.#instructions = resolveInstructions(config.instructions, { sessionId: this.id, cwd: config.cwd, profile: config.profile })
     if (config.restore) {
       this.#restore(config.restore)
     }
@@ -787,7 +790,7 @@ export class AiSdkRunner implements Runner {
     const agent = new ToolLoopAgent({
       model: this.#model,
       tools: this.#config.tools ?? {},
-      instructions: this.#config.instructions,
+      instructions: this.#instructions,
       stopWhen: isStepCount(this.#config.maxSteps ?? 20),
     })
     const abort = new AbortController()

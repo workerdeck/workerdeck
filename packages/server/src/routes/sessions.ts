@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { CreateSessionRequest, ResolvePermissionRequest, UpdateSessionRequest } from '@workerdeck/protocol'
+import type { ResolvePermissionRequest, UpdateSessionRequest } from '@workerdeck/protocol'
 import { contentTypeFor, json, readJsonBody, untrustedDownloadHeaders } from '../lib/http.ts'
 import type { SessionRoute } from '../lib/parse-route.ts'
 import type { AuthContext } from '../services/auth.ts'
@@ -31,13 +31,12 @@ export async function handleSessions(
       return
     }
     if (req.method === 'POST') {
-      const body = (await readJsonBody(req, ctx.maxBodyBytes)) as CreateSessionRequest
-      const refusal = vetCreateRequest(ctx, body, auth)
-      if (refusal) {
-        json(res, refusal.status, { error: refusal.error })
+      const vetted = vetCreateRequest(ctx, await readJsonBody(req, ctx.maxBodyBytes), auth)
+      if (!vetted.ok) {
+        json(res, vetted.status, { error: vetted.error })
         return
       }
-      const runner = await factory.createRunner(factory.buildRunnerConfig(body))
+      const runner = await factory.createRunner(factory.buildRunnerConfig(vetted.request))
       factory.watchAuthSource(runner)
       json(res, 201, { session: projects.withProject(runner.info()) })
       return
@@ -135,7 +134,11 @@ export async function handleSessions(
       json(res, 409, { error: 'session is parked (it has no pending permission requests)' })
       return
     }
-    if (!runner.resolvePermission(route.permissionId, body)) {
+    const decision: ResolvePermissionRequest =
+      body.behavior === 'allow'
+        ? { behavior: 'allow', updatedInput: body.updatedInput }
+        : { behavior: 'deny', message: body.message, interrupt: body.interrupt }
+    if (!runner.resolvePermission(route.permissionId, decision)) {
       json(res, 404, { error: 'permission request not found (already resolved or expired)' })
       return
     }

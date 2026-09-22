@@ -29,6 +29,7 @@ import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
 import { EventLog } from '../../lib/event-log.ts'
 import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { sessionTitle, withTitle } from '../../lib/title.ts'
+import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent, type ItemScope } from './subagents.ts'
@@ -522,6 +523,8 @@ export type CodexRunnerConfig = CreateSessionRequest & {
   connectFn: AppServerConnectFn
   env?: Record<string, string | undefined>
   codexHome?: string
+  codexPathOverride?: string
+  instructions?: SessionInstructions
   defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
   peers?: PeerDirectory
@@ -591,6 +594,7 @@ export class CodexRunner implements Runner {
 
   #config: CodexRunnerConfig
   readonly #cwd: string
+  readonly #instructions: string | undefined
   #log = new EventLog()
   #subscribers = new SubscriberSet()
   #status: SessionStatus = 'starting'
@@ -650,6 +654,7 @@ export class CodexRunner implements Runner {
     this.#threadMaterialized = config.resume !== undefined
     this.id = id
     this.createdAt = Date.now()
+    this.#instructions = resolveInstructions(config.instructions, { sessionId: id, cwd: config.cwd, profile: config.profile })
   }
 
   #childEnv(): Record<string, string> {
@@ -1146,6 +1151,9 @@ export class CodexRunner implements Runner {
       }
       if (this.#model) {
         options.model = this.#model
+      }
+      if (this.#instructions !== undefined) {
+        options.developerInstructions = this.#instructions
       }
       if (this.#config.peers) {
         options.dynamicTools = peerToolSpecs().map((spec) => ({ type: 'function', ...spec }))

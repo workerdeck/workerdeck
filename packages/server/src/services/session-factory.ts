@@ -184,6 +184,10 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     if (name !== undefined && !profile) {
       throw new Error(`unknown profile: ${name}`)
     }
+    const capabilities = profile?.capabilities ?? adapterFor(profile?.engine).capabilities
+    if (config.instructions !== undefined && capabilities.systemInstructions === false) {
+      throw new Error(`the ${engineOf(profile)} engine cannot deliver system instructions`)
+    }
     const runner =
       profile && isProviderProfile(profile)
         ? // Non-null: startup refuses a provider profile when no factory was wired.

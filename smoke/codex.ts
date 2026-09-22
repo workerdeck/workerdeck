@@ -197,6 +197,34 @@ async function canaries(): Promise<void> {
         fail('granular approvalPolicy gate', `thread/start rejected the granular approvalPolicy: ${(error as Error).message}`)
       }
 
+      // Acceptance alone proves nothing: this app-server ignores unknown thread/start fields rather than
+      // refusing them, which is how `dynamicTools` could be dropped silently. The second probe is the real
+      // check - a wrong-typed value is refused only if the field is in the schema at all.
+      try {
+        const started = (await connection.request('thread/start', {
+          cwd: gateCwd,
+          sandbox: 'read-only',
+          developerInstructions: 'You are running under a WorkerDeck smoke canary.',
+        })) as { thread?: { id?: string } }
+        if (typeof started?.thread?.id !== 'string') {
+          fail('developerInstructions accepted', 'thread/start answered without a thread id')
+        } else {
+          ok('developerInstructions accepted', 'thread/start took the string')
+          try {
+            await connection.request('thread/start', { cwd: gateCwd, sandbox: 'read-only', developerInstructions: 42 })
+            fail(
+              'developerInstructions is a real field',
+              'a numeric developerInstructions was accepted, so the field is being IGNORED, not read - ' +
+                'the host instruction seam delivers nothing to codex on this version',
+            )
+          } catch {
+            ok('developerInstructions is a real field', 'a numeric value is refused, so the schema declares it')
+          }
+        }
+      } catch (error) {
+        fail('developerInstructions accepted', `thread/start rejected developerInstructions: ${(error as Error).message}`)
+      }
+
       // The shape `engines/codex/types.ts` mirrors by hand. Asserted structurally, never on WHICH skills exist:
       // this machine's CODEX_HOME is not the contract.
       try {

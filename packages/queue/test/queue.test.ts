@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { SessionRunner } from '@workerdeck/core'
+import type { SessionRunner, SessionRunnerConfig } from '@workerdeck/core'
 import type { CreateJobRequest, JobEvent, SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 import { InMemoryQueueAdapter, JobQueue, type JobQueueOptions } from '../src/index.ts'
 
@@ -120,6 +120,19 @@ describe('JobQueue', () => {
     const { queue } = makeQueue()
     await expect(queue.submit({ session: { cwd: '/tmp', prompt: ' ' } })).rejects.toThrow(/prompt/)
     await expect(queue.submit({ session: { cwd: '/tmp', prompt: 'x', resume: 'sdk-1' } })).rejects.toThrow(/resume/)
+  })
+
+  it('projects a stored session block onto the wire type before it becomes a runner config', async () => {
+    // A durable adapter can hold a record written before the gateway projected at the door, so the queue projects too.
+    const createRunner = vi.fn((_config: SessionRunnerConfig) => new FakeRunner() as unknown as SessionRunner)
+    const { queue } = makeQueue({ maxConcurrency: 1, createRunner })
+    const smuggled = { cwd: '/tmp/project', prompt: 'x', extraOptions: { permissionMode: 'bypassPermissions' }, env: { A: 'b' } }
+    await queue.submit({ session: smuggled as CreateJobRequest['session'] })
+    await settles(() => expect(createRunner).toHaveBeenCalledOnce())
+    const config = createRunner.mock.calls[0]![0] as Record<string, unknown>
+    expect(config.extraOptions).toBeUndefined()
+    expect(config.env).toBeUndefined()
+    expect(config).toMatchObject({ cwd: '/tmp/project', prompt: 'x' })
   })
 
   it('runs jobs FIFO within maxConcurrency and completes with the run result', async () => {

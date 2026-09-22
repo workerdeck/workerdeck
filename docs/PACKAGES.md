@@ -393,6 +393,15 @@ own total from its transcript on a resume.
 and cache writes, and does not meter cache reads, which is why quota burn and API-equivalent cost
 diverge so widely.
 
+`CREATE_SESSION_REQUEST_KEYS` and `pickCreateSessionRequest` are the newest rule and the first
+about *input* rather than output: the exact key set of `CreateSessionRequest`, built from a
+`Record<keyof CreateSessionRequest, true>` so the type and the list cannot drift (a field added
+to one without the other fails typecheck), and the projection the gateway runs an untrusted body
+through before anything reads it. It lives here rather than in server for the family's usual
+reason: the queue needs the same projection over a stored job record and may not import server.
+Why it exists, and the two-tier unknown-key policy (host-only names 400, anything else is dropped
+as a future additive field), are in `docs/GOTCHAS.md` §Server, profiles & auth.
+
 ## `packages/core`
 
 the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
@@ -489,6 +498,17 @@ prompts only). `Runner.sendMessage` grew a third argument, `{ origin }`, for the
 directory reaches a runner as `peerDirectoryHandle()`, resolved per call from a process-wide slot,
 which is what keeps a hot-reload-carried runner pointed at the live registry.
 
+`src/lib/instructions.ts` is the host-instruction seam: `SessionInstructions`
+(`string | ((context) => string)`), `resolveInstructions` and `composeInstructions`. All three
+runner configs carry `instructions`, each runner resolves it **once in its constructor**, after
+the id exists, and each delivers it in its engine's own currency (claude appends to the
+`claude_code` preset, codex sends `developerInstructions`, the provider passes the agent's
+`instructions`). Composition - profile, then host default, then per-session, blank line between -
+happens once per engine, in the two binary adapters and in `createEngineSession`. It is host-only
+by construction: the field is not on `CreateSessionRequest`, the gateway 400s the name, and the
+function form cannot cross JSON at all. Invariants, and why the text is never persisted, in
+`docs/GOTCHAS.md` §Host instructions.
+
 ## `packages/sandbox`
 
 untrusted-code boundary: QuickJS-NG WASM guest, in-memory map VFS (not a
@@ -522,7 +542,10 @@ this - which is exactly how it was found.
 
 `JobQueue` + `QueueAdapter` (in-memory bundled; `claimNext` must stay atomic
 and skip future `nextRunAt`). Concurrency, token budgets, webhooks, retries, watchdog, retention.
-Jobs are one-shot, but a run that parks frees its slot and stops its duration clock.
+Jobs are one-shot, but a run that parks frees its slot and stops its duration clock. `#start`
+projects the stored `session` block through protocol's `pickCreateSessionRequest` before
+`buildRunnerConfig` sees it: the HTTP door stores a projected block, but a durable adapter can
+hold one written before it did, and the record is the second place a smuggled key can live.
 ## `packages/server`
 
 HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
@@ -598,6 +621,14 @@ separately; realpath-based containment and uniform-404 disclosure, so **do not**
 `cwdAllowed` there - see `docs/GOTCHAS.md` §Host filesystem),
 capability-record request gating (`checkEngineGrants` 400s what the engine's record forswears;
 `stripInertFields` drops `questionBehavior` where no approval channel exists),
+**the create boundary** (`routes/create-vet.ts` - the one ladder for `POST /sessions` and the
+`session` block of `POST /jobs`; it projects the untrusted body onto `CreateSessionRequest`
+through protocol's allowlist *before* its own checks and before the host's `buildRunnerConfig`
+hook, 400s the host-only runner-config names by name (`extraOptions`, `env`, `instructions`,
+`pathToClaudeCodeExecutable`, `codexHome`, the lot, derived from the three config types at the
+type level), drops any other unknown key silently, and hands back the projected object, which is
+what a door must build from and what the jobs door stores; the invariant and the unknown-key
+argument are in `docs/GOTCHAS.md` §Server, profiles & auth),
 `SessionNotifier` (`notifications.ts`) - server-wide session webhooks for the four
 human-attention moments, subscribed through `SessionRegistry`'s `onRegister` so a rebuilt
 parked session is covered too; transport-agnostic on purpose (no push credentials here).
@@ -657,7 +688,8 @@ has (or every live session lists twice), the `session_closed` discard is skipped
 `#closed` (the registry closes runners with the same 'server' reason a DELETE gives, so a
 graceful shutdown would forget exactly what it was preserving), waking one feeds its config
 back through `buildRunnerConfig` rather than using it as-is - `env` is never persisted, so the
-profile's `CLAUDE_CONFIG_DIR` pin has to be re-derived - and a **`live` record is refreshed in
+profile's `CLAUDE_CONFIG_DIR` pin has to be re-derived, and `instructions` is not persisted either,
+so the host re-derives it from the `meta` the record does keep, under the id the record keeps too - and a **`live` record is refreshed in
 place on wake, never consumed** the way a park's is. That last one is a `kind` on the shared
 `ParkedSessionRecord` rather than a new type (every other branch - rebuild, serve `vfs`, arm
 `executions`, subscribe past `snapshot.seq` - is already right for both, and an older server

@@ -153,7 +153,10 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `permissionMode: 'bypassPermissions'` on session/job creation (403) and strips the
   `allowDangerouslySkipPermissions` pre-authorization from requests rather than refusing outright,
   so clients that ask for the capability by default keep working and only their later switch
-  attempt fails.
+  attempt fails. The refusal is only as good as the wire boundary in front of it: `extraOptions`
+  is spread into the SDK options *after* the vetted `permissionMode`, so a body key the ladder
+  never looked at used to bring bypass back through the side. The projection that closes that is
+  in § Server, profiles & auth ("`SessionRunnerConfig` is a host-only superset").
 
 ## Provider engine (AI SDK v7)
 
@@ -619,6 +622,52 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   one family can differ only there, e.g. `claude-fable-5-1` beside `claude-fable-5`), falling back
   to the family token for a server too old to send it. The match rule is written once per client
   (`ModelSelect.optionMatches`, Swift `ModelOption.matches`) and the two must stay identical.
+
+## Host instructions (the `instructions` seam)
+
+- **`instructions` is host authority and never rides the wire.** `CreateSessionRequest` has no
+  such field and both create doors refuse the name outright (§Server, profiles & auth). A host
+  sets it from `buildRunnerConfig`; a provider host may also set a static default through
+  `createProviderRunner`; a profile sets the deployment-wide part as
+  `ProfileSessionDefaults.instructions`. Host-only is not caution, it is the shape of the thing:
+  the text is model-visible and transcript-invisible at once, so a client that could set it would
+  reprogram a session anyone else later attaches to with nothing in the log to show for it.
+- **It resolves once, in the runner constructor, after the id exists.** The type is
+  `string | ((context: { sessionId, cwd?, profile? }) => string)`. The function form is there
+  because the instruction worth sending usually names the session it is in (`--session <id>`), and
+  the WorkerDeck runner id is assigned by the constructor, long after `buildRunnerConfig` ran. It
+  resolves to a string once per runner, so nothing re-renders mid-session. Name the **runner** id,
+  never `sdkSessionId`: codex's thread id changes on every clear.
+- **Composition is profile, then host default, then per-session, joined by a blank line**, done in
+  exactly one place per engine - the claude and codex adapters, and `createEngineSession` for the
+  provider. Compose again downstream and the profile text appears twice.
+- **Delivery differs per engine and each one is load-bearing.** Claude takes
+  `systemPrompt: { type: 'preset', preset: 'claude_code', append }`, which keeps the Claude Code
+  preset and appends to it rather than replacing it; a config that also carries
+  `extraOptions.systemPrompt` throws in the constructor instead of picking a winner. Codex takes
+  `developerInstructions` on the thread options that feed both `thread/start` and `thread/resume`.
+  The provider engine passes it as the agent's `instructions`, re-read every turn.
+- **It survives the three things that end a context without ending the session.** Claude's
+  `/clear` is an in-band message on the same `query`, so the options, and the append with them, are
+  untouched, and compaction is the same. Codex's clear sets `#threadLoaded = false` and the next
+  connect rebuilds the same options object, so the fresh thread carries the instructions; resume
+  takes that same path. The provider's clear empties the message list, and the instructions were
+  never in it.
+- **The text is never persisted.** `instructions` is in `EPHEMERAL_CONFIG_KEYS`, stripped from the
+  durable record like `env` and `extraOptions`. A dormant wake re-runs `buildRunnerConfig` against
+  the stored config under the preserved id, so the host re-derives the same text: **`meta` is the
+  durable public input, the instruction is the derived output.** A host that composes from state it
+  did not put in `meta` loses it across a restart, and that is the trade, not an oversight - the
+  parked record is plain JSON on disk and instructions routinely carry internal URLs.
+- **`EngineCapabilities.systemInstructions` is absent-means-true**, the `hostCwd` precedent.
+  `buildRunner` throws when a config carries instructions and the engine's record says `false`,
+  because an engine that silently dropped them would be indistinguishable from one that delivered
+  them.
+- **codex declares `developerInstructions` for real, verified at 0.155.1.** Acceptance alone proves
+  nothing on this app-server, which ignores unknown `thread/start` fields rather than refusing them
+  (the same trap as `dynamicTools`), so `pnpm smoke:codex --canary` sends a numeric value as well:
+  the refusal is what proves the field is in the schema. The floor stays the package's own
+  `~0.149.0`, and a binary predating the field would drop it silently.
 
 ## Tool trust & the sandbox
 
@@ -1174,6 +1223,44 @@ has the shape; these are the ways to get it wrong.
   server's own environment at session time. That is what makes a stored profile safe to write to
   disk and safe to serve from `GET /profiles`, the same rule `toDurableRecord` follows when it drops
   `env` from a persisted session config.
+- **`SessionRunnerConfig` is a host-only superset of `CreateSessionRequest`, and the difference is
+  host authority. The wire boundary is an allowlist projection, never a cast.** All three runner
+  configs (`SessionRunnerConfig`, `CodexRunnerConfig`, `AiSdkRunnerConfig`) are the wire type
+  intersected with fields only the gateway may set, and those fields are not decoration:
+  `extraOptions` is spread *last* into the Claude SDK options, after everything the vet ladder
+  decided, so `extraOptions: { permissionMode: 'bypassPermissions' }` walked past
+  `disableBypassPermissions` and `extraOptions: { cwd }` past `allowedCwdRoots`; `env` is the base
+  the profile pins `CLAUDE_CONFIG_DIR` onto, so every variable the profile does not pin
+  (`ANTHROPIC_BASE_URL`) was the caller's, which is a credential route and an auth red line;
+  `pathToClaudeCodeExecutable` and `codexPathOverride` name the binary the gateway spawns;
+  `instructions` is the system prompt. `POST /sessions` used to cast the parsed body to
+  `CreateSessionRequest` and `POST /jobs` stored its `session` block whole, the default
+  `buildRunnerConfig` is the identity, and `vetCreateRequest` validated named fields in place, so
+  every JSON key became a config key. Now that ladder (`routes/create-vet.ts`, the one both doors
+  run) projects the body through protocol's `pickCreateSessionRequest` *before* its own checks and
+  before the host's hook, whose contract is "request in, config out" and which cannot be expected
+  to re-sanitize, and hands back the projected object: a door must use what it hands back, and the
+  jobs door stores it, because the queue spreads the stored block into a config later (and projects
+  again at `#start`, since a durable adapter can hold a record written before the door did). Two
+  lists keep it honest and both fail typecheck rather than drift: `CREATE_SESSION_REQUEST_KEYS` in
+  protocol is built from a `Record<keyof CreateSessionRequest, true>`, so a wire field added
+  without an entry is a missing property; `HOST_ONLY_KEY_SET` in `create-vet.ts` is a `Record`
+  over `Exclude<keyof <the three configs>, keyof CreateSessionRequest>`, so a host-only field added
+  to any engine is a missing property and one promoted onto the wire is an excess one. **A key an
+  engine reads through an inline cast is invisible to that derivation** (`codexPathOverride` in
+  `codex/adapter.ts` is the one such key today) and has to be named by hand in
+  `UNDECLARED_HOST_ONLY_KEYS`; declaring the field is the better fix. The unknown-key policy is
+  deliberately two-tier. A known host-only name is a **400 naming it**: loud enough to diagnose an
+  attack or an operator who put `extraOptions` in the wrong place. Any other unknown key is
+  **dropped silently**, because `PROTOCOL_VERSION` is locked and an additive wire field is the
+  documented way the protocol grows, so a newer client's new optional field must degrade on an
+  older gateway, never hard-fail it. The corollary is that a host-only name is retired from the wire
+  vocabulary for good: promoting one onto `CreateSessionRequest` would turn every older gateway's
+  refusal into exactly the compatibility break the second tier exists to avoid. The projection
+  decides *which* keys exist, not what they hold; value checks on the known fields stay the
+  ladder's job. Proof in `server/test/create-boundary.test.ts` (every host-only name, both doors,
+  the stored job record, and the four policies a smuggled key used to defeat) and
+  `queue/test/queue.test.ts`.
 
 ## Host filesystem (`/v1/fs/*`)
 

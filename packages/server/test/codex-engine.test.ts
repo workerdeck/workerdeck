@@ -434,7 +434,7 @@ describe('codex engine over the gateway', () => {
     expect(providerConfig?.defaultApprovalTimeoutMs).toBe(45_000)
   })
 
-  it('validates codexHome like configDir, and refuses undeliverable instructions', () => {
+  it('validates codexHome like configDir, and now accepts session instructions', () => {
     expect(() =>
       createWorkerServer({
         allowUnauthenticated: true,
@@ -446,7 +446,7 @@ describe('codex engine over the gateway', () => {
         allowUnauthenticated: true,
         profiles: [codexProfile({ session: { instructions: 'be nice' } })],
       }),
-    ).toThrow(/AGENTS\.md/)
+    ).not.toThrow()
   })
 
   it('accepts a codexHome that exists, without requiring an engine factory', async () => {

@@ -488,6 +488,7 @@ export type EngineCapabilities = {
   reasoningEfforts?: readonly string[]
   vfs: boolean
   hostCwd?: boolean
+  systemInstructions?: boolean
   streaming: 'token' | 'item' | 'none'
 }
 
@@ -513,6 +514,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     vfs: false,
     hostCwd: true,
+    systemInstructions: true,
     streaming: 'token',
   },
   codex: {
@@ -536,6 +538,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     reasoningEfforts: ['minimal', 'low', 'medium', 'high', 'xhigh'],
     vfs: false,
     hostCwd: true,
+    systemInstructions: true,
     streaming: 'token',
   },
   provider: {
@@ -558,6 +561,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     attachments: ['image', 'pdf', 'text'],
     vfs: true,
     hostCwd: false,
+    systemInstructions: true,
     streaming: 'token',
   },
 }
@@ -678,6 +682,44 @@ export type CreateSessionRequest = {
   capabilities?: SessionCapability[]
   meta?: Record<string, unknown>
   scope?: Record<string, string>
+}
+
+// Typed as a record over the request's keys so a field added above without an entry here, or an entry left behind
+// after a field is removed, fails typecheck: this list is what the gateway projects an untrusted body through.
+const CREATE_SESSION_REQUEST_KEY_SET: Record<keyof CreateSessionRequest, true> = {
+  cwd: true,
+  profile: true,
+  prompt: true,
+  permissionMode: true,
+  allowDangerouslySkipPermissions: true,
+  allowedTools: true,
+  disallowedTools: true,
+  mcpServers: true,
+  settingSources: true,
+  model: true,
+  maxTurns: true,
+  maxBudgetUsd: true,
+  resume: true,
+  forkSession: true,
+  reasoningEffort: true,
+  includePartialMessages: true,
+  approvalTimeoutMs: true,
+  questionBehavior: true,
+  capabilities: true,
+  meta: true,
+  scope: true,
+}
+
+export const CREATE_SESSION_REQUEST_KEYS = Object.keys(CREATE_SESSION_REQUEST_KEY_SET) as ReadonlyArray<keyof CreateSessionRequest>
+
+export function pickCreateSessionRequest(body: Record<string, unknown>): CreateSessionRequest {
+  const picked: Record<string, unknown> = {}
+  for (const key of CREATE_SESSION_REQUEST_KEYS) {
+    if (body[key] !== undefined) {
+      picked[key] = body[key]
+    }
+  }
+  return picked as CreateSessionRequest
 }
 
 export type SubagentInfo = {

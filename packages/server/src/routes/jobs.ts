@@ -37,22 +37,24 @@ export async function handleJobs(
       return
     }
     if (req.method === 'POST') {
-      const body = (await readJsonBody(req, ctx.maxBodyBytes)) as CreateJobRequest
-      if (!body.session || typeof body.session !== 'object') {
+      const body = (await readJsonBody(req, ctx.maxBodyBytes)) as CreateJobRequest | null
+      if (!body?.session || typeof body.session !== 'object') {
         json(res, 400, { error: 'session is required' })
         return
       }
-      if (!body.session.prompt || typeof body.session.prompt !== 'string') {
+      const prompt = body.session.prompt
+      if (!prompt || typeof prompt !== 'string') {
         json(res, 400, { error: 'session.prompt is required' })
         return
       }
-      const refusal = vetCreateRequest(ctx, body.session, auth)
-      if (refusal) {
-        json(res, refusal.status, { error: refusal.error })
+      const vetted = vetCreateRequest(ctx, body.session, auth)
+      if (!vetted.ok) {
+        json(res, vetted.status, { error: vetted.error })
         return
       }
       try {
-        json(res, 201, { job: await queue.submit(body) })
+        // The projected block is what gets stored: the queue spreads the record's session into a runner config later.
+        json(res, 201, { job: await queue.submit({ ...body, session: { ...vetted.request, prompt } }) })
       } catch (error) {
         json(res, 400, { error: error instanceof Error ? error.message : 'invalid job' })
       }
