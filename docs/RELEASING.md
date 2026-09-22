@@ -1165,6 +1165,30 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   was filed as a task and no card drew it. `SubagentInfo.isAgent` is the engine saying what only it
   knows. **Protocol stays 1** - `isAgent` is additive.
 
+  **2.13.0** - **host instructions, and the create door that makes them host-only.** A **minor**.
+  A host can now set a session's system instructions: `instructions` on all three runner configs,
+  typed `string | ((context) => string)` because the instruction worth sending usually names the
+  session it is in, and the runner id only exists once the constructor runs. It resolves once per
+  runner and is delivered in each engine's own currency - claude appends to the `claude_code`
+  preset rather than replacing it, codex sends `developerInstructions`, the provider passes the
+  agent's `instructions` - and it survives `/clear`, compaction and resume on all three, which is
+  the part that needed proving rather than asserting. The field is **host-only by construction**,
+  not by politeness: it is absent from `CreateSessionRequest`, the function form cannot cross
+  JSON, and both create doors refuse the name. That last one is the release's real work.
+  `routes/create-vet.ts` is now the one ladder for `POST /sessions` and the `session` block of
+  `POST /jobs`, and it projects an untrusted body through protocol's `pickCreateSessionRequest`
+  allowlist **before** anything reads it, because `extraOptions` was spread into the SDK options
+  after the vetted `permissionMode` and a key the ladder never looked at could bring bypass back
+  through the side. The allowlist is a `Record<keyof CreateSessionRequest, true>`, so a field
+  added to the type without an entry fails typecheck. Host-only names 400 by name; anything else
+  unknown is dropped as a future additive field. The queue projects the stored job record too, on
+  the argument that a durable adapter can hold a block written before the door did. Instructions
+  are never persisted: `meta` is the durable public input, the instruction is the derived output,
+  so a dormant wake re-derives it under the preserved id. **Protocol stays 1** -
+  `EngineCapabilities.systemInstructions` is additive and absent-means-true. `pnpm smoke:codex
+  --canary` pins the codex half: a numeric `developerInstructions` is refused, which is what
+  proves the field is in the schema rather than merely tolerated.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
