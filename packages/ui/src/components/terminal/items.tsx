@@ -5,11 +5,11 @@ import { compactionText, formatBytes, formatCost, formatDuration, toolInputPrevi
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { PromptTokenText } from '../agent/PromptTokenText.tsx'
-import { BookmarkAction, CopyAction, OpenShellAction, WithActions } from './affordances.tsx'
+import { BookmarkAction, CopyAction, KillShellAction, OpenShellAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { usePeerNames } from './peer-names.tsx'
-import { Pressable, useRevealOnOpen } from './press.tsx'
+import { Pressable, useRevealOnOpen, type PressModifiers } from './press.tsx'
 import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, imagePlaceholder } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
@@ -18,7 +18,7 @@ import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
 import { isPeerSend, peerName, peerOneLine, peerSendTarget, peerSendText, planRun, runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
 import { useShellActions } from '../agent/shell-actions.tsx'
-import { SHELL_GLYPH, SHELL_KILL_GLYPH, shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from './shell-row.ts'
+import { SHELL_GLYPH, shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from './shell-row.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
@@ -407,7 +407,11 @@ export function ShellRow({ item }: { item: ShellItem }) {
     }
   }, [running, shellId, verify])
 
-  const press = () => {
+  const press = (modifiers: PressModifiers) => {
+    if ((modifiers.meta || modifiers.ctrl) && actions.open) {
+      actions.open(shellId)
+      return
+    }
     const next = !open
     setOpen(next)
     if (!next || !item.truncated || item.expanded !== undefined || item.missing) {
@@ -423,6 +427,7 @@ export function ShellRow({ item }: { item: ShellItem }) {
         actions={
           <>
             {actions.open ? <OpenShellAction onOpen={() => actions.open?.(shellId)} /> : null}
+            {running ? <KillShellAction onKill={() => void actions.kill(shellId)} /> : null}
             <BookmarkAction id={item.id} />
             <CopyAction text={item.shell.command} label="Copy command" />
           </>
@@ -437,34 +442,14 @@ export function ShellRow({ item }: { item: ShellItem }) {
               {' · '}
               {shellStatusText(item)}
             </Ink>
-            {running ? (
-              <button
-                type="button"
-                aria-label="Kill this shell"
-                title="Kill this shell"
-                className="term-press term-link"
-                data-tone="red"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void actions.kill(shellId)
-                }}
-              >
-                {' '}
-                {SHELL_KILL_GLYPH}
-              </button>
-            ) : null}
           </Row>
         </Pressable>
         {lines.map((line, index) => (
-          <Row key={index} indent={1} columns={3} glyph={index === 0 ? '⎿' : undefined} tone={failed ? 'red' : 'dim'}>
+          <Row key={index} tone={failed ? 'red' : 'dim'}>
             {line || ' '}
           </Row>
         ))}
-        {footer || busy ? (
-          <Row indent={1} columns={3} tone="faint">
-            {busy ? '… fetching the full output' : footer}
-          </Row>
-        ) : null}
+        {footer || busy ? <Row tone="faint">{busy ? '… fetching the full output' : footer}</Row> : null}
       </WithActions>
     </div>
   )

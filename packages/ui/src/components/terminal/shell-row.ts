@@ -63,8 +63,7 @@ export function shellFailed(item: ShellItem): boolean {
 }
 
 export function shellHeaderText(item: ShellItem): string {
-  const kill = item.shell.status === 'running' ? ` ${SHELL_KILL_GLYPH}` : ''
-  return `${shellLabel(item)} · ${shellStatusText(item)}${kill}`
+  return `${shellLabel(item)} · ${shellStatusText(item)}`
 }
 
 export function shellBodyLines(item: ShellItem, open: boolean): string[] {

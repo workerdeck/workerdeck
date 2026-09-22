@@ -3,13 +3,15 @@ import { cn } from '../../lib/utils.ts'
 
 const DRAG_SLOP = 4
 
+export type PressModifiers = { meta: boolean; ctrl: boolean; alt: boolean }
+
 export function Pressable({
   onPress,
   expanded,
   className,
   children,
 }: {
-  onPress: () => void
+  onPress: (modifiers: PressModifiers) => void
   expanded?: boolean
   className?: string
   children: ReactNode
@@ -34,14 +36,14 @@ export function Pressable({
         if (selection && !selection.isCollapsed && selection.containsNode(event.currentTarget, true)) {
           return
         }
-        onPress()
+        onPress({ meta: event.metaKey, ctrl: event.ctrlKey, alt: event.altKey })
       }}
       onKeyDown={(event) => {
         if (event.key !== 'Enter' && event.key !== ' ') {
           return
         }
         event.preventDefault()
-        onPress()
+        onPress({ meta: event.metaKey, ctrl: event.ctrlKey, alt: event.altKey })
       }}
     >
       {children}

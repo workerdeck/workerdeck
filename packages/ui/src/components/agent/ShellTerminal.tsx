@@ -126,7 +126,7 @@ export function ShellTerminal({ handle, shellId, onEnded, onShell, fontSize, cla
   }, [ready])
 
   return (
-    <div className={cn('relative min-h-0 flex-1 overflow-hidden bg-bg px-2 py-1', className)}>
+    <div className={cn('relative min-h-0 flex-1 overflow-hidden px-2 py-1', className)}>
       <div ref={host} className="h-full w-full" onClick={() => term.current?.focus()} />
       {ready && shell.status !== 'idle' ? null : (
         <div className="absolute inset-0 grid place-items-center">

@@ -640,11 +640,11 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
       const lines = shellBodyLines(item, false)
       let acc = rowH(shellHeaderText(item), m, { extraPx })
       for (const line of lines) {
-        acc = add(acc, rowH(line || ' ', m, { indentCells: 3, gutterCells: 3, extraPx }))
+        acc = add(acc, rowH(line || ' ', m, { extraPx }))
       }
       const footer = shellFooterText(item, false, lines.length)
       if (footer) {
-        acc = add(acc, rowH(footer, m, { indentCells: 3, gutterCells: 3, extraPx }))
+        acc = add(acc, rowH(footer, m, { extraPx }))
       }
       return acc
     }

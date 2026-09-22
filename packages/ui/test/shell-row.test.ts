@@ -3,6 +3,7 @@ import type { ShellItem } from '@workerdeck/react'
 import type { ShellInfo } from '@workerdeck/protocol'
 import { buildMarks } from '../src/components/agent/scrubber-marks.ts'
 import {
+  SHELL_KILL_GLYPH,
   SHELL_MISSING,
   shellBodyLines,
   shellFailed,
@@ -38,8 +39,9 @@ function item(overrides: Partial<ShellItem> = {}): ShellItem {
 }
 
 describe('the shell row', () => {
-  it('names a running shell and offers the kill glyph', () => {
-    expect(shellHeaderText(item())).toBe('npm run dev · running ✕')
+  it('names a running shell and leaves the kill to the hover rail', () => {
+    expect(shellHeaderText(item())).toBe('npm run dev · running')
+    expect(shellHeaderText(item())).not.toContain(SHELL_KILL_GLYPH)
     expect(shellStatusText(item())).toBe('running')
     expect(shellFailed(item())).toBe(false)
   })

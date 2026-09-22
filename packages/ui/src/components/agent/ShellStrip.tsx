@@ -4,7 +4,8 @@ import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Ink, Row } from '../terminal/row.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
-import { SHELL_KILL_GLYPH, shellInfoFailed, shellInfoStatusText, shellTitle } from '../terminal/shell-row.ts'
+import { shellInfoFailed, shellInfoStatusText, shellTitle } from '../terminal/shell-row.ts'
+import { KillShellAction, WithActions } from '../terminal/affordances.tsx'
 
 export interface ShellStripProps {
   shell: ShellInfo | undefined
@@ -28,26 +29,15 @@ export function ShellStrip({ shell, label, cols, onBack, onKill, terminal, fontS
   if (terminal) {
     return (
       <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} className="shrink-0">
-        <Row glyph="←" glyphTone="dim" indent={1} tone={failed ? 'red' : 'magenta'}>
-          <button type="button" onClick={onBack} aria-label="Back to the session" className="cursor-pointer text-left">
-            {name}
-          </button>
-          {status ? <Ink tone={failed ? 'red' : running ? 'magenta' : 'dim'}> · {status}</Ink> : null}
-          {detail ? <Ink tone="faint"> · {detail}</Ink> : null}
-          {running && onKill ? (
-            <button
-              type="button"
-              aria-label="Kill this shell"
-              title="Kill this shell"
-              className="term-press term-link"
-              data-tone="red"
-              onClick={onKill}
-            >
-              {' '}
-              {SHELL_KILL_GLYPH}
+        <WithActions actions={running && onKill ? <KillShellAction onKill={onKill} /> : null}>
+          <Row glyph="←" glyphTone="dim" indent={1} tone={failed ? 'red' : 'magenta'}>
+            <button type="button" onClick={onBack} aria-label="Back to the session" className="cursor-pointer text-left">
+              {name}
             </button>
-          ) : null}
-        </Row>
+            {status ? <Ink tone={failed ? 'red' : running ? 'magenta' : 'dim'}> · {status}</Ink> : null}
+            {detail ? <Ink tone="faint"> · {detail}</Ink> : null}
+          </Row>
+        </WithActions>
       </TerminalSurface>
     )
   }

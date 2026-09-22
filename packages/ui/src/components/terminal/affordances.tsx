@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { copyText } from '../../lib/clipboard.ts'
+import { SHELL_KILL_GLYPH } from './shell-row.ts'
 import { cn } from '../../lib/utils.ts'
 
 export type TerminalAffordances = {
@@ -111,6 +112,24 @@ export function OpenShellAction({ onOpen, label = 'Open terminal' }: { onOpen: (
       }}
     >
       ⤢
+    </button>
+  )
+}
+
+export function KillShellAction({ onKill, label = 'Kill this shell' }: { onKill: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      className="term-action"
+      title={label}
+      aria-label={label}
+      data-tone="red"
+      onClick={(event) => {
+        event.stopPropagation()
+        onKill()
+      }}
+    >
+      {SHELL_KILL_GLYPH}
     </button>
   )
 }
