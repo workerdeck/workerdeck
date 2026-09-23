@@ -1014,6 +1014,15 @@ export type ListHostRootsResponse = {
   canWrite: boolean
 }
 
+// A gateway's answer to "which machine am I?". `machineId` is an opaque fingerprint of the host
+// the gateway process runs on, not an identity or a secret: a client that computes the same
+// fingerprint for itself knows the gateway's paths are its own paths, and can open them natively
+// instead of proxying them over `/fs`. Optional, so a gateway that predates it just stays remote.
+export type GatewayMeta = {
+  protocolVersion: number
+  machineId?: string
+}
+
 export type HostDirEntry = {
   name: string
   path: string

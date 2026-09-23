@@ -684,7 +684,12 @@ in); with several declared, `profile` stays `undefined` and the **claude** engin
 is listed, because old clients cannot answer a new 400. An engine whose adapter has no
 `listSessions` 400s with the profile named. The
 operator surfaces (`/fs/*`, `/sdk-sessions`, `/queue`, `/queue/ws`) are refused outright to a
-scoped principal, because they answer about the *gateway* and there is nothing to filter. Two
+scoped principal, because they answer about the *gateway* and there is nothing to filter.
+`GET /meta` is the one that *degrades* instead: everyone authenticated gets `protocolVersion`,
+only an operator also gets `machineId`, the fingerprint that tells a client whether the gateway's
+paths are its own (`lib/machine-id.ts`, hashed so the answer carries no hostname or home
+directory; `docs/CLIENTS.md` has the reason it exists). It is gated with `/fs/*` on purpose -
+the only client that acts on the answer also means to read that machine's files. Two
 guards keep it honest: `buildRunnerConfig` re-stamps the scope over the host hook's output, and
 `buildRunner` - the one chokepoint for create, dormant rebuild and parked rebuild - asserts the
 runner echoes it, because a runner that dropped it would be invisible to every check and
@@ -838,7 +843,9 @@ a key has to normalize and present both identically, or the same gateway works i
 not another (and the same gateway saved twice is two gateways). `isLoopbackHost` decides from the
 URL, **never by probing paths for existence** - two checkouts of the same repo would lie - and in
 a remote development window the caller runs on the remote box, so "loopback" correctly means
-*that* machine and its paths are real files there. `host-url.ts` was extracted because two copies
+*that* machine and its paths are real files there. It is a *sufficient* test, not a complete one:
+a gateway on this machine reached by a LAN or tailnet name fails it, which is what `client.meta()`
+and the gateway's `machineId` are for (`docs/CLIENTS.md` § the extension's file links). `host-url.ts` was extracted because two copies
 already existed (iOS `Host.apiURL`, the extension's port) and a third was coming. `hostAuth` is
 browser-shaped on purpose: a Node host such as the extension sends the key as a header on both
 transports and needs none of it. Should a gateway ever mint short-lived WS tickets, only the body

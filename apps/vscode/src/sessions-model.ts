@@ -1,7 +1,8 @@
 import * as vscode from 'vscode'
 import type { SessionInfo } from '@workerdeck/protocol'
 import type { GatewayHost, HostStore } from './hosts.ts'
-import { apiUrl, isLoopbackHost } from './hosts.ts'
+import { apiUrl } from './hosts.ts'
+import { forgetLocality, isLocalHostCached, refreshLocality } from './machine.ts'
 import { clientFor, probe, type ProbeResult } from './gateway.ts'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
 import { workspaceScope } from './workspace-scope.ts'
@@ -157,6 +158,9 @@ export class SessionsModel implements vscode.Disposable {
             const sessions = await client.listSessions()
             sessions.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
             this.#snapshots.set(host.id, { probe: 'connected', sessions })
+            // Warms the cache the sidebar reads synchronously; a reachable gateway is the only one
+            // that can answer, and a failure just leaves the previous answer standing.
+            void refreshLocality(this.#store, host)
           } catch {
             const result: ProbeResult = await probe(client)
             this.#snapshots.set(host.id, result === 'connected' ? { probe: 'connected', sessions: [] } : { probe: result })
@@ -167,6 +171,7 @@ export class SessionsModel implements vscode.Disposable {
       for (const id of this.#snapshots.keys()) {
         if (!hosts.some((h) => h.id === id)) {
           this.#snapshots.delete(id)
+          forgetLocality(id)
         }
       }
       this.#onDidChange.fire()
@@ -215,7 +220,7 @@ export class SessionsModel implements vscode.Disposable {
         continue
       }
       const snap = this.#snapshots.get(host.id)
-      const local = isLoopbackHost(host)
+      const local = isLocalHostCached(host)
       const folder = scope?.roots.find((r) => (r.hostId ? r.hostId.toLowerCase() === host.id.toLowerCase() : local))?.path
       hosts.push({
         id: host.id,

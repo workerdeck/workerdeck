@@ -2,7 +2,8 @@ import * as vscode from 'vscode'
 import type { PermissionMode } from '@workerdeck/protocol'
 import type { SessionVitals, SessionSurfacePanel } from '@workerdeck/ui'
 import type { GatewayHost, HostStore } from './hosts.ts'
-import { apiUrl, isLoopbackHost } from './hosts.ts'
+import { apiUrl } from './hosts.ts'
+import { isLocalHost } from './machine.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import { catchUpMode, panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant } from './webview-html.ts'
@@ -229,7 +230,7 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   protected override async onMessage(msg: PanelToHost): Promise<void> {
     switch (msg.kind) {
       case 'wd-open-path': {
-        return openTranscriptPath(this.#session, msg.path, msg.line)
+        return openTranscriptPath(this.#store, this.#session, msg.path, msg.line)
       }
       case 'wd-open-url': {
         return void vscode.env.openExternal(vscode.Uri.parse(msg.url))
@@ -331,8 +332,16 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   }
 }
 
-// In a Remote SSH window "this machine" is the remote box, which is exactly where a loopback gateway's files are.
-async function openTranscriptPath(session: SessionRef | undefined, clicked: string, line: number | undefined): Promise<void> {
+// A gateway on this very machine - loopback, or reached by a LAN/tailnet name that resolves back here -
+// owns the same files this window does, so its paths open as plain `file:` URIs: one editor per file,
+// shared with the explorer, and every native affordance (Reveal in Finder, the git gutter) intact. Only
+// a genuinely remote gateway goes through the `workerdeck:` provider.
+async function openTranscriptPath(
+  store: HostStore,
+  session: SessionRef | undefined,
+  clicked: string,
+  line: number | undefined,
+): Promise<void> {
   if (!session) {
     return
   }
@@ -340,7 +349,7 @@ async function openTranscriptPath(session: SessionRef | undefined, clicked: stri
   if (!path) {
     return
   }
-  const uri = isLoopbackHost(session.host)
+  const uri = (await isLocalHost(store, session.host))
     ? vscode.Uri.file(path)
     : vscode.Uri.from({ scheme: 'workerdeck', authority: session.host.id.toLowerCase(), path })
   try {

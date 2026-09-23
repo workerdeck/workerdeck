@@ -4,6 +4,7 @@ import type {
   CreateSessionRequest,
   JobInfo,
   FindHostFilesResponse,
+  GatewayMeta,
   GetProfileResponse,
   ListHostDirResponse,
   ListHostRootsResponse,
@@ -212,6 +213,10 @@ export class WorkerDeckClient {
 
   async listHostRoots(): Promise<ListHostRootsResponse> {
     return (await this.#call('GET', '/fs/roots')) as ListHostRootsResponse
+  }
+
+  async meta(): Promise<GatewayMeta> {
+    return (await this.#call('GET', '/meta')) as GatewayMeta
   }
 
   async listHostDir(path: string): Promise<ListHostDirResponse> {

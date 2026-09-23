@@ -131,9 +131,25 @@ the `vscode.open` command, not `openTextDocument`, because the latter throws on 
 and a `.jpg`/`.pdf` the agent linked would toast "could not open" while sitting on disk; only a
 `path:line` click goes through `openTextDocument`, for the selection. Remote gateways mount as a `workerdeck://`
 FileSystemProvider over `/fs/*` (hash-guarded conditional writes; no mkdir/delete/rename -
-no such routes); local-vs-remote is decided from the gateway URL (`isLoopbackHost`), never
-by probing paths, which is also what makes `extensionKind: ["workspace","ui"]` the whole
+no such routes), which is also what makes `extensionKind: ["workspace","ui"]` the whole
 Remote SSH story.
+
+**Local-vs-remote is a question about machines, not about URLs** (`src/machine.ts`). A loopback
+URL settles it for free, but the common case does not have one: a gateway bound to a LAN or
+tailnet name (`--host toby.example.ts.net`) serves the very machine the window runs on, and
+judging it remote sent every transcript click through the `workerdeck://` provider - a second
+editor for a file the explorer already had open, no Reveal in Finder, no git gutter. So the
+gateway answers `GET /meta` with a `machineId`, an opaque hash of hostname/platform/arch/home,
+and a client that computes the same string for itself is looking at its own filesystem. Three
+properties carry it: the fingerprint is **never derived from probing paths** (two checkouts of
+the same repo would lie); it is **operator-gated**, since the only client that acts on it also
+means to read that machine's files; and it is **optional**, so a gateway that predates it stays
+remote exactly as before. The answer is cached per gateway *against the URL it was measured at*
+- re-pointing a gateway keeps its id - warmed on the sessions probe, and read synchronously
+(falling back to loopback) by the sidebar view model so no render waits on a round trip.
+`apps/vscode/src/machine.ts` recomputes `packages/server/src/lib/machine-id.ts` byte for byte,
+because the extension must not import the server; the two change together or local files quietly
+stop opening natively.
 
 ### The navigation rule
 

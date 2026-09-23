@@ -4,7 +4,8 @@ import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
-import { HostStore, isLoopbackHost } from './hosts.ts'
+import { HostStore } from './hosts.ts'
+import { isLocalHost } from './machine.ts'
 import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 import { SessionPanelView } from './panel.ts'
 import { SessionEditorTab } from './session-tab.ts'
@@ -588,7 +589,7 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showInformationMessage('WorkerDeck: open a session first.')
         return
       }
-      const uri = isLoopbackHost(session.host)
+      const uri = (await isLocalHost(store, session.host))
         ? vscode.Uri.file(session.cwd)
         : vscode.Uri.from({
             scheme: WorkerdeckFileSystem.scheme,

@@ -17,6 +17,7 @@ import {
 import type { SessionRunnerConfig } from '@workerdeck/core'
 import type { ServerContext } from './context.ts'
 import { json } from './lib/http.ts'
+import { machineId } from './lib/machine-id.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { parseSessionRoute } from './lib/parse-route.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
@@ -434,6 +435,17 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         return
       }
       await handleSdkSessions(ctx, req, res, authCtx)
+      return
+    }
+    if (pathname === basePath + '/meta') {
+      const authCtx = await auth.authenticate(req)
+      if (!authCtx.ok) {
+        json(res, 401, { error: 'unauthorized' })
+        return
+      }
+      // Operator-only, same as `/fs`: the fingerprint is only ever acted on by a client that also
+      // means to read this machine's files, so it is gated behind the same principal.
+      json(res, 200, { protocolVersion: PROTOCOL_VERSION, ...(auth.isOperator(authCtx) ? { machineId: machineId() } : {}) })
       return
     }
     if (pathname.startsWith(basePath + '/fs/')) {

@@ -5,6 +5,40 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [Unreleased]
+
+### Added
+
+- **Shell sessions.** A `$` command the agent runs is a tracked PTY with a record of its own: it
+  gets a row on the session card that outlives a `/clear`, a drill-in that replays what came
+  before and streams what comes after, and a kill that reaches the whole process tree rather than
+  the leader's group alone.
+
+### Fixed
+
+- **A file link to a gateway on this machine opens as a real file.** Only a loopback URL used to
+  count as local, so a gateway bound to a LAN or tailnet name - the same Mac, reached by its own
+  name - sent every transcript click through the read-only `workerdeck://` mount: a second editor
+  for a file the explorer already had open, no Reveal in Finder, no git gutter. The gateway now
+  reports an opaque machine fingerprint and the extension compares it with its own, so locality is
+  a question about machines rather than about URLs. `Open Session Project Folder` follows the same
+  test. A genuinely remote gateway is unchanged.
+
+## [2.12.0] - 2026-09-21
+
+### Changed
+
+- The sub-agent visibility control is a **menu**, not an icon-only cycling button: three labelled
+  options with the current one ticked, in the dashboard's labels and order. Three stops is one
+  more than a single glyph can report.
+
+### Fixed
+
+- The three sub-agent menu items set the state they name. As a cycling button each command set the
+  *next* state, which is right for a button and backwards as a menu - `Hide Completed` was setting
+  `Show All`.
+- Sessions refresh moved off the title bar and into the overflow.
+
 ## [2.10.0] - 2026-09-20
 
 ### Added
