@@ -30,7 +30,7 @@ export type CostBreakdown = {
   unpricedShare: number
 }
 
-export const PRICING_AS_OF = '2026-09-19'
+export const PRICING_AS_OF = '2026-09-23'
 
 export const PRICING_SOURCES = 'platform.claude.com and developers.openai.com list prices, bundled'
 
@@ -63,6 +63,7 @@ export const DEFAULT_PRICING: Record<string, ModelRate> = {
   'claude-fable-5': anthropicRate(10, 50),
   'claude-mythos-5-1': anthropicRate(10, 50, 0.25),
   'claude-mythos-5': anthropicRate(10, 50),
+  'claude-opus-5-5': anthropicRate(4, 20, 0.2),
   'claude-opus-5': anthropicRate(5, 25),
   'claude-opus-4-8': anthropicRate(5, 25),
   'claude-opus-4-7': anthropicRate(5, 25),

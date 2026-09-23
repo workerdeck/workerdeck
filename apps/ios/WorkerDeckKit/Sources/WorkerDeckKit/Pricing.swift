@@ -148,7 +148,7 @@ public struct ProfileSpend: Codable, Sendable, Equatable {
 /// phone prices the same tokens the dashboard does, and a table that drifts
 /// shows a different dollar figure for one session on two screens.
 public enum Pricing {
-  public static let asOf = "2026-09-19"
+  public static let asOf = "2026-09-23"
 
   public static let sources = "platform.claude.com and developers.openai.com list prices, bundled"
 
@@ -181,6 +181,7 @@ public enum Pricing {
     "claude-fable-5": anthropicRate(10, 50),
     "claude-mythos-5-1": anthropicRate(10, 50, 0.25),
     "claude-mythos-5": anthropicRate(10, 50),
+    "claude-opus-5-5": anthropicRate(4, 20, 0.2),
     "claude-opus-5": anthropicRate(5, 25),
     "claude-opus-4-8": anthropicRate(5, 25),
     "claude-opus-4-7": anthropicRate(5, 25),

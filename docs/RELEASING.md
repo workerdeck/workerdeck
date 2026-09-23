@@ -1307,6 +1307,17 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   full parallel `pnpm test` (two cases, green in isolation every time, CPU contention against real
   timers).
 
+  **2.15.0** - **Opus 5.5.** A **minor** on the 1.1.0 precedent (the model rows catching up),
+  additive throughout, protocol stays **1**. Agent SDK `^0.3.278` → `^0.3.280` and
+  `@ai-sdk/anthropic` `^4.0.57` → `^4.0.61`. The claude catalog was re-read from
+  `supportedModels()` of the new SDK: `opus[1m]` now resolves to `claude-opus-5-5[1m]` and is the
+  primary Opus row as "Opus 5.5"; Opus 5 stays as a non-primary `claude-opus-5[1m]` row (the
+  Fable 5 shape) and Opus 4.8 moves to "Older Opus generation". The rate table gains
+  `claude-opus-5-5` at $4 / $20 with a $0.20 cache read, in both `protocol` and the kit's
+  `Pricing.swift`, and `PRICING_AS_OF` moves to 2026-09-23 on both. The dashboard's static Opus
+  description, `examples/provider-server.ts` and the smoke README follow. Not verified: the
+  direct-API id `claude-opus-5-5` has not been run against a live key through the provider engine.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

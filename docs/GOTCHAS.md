@@ -617,7 +617,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   event alone breaks codex (which never sends one); the catalog on `ProfileInfo.models` is the
   fallback that fixes it.
 - **A catalog row's `value` is an alias; a session reports a resolved id.** Rows read `opus[1m]`,
-  `sonnet`, `claude-fable-5-1[1m]`; a running session reports `claude-opus-5[1m]`. Match through
+  `sonnet`, `claude-fable-5-1[1m]`; a running session reports `claude-opus-5-5[1m]`. Match through
   `ModelOption.resolvedModel` (authoritative when present, including when it disagrees: two rows of
   one family can differ only there, e.g. `claude-fable-5-1` beside `claude-fable-5`), falling back
   to the family token for a server too old to send it. The match rule is written once per client

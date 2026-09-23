@@ -2,8 +2,8 @@ import type { ModelCatalog } from '../adapter.ts'
 
 export const CLAUDE_CATALOG: ModelCatalog = {
   provenance:
-    'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.258 (Claude Code CLI), ' +
-    'extracted 2026-09-02; older-model rows hand-maintained',
+    'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.280 (Claude Code CLI), ' +
+    'extracted 2026-09-23; older-model rows hand-maintained',
   models: [
     {
       value: 'claude-fable-5-1[1m]',
@@ -21,17 +21,23 @@ export const CLAUDE_CATALOG: ModelCatalog = {
     },
     {
       value: 'opus[1m]',
-      resolvedModel: 'claude-opus-5[1m]',
-      displayName: 'Opus 5',
-      description: 'Opus 5 with 1M context · Best for everyday, complex tasks',
+      resolvedModel: 'claude-opus-5-5[1m]',
+      displayName: 'Opus 5.5',
+      description: 'Opus 5.5 with 1M context · Best for everyday, complex tasks',
       primary: true,
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-opus-5[1m]',
+      resolvedModel: 'claude-opus-5',
+      displayName: 'Opus 5',
+      description: 'Opus 5 · Previous Opus generation',
     },
     {
       value: 'claude-opus-4-8',
       resolvedModel: 'claude-opus-4-8',
       displayName: 'Opus 4.8',
-      description: 'Opus 4.8 · Previous Opus generation',
+      description: 'Opus 4.8 · Older Opus generation',
     },
     {
       value: 'sonnet',

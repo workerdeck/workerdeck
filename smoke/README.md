@@ -45,7 +45,7 @@ replay → completion**.
 MOONSHOT_API_KEY=...  pnpm smoke:live              # Kimi K3 (default)
 OPENAI_API_KEY=...    pnpm smoke:live openai
 ANTHROPIC_API_KEY=... pnpm smoke:live anthropic
-ANTHROPIC_API_KEY=... pnpm smoke:live anthropic claude-opus-5
+ANTHROPIC_API_KEY=... pnpm smoke:live anthropic claude-opus-5-5
 ```
 
 The document says `revenue: 4173`, `employees: 12`, so the only correct answer is **348**: a
