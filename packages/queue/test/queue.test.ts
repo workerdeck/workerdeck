@@ -45,6 +45,8 @@ function tick() {
 
 // A deadline, not a latency assertion: every wait here asserts something eventually settles, and vi.waitFor's 1s default
 // starved a 1ms retry timer under parallel CI workers - the flake that failed the v0.9.0 publish.
+// The 20s `testTimeout` in `vitest.config.ts` exists to sit above this; without it the case dies at
+// vitest's default 5s and this deadline never applies.
 function settles<T>(assertion: () => T | Promise<T>): Promise<T> {
   return vi.waitFor(assertion, { timeout: 15_000, interval: 10 })
 }

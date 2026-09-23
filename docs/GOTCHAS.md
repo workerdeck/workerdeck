@@ -1326,6 +1326,22 @@ has the shape; these are the ways to get it wrong.
   check and the reads do not.
 - **No default wall clock.** `shell.timeoutMs` is honoured when set and nothing else ends a shell on
   its own; up to `SHELL_MAX_RUNNING_PER_SESSION` run at once, so a dev server and a test run coexist.
+- **Every `$` is spawned as `/bin/sh -c 'true <>/dev/tty 2>/dev/null; exec "$0" -c "$1"' <login shell>
+  <command>`, and the `/dev/tty` open is the point.** On macOS a session leader's unread pty output is
+  discarded about 600 ms after it exits, unless some process in its session has opened `/dev/tty`
+  (XNU's `cttyopen` takes a session-level reference on the controlling tty; with it the exit blocks
+  until the master drains, which is what Linux does anyway). zsh opens its tty by `ttyname` path,
+  which does not count; bash opens `/dev/tty` at startup and is immune, so the loss shows only under
+  the default `SHELL=/bin/zsh`. It surfaced as `text: ''` with `exitCode: 0` in
+  `shell-directory.test.ts` and as a `$ pwd; echo done` row with no output in `shell-routes.test.ts`,
+  whenever a full parallel `pnpm test` starved a vitest worker past the deadline, and it would bite a
+  gateway stalled that long while a `$` finishes. The wrapper (`CTTY_WRAPPER`) opens `/dev/tty`
+  once, then `exec`s the login shell under the same pid with the command as `$1`, so `argv[0]`, the
+  exit code, the pid the kill paths hold and the command text all reach the login shell unchanged
+  and nothing is re-quoted; it costs about 2 ms per command. The ordering on our side was never the
+  problem: node-pty emits `exit` only after the master socket closes, so every byte that reached the
+  gateway is in the artifact before the record turns `exited`. The `drain` case in `shells.test.ts`
+  stalls the loop past the deadline and fails on a direct spawn.
 - **The artifact is on disk under `<stateDir>/shells/`, index per session, spill per shell.** Small
   outputs live inline in the index; `SHELL_SPILL_BYTES` decides. The cap stops the file, never the
   process; the tail ring keeps advancing. Without a state dir the index is memory-only and every

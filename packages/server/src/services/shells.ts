@@ -47,6 +47,9 @@ const ID_CHARS = 12
 const TERM = 'xterm-256color'
 const INDEX_SUFFIX = '.json'
 const INDEX_VERSION = 1
+// macOS drops a session leader's unread pty output ~600ms after it exits unless its session opened /dev/tty; the
+// login shell execs under the same pid with the command as $1, so nothing is re-quoted.
+const CTTY_WRAPPER = 'true <>/dev/tty 2>/dev/null; exec "$0" -c "$1"'
 
 export type ShellSize = { cols: number; rows: number }
 
@@ -486,7 +489,13 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     env.PWD = cwd
     let child: PtyChild
     try {
-      child = pty.spawn(loginShell(process.env), ['-c', command], { name: TERM, cols: SHELL_COLS, rows: SHELL_ROWS, cwd, env })
+      child = pty.spawn('/bin/sh', ['-c', CTTY_WRAPPER, loginShell(process.env), command], {
+        name: TERM,
+        cols: SHELL_COLS,
+        rows: SHELL_ROWS,
+        cwd,
+        env,
+      })
     } catch (error) {
       settle(state, entry, 'spawn_failed')
       throw error instanceof Error ? error : new Error('failed to start the shell')

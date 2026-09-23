@@ -511,6 +511,20 @@ withPty('source', () => {
   })
 })
 
+withPty('drain', () => {
+  // The stall outlasts the ~600ms macOS keeps a finished session leader's unread pty output, so a registry that
+  // spawns the login shell directly loses every byte here, with exit code 0.
+  it('keeps the output of a command that exits while the gateway is stalled', async () => {
+    const shells = makeRegistry()
+    const { source } = await shells.spawn({ runner: runner('s1'), command: 'for i in 1 2 3 4 5; do echo line$i; done', owner: 'user' })
+    await new Promise((resolve) => setImmediate(resolve))
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 900)
+    const shell = await settled(source)
+    expect(shell).toMatchObject({ status: 'exited', exitCode: 0, endReason: 'exit' })
+    expect(source.text()).toBe('line1\nline2\nline3\nline4\nline5\n')
+  })
+})
+
 withPty('attach', () => {
   it('replays what came before, streams what comes after, and ends with the shell', async () => {
     const shells = makeRegistry()
