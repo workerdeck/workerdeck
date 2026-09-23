@@ -1189,6 +1189,124 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   --canary` pins the codex half: a numeric `developerInstructions` is refused, which is what
   proves the field is in the schema rather than merely tolerated.
 
+  **2.14.0** - **every `$` is a real terminal, and a gateway on this machine opens its own
+  files.** A **minor**; protocol stays **1**, everything additive. The release is one long branch
+  (`feat/shell-sessions`, 11 commits) plus one late fix, and it was **held once before it was
+  cut**: merged to master on 2026-09-23 with the bump deliberately skipped, then released in the
+  same session when the maintainer asked for it. The two items it was being held for are still
+  open, and are named at the end of this entry rather than quietly dropped.
+
+  **Shell sessions.** A `$` invocation used to be a pipe; it is now a PTY with a record.
+  `services/shells.ts` is the registry: spawn as a detached group leader, artifact spill at 64
+  KiB, one `ShellInfo` per invocation and one transcript row that redraws in place under a single
+  uuid. That fixed a live context bug on the way: the model was receiving 32 KiB of **head-only**
+  output, which drops the tail where the error is. It now gets a bounded head + tail + pointer
+  built from a pure text view (`tty-text.ts`, ANSI stripped and bare `\r` resolved as overwrite),
+  and the row's budget never touches the model's - expanding a row client-side fetches the
+  artifact and adds nothing to context. Stage 2 made the row open as a full terminal on the live
+  PTY: four socket arms in `routes/ws.ts`, several clients attachable to one shell and all of them
+  seeing every byte. The three frames stay **ephemeral**, under the `tool_call_request` rule, so
+  PTY bytes never reach the event log, the reducer, the transcript cache or a parking snapshot;
+  backpressure at 4 MiB of `bufferedAmount` detaches with a retriable reason rather than growing
+  the heap. Stage 3 put a running shell on the **session card** (`promotedShells`, debounced on
+  the client's clock at `SHELL_PROMOTE_MS`), which is the handle that outlives a `/clear` - until
+  then `conversation_reset` wiped the only surface a running shell had, and the port was held by
+  an orphan nobody could see, which is the complaint the feature exists to answer.
+
+  **The kill was overpromising, and the test could not see it.** `process.kill(-pid)` reaches only
+  what stayed in the leader's group, so a supervisor calling `setsid` per child escapes: `$ box
+  dev` in the silkweave stack killed two of six processes and vite kept port 5190 while the record
+  said `killed`. The existing grandchild test passed throughout, because a plain `&` child
+  inherits the group and therefore never proved the general claim. `killProcessTrees` now scans
+  `ps` first, SIGSTOPs the group and every descendant so nothing forks past the scan, rescans
+  until the closure converges, then SIGKILLs the group, each descendant and every group seen on
+  the way; scanning before freezing is what lets the recycled-pid guard exist without ever
+  freezing an innocent group. Every path funnels through it, `killAllSync` on the CLI force path
+  included. Two limits stay true and are in `docs/GOTCHAS.md` rather than glossed: `endReason:
+  'killed'` means **signalled**, not verified dead, and a double-forked daemon that had already
+  left the tree is unreachable.
+
+  **The agent can read shells**, through `core/src/lib/shells.ts` (the `peers.ts` twin), delivered
+  on all three engines and surfacing on claude as `mcp__workerdeck__shell_read`. The gate is the
+  **runner config, not the tool**: `buildRunner` stamps `shells` only when the gateway has
+  `shell.enabled` and the engine is `hostCwd`, so a session that could never own a shell is never
+  told the tools exist. Stage 4a owes a real per-principal gate; today the operator leg holds only
+  transitively, because just a `$` can create a shell and `list` is keyed by session.
+
+  **iOS wrote its own terminal.** `VTScreen` is a dependency-free VT emulator in `WorkerDeckKit`
+  (resumable parser, cell grid, scrollback, alternate screen, 256 colour and true colour, DEC
+  special graphics so tmux and ncurses borders draw), written rather than imported because
+  `project.yml` takes no third-party packages, and pinned by 60 tests. Two properties carry it:
+  the parser **resumes across `feed` calls**, because one CSI arrives split over three socket
+  frames often enough, and wrap is **deferred**, so a character in the last column does not scroll
+  early. `ShellKeyboard` is a `UIKeyInput` first responder rather than a text view, because a
+  terminal's stdin is a stream the process echoes and not a document to edit, which is also why
+  every autocorrect and smart-quote trait is off. Redraws coalesce to 30Hz so a `yes` costs thirty
+  layouts a second rather than thousands. The phone splits the row's two intents where the web
+  does not - header opens, last line kills - because this renderer presses whole wrapped lines and
+  two intents on one line is a coin toss under a thumb.
+
+  **Three defects a review of the landed stages found**, each fixed with a test that fails without
+  it. The shell REST read routes had **no operator gate at all**, so any principal that could see
+  a session could list every `$` an operator ran in it and fetch the raw output. `promotedShells`
+  drew killed and restart-reconciled shells as failures, because neither reports an exit code and
+  `!== 0` read that as one. And the row's 250ms re-emission grew the event log without bound, so
+  `EventLog` now keeps one event per `logCoalesceKey` - a rule defined for exactly one kind and a
+  strict subset of the replay rule, which is what makes it unobservable; the other coalescable
+  kinds stay in the log because parking and the queue act on transitions, not last-write-wins.
+
+  **The late fix: local is a question about machines, not about URLs.** The VS Code extension
+  decided native-vs-proxied from `isLoopbackHost` alone, so a gateway bound to a LAN or tailnet
+  name - the same Mac, reached by its own name, which is how the maintainer actually runs it -
+  was judged remote. Every transcript file click went through the read-only `workerdeck://` mount:
+  a second editor for a file the explorer already had open, no Reveal in Finder, no git gutter.
+  The gateway now answers `GET /meta` with a `machineId`, an opaque hash of
+  hostname/platform/arch/home, and a client that computes the same string for itself is looking at
+  its own filesystem. It is **never derived from probing paths** (two checkouts of the same repo
+  would lie), **operator-gated** like `/fs/*` since the only client that acts on it also means to
+  read that machine's files, and **optional**, so a gateway that predates it stays remote exactly
+  as before. Cached per gateway against the URL it was measured at, because re-pointing a gateway
+  keeps its id. `apps/vscode/src/machine.ts` recomputes `server/src/lib/machine-id.ts` byte for
+  byte - the extension must not import the server - and a drift between them shows up only as
+  "local files stopped opening natively", never as a failure, which is why both carry the comment.
+
+  **The release gate found a real one: macOS was eating a finished shell's output.** A
+  `shell-directory` case failed about twice in five full parallel `pnpm test` runs, and only there
+  - the file alone, the package alone, even under twelve spinning `yes` processes, stayed green.
+  It looked like a timing flake and was not: the assertion read `text: ''` against `exitCode: 0`,
+  which is every byte lost, not a slow one. The ordering on our side was never wrong (node-pty
+  emits `exit` only after the master socket closes, so a byte that reached the gateway is in the
+  artifact before the record turns `exited`; a 2000-spawn probe found no data after exit). The
+  contract being broken was the kernel's. **XNU discards a session leader's unread pty output
+  about 600 ms after it exits, unless some process in that session has opened `/dev/tty`** - the
+  `cttyopen` path takes a session-level reference, and with it the exit blocks until the master
+  drains, which is what Linux does unconditionally. Bisected to the shell: bash opens `/dev/tty`
+  at startup and is immune; zsh opens its tty by `ttyname` path, which does not count. So it
+  showed only under the default `SHELL=/bin/zsh`, and only when turbo starting six vitest workers
+  starved one past the deadline. Reader stalled 550 ms keeps 10 of 10; stalled 650 ms loses 10 of
+  10. Every `$` is now spawned through `/bin/sh -c 'true <>/dev/tty 2>/dev/null; exec "$0" -c
+  "$1"'`, which opens `/dev/tty` once and then `exec`s the login shell **under the same pid** with
+  the command as `$1`, so `argv[0]`, `ZSH_NAME`, `SHLVL`, the exit code, the pid every kill path
+  holds and the command text are all unchanged and nothing is re-quoted; it costs about 2 ms per
+  command. The `drain` case in `shells.test.ts` stalls the loop 900 ms and fails deterministically
+  on a direct spawn. This never threatened the publish gate - CI is `ubuntu-latest` - but it would
+  bite any macOS gateway stalled that long while a `$` finishes, which is the machine most of them
+  run on. `packages/queue`'s own long-standing flake was the other half of the noise and is fixed
+  too, for a duller reason: `settles` was raised to a 15 s deadline after it failed the v0.9.0
+  publish and never used a second of it, because vitest's default 5 s **test** budget killed the
+  case first. `vitest.config.ts` now sets `testTimeout: 20_000` so the deadline that was written
+  is the one that governs.
+
+  **Shipped with two things open, on purpose.** `_docs/features/SHELL-REVIEW-RESIDUE.md` holds six
+  defects, all scoped to file and line and none of them blocking (start at `resize` on an exited
+  shell dropping the record's size). And **nobody has typed into a real PTY from the phone**: the
+  emulator and the wire are unit-tested and the renderer was eye-checked through `UIPREVIEW=shell`,
+  but the end-to-end write path has never run, so the iOS half of stage 2 is verified by
+  construction rather than by use. A dev gateway plus `_docs/ask.sh` settles it. `SHELL-WRITE-PATH.md`
+  is explicitly a later cycle. Also unpaid and unrelated: `packages/queue` is timing-flaky under a
+  full parallel `pnpm test` (two cases, green in isolation every time, CPU contention against real
+  timers).
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

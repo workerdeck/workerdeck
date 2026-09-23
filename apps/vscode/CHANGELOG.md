@@ -5,7 +5,7 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
-## [Unreleased]
+## [2.14.0] - 2026-09-23
 
 ### Added
 
