@@ -1,6 +1,6 @@
 import {
   createEngineSession,
-  isShellWriteToolName,
+  shellToolNeedsCard,
   type EngineSessionOptions,
   type HostToolDefinition,
   type LanguageModel,
@@ -55,9 +55,10 @@ export async function createProviderRunner(ctx: EngineRunnerContext, options: Pr
   // own; `needsApproval` fires only through `shouldApprove`, so the default is supplied here and defers to the
   // embedder's for every other tool.
   const shouldApprove =
-    config.shellAgentWrite === 'gated'
-      ? (call: { toolName: string; input: unknown }) => isShellWriteToolName(call.toolName) || options.shouldApprove?.(call) === true
-      : options.shouldApprove
+    config.shellAgentWrite === undefined
+      ? options.shouldApprove
+      : (call: { toolName: string; input: unknown }) =>
+          shellToolNeedsCard(call.toolName, config.shellAgentWrite) || options.shouldApprove?.(call) === true
   return createEngineSession({
     config: {
       ...config,

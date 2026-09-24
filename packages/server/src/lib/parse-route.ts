@@ -12,7 +12,7 @@ export type SessionRoute = {
   producedFileId?: string
   shells?: boolean
   shellId?: string
-  shellAction?: 'output' | 'kill'
+  shellAction?: 'output' | 'kill' | 'agent-write'
   resultSeq?: number
   projectIcon?: boolean
 }
@@ -52,7 +52,7 @@ export function parseSessionRoute(basePath: string, url: string): SessionRoute |
   }
   if (parts[1] === 'shells' && parts.length <= 4) {
     const action = parts[3]
-    if (action !== undefined && action !== 'output' && action !== 'kill') {
+    if (action !== undefined && action !== 'output' && action !== 'kill' && action !== 'agent-write') {
       return null
     }
     return {

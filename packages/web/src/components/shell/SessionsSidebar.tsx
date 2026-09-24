@@ -73,6 +73,13 @@ export function SessionsSidebar() {
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Kill failed'))
   }
 
+  const shellAgentWrite = (row: SessionRow, shellId: string, enabled: boolean) => {
+    void clientFor(row.hostId)
+      ?.setShellAgentWrite(row.info.id, shellId, enabled)
+      .then(() => refresh())
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : enabled ? 'Grant failed' : 'Revoke failed'))
+  }
+
   const rename = (row: SessionRow, title: string) => {
     void clientFor(row.hostId)
       ?.updateSession(row.info.id, { title: title || null })
@@ -150,6 +157,7 @@ export function SessionsSidebar() {
             onSelectSubagent={openSubagent}
             onSelectShell={openShell}
             onKillShell={killShell}
+            onShellAgentWrite={shellAgentWrite}
             onRename={rename}
             onClearContext={(row) => {
               const client = clientFor(row.hostId)

@@ -47,6 +47,10 @@ function shellDirectory(): ShellDirectory & { calls: unknown[][] } {
       calls.push(['kill', from, shellId])
       return { shell: { id: shellId, ...EXITED, owner: 'agent' }, killed: true }
     },
+    grant: async (from, shellId) => {
+      calls.push(['grant', from, shellId])
+      return { id: shellId, ...EXITED, owner: 'user', agentWrite: true }
+    },
   }
 }
 
@@ -101,7 +105,14 @@ describe('SessionRunner: shell tools', () => {
     const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells, shellAgentWrite: 'gated' })
     void runner.start()
     await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
-    expect(Object.keys(registered(harness)).sort()).toEqual(['shell_kill', 'shell_list', 'shell_read', 'shell_run', 'shell_write'])
+    expect(Object.keys(registered(harness)).sort()).toEqual([
+      'shell_kill',
+      'shell_list',
+      'shell_read',
+      'shell_request_write',
+      'shell_run',
+      'shell_write',
+    ])
     const started = await registered(harness).shell_run!.handler({ command: 'npm run dev' }, {})
     expect(started).toMatchObject({ isError: false, content: [{ type: 'text', text: expect.stringContaining('sh_new') }] })
     await registered(harness).shell_write!.handler({ shellId: 'sh_new', keys: ['r'] }, {})
@@ -148,7 +159,42 @@ describe('SessionRunner: shell tools', () => {
 
     void canUseTool(harness, 'Bash', { command: 'rm -rf /' })
     expect(runner.pendingApprovals).toHaveLength(1)
-    void canUseTool(harness, 'mcp__workerdeck__shell_read', { shellId: 'sh_a' })
+    void canUseTool(harness, 'mcp__workerdeck__shell_request_write', { shellId: 'sh_a', reason: 'answer the prompt' })
     expect(runner.pendingApprovals).toHaveLength(2)
+    expect(runner.pendingApprovals[1]).toMatchObject({ toolName: 'mcp__workerdeck__shell_request_write' })
+  })
+
+  it('never cards the read tools, whatever the write mode, and still records them as resolved by policy', async () => {
+    for (const shellAgentWrite of [undefined, 'gated', 'allow'] as const) {
+      const harness = fakeHarness()
+      const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells: shellDirectory(), shellAgentWrite })
+      const events: SessionEvent[] = []
+      runner.subscribe((e) => events.push(e))
+      void runner.start()
+      await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+      await expect(canUseTool(harness, 'mcp__workerdeck__shell_read', { shellId: 'sh_a' })).resolves.toMatchObject({ behavior: 'allow' })
+      await expect(canUseTool(harness, 'mcp__workerdeck__shell_list', {})).resolves.toMatchObject({ behavior: 'allow' })
+      expect(runner.pendingApprovals).toHaveLength(0)
+      expect(events.filter((e) => e.type === 'permission_resolved')).toHaveLength(2)
+    }
+    const bare = fakeHarness()
+    const unstamped = new SessionRunner({ cwd: '/tmp/p', queryFn: bare.queryFn })
+    void unstamped.start()
+    await vi.waitFor(() => expect(bare.captured.options).toBeDefined())
+    void canUseTool(bare, 'mcp__workerdeck__shell_read', { shellId: 'sh_a' })
+    expect(unstamped.pendingApprovals).toHaveLength(1)
+  })
+
+  it('cards a grant request under gated too, and the allowed request runs the grant as this runner', async () => {
+    const harness = fakeHarness()
+    const shells = shellDirectory()
+    const runner = new SessionRunner({ cwd: '/tmp/p', queryFn: harness.queryFn, shells, shellAgentWrite: 'gated' })
+    void runner.start()
+    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    void canUseTool(harness, 'mcp__workerdeck__shell_request_write', { shellId: 'sh_a', reason: 'answer the prompt' })
+    expect(runner.pendingApprovals).toHaveLength(1)
+    const granted = await registered(harness).shell_request_write!.handler({ shellId: 'sh_a', reason: 'answer the prompt' }, {})
+    expect(granted).toMatchObject({ isError: false, content: [{ type: 'text', text: expect.stringContaining('granted') }] })
+    expect(shells.calls).toContainEqual(['grant', runner.id, 'sh_a'])
   })
 })

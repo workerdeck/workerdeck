@@ -39,6 +39,7 @@ export interface SessionBrowserProps {
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
+  onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
   emptyState?: React.ReactNode
   showControls?: boolean
   projectIcons?: Record<string, string>
@@ -65,6 +66,7 @@ export function SessionBrowser({
   onSelectSubagent,
   onSelectShell,
   onKillShell,
+  onShellAgentWrite,
   emptyState,
   showControls = true,
   projectIcons,
@@ -240,6 +242,7 @@ export function SessionBrowser({
                   onSelectSubagent={onSelectSubagent}
                   onSelectShell={onSelectShell}
                   onKillShell={onKillShell}
+                  onShellAgentWrite={onShellAgentWrite}
                 />
               ))}
             </div>
@@ -272,6 +275,7 @@ interface SessionRowItemProps {
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
+  onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
 }
 
 function SessionRowItem({
@@ -291,6 +295,7 @@ function SessionRowItem({
   onSelectSubagent,
   onSelectShell,
   onKillShell,
+  onShellAgentWrite,
 }: SessionRowItemProps) {
   const { info } = row
   const [editing, setEditing] = useState(false)
@@ -309,6 +314,7 @@ function SessionRowItem({
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
       onSelectShell={onSelectShell ? (id) => onSelectShell(row, id) : undefined}
       onKillShell={onKillShell ? (id) => onKillShell(row, id) : undefined}
+      onShellAgentWrite={onShellAgentWrite ? (id, enabled) => onShellAgentWrite(row, id, enabled) : undefined}
       onRename={onRename ? (title) => onRename(row, title) : undefined}
       renameOn="external"
       editing={editing}

@@ -25,6 +25,7 @@ export interface SessionItemProps {
   onSelectSubagent?: (toolUseId: string) => void
   onSelectShell?: (shellId: string) => void
   onKillShell?: (shellId: string) => void
+  onShellAgentWrite?: (shellId: string, enabled: boolean) => void
   now?: number
   onRename?: (title: string) => void
   renameOn?: 'doubleClick' | 'external'
@@ -48,6 +49,7 @@ export function SessionItem({
   onSelectSubagent,
   onSelectShell,
   onKillShell,
+  onShellAgentWrite,
   now,
   onRename,
   renameOn = 'doubleClick',
@@ -100,6 +102,7 @@ export function SessionItem({
     now: now ?? Date.now(),
     onSelect: (shellId) => (onSelectShell ? onSelectShell(shellId) : onSelect?.(NO_MODIFIERS)),
     onKill: onKillShell,
+    onAgentWrite: onShellAgentWrite,
   })
   const holdsOpenStep = steps.some((s) => s.key === activeStepKey)
 

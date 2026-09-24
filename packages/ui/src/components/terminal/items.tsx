@@ -5,7 +5,7 @@ import { compactionText, formatBytes, formatCost, formatDuration, toolInputPrevi
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { PromptTokenText } from '../agent/PromptTokenText.tsx'
-import { BookmarkAction, CopyAction, KillShellAction, OpenShellAction, WithActions } from './affordances.tsx'
+import { AgentWriteAction, BookmarkAction, CopyAction, KillShellAction, OpenShellAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { usePeerNames } from './peer-names.tsx'
@@ -18,7 +18,16 @@ import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
 import { isPeerSend, peerName, peerOneLine, peerSendTarget, peerSendText, planRun, runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
 import { useShellActions } from '../agent/shell-actions.tsx'
-import { SHELL_GLYPH, shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from './shell-row.ts'
+import {
+  SHELL_GLYPH,
+  shellAgentWriteLabel,
+  shellBodyLines,
+  shellFailed,
+  shellFooterText,
+  shellGrantable,
+  shellLabel,
+  shellStatusText,
+} from './shell-row.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
@@ -427,6 +436,13 @@ export function ShellRow({ item }: { item: ShellItem }) {
         actions={
           <>
             {actions.open ? <OpenShellAction onOpen={() => actions.open?.(shellId)} /> : null}
+            {actions.agentWrite && shellGrantable(item.shell) ? (
+              <AgentWriteAction
+                granted={item.shell.agentWrite === true}
+                label={shellAgentWriteLabel(item.shell)}
+                onToggle={() => void actions.agentWrite?.(shellId, item.shell.agentWrite !== true)}
+              />
+            ) : null}
             {running ? <KillShellAction onKill={() => void actions.kill(shellId)} /> : null}
             <BookmarkAction id={item.id} />
             <CopyAction text={item.shell.command} label="Copy command" />

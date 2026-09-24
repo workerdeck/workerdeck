@@ -9,8 +9,10 @@
 //
 // Per engine: (1) gated, the agent starts smoke/tui-demo.sh with shell_run, presses keys with shell_write, reads the
 // screen and kills it; every card is allowed and must carry its payload verbatim. (2) a denied shell_run creates no
-// shell. (3) the modes the plan left unverified are observed and reported, never failed: claude dontAsk and auto,
-// codex auto.
+// shell. (3) the takeover: the smoke opens a user shell with `$`, the agent's shell_write into it is refused by name,
+// it asks with shell_request_write, the smoke allows, the write lands, the smoke revokes over REST and the next write
+// is refused again. (4) the modes the plan left unverified are observed and reported, never failed: claude dontAsk
+// and auto, codex auto.
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -112,7 +114,7 @@ type Decide = (request: PermissionRequest) => 'allow' | 'deny'
 type Turn = { text: string; cards: PermissionRequest[]; policy: PermissionRequest[]; tools: string[]; done: boolean }
 
 function isShellTool(name: string): boolean {
-  return /(^|__)shell_(run|write|kill|read|list)$/.test(name)
+  return /(^|__)shell_(run|write|kill|read|list|request_write)$/.test(name)
 }
 
 function bare(name: string): string {
@@ -227,7 +229,10 @@ async function gated(engine: 'claude' | 'codex'): Promise<void> {
   if (runCard && String(runCard.input.command ?? '').includes('tui-demo.sh')) {
     ok('shell_run raised a card carrying the command', JSON.stringify(runCard.input.command))
   } else {
-    fail('shell_run raised a card carrying the command', `cards: ${run.cards.map((c) => `${c.toolName} ${JSON.stringify(c.input)}`).join(' | ') || 'none'}`)
+    fail(
+      'shell_run raised a card carrying the command',
+      `cards: ${run.cards.map((c) => `${c.toolName} ${JSON.stringify(c.input)}`).join(' | ') || 'none'}`,
+    )
   }
   const writeCard = byTool('shell_write')[0]
   if (writeCard && JSON.stringify(writeCard.input).includes('3')) {
@@ -240,11 +245,11 @@ async function gated(engine: 'claude' | 'codex'): Promise<void> {
   } else {
     fail('shell_kill raised a card', `tools used: ${run.tools.join(', ')}`)
   }
-  const readCards = run.cards.filter((c) => ['shell_read', 'shell_list'].includes(bare(c.toolName)))
+  const readCards = run.cards.filter((c) => ['shell_read', 'shell_list'].includes(bare(c.toolName)) && !run.policy.includes(c))
   if (readCards.length === 0) {
-    ok('the read tools raised no card')
+    ok('the read tools waited on no click')
   } else {
-    warn('the read tools raised a card', readCards.map((c) => c.toolName).join(', '))
+    fail('the read tools waited on no click', readCards.map((c) => c.toolName).join(', '))
   }
   const text = run.text.toLowerCase()
   if (text.includes('hot module reload') && text.includes('source maps') && text.includes('verbose errors')) {
@@ -289,6 +294,102 @@ async function denied(engine: 'claude' | 'codex'): Promise<void> {
   }
 }
 
+// A `$` from the composer, as the operator types it: the shell is owned by the user.
+async function userShell(id: string, command: string): Promise<ShellInfo> {
+  const ws = new WebSocket(`ws://127.0.0.1:${PORT}/v1/sessions/${id}/ws`)
+  await new Promise<void>((r, j) => {
+    ws.once('open', () => r())
+    ws.once('error', j)
+  })
+  ws.send(JSON.stringify({ type: 'shell_command', command }))
+  const deadline = Date.now() + 15_000
+  try {
+    for (;;) {
+      const shell = (await shells(id)).find((s) => s.command === command)
+      if (shell && shell.bytes > 0) {
+        return shell
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`the user shell ${JSON.stringify(command)} never started`)
+      }
+      await sleep(250)
+    }
+  } finally {
+    ws.close()
+  }
+}
+
+async function takeover(engine: 'claude' | 'codex'): Promise<void> {
+  step(`${engine}: the takeover of a user shell, then a revoke`)
+  const id = await create(engine, 'default')
+  note(`session ${id}`)
+  const session = await api<{ session: SessionInfo }>(`/sessions/${id}`)
+  if (session.session.shellAgentWrite === 'gated') {
+    ok('the session tells clients the agent holds the write tools')
+  } else {
+    fail('the session tells clients the agent holds the write tools', JSON.stringify(session.session.shellAgentWrite))
+  }
+  const shell = await userShell(id, `bash ${TUI}`)
+  note(`user shell ${shell.id}`)
+  const run = await turn(
+    id,
+    'This is an automated test of your shell tools. Do not use Bash or any command tool. Steps:\n' +
+      `1. Call shell_write on shell ${shell.id} with keys ["3"].\n` +
+      '2. That shell was started by the user, so step 1 is refused. Call shell_request_write on it with reason ' +
+      '"switch the demo to its Config page".\n' +
+      `3. Call shell_write on shell ${shell.id} with keys ["3"] and waitFor "[x]" again.\n` +
+      '4. Call shell_read on it with view "screen".\n' +
+      'Then reply with one line: the names of the items marked [x] on the Config page, comma separated.',
+    allowShell,
+  )
+  if (!run.done) {
+    fail('the turn finished', 'no turn_result within the budget')
+  }
+  const request = run.cards.find((c) => bare(c.toolName) === 'shell_request_write')
+  if (request && request.input.shellId === shell.id && String(request.input.reason ?? '').length > 0) {
+    ok('shell_request_write raised a card naming the shell and the reason', JSON.stringify(request.input.reason))
+  } else {
+    fail(
+      'shell_request_write raised a card naming the shell and the reason',
+      `cards: ${run.cards.map((c) => `${bare(c.toolName)} ${JSON.stringify(c.input)}`).join(' | ') || 'none'}`,
+    )
+  }
+  const granted = (await shells(id)).find((s) => s.id === shell.id)
+  if (granted?.agentWrite === true && granted.status === 'running') {
+    ok('allow set the grant on the record')
+  } else {
+    fail('allow set the grant on the record', JSON.stringify(granted))
+  }
+  const text = run.text.toLowerCase()
+  if (text.includes('hot module reload') && text.includes('source maps') && text.includes('verbose errors')) {
+    ok('the granted write landed and the agent read the screen', JSON.stringify(run.text.trim().slice(-120)))
+  } else {
+    fail('the granted write landed and the agent read the screen', JSON.stringify(run.text.trim().slice(-200)))
+  }
+
+  const revoked = await api<{ shell: ShellInfo }>(`/sessions/${id}/shells/${shell.id}/agent-write`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled: false }),
+  })
+  if (revoked.shell.agentWrite === undefined) {
+    ok('the operator revoked the grant over REST')
+  } else {
+    fail('the operator revoked the grant over REST', JSON.stringify(revoked.shell))
+  }
+  const after = await turn(
+    id,
+    `This is an automated test. Do not use Bash or any command tool. Call shell_write on shell ${shell.id} with keys ["1"]. ` +
+      'Do not call shell_request_write and do not retry. Reply with the exact text the tool returned.',
+    allowShell,
+  )
+  if (after.text.includes('started by the user')) {
+    ok('the next write was refused with the rule named', JSON.stringify(after.text.trim().slice(0, 160)))
+  } else {
+    fail('the next write was refused with the rule named', JSON.stringify(after.text.trim().slice(0, 200)))
+  }
+  await api(`/sessions/${id}/shells/${shell.id}/kill`, { method: 'POST' })
+}
+
 async function observe(engine: 'claude' | 'codex', mode: PermissionMode): Promise<void> {
   step(`${engine}: what ${mode} does to shell_run (observed, not asserted)`)
   const id = await create(engine, mode)
@@ -320,6 +421,7 @@ async function main(): Promise<void> {
     for (const engine of engines) {
       await gated(engine)
       await denied(engine)
+      await takeover(engine)
       for (const mode of engine === 'claude' ? (['dontAsk', 'auto'] as const) : (['auto'] as const)) {
         await observe(engine, mode)
       }

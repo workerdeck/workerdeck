@@ -158,6 +158,13 @@ export type SidebarToHost =
       shellId: string
     }
   | {
+      kind: 'wd-shell-agent-write'
+      hostId: string
+      sessionId: string
+      shellId: string
+      enabled: boolean
+    }
+  | {
       kind: 'wd-stop-session'
       hostId: string
       sessionId: string

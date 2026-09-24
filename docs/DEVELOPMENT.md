@@ -150,7 +150,8 @@ handshake, or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `
 (paid; `smoke:live` is the provider engine and never reaches it): its own gateway on 8792 with
 `--shell --shell-agent-write gated`, the agent drives `smoke/tui-demo.sh` through `shell_run`,
 `shell_write` and `shell_kill` with every card checked for its payload, a denied card must create no
-shell, and it reports what claude `dontAsk`/`auto` and codex `auto` do. It drops
+shell, the takeover runs end to end (a `$` of the smoke's own, the agent's write refused by name,
+`shell_request_write` allowed, the write lands, a REST revoke, the next write refused), and it reports what claude `dontAsk`/`auto` and codex `auto` do. It drops
 `WORKERDECK_AUTH_KEY` from the child's env, since its loopback gateway runs without auth. Still
 unproven: whether a real codex honours `dynamicTools` on `thread/resume`. **`smoke:live` does not
 cover the provider engine's approval path** - it

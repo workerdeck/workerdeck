@@ -9,6 +9,19 @@ export const SHELL_EXPAND_CHARS = 100_000
 
 export const SHELL_MISSING = 'output expired or not tracked by this gateway'
 
+export const SHELL_AGENT_WRITE_NOTE = 'agent may type'
+
+export const SHELL_AGENT_WRITE_GLYPH = '⌨'
+
+// Only a running shell the user started takes a grant: the agent already drives its own.
+export function shellGrantable(shell: ShellInfo): boolean {
+  return shell.status === 'running' && shell.owner === 'user'
+}
+
+export function shellAgentWriteLabel(shell: ShellInfo): string {
+  return shell.agentWrite === true ? 'Revoke the agent’s access to this shell' : 'Let the agent type into this shell'
+}
+
 export function shellInfoLabel(shell: ShellInfo): string {
   return shell.label || shell.command.split('\n')[0] || ''
 }
@@ -31,7 +44,7 @@ export function shellInfoFailed(shell: ShellInfo): boolean {
 
 export function shellInfoStatusText(shell: ShellInfo): string {
   if (shell.status === 'running') {
-    return 'running'
+    return shell.agentWrite === true ? `running · ${SHELL_AGENT_WRITE_NOTE}` : 'running'
   }
   if (typeof shell.exitCode === 'number') {
     return shell.exitCode === 0 ? 'exit 0' : `exit ${shell.exitCode}`

@@ -474,6 +474,10 @@
 [data-terminal] .term-action[data-tone='magenta'] {
   color: var(--term-magenta);
 }
+/* A live grant on a user's shell: the agent may type into it. */
+[data-terminal] .term-action[data-tone='yellow'] {
+  color: var(--term-yellow);
+}
 [data-terminal] .term-action:hover {
   color: var(--term-fg);
 }

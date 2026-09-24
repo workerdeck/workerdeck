@@ -85,6 +85,8 @@ export {
   shellSummary,
   shellTail,
   shellToolNames,
+  shellToolNeedsCard,
+  shellToolOf,
   shellToolSpecs,
   shellWriteDeniedText,
   shellWriteToolOf,

@@ -1430,7 +1430,7 @@ has the shape; these are the ways to get it wrong.
   long-lived shell plus a write tool is a foothold where every later keystroke is a payload, which
   is why the default is read-only, why the card draws `command`, `data` and `keys` verbatim
   (`packages/ui/src/lib/shell-request.ts`, both prompt themes), and why no client offers "always
-  allow" for these three.
+  allow" for these four (`shell_request_write` is the fourth).
 - **The third ANDed condition, operator auth, is now stamped on the record rather than assumed.**
   `POST /sessions` passes `{ operator: auth.isOperator(auth) }` beside the vetted request, and
   `buildRunnerConfig` writes it as `createdByOperator` **after** the host's hook (the hook and a
@@ -1446,11 +1446,27 @@ has the shape; these are the ways to get it wrong.
   call for a tool that was never declared is refused at the tool, not by absence.
 - **The agent may drive only shells it started, and the refusal says so.** `agentMayWrite` is
   `sessionId === from && (owner === 'agent' || agentWrite === true)`; the `agentWrite` leg is
-  stage 4b's grant and is honoured already. A user's `$` in the same session refuses `write` and
-  `kill` with `shellOwnershipRefusal`, which names the rule so the model stops retrying; another
+  the grant below. An ungranted `$` of the user's in the same session refuses `write` and
+  `kill` with `shellOwnershipRefusal`, which names the rule (and `shell_request_write`) so the
+  model stops retrying and asks instead; another
   session's shell still reads as missing. `shell_run` takes no `cwd`: the shell runs in the
   session's cwd like a `$`, because a cwd of the model's choosing would be a new way out of
   `allowedCwdRoots`.
+- **A grant is the user's decision about the user's shell, so asking for one always cards.**
+  `shell_request_write({ shellId, reason })` is offered beside the three write tools and
+  `shellToolNeedsCard` makes it the one write tool that raises a card under `allow` too (claude
+  excludes it from `#allowsShellToolByPolicy`, codex gates on the helper, the provider default
+  `shouldApprove` answers it). `bypassPermissions` still evaporates the card, the same trade as
+  `Bash`. Allowed, the tool calls `directory.grant`, which runs `registry.setAgentWrite(true)`:
+  running user shells only (an agent shell answers "already yours", an ended one throws), the flag
+  is persisted and the listeners fire, so the transcript row and the session card redraw at once.
+  **The grant ends with the shell**: `settle` deletes the flag, and `agentMayWrite` plus the
+  running check would refuse anyway. The operator can also grant without being asked, and revoke
+  either way, through `POST /sessions/:id/shells/:shellId/agent-write { enabled }` (operator and
+  `shellPermitted`, like kill; enabling is a 409 when the session's `SessionInfo.shellAgentWrite`
+  is absent, because a grant with no write tool to use it is a promise the agent cannot keep).
+  Clients offer the toggle only where `shellAgentWrite` is present, on user shells that are
+  running: the row, the drill-in strip and the session card's shell step.
 - **An agent-run shell gets the transcript row and the card entry, never the context flush.**
   `LocalCommandQueue.push` branches on `owner === 'agent'`: the row is drawn and redrawn under
   one uuid like a `$`, but the source never joins the queue, because the flush wraps its text in
@@ -1477,21 +1493,25 @@ has the shape; these are the ways to get it wrong.
   because the channel returns no `decision`, an interrupting deny also interrupts the turn.
   Interrupt, close, clear and turn end settle it like every other approval. `wireId` is left
   unset so `serverRequest/resolved` can never match it.
-- **Claude's gate is Claude Code's, and `allow` short-circuits it.** An MCP tool call reaches
+- **Claude's gate is Claude Code's, `allow` short-circuits it, and the read pair never waits.**
+  An MCP tool call reaches
   `#canUseTool` whenever Claude Code decides it needs permission, so under `gated` the three
   tools prompt under whatever rule the CLI applies to `mcp__workerdeck__*` in the session's mode;
   nothing is added. Under `allow`, `#allowByPolicy` resolves the three write tools at once and
   still emits `permission_requested` + `permission_resolved { resolvedBy: 'policy' }`, so the
   transcript records what ran. Verified by `pnpm smoke:shell-write` on 2026-09-24 (agent SDK
-  0.3.280): `default` prompts for all five shell tools, **the read tools included**, because Claude
+  0.3.280): `default` prompts for every shell tool, **the read tools included**, because Claude
   Code asks for every MCP tool there; `dontAsk` denies `shell_run` silently (no card, no shell, the
   model is told it was blocked); `auto` runs it with no card. Codex under `gated` cards only the
-  three write tools.
+  write tools. So `#allowsShellToolByPolicy` resolves `shell_list` and `shell_read` by policy
+  whenever `shells` is stamped (read-only, operator sessions only), recorded like `#allowByPolicy`:
+  a TUI session is no longer a click per read.
 - **The provider gate exists for embedders, not for the shipped adapter.** The in-repo provider
   engine is `hostCwd: false`, so `shells` is never stamped and the tools never exist there. An
   embedder may register an adapter that says otherwise (`options.engines`), so
-  `createProviderRunner` supplies the `shouldApprove` default under `gated`: true for the three
-  write tools, the embedder's answer for everything else. Without it the write tools would run
+  `createProviderRunner` supplies the `shouldApprove` default whenever the write tools are
+  offered: `shellToolNeedsCard` (every write tool under `gated`, `shell_request_write` under
+  `allow` too), the embedder's answer for everything else. Without it the write tools would run
   silently under `default`.
 - **`shell_read` returns the text view's tail, clamped, never raw bytes.** `SHELL_READ_DEFAULT_LINES`
   when the agent asks for nothing, `SHELL_READ_MAX_LINES` as the ceiling, and an over-max `tail` is

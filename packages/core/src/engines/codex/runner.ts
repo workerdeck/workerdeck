@@ -37,8 +37,8 @@ import { untrustedProjectNotice } from './trust.ts'
 import { isPeerToolName, peerToolSpecs, runPeerTool, withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
 import {
   isShellToolName,
-  isShellWriteToolName,
   runShellTool,
+  shellToolNeedsCard,
   shellToolSpecs,
   shellWriteDeniedText,
   type ShellAgentWrite,
@@ -719,6 +719,7 @@ export class CodexRunner implements Runner {
       cwd: this.#cwd,
       profile: this.#config.profile,
       engine: 'codex',
+      shellAgentWrite: this.#config.shells ? this.#config.shellAgentWrite : undefined,
       capabilities: ENGINE_CAPABILITIES.codex,
       model: this.#model ?? this.#resolvedModel,
       permissionMode: this.#permissionMode,
@@ -1764,12 +1765,7 @@ export class CodexRunner implements Runner {
       if (shells && isShellToolName(call.tool)) {
         const write = this.#config.shellAgentWrite !== undefined
         let args = call.arguments
-        if (
-          write &&
-          isShellWriteToolName(call.tool) &&
-          this.#config.shellAgentWrite === 'gated' &&
-          SHELL_WRITE_GATE_MODES.has(this.#permissionMode)
-        ) {
+        if (write && shellToolNeedsCard(call.tool, this.#config.shellAgentWrite) && SHELL_WRITE_GATE_MODES.has(this.#permissionMode)) {
           const verdict = (await this.#requestApproval(SHELL_WRITE_CHANNEL, method, call, undefined)) as ShellWriteVerdict
           if (!verdict.allowed) {
             return { success: false, contentItems: [{ type: 'inputText', text: shellWriteDeniedText(call.tool, verdict.message) }] }

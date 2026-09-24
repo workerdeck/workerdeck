@@ -299,6 +299,12 @@ export class WorkerDeckClient {
     return (body as { shell: ShellInfo }).shell
   }
 
+  async setShellAgentWrite(sessionId: string, shellId: string, enabled: boolean): Promise<ShellInfo> {
+    const path = `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}/agent-write`
+    const body = await this.#call('POST', path, { enabled })
+    return (body as { shell: ShellInfo }).shell
+  }
+
   attach(sessionId: string, options?: AttachOptions): SessionHandle {
     return new SessionHandle(this, sessionId, options)
   }

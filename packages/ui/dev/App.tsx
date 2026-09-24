@@ -7,6 +7,7 @@ import { TerminalSurface } from '../src/components/terminal/surface.tsx'
 import { Composer } from '../src/components/agent/Composer.tsx'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
 import { TranscriptVariantProvider } from '../src/components/agent/transcript-variant.tsx'
+import { ShellActionsProvider, type ShellActions } from '../src/components/agent/shell-actions.tsx'
 import { BASH_APPROVAL, EDIT_APPROVAL, FIXTURES, QUESTIONS } from './fixtures.ts'
 import { markdownHeight, measureCh, textLines } from '../src/components/terminal/height.ts'
 import { terminalBlocks } from '../src/components/terminal/blocks.ts'
@@ -130,6 +131,40 @@ export function App() {
     reply(1, 'Working on it.')
     reply(2, 'Reading the files that matter, then the two rules underneath them.')
     reply(3, 'Done - the change is in `packages/ui`, and the reason is in the header comment.')
+  }
+  // A `$` lands as a running user shell, so the row's grant, revoke and kill can be exercised without a gateway.
+  const runShell = (command: string) => {
+    const stamp = Date.now()
+    const id = `sh_dev${stamp}`
+    const shell = { id, sessionId: 'dev', ordinal: sent.length + 1, command, label: command, cwd: '/repo', owner: 'user' as const }
+    setSent((prior) => [
+      ...prior,
+      {
+        id: `shell-${stamp}`,
+        kind: 'shell',
+        shell: { ...shell, status: 'running', startedAt: stamp, bytes: 24, cols: 120, rows: 40 },
+        text: 'waiting for input...',
+        truncated: false,
+      } as TranscriptItem,
+    ])
+  }
+  const patchShell = (shellId: string, patch: (shell: Extract<TranscriptItem, { kind: 'shell' }>['shell']) => object) =>
+    setSent((prior) =>
+      prior.map((entry) =>
+        entry.kind === 'shell' && entry.shell.id === shellId ? { ...entry, shell: { ...entry.shell, ...patch(entry.shell) } } : entry,
+      ),
+    )
+  const shellActions: ShellActions = {
+    loadOutput: async () => true,
+    verify: async () => true,
+    kill: async (shellId) => {
+      patchShell(shellId, () => ({ status: 'exited', endReason: 'killed', endedAt: Date.now(), agentWrite: undefined }))
+      return true
+    },
+    agentWrite: async (shellId, enabled) => {
+      patchShell(shellId, () => ({ agentWrite: enabled ? true : undefined }))
+      return true
+    },
   }
   const [attachmentCount, setAttachmentCount] = useState(0)
   const stagedAttachments = useMemo(() => {
@@ -430,25 +465,27 @@ export function App() {
 
       <main className="flex min-w-0 flex-1 justify-center overflow-auto">
         <div ref={surface} className="flex h-[80vh] min-h-0 min-w-0 flex-1 flex-col" style={width ? { maxWidth: width } : undefined}>
-          <Transcript
-            stickyPrompt
-            state={state}
-            variant="terminal"
-            fontSize={fontSize}
-            lineHeight={lineHeight}
-            affordances={affordances}
-            scrubber={scrub}
-            bookmarks={
-              fixture === 'huge'
-                ? [state.items[30]?.id, state.items[210]?.id, state.items[480]?.id].filter((id) => id !== undefined)
-                : undefined
-            }
-            replaying={replayHold}
-            catchUp={catchUp}
-            jumpToRecapRef={jumpRef}
-            repinRef={repinRef}
-            className={cn('min-h-0 flex-1', grid && 'term-grid-overlay')}
-          />
+          <ShellActionsProvider value={shellActions}>
+            <Transcript
+              stickyPrompt
+              state={state}
+              variant="terminal"
+              fontSize={fontSize}
+              lineHeight={lineHeight}
+              affordances={affordances}
+              scrubber={scrub}
+              bookmarks={
+                fixture === 'huge'
+                  ? [state.items[30]?.id, state.items[210]?.id, state.items[480]?.id].filter((id) => id !== undefined)
+                  : undefined
+              }
+              replaying={replayHold}
+              catchUp={catchUp}
+              jumpToRecapRef={jumpRef}
+              repinRef={repinRef}
+              className={cn('min-h-0 flex-1', grid && 'term-grid-overlay')}
+            />
+          </ShellActionsProvider>
           <TranscriptVariantProvider value="terminal">
             <Composer
               attachments={stagedAttachments}
@@ -460,7 +497,10 @@ export function App() {
                   .filter((p) => p.includes(query))
                   .map((p) => ({ path: `/repo/${p}`, relative: p }))
               }
-              onShellCommand={(command) => setAnswered(`shell: ${command}`)}
+              onShellCommand={(command) => {
+                setAnswered(`shell: ${command}`)
+                runShell(command)
+              }}
               onSend={(text) => {
                 repinRef.current?.()
                 setAnswered(`sent: ${text}`)

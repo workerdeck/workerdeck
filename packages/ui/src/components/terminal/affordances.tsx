@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { copyText } from '../../lib/clipboard.ts'
-import { SHELL_KILL_GLYPH } from './shell-row.ts'
+import { SHELL_AGENT_WRITE_GLYPH, SHELL_KILL_GLYPH } from './shell-row.ts'
 import { cn } from '../../lib/utils.ts'
 
 export type TerminalAffordances = {
@@ -130,6 +130,25 @@ export function KillShellAction({ onKill, label = 'Kill this shell' }: { onKill:
       }}
     >
       {SHELL_KILL_GLYPH}
+    </button>
+  )
+}
+
+export function AgentWriteAction({ granted, label, onToggle }: { granted: boolean; label: string; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className="term-action"
+      title={label}
+      aria-label={label}
+      aria-pressed={granted}
+      data-tone={granted ? 'yellow' : 'magenta'}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle()
+      }}
+    >
+      {SHELL_AGENT_WRITE_GLYPH}
     </button>
   )
 }

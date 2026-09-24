@@ -200,6 +200,7 @@ export class AiSdkRunner implements Runner {
       cwd: this.#config.cwd ?? '',
       profile: this.#config.profile,
       engine: 'provider',
+      shellAgentWrite: this.#config.shells ? this.#config.shellAgentWrite : undefined,
       capabilities: this.#config.shouldApprove
         ? { ...ENGINE_CAPABILITIES.provider, interactiveApprovals: true }
         : ENGINE_CAPABILITIES.provider,

@@ -45,3 +45,15 @@ describe('shellRequestPayload', () => {
     expect(visibleControls('plain text')).toBe('plain text')
   })
 })
+
+describe('shell_request_write on the card', () => {
+  it('names the shell and shows the reason verbatim, with the grant spelled out', () => {
+    const payload = shellRequestPayload({
+      toolName: 'mcp__workerdeck__shell_request_write',
+      input: { shellId: 'sh_a', reason: 'answer "y" to the\nprompt' },
+    })
+    expect(payload).toEqual({ kind: 'grant', shellId: 'sh_a', reason: 'answer "y" to the\nprompt' })
+    expect(shellRequestTitle(payload!)).toBe('Agent asks to type into your shell sh_a')
+    expect(shellRequestLines(payload!)).toEqual(['why: answer "y" to the[newline]prompt', 'until the shell ends or you revoke it'])
+  })
+})

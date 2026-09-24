@@ -12,6 +12,7 @@ import {
   shellSummary,
   shellTail,
   shellToolNames,
+  shellToolNeedsCard,
   shellToolSpecs,
   shellWriteToolOf,
   type ShellDirectory,
@@ -78,16 +79,23 @@ function directory(text = 'one\ntwo\nthree\n'): ShellDirectory & { calls: unknow
       }
       return { shell: shellSummary(info({ owner: 'agent', status: 'exited', endReason: 'killed' })), killed: true }
     },
+    grant: async (from, shellId) => {
+      calls.push(['grant', from, shellId])
+      if (from !== 'a' || shellId !== 'sh_a') {
+        return undefined
+      }
+      return shellSummary(info({ agentWrite: true }))
+    },
   }
 }
 
 describe('shell tool specs', () => {
-  it('describes the two read tools by default and all five when the agent may write', () => {
+  it('describes the two read tools by default and all six when the agent may write', () => {
     expect(shellToolSpecs().map((s) => s.name)).toEqual(['shell_list', 'shell_read'])
     expect(shellToolNames(false)).toEqual(['shell_list', 'shell_read'])
-    expect(shellToolNames(true)).toEqual(['shell_list', 'shell_read', 'shell_run', 'shell_write', 'shell_kill'])
+    expect(shellToolNames(true)).toEqual(['shell_list', 'shell_read', 'shell_run', 'shell_write', 'shell_kill', 'shell_request_write'])
     const specs = shellToolSpecs(true)
-    expect(specs.map((s) => s.name)).toEqual(['shell_list', 'shell_read', 'shell_run', 'shell_write', 'shell_kill'])
+    expect(specs.map((s) => s.name)).toEqual(['shell_list', 'shell_read', 'shell_run', 'shell_write', 'shell_kill', 'shell_request_write'])
     const read = specs.find((s) => s.name === 'shell_read')!
     expect(read.inputSchema).toMatchObject({ type: 'object', required: ['shellId'] })
     expect((read.inputSchema.properties as Record<string, unknown>).tail).toMatchObject({ type: 'integer' })
@@ -143,7 +151,9 @@ describe('agentMayWrite', () => {
     expect(agentMayWrite(info({ owner: 'user' }), 'a')).toBe(false)
     expect(agentMayWrite(info({ owner: 'user', agentWrite: true }), 'a')).toBe(true)
     expect(agentMayWrite(info({ owner: 'agent' }), 'b')).toBe(false)
-    expect(shellOwnershipRefusal('sh_a')).toBe('shell sh_a was started by the user; the agent may only type into or kill shells it started')
+    expect(shellOwnershipRefusal('sh_a')).toBe(
+      'shell sh_a was started by the user; the agent may only type into or kill shells it started, or one the user granted through shell_request_write',
+    )
   })
 })
 
@@ -315,7 +325,7 @@ describe('runShellTool', () => {
       isError: true,
     })
     expect(await runShellTool(shells, 'a', 'shell_write', { shellId: 'sh_a', keys: ['q'] }, { write: true })).toEqual({
-      text: 'shell sh_a was started by the user; the agent may only type into or kill shells it started',
+      text: 'shell sh_a was started by the user; the agent may only type into or kill shells it started, or one the user granted through shell_request_write',
       isError: true,
     })
   })
@@ -339,5 +349,42 @@ describe('shellDirectoryHandle', () => {
     await expect(handle.list('a')).resolves.toHaveLength(1)
     await expect(handle.kill('a', 'sh_a')).resolves.toMatchObject({ killed: true })
     installShellDirectory(undefined)
+  })
+})
+
+describe('shell_request_write', () => {
+  it('cards a grant request under both write modes, and every other write tool only under gated', () => {
+    expect(shellToolNeedsCard('shell_request_write', 'allow')).toBe(true)
+    expect(shellToolNeedsCard('mcp__workerdeck__shell_request_write', 'gated')).toBe(true)
+    expect(shellToolNeedsCard('shell_write', 'gated')).toBe(true)
+    expect(shellToolNeedsCard('shell_write', 'allow')).toBe(false)
+    expect(shellToolNeedsCard('shell_read', 'gated')).toBe(false)
+    expect(shellToolNeedsCard('shell_request_write', undefined)).toBe(false)
+  })
+
+  it('grants through the directory as the caller, and refuses when the session holds no write tools', async () => {
+    const shells = directory()
+    const granted = await runShellTool(
+      shells,
+      'a',
+      'shell_request_write',
+      { shellId: 'sh_a', reason: 'answer the prompt' },
+      { write: true },
+    )
+    expect(granted).toEqual({
+      text: 'granted: you may now type into and kill shell #3 sh_a ($ npm run dev) until it ends or the user revokes it',
+      isError: false,
+    })
+    expect(shells.calls).toEqual([['grant', 'a', 'sh_a']])
+    expect((await runShellTool(shells, 'b', 'shell_request_write', { shellId: 'sh_a', reason: 'x' }, { write: true })).text).toBe(
+      'no such shell: sh_a',
+    )
+    expect(await runShellTool(shells, 'a', 'shell_request_write', { shellId: 'sh_a', reason: 'x' })).toEqual({
+      text: SHELL_WRITE_REFUSAL,
+      isError: true,
+    })
+    expect((await runShellTool(shells, 'a', 'shell_request_write', { shellId: 'sh_a' }, { write: true })).text).toMatch(
+      /^invalid arguments for shell_request_write: reason/,
+    )
   })
 })

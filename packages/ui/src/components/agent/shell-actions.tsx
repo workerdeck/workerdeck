@@ -6,6 +6,8 @@ export type ShellActions = {
   kill: (shellId: string) => Promise<boolean>
   // Drill in to the shell's terminal. Absent when the host has no frame to open one in.
   open?: (shellId: string) => void
+  // Grant or revoke the agent's hand on a shell the user started. Absent where the agent holds no write tools.
+  agentWrite?: (shellId: string, enabled: boolean) => Promise<boolean>
 }
 
 const NOOP: ShellActions = {

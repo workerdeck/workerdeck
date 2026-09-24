@@ -16,6 +16,7 @@ export function SessionCard({
   onSelectSubagent,
   onSelectShell,
   onKillShell,
+  onShellAgentWrite,
   onRename,
   onMenu,
 }: {
@@ -32,6 +33,7 @@ export function SessionCard({
   onSelectSubagent: (toolUseId: string) => void
   onSelectShell: (shellId: string) => void
   onKillShell: (shellId: string) => void
+  onShellAgentWrite?: (shellId: string, enabled: boolean) => void
   onRename: (title: string) => void
   onMenu: () => void
 }) {
@@ -48,6 +50,7 @@ export function SessionCard({
       onSelectSubagent={onSelectSubagent}
       onSelectShell={onSelectShell}
       onKillShell={onKillShell}
+      onShellAgentWrite={onShellAgentWrite}
       onRename={onRename}
       actions={
         <>

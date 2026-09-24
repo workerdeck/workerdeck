@@ -231,6 +231,15 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                       shellId,
                     })
                   }
+                  onShellAgentWrite={(shellId, enabled) =>
+                    bridge.post({
+                      kind: 'wd-shell-agent-write',
+                      hostId: row.hostId,
+                      sessionId: row.info.id,
+                      shellId,
+                      enabled,
+                    })
+                  }
                   onRename={(title) =>
                     bridge.post({
                       kind: 'wd-rename-session',

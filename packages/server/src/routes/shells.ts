@@ -1,9 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Runner } from '@workerdeck/core'
-import { json, untrustedDownloadHeaders } from '../lib/http.ts'
+import { json, readJsonBody, untrustedDownloadHeaders } from '../lib/http.ts'
 import type { SessionRoute } from '../lib/parse-route.ts'
 import { shellPermitted, SHELL_REFUSAL } from '../services/shells.ts'
 import type { ServerContext } from '../context.ts'
+
+const AGENT_WRITE_BODY_MAX = 1024
 
 export async function handleShells(
   ctx: ServerContext,
@@ -45,6 +47,44 @@ export async function handleShells(
       return
     }
     const shell = shells.kill(sessionId, route.shellId)
+    if (!shell) {
+      json(res, 404, { error: 'shell not found' })
+      return
+    }
+    json(res, 200, { shell })
+    return
+  }
+  if (route.shellAction === 'agent-write') {
+    if (req.method !== 'POST') {
+      json(res, 405, { error: 'method not allowed' })
+      return
+    }
+    if (!runner || !shellPermitted(shells, runner, operator)) {
+      json(res, 403, { error: SHELL_REFUSAL })
+      return
+    }
+    let body: Record<string, unknown>
+    try {
+      body = await readJsonBody(req, AGENT_WRITE_BODY_MAX)
+    } catch {
+      json(res, 400, { error: 'invalid JSON body' })
+      return
+    }
+    if (typeof body.enabled !== 'boolean') {
+      json(res, 400, { error: 'enabled must be a boolean' })
+      return
+    }
+    if (body.enabled && runner.info().shellAgentWrite === undefined) {
+      json(res, 409, { error: 'the agent has no shell write tools on this session (shell.agentWrite is read-only)' })
+      return
+    }
+    let shell
+    try {
+      shell = shells.setAgentWrite(sessionId, route.shellId, body.enabled)
+    } catch (error) {
+      json(res, 409, { error: error instanceof Error ? error.message : String(error) })
+      return
+    }
     if (!shell) {
       json(res, 404, { error: 'shell not found' })
       return

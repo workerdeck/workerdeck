@@ -93,6 +93,7 @@ export type UseClaudeSessionResult = {
   // A `running` row is a claim from the event log, which can be older than the process. Fetched once per shell id.
   verifyShell: (shellId: string) => Promise<boolean>
   killShell: (shellId: string) => Promise<boolean>
+  setShellAgentWrite: (shellId: string, enabled: boolean) => Promise<boolean>
 }
 
 export function useClaudeSession(
@@ -290,6 +291,22 @@ export function useClaudeSession(
     [client, sessionId],
   )
 
+  const setShellAgentWrite = useCallback(
+    async (shellId: string, enabled: boolean): Promise<boolean> => {
+      if (!sessionId) {
+        return false
+      }
+      try {
+        const record = await client.setShellAgentWrite(sessionId, shellId, enabled)
+        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: record })
+        return true
+      } catch {
+        return false
+      }
+    },
+    [client, sessionId],
+  )
+
   return useMemo(
     () => ({
       state,
@@ -316,6 +333,7 @@ export function useClaudeSession(
       loadShellOutput,
       verifyShell,
       killShell,
+      setShellAgentWrite,
     }),
     [
       state,
@@ -332,6 +350,7 @@ export function useClaudeSession(
       loadShellOutput,
       verifyShell,
       killShell,
+      setShellAgentWrite,
     ],
   )
 }

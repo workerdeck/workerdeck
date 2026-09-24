@@ -298,6 +298,7 @@ export function SessionPanel({
     loadShellOutput,
     verifyShell,
     killShell,
+    setShellAgentWrite,
   } = useClaudeSession(client, sessionId, { onProtocolError: setProtocolError, cacheTranscript })
   const {
     shellId: framedShellId,
@@ -307,9 +308,10 @@ export function SessionPanel({
     shell: framedShell,
     label: framedShellLabel,
   } = useShellFrame({ sessionId, items: state.items, session: state.session, shells, reveal, openShell, onShellChange })
+  const agentWrite = state.session?.shellAgentWrite !== undefined ? setShellAgentWrite : undefined
   const shellActions = useMemo(
-    () => ({ loadOutput: loadShellOutput, verify: verifyShell, kill: killShell, open: enterShell }),
-    [loadShellOutput, verifyShell, killShell, enterShell],
+    () => ({ loadOutput: loadShellOutput, verify: verifyShell, kill: killShell, open: enterShell, agentWrite }),
+    [loadShellOutput, verifyShell, killShell, enterShell, agentWrite],
   )
   useEffect(() => setProtocolError(undefined), [sessionId])
   const {
@@ -732,6 +734,7 @@ export function SessionPanel({
                         label={framedShellLabel}
                         onBack={leaveShell}
                         onKill={() => void killShell(framedShellId)}
+                        onAgentWrite={agentWrite ? (enabled) => void agentWrite(framedShellId, enabled) : undefined}
                         terminal={terminal}
                         fontSize={effectiveTermFontSize}
                         lineHeight={effectiveTermLineHeight}

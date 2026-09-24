@@ -529,7 +529,10 @@ the same `undefined` they give a nonexistent one; `read` clamps `tail` between
 carries `shellAgentWrite?: 'gated' | 'allow'` (absent is read-only); the claude one also carries
 `createdByOperator`, which the gateway stamps and reads back. The codex runner raises the gateway's
 own card for a gated write (`SHELL_WRITE_CHANNEL`); the claude runner leaves Claude Code's
-`canUseTool` alone under `gated` and resolves the three by policy under `allow`.
+`canUseTool` alone under `gated`, resolves the write tools by policy under `allow` and the two read
+tools always. `shell_request_write` asks for a grant on a user's shell through `ShellDirectory.grant`;
+`shellToolNeedsCard(tool, mode)` is the one rule every engine gates on, and it cards a grant request
+under `allow` too. Every engine's `info()` reports `shellAgentWrite` when it holds the write tools.
 `LocalCommandQueue` draws an agent-owned shell's row but never flushes it into context.
 
 `src/lib/instructions.ts` is the host-instruction seam: `SessionInstructions`
@@ -814,7 +817,9 @@ provider engine therefore never gets the tools. `shellAgentWrite` is stamped bes
 `shell.agentWrite` is not `read-only` **and** the record's `createdByOperator` (written by
 `buildRunnerConfig` from the principal `POST /sessions` passes beside the request; a job has none) is
 true. `lib/provider-runner.ts`
-supplies the `shouldApprove` default for the write tools under `gated`. Invariants in
+supplies the `shouldApprove` default (`shellToolNeedsCard`). `registry.setAgentWrite` is the grant:
+running user shells only, persisted, listeners fired so the row redraws; `settle` clears it.
+`POST /sessions/:id/shells/:shellId/agent-write { enabled }` is the operator's grant and revoke. Invariants in
 `docs/GOTCHAS.md` §Shell sessions.
 
 ## `packages/client`

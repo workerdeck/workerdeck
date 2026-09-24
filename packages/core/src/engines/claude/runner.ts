@@ -58,6 +58,8 @@ import {
   SHELL_TOOL_SHAPES,
   runShellTool,
   shellToolNames,
+  shellToolNeedsCard,
+  shellToolOf,
   shellWriteToolOf,
   type ShellAgentWrite,
   type ShellDirectory,
@@ -181,6 +183,7 @@ export class SessionRunner implements Runner {
       cwd: this.#cwd,
       profile: this.#config.profile,
       engine: 'claude',
+      shellAgentWrite: this.#config.shells ? this.#config.shellAgentWrite : undefined,
       capabilities: ENGINE_CAPABILITIES.claude,
       model: this.#model ?? this.#config.model,
       permissionMode: this.#permissionMode,
@@ -773,7 +776,7 @@ export class SessionRunner implements Runner {
       delete request.expiresAt
       return Promise.resolve(this.#resolveQuestionByPolicy(request, questionBehavior))
     }
-    if (this.#config.shellAgentWrite === 'allow' && shellWriteToolOf(toolName) !== undefined) {
+    if (this.#allowsShellToolByPolicy(toolName)) {
       delete request.expiresAt
       return Promise.resolve(this.#allowByPolicy(request))
     }
@@ -797,6 +800,16 @@ export class SessionRunner implements Runner {
       this.#emit({ type: 'permission_requested', request })
       this.#setStatus('awaiting_approval')
     })
+  }
+
+  // Reading a shell never writes to it and the tools are offered to operator sessions only, so the read pair never
+  // waits on a click; a write tool skips the card only under `allow`, and a grant request never does.
+  #allowsShellToolByPolicy(toolName: string): boolean {
+    const tool = this.#config.shells ? shellToolOf(toolName) : undefined
+    if (tool === undefined) {
+      return false
+    }
+    return shellWriteToolOf(toolName) === undefined || !shellToolNeedsCard(toolName, this.#config.shellAgentWrite)
   }
 
   // The card still reaches the transcript, resolved by policy, so an operator who chose `allow` can see what ran.

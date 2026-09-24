@@ -196,6 +196,54 @@ withPty('shell_command spawns a tracked PTY', () => {
     ws.close()
   })
 
+  it('grants and revokes the agent on a running user shell over REST, re-emitting the row, only where it holds write tools', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startShellServer(harness, {
+      shell: { enabled: true, artifactDir: tempDir(), agentWrite: 'gated' },
+    })
+    const id = await createSession(base, 'operator', { cwd: tempDir() })
+    const session = (await (await get(base, `/sessions/${id}`)).json()) as { session: { shellAgentWrite?: string } }
+    expect(session.session.shellAgentWrite).toBe('gated')
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
+    ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
+    const started = await collector.waitFor((f) => shellRow(f)?.shell.command === 'sleep 30')
+    const shellId = shellRow(started)!.shell.id
+    const post = (enabled: unknown, token = 'operator') =>
+      fetch(`${base}/sessions/${id}/shells/${shellId}/agent-write`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+
+    expect((await post('yes')).status).toBe(400)
+    const granted = await post(true)
+    expect(granted.status).toBe(200)
+    expect(((await granted.json()) as { shell: ShellInfo }).shell).toMatchObject({ id: shellId, agentWrite: true })
+    await collector.waitFor((f) => shellRow(f)?.shell.id === shellId && shellRow(f)?.shell.agentWrite === true)
+
+    const revoked = await post(false)
+    expect(((await revoked.json()) as { shell: ShellInfo }).shell.agentWrite).toBeUndefined()
+    await collector.waitFor((f) => shellRow(f)?.shell.id === shellId && shellRow(f)?.shell.agentWrite === undefined && f !== started)
+    ws.close()
+  })
+
+  it('refuses a grant where the agent holds no write tools', async () => {
+    const harness = fakeHarness()
+    const { base, wsBase } = await startShellServer(harness)
+    const id = await createSession(base, 'operator', { cwd: tempDir() })
+    const { ws, collector } = await attachSocket(wsBase, id, 'operator')
+    ws.send(JSON.stringify({ type: 'shell_command', command: 'sleep 30' }))
+    const started = await collector.waitFor((f) => shellRow(f)?.shell.command === 'sleep 30')
+    const res = await fetch(`${base}/sessions/${id}/shells/${shellRow(started)!.shell.id}/agent-write`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer operator', 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { error: string }).error).toMatch(/read-only/)
+    ws.close()
+  })
+
   it('refuses the kill route to a scoped principal', async () => {
     const harness = fakeHarness()
     const { base, wsBase } = await startShellServer(harness)

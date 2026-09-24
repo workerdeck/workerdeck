@@ -138,8 +138,12 @@ export { ShellStrip, type ShellStripProps } from './components/agent/ShellStrip.
 export { useShellFrame, type ShellFrame, type ShellFrameOptions } from './components/agent/use-shell-frame.ts'
 export { ShellActionsProvider, useShellActions, type ShellActions } from './components/agent/shell-actions.tsx'
 export {
+  SHELL_AGENT_WRITE_GLYPH,
+  SHELL_AGENT_WRITE_NOTE,
   SHELL_GLYPH,
   SHELL_KILL_GLYPH,
+  shellAgentWriteLabel,
+  shellGrantable,
   shellInfoFailed,
   shellInfoLabel,
   shellInfoStatusText,

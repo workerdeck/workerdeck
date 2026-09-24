@@ -57,6 +57,10 @@ function shellDirectory(): ShellDirectory & { calls: unknown[][] } {
       calls.push(['kill', from, shellId])
       return { shell: { id: shellId, ...RUNNING, owner: 'agent' }, killed: true }
     },
+    grant: async (from, shellId) => {
+      calls.push(['grant', from, shellId])
+      return { id: shellId, ...RUNNING, owner: 'user', agentWrite: true }
+    },
   }
 }
 
@@ -112,6 +116,7 @@ describe('CodexRunner: shell tools ride the same dynamicTools list', () => {
       'shell_run',
       'shell_write',
       'shell_kill',
+      'shell_request_write',
     ])
   })
 
@@ -256,5 +261,21 @@ describe('CodexRunner: the gateway gates the shell write tools, because codex it
     expect((await call('shell_write', { shellId: 'sh_a', data: 'ls', keys: ['enter'] })).success).toBe(true)
     expect(shells.calls).toEqual([['write', runner.id, 'sh_a', { data: 'ls', keys: ['enter'], waitFor: undefined, timeoutMs: undefined }]])
     expect(ofType(events, 'permission_requested')).toHaveLength(0)
+  })
+
+  it('under allow, still cards a grant request, and runs the grant only once it is allowed', async () => {
+    const { shells, runner, events, call } = await started({ shellAgentWrite: 'allow' })
+    const answer = call('shell_request_write', { shellId: 'sh_a', reason: 'answer the prompt' })
+    await vi.waitFor(() => expect(ofType(events, 'permission_requested')).toHaveLength(1))
+    expect(shells.calls).toEqual([])
+    expect(ofType(events, 'permission_requested')[0]!.request).toMatchObject({
+      toolName: 'shell_request_write',
+      input: { shellId: 'sh_a', reason: 'answer the prompt' },
+    })
+    runner.resolvePermission(runner.pendingApprovals[0]!.id, { behavior: 'allow' })
+    const answered = await answer
+    expect(answered.success).toBe(true)
+    expect(answered.contentItems[0]!.text).toContain('granted')
+    expect(shells.calls).toEqual([['grant', runner.id, 'sh_a']])
   })
 })

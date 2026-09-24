@@ -67,6 +67,7 @@ export interface ShellDirectory {
   run(from: string, options: ShellRunOptions): Promise<ShellReadResult>
   write(from: string, shellId: string, options: ShellWriteOptions): Promise<ShellReadResult | undefined>
   kill(from: string, shellId: string): Promise<ShellKillResult | undefined>
+  grant(from: string, shellId: string): Promise<ShellSummary | undefined>
 }
 
 // The one string every refusal returns, so the surface cannot be read as an existence oracle.
@@ -217,7 +218,7 @@ export const SHELL_TOOL_SHAPES = {
       `programs, not for a TUI. Key names: ${SHELL_KEY_NAMES.join(', ')}. ` +
       'With waitFor the call blocks until the shell prints that text AFTER your keystrokes (earlier output never ' +
       'counts), then returns the view, so "press r and wait for \'reloaded\'" is one call. Typing into a shell the ' +
-      'user started is refused.',
+      'user started is refused unless they granted it through shell_request_write.',
     shape: {
       shellId: z.string().describe('The shell id from shell_run or shell_list'),
       data: z.string().max(SHELL_INPUT_MAX).optional().describe('Literal text to type, sent as-is'),
@@ -234,9 +235,21 @@ export const SHELL_TOOL_SHAPES = {
   shell_kill: {
     description:
       'Stop a shell you started with shell_run, killing its whole process tree. Use it when the user asks you to stop ' +
-      'the server or when you are done with it. Killing a shell the user started is refused.',
+      'the server or when you are done with it. Killing a shell the user started is refused unless they granted it ' +
+      'through shell_request_write.',
     shape: {
       shellId: z.string().describe('The shell id from shell_run or shell_list'),
+    },
+  },
+  shell_request_write: {
+    description:
+      'Ask the user to let you type into (and kill) a shell THEY started with `$`, for example to answer a prompt in ' +
+      'a script or to drive a TUI they launched. The user sees the shell and your reason and allows or denies; once ' +
+      'allowed, shell_write and shell_kill work on it until the shell ends or the user revokes the grant. Never needed ' +
+      'for a shell you started with shell_run.',
+    shape: {
+      shellId: z.string().describe('The id of a running shell the user started, from shell_list'),
+      reason: z.string().min(1).max(500).describe('One sentence the user reads on the approval card: what you will type and why'),
     },
   },
 } as const
@@ -247,7 +260,7 @@ export const SHELL_TOOL_NAMES = Object.keys(SHELL_TOOL_SHAPES) as ShellToolName[
 
 export const SHELL_READ_TOOL_NAMES: readonly ShellToolName[] = ['shell_list', 'shell_read']
 
-export const SHELL_WRITE_TOOL_NAMES: readonly ShellToolName[] = ['shell_run', 'shell_write', 'shell_kill']
+export const SHELL_WRITE_TOOL_NAMES: readonly ShellToolName[] = ['shell_run', 'shell_write', 'shell_kill', 'shell_request_write']
 
 export type ShellToolSpec = { name: ShellToolName; description: string; inputSchema: Record<string, unknown> }
 
@@ -281,6 +294,21 @@ export function shellWriteToolOf(toolName: string): ShellToolName | undefined {
   return isShellWriteToolName(bare) ? (bare as ShellToolName) : undefined
 }
 
+// The bare shell tool behind an engine's tool name, read or write.
+export function shellToolOf(toolName: string): ShellToolName | undefined {
+  const bare = toolName.startsWith('mcp__') ? toolName.slice(toolName.indexOf('__', 5) + 2) : toolName
+  return isShellToolName(bare) ? bare : undefined
+}
+
+// A grant is the user's decision about the user's own shell, so asking for one raises a card even under `allow`.
+export function shellToolNeedsCard(toolName: string, agentWrite: ShellAgentWrite | undefined): boolean {
+  const tool = shellWriteToolOf(toolName)
+  if (tool === undefined || agentWrite === undefined) {
+    return false
+  }
+  return agentWrite === 'gated' || tool === 'shell_request_write'
+}
+
 export function clampShellTail(tail: number | undefined): number {
   if (tail === undefined || !Number.isFinite(tail)) {
     return SHELL_READ_DEFAULT_LINES
@@ -294,7 +322,7 @@ export function agentMayWrite(shell: Pick<ShellInfo, 'sessionId' | 'owner' | 'ag
 }
 
 export function shellOwnershipRefusal(shellId: string): string {
-  return `shell ${shellId} was started by the user; the agent may only type into or kill shells it started`
+  return `shell ${shellId} was started by the user; the agent may only type into or kill shells it started, or one the user granted through shell_request_write`
 }
 
 export function shellWriteDeniedText(name: string, message: string | undefined): string {
@@ -443,6 +471,20 @@ export async function runShellTool(
         }
         return { text: shellKillText(result), isError: false }
       }
+      case 'shell_request_write': {
+        const input = z.object(SHELL_TOOL_SHAPES.shell_request_write.shape).safeParse(args ?? {})
+        if (!input.success) {
+          return invalidArguments(name, input.error)
+        }
+        const shell = await shells.grant(from, input.data.shellId)
+        if (!shell) {
+          return { text: `no such shell: ${input.data.shellId}`, isError: true }
+        }
+        return {
+          text: `granted: you may now type into and kill shell #${shell.ordinal} ${shell.id} ($ ${shell.command}) until it ends or the user revokes it`,
+          isError: false,
+        }
+      }
     }
   } catch (error) {
     return { text: error instanceof Error ? error.message : String(error), isError: true }
@@ -535,5 +577,6 @@ export function shellDirectoryHandle(): ShellDirectory {
     run: async (from, options) => resolve().run(from, options),
     write: async (from, shellId, options) => resolve().write(from, shellId, options),
     kill: async (from, shellId) => resolve().kill(from, shellId),
+    grant: async (from, shellId) => resolve().grant(from, shellId),
   }
 }

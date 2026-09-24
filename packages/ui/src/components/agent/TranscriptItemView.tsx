@@ -13,7 +13,16 @@ import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { peerLabel } from '../terminal/items.tsx'
 import { useShellActions } from './shell-actions.tsx'
-import { shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from '../terminal/shell-row.ts'
+import {
+  SHELL_AGENT_WRITE_GLYPH,
+  shellAgentWriteLabel,
+  shellBodyLines,
+  shellFailed,
+  shellFooterText,
+  shellGrantable,
+  shellLabel,
+  shellStatusText,
+} from '../terminal/shell-row.ts'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
   return (
@@ -163,6 +172,18 @@ function ShellCard({ item }: { item: ShellItem }) {
             onClick={() => actions.open?.(shellId)}
           >
             ⤢
+          </button>
+        ) : null}
+        {actions.agentWrite && shellGrantable(item.shell) ? (
+          <button
+            type="button"
+            aria-label={shellAgentWriteLabel(item.shell)}
+            aria-pressed={item.shell.agentWrite === true}
+            title={shellAgentWriteLabel(item.shell)}
+            className={cn('shrink-0 text-label', item.shell.agentWrite === true ? 'text-warning' : 'text-fg-3 hover:text-fg-1')}
+            onClick={() => void actions.agentWrite?.(shellId, item.shell.agentWrite !== true)}
+          >
+            {SHELL_AGENT_WRITE_GLYPH}
           </button>
         ) : null}
         {running ? (

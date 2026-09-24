@@ -4,8 +4,15 @@ import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Ink, Row } from '../terminal/row.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
-import { shellInfoFailed, shellInfoStatusText, shellTitle } from '../terminal/shell-row.ts'
-import { KillShellAction, WithActions } from '../terminal/affordances.tsx'
+import {
+  SHELL_AGENT_WRITE_GLYPH,
+  shellAgentWriteLabel,
+  shellGrantable,
+  shellInfoFailed,
+  shellInfoStatusText,
+  shellTitle,
+} from '../terminal/shell-row.ts'
+import { AgentWriteAction, KillShellAction, WithActions } from '../terminal/affordances.tsx'
 
 export interface ShellStripProps {
   shell: ShellInfo | undefined
@@ -13,23 +20,33 @@ export interface ShellStripProps {
   cols?: number
   onBack: () => void
   onKill?: () => void
+  onAgentWrite?: (enabled: boolean) => void
   terminal: boolean
   fontSize?: number
   lineHeight?: number
 }
 
-export function ShellStrip({ shell, label, cols, onBack, onKill, terminal, fontSize, lineHeight }: ShellStripProps) {
+export function ShellStrip({ shell, label, cols, onBack, onKill, onAgentWrite, terminal, fontSize, lineHeight }: ShellStripProps) {
   const running = shell?.status === 'running'
   const failed = shell ? shellInfoFailed(shell) : false
   const name = shell ? shellTitle(shell) : label
   const status = shell ? shellInfoStatusText(shell) : undefined
   const width = cols ?? shell?.cols
   const detail = width === undefined ? undefined : `${width} cols`
+  const granted = shell?.agentWrite === true
+  const grant = shell && onAgentWrite && shellGrantable(shell) ? () => onAgentWrite(!granted) : undefined
 
   if (terminal) {
     return (
       <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} className="shrink-0">
-        <WithActions actions={running && onKill ? <KillShellAction onKill={onKill} /> : null}>
+        <WithActions
+          actions={
+            <>
+              {grant && shell ? <AgentWriteAction granted={granted} label={shellAgentWriteLabel(shell)} onToggle={grant} /> : null}
+              {running && onKill ? <KillShellAction onKill={onKill} /> : null}
+            </>
+          }
+        >
           <Row glyph="←" glyphTone="dim" indent={1} tone={failed ? 'red' : 'magenta'}>
             <button type="button" onClick={onBack} aria-label="Back to the session" className="cursor-pointer text-left">
               {name}
@@ -55,6 +72,18 @@ export function ShellStrip({ shell, label, cols, onBack, onKill, terminal, fontS
         </span>
       ) : null}
       {detail ? <span className="shrink-0 text-label text-fg-4">{detail}</span> : null}
+      {grant && shell ? (
+        <button
+          type="button"
+          aria-label={shellAgentWriteLabel(shell)}
+          aria-pressed={granted}
+          title={shellAgentWriteLabel(shell)}
+          className={cn('shrink-0 text-label', granted ? 'text-warning' : 'text-fg-3 hover:text-fg-1')}
+          onClick={grant}
+        >
+          {SHELL_AGENT_WRITE_GLYPH}
+        </button>
+      ) : null}
       {running && onKill ? (
         <button
           type="button"

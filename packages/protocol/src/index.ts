@@ -826,6 +826,8 @@ export type SessionInfo = {
   scope?: Record<string, string>
   project?: ProjectInfo
   shells?: ShellInfo[]
+  // Present when the agent holds the shell write tools, so a client offers the operator's grant only where it can bite.
+  shellAgentWrite?: 'gated' | 'allow'
 }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {

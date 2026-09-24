@@ -110,6 +110,7 @@ export type ShellRegistry = {
   list: (sessionId: string) => ShellInfo[]
   running: () => ShellInfo[]
   kill: (sessionId: string, shellId: string, reason?: ShellEndReason) => ShellInfo | undefined
+  setAgentWrite: (sessionId: string, shellId: string, enabled: boolean) => ShellInfo | undefined
   killAll: (reason: ShellEndReason) => number
   killAllSync: () => void
   attach: (sessionId: string, shellId: string, sink: ShellSink) => Promise<ShellAttachment>
@@ -309,6 +310,17 @@ export function createShellDirectory(registry: ShellRegistry, deps: ShellDirecto
       const killed = registry.kill(from, shellId, 'killed') ?? info
       return { shell: shellSummary(killed), killed: true }
     },
+    grant: async (from, shellId) => {
+      const info = registry.get(from, shellId)
+      if (!info) {
+        return undefined
+      }
+      if (info.owner === 'agent') {
+        return shellSummary(info)
+      }
+      const granted = registry.setAgentWrite(from, shellId, true)
+      return granted ? shellSummary(granted) : undefined
+    },
   }
 }
 
@@ -496,6 +508,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     entry.info.status = 'exited'
     entry.info.endedAt = Date.now()
     entry.info.endReason = reason
+    delete entry.info.agentWrite
     clearTimeout(entry.clock)
     clearTimeout(entry.notify)
     clearInterval(entry.tailTimer)
@@ -728,6 +741,31 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
         return undefined
       }
       kill(state, entry, reason)
+      return { ...entry.info }
+    },
+    setAgentWrite: (sessionId, shellId, enabled) => {
+      const state = sessions.get(sessionId)
+      const entry = state?.entries.get(shellId)
+      if (!state || !entry) {
+        return undefined
+      }
+      if (enabled) {
+        if (entry.info.owner !== 'user') {
+          throw new Error(`shell ${shellId} was started by the agent, which may already type into it`)
+        }
+        if (entry.info.status !== 'running') {
+          throw new Error(`shell ${shellId} has already ended; there is nothing to grant`)
+        }
+      }
+      if ((entry.info.agentWrite === true) !== enabled) {
+        if (enabled) {
+          entry.info.agentWrite = true
+        } else {
+          delete entry.info.agentWrite
+        }
+        persist(state)
+        fire(entry)
+      }
       return { ...entry.info }
     },
     killAll: (reason) => {

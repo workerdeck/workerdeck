@@ -28,11 +28,13 @@ export function toolIcon(toolName: string): LucideIcon {
     case 'shell_run':
     case 'shell_write':
     case 'shell_kill':
+    case 'shell_request_write':
     case 'mcp__workerdeck__shell_list':
     case 'mcp__workerdeck__shell_read':
     case 'mcp__workerdeck__shell_run':
     case 'mcp__workerdeck__shell_write':
-    case 'mcp__workerdeck__shell_kill': {
+    case 'mcp__workerdeck__shell_kill':
+    case 'mcp__workerdeck__shell_request_write': {
       return Terminal
     }
     case 'Read': {

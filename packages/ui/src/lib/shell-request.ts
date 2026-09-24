@@ -4,6 +4,7 @@ export type ShellRequestPayload =
   | { kind: 'run'; command: string }
   | { kind: 'write'; shellId: string; data?: string; keys?: string[] }
   | { kind: 'kill'; shellId: string }
+  | { kind: 'grant'; shellId: string; reason: string }
 
 type RequestLike = { toolName?: unknown; input?: unknown }
 
@@ -15,12 +16,16 @@ const CONTROL_NAMES: Record<string, string> = {
   '\x7f': 'backspace',
 }
 
-export function shellToolOf(toolName: unknown): 'shell_run' | 'shell_write' | 'shell_kill' | undefined {
+type ShellWriteTool = 'shell_run' | 'shell_write' | 'shell_kill' | 'shell_request_write'
+
+const SHELL_WRITE_TOOLS: readonly string[] = ['shell_run', 'shell_write', 'shell_kill', 'shell_request_write']
+
+export function shellToolOf(toolName: unknown): ShellWriteTool | undefined {
   if (typeof toolName !== 'string') {
     return undefined
   }
   const bare = toolName.startsWith('mcp__') ? toolName.slice(toolName.indexOf('__', 5) + 2) : toolName
-  return bare === 'shell_run' || bare === 'shell_write' || bare === 'shell_kill' ? bare : undefined
+  return SHELL_WRITE_TOOLS.includes(bare) ? (bare as ShellWriteTool) : undefined
 }
 
 export function shellRequestPayload(request: RequestLike | null | undefined): ShellRequestPayload | undefined {
@@ -46,6 +51,9 @@ export function shellRequestPayload(request: RequestLike | null | undefined): Sh
     case 'shell_kill': {
       return { kind: 'kill', shellId }
     }
+    case 'shell_request_write': {
+      return { kind: 'grant', shellId, reason: typeof input.reason === 'string' ? input.reason : '' }
+    }
   }
 }
 
@@ -59,6 +67,9 @@ export function shellRequestTitle(payload: ShellRequestPayload): string {
     }
     case 'kill': {
       return `Agent wants to kill shell ${payload.shellId}`
+    }
+    case 'grant': {
+      return `Agent asks to type into your shell ${payload.shellId}`
     }
   }
 }
@@ -82,6 +93,9 @@ export function shellRequestLines(payload: ShellRequestPayload): string[] {
     }
     case 'kill': {
       return [`kill ${payload.shellId}`]
+    }
+    case 'grant': {
+      return [`why: ${visibleControls(payload.reason)}`, 'until the shell ends or you revoke it']
     }
   }
 }

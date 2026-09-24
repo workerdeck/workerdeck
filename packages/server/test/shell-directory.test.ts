@@ -261,6 +261,49 @@ withPty('createShellDirectory', () => {
     expect(registry.get('s1', mine.shell.id)?.status).toBe('running')
   })
 
+  it("grants the agent a user's running shell, re-emits its row, types into it, and a revoke refuses the next write", async () => {
+    const registry = makeRegistry()
+    const owner = agentRunner('s1')
+    const other = agentRunner('s2')
+    const directory = agentDirectory(registry, owner, other)
+    const spawned = await registry.spawn({ runner: owner, command: ECHO_KEYS, owner: 'user' })
+    const id = spawned.shell.id
+    const redraws = vi.fn()
+    spawned.source.subscribe(redraws)
+
+    expect(await directory.grant('s2', id)).toBeUndefined()
+    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
+    expect(await directory.grant('s1', id)).toMatchObject({ id, owner: 'user', agentWrite: true })
+    expect(spawned.source.info().agentWrite).toBe(true)
+    expect(redraws).toHaveBeenCalled()
+
+    const typed = await directory.write('s1', id, { data: 'hi', keys: ['enter'], waitFor: ['got hi'], timeoutMs: 5000 })
+    expect(typed!.wait).toMatchObject({ outcome: 'matched' })
+
+    expect(registry.setAgentWrite('s1', id, false)).toMatchObject({ id, owner: 'user' })
+    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
+    await expect(directory.write('s1', id, { keys: ['q'] })).rejects.toThrow(shellOwnershipRefusal(id))
+    await expect(directory.kill('s1', id)).rejects.toThrow(shellOwnershipRefusal(id))
+  })
+
+  it('ends a grant with its shell, grants nothing on an ended one, and answers an agent shell as already writable', async () => {
+    const registry = makeRegistry()
+    const owner = agentRunner('s1')
+    const directory = agentDirectory(registry, owner)
+    const spawned = await registry.spawn({ runner: owner, command: 'sleep 30', owner: 'user' })
+    const id = spawned.shell.id
+    await directory.grant('s1', id)
+    registry.kill('s1', id)
+    expect(registry.get('s1', id)).toMatchObject({ status: 'exited' })
+    expect(registry.get('s1', id)?.agentWrite).toBeUndefined()
+    await expect(directory.grant('s1', id)).rejects.toThrow(/already ended/)
+
+    const mine = await directory.run('s1', { command: 'sleep 30' })
+    expect(await directory.grant('s1', mine.shell.id)).toMatchObject({ owner: 'agent' })
+    expect(registry.get('s1', mine.shell.id)?.agentWrite).toBeUndefined()
+    expect(() => registry.setAgentWrite('s1', mine.shell.id, true)).toThrow(/started by the agent/)
+  })
+
   it('clamps an absurd tail and defaults an absent one', async () => {
     const registry = makeRegistry()
     const directory = createShellDirectory(registry)
@@ -372,6 +415,7 @@ describe('the gateway stamps the directory only where a shell of that session co
       'shell_run',
       'shell_write',
       'shell_kill',
+      'shell_request_write',
     ])
 
     const scoped = fakeHarness()
