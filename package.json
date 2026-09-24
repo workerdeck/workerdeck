@@ -63,7 +63,7 @@
     "rimraf": "^6.1.3",
     "tsdown": "^0.22.14",
     "turbo": "^2.10.13",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.1",
     "workerdeck": "workspace:*",
     "ws": "^8.21.3",
     "zod": "^4.6.5"
