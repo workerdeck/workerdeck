@@ -146,7 +146,11 @@ engine's process contract can't either**: any change to `CodexRunner`'s spawn op
 handshake, or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
 `smoke:codex --canary` are free; `smoke:live`, `smoke:live-approval`, `smoke:sdk`, `smoke:media`
 (the only check that the CLI accepts image/PDF/text attachment blocks at all) and the full
-`smoke:codex` are not. **`smoke:live` does not cover the provider engine's approval path** - it
+`smoke:codex` are not. The shell write path (`--shell-agent-write gated`) is covered by fake
+harnesses only and still owes `smoke:live` (a claude card for one `shell_run`, payload visible,
+and what `dontAsk` does to it) and `smoke:codex` (the gateway-raised card before `item/tool/call`
+is answered, and whether a real codex honours `dynamicTools` on resume). **`smoke:live` does not
+cover the provider engine's approval path** - it
 drives tools by hand and configures no executor, so it never reaches `#dispatchSingle`; that is
 what `smoke:live-approval` is for. It edits the first tool call at approval and proves the edit
 ran from a **VFS entry** rather than from anything the model says, so it does not rest on a model

@@ -39,6 +39,14 @@ function item(overrides: Partial<ShellItem> = {}): ShellItem {
 }
 
 describe('the shell row', () => {
+  it('draws an interactive shell as one note, never its flattened frames', () => {
+    const tui = item({ shell: shell({ interactive: true }), text: 'frame\nframe', truncated: true, expanded: 'frame\nframe\nframe' })
+    expect(shellBodyLines(tui, false)).toEqual([])
+    expect(shellBodyLines(tui, true)).toEqual([])
+    expect(shellFooterText(tui, false, 0)).toBe('interactive output, no preview')
+    expect(shellFooterText(tui, true, 0)).toBe('interactive output, no preview')
+  })
+
   it('names a running shell and leaves the kill to the hover rail', () => {
     expect(shellHeaderText(item())).toBe('npm run dev · running')
     expect(shellHeaderText(item())).not.toContain(SHELL_KILL_GLYPH)

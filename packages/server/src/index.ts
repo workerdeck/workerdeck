@@ -5,6 +5,7 @@ export type {
   EngineRunnerContext,
   QueueServerOptions,
   SdkSessionLister,
+  ShellAgentWriteOption,
   WorkerServer,
   WorkerServerOptions,
 } from './options.ts'
@@ -30,6 +31,13 @@ export { createFileSessionStore, MemorySessionStore, toDurableRecord } from './s
 export { isDormant } from './services/session-store.ts'
 export type { FileSessionStoreOptions, ParkedSessionRecord, SessionStore, StoredSessionRecord } from './services/session-store.ts'
 export { createFileProfileStore, createMemoryProfileStore, type ProfileStore } from './services/profile-store.ts'
-export { createShellRegistry, shellPermitted, SHELL_REFUSAL } from './services/shells.ts'
-export type { ShellRegistry, ShellRegistryOptions, ShellSink, StoredShellIndex, StoredShellRecord } from './services/shells.ts'
+export { createShellDirectory, createShellRegistry, shellPermitted, SHELL_REFUSAL } from './services/shells.ts'
+export type {
+  ShellDirectoryDeps,
+  ShellRegistry,
+  ShellRegistryOptions,
+  ShellSink,
+  StoredShellIndex,
+  StoredShellRecord,
+} from './services/shells.ts'
 export type { ProcessRow, ProcessTable } from './services/process-tree.ts'

@@ -355,6 +355,13 @@ function probe(text: string): { text: string; reads: Array<{ method: string; arg
 }
 
 describe('shellInlineText', () => {
+  it('replaces the output of an interactive shell with one note line', () => {
+    expect(bodyOf(shellInlineText({ ...running(), interactive: true }, numbered(12)))).toBe('$ npm test\n[interactive output, no preview]')
+    expect(bodyOf(shellInlineText({ ...exited(1), interactive: true }, numbered(3)))).toBe(
+      '$ npm test\n[interactive output, no preview]\n[exit 1]',
+    )
+  })
+
   it('shows the command and the first SHELL_INLINE_LINES lines of a running shell as stdout', () => {
     const text = shellInlineText(running(), numbered(12))
     expect(LOCAL_COMMAND_OUTPUT.exec(text)?.[1]).toBe('stdout')
@@ -531,6 +538,33 @@ describe('LocalCommandQueue', () => {
     expect(third).toContain('220 of 340 lines omitted')
     expect(shell.listeners()).toBe(0)
     expect(queue.take()).toBeUndefined()
+  })
+
+  it('draws and redraws the row for a shell the agent started, but never flushes it into the model context', () => {
+    const { queue, emitted } = collectQueue()
+    const shell = fakeShell({ ...running(), owner: 'agent' }, 'starting')
+    queue.push(shell.source)
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]!.shell).toMatchObject({ id: 'sh_abc123def456', owner: 'agent', status: 'running' })
+    expect(queue.take()).toBeUndefined()
+    expect(queue.materialize()).toEqual([])
+    expect(shell.listeners()).toBe(1)
+
+    shell.set({ text: 'starting\nready in 12ms' })
+    shell.set({ info: { status: 'exited', exitCode: 0, endReason: 'exit' } })
+    expect(emitted).toHaveLength(3)
+    expect(new Set(emitted.map((e) => e.uuid)).size).toBe(1)
+    expect(emitted[2]!.shell).toMatchObject({ owner: 'agent', status: 'exited' })
+    expect(queue.take()).toBeUndefined()
+    expect(shell.listeners()).toBe(0)
+
+    const done = fakeShell({ ...exited(0), owner: 'agent' }, 'over')
+    queue.push(done.source)
+    expect(done.listeners()).toBe(0)
+    const live = fakeShell({ ...running(), owner: 'agent' }, '')
+    queue.push(live.source)
+    queue.clear()
+    expect(live.listeners()).toBe(0)
   })
 
   it('settles a shell that exits before its first flush, and a one-shot result, on that flush', () => {

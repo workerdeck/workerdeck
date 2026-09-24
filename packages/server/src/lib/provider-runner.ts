@@ -1,5 +1,6 @@
 import {
   createEngineSession,
+  isShellWriteToolName,
   type EngineSessionOptions,
   type HostToolDefinition,
   type LanguageModel,
@@ -50,6 +51,13 @@ export async function createProviderRunner(ctx: EngineRunnerContext, options: Pr
       ? 'browser'
       : 'server'
 
+  // Under `gated` the agent's shell write tools must raise a card even when the embedder wired no reviewer of its
+  // own; `needsApproval` fires only through `shouldApprove`, so the default is supplied here and defers to the
+  // embedder's for every other tool.
+  const shouldApprove =
+    config.shellAgentWrite === 'gated'
+      ? (call: { toolName: string; input: unknown }) => isShellWriteToolName(call.toolName) || options.shouldApprove?.(call) === true
+      : options.shouldApprove
   return createEngineSession({
     config: {
       ...config,
@@ -68,7 +76,7 @@ export async function createProviderRunner(ctx: EngineRunnerContext, options: Pr
     mcpTools: options.mcpTools,
     instructions: options.instructions,
     executionLimits: options.executionLimits,
-    shouldApprove: options.shouldApprove,
+    shouldApprove,
     approvalTimeoutMs: config.defaultApprovalTimeoutMs === undefined ? options.approvalTimeoutMs : config.defaultApprovalTimeoutMs,
     seedVfs: options.seedVfs,
   })

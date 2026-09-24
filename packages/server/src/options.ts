@@ -18,6 +18,8 @@ import type { ProfileStore } from './services/profile-store.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionStore } from './services/session-store.ts'
 import type { ShellRegistry } from './services/shells.ts'
+
+export type ShellAgentWriteOption = 'read-only' | 'gated' | 'allow'
 import type { SpendStore } from './services/spend-ledger.ts'
 
 export type SdkSessionLister = (options: { dir?: string; limit?: number; offset?: number }) => Promise<SdkSessionSummary[]>
@@ -48,6 +50,10 @@ export type WorkerServerOptions = {
     artifactMaxBytes?: number
     artifactTtlMs?: number
     maxRunningPerSession?: number
+    // The agent's own hand: `read-only` (default) offers shell_list/shell_read only; `gated` adds shell_run,
+    // shell_write and shell_kill behind a permission card; `allow` adds them with no card beyond the engine's own
+    // mode. Only a session an operator created is ever offered the write tools, whatever this says.
+    agentWrite?: ShellAgentWriteOption
   }
   attachments?: {
     maxFileBytes?: number

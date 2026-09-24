@@ -8,7 +8,7 @@ import {
 import type { EngineAdapter, PeerDirectory, Runner, RunnerSnapshot, SessionRunnerConfig, ShellDirectory } from '@workerdeck/core'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { claudeSessionEnv, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
-import type { EngineRunnerContext, LateBoundRefs } from '../options.ts'
+import type { EngineRunnerContext, LateBoundRefs, ShellAgentWriteOption } from '../options.ts'
 import type { ProfileService } from './profiles.ts'
 
 export type SessionFactoryDeps = {
@@ -22,10 +22,22 @@ export type SessionFactoryDeps = {
   requireApiKey?: boolean
   peers?: PeerDirectory
   shells?: ShellDirectory
+  shellAgentWrite?: ShellAgentWriteOption
   refs: LateBoundRefs
 }
 
+// A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
+// door passes it beside the request instead, because the host's hook and a job record see only the wire type.
+export type CreateRequestWithPrincipal = CreateSessionRequest & { createdByOperator?: boolean }
+
+export type SessionPrincipal = { operator: boolean }
+
 export type SessionFactory = ReturnType<typeof createSessionFactory>
+
+// Applied after the host's hook for the same reason as scope: the hook may rebuild the config from the request.
+function withPrincipal(config: SessionRunnerConfig, operator: boolean | undefined): SessionRunnerConfig {
+  return operator === undefined ? config : { ...config, createdByOperator: operator }
+}
 
 export function createSessionFactory(deps: SessionFactoryDeps) {
   const { adapterFor, profiles, refs } = deps
@@ -145,19 +157,23 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   const withApprovalDefault = (config: SessionRunnerConfig): SessionRunnerConfig =>
     deps.approvalTimeoutMs === undefined ? config : { ...config, defaultApprovalTimeoutMs: deps.approvalTimeoutMs }
 
-  const buildRunnerConfig = (req: CreateSessionRequest): SessionRunnerConfig => {
+  const buildRunnerConfig = (req: CreateRequestWithPrincipal, principal?: SessionPrincipal): SessionRunnerConfig => {
     const profile = req.profile !== undefined ? profiles.get(req.profile) : undefined
+    const operator = principal?.operator ?? req.createdByOperator
     if (!profile) {
-      return withApprovalDefault(withScope(deps.hostBuildRunnerConfig(req), req.scope))
+      return withApprovalDefault(withPrincipal(withScope(deps.hostBuildRunnerConfig(req), req.scope), operator))
     }
     const config = withApprovalDefault(
-      withScope(
-        deps.hostBuildRunnerConfig({
-          ...req,
-          model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
-          permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
-        }),
-        req.scope,
+      withPrincipal(
+        withScope(
+          deps.hostBuildRunnerConfig({
+            ...req,
+            model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
+            permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
+          }),
+          req.scope,
+        ),
+        operator,
       ),
     )
     if (engineOf(profile) !== 'claude') {
@@ -185,11 +201,18 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
     const capabilities = profile?.capabilities ?? adapterFor(profile?.engine).capabilities
     // Applied here rather than in buildRunnerConfig so a parked record, which stores its config, gets it too. The shell
-    // tools are offered only where a shell of this session's could exist at all: enabled on the gateway, host cwd engine.
-    const config: SessionRunnerConfig = {
-      ...built,
-      ...(deps.peers ? { peers: deps.peers } : {}),
-      ...(deps.shells && capabilities.hostCwd === true ? { shells: deps.shells } : {}),
+    // tools are offered only where a shell of this session's could exist at all: enabled on the gateway, host cwd
+    // engine. The write tools need, on top, the gateway's say-so and a session an operator created; both are read
+    // afresh on every build, so a record never carries a stale grant.
+    const config: SessionRunnerConfig = { ...built, ...(deps.peers ? { peers: deps.peers } : {}) }
+    delete config.shells
+    delete config.shellAgentWrite
+    if (deps.shells && capabilities.hostCwd === true) {
+      config.shells = deps.shells
+      const write = deps.shellAgentWrite ?? 'read-only'
+      if (write !== 'read-only' && built.createdByOperator === true) {
+        config.shellAgentWrite = write
+      }
     }
     if (config.instructions !== undefined && capabilities.systemInstructions === false) {
       throw new Error(`the ${engineOf(profile)} engine cannot deliver system instructions`)

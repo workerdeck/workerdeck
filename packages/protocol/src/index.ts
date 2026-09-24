@@ -356,6 +356,7 @@ export type ShellInfo = {
   cols: number
   rows: number
   agentWrite?: boolean
+  interactive?: boolean
 }
 
 export type SessionCommand =
@@ -406,6 +407,7 @@ export const SHELL_MAX_ROWS = 500
 export const SHELL_INPUT_MAX = 4096
 export const SHELL_LABEL_MAX = 80
 export const SHELL_INLINE_LINES = 8
+export const SHELL_INTERACTIVE_NOTE = 'interactive output, no preview'
 export const SHELL_INLINE_LINE_CHARS = 512
 export const SHELL_INLINE_CHARS = 2048
 export const SHELL_PROMOTE_MS = 3000
@@ -425,6 +427,8 @@ export const SHELL_CONTEXT_TAIL_CHARS = 12288
 export const SHELL_CONTEXT_FLUSH_MAX_CHARS = 49152
 export const SHELL_READ_DEFAULT_LINES = 200
 export const SHELL_READ_MAX_LINES = 2000
+export const SHELL_WAIT_DEFAULT_MS = 30_000
+export const SHELL_WAIT_MAX_MS = 120_000
 
 export type AttachedFrame = {
   type: 'attached'

@@ -22,7 +22,17 @@ export function toolIcon(toolName: string): LucideIcon {
   switch (toolName) {
     case 'Bash':
     case 'BashOutput':
-    case 'KillShell': {
+    case 'KillShell':
+    case 'shell_list':
+    case 'shell_read':
+    case 'shell_run':
+    case 'shell_write':
+    case 'shell_kill':
+    case 'mcp__workerdeck__shell_list':
+    case 'mcp__workerdeck__shell_read':
+    case 'mcp__workerdeck__shell_run':
+    case 'mcp__workerdeck__shell_write':
+    case 'mcp__workerdeck__shell_kill': {
       return Terminal
     }
     case 'Read': {

@@ -1,4 +1,4 @@
-import type { ShellInfo } from '@workerdeck/protocol'
+import { SHELL_INTERACTIVE_NOTE, type ShellInfo } from '@workerdeck/protocol'
 import type { ShellItem } from '@workerdeck/react'
 
 export const SHELL_GLYPH = '$'
@@ -68,7 +68,7 @@ export function shellHeaderText(item: ShellItem): string {
 
 export function shellBodyLines(item: ShellItem, open: boolean): string[] {
   const source = open && item.expanded !== undefined ? item.expanded : item.text
-  if (source === '') {
+  if (source === '' || item.shell.interactive) {
     return []
   }
   const lines = source.split('\n')
@@ -89,6 +89,9 @@ export function shellBodyLines(item: ShellItem, open: boolean): string[] {
 
 // The footer is the row's one affordance line: what expanding will fetch, what it clipped, or why it cannot.
 export function shellFooterText(item: ShellItem, open: boolean, shown: number): string | undefined {
+  if (item.shell.interactive) {
+    return SHELL_INTERACTIVE_NOTE
+  }
   if (item.missing) {
     return SHELL_MISSING
   }

@@ -1406,12 +1406,90 @@ has the shape; these are the ways to get it wrong.
   they surface as `mcp__workerdeck__shell_read`; codex through `dynamicTools`; provider through
   `tools.ts` with `trust: 'authoritative'`). `session-factory.buildRunner` stamps `shells` only
   when the gateway has `shell.enabled` **and** the engine is `hostCwd`, so a session that could
-  never own a shell is never told the tools exist. The third ANDed condition, operator auth, is
-  per-principal and has no home on a runner config; it holds transitively today because only an
-  operator can spawn a `$`, `list` is keyed by session, and `read` answers a foreign `shellId`
-  with the same not-found it gives a nonexistent one. **Stage 4a breaks that transitivity**: the
-  moment an agent can start its own shell, `owner` stops being decorative and the gate needs a
-  real per-principal answer.
+  never own a shell is never told the tools exist. `list` is keyed by session, and `read` answers a
+  foreign `shellId` with the same not-found it gives a nonexistent one.
+- **A shell that redraws is flagged `interactive`, and its transcript row stops showing output.**
+  The registry scans every PTY chunk with `ttyRedraws` (core `tty-text.ts`; a small carry catches
+  an escape split across chunks) for the alternate screen, cursor up or previous line, or an
+  absolute row, and sets `ShellInfo.interactive` once, sticky. `\r` progress bars, erase-line,
+  colour and a plain `clear` do not count, because they flatten fine. An interactive row is the
+  command plus `SHELL_INTERACTIVE_NOTE`: flattened, a TUI is every frame it ever painted. The note
+  is in core's inline text too, so a client that predates the flag (iOS) still draws it.
+- **The screen view is a headless emulator per running shell, not a reparse on demand.**
+  `services/shell-screen.ts` feeds `@xterm/headless` the same bytes as the artifact and follows
+  `resize`; on exit it keeps the last screen as a string and disposes the emulator. A shell this
+  generation never ran (reconciled from the index) is rendered by replaying the artifact's last
+  `SHELL_ATTACH_REPLAY_BYTES`, which is right for a program that repaints and can miss static
+  regions painted before that window. Headless writes are asynchronous: every read drains first.
+  `shell_read` defaults to `view: 'screen'` for an interactive shell; `waitFor` is a plain
+  substring (never a regex: the pattern is model-supplied and would run on the gateway's loop).
+- **The agent's hand on a shell is a tool and rides the permission framework; it is not
+  containment.** `shell.agentWrite` (`read-only` default, `gated`, `allow`; CLI
+  `--shell-agent-write`) adds `shell_run`, `shell_write` and `shell_kill` beside the two read
+  tools. Under `bypassPermissions` the card evaporates, the same trade `Bash` makes; a
+  long-lived shell plus a write tool is a foothold where every later keystroke is a payload, which
+  is why the default is read-only, why the card draws `command`, `data` and `keys` verbatim
+  (`packages/ui/src/lib/shell-request.ts`, both prompt themes), and why no client offers "always
+  allow" for these three.
+- **The third ANDed condition, operator auth, is now stamped on the record rather than assumed.**
+  `POST /sessions` passes `{ operator: auth.isOperator(auth) }` beside the vetted request, and
+  `buildRunnerConfig` writes it as `createdByOperator` **after** the host's hook (the hook and a
+  job record see only the wire type; `create-boundary.test.ts` pins that). `buildRunner` derives
+  `shellAgentWrite` from the gateway option **and** that flag on every build, so a parked or
+  dormant rebuild (which spreads the stored flag back in) re-reads the gateway's current setting,
+  and a session a scoped principal made is never offered the write tools. A **job's** session has
+  no principal on its record, so it is read-only too; giving jobs the write tools needs a slot on
+  `JobInfo` and is not part of 4a. Both keys are in `HOST_ONLY_KEYS` (a body carrying them is a
+  400) and both, with `shells`, are in `EPHEMERAL_CONFIG_KEYS`: the `shells` handle used to
+  serialise as `{}` into a durable record, and a rebuild on a gateway with shells off would have
+  kept it. `runShellTool` refuses a write tool unless the runner passed `{ write: true }`, so a
+  call for a tool that was never declared is refused at the tool, not by absence.
+- **The agent may drive only shells it started, and the refusal says so.** `agentMayWrite` is
+  `sessionId === from && (owner === 'agent' || agentWrite === true)`; the `agentWrite` leg is
+  stage 4b's grant and is honoured already. A user's `$` in the same session refuses `write` and
+  `kill` with `shellOwnershipRefusal`, which names the rule so the model stops retrying; another
+  session's shell still reads as missing. `shell_run` takes no `cwd`: the shell runs in the
+  session's cwd like a `$`, because a cwd of the model's choosing would be a new way out of
+  `allowedCwdRoots`.
+- **An agent-run shell gets the transcript row and the card entry, never the context flush.**
+  `LocalCommandQueue.push` branches on `owner === 'agent'`: the row is drawn and redrawn under
+  one uuid like a `$`, but the source never joins the queue, because the flush wraps its text in
+  a caveat that says the user ran it, the agent already holds the tool result, and it can
+  `shell_read` for more.
+- **`shell_write.waitFor` matches only bytes the process wrote after the keystrokes.** The
+  directory marks `info.bytes` before it writes and searches `ttyText` of the raw bytes past that
+  mark (`since`), so "press r, wait for reloaded" cannot be satisfied by the `reloaded` already on
+  screen. `shell_read` and `shell_run` count text already present, on purpose. A program that
+  repaints its whole screen after a key repaints stale text too, and that counts as new; there is
+  no better answer for a full repaint.
+- **Named keys are encoded to what a terminal sends, cursor keys per DECCKM.** `encodeShellKeys`
+  in core owns the table (`enter` is `\r`, `backspace` `\x7f`, `ctrl-a` to `ctrl-z`, `f1` to
+  `f12`, a single printable character as itself); the server encodes with
+  `ShellScreen.applicationCursorKeys()` read off the headless emulator after a drain, so `up` is
+  `ESC O A` once a TUI has switched to application mode and `ESC [ A` otherwise. `data` is typed
+  first, then `keys`, in order.
+- **Codex's gate is the gateway's own; never describe it as codex's reviewer.** `item/tool/call`
+  is answered directly with no approval, so `#answerServerRequest` raises `SHELL_WRITE_CHANNEL`
+  through the same `#approvals` map as a command approval, **before** the tool runs, under
+  `default` and `acceptEdits` only (`SHELL_WRITE_GATE_MODES`; `bypassPermissions` and `auto`
+  skip it, per the plan). Allow runs the call, with `updatedInput` if the client edited it; deny
+  answers codex a failed tool call whose text carries the reason (`shellWriteDeniedText`), and
+  because the channel returns no `decision`, an interrupting deny also interrupts the turn.
+  Interrupt, close, clear and turn end settle it like every other approval. `wireId` is left
+  unset so `serverRequest/resolved` can never match it.
+- **Claude's gate is Claude Code's, and `allow` short-circuits it.** An MCP tool call reaches
+  `#canUseTool` whenever Claude Code decides it needs permission, so under `gated` the three
+  tools prompt under whatever rule the CLI applies to `mcp__workerdeck__*` in the session's mode;
+  nothing is added. Under `allow`, `#allowByPolicy` resolves the three write tools at once and
+  still emits `permission_requested` + `permission_resolved { resolvedBy: 'policy' }`, so the
+  transcript records what ran. What `dontAsk` and `auto` do to an MCP prompt is **unverified**
+  (`pnpm smoke:live` settles it; do not write the sentence first).
+- **The provider gate exists for embedders, not for the shipped adapter.** The in-repo provider
+  engine is `hostCwd: false`, so `shells` is never stamped and the tools never exist there. An
+  embedder may register an adapter that says otherwise (`options.engines`), so
+  `createProviderRunner` supplies the `shouldApprove` default under `gated`: true for the three
+  write tools, the embedder's answer for everything else. Without it the write tools would run
+  silently under `default`.
 - **`shell_read` returns the text view's tail, clamped, never raw bytes.** `SHELL_READ_DEFAULT_LINES`
   when the agent asks for nothing, `SHELL_READ_MAX_LINES` as the ceiling, and an over-max `tail` is
   clamped rather than rejected: rejecting burns a turn to teach the model a number it could have

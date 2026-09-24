@@ -129,7 +129,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   command is a tracked shell record you can list, expand and kill, and any row opens as a full
   terminal: keystrokes go to the PTY, the pane resizes it, and several clients can watch and drive
   the same shell at once. Which is exactly why it is `--shell`, off by default, and offered to an
-  operator only.
+  operator only. The agent can read every shell of its session; with `--shell-agent-write gated`
+  it can also start, type into and kill shells of its own, each keystroke behind a permission
+  card that shows it verbatim.
 - **Sessions that can talk to each other.** Every session, on any engine, gets three tools:
   `peers_list`, `peers_peek` (status, checklist, the last few lines, without interrupting) and
   `peers_send`. A message lands as a peer-stamped message that never cuts into a running turn, so a

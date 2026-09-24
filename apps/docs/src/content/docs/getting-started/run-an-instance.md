@@ -130,6 +130,16 @@ working directory to run in. There is no default time limit; the captured output
 rather than in the running process, and every shell is killed with its process group when the
 session closes or parks.
 
+The agent sees these shells too. With `--shell` it gets `shell_list` and `shell_read` (the text
+tail, or the current screen of a program that redraws, with an optional wait for a line to
+appear). It cannot type into them. `--shell-agent-write gated` adds `shell_run`, `shell_write`
+and `shell_kill`, so "start the dev server and tell me when it's ready" is one tool call: each
+one raises a permission card that shows the command or the keystrokes verbatim, the agent may
+only drive shells it started itself (a `$` of yours is refused by name), and every shell it
+starts is a row in the transcript and on the session card like your own. `allow` drops the card
+(the engine's own permission mode still applies); `read-only` is the default. A session created
+by a scoped principal is never offered the write tools, whatever the flag says.
+
 ## Options
 
 | Flag | Env | Default |
@@ -141,6 +151,7 @@ session closes or parks.
 | `--fs-root <path>` (repeatable) | `WORKERDECK_FS_ROOTS` (`:`-separated) | narrows `/v1/fs`; unset, reading follows `--cwd-root` |
 | `--fs-write` | - | off (read-only) |
 | `--shell` | - | off (config: `shell: { enabled }`) |
+| `--shell-agent-write <mode>` | - | `read-only` (config: `shell: { agentWrite }`; `gated` or `allow`) |
 | `--profile <name=dir>` (repeatable) | - | auto-detected from `~/.claude` |
 | `--state-dir <path>` | `WORKERDECK_STATE_DIR` | beside the config file, else `~/.workerdeck` |
 | `--trust-proxy` | - | off |

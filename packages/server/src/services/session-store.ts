@@ -64,7 +64,7 @@ export class MemorySessionStore implements SessionStore {
   }
 }
 
-const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env', 'peers', 'instructions'] as const
+const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env', 'peers', 'instructions', 'shells', 'shellAgentWrite'] as const
 
 export function toDurableRecord<T extends StoredSessionRecord>(record: T): T {
   const config: SessionRunnerConfig = { ...record.config }

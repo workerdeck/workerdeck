@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countLines, headTail, splitLines, ttyText } from '../src/lib/tty-text.ts'
+import { countLines, headTail, splitLines, ttyRedraws, ttyText } from '../src/lib/tty-text.ts'
 
 const LS_COLOR = '\x1b[1;34mdocs\x1b[0m  \x1b[1;32mrun.sh\x1b[0m  README.md\r\n\x1b[1;34mpackages\x1b[0m\r\n'
 
@@ -128,5 +128,25 @@ describe('headTail', () => {
   it('measures bytes as UTF-8 and an empty text as nothing', () => {
     expect(headTail('é\n', BOUNDS)).toEqual({ head: 'é', tail: '', omittedLines: 0, totalLines: 1, totalBytes: 3 })
     expect(headTail('', BOUNDS)).toEqual({ head: '', tail: '', omittedLines: 0, totalLines: 0, totalBytes: 0 })
+  })
+})
+
+describe('ttyRedraws', () => {
+  it('flags the alternate screen, cursor up, previous line and an absolute row', () => {
+    expect(ttyRedraws('\x1b[?1049h\x1b[H')).toBe(true)
+    expect(ttyRedraws('\x1b[?47h')).toBe(true)
+    expect(ttyRedraws('step 1\r\n\x1b[2A\x1b[2Kstep 2')).toBe(true)
+    expect(ttyRedraws('\x1b[A')).toBe(true)
+    expect(ttyRedraws('\x1b[3F')).toBe(true)
+    expect(ttyRedraws('\x1b[12;1H')).toBe(true)
+    expect(ttyRedraws('\x1b[5d')).toBe(true)
+  })
+
+  it('leaves colour, a one-line progress bar, a title and a clear alone', () => {
+    expect(ttyRedraws(LS_COLOR)).toBe(false)
+    expect(ttyRedraws(NPM_PROGRESS)).toBe(false)
+    expect(ttyRedraws(OSC_TITLE)).toBe(false)
+    expect(ttyRedraws(TPUT_PROMPT)).toBe(false)
+    expect(ttyRedraws('\x1b[H\x1b[2J\x1b[3Jhello\r\n')).toBe(false)
   })
 })

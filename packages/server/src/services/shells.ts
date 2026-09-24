@@ -4,13 +4,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   SHELL_REFUSAL,
+  agentMayWrite,
   clampShellTail,
+  encodeShellKeys,
+  shellOwnershipRefusal,
   shellSummary,
   shellTail,
+  TTY_REDRAW_CARRY,
+  ttyRedraws,
   ttyText,
   type LocalShellSource,
   type Runner,
   type ShellDirectory,
+  type ShellReadResult,
+  type ShellView,
 } from '@workerdeck/core'
 import {
   ENGINE_CAPABILITIES,
@@ -27,15 +34,19 @@ import {
   SHELL_MAX_RUNNING_TOTAL,
   SHELL_MIN_COLS,
   SHELL_MIN_ROWS,
+  SHELL_READ_MAX_LINES,
   SHELL_ROWS,
   SHELL_SPILL_BYTES,
   SHELL_TAIL_FLUSH_MS,
   SHELL_TAIL_RING_BYTES,
+  SHELL_WAIT_DEFAULT_MS,
+  SHELL_WAIT_MAX_MS,
   type SessionInfo,
   type ShellEndReason,
   type ShellInfo,
   type ShellOwner,
 } from '@workerdeck/protocol'
+import { renderScreen, ShellScreen } from './shell-screen.ts'
 import { killProcessTrees, readProcessTable, type ProcessTable, type TreeKillDeps } from './process-tree.ts'
 
 export { SHELL_REFUSAL }
@@ -61,9 +72,17 @@ export type ShellSpawned = { shell: ShellInfo; source: LocalShellSource }
 
 export type ShellAttachment = { shell: ShellInfo; scrollback: string; detach: () => void }
 
-export type ShellOutputQuery = { view: 'text' | 'raw'; tail?: number }
+export type ShellOutputQuery = { view: 'text' | 'raw' | 'screen'; tail?: number }
 
 export type ShellErrorContext = { op: 'index' | 'artifact' | 'sweep' | 'listener' | 'kill'; sessionId?: string; shellId?: string }
+
+// The directory reaches a live runner only to start a shell for it: the record needs the session's cwd and the runner
+// draws the transcript row, exactly as a `$` from the composer does.
+export type ShellDirectoryDeps = { runnerFor?: (sessionId: string) => Runner | undefined }
+
+type ShellSettleOptions = { view?: ShellView; tail?: number; waitFor?: string[]; timeoutMs?: number; since?: number }
+
+type ShellTaken = { info: ShellInfo; read: Omit<ShellReadResult, 'shell' | 'wait'>; haystack: string }
 
 export type ShellRegistryOptions = {
   generation: string
@@ -97,6 +116,8 @@ export type ShellRegistry = {
   write: (sessionId: string, shellId: string, data: string) => void
   resize: (sessionId: string, shellId: string, size: ShellSize) => ShellSize
   output: (sessionId: string, shellId: string, query: ShellOutputQuery) => Promise<string | undefined>
+  applicationCursorKeys: (sessionId: string, shellId: string) => Promise<boolean>
+  changed: (sessionId: string, shellId: string, timeoutMs: number) => Promise<void>
   hydrate: () => Promise<void>
   sweep: () => Promise<void>
   flush: () => Promise<void>
@@ -140,6 +161,8 @@ type ShellEntry = {
   notify?: NodeJS.Timeout
   clock?: NodeJS.Timeout
   tailTimer?: NodeJS.Timeout
+  redrawCarry?: string
+  screen?: ShellScreen
 }
 
 type SessionShells = {
@@ -166,21 +189,125 @@ export async function loadPty(): Promise<PtyModule | null> {
   return ptyModule
 }
 
-// The agent's read side over the same registry: a session sees its own shells and nothing else, so another session's
-// id reads as missing rather than as a refusal that would name it.
-export function createShellDirectory(registry: ShellRegistry): ShellDirectory {
-  return {
-    list: async (from) => registry.list(from).map(shellSummary),
-    read: async (from, shellId, options) => {
-      const info = registry.get(from, shellId)
-      if (!info) {
-        return undefined
-      }
-      const text = await registry.output(from, shellId, { view: 'text' })
+// The agent's side of the same registry: a session sees its own shells and nothing else, so another session's id
+// reads as missing rather than as a refusal that would name it. Writes and kills are further limited to shells the
+// agent owns (`agentMayWrite`), and that refusal names the rule because the shell does exist.
+export function createShellDirectory(registry: ShellRegistry, deps: ShellDirectoryDeps = {}): ShellDirectory {
+  // One read of the shell as it is now. With `since`, the haystack is only what the process wrote after that byte
+  // offset, so a wait that follows a keystroke cannot be satisfied by text that was already on the screen.
+  const take = async (from: string, shellId: string, options: ShellSettleOptions): Promise<ShellTaken | undefined> => {
+    const info = registry.get(from, shellId)
+    if (!info) {
+      return undefined
+    }
+    const view: ShellView = options.view ?? (info.interactive ? 'screen' : 'lines')
+    const fresh = options.since === undefined ? undefined : await freshText(from, shellId, info.bytes - options.since)
+    if (view === 'screen') {
+      const text = await registry.output(from, shellId, { view: 'screen' })
       if (text === undefined) {
         return undefined
       }
-      return { shell: shellSummary(info), ...shellTail(text, clampShellTail(options?.tail)) }
+      const lines = text === '' ? 0 : text.split('\n').length
+      return { info, read: { view, text, lines, totalLines: lines, truncated: false }, haystack: fresh ?? text }
+    }
+    const text = await registry.output(from, shellId, { view: 'text' })
+    if (text === undefined) {
+      return undefined
+    }
+    return { info, read: shellTail(text, clampShellTail(options.tail)), haystack: fresh ?? shellTail(text, SHELL_READ_MAX_LINES).text }
+  }
+  const freshText = async (from: string, shellId: string, bytes: number): Promise<string> => {
+    if (bytes <= 0) {
+      return ''
+    }
+    const raw = await registry.output(from, shellId, { view: 'raw', tail: bytes })
+    return raw === undefined ? '' : ttyText(raw)
+  }
+  const settle = async (from: string, shellId: string, options: ShellSettleOptions): Promise<ShellReadResult | undefined> => {
+    const needles = options.waitFor ?? []
+    const started = Date.now()
+    const timeoutMs = Math.max(0, Math.min(options.timeoutMs ?? SHELL_WAIT_DEFAULT_MS, SHELL_WAIT_MAX_MS))
+    for (;;) {
+      const taken = await take(from, shellId, options)
+      if (!taken) {
+        return undefined
+      }
+      const result: ShellReadResult = { shell: shellSummary(taken.info), ...taken.read }
+      if (needles.length === 0) {
+        return result
+      }
+      const ms = Date.now() - started
+      const match = needles.find((needle) => taken.haystack.includes(needle))
+      if (match !== undefined) {
+        return { ...result, wait: { outcome: 'matched', match, ms } }
+      }
+      if (taken.info.status !== 'running') {
+        return { ...result, wait: { outcome: 'exited', ms } }
+      }
+      if (ms >= timeoutMs) {
+        return { ...result, wait: { outcome: 'timeout', ms } }
+      }
+      await registry.changed(from, shellId, timeoutMs - ms)
+    }
+  }
+  const writable = (from: string, shellId: string): ShellInfo | undefined => {
+    const info = registry.get(from, shellId)
+    if (!info) {
+      return undefined
+    }
+    if (!agentMayWrite(info, from)) {
+      throw new Error(shellOwnershipRefusal(shellId))
+    }
+    return info
+  }
+  return {
+    list: async (from) => registry.list(from).map(shellSummary),
+    read: (from, shellId, options) => settle(from, shellId, { ...options }),
+    run: async (from, options) => {
+      const runner = deps.runnerFor?.(from)
+      if (!runner?.queueLocalCommand) {
+        throw new Error(SHELL_REFUSAL)
+      }
+      const { shell, source } = await registry.spawn({ runner, command: options.command, owner: 'agent' })
+      try {
+        runner.queueLocalCommand(source)
+      } catch (error) {
+        registry.kill(from, shell.id)
+        throw error
+      }
+      const result = await settle(from, shell.id, { waitFor: options.waitFor, timeoutMs: options.timeoutMs })
+      if (!result) {
+        throw new Error(`shell ${shell.id} vanished as it started`)
+      }
+      return result
+    },
+    write: async (from, shellId, options) => {
+      const info = writable(from, shellId)
+      if (!info) {
+        return undefined
+      }
+      if (info.status !== 'running') {
+        throw new Error(`shell ${shellId} has already ended; there is nothing to type into`)
+      }
+      const application = await registry.applicationCursorKeys(from, shellId)
+      const data = (options.data ?? '') + encodeShellKeys(options.keys ?? [], { applicationCursorKeys: application })
+      if (data.length === 0) {
+        throw new Error('nothing to write: give data, keys or both')
+      }
+      const since = registry.get(from, shellId)?.bytes ?? info.bytes
+      registry.write(from, shellId, data)
+      return settle(from, shellId, { waitFor: options.waitFor, timeoutMs: options.timeoutMs, since })
+    },
+    kill: async (from, shellId) => {
+      const info = writable(from, shellId)
+      if (!info) {
+        return undefined
+      }
+      if (info.status !== 'running') {
+        return { shell: shellSummary(info), killed: false }
+      }
+      const killed = registry.kill(from, shellId, 'killed') ?? info
+      return { shell: shellSummary(killed), killed: true }
     },
   }
 }
@@ -378,6 +505,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     if (entry.artifact instanceof LiveArtifact) {
       entry.artifact.close()
     }
+    entry.screen?.close()
     for (const sink of entry.sinks) {
       try {
         sink.end(reason)
@@ -482,6 +610,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     }
     const artifact = new LiveArtifact(pathsFor(sessionId, id), limits, (error) => report(error, { op: 'artifact', sessionId, shellId: id }))
     const entry: ShellEntry = { info, generation, artifact, sinks: new Set(), listeners: new Set() }
+    entry.screen = new ShellScreen(info.cols, info.rows)
     state.entries.set(id, entry)
     const env = shellChildEnv(process.env)
     env.TERM = TERM
@@ -508,6 +637,17 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       }
       const changed = artifact.append(data)
       entry.info.bytes = artifact.bytes
+      entry.screen?.write(data)
+      if (!entry.info.interactive) {
+        const scanned = (entry.redrawCarry ?? '') + data
+        if (ttyRedraws(scanned)) {
+          entry.info.interactive = true
+          entry.redrawCarry = undefined
+          persist(state)
+        } else {
+          entry.redrawCarry = scanned.slice(-TTY_REDRAW_CARRY)
+        }
+      }
       if (changed) {
         if (artifact.capped && !entry.info.capped) {
           entry.info.capped = true
@@ -676,6 +816,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
         } catch {}
         entry.info.cols = next.cols
         entry.info.rows = next.rows
+        entry.screen?.resize(next.cols, next.rows)
       }
       return next
     },
@@ -684,12 +825,36 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       if (!entry) {
         return undefined
       }
+      if (query.view === 'screen') {
+        if (entry.screen) {
+          return entry.screen.snapshot()
+        }
+        const replay = await entry.artifact.replay(SHELL_ATTACH_REPLAY_BYTES)
+        return renderScreen(replay.toString('utf8'), entry.info.cols, entry.info.rows)
+      }
       if (query.tail === undefined && query.view === 'text') {
         return entry.artifact.textView()
       }
       const raw = await entry.artifact.read(query.tail)
       const text = raw.toString('utf8')
       return query.view === 'raw' ? text : ttyText(text)
+    },
+    applicationCursorKeys: (sessionId, shellId) => find(sessionId, shellId)?.screen?.applicationCursorKeys() ?? Promise.resolve(false),
+    changed: (sessionId, shellId, timeoutMs) => {
+      const entry = find(sessionId, shellId)
+      if (!entry || entry.info.status !== 'running') {
+        return Promise.resolve()
+      }
+      return new Promise((resolve) => {
+        const done = () => {
+          clearTimeout(timer)
+          entry.listeners.delete(done)
+          resolve()
+        }
+        const timer = setTimeout(done, Math.max(0, timeoutMs))
+        timer.unref()
+        entry.listeners.add(done)
+      })
     },
     hydrate: async () => {
       if (dir) {

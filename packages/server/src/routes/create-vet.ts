@@ -21,6 +21,8 @@ const HOST_ONLY_KEY_SET: Record<HostOnlyKey, true> = {
   sessionInfoFn: true,
   peers: true,
   shells: true,
+  shellAgentWrite: true,
+  createdByOperator: true,
   connectFn: true,
   codexHome: true,
   codexPathOverride: true,

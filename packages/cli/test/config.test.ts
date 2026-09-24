@@ -210,6 +210,20 @@ describe('resolveInstanceConfig', () => {
     expect(config.options.hostFiles).toEqual({ roots: ['/srv/projects'], write: true })
   })
 
+  it('turns the agent shell write mode on beside --shell, validates it, and layers it over the config file', () => {
+    const gated = resolveInstanceConfig(parseArgs(['--shell', '--shell-agent-write', 'gated']), noConfig, {})
+    expect(gated.options.shell).toEqual({ enabled: true, agentWrite: 'gated' })
+    const layered = resolveInstanceConfig(
+      parseArgs(['--shell-agent-write', 'allow']),
+      { path: '/x/c.mjs', options: { shell: { enabled: true, timeoutMs: 5000 } } },
+      {},
+    )
+    expect(layered.options.shell).toEqual({ enabled: true, timeoutMs: 5000, agentWrite: 'allow' })
+    expect(resolveInstanceConfig(parseArgs(['--shell']), noConfig, {}).options.shell).toEqual({ enabled: true })
+    expect(() => parseArgs(['--shell-agent-write', 'yolo'])).toThrow(/must be read-only, gated or allow/)
+    expect(() => parseArgs(['--shell-agent-write'])).toThrow(/requires a value/)
+  })
+
   it('puts state beside the config file when there is one', () => {
     expect(defaultStateDir('/srv/worker/workerdeck.config.mjs')).toBe('/srv/worker/.workerdeck')
   })

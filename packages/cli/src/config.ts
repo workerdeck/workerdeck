@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { ProfileInfo } from '@workerdeck/protocol'
-import type { WorkerServerOptions } from '@workerdeck/server'
+import type { ShellAgentWriteOption, WorkerServerOptions } from '@workerdeck/server'
 import type { ApnsConfig } from './apns/client.ts'
 import type { CliAuthOptions } from './auth/auth.ts'
 
@@ -41,6 +41,7 @@ export type CliFlags = {
   profileStore?: boolean
   fsWrite?: boolean
   shell?: boolean
+  shellAgentWrite?: ShellAgentWriteOption
   allowedOrigins: string[]
   allowedHosts: string[]
   insecureHosts: string[]
@@ -72,6 +73,13 @@ function parseDuration(raw: string, source: string): number | null {
   const scale = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[match[2] ?? 'ms']!
   const ms = Number(match[1]) * scale
   return ms > 0 ? ms : null
+}
+
+function parseShellAgentWrite(value: string, name: string): ShellAgentWriteOption {
+  if (value === 'read-only' || value === 'gated' || value === 'allow') {
+    return value
+  }
+  throw new ConfigError(`${name} must be read-only, gated or allow (got '${value}')`)
 }
 
 function parsePort(raw: string, source: string): number {
@@ -177,6 +185,11 @@ export function parseArgs(argv: string[]): CliFlags {
       }
       case '--shell': {
         flags.shell = true
+        break
+      }
+      case '--shell-agent-write': {
+        flags.shellAgentWrite = parseShellAgentWrite(next(i, arg), arg)
+        i++
         break
       }
       case '--allowed-origin': {
@@ -461,8 +474,12 @@ export function resolveInstanceConfig(
       ...(flags.fsWrite ? { write: true } : {}),
     }
   }
-  if (flags.shell) {
-    options.shell = { ...loaded.options.shell, enabled: true }
+  if (flags.shell || flags.shellAgentWrite !== undefined) {
+    options.shell = {
+      ...loaded.options.shell,
+      ...(flags.shell ? { enabled: true } : {}),
+      ...(flags.shellAgentWrite !== undefined ? { agentWrite: flags.shellAgentWrite } : {}),
+    }
   }
   // Flags replace rather than merge: a half-declared profile set is a credential mix-up.
   if (flags.profiles.length) {

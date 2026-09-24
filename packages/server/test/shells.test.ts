@@ -148,6 +148,14 @@ withPty('spawn', () => {
     expect(shell.bytes).toBeGreaterThan(0)
   })
 
+  it('marks a shell that redraws as interactive, even across a split escape, and leaves plain output alone', async () => {
+    const shells = makeRegistry()
+    const plain = await run(shells, runner('s1'), "printf 'one\\r\\033[Ktwo\\n'")
+    expect(plain.shell.interactive).toBeUndefined()
+    const split = await run(shells, runner('s2'), "printf 'a\\n\\033['; sleep 0.2; printf '1Ab\\n'")
+    expect(split.shell.interactive).toBe(true)
+  })
+
   it('labels by the first line of the command and numbers shells per session', async () => {
     const shells = makeRegistry()
     const s1 = runner('s1')

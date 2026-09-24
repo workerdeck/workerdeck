@@ -821,6 +821,10 @@
   left: 0;
   width: 12px;
 }
+/* xterm.css paints its viewport #000 whatever the theme says; the drill-in shows the panel through. */
+.wd-shell-term .xterm .xterm-viewport {
+  background-color: transparent;
+}
 .wd-scrubber .wd-scrub-mark[data-kind='user'] {
   background: var(--accent);
 }

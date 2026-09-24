@@ -10,6 +10,13 @@ const CSI_SEQUENCE = /(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]/g
 const ESCAPE_SEQUENCE = /\x1b[ -/]*[0-~]/g
 const CONTROL_CHARS = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g
 
+// Alternate screen, cursor up or previous line, or an absolute row: a program that redraws, which a flattened
+// transcript turns into every frame it ever painted. `\r` and erase-line are not here: a one-line progress bar
+// flattens fine.
+const REDRAW_SEQUENCE = /(?:\x1b\[|\x9b)(?:\?(?:1049|1047|47)h|\d*[AF]|\d+;\d+[Hf]|\d+d)/
+
+export const TTY_REDRAW_CARRY = 16
+
 export function ttyText(raw: string): string {
   const plain = raw
     .replace(OSC_SEQUENCE, '')
@@ -22,6 +29,10 @@ export function ttyText(raw: string): string {
     .split('\n')
     .map((line) => overwritten(line).trimEnd())
     .join('\n')
+}
+
+export function ttyRedraws(raw: string): boolean {
+  return REDRAW_SEQUENCE.test(raw)
 }
 
 export function splitLines(text: string): string[] {

@@ -186,7 +186,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   if (peers) {
     installPeerDirectory(peers)
   }
-  installShellDirectory(shells ? createShellDirectory(shells) : undefined)
+  installShellDirectory(shells ? createShellDirectory(shells, { runnerFor: (id) => refs.registry?.get(id) }) : undefined)
   const factory = createSessionFactory({
     adapterFor,
     profiles,
@@ -198,6 +198,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     requireApiKey: options.requireApiKey,
     peers: peers ? peerDirectoryHandle() : undefined,
     shells: shells ? shellDirectoryHandle() : undefined,
+    shellAgentWrite: options.shell?.agentWrite,
     refs,
   })
 

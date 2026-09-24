@@ -58,7 +58,8 @@ export async function handleShells(
   }
   if (route.shellAction === 'output') {
     const url = new URL(req.url ?? '/', 'http://internal')
-    const view = url.searchParams.get('view') === 'raw' ? 'raw' : 'text'
+    const requested = url.searchParams.get('view')
+    const view = requested === 'raw' || requested === 'screen' ? requested : 'text'
     const tailParam = url.searchParams.get('tail')
     const tail = tailParam === null ? undefined : Number(tailParam)
     if (tail !== undefined && (!Number.isInteger(tail) || tail <= 0)) {

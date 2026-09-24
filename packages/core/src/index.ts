@@ -61,28 +61,50 @@ export type {
   PeerToolSpec,
 } from './lib/peers.ts'
 export {
+  SHELL_KEY_NAMES,
+  SHELL_KEYS_MAX,
+  SHELL_READ_TOOL_NAMES,
   SHELL_REFUSAL,
   SHELL_TOOL_NAMES,
   SHELL_TOOL_SHAPES,
+  SHELL_WRITE_REFUSAL,
+  SHELL_WRITE_TOOL_NAMES,
+  agentMayWrite,
   clampShellTail,
+  encodeShellKey,
+  encodeShellKeys,
   installShellDirectory,
   installedShellDirectory,
   isShellToolName,
+  isShellWriteToolName,
   runShellTool,
   shellDirectoryHandle,
+  shellKillText,
+  shellOwnershipRefusal,
   shellReadText,
   shellSummary,
   shellTail,
+  shellToolNames,
   shellToolSpecs,
+  shellWriteDeniedText,
+  shellWriteToolOf,
 } from './lib/shells.ts'
 export type {
+  ShellAgentWrite,
   ShellDirectory,
+  ShellKeyOptions,
+  ShellKillResult,
   ShellReadOptions,
   ShellReadResult,
+  ShellRunOptions,
+  ShellView,
+  ShellWait,
   ShellSummary,
   ShellToolName,
+  ShellToolOptions,
   ShellToolOutput,
   ShellToolSpec,
+  ShellWriteOptions,
 } from './lib/shells.ts'
 export {
   SUPPORTED_ATTACHMENT_TYPES,
@@ -103,7 +125,7 @@ export {
   shellInlineText,
 } from './lib/local-command.ts'
 export type { LocalCommandEmit, LocalCommandEvent, LocalCommandResult, LocalShellSource, ShellContextOptions } from './lib/local-command.ts'
-export { countLines, headTail, splitLines, ttyText } from './lib/tty-text.ts'
+export { countLines, headTail, splitLines, TTY_REDRAW_CARRY, ttyRedraws, ttyText } from './lib/tty-text.ts'
 export type { HeadTail, HeadTailOptions } from './lib/tty-text.ts'
 export { mcpStatusInfo, modelOptionsFromSdk, normalizeSdkMessage, toApiMessage } from './lib/normalize.ts'
 export { getEngineAdapter } from './engines/adapter.ts'

@@ -8,6 +8,7 @@ import {
   SHELL_INLINE_CHARS,
   SHELL_INLINE_LINE_CHARS,
   SHELL_INLINE_LINES,
+  SHELL_INTERACTIVE_NOTE,
   type SessionEventBody,
   type ShellInfo,
 } from '@workerdeck/protocol'
@@ -110,10 +111,15 @@ export function localCommandEvent(text: string, uuid: string, shell: ShellInfo |
 }
 
 export function shellInlineText(shell: ShellInfo, text: string): string {
-  const head = inlineHead(text)
-  const body = [`$ ${shell.command}`, ...head.lines]
-  if (head.more) {
-    body.push(INLINE_MORE)
+  const body = [`$ ${shell.command}`]
+  if (shell.interactive) {
+    body.push(`[${SHELL_INTERACTIVE_NOTE}]`)
+  } else {
+    const head = inlineHead(text)
+    body.push(...head.lines)
+    if (head.more) {
+      body.push(INLINE_MORE)
+    }
   }
   const end = shellEndLine(shell)
   if (end) {
@@ -162,12 +168,15 @@ export function shellContextText(shell: ShellInfo, text: string, options: ShellC
 
 export class LocalCommandQueue {
   #entries: QueueEntry[] = []
+  #rows = new Set<() => void>()
   readonly #emit: LocalCommandEmit
 
   constructor(emit: LocalCommandEmit) {
     this.#emit = emit
   }
 
+  // A shell the agent started gets the same transcript row, redrawn the same way, but never enters the next flush: the
+  // caveat says the user ran it, the agent already holds the tool result, and it reads more through shell_read.
   push(input: LocalCommandResult | LocalShellSource): void {
     if (!isLocalShellSource(input)) {
       const text = localCommandTranscript(input)
@@ -179,6 +188,22 @@ export class LocalCommandQueue {
     const row = () => {
       const info = { ...input.info() }
       this.#emit(shellInlineText(info, input.text()), uuid, info)
+    }
+    if (input.info().owner === 'agent') {
+      const settle = () => {
+        if (input.info().status !== 'running') {
+          unsubscribe()
+          this.#rows.delete(unsubscribe)
+        }
+      }
+      const unsubscribe = input.subscribe(() => {
+        row()
+        settle()
+      })
+      this.#rows.add(unsubscribe)
+      row()
+      settle()
+      return
     }
     row()
     const unsubscribe = input.subscribe(row)
@@ -224,6 +249,10 @@ export class LocalCommandQueue {
       }
     }
     this.#entries = []
+    for (const unsubscribe of this.#rows) {
+      unsubscribe()
+    }
+    this.#rows.clear()
   }
 }
 

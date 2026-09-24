@@ -35,7 +35,15 @@ import { JsonRpcError } from './jsonrpc.ts'
 import { CodexAgentTracker, type CodexAgent, type ItemScope } from './subagents.ts'
 import { untrustedProjectNotice } from './trust.ts'
 import { isPeerToolName, peerToolSpecs, runPeerTool, withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
-import { isShellToolName, runShellTool, shellToolSpecs, type ShellDirectory } from '../../lib/shells.ts'
+import {
+  isShellToolName,
+  isShellWriteToolName,
+  runShellTool,
+  shellToolSpecs,
+  shellWriteDeniedText,
+  type ShellAgentWrite,
+  type ShellDirectory,
+} from '../../lib/shells.ts'
 import type {
   AppServerCollabAgentToolCallItem,
   AppServerCommandApprovalParams,
@@ -376,8 +384,26 @@ type ApprovalChannel = {
     updatedInput: Record<string, unknown> | undefined,
     offered: Set<string> | undefined,
   ): { response: unknown; decision?: string } | undefined
-  deny(params: unknown, interrupt: boolean, offered: Set<string> | undefined): { response: unknown; decision?: string }
+  deny(params: unknown, interrupt: boolean, offered: Set<string> | undefined, message?: string): { response: unknown; decision?: string }
 }
+
+type ShellWriteVerdict = { allowed: true; updatedInput?: Record<string, unknown> } | { allowed: false; message?: string }
+
+// The gateway's own gate on the agent's shell write tools: codex answers `item/tool/call` with no reviewer of its
+// own, so the card is raised here before the call runs. The verdict is what the awaiting caller reads; `decision`
+// is left unset on a deny so an interrupting deny also interrupts the turn, which a tool error alone would not.
+const SHELL_WRITE_CHANNEL: ApprovalChannel = {
+  describe: (raw) => {
+    const call = raw as AppServerDynamicToolCallParams
+    const input = typeof call.arguments === 'object' && call.arguments !== null ? (call.arguments as Record<string, unknown>) : {}
+    return { toolName: call.tool, input, title: `Agent wants to run ${call.tool}`, displayName: call.tool }
+  },
+  itemId: (raw) => (raw as AppServerDynamicToolCallParams).callId,
+  allow: (_raw, updatedInput) => ({ response: { allowed: true, updatedInput } satisfies ShellWriteVerdict }),
+  deny: (_raw, _interrupt, _offered, message) => ({ response: { allowed: false, message } satisfies ShellWriteVerdict }),
+}
+
+const SHELL_WRITE_GATE_MODES: ReadonlySet<PermissionMode> = new Set(['default', 'acceptEdits'])
 
 function decisionChannel(describe: (params: unknown) => ApprovalSurface, itemId: (params: unknown) => string | undefined): ApprovalChannel {
   return {
@@ -530,6 +556,7 @@ export type CodexRunnerConfig = CreateSessionRequest & {
   backfillHistory?: boolean
   peers?: PeerDirectory
   shells?: ShellDirectory
+  shellAgentWrite?: ShellAgentWrite
 }
 
 type QueuedTurn = { input: AppServerUserInput[] }
@@ -1157,7 +1184,10 @@ export class CodexRunner implements Runner {
       if (this.#instructions !== undefined) {
         options.developerInstructions = this.#instructions
       }
-      const dynamic = [...(this.#config.peers ? peerToolSpecs() : []), ...(this.#config.shells ? shellToolSpecs() : [])]
+      const dynamic = [
+        ...(this.#config.peers ? peerToolSpecs() : []),
+        ...(this.#config.shells ? shellToolSpecs(this.#config.shellAgentWrite !== undefined) : []),
+      ]
       if (dynamic.length) {
         options.dynamicTools = dynamic.map((spec) => ({ type: 'function', ...spec }))
       }
@@ -1732,7 +1762,21 @@ export class CodexRunner implements Runner {
         return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
       }
       if (shells && isShellToolName(call.tool)) {
-        const output = await runShellTool(shells, this.id, call.tool, call.arguments)
+        const write = this.#config.shellAgentWrite !== undefined
+        let args = call.arguments
+        if (
+          write &&
+          isShellWriteToolName(call.tool) &&
+          this.#config.shellAgentWrite === 'gated' &&
+          SHELL_WRITE_GATE_MODES.has(this.#permissionMode)
+        ) {
+          const verdict = (await this.#requestApproval(SHELL_WRITE_CHANNEL, method, call, undefined)) as ShellWriteVerdict
+          if (!verdict.allowed) {
+            return { success: false, contentItems: [{ type: 'inputText', text: shellWriteDeniedText(call.tool, verdict.message) }] }
+          }
+          args = verdict.updatedInput ?? args
+        }
+        const output = await runShellTool(shells, this.id, call.tool, args, { write })
         return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
       }
     }
@@ -1832,7 +1876,7 @@ export class CodexRunner implements Runner {
         sent = pending.channel.deny(pending.params, false, pending.offered)
       }
     } else {
-      sent = pending.channel.deny(pending.params, decision.interrupt === true, pending.offered)
+      sent = pending.channel.deny(pending.params, decision.interrupt === true, pending.offered, message)
     }
     pending.respond(sent.response)
     this.#emit({ type: 'permission_resolved', requestId: id, behavior, resolvedBy, message })

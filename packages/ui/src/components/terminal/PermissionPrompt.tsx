@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import { toolInputPreview } from '../../lib/format.ts'
 import { planFromRequest } from '../../lib/plan-request.ts'
+import { shellRequestLines, shellRequestPayload, shellRequestTitle } from '../../lib/shell-request.ts'
 import { TerminalDiff, previewPatch } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Choices, Hint, PromptInput, PromptTitle, Rule } from './prompt.tsx'
@@ -29,9 +30,14 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
   }
 
   const plan = planFromRequest(request)
-  const patch = plan ? undefined : previewPatch(request.input)
-  const summary = plan ? '' : toolInputPreview(request.input)
-  const heading = plan ? 'Plan ready for review' : (request.displayName ?? request.title ?? 'Permission needed')
+  const shell = plan ? undefined : shellRequestPayload(request)
+  const patch = plan || shell ? undefined : previewPatch(request.input)
+  const summary = plan || shell ? '' : toolInputPreview(request.input)
+  const heading = plan
+    ? 'Plan ready for review'
+    : shell
+      ? shellRequestTitle(shell)
+      : (request.displayName ?? request.title ?? 'Permission needed')
   const subject = patch?.path ?? (summary || undefined)
 
   const reasonInput = denying ? (
@@ -82,6 +88,16 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
           <Blank />
           <Rule dashed />
         </>
+      ) : shell ? (
+        <>
+          {shellRequestLines(shell).map((line, index) => (
+            <Row key={index} bold>
+              {line}
+            </Row>
+          ))}
+          <Blank />
+          <Rule dashed />
+        </>
       ) : patch ? (
         <>
           <TerminalDiff patch={patch} />
@@ -95,7 +111,7 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
         </>
       ) : null}
       {request.decisionReason ? <Row tone="faint">{request.decisionReason}</Row> : null}
-      <Row>{plan ? 'Ready to implement this plan?' : (request.title ?? `Do you want to proceed?`)}</Row>
+      <Row>{plan ? 'Ready to implement this plan?' : shell ? 'Do you want to let it?' : (request.title ?? `Do you want to proceed?`)}</Row>
       <Choices
         label={heading}
         options={options}

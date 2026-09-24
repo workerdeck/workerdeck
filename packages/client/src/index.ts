@@ -276,7 +276,7 @@ export class WorkerDeckClient {
     return (body as { shell: ShellInfo }).shell
   }
 
-  async shellOutput(sessionId: string, shellId: string, options?: { view?: 'text' | 'raw'; tail?: number }): Promise<string> {
+  async shellOutput(sessionId: string, shellId: string, options?: { view?: 'text' | 'raw' | 'screen'; tail?: number }): Promise<string> {
     const search = new URLSearchParams()
     if (options?.view) {
       search.set('view', options.view)

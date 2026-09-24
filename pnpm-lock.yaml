@@ -545,6 +545,9 @@ importers:
       '@workerdeck/queue':
         specifier: workspace:*
         version: link:../queue
+      '@xterm/headless':
+        specifier: ^6.0.0
+        version: 6.0.0
       ws:
         specifier: ^8.21.3
         version: 8.21.3
@@ -3498,6 +3501,9 @@ packages:
 
   '@xterm/addon-fit@0.11.0':
     resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
+
+  '@xterm/headless@6.0.0':
+    resolution: {integrity: sha512-5Yj1QINYCyzrZtf8OFIHi47iQtI+0qYFPHmouEfG8dHNxbZ9Tb9YGSuLcsEwj9Z+OL75GJqPyJbyoFer80a2Hw==}
 
   '@xterm/xterm@6.0.0':
     resolution: {integrity: sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==}
@@ -8657,6 +8663,8 @@ snapshots:
   '@workflow/serde@4.1.0': {}
 
   '@xterm/addon-fit@0.11.0': {}
+
+  '@xterm/headless@6.0.0': {}
 
   '@xterm/xterm@6.0.0': {}
 

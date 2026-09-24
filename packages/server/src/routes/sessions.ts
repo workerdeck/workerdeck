@@ -36,7 +36,7 @@ export async function handleSessions(
         json(res, vetted.status, { error: vetted.error })
         return
       }
-      const runner = await factory.createRunner(factory.buildRunnerConfig(vetted.request))
+      const runner = await factory.createRunner(factory.buildRunnerConfig(vetted.request, { operator: authSvc.isOperator(auth) }))
       factory.watchAuthSource(runner)
       json(res, 201, { session: projects.withProject(runner.info()) })
       return

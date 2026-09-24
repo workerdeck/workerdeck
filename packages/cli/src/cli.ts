@@ -61,7 +61,14 @@ Options
                             with a tracked record. Off by default and its own switch:
                             unlike an agent's Bash tool, a '$' command goes through
                             no permission prompt at all. Never offered to a scoped
-                            principal.
+                            principal. The agent gets shell_list and shell_read.
+      --shell-agent-write <mode>
+                            what the agent may do to shells of its own with --shell:
+                            read-only (default: it only reads), gated (shell_run,
+                            shell_write and shell_kill behind a permission card,
+                            payload shown; config: shell.agentWrite) or allow (no
+                            card beyond the engine's own mode). Never a shell the
+                            user started, never a session a scoped principal made.
       --approval-timeout <d>
                             how long a permission prompt or a question may wait for
                             an answer before the engine denies it (300000, 30s, 5m;

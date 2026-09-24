@@ -54,7 +54,14 @@ import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
 import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
 import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
 import { PEER_MCP_SERVER, PEER_TOOL_SHAPES, PEER_TOOL_NAMES, withPeerContext, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
-import { SHELL_TOOL_NAMES, SHELL_TOOL_SHAPES, runShellTool, type ShellDirectory } from '../../lib/shells.ts'
+import {
+  SHELL_TOOL_SHAPES,
+  runShellTool,
+  shellToolNames,
+  shellWriteToolOf,
+  type ShellAgentWrite,
+  type ShellDirectory,
+} from '../../lib/shells.ts'
 import { SubagentTracker } from './subagents.ts'
 
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
@@ -79,6 +86,10 @@ export type SessionRunnerConfig = CreateSessionRequest & {
   sessionInfoFn?: SessionInfoFn
   peers?: PeerDirectory
   shells?: ShellDirectory
+  shellAgentWrite?: ShellAgentWrite
+  // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell
+  // write tools are offered only to a session an operator created.
+  createdByOperator?: boolean
 }
 
 type PendingApproval = {
@@ -469,9 +480,9 @@ export class SessionRunner implements Runner {
           )
         : []),
       ...(shells
-        ? SHELL_TOOL_NAMES.map((name) =>
+        ? shellToolNames(this.#config.shellAgentWrite !== undefined).map((name) =>
             sdkTool(name, SHELL_TOOL_SHAPES[name].description, SHELL_TOOL_SHAPES[name].shape, async (args) => {
-              const output = await runShellTool(shells, this.id, name, args)
+              const output = await runShellTool(shells, this.id, name, args, { write: this.#config.shellAgentWrite !== undefined })
               return { content: [{ type: 'text', text: output.text }], isError: output.isError }
             }),
           )
@@ -762,6 +773,10 @@ export class SessionRunner implements Runner {
       delete request.expiresAt
       return Promise.resolve(this.#resolveQuestionByPolicy(request, questionBehavior))
     }
+    if (this.#config.shellAgentWrite === 'allow' && shellWriteToolOf(toolName) !== undefined) {
+      delete request.expiresAt
+      return Promise.resolve(this.#allowByPolicy(request))
+    }
     return new Promise<PermissionResult>((resolve) => {
       const timer =
         timeoutMs === undefined
@@ -782,6 +797,13 @@ export class SessionRunner implements Runner {
       this.#emit({ type: 'permission_requested', request })
       this.#setStatus('awaiting_approval')
     })
+  }
+
+  // The card still reaches the transcript, resolved by policy, so an operator who chose `allow` can see what ran.
+  #allowByPolicy(request: PermissionRequest): PermissionResult {
+    this.#emit({ type: 'permission_requested', request })
+    this.#emit({ type: 'permission_resolved', requestId: request.id, behavior: 'allow', resolvedBy: 'policy' })
+    return { behavior: 'allow', updatedInput: request.input, toolUseID: request.toolUseId }
   }
 
   #resolveQuestionByPolicy(request: PermissionRequest, mode: 'auto' | 'deny'): PermissionResult {
