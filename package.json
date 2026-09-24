@@ -2,7 +2,7 @@
   "name": "workerdeck-monorepo",
   "version": "0.1.1",
   "private": true,
-  "description": "Run a coding agent \u2014 Claude Code, OpenAI Codex, or any model provider \u2014 as a session you can watch, steer, and embed. Gateway + wire protocol + web dashboard, with iOS and VS Code clients.",
+  "description": "Run a coding agent - Claude Code, OpenAI Codex, or any model provider - as a session you can watch, steer, and embed. Gateway + wire protocol + web dashboard, with iOS and VS Code clients.",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -32,6 +32,7 @@
     "smoke:codex": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/codex.ts",
     "smoke:hot-reload": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/hot-reload.ts",
     "smoke:restart": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/restart.ts",
+    "smoke:shell-write": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/shell-write.ts",
     "smoke:attach": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/attach.ts",
     "smoke:push": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/push.ts",
     "smoke:activity": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/live-activity.ts",

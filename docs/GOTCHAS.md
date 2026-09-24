@@ -1482,8 +1482,11 @@ has the shape; these are the ways to get it wrong.
   tools prompt under whatever rule the CLI applies to `mcp__workerdeck__*` in the session's mode;
   nothing is added. Under `allow`, `#allowByPolicy` resolves the three write tools at once and
   still emits `permission_requested` + `permission_resolved { resolvedBy: 'policy' }`, so the
-  transcript records what ran. What `dontAsk` and `auto` do to an MCP prompt is **unverified**
-  (`pnpm smoke:live` settles it; do not write the sentence first).
+  transcript records what ran. Verified by `pnpm smoke:shell-write` on 2026-09-24 (agent SDK
+  0.3.280): `default` prompts for all five shell tools, **the read tools included**, because Claude
+  Code asks for every MCP tool there; `dontAsk` denies `shell_run` silently (no card, no shell, the
+  model is told it was blocked); `auto` runs it with no card. Codex under `gated` cards only the
+  three write tools.
 - **The provider gate exists for embedders, not for the shipped adapter.** The in-repo provider
   engine is `hostCwd: false`, so `shells` is never stamped and the tools never exist there. An
   embedder may register an adapter that says otherwise (`options.engines`), so

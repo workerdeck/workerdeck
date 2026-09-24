@@ -146,10 +146,13 @@ engine's process contract can't either**: any change to `CodexRunner`'s spawn op
 handshake, or event mapping needs `pnpm smoke:codex`. Smokes live in `smoke/`: `smoke:sandbox` and
 `smoke:codex --canary` are free; `smoke:live`, `smoke:live-approval`, `smoke:sdk`, `smoke:media`
 (the only check that the CLI accepts image/PDF/text attachment blocks at all) and the full
-`smoke:codex` are not. The shell write path (`--shell-agent-write gated`) is covered by fake
-harnesses only and still owes `smoke:live` (a claude card for one `shell_run`, payload visible,
-and what `dontAsk` does to it) and `smoke:codex` (the gateway-raised card before `item/tool/call`
-is answered, and whether a real codex honours `dynamicTools` on resume). **`smoke:live` does not
+`smoke:codex` are not. The shell write path has its own, `smoke:shell-write [claude|codex|all]`
+(paid; `smoke:live` is the provider engine and never reaches it): its own gateway on 8792 with
+`--shell --shell-agent-write gated`, the agent drives `smoke/tui-demo.sh` through `shell_run`,
+`shell_write` and `shell_kill` with every card checked for its payload, a denied card must create no
+shell, and it reports what claude `dontAsk`/`auto` and codex `auto` do. It drops
+`WORKERDECK_AUTH_KEY` from the child's env, since its loopback gateway runs without auth. Still
+unproven: whether a real codex honours `dynamicTools` on `thread/resume`. **`smoke:live` does not
 cover the provider engine's approval path** - it
 drives tools by hand and configures no executor, so it never reaches `#dispatchSingle`; that is
 what `smoke:live-approval` is for. It edits the first tool call at approval and proves the edit
