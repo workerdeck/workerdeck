@@ -46,6 +46,7 @@ export class HostSupervisor implements vscode.Disposable {
   readonly #log = new LogTail()
   readonly #version: string
   #state: HostState = { kind: 'disabled' }
+  #restartOffered = false
   #child: ChildProcess | undefined
   #busy: Promise<void> = Promise.resolve()
 
@@ -129,6 +130,24 @@ export class HostSupervisor implements vscode.Disposable {
     return this.#queue(async () => {
       await this.#stopNow(readHostSettings(), options.confirm ?? true, 'Stop')
     })
+  }
+
+  // Only the focused window asks, and only about a server VS Code launched: every window sees the same settings
+  // change, and a server started by hand in a terminal never read these settings at all.
+  offerRestart(): void {
+    const state = this.#state
+    if (state.kind !== 'running' || !state.owned || !vscode.window.state.focused || this.#restartOffered) {
+      return
+    }
+    this.#restartOffered = true
+    void vscode.window
+      .showInformationMessage('WorkerDeck: the server picks up the changed Host Mode settings on its next start.', 'Restart Now')
+      .then((answer) => {
+        this.#restartOffered = false
+        if (answer === 'Restart Now') {
+          void this.restart()
+        }
+      })
   }
 
   restart(): Promise<void> {
@@ -387,6 +406,9 @@ export class HostSupervisor implements vscode.Disposable {
     }
     if (settings.shell) {
       args.push('--shell')
+      if (settings.shellAgentWrite !== 'read-only') {
+        args.push('--shell-agent-write', settings.shellAgentWrite)
+      }
     }
     if (settings.hotReload) {
       args.push('--hot-reload')

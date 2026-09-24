@@ -199,6 +199,12 @@ finish), so Stop sends one, waits 30s, sends a second (the CLI's own "stop now")
 the signal goes to the **process group** (`-pid`), because on the npx path the server is a
 grandchild. Parked sessions survive all of it, which is what makes the prompt tolerable at all.
 
+**A settings change that reaches the argv offers a restart, never performs one.** `needsRestart`
+(`host/settings.ts`) lists the keys; port and state dir are left out because `sync` already follows
+them to whatever server they now name. Only the focused window asks, and only about a server VS Code
+launched (`owned`), since every window sees the same change and a hand-started server never read
+these settings. Restart Now goes through the same busy-sessions confirmation as the command.
+
 **Hot-Reload Server is the opposite of Restart and addresses the gateway differently on purpose.**
 `workerdeck.host.hotReload` adds `--hot-reload` to the child's argv; the command then signals
 `SIGUSR2` and the gateway re-evaluates its own source in place, carrying live sessions and their

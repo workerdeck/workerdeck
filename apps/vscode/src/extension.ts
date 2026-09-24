@@ -19,7 +19,7 @@ import { ProfilesViewProvider } from './profiles-view.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
 import { hostActions, HostStatusItem } from './host/status-item.ts'
 import { HostSupervisor } from './host/supervisor.ts'
-import { HOST_SECTION } from './host/settings.ts'
+import { HOST_SECTION, needsRestart } from './host/settings.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
 import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
@@ -428,6 +428,9 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (e.affectsConfiguration(HOST_SECTION)) {
         hostStatus.render()
+        if (needsRestart(e)) {
+          hostSupervisor?.offerRestart()
+        }
         void hostSupervisor?.sync()
       }
       if (e.affectsConfiguration('workerdeck.statusBar')) {
@@ -487,8 +490,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('workerdeck.host.openDashboard', () => requireHost()?.openDashboard()),
     vscode.commands.registerCommand('workerdeck.host.showLog', () => requireHost()?.showLog()),
     vscode.commands.registerCommand('workerdeck.host.actions', () => hostActions(hostSupervisor?.state ?? { kind: 'disabled' })),
+    vscode.commands.registerCommand('workerdeck.openSettings', () =>
+      vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${context.extension.id}`),
+    ),
     vscode.commands.registerCommand('workerdeck.host.openSettings', () =>
-      vscode.commands.executeCommand('workbench.action.openSettings', `@ext:workerdeck.workerdeck ${HOST_SECTION}`),
+      vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${context.extension.id} ${HOST_SECTION}`),
     ),
 
     vscode.commands.registerCommand('workerdeck.manageProfiles', () => manageProfiles(profileFlow)),

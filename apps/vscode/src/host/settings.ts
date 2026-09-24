@@ -15,12 +15,17 @@ export type HostSettings = {
   npxSpec: string | undefined
   dashboard: boolean
   shell: boolean
+  shellAgentWrite: ShellAgentWrite
   hotReload: boolean
   cwdRoots: string[]
   statusBar: boolean
 }
 
 export const HOST_SECTION = 'workerdeck.host'
+
+export type ShellAgentWrite = 'read-only' | 'gated' | 'allow'
+
+const SHELL_AGENT_WRITE: readonly ShellAgentWrite[] = ['read-only', 'gated', 'allow']
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '0.0.0.0', '::'])
 
@@ -56,10 +61,35 @@ export function readHostSettings(): HostSettings {
     npxSpec: config.get<string>('npxSpec', '').trim() || undefined,
     dashboard: config.get<boolean>('dashboard', true),
     shell: config.get<boolean>('shell', false),
+    shellAgentWrite: shellAgentWrite(config.get<string>('shellAgentWrite', 'read-only')),
     hotReload: config.get<boolean>('hotReload', false),
     cwdRoots: config.get<string[]>('cwdRoots', []).map(expandHome).filter(Boolean),
     statusBar: config.get<boolean>('statusBar', true),
   }
+}
+
+// Everything that reaches the server's argv, less the port and the state dir, which `sync` already follows by
+// adopting or launching the server they now name.
+const RESTART_KEYS = [
+  'bindAddress',
+  'requireAuthKey',
+  'configPath',
+  'cwdRoots',
+  'dashboard',
+  'hotReload',
+  'shell',
+  'shellAgentWrite',
+  'binaryPath',
+  'useNpx',
+  'npxSpec',
+]
+
+export function needsRestart(event: vscode.ConfigurationChangeEvent): boolean {
+  return RESTART_KEYS.some((key) => event.affectsConfiguration(`${HOST_SECTION}.${key}`))
+}
+
+function shellAgentWrite(value: string): ShellAgentWrite {
+  return SHELL_AGENT_WRITE.find((mode) => mode === value) ?? 'read-only'
 }
 
 export function settingsProblem(settings: HostSettings): string | undefined {

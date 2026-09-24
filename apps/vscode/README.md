@@ -149,6 +149,8 @@ Every key is optional. The ones people actually change:
 | `workerdeck.host.autoStart` | `true` | Once Host Mode is on, bring the server up on activation rather than waiting for the command. |
 | `workerdeck.host.port` | `8787` | Port the managed server listens on, and the port every window probes. |
 | `workerdeck.host.cwdRoots` | `[]` | Confine sessions to these directory trees. |
+| `workerdeck.host.shell` | `false` | Let `$` in the composer run commands on this machine. |
+| `workerdeck.host.shellAgentWrite` | `read-only` | With `shell` on: `gated` lets the agent start, type into and kill shells of its own behind a permission card; `allow` drops the card. |
 | `workerdeck.fontFamily` | `editor` | Typeface for the Agent panel: the editor font, or VS Code's UI font. |
 | `workerdeck.fontSize` | `0` | Panel font size. `0` follows the editor. |
 | `workerdeck.transcriptDensity` | `comfortable` | Row spacing in the transcript. |
