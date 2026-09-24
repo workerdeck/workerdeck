@@ -383,10 +383,12 @@ export function usePromptAreaKeydown({
         const launcher = triggers.find((t) => t.mode === 'launch' && t.char === e.key)
         const editor = editorRef.current
         if (launcher?.onActivate && editor) {
-          const cursorPos = getCursorOffset(editor)
-          if (cursorPos !== null) {
+          const caret = getCursorOffset(editor)
+          if (caret !== null) {
             const segments = readSegmentsFromDOM()
             const plainText = segmentsToPlainText(segments)
+            // An emptied editor keeps the browser's filler <br>: the reader drops it, the caret count does not.
+            const cursorPos = Math.min(caret, plainText.length)
             if (isValidTriggerPosition(plainText, cursorPos, launcher.position)) {
               e.preventDefault()
               launcher.onActivate({
