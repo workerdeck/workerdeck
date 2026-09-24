@@ -23,7 +23,6 @@ struct TranscriptListView: View {
   var jumpToRecap: Int = 0
 
   @Environment(\.transcriptVariant) private var variant
-  @Environment(\.transcriptDensity) private var density
 
   @State private var expanded: Set<String> = []
   @State private var isNearBottom = true
@@ -34,9 +33,8 @@ struct TranscriptListView: View {
   var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        // The one vertical separation between rows there is, which is what makes
-        // it the whole of the density feature.
-        LazyVStack(alignment: .leading, spacing: transcriptRowGap(variant, density)) {
+        // The one vertical separation between rows there is.
+        LazyVStack(alignment: .leading, spacing: transcriptRowGap(variant)) {
           ForEach(Array(items.enumerated()), id: \.element.rowID) { index, item in
             if let catchUp, catchUp.at == index {
               RecapDivider(label: catchUp.label).id(Self.recapAnchor)

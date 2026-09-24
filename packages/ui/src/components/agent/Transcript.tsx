@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils.ts'
 import { Conversation, ConversationContent, ConversationScrollButton } from './Conversation.tsx'
 import { Loader } from './Loader.tsx'
 import { SessionEmptyState } from './SessionEmptyState.tsx'
-import { type TerminalAffordances } from '../terminal/affordances.tsx'
+import { AffordanceProvider, resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
 import { WorkingRow } from '../terminal/items.tsx'
 import { subagentItems, terminalBlocks, type ToolCallItem } from '../terminal/blocks.ts'
 import { taskBrief, taskBusy } from '../terminal/tool-run.ts'
@@ -12,7 +12,7 @@ import { type TranscriptRow } from './transcript-rows.ts'
 import { TranscriptRows } from './TranscriptRows.tsx'
 import { SessionNamesProvider, SkillNamesProvider } from './PromptTokenText.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
-import { ROW_GAP, TranscriptVariantProvider, type TranscriptDensity, type TranscriptVariant } from './transcript-variant.tsx'
+import { ROW_GAP, TranscriptVariantProvider, type TranscriptVariant } from './transcript-variant.tsx'
 
 function useRunStart(status: TranscriptState['status']): number | undefined {
   const running = status === 'running' || status === 'starting'
@@ -54,7 +54,11 @@ function TerminalShell({
   children: ReactNode
 }) {
   if (!active) {
-    return <>{children}</>
+    return (
+      <div data-cards="" className="contents">
+        <AffordanceProvider value={resolveAffordances(affordances)}>{children}</AffordanceProvider>
+      </div>
+    )
   }
   return (
     <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} affordances={affordances} bleed="1ch" className="term-transcript">
@@ -72,7 +76,6 @@ export interface TranscriptProps {
   canBrowseFiles?: boolean
   hostImage?: (path: string) => Promise<string | undefined>
   variant?: TranscriptVariant
-  density?: TranscriptDensity
   fontSize?: number
   lineHeight?: number
   affordances?: TerminalAffordances | boolean
@@ -99,7 +102,6 @@ export function Transcript({
   canBrowseFiles,
   hostImage,
   variant = 'cards',
-  density = 'comfortable',
   fontSize,
   lineHeight,
   affordances,
@@ -124,7 +126,7 @@ export function Transcript({
       frame ? state.items.find((item): item is ToolCallItem => item.kind === 'tool_call' && item.id === frame.parentToolUseId) : undefined,
     [state.items, frame],
   )
-  const gap = ROW_GAP[variant][density]
+  const gap = ROW_GAP[variant]
   const runStartedAt = useRunStart(state.status)
   const boundary = !frame && catchUp && catchUp.from > 0 && catchUp.from < state.items.length ? catchUp.from : undefined
   const recap = useMemo(() => (boundary === undefined ? undefined : recapLine(summarizeSince(state, boundary))), [state, boundary])

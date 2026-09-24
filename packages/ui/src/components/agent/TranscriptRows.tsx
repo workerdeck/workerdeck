@@ -5,7 +5,7 @@ import { useStickToBottomContext } from 'use-stick-to-bottom'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
-import { resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
+import { ActionPlacementProvider, resolveAffordances, type TerminalAffordances } from '../terminal/affordances.tsx'
 import { RunRow } from '../terminal/items.tsx'
 import { parentOf } from '../terminal/blocks.ts'
 import { briefPx, estimateBlockPx } from '../terminal/height.ts'
@@ -324,7 +324,8 @@ export function TranscriptRows({
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const row = rows[virtualRow.index]
           const gapClass = virtualRow.index > 0 && (!terminal || gapBefore(rows, virtualRow.index)) ? gap.className : undefined
-          const content =
+          const flushBelow = terminal && virtualRow.index < rows.length - 1 && !gapBefore(rows, virtualRow.index + 1)
+          const view =
             'run' in row ? (
               <div className={cn(read(boundary, row.index) && 'opacity-45')}>
                 <RunRow items={row.run} />
@@ -348,6 +349,7 @@ export function TranscriptRows({
                 <TaskRow block={row} fileUrl={fileUrl} onOpenSubagent={onOpenSubagent} />
               </div>
             )
+          const content = <ActionPlacementProvider value={flushBelow ? 'inline' : 'below'}>{view}</ActionPlacementProvider>
           if (stickyPrompt && 'item' in row && row.item.kind === 'user' && parentOf(row.item) === undefined) {
             const next = promptRows.find((index) => index > virtualRow.index)
             const laneEnd = next === undefined ? virtualizer.getTotalSize() : (measurements[next]?.start ?? virtualRow.start)

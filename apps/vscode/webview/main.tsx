@@ -14,13 +14,12 @@ if (!root) {
   throw new Error('Root element #root not found')
 }
 
-const density = root.dataset.density === 'compact' ? 'compact' : 'comfortable'
 const variant = root.dataset.variant === 'cards' ? 'cards' : 'terminal'
 const terminalMetrics = {
   fontSize: Number(root.dataset.fontSize) || undefined,
   lineHeight: Number(root.dataset.lineHeight) || undefined,
 }
-const affordances = root.dataset.affordances !== 'off'
+const affordances = root.dataset.affordances === 'off' ? false : { labels: root.dataset.actionLabels === 'on' }
 const catchUp = root.dataset.catchUp !== 'off'
 const panelFontSize = Number(root.dataset.panelFontSize) || undefined
 
@@ -28,7 +27,6 @@ createRoot(root).render(
   <StrictMode>
     <App
       bridge={bridge}
-      density={density}
       variant={variant}
       catchUp={catchUp}
       terminalMetrics={terminalMetrics}

@@ -3,8 +3,8 @@ import { isAgentRecord, promotedShells, subagentLabel, visibleSubagents } from '
 import type { SessionInfo, ShellInfo, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
+import { AgentWriteIcon } from '../terminal/affordances.tsx'
 import {
-  SHELL_AGENT_WRITE_GLYPH,
   SHELL_AGENT_WRITE_NOTE,
   SHELL_GLYPH,
   SHELL_KILL_GLYPH,
@@ -119,7 +119,7 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
         <StepIcon step={step} />
         <span className="min-w-0 flex-1 truncate">{step.label}</span>
         {step.detail ? <span className="shrink-0 tabular-nums text-fg-4">{step.detail}</span> : null}
-        <ArrowRight className="size-3.5 shrink-0 text-fg-4" />
+        {step.kind === 'shell' ? null : <ArrowRight className="size-3.5 shrink-0 text-fg-4" />}
       </button>
       {step.agentWrite ? (
         <button
@@ -136,7 +136,7 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
             step.agentWrite.granted ? 'text-warning' : 'text-fg-4 hover:text-fg-1',
           )}
         >
-          {SHELL_AGENT_WRITE_GLYPH}
+          <AgentWriteIcon granted={step.agentWrite.granted} className="size-3.5" />
         </button>
       ) : null}
       {step.onKill ? (

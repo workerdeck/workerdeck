@@ -23,26 +23,6 @@ enum TranscriptVariant: String, Codable, CaseIterable, Sendable {
   }
 }
 
-/// How much room the transcript gives each row.
-///
-/// **Cards-only.** Terminal has one line height and is monospace by
-/// construction, so there is no "how much air around a row" to prefer - its
-/// spacing is a blank *line* decided per pair of blocks, not a container gap
-/// (see `transcriptRowGap` below). A control that changed nothing under
-/// terminal would invite pressing it for no effect, so callers must hide or
-/// disable these when the variant is terminal (`SettingsView`).
-enum TranscriptDensity: String, Codable, CaseIterable, Sendable {
-  case comfortable
-  case compact
-
-  var label: String {
-    switch self {
-    case .comfortable: "Comfortable"
-    case .compact: "Compact"
-    }
-  }
-}
-
 /// The typeface the agent view runs in - the Swift mirror of `SessionPanel`'s
 /// `transcriptFont`.
 ///
@@ -51,9 +31,9 @@ enum TranscriptDensity: String, Codable, CaseIterable, Sendable {
 /// the claim is a monospace agent view inside an ordinary app rather than a
 /// monospace app.
 ///
-/// **Cards-only**, like density: terminal is monospace by construction (it
-/// takes its face from the terminal renderer's own cell font), so this choice
-/// has nothing to apply to there.
+/// **Cards-only**: terminal is monospace by construction (it takes its face
+/// from the terminal renderer's own cell font), so this choice has nothing to
+/// apply to there.
 enum TranscriptFont: String, Codable, CaseIterable, Sendable {
   case regular
   case monospace
@@ -173,10 +153,6 @@ final class AppSettings {
     didSet { defaults.set(transcriptVariant.rawValue, forKey: Self.variantKey) }
   }
 
-  var transcriptDensity: TranscriptDensity {
-    didSet { defaults.set(transcriptDensity.rawValue, forKey: Self.densityKey) }
-  }
-
   var transcriptFont: TranscriptFont {
     didSet { defaults.set(transcriptFont.rawValue, forKey: Self.fontKey) }
   }
@@ -192,7 +168,6 @@ final class AppSettings {
   private let defaults: UserDefaults
 
   private static let variantKey = "bi.atomic.workerdeck.ios.transcriptVariant"
-  private static let densityKey = "bi.atomic.workerdeck.ios.transcriptDensity"
   private static let fontKey = "bi.atomic.workerdeck.ios.transcriptFont"
   private static let catchUpKey = "bi.atomic.workerdeck.ios.catchUpMode"
   private static let approveLockKey = "bi.atomic.workerdeck.ios.approveWhileLocked"
@@ -212,9 +187,6 @@ final class AppSettings {
     case let raw?: transcriptVariant = TranscriptVariant(rawValue: raw) ?? .cards
     case nil: transcriptVariant = .cards
     }
-    transcriptDensity =
-      defaults.string(forKey: Self.densityKey).flatMap(TranscriptDensity.init(rawValue:))
-      ?? .comfortable
     transcriptFont =
       defaults.string(forKey: Self.fontKey).flatMap(TranscriptFont.init(rawValue:)) ?? .regular
     catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true
@@ -232,17 +204,13 @@ final class AppSettings {
 
 // MARK: - Environment
 
-/// Variant and density reach the rows as environment values rather than props.
-/// Every row kind needs them and only the transcript root knows them; threading
-/// two parameters through seven row types (and the markdown blocks below those)
-/// to reach a background colour is worse than one lookup. Same reasoning - and
+/// Variant reaches the rows as an environment value rather than a prop. Every
+/// row kind needs it and only the transcript root knows it; threading a
+/// parameter through seven row types (and the markdown blocks below those) to
+/// reach a background colour is worse than one lookup. Same reasoning - and
 /// the same shape - as `\.fileDownloader` and `\.producedImageLoader`.
 private struct TranscriptVariantKey: EnvironmentKey {
   static let defaultValue: TranscriptVariant = .cards
-}
-
-private struct TranscriptDensityKey: EnvironmentKey {
-  static let defaultValue: TranscriptDensity = .comfortable
 }
 
 private struct TranscriptFontKey: EnvironmentKey {
@@ -253,11 +221,6 @@ extension EnvironmentValues {
   var transcriptVariant: TranscriptVariant {
     get { self[TranscriptVariantKey.self] }
     set { self[TranscriptVariantKey.self] = newValue }
-  }
-
-  var transcriptDensity: TranscriptDensity {
-    get { self[TranscriptDensityKey.self] }
-    set { self[TranscriptDensityKey.self] = newValue }
   }
 
   var transcriptFont: TranscriptFont {
@@ -275,8 +238,8 @@ extension TranscriptVariant {
 }
 
 extension View {
-  /// All three reader preferences in one modifier. They always travel together,
-  /// and `SessionView`'s body is long enough that another few links in its chain
+  /// Both reader preferences in one modifier. They always travel together, and
+  /// `SessionView`'s body is long enough that another few links in its chain
   /// put it over the type-checker's budget.
   ///
   /// The font is applied here as well as published: `fontDesign` is inherited by
@@ -286,7 +249,6 @@ extension View {
   /// view cannot leak into the list you reached it from.
   func transcriptPreferences(_ settings: AppSettings) -> some View {
     environment(\.transcriptVariant, settings.transcriptVariant)
-      .environment(\.transcriptDensity, settings.transcriptDensity)
       .environment(\.transcriptFont, settings.transcriptFont)
       .fontDesign(settings.transcriptFont.design)
   }
@@ -303,23 +265,16 @@ extension View {
 /// different app's input box.
 let lineTextUIStyle: UIFont.TextStyle = .subheadline
 
-/// The gap between two `cards` rows, per density - the whole of the density
-/// feature, since `TranscriptListView`'s `LazyVStack` spacing is the only
-/// vertical separation between rows that exists.
+/// The gap between two `cards` rows, since `TranscriptListView`'s `LazyVStack`
+/// spacing is the only vertical separation between rows that exists.
 ///
 /// Terminal returns 0 unconditionally: its rows are one line height apart by
 /// construction, and the blank line that separates *blocks* (not rows) is drawn
 /// per pair of blocks inside the terminal renderer itself, not by a container
-/// gap here - mirroring the web `ui` package, where density "reaches `cards`
-/// only" for the same reason.
-func transcriptRowGap(_ variant: TranscriptVariant, _ density: TranscriptDensity) -> CGFloat {
+/// gap here - mirroring the web `ui` package.
+func transcriptRowGap(_ variant: TranscriptVariant) -> CGFloat {
   switch variant {
-  case .cards:
-    switch density {
-    case .comfortable: 12
-    case .compact: 6
-    }
-  case .terminal:
-    0
+  case .cards: 12
+  case .terminal: 0
   }
 }

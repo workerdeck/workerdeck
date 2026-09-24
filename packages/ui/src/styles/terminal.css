@@ -436,50 +436,144 @@
 .term-hoverable {
   position: relative;
 }
-/* Pinned to the block's first line at its right edge. Absolute, so the rows
-   below are exactly where they would have been without it. */
-[data-terminal] .term-actions {
+/* `below` sits in the blank line (cards: the row gap) under the block; `inline`
+   pins to the block's first line at its right edge, for blocks with no blank
+   line beneath them. Absolute either way, so no row moves when they appear. */
+:is([data-terminal], [data-cards]) .term-actions {
   position: absolute;
-  top: 0;
-  right: 0;
-  height: var(--term-line);
+  z-index: 1;
   display: flex;
-  gap: 1ch;
-  padding-inline: 1ch;
-  background: var(--bg, transparent);
+  align-items: center;
   opacity: 0;
   transition: opacity var(--motion-fast, 120ms);
 }
-[data-terminal] .term-hoverable:hover .term-actions,
-[data-terminal] .term-hoverable:focus-within .term-actions {
+[data-terminal] .term-actions {
+  height: var(--term-line);
+  gap: 1ch;
+}
+[data-cards] .term-actions {
+  height: 20px;
+  gap: 6px;
+}
+:is([data-terminal], [data-cards]) [data-placement='below'] > .term-actions {
+  top: 100%;
+}
+[data-terminal] [data-placement='below'] > .term-actions {
+  left: var(--term-cell);
+}
+[data-cards] [data-placement='below'] > .term-actions {
+  left: 0;
+}
+:is([data-terminal], [data-cards]) [data-placement='inline'] > .term-actions {
+  top: 0;
+  right: 0;
+  padding-inline: 1ch;
+  background: var(--bg, transparent);
+}
+/* Only the innermost `below` block under the pointer shows its bar, so an
+   expanded chain does not light up its own and its parent's at once. */
+:is([data-terminal], [data-cards])
+  [data-placement='below']:is(:hover, :focus-within):not(:has([data-placement='below']:is(:hover, :focus-within)))
+  > .term-actions,
+:is([data-terminal], [data-cards]) [data-placement='inline']:is(:hover, :focus-within) > .term-actions {
   opacity: 1;
 }
+/* A virtualized row paints under the next one, whose top padding is the gap
+   the bar sits in; lift the hovered row so the bar stays clickable. */
+:is([data-terminal], [data-cards]) [data-slot='transcript-rows'] [data-index]:not(.absolute) {
+  position: relative;
+}
+:is([data-terminal], [data-cards]) [data-slot='transcript-rows'] [data-index]:is(:hover, :focus-within) {
+  z-index: 1;
+}
 @media (hover: none) {
-  /* No pointer to hover with: showing them always is the only way they exist at
-     all, and a phone has the room. */
-  [data-terminal] .term-actions {
+  :is([data-terminal], [data-cards]) .term-actions {
     opacity: 1;
   }
 }
-[data-terminal] .term-action {
+[data-cards] .term-action {
   font: inherit;
-  line-height: var(--term-line);
-  color: var(--term-dim);
-  background: none;
-  border: 0;
-  padding: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  height: 18px;
+  min-width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-inline: 5px;
+  color: var(--fg-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
   cursor: pointer;
 }
-/* The shell drill-in, in the same magenta as the row's `$`. */
+[data-cards] .term-action-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.25;
+  flex: none;
+}
+[data-cards] .term-action-word {
+  padding-right: 2px;
+}
+[data-cards] .term-action:hover,
+[data-cards] .term-action:focus-visible {
+  color: var(--fg-1);
+  background: var(--row-hover);
+}
+[data-cards] .term-action[data-tone='magenta'] {
+  color: var(--wd-shell-accent);
+}
+[data-cards] .term-action[data-tone='yellow'] {
+  color: var(--warning);
+}
+[data-cards] .term-action[data-tone='danger']:hover {
+  color: var(--danger);
+}
+[data-terminal] .term-action {
+  font: inherit;
+  font-weight: 500;
+  line-height: 1;
+  height: calc(var(--term-line) - 2px);
+  min-width: 3ch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6ch;
+  padding-inline: 0.6ch;
+  color: var(--term-dim);
+  background: var(--term-band-bg);
+  border: 1px solid color-mix(in srgb, var(--term-faint) 55%, transparent);
+  border-radius: 3px;
+  white-space: pre;
+  cursor: pointer;
+}
+[data-terminal] .term-action-icon {
+  width: calc(var(--term-font-size) + 1px);
+  height: calc(var(--term-font-size) + 1px);
+  stroke-width: 2.25;
+  flex: none;
+}
+[data-terminal] .term-action-word {
+  padding-right: 0.2ch;
+}
+[data-terminal] .term-action:hover,
+[data-terminal] .term-action:focus-visible {
+  color: var(--term-bright);
+  border-color: var(--term-dim);
+  background: var(--term-row-hover);
+}
 [data-terminal] .term-action[data-tone='magenta'] {
   color: var(--term-magenta);
 }
-/* A live grant on a user's shell: the agent may type into it. */
 [data-terminal] .term-action[data-tone='yellow'] {
   color: var(--term-yellow);
 }
-[data-terminal] .term-action:hover {
-  color: var(--term-fg);
+[data-terminal] .term-action[data-tone='danger']:hover {
+  color: var(--term-red);
 }
 
 /* What you typed, on a band of its own - the CLI's own treatment. */
@@ -718,7 +812,7 @@ button.term-link {
 [data-terminal] [data-sticky-lane] > [data-sticky-headlane] {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
 }
 

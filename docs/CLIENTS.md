@@ -33,7 +33,7 @@ editor's own cell**: `terminalMetrics` is resolved host-side from `editor.fontSi
 multiplier, else pixels - rounded, because a fractional cell puts every other row on a
 half-pixel), overridable per `workerdeck.terminal.fontSize`/`.lineHeight`, so the panel, the
 editor and the integrated terminal draw at one size. Everything the first paint needs is
-stamped on `#root` - variant, density, cell, affordances - and a change to any of them, or to
+stamped on `#root` - variant, cell, affordances - and a change to any of them, or to
 the two `editor.*` keys, re-renders the panel through the same `reloadWebview()` the dev
 reloader uses. The webview repoints `--cw-font-mono` at `--vscode-editor-font-family`
 unconditionally, which is what makes "the agent panel is in my editor font" true under a theme
@@ -728,13 +728,14 @@ under one id - `pending` while the engine summarises, settled when the boundary 
 row says it is working and then says what it did (`docs/GOTCHAS.md`). `TermFmt.compaction` is
 Swift's own port of `compactionText`, pinned by `TerminalTextTests` because there is no module
 the two sides can share.
-The three agent-view preferences are mirrored too (`AppSettings.swift`): variant and density as
-environment values the rows read, and the font as one `fontDesign` on the session view - with
-the composer's `UITextView` told separately, since UIKit sits outside SwiftUI's font
-environment. `lines` is **gone**, replaced by a native Swift **terminal** renderer
-(`App/Sources/Session/Terminal/` over `WorkerDeckKit/.../Terminal/`); a stored `lines`
-preference migrates to it rather than falling back to cards, because someone who turned boxes
-off should keep them off. Density and font stay Cards-only here as everywhere. The port carries
+The agent-view preferences are mirrored too (`AppSettings.swift`): variant as an environment
+value the rows read, and the font as one `fontDesign` on the session view - with the composer's
+`UITextView` told separately, since UIKit sits outside SwiftUI's font environment. `lines` is
+**gone**, replaced by a native Swift **terminal** renderer (`App/Sources/Session/Terminal/`
+over `WorkerDeckKit/.../Terminal/`); a stored `lines` preference migrates to it rather than
+falling back to cards, because someone who turned boxes off should keep them off. Density is
+gone everywhere - every client dropped it - and font stays Cards-only here, as it does on the
+web clients. The port carries
 the rules across - the two folds, the row-covers-a-*membership* addressing, the cell/wrap model,
 the strings that *are* the heights - and inverts one thing deliberately: **the planner wraps and
 the renderer draws the lines it returned**, so a row's height is `lines.count × line` by

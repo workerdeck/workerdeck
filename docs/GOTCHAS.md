@@ -2083,9 +2083,12 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   measures one element per item, so space between two items must be *part of* one of them or it
   goes unmeasured and the scrollbar drifts. Hence `term-row-gap` as padding on the measured
   wrapper, applied conditionally via `needsBlank` so a tool call and its output stay flush.
-- **Affordances must cost no layout.** The hover fill is a background and the copy actions are
-  absolutely positioned overlays one line tall, so `affordances={false}` changes no glyph's
-  position; a new affordance may not be added as anything that occupies space.
+- **Affordances must cost no layout.** The hover fill is a background and the action buttons are
+  absolutely positioned overlays one line tall, sitting in the blank line under their block, so
+  `affordances={false}` changes no glyph's position; a new affordance may not be added as anything
+  that occupies space. The bar overlaps the *next* virtual row's gap padding, and each virtual row
+  is its own stacking context (`transform`), so the hovered row must be lifted (`z-index: 1`) or
+  the next row swallows the click; the sticky head lane sits at `z-index: 2` to stay above that.
 - **`ch` is measured off the live surface, never derived from the font size.** `CellMetrics.ch` is
   the advance of `0` in px (7.83px at 13px JetBrains Mono, not `13 * 0.6`), read by `measureCh` from
   an absolutely positioned probe. Every wrap column count in `height.ts` divides by it, so a derived
@@ -2253,7 +2256,7 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
 - **The VS Code webview stamps its first paint into the HTML, and declares no `connect-src` at
   all.** Every byte to a gateway rides postMessage. `img-src` allows http(s) for inline images on
   keyless gateways only, because header auth cannot ride an `<img>`. Everything the first paint
-  needs (font mode, density, variant, terminal cell, affordances, panel font size) is stamped on
+  needs (font mode, variant, terminal cell, affordances, panel font size) is stamped on
   `<html>`/`#root` rather than pushed over the bridge, because a postMessage arrives one tick late
   and these values decide every row's height; changing any of them re-renders the HTML.
 - **The dashboard is a build artifact; the packages are not.** `pnpm dev:server` serves

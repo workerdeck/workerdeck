@@ -6,7 +6,14 @@ import { apiUrl } from './hosts.ts'
 import { isLocalHost } from './machine.ts'
 import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
-import { catchUpMode, panelFontSize, terminalAffordances, terminalMetrics, transcriptDensity, transcriptVariant } from './webview-html.ts'
+import {
+  catchUpMode,
+  panelFontSize,
+  terminalActionLabels,
+  terminalAffordances,
+  terminalMetrics,
+  transcriptVariant,
+} from './webview-html.ts'
 import { WebviewHost, type WebviewSurface } from './webview-host.ts'
 import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
@@ -90,12 +97,12 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   protected override rootAttrs(): Record<string, string> {
     const cell = terminalMetrics()
     return {
-      'data-density': transcriptDensity(),
       'data-variant': transcriptVariant(),
       'data-panel-font-size': String(panelFontSize()),
       'data-font-size': String(cell.fontSize),
       'data-line-height': String(cell.lineHeight),
       'data-affordances': terminalAffordances() ? 'on' : 'off',
+      'data-action-labels': terminalActionLabels() ? 'on' : 'off',
       'data-catch-up': catchUpMode() ? 'on' : 'off',
     }
   }

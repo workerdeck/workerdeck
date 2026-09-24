@@ -153,8 +153,8 @@ Every key is optional. The ones people actually change:
 | `workerdeck.host.shellAgentWrite` | `read-only` | With `shell` on: `gated` lets the agent start, type into and kill shells of its own behind a permission card; `allow` drops the card. |
 | `workerdeck.fontFamily` | `editor` | Typeface for the Agent panel: the editor font, or VS Code's UI font. |
 | `workerdeck.fontSize` | `0` | Panel font size. `0` follows the editor. |
-| `workerdeck.transcriptDensity` | `comfortable` | Row spacing in the transcript. |
 | `workerdeck.catchUpMode` | `true` | The recap row when you return to a session that moved on. |
+| `workerdeck.actionStyle` | `icons` | Hover actions under a message: icon-only, or icons with labels. |
 | `workerdeck.newSession.permissionMode` | `remember` | Permission mode for new sessions. `remember` follows your last one. |
 | `workerdeck.statusBar.*` | mixed | One toggle per status-bar badge: status, context, session usage, weekly usage, per-model usage, unread, subagents, model, mode. |
 

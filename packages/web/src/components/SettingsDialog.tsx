@@ -13,18 +13,18 @@ import {
 } from '@workerdeck/ui'
 import { ThemeToggle } from './shell/ThemeToggle.tsx'
 import {
+  getActionStyle,
   getFontSize,
   getCatchUp,
-  getTranscriptDensity,
   getTranscriptFont,
   getTranscriptVariant,
+  setActionStyle,
   setFontSize,
   setCatchUp,
-  setTranscriptDensity,
   setTranscriptFont,
   setTranscriptVariant,
+  type ActionStyle,
   type CatchUp,
-  type TranscriptDensity,
   type TranscriptFont,
   type TranscriptVariant,
 } from '@/lib/settings.ts'
@@ -124,33 +124,31 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 />
               </div>
               {variant === 'cards' ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-body-sm text-fg-2">Agent view density</span>
-                    <PrefSelect<TranscriptDensity>
-                      label="Agent view density"
-                      options={[
-                        { value: 'comfortable', label: 'Comfortable' },
-                        { value: 'compact', label: 'Compact' },
-                      ]}
-                      read={getTranscriptDensity}
-                      write={setTranscriptDensity}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-body-sm text-fg-2">Agent view font</span>
-                    <PrefSelect<TranscriptFont>
-                      label="Agent view font"
-                      options={[
-                        { value: 'sans', label: 'Regular' },
-                        { value: 'mono', label: 'Monospace' },
-                      ]}
-                      read={getTranscriptFont}
-                      write={setTranscriptFont}
-                    />
-                  </div>
-                </>
+                <div className="flex items-center justify-between">
+                  <span className="text-body-sm text-fg-2">Agent view font</span>
+                  <PrefSelect<TranscriptFont>
+                    label="Agent view font"
+                    options={[
+                      { value: 'sans', label: 'Regular' },
+                      { value: 'mono', label: 'Monospace' },
+                    ]}
+                    read={getTranscriptFont}
+                    write={setTranscriptFont}
+                  />
+                </div>
               ) : null}
+              <div className="flex items-center justify-between">
+                <span className="text-body-sm text-fg-2">Row actions</span>
+                <PrefSelect<ActionStyle>
+                  label="Row actions"
+                  options={[
+                    { value: 'icons', label: 'Icons' },
+                    { value: 'labeled', label: 'Icons and labels' },
+                  ]}
+                  read={getActionStyle}
+                  write={setActionStyle}
+                />
+              </div>
             </Section>
             <Section title="Sessions">
               <div className="flex items-center justify-between gap-4">

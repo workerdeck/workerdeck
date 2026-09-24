@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import type { TerminalAffordances } from './affordances.tsx'
-import { OpenSubagentAction, WithActions } from './affordances.tsx'
+import { ActionPlacementProvider, OpenSubagentAction, WithActions } from './affordances.tsx'
 import {
   AssistantRow,
   CompactionRow,
@@ -122,12 +122,16 @@ export function TaskRow({
       {open ? (
         <div className="term-nested">
           {brief ? <BriefRow text={brief} terminal /> : null}
-          {block.children.map((leaf, index) => (
-            <Fragment key={leaf.key}>
-              {index > 0 && blockNeedsBlank(block.children[index - 1]!, leaf) ? <Blank /> : null}
-              {'run' in leaf ? <RunRow items={leaf.run} /> : <TerminalItemView item={leaf.item} fileUrl={fileUrl} />}
-            </Fragment>
-          ))}
+          {block.children.map((leaf, index) => {
+            const next = block.children[index + 1]
+            const view = 'run' in leaf ? <RunRow items={leaf.run} /> : <TerminalItemView item={leaf.item} fileUrl={fileUrl} />
+            return (
+              <Fragment key={leaf.key}>
+                {index > 0 && blockNeedsBlank(block.children[index - 1]!, leaf) ? <Blank /> : null}
+                {next && !blockNeedsBlank(leaf, next) ? <ActionPlacementProvider value="inline">{view}</ActionPlacementProvider> : view}
+              </Fragment>
+            )
+          })}
         </div>
       ) : null}
     </div>
@@ -177,18 +181,23 @@ export function TerminalTranscript({ state, fileUrl, fontSize, lineHeight, affor
       className={cn('term-transcript', className)}
     >
       <PeerNamesProvider items={state.items}>
-        {blocks.map((block, index) => (
-          <Fragment key={block.key}>
-            {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
-            {'run' in block ? (
-              <RunRow items={block.run} />
-            ) : 'item' in block ? (
-              <TerminalItemView item={block.item} fileUrl={fileUrl} />
-            ) : (
-              <TaskRow block={block} fileUrl={fileUrl} />
-            )}
-          </Fragment>
-        ))}
+        {blocks.map((block, index) => {
+          const next = blocks[index + 1]
+          return (
+            <Fragment key={block.key}>
+              {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
+              <ActionPlacementProvider value={next && !blockNeedsBlank(block, next) ? 'inline' : 'below'}>
+                {'run' in block ? (
+                  <RunRow items={block.run} />
+                ) : 'item' in block ? (
+                  <TerminalItemView item={block.item} fileUrl={fileUrl} />
+                ) : (
+                  <TaskRow block={block} fileUrl={fileUrl} />
+                )}
+              </ActionPlacementProvider>
+            </Fragment>
+          )
+        })}
         {working(state) ? (
           <>
             {state.items.length > 0 ? <Blank /> : null}

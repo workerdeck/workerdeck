@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { Composer } from '../src/components/agent/Composer.tsx'
-import { TranscriptVariantProvider, TranscriptDensityProvider } from '../src/components/agent/transcript-variant.tsx'
+import { TranscriptVariantProvider } from '../src/components/agent/transcript-variant.tsx'
 
 function noop() {}
 
@@ -10,11 +10,9 @@ const meta: Meta<typeof Composer> = {
   decorators: [
     (Story) => (
       <TranscriptVariantProvider value="cards">
-        <TranscriptDensityProvider value="comfortable">
-          <div className="w-[480px]" data-theme="dark">
-            <Story />
-          </div>
-        </TranscriptDensityProvider>
+        <div className="w-[480px]" data-theme="dark">
+          <Story />
+        </div>
       </TranscriptVariantProvider>
     ),
   ],
@@ -68,11 +66,9 @@ export const InlineNarrow: Story = {
   decorators: [
     (Story) => (
       <TranscriptVariantProvider value="cards">
-        <TranscriptDensityProvider value="comfortable">
-          <div className="w-[320px]" data-theme="dark">
-            <Story />
-          </div>
-        </TranscriptDensityProvider>
+        <div className="w-[320px]" data-theme="dark">
+          <Story />
+        </div>
       </TranscriptVariantProvider>
     ),
   ],

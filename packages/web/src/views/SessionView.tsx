@@ -17,7 +17,7 @@ import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { Trash2 } from 'lucide-react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
-import { getCatchUp, getFontSize, getTranscriptDensity, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
+import { getActionStyle, getCatchUp, getFontSize, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { useBookmarks } from '@/hooks/useBookmarks.ts'
@@ -57,9 +57,9 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   const { bookmarks, toggle: toggleBookmark } = useBookmarks(hostId, sessionId)
   // Read once, at mount: re-reading it as the mark moves would walk the catch-up row down the transcript under the reader.
   const [unseen] = useState(() => (getCatchUp() === 'on' ? unseenSince(hostId, sessionId) : undefined))
-  const [density] = useState(getTranscriptDensity)
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
+  const [actionStyle] = useState(getActionStyle)
   const [panelFontSize] = useState(getFontSize)
   // Read once: the workspace owns the live value, and re-seeding mid-session would yank the splitter out from under a drag.
   const [rail] = useState(getRail)
@@ -110,8 +110,8 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       client={client}
       sessionId={sessionId}
       transcriptVariant={variant}
-      transcriptDensity={density}
       transcriptFont={font}
+      affordances={{ labels: actionStyle === 'labeled' }}
       fontSize={panelFontSize}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}
       reveal={reveal ? { toolUseId: reveal, nonce: rn ?? 0 } : undefined}

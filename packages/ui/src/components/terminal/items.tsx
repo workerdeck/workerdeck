@@ -1,11 +1,19 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import type { MessageOrigin } from '@workerdeck/protocol'
 import type { ShellItem, TranscriptItem } from '@workerdeck/react'
 import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { PromptTokenText } from '../agent/PromptTokenText.tsx'
-import { AgentWriteAction, BookmarkAction, CopyAction, KillShellAction, OpenShellAction, WithActions } from './affordances.tsx'
+import {
+  ActionPlacementProvider,
+  AgentWriteAction,
+  BookmarkAction,
+  CopyAction,
+  KillShellAction,
+  OpenShellAction,
+  WithActions,
+} from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { usePeerNames } from './peer-names.tsx'
@@ -347,8 +355,17 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
       </Pressable>
       {open ? (
         <div>
-          {items.map((item) => (
-            <ToolRow key={item.id} item={item} />
+          {items.map((item, index) => (
+            <Fragment key={item.id}>
+              {index > 0 ? <Blank /> : null}
+              {index < items.length - 1 ? (
+                <ActionPlacementProvider value="below">
+                  <ToolRow item={item} />
+                </ActionPlacementProvider>
+              ) : (
+                <ToolRow item={item} />
+              )}
+            </Fragment>
           ))}
         </div>
       ) : null}

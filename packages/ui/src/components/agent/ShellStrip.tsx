@@ -4,15 +4,8 @@ import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Ink, Row } from '../terminal/row.tsx'
 import { TerminalSurface } from '../terminal/surface.tsx'
-import {
-  SHELL_AGENT_WRITE_GLYPH,
-  shellAgentWriteLabel,
-  shellGrantable,
-  shellInfoFailed,
-  shellInfoStatusText,
-  shellTitle,
-} from '../terminal/shell-row.ts'
-import { AgentWriteAction, KillShellAction, WithActions } from '../terminal/affordances.tsx'
+import { shellAgentWriteLabel, shellGrantable, shellInfoFailed, shellInfoStatusText, shellTitle } from '../terminal/shell-row.ts'
+import { AgentWriteAction, AgentWriteIcon, KillShellAction, WithActions } from '../terminal/affordances.tsx'
 
 export interface ShellStripProps {
   shell: ShellInfo | undefined
@@ -40,6 +33,7 @@ export function ShellStrip({ shell, label, cols, onBack, onKill, onAgentWrite, t
     return (
       <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} className="shrink-0">
         <WithActions
+          placement="inline"
           actions={
             <>
               {grant && shell ? <AgentWriteAction granted={granted} label={shellAgentWriteLabel(shell)} onToggle={grant} /> : null}
@@ -81,7 +75,7 @@ export function ShellStrip({ shell, label, cols, onBack, onKill, onAgentWrite, t
           className={cn('shrink-0 text-label', granted ? 'text-warning' : 'text-fg-3 hover:text-fg-1')}
           onClick={grant}
         >
-          {SHELL_AGENT_WRITE_GLYPH}
+          <AgentWriteIcon granted={granted} className="size-3.5" />
         </button>
       ) : null}
       {running && onKill ? (

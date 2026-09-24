@@ -90,10 +90,10 @@ as anything that occupies space.
   behind a chip strip, ending in a review step, answerable entirely from `↑↓`, the digits and
   `esc`. No boxes means the affordance has to be carried by the keyboard, which is what a terminal
   does anyway.
-- **`transcriptDensity` and `transcriptFont` stop meaning anything.** A terminal has one line
-  height and is monospace by construction. Both are inert rather than broken under `terminal` - a
-  host that offers them as settings should say so, or hide them. (The dashboard hides them; the VS
-  Code extension documents them as Cards-only.)
+- **`transcriptFont` stops meaning anything.** A terminal has one line
+  height and is monospace by construction. It is inert rather than broken under `terminal` - a
+  host that offers it as a setting should say so, or hide it. (The dashboard hides it; the VS
+  Code extension documents it as Cards-only.)
 
 ## Where it is already on
 

@@ -17,8 +17,8 @@ export interface SessionWorkspaceProps {
   sessionId: string | undefined
   header?: SessionPanelProps['header']
   transcriptVariant?: SessionPanelProps['transcriptVariant']
-  transcriptDensity?: SessionPanelProps['transcriptDensity']
   transcriptFont?: SessionPanelProps['transcriptFont']
+  affordances?: SessionPanelProps['affordances']
   scrubber?: SessionPanelProps['scrubber']
   bookmarks?: SessionPanelProps['bookmarks']
   onToggleBookmark?: SessionPanelProps['onToggleBookmark']
@@ -54,8 +54,8 @@ export function SessionWorkspace({
   sessionId,
   header,
   transcriptVariant,
-  transcriptDensity,
   transcriptFont,
+  affordances,
   scrubber,
   bookmarks,
   onToggleBookmark,
@@ -217,8 +217,8 @@ export function SessionWorkspace({
             sessionId={sessionId}
             header={hoisted}
             transcriptVariant={transcriptVariant}
-            transcriptDensity={transcriptDensity}
             transcriptFont={transcriptFont}
+            affordances={affordances}
             scrubber={scrubber}
             bookmarks={bookmarks}
             onToggleBookmark={onToggleBookmark}

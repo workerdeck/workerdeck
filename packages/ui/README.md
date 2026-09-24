@@ -160,7 +160,7 @@ lose by forgetting a second mount isn't one.
 - **The panel owns the session's one attach.** External chrome reads live values through
   `onVitals` and changes them through `onControls`; opening a second attach to render a status bar
   means the tool bridge may ask the wrong client.
-- **`transcriptVariant` and `transcriptDensity` ride context, not props.** A row component composed
+- **`transcriptVariant` rides context, not a prop.** A row component composed
   by hand still gets the right treatment; restyling `data-slot`s from outside is not the seam.
 - **`statusSurface: 'external'` takes the `⋯` menu's only home with it.** Combining it with
   `panelSurface: 'internal'` needs a *function* `header` to receive the menu, or those panels
@@ -173,9 +173,9 @@ lose by forgetting a second mount isn't one.
   prompts and the composer each establish their own cell, because each sits in a different part of
   the flex column. `terminalMetrics` is one prop for exactly that reason: hand two of them
   different numbers and the caret lands on a different column from the text above it.
-- **`transcriptDensity` and `transcriptFont` reach `cards` only.** A terminal has one line height
-  and is monospace by construction. Under `terminal` both are inert rather than broken - a host
-  offering them as settings should say so, or hide them (the dashboard hides them).
+- **`transcriptFont` reaches `cards` only.** A terminal has one line height
+  and is monospace by construction. Under `terminal` it is inert rather than broken - a host
+  offering it as a setting should say so, or hide it (the dashboard hides it).
 - **`unseen` is catch-up mode's whole switch.** Passing a watermark draws the boundary, fades what
   was already read and offers the "N new rows since you were last here" bar; passing `undefined`
   draws none of it. The mark is frozen at mount, so it never walks down the transcript under the
@@ -227,7 +227,8 @@ lose by forgetting a second mount isn't one.
   would be authoritative-looking and wrong. A patch whose hunks all start at 0 (an approval, where
   the edit has not happened yet) renders *without* a number column rather than a column of zeroes.
 - **Affordances cost no layout, which is what makes `false` a real option.** The hover fill is a
-  background and the copy actions are absolutely-positioned overlays one line tall, so
+  background and the action buttons are absolutely-positioned overlays one line tall, in the blank
+  line under their block, so
   `affordances={false}` changes no glyph's position - it is the pure article, not a degraded mode.
 - **Keep `monaco-editor` unreachable from `src/index.ts`.** Tree-shaking does not cover it: Vite
   resolves Monaco's worker `new URL(...)`s while *transforming* the module, before shaking, and

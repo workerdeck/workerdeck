@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
-import { Button, SessionPanel, Toaster, usePathLinks, type PathHit, type SessionControls, type TerminalMetrics } from '@workerdeck/ui'
+import {
+  Button,
+  SessionPanel,
+  Toaster,
+  usePathLinks,
+  type PathHit,
+  type SessionControls,
+  type TerminalAffordances,
+  type TerminalMetrics,
+} from '@workerdeck/ui'
 import type { SurfaceState } from '../src/bridge-protocol.ts'
 import type { Bridge } from './bridge.ts'
 
@@ -49,7 +58,6 @@ function useBookmarks(sessionKey: string) {
 
 export function App({
   bridge,
-  density,
   variant,
   catchUp,
   terminalMetrics,
@@ -57,11 +65,10 @@ export function App({
   fontSize,
 }: {
   bridge: Bridge
-  density: 'comfortable' | 'compact'
   variant: 'terminal' | 'cards'
   catchUp: boolean
   terminalMetrics: TerminalMetrics
-  affordances: boolean
+  affordances: TerminalAffordances | boolean
   fontSize?: number
 }) {
   const [shown, setShown] = useState<Shown | undefined>(undefined)
@@ -183,7 +190,6 @@ export function App({
         openSubagent={openSubagent}
         reveal={reveal}
         stickyPrompt
-        transcriptDensity={density}
         panelSurface="external"
         controlsSurface="external"
         focusComposerOnClick

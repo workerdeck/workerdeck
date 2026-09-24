@@ -4,12 +4,6 @@ export function fontMode(): 'editor' | 'sans' {
   return vscode.workspace.getConfiguration('workerdeck').get<'editor' | 'sans'>('fontFamily') === 'sans' ? 'sans' : 'editor'
 }
 
-export function transcriptDensity(): 'comfortable' | 'compact' {
-  return vscode.workspace.getConfiguration('workerdeck').get<'comfortable' | 'compact'>('transcriptDensity') === 'compact'
-    ? 'compact'
-    : 'comfortable'
-}
-
 export function transcriptVariant(): 'terminal' | 'cards' {
   // Anything not `cards` resolves to `terminal`, which is what carries a settings file still holding the retired `lines` value.
   return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
@@ -36,6 +30,10 @@ export function terminalMetrics(): { fontSize: number; lineHeight: number } {
 
 export function terminalAffordances(): boolean {
   return vscode.workspace.getConfiguration('workerdeck').get<boolean>('terminal.affordances') !== false
+}
+
+export function terminalActionLabels(): boolean {
+  return vscode.workspace.getConfiguration('workerdeck').get<string>('actionStyle') === 'labeled'
 }
 
 export function webviewHtml(

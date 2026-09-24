@@ -417,10 +417,10 @@ export function activate(context: vscode.ExtensionContext): void {
       if (
         e.affectsConfiguration('workerdeck.fontSize') ||
         e.affectsConfiguration('workerdeck.fontFamily') ||
-        e.affectsConfiguration('workerdeck.transcriptDensity') ||
         e.affectsConfiguration('workerdeck.transcriptVariant') ||
         e.affectsConfiguration('workerdeck.catchUpMode') ||
         e.affectsConfiguration('workerdeck.terminal') ||
+        e.affectsConfiguration('workerdeck.actionStyle') ||
         e.affectsConfiguration('editor.fontSize') ||
         e.affectsConfiguration('editor.lineHeight')
       ) {

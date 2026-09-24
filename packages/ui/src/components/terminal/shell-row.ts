@@ -11,8 +11,6 @@ export const SHELL_MISSING = 'output expired or not tracked by this gateway'
 
 export const SHELL_AGENT_WRITE_NOTE = 'agent may type'
 
-export const SHELL_AGENT_WRITE_GLYPH = '⌨'
-
 // Only a running shell the user started takes a grant: the agent already drives its own.
 export function shellGrantable(shell: ShellInfo): boolean {
   return shell.status === 'running' && shell.owner === 'user'

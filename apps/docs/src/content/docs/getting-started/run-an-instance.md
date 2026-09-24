@@ -138,8 +138,8 @@ one raises a permission card that shows the command or the keystrokes verbatim, 
 only drive shells it started itself (a `$` of yours is refused by name), and every shell it
 starts is a row in the transcript and on the session card like your own. To drive one of yours,
 say a script waiting on a prompt, it calls `shell_request_write` with a reason: the card names
-the shell, and allowing it lets the agent type into and kill that shell until it ends. The ⌨
-action on the row, the drill-in strip and the session card grants the same thing without being
+the shell, and allowing it lets the agent type into and kill that shell until it ends. The robot
+action on the row (crossed out while the agent is read-only), the drill-in strip and the session card grants the same thing without being
 asked, and revokes it; the shell's status reads `agent may type` while the grant stands. A grant
 request always raises a card, `allow` included. `allow` drops the card
 (the engine's own permission mode still applies); `read-only` is the default. A session created

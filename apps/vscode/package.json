@@ -540,55 +540,55 @@
               "Cards"
             ]
           },
-          "workerdeck.transcriptDensity": {
-            "type": "string",
-            "enum": [
-              "comfortable",
-              "compact"
-            ],
-            "enumDescriptions": [
-              "A blank line between messages, like the Claude Code CLI.",
-              "No blank line - every row tight against the next."
-            ],
-            "default": "comfortable",
-            "order": 3,
-            "markdownDescription": "Vertical spacing between messages in the agent panel's Cards style (`#workerdeck.transcriptVariant#`). The Terminal style has one line height by definition and ignores this.",
-            "enumItemLabels": [
-              "Comfortable",
-              "Compact"
-            ]
-          },
           "workerdeck.catchUpMode": {
             "type": "boolean",
             "default": true,
             "description": "When you reopen a session, mark where you left off with a bar counting the rows that arrived since, and fade what you already read. Turn this off if you switch between sessions constantly and the marker is just noise.",
-            "order": 4
+            "order": 3
           },
           "workerdeck.fontSize": {
             "type": "number",
             "default": 0,
             "minimum": 0,
-            "order": 5,
+            "order": 4,
             "markdownDescription": "Font size for the agent panel in pixels - drives the overall scale of everything the panel draws (prompt, output, markdown, status bar) in both Cards and Terminal styles. 0 follows `editor.fontSize`. Rounded to whole pixels."
           },
           "workerdeck.terminal.fontSize": {
             "type": "number",
             "default": 0,
             "minimum": 0,
-            "order": 6,
+            "order": 5,
             "markdownDescription": "Font size for the agent panel's Terminal style, in pixels. `0` follows `#workerdeck.fontSize#`, then `editor.fontSize`. Rounded to whole pixels: a fractional cell puts every other row on a half-pixel."
           },
           "workerdeck.terminal.lineHeight": {
             "type": "number",
             "default": 0,
             "minimum": 0,
-            "order": 7,
+            "order": 6,
             "markdownDescription": "Line height for the agent panel's Terminal style. 0 follows `editor.lineHeight`; as there, a value under 8 is a multiple of the font size and anything else is pixels. Rounded to whole pixels."
           },
           "workerdeck.terminal.affordances": {
             "type": "boolean",
             "default": true,
-            "description": "In the Terminal style, allow the things a real terminal cannot do: fill the row under the pointer, and reveal a copy button on hover. Neither costs any layout, so turning them off moves nothing.",
+            "description": "In the Terminal style, allow the things a real terminal cannot do: fill the row under the pointer, and reveal action buttons (bookmark, copy, enter shell) on hover. Neither costs any layout, so turning them off moves nothing.",
+            "order": 7
+          },
+          "workerdeck.actionStyle": {
+            "type": "string",
+            "enum": [
+              "icons",
+              "labeled"
+            ],
+            "enumItemLabels": [
+              "Icons",
+              "Icons and labels"
+            ],
+            "enumDescriptions": [
+              "Icon-only buttons; the tooltip names each one.",
+              "Each button carries its name next to the icon."
+            ],
+            "default": "icons",
+            "description": "How the agent panel draws the hover actions under a message (bookmark, copy, enter shell), in both styles.",
             "order": 8
           }
         }

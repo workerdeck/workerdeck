@@ -29,7 +29,7 @@ function fenceLanguage(node: ReactNode): string | undefined {
 
 function CodeBand({ code, language }: { code: string; language?: string }) {
   return (
-    <WithActions className="term-block" actions={<CopyAction text={code} label="Copy code" />}>
+    <WithActions className="term-block" placement="inline" actions={<CopyAction text={code} label="Copy code" />}>
       <Band className="term-code" data-language={language}>
         <pre className="term-pre">{code}</pre>
       </Band>

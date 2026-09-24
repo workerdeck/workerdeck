@@ -60,7 +60,14 @@ export { TerminalQuestionPrompt, type TerminalQuestionPromptProps } from './comp
 export { TerminalDiff, previewPatch } from './components/terminal/diff.tsx'
 export { TerminalMarkdown, type TerminalMarkdownProps } from './components/terminal/markdown.tsx'
 export { Band, Blank, Ink, Row, type RowProps, type Tone } from './components/terminal/row.tsx'
-export { CopyAction, WithActions, useAffordances, type TerminalAffordances } from './components/terminal/affordances.tsx'
+export {
+  AgentWriteIcon,
+  CopyAction,
+  WithActions,
+  useAffordances,
+  type ActionPlacement,
+  type TerminalAffordances,
+} from './components/terminal/affordances.tsx'
 export { FileLinkProvider, useFileLinks, type FileLinkHandle, type FileLinkOpener } from './components/terminal/file-link.tsx'
 export { parseFileLink, type FileLink } from './lib/file-link.ts'
 export { matchPath, type PathHit, type PathMatch } from './lib/path-match.ts'
@@ -68,11 +75,8 @@ export { usePathLinks, resolveAgainstCwd } from './components/agent/use-path-lin
 export { Conversation, ConversationContent, ConversationScrollButton, type ConversationProps } from './components/agent/Conversation.tsx'
 export { Message, MessageContent, type MessageProps } from './components/agent/Message.tsx'
 export {
-  TranscriptDensityProvider,
   TranscriptVariantProvider,
-  useTranscriptDensity,
   useTranscriptVariant,
-  type TranscriptDensity,
   type TranscriptFont,
   type TranscriptVariant,
 } from './components/agent/transcript-variant.tsx'
@@ -138,7 +142,6 @@ export { ShellStrip, type ShellStripProps } from './components/agent/ShellStrip.
 export { useShellFrame, type ShellFrame, type ShellFrameOptions } from './components/agent/use-shell-frame.ts'
 export { ShellActionsProvider, useShellActions, type ShellActions } from './components/agent/shell-actions.tsx'
 export {
-  SHELL_AGENT_WRITE_GLYPH,
   SHELL_AGENT_WRITE_NOTE,
   SHELL_GLYPH,
   SHELL_KILL_GLYPH,

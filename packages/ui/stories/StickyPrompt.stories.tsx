@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
-import { TranscriptDensityProvider, TranscriptVariantProvider } from '../src/components/agent/transcript-variant.tsx'
+import { TranscriptVariantProvider } from '../src/components/agent/transcript-variant.tsx'
 
 function mockItems(): TranscriptItem[] {
   const items: TranscriptItem[] = []
@@ -119,38 +119,15 @@ export const Cards: Story = {
   decorators: [
     (Story) => (
       <TranscriptVariantProvider value="cards">
-        <TranscriptDensityProvider value="comfortable">
-          <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme="dark">
-            <Story />
-          </div>
-        </TranscriptDensityProvider>
+        <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme="dark">
+          <Story />
+        </div>
       </TranscriptVariantProvider>
     ),
   ],
   args: {
     state,
     variant: 'cards',
-    density: 'comfortable',
-    stickyPrompt: true,
-  },
-}
-
-export const CardsCompact: Story = {
-  decorators: [
-    (Story) => (
-      <TranscriptVariantProvider value="cards">
-        <TranscriptDensityProvider value="compact">
-          <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme="dark">
-            <Story />
-          </div>
-        </TranscriptDensityProvider>
-      </TranscriptVariantProvider>
-    ),
-  ],
-  args: {
-    state,
-    variant: 'cards',
-    density: 'compact',
     stickyPrompt: true,
   },
 }
@@ -159,11 +136,9 @@ export const Terminal: Story = {
   decorators: [
     (Story) => (
       <TranscriptVariantProvider value="terminal">
-        <TranscriptDensityProvider value="comfortable">
-          <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme="dark">
-            <Story />
-          </div>
-        </TranscriptDensityProvider>
+        <div style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }} data-theme="dark">
+          <Story />
+        </div>
       </TranscriptVariantProvider>
     ),
   ],

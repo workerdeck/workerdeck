@@ -12,27 +12,9 @@ export function useTranscriptVariant(): TranscriptVariant {
   return useContext(VariantContext)
 }
 
-export type TranscriptDensity = 'comfortable' | 'compact'
-
-const DensityContext = createContext<TranscriptDensity>('comfortable')
-
-export function TranscriptDensityProvider({ value, children }: { value: TranscriptDensity; children: ReactNode }) {
-  return <DensityContext.Provider value={value}>{children}</DensityContext.Provider>
-}
-
-export function useTranscriptDensity(): TranscriptDensity {
-  return useContext(DensityContext)
-}
-
 export type TranscriptFont = 'sans' | 'mono'
 
-export const ROW_GAP: Record<TranscriptVariant, Record<TranscriptDensity, { className?: string; px: number }>> = {
-  terminal: {
-    comfortable: { className: 'term-row-gap', px: 18 },
-    compact: { className: 'term-row-gap', px: 18 },
-  },
-  cards: {
-    comfortable: { className: 'pt-4', px: 16 },
-    compact: { className: 'pt-2', px: 8 },
-  },
+export const ROW_GAP: Record<TranscriptVariant, { className?: string; px: number }> = {
+  terminal: { className: 'term-row-gap', px: 18 },
+  cards: { className: 'pt-5', px: 20 },
 }

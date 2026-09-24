@@ -3,12 +3,7 @@ import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
 import { Transcript } from '../src/components/agent/Transcript.tsx'
 import { ToolTitleProvider } from '../src/components/agent/tool-titles.tsx'
-import {
-  TranscriptDensityProvider,
-  TranscriptVariantProvider,
-  type TranscriptDensity,
-  type TranscriptVariant,
-} from '../src/components/agent/transcript-variant.tsx'
+import { TranscriptVariantProvider, type TranscriptVariant } from '../src/components/agent/transcript-variant.tsx'
 
 function richItems(): TranscriptItem[] {
   const items: TranscriptItem[] = []
@@ -246,36 +241,32 @@ const state: TranscriptState = {
 
 function AgentViewShell({
   variant = 'cards',
-  density = 'comfortable',
   fontSize,
   children,
 }: {
   variant?: TranscriptVariant
-  density?: TranscriptDensity
   fontSize?: number
   children: React.ReactNode
 }) {
   return (
     <TranscriptVariantProvider value={variant}>
-      <TranscriptDensityProvider value={density}>
-        <ToolTitleProvider value={state.toolTitles}>
-          <div
-            data-slot="session-panel"
-            data-theme="dark"
-            style={
-              {
-                height: '100vh',
-                display: 'flex',
-                flexDirection: 'column',
-                background: 'var(--bg)',
-                ...(fontSize ? { '--wd-font-size': `${fontSize}px` } : {}),
-              } as React.CSSProperties
-            }
-          >
-            {children}
-          </div>
-        </ToolTitleProvider>
-      </TranscriptDensityProvider>
+      <ToolTitleProvider value={state.toolTitles}>
+        <div
+          data-slot="session-panel"
+          data-theme="dark"
+          style={
+            {
+              height: '100vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--bg)',
+              ...(fontSize ? { '--wd-font-size': `${fontSize}px` } : {}),
+            } as React.CSSProperties
+          }
+        >
+          {children}
+        </div>
+      </ToolTitleProvider>
     </TranscriptVariantProvider>
   )
 }
@@ -291,11 +282,6 @@ const meta: Meta<typeof Transcript> = {
       control: 'select',
       options: ['cards', 'terminal'],
       description: 'Transcript variant - chat bubbles or terminal lines',
-    },
-    density: {
-      control: 'select',
-      options: ['comfortable', 'compact'],
-      description: 'Row spacing (cards only)',
     },
     fontSize: {
       control: { type: 'range', min: 10, max: 20, step: 1 },
@@ -319,7 +305,6 @@ export default meta
 
 type AgentViewArgs = {
   variant: TranscriptVariant
-  density: TranscriptDensity
   fontSize: number | undefined
   stickyPrompt: boolean
   scrubber: boolean
@@ -330,11 +315,10 @@ type Story = StoryObj<AgentViewArgs>
 
 function Template(args: AgentViewArgs) {
   return (
-    <AgentViewShell variant={args.variant} density={args.density} fontSize={args.fontSize}>
+    <AgentViewShell variant={args.variant} fontSize={args.fontSize}>
       <Transcript
         state={state}
         variant={args.variant}
-        density={args.density}
         stickyPrompt={args.stickyPrompt}
         scrubber={args.scrubber}
         affordances={args.affordances}
@@ -348,7 +332,6 @@ export const Default: Story = {
   render: Template,
   args: {
     variant: 'cards',
-    density: 'comfortable',
     fontSize: undefined,
     stickyPrompt: false,
     scrubber: false,
@@ -360,7 +343,6 @@ export const Small: Story = {
   render: Template,
   args: {
     variant: 'cards',
-    density: 'comfortable',
     fontSize: 11,
     stickyPrompt: false,
     scrubber: false,
@@ -372,7 +354,6 @@ export const Large: Story = {
   render: Template,
   args: {
     variant: 'cards',
-    density: 'comfortable',
     fontSize: 16,
     stickyPrompt: false,
     scrubber: false,
@@ -384,7 +365,6 @@ export const TerminalSmall: Story = {
   render: Template,
   args: {
     variant: 'terminal',
-    density: 'comfortable',
     fontSize: 11,
     stickyPrompt: true,
     scrubber: true,
@@ -396,7 +376,6 @@ export const TerminalDefault: Story = {
   render: Template,
   args: {
     variant: 'terminal',
-    density: 'comfortable',
     fontSize: undefined,
     stickyPrompt: true,
     scrubber: true,

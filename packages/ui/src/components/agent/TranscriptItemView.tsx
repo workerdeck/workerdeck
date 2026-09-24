@@ -13,8 +13,8 @@ import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { peerLabel } from '../terminal/items.tsx'
 import { useShellActions } from './shell-actions.tsx'
+import { AgentWriteAction, BookmarkAction, CopyAction, KillShellAction, OpenShellAction, WithActions } from '../terminal/affordances.tsx'
 import {
-  SHELL_AGENT_WRITE_GLYPH,
   shellAgentWriteLabel,
   shellBodyLines,
   shellFailed,
@@ -81,31 +81,42 @@ export function TranscriptItemView({
   switch (item.kind) {
     case 'user': {
       return (
-        <Message from="user">
-          {item.origin ? <div className="wd-peer-origin text-xs text-muted-foreground">{peerLabel(item.origin)}</div> : null}
-          {item.attachments?.length ? <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} /> : null}
-          {item.text ? (
-            <MessageContent>
-              <PromptTokenText text={item.text} />
-            </MessageContent>
-          ) : null}
-        </Message>
+        <WithActions actions={<BookmarkAction id={item.id} />}>
+          <Message from="user">
+            {item.origin ? <div className="wd-peer-origin text-xs text-muted-foreground">{peerLabel(item.origin)}</div> : null}
+            {item.attachments?.length ? <SentAttachments attachments={item.attachments} attachmentUrl={attachmentUrl} /> : null}
+            {item.text ? (
+              <MessageContent>
+                <PromptTokenText text={item.text} />
+              </MessageContent>
+            ) : null}
+          </Message>
+        </WithActions>
       )
     }
     case 'assistant_text': {
       return (
-        <Message from="assistant">
-          <MessageContent>
-            <Response streaming={item.streaming}>{item.text}</Response>
-          </MessageContent>
-        </Message>
+        <WithActions
+          actions={
+            <>
+              <BookmarkAction id={item.id} />
+              {item.streaming ? null : <CopyAction text={item.text} label="Copy message" />}
+            </>
+          }
+        >
+          <Message from="assistant">
+            <MessageContent>
+              <Response streaming={item.streaming}>{item.text}</Response>
+            </MessageContent>
+          </Message>
+        </WithActions>
       )
     }
     case 'thinking': {
       return <Reasoning isStreaming={item.id === 'streaming-thinking'}>{item.text}</Reasoning>
     }
     case 'tool_call': {
-      return <ToolCallCard item={item} hostImage={hostImage} />
+      return <ToolCard item={item} hostImage={hostImage} />
     }
     case 'turn_result': {
       return <TurnResultRow item={item} />
@@ -128,6 +139,29 @@ export function TranscriptItemView({
   }
 }
 
+function ToolCard({
+  item,
+  hostImage,
+}: {
+  item: Extract<TranscriptItem, { kind: 'tool_call' }>
+  hostImage?: (path: string) => Promise<string | undefined>
+}) {
+  const command = (item.input as { command?: unknown } | null)?.command
+  const copyable = typeof command === 'string' ? command : (item.result?.text ?? '')
+  return (
+    <WithActions
+      actions={
+        <>
+          <BookmarkAction id={item.id} />
+          {copyable ? <CopyAction text={copyable} label="Copy" /> : null}
+        </>
+      }
+    >
+      <ToolCallCard item={item} hostImage={hostImage} />
+    </WithActions>
+  )
+}
+
 function ShellCard({ item }: { item: ShellItem }) {
   const [open, setOpen] = useState(false)
   const actions = useShellActions()
@@ -145,65 +179,50 @@ function ShellCard({ item }: { item: ShellItem }) {
   }, [running, shellId, verify])
 
   return (
-    <div data-slot="shell" className="overflow-hidden rounded-md border border-border bg-surface">
-      <div className="flex items-center gap-2 px-3 py-1.5">
-        <span className="font-mono text-label text-[var(--wd-shell-accent)]">$</span>
-        <button
-          type="button"
-          aria-expanded={open}
-          className="min-w-0 flex-1 truncate text-left font-mono text-label text-fg-1"
-          onClick={() => {
-            const next = !open
-            setOpen(next)
-            if (next && item.truncated && item.expanded === undefined && !item.missing) {
-              void actions.loadOutput(shellId)
-            }
-          }}
-        >
-          {shellLabel(item)}
-        </button>
-        <span className={cn('shrink-0 text-label', failed ? 'text-danger' : 'text-fg-4')}>{shellStatusText(item)}</span>
-        {actions.open ? (
+    <WithActions
+      actions={
+        <>
+          {actions.open ? <OpenShellAction onOpen={() => actions.open?.(shellId)} /> : null}
+          {actions.agentWrite && shellGrantable(item.shell) ? (
+            <AgentWriteAction
+              granted={item.shell.agentWrite === true}
+              label={shellAgentWriteLabel(item.shell)}
+              onToggle={() => void actions.agentWrite?.(shellId, item.shell.agentWrite !== true)}
+            />
+          ) : null}
+          {running ? <KillShellAction onKill={() => void actions.kill(shellId)} /> : null}
+          <BookmarkAction id={item.id} />
+          <CopyAction text={item.shell.command} label="Copy command" />
+        </>
+      }
+    >
+      <div data-slot="shell" className="overflow-hidden rounded-md border border-border bg-surface">
+        <div className="flex items-center gap-2 px-3 py-1.5">
+          <span className="font-mono text-label text-[var(--wd-shell-accent)]">$</span>
           <button
             type="button"
-            aria-label="Open terminal"
-            title="Open terminal"
-            className="shrink-0 text-label text-fg-3 hover:text-fg-1"
-            onClick={() => actions.open?.(shellId)}
+            aria-expanded={open}
+            className="min-w-0 flex-1 truncate text-left font-mono text-label text-fg-1"
+            onClick={() => {
+              const next = !open
+              setOpen(next)
+              if (next && item.truncated && item.expanded === undefined && !item.missing) {
+                void actions.loadOutput(shellId)
+              }
+            }}
           >
-            ⤢
+            {shellLabel(item)}
           </button>
+          <span className={cn('shrink-0 text-label', failed ? 'text-danger' : 'text-fg-4')}>{shellStatusText(item)}</span>
+        </div>
+        {lines.length > 0 ? (
+          <pre className="overflow-x-auto border-t border-border px-3 py-2 font-mono text-label whitespace-pre-wrap text-fg-2">
+            {lines.join('\n')}
+          </pre>
         ) : null}
-        {actions.agentWrite && shellGrantable(item.shell) ? (
-          <button
-            type="button"
-            aria-label={shellAgentWriteLabel(item.shell)}
-            aria-pressed={item.shell.agentWrite === true}
-            title={shellAgentWriteLabel(item.shell)}
-            className={cn('shrink-0 text-label', item.shell.agentWrite === true ? 'text-warning' : 'text-fg-3 hover:text-fg-1')}
-            onClick={() => void actions.agentWrite?.(shellId, item.shell.agentWrite !== true)}
-          >
-            {SHELL_AGENT_WRITE_GLYPH}
-          </button>
-        ) : null}
-        {running ? (
-          <button
-            type="button"
-            aria-label="Kill this shell"
-            className="shrink-0 text-label text-fg-3"
-            onClick={() => void actions.kill(shellId)}
-          >
-            ✕
-          </button>
-        ) : null}
+        {footer ? <div className="px-3 pb-2 text-label text-fg-4">{footer}</div> : null}
       </div>
-      {lines.length > 0 ? (
-        <pre className="overflow-x-auto border-t border-border px-3 py-2 font-mono text-label whitespace-pre-wrap text-fg-2">
-          {lines.join('\n')}
-        </pre>
-      ) : null}
-      {footer ? <div className="px-3 pb-2 text-label text-fg-4">{footer}</div> : null}
-    </div>
+    </WithActions>
   )
 }
 

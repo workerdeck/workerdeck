@@ -1343,8 +1343,16 @@ kept mounted far above the window - exactly when it is working - through the vir
 epoch's `virtualizer.measure()` wipe must re-feed mounted rows via `resizeItem` (after a
 measurement read rebuilds the array) or a row whose height survived a width change keeps its
 estimate forever and the transcript grows a phantom scrollable tail. `affordances` is the seam for what a real
-terminal *cannot* do (hover fill, hover-revealed copy) and every one of them costs no layout, so
-`false` is the pure article rather than a degraded mode. `terminalMetrics` is the cell, in whole
+terminal *cannot* do (hover fill, the hover-revealed action buttons) and every one of them costs no layout, so
+`false` is the pure article rather than a degraded mode. `affordances.labels` picks the button
+form: icon-only keycaps (default) or icon plus word, which the dashboard and VS Code expose as a
+setting. Actions sit in the **blank line under their block** (`WithActions` placement `below`);
+a block with no blank line under it (a tool row flush against the next) gets `inline`, pinned to
+its own first line's right edge, decided by `ActionPlacementProvider` from the same `gapBefore` /
+`blockNeedsBlank` rule that draws the blank. An expanded tool chain draws a blank line between
+its calls for that reason. Only the innermost `below` block under the pointer shows its bar, and
+a hovered virtual row is lifted a z-index so the bar, which overlaps the next row's gap padding,
+stays clickable. Code-band copy and the shell drill-in strip are always `inline`. The cards variant draws the same bar with app tokens instead of terminal ones (`[data-cards]`, set by `Transcript` on the non-terminal branch along with the affordance context), in its row gap, which is 20px for that reason; the shell card's open / grant / kill moved from its header into the bar. `terminalMetrics` is the cell, in whole
 pixels, and it is **one** prop because the panel mounts **three** terminal surfaces - transcript,
 pending prompts, composer - each in a different part of its flex column; hand two of them
 different numbers and the caret lands on a different column from the text above it, which is the
@@ -1398,27 +1406,21 @@ spans a whole multiple of the line; it is dev-only and unpublished (`files` is `
 (`transcript-variant.tsx`), not a prop chain, because the pieces that need it sit *outside* the
 transcript - the composer and the pending prompts, which are line items of the same run - and
 because a row component composed by hand gets the right treatment too.
-`transcriptDensity` is the sixth seam and rides its own
-context beside it - `'comfortable'` (default: one blank line between rows, what the Claude
-Code CLI leaves) or `'compact'`. Separate from the variant on purpose: the variant follows
-from the *surface*, density is the reader's *preference*. It reaches **`cards` only**: a
-terminal has one line height, which is the premise, so its spacing is a blank *line* decided
-per pair of blocks by `needsBlank`. `ROW_GAP` in `transcript-variant.tsx` is the whole feature - the
-gap goes on the virtualizer's **measured** wrapper, so no pixel constant is load-bearing and
-only `estimateSize` takes the `px` (scrollbar length before rows mount, replaced by a real
-measurement the moment one does). VS Code exposes it as `workerdeck.transcriptDensity`,
-stamped on `#root` like the font because it decides every row's height (`transcriptVariant`
-is stamped beside it, along with the cell and the affordances flag - the dock defaults to
-`terminal`, but it is a setting, not a
-hardcode). `transcriptFont` is the seventh seam and the one with **no JS at all**:
-`'sans'`/`'mono'`, one `data-agent-font` attribute on the panel root, and a rule in
-`theme.css` repointing `--cw-font-sans` at the mono stack for that subtree. A subtree rule
-rather than `:root` is the whole claim - a monospace agent view inside an ordinary app, so
-a host's sidebars and dialogs cannot pick it up. It too is **`cards` only**: the terminal
-theme is monospace by construction and takes its face from `--cw-font-mono` (which the VS Code
-webview repoints at the editor font, unconditionally, for exactly that reason). Clients that
-offer density and font as settings must say they are Cards-only or hide them - the dashboard
-hides them, the extension documents them.
+Row spacing under `'cards'` is a fixed `ROW_GAP` in `transcript-variant.tsx` rather than a
+setting - one blank line between rows, what the Claude Code CLI leaves. The gap goes on
+the virtualizer's **measured** wrapper, so no pixel constant is load-bearing and only
+`estimateSize` takes the `px` (scrollbar length before rows mount, replaced by a real
+measurement the moment one does). Under `'terminal'` there is no gap to set: a terminal
+has one line height, which is the premise, so its spacing is a blank *line* decided per
+pair of blocks by `needsBlank`. `transcriptFont` is the sixth seam and the one with **no
+JS at all**: `'sans'`/`'mono'`, one `data-agent-font` attribute on the panel root, and a
+rule in `theme.css` repointing `--cw-font-sans` at the mono stack for that subtree. A
+subtree rule rather than `:root` is the whole claim - a monospace agent view inside an
+ordinary app, so a host's sidebars and dialogs cannot pick it up. It is **`cards` only**:
+the terminal theme is monospace by construction and takes its face from `--cw-font-mono`
+(which the VS Code webview repoints at the editor font, unconditionally, for exactly that
+reason). Clients that offer font as a setting must say it is Cards-only or hide it - the
+dashboard hides it, the extension documents it.
 
 `unseen` is how a host turns catch-up mode on: pass the watermark and the panel draws the
 boundary, the faded rows above it and the "N new rows since you were last here" bar; pass
@@ -1810,7 +1812,7 @@ create is a decision you finish and return from, never a screen you navigate to)
 sheet, and a destination that spent the whole window on four rows of selects was the wrong
 trade; `/settings` survives as a redirect for bookmarks. What is left in it is only what this
 *browser* holds: theme and the agent-view preferences - style (Cards/Terminal), and, **only
-when the style is Cards**, density and font. Both are inert under the terminal theme (one line
+when the style is Cards**, font. It is inert under the terminal theme (one line
 height, monospace by construction), and a control that changes nothing is worse than an absent
 one: it invites you to keep pressing it. A stored `lines` migrates to `terminal` rather than
 falling back to `cards`, because someone who turned boxes off should keep them off. The run

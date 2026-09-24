@@ -12,18 +12,6 @@ export const MODEL_OPTIONS: ModelOption[] = [
 
 export type DefaultsKind = 'session' | 'job'
 
-export type TranscriptDensity = 'comfortable' | 'compact'
-
-const DENSITY_KEY = 'workerdeck.transcript-density'
-
-export function getTranscriptDensity(): TranscriptDensity {
-  return readPref(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'
-}
-
-export function setTranscriptDensity(density: TranscriptDensity): void {
-  writePref(DENSITY_KEY, density)
-}
-
 export type TranscriptVariant = 'cards' | 'terminal'
 
 const VARIANT_KEY = 'workerdeck.transcript-variant'
@@ -75,4 +63,16 @@ export function getCatchUp(): CatchUp {
 
 export function setCatchUp(mode: CatchUp): void {
   writePref(CATCH_UP_KEY, mode)
+}
+
+export type ActionStyle = 'icons' | 'labeled'
+
+const ACTION_STYLE_KEY = 'workerdeck.action-style'
+
+export function getActionStyle(): ActionStyle {
+  return readPref(ACTION_STYLE_KEY) === 'labeled' ? 'labeled' : 'icons'
+}
+
+export function setActionStyle(style: ActionStyle): void {
+  writePref(ACTION_STYLE_KEY, style)
 }
