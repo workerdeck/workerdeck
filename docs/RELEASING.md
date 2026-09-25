@@ -1341,9 +1341,18 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   prompt for argv-reaching changes, and the `$`-after-backspace composer fix. **Open, on purpose**:
   iOS has no grant toggle and no image viewer, and still offers nothing for density's removal
   beyond the picker going away; the `shells.test.ts` artifact cases fail intermittently on Linux CI,
-  which is a real node-pty output-loss race rather than test noise (`docs/GOTCHAS.md`), and the first
-  publish attempt failed on it and was re-run; and no WorkerDeck-authored prompt tells an agent it may answer with
+  which is a real node-pty output-loss race rather than test noise (`docs/GOTCHAS.md`); and no WorkerDeck-authored prompt tells an agent it may answer with
   `![](path)`, so today that is up to the operator's profile `instructions`.
+
+  **3.0.1** - **3.0.0, published.** Same content; **3.0.0 was never released**. Tag `v3.0.0` was
+  pushed and its publish workflow failed the CI gate twice on `shells.test.ts`'s `artifact` cases,
+  so nothing under that number reached npm or the Marketplace, and the registry goes 2.15.0 →
+  3.0.1. Do not publish a v3.0.0 after the fact (the 0.14.0 rule). The first attempt was the node-pty
+  exit race (`bytes: 4095`, see `docs/GOTCHAS.md`); the re-run hit a **test bug**: the cap case
+  `statSync`ed the raw file before `await shells.flush()`, and the artifact writes asynchronously,
+  so a loaded runner saw 0 bytes. The flush now comes first, and the `artifact` block runs with
+  `retry: 2` so the node-pty race stops blocking the gate. That retry keeps the gate usable and is
+  not a fix: the race is still open.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`

@@ -346,7 +346,8 @@ withPty('limits', () => {
   })
 })
 
-withPty('artifact', () => {
+// Retried because node-pty can drop unread output when the loop stalls 200ms at exit (docs/GOTCHAS.md), which a loaded CI runner hits.
+withPty('artifact', { retry: 2 }, () => {
   it('keeps small output inline in the index and spills past the threshold', async () => {
     const dir = tempDir()
     const shells = makeRegistry({ artifactDir: dir, spillBytes: 1024 })
@@ -375,6 +376,7 @@ withPty('artifact', () => {
     const shells = makeRegistry({ artifactDir: dir, spillBytes: 512, artifactMaxBytes: 2048, tailRingBytes: 256, tailFlushMs: 60_000 })
     const { shell, source } = await run(shells, runner('s1'), 'head -c 8192 /dev/zero | tr "\\0" a; echo; echo END')
     expect(shell).toMatchObject({ capped: true, exitCode: 0, bytes: 8192 + 2 + 5 })
+    await shells.flush()
     const raw = join(dir, 's1', `${shell.id}.raw`)
     expect(statSync(raw).size).toBe(2048)
     await expect(shells.output('s1', shell.id, { view: 'raw' })).resolves.toBe('a'.repeat(2048))

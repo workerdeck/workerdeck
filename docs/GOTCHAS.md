@@ -1347,8 +1347,9 @@ has the shape; these are the ways to get it wrong.
   the first 4095 bytes and settles the record `exited` with the rest gone. It shows as the
   `artifact` cases in `shells.test.ts` receiving `bytes: 4095` on a loaded CI runner (it failed the
   2.15.0 CI and the first 3.0.0 publish attempt), never on macOS, and it would bite a real gateway
-  stalled that long as a `$` finishes. Re-running is the workaround, and a re-run is not a fix: the
-  fix is to drain the fd on our side before settling, or to stop node-pty's destroy.
+  stalled that long as a `$` finishes. The `artifact` block runs with `retry: 2` so the gate stops
+  flaking on it, which hides the symptom and fixes nothing: the fix is to drain the fd on our side
+  before settling, or to stop node-pty's destroy.
 - **The artifact is on disk under `<stateDir>/shells/`, index per session, spill per shell.** Small
   outputs live inline in the index; `SHELL_SPILL_BYTES` decides. The cap stops the file, never the
   process; the tail ring keeps advancing. Without a state dir the index is memory-only and every
