@@ -722,9 +722,13 @@ const subagents: TranscriptItem[] = [
   }),
 ]
 
-// The playground supplies no image loader, so every box settles into its failure state - deliberate: all three states are one box of `IMAGE_BOX_LINES`.
+// The playground's loader draws every picture but sourceSeq 51, which stays in its failure state: all three states are one box of `IMAGE_BOX_LINES`.
 const images: TranscriptItem[] = [
-  item({ kind: 'user', text: 'Look at the three mockups and tell me which one holds up.' }),
+  item({
+    kind: 'user',
+    text: 'Look at the three mockups and tell me which one holds up.',
+    attachments: [{ id: 'att-sketch', name: 'sketch.png', mediaType: 'image/png', bytes: 88_000 }],
+  }),
   item({
     kind: 'tool_call',
     name: 'Read',
@@ -774,6 +778,20 @@ const images: TranscriptItem[] = [
   item({
     kind: 'assistant_text',
     text: 'Mockup A. The other two lose the header at narrow widths.',
+    streaming: false,
+    parentToolUseId: null,
+  }),
+  item({
+    kind: 'tool_call',
+    name: 'CodexImageGeneration',
+    input: { savedPath: '/Users/me/.codex/generated_images/header-fix.png' },
+    parentToolUseId: null,
+    status: 'settled',
+    result: { text: '', isError: false },
+  }),
+  item({
+    kind: 'assistant_text',
+    text: 'Here is the header fix I rendered:\n\n![header fix](design/header-fix.png)\n\nAnd one the host will not serve:\n\n![missing](/nope/missing.png)',
     streaming: false,
     parentToolUseId: null,
   }),

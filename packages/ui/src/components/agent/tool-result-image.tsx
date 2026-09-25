@@ -55,6 +55,46 @@ export function useToolResultImageSrc(ref: ToolResultImageRef): ToolResultImageS
   return state
 }
 
+export type HostImageLoader = (path: string) => Promise<string | undefined>
+
+const HostImageContext = createContext<HostImageLoader | undefined>(undefined)
+
+export function HostImageProvider({ value, children }: { value: HostImageLoader | undefined; children: ReactNode }) {
+  return <HostImageContext.Provider value={value}>{children}</HostImageContext.Provider>
+}
+
+export function useHostImageSrc(path: string | undefined, override?: HostImageLoader): ToolResultImageState {
+  const provided = useContext(HostImageContext)
+  const load = override ?? provided
+  const [state, setState] = useState<ToolResultImageState>({ failed: false })
+  useEffect(() => {
+    if (path === undefined) {
+      return
+    }
+    if (!load) {
+      setState({ failed: true })
+      return
+    }
+    let live = true
+    setState({ failed: false })
+    load(path)
+      .then((src) => {
+        if (live) {
+          setState({ src, failed: src === undefined })
+        }
+      })
+      .catch(() => {
+        if (live) {
+          setState({ failed: true })
+        }
+      })
+    return () => {
+      live = false
+    }
+  }, [load, path])
+  return state
+}
+
 const CACHE_BUDGET_BYTES = 64 * 1024 * 1024
 
 type Entry = { pending: Promise<string | undefined>; url?: string; bytes: number }

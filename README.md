@@ -123,6 +123,10 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **The host's files, in the trees sessions already run in.** Browse, read and fuzzy-search over
   your `--cwd-root` directories, so a remote client gets a real file tree instead of guessing at
   paths. Reading needs no extra grant; writing is a separate opt-in.
+- **Images in the transcript, from either engine.** A picture a tool returned (Claude reading a
+  PNG), an image codex generated or viewed, and a markdown image in the reply
+  (`![shot](/abs/path.png)`, served through the same host-file routes) all draw inline at a capped
+  size, in both views. Pressing one opens a viewer with fit and 1:1, zoom, pan and download.
 - **`$` for a shell, as in the CLI.** Type `$` first in the composer and the rest of the line runs
   on the host in the session's cwd, in a real terminal, with the output in the transcript and in
   the model's next context - no turn spent, no permission card, no rewording by the agent. Every

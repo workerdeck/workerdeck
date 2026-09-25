@@ -1263,6 +1263,18 @@ too much for any constant to be right and the calculator has no claim there. `de
 is the regression test and it measures against real browser layout, which is the only thing that
 can check this: jsdom has no text layout, so a unit test would check the calculator against its
 author's assumptions. The one genuinely unit-testable piece is `textLines`.
+**Images** draw inline in both themes, capped: a terminal box is `IMAGE_BOX_LINES` whole lines
+(the height calculator reserves one per tool-result image, one for a codex `CodexImageGeneration` /
+`CodexImageView` host path, and one for a markdown paragraph that is a lone `![](…)`; an image mixed
+into text flags the row inexact), a card image is capped by CSS. Three sources, one engine-agnostic
+route each: a tool result's `image_ref` (claude `Read` on a picture), a codex tool's host path, and a
+markdown image in the reply (either engine, `markdown-image.tsx`). Every loaded image is a
+`ViewableImage`, and pressing one opens the **viewer** (`image-viewer.tsx`): a sub-view laid over the
+panel (`absolute inset-0`, so its host must be positioned; `SessionPanel` is) with fit / 1:1, zoom
+steps, ctrl-wheel zoom anchored on the centre, drag-to-pan, Download, and Esc or the backdrop to
+leave. No `ImageViewerProvider` means images simply are not pressable; an embedding that mounts
+`Transcript` alone opts in by wrapping it.
+
 `scrubber` is the **overview ruler** (`terminal/scrubber.tsx`), VS Code's strip rather than its
 minimap: a **12px** rail replacing the scrollbar and **two 6px lanes that are channels, not
 classes** - left is what went *in* (your prompts, and **the sub-agents you dispatched**, green),

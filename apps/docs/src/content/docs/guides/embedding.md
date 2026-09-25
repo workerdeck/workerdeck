@@ -85,6 +85,10 @@ Five levels, from most batteries-included to most raw:
 1. **`SessionPanel`** (`@workerdeck/ui`) - status bar, streaming transcript, tool-call cards,
    permission prompts, composer. `<SessionPanel client={client} sessionId={session.id} />`.
    Untouched by the workspace and complete on its own; an app with its own file tree wants this.
+   Images in the transcript (tool results, codex's generated images, markdown images whose path the
+   gateway's `hostFiles` routes serve) open a full-panel viewer; the panel provides it. A host that
+   mounts `Transcript` on its own wraps it in `ImageViewerProvider` inside a positioned element to
+   get the same, and without one the images simply are not pressable.
 2. **Headless `useClaudeSession`** (`@workerdeck/react`) - the hook attaches to a session,
    folds the event stream through a pure transcript reducer, and hands back live state plus the
    control surface (send, approve/deny, interrupt, permission mode, model). Bring your own

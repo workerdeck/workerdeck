@@ -1374,7 +1374,16 @@ button.term-link {
   display: block;
   overflow: hidden;
 }
-.term-image > img {
+.term-image > [data-slot='viewable-image'] {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.term-image img {
+  display: block;
   max-width: 100%;
   height: 100%;
   object-fit: contain;

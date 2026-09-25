@@ -1,8 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, imagePlaceholder } from '../src/components/terminal/image-box.ts'
-import { itemHeight, type CellMetrics } from '../src/components/terminal/height.ts'
+import {
+  IMAGE_BOX_LINES,
+  IMAGE_UNAVAILABLE,
+  hostImagePathOf,
+  imagePlaceholder,
+  resultImageName,
+} from '../src/components/terminal/image-box.ts'
+import { itemHeight, markdownHeight, type CellMetrics } from '../src/components/terminal/height.ts'
 
 const m: CellMetrics = { width: 800, ch: 8, line: 18 }
 
@@ -70,6 +76,11 @@ describe('the box in the height calculator', () => {
     expect(patched([image(0)])).toBe(patched() + IMAGE_BOX_LINES * m.line)
   })
 
+  it('reserves one box for a codex image the tool left on the host', () => {
+    const generated = (name: string): TranscriptItem => ({ ...call(), name, input: { savedPath: '/tmp/g.png' } }) as TranscriptItem
+    expect(itemHeight(generated('CodexImageGeneration'), m).px).toBe(itemHeight(generated('Other'), m).px + IMAGE_BOX_LINES * m.line)
+  })
+
   it('costs nothing when the replay delivered no references', () => {
     expect(itemHeight(call(), m).px).toBe(itemHeight(call([]), m).px)
   })
@@ -79,7 +90,7 @@ describe('one spelling', () => {
   const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
   it('is what both the calculator and the renderer read', () => {
-    expect(source('../src/components/terminal/height.ts')).toContain("import { IMAGE_BOX_LINES } from './image-box.ts'")
+    expect(source('../src/components/terminal/height.ts')).toMatch(/import \{ IMAGE_BOX_LINES\b[^}]*\} from '\.\/image-box\.ts'/)
     const items = source('../src/components/terminal/items.tsx')
     expect(items).toContain("from './image-box.ts'")
     expect(items).toContain('`calc(var(--term-line) * ${IMAGE_BOX_LINES})`')
@@ -87,5 +98,28 @@ describe('one spelling', () => {
 
   it('is what the cards theme labels its frame with', () => {
     expect(source('../src/components/agent/ToolCallCard.tsx')).toContain("from '../terminal/image-box.ts'")
+  })
+})
+
+describe('a markdown image', () => {
+  it('costs one box when it stands alone on its line', () => {
+    const md = (body: string) => markdownHeight(`intro\n\n${body}`, m)
+    expect(md('![shot](/tmp/a.png)')).toEqual({ px: md('x').px - m.line + IMAGE_BOX_LINES * m.line, exact: true })
+  })
+
+  it('flags a line that mixes text and an image', () => {
+    expect(markdownHeight('see ![shot](/tmp/a.png) here', m).exact).toBe(false)
+  })
+})
+
+describe('image names', () => {
+  it('names a tool result image by tool, part and media type', () => {
+    expect(resultImageName('Read', { partIndex: 0, mediaType: 'image/jpeg' })).toBe('read-1.jpg')
+  })
+
+  it('reads the host path of codex image tools only', () => {
+    const item = { ...call(), name: 'CodexImageView', input: { path: '/tmp/v.png' } } as Extract<TranscriptItem, { kind: 'tool_call' }>
+    expect(hostImagePathOf(item)).toBe('/tmp/v.png')
+    expect(hostImagePathOf({ ...item, name: 'Read' })).toBeUndefined()
   })
 })

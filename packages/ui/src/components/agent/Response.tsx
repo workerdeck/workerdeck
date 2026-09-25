@@ -1,6 +1,11 @@
 import { memo } from 'react'
-import { Streamdown } from 'streamdown'
+import { Streamdown, type Components } from 'streamdown'
 import { cn } from '../../lib/utils.ts'
+import { MARKDOWN_REHYPE_PLUGINS, MarkdownImage } from './markdown-image.tsx'
+
+const COMPONENTS: Components = {
+  img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
+}
 
 export interface ResponseProps {
   children: string
@@ -16,6 +21,8 @@ export const Response = memo(
         parseIncompleteMarkdown={streaming}
         shikiTheme={['github-light', 'github-dark']}
         linkSafety={{ enabled: false }}
+        components={COMPONENTS}
+        rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
         className={cn('size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0', className)}
       >
         {children}

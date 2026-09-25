@@ -1947,6 +1947,19 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   `MOUNT_SETTLE_MS` (150ms) after a row mounts, with no `IntersectionObserver` beside it (the
   transcript is virtualized, a mounted row is already within an overscan of the viewport). A started
   load runs to completion; an aborted fetch re-pays the whole image on the return visit.
+- **A markdown image with a host path must be shielded from Streamdown before it can render.**
+  Streamdown's sanitize drops `file:` sources and its harden step blocks relative ones and re-roots
+  `./x.png` to `/x.png`, so `shieldLocalImages` (`markdown-image.tsx`) runs first and rewrites every
+  non-web `src` onto the reserved `https://local-image.invalid/` host; `MarkdownImage` decodes it,
+  resolves it against the session cwd with `parseFileLink`, and loads it through the same host-image
+  loader codex's generated images use. So it reaches only what `hostFiles` serves: a path outside the
+  roots draws `image unavailable`, never a fetch against the page origin. `data:` images stay dropped
+  by sanitize, as before. Both markdown renderers must pass `MARKDOWN_REHYPE_PLUGINS`: one that keeps
+  Streamdown's defaults silently loses every local image.
+- **The image viewer borrows the loader's URL; it never owns one.** `ImageViewerProvider` holds only
+  `{src, name}`, and the src is an object URL `useToolResultImages` may revoke on eviction while the
+  viewer is open. The decoded picture survives that; its Download link does not. At a 64 MB budget
+  this takes a very long session, so it is accepted rather than pinned.
 - **`truncateResults` cuts text, and text is not where the bytes are, measured.** A truncating
   attach on the reference session came out at 3,092 KB against 3,101 KB untruncated: 0.3%. Of 176
   `tool_result` blocks, only four held more than 8,000 characters of text (8 KB between them); the

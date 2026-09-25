@@ -35,10 +35,18 @@ export interface TerminalTranscriptProps {
   className?: string
 }
 
-export function TerminalItemView({ item, fileUrl }: { item: TranscriptItem; fileUrl?: (path: string) => string }) {
+export function TerminalItemView({
+  item,
+  fileUrl,
+  attachmentUrl,
+}: {
+  item: TranscriptItem
+  fileUrl?: (path: string) => string
+  attachmentUrl?: (attachmentId: string) => string
+}) {
   switch (item.kind) {
     case 'user': {
-      return <UserRow item={item} />
+      return <UserRow item={item} attachmentUrl={attachmentUrl} />
     }
     case 'assistant_text': {
       return <AssistantRow item={item} />

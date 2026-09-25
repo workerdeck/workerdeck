@@ -16,6 +16,20 @@ import { auditGrid, type GridReport } from './grid-audit.ts'
 import { auditHeights } from './height-audit.ts'
 import { perfSweep } from './perf-audit.ts'
 import { cn } from '../src/lib/utils.ts'
+import { ImageViewerProvider } from '../src/components/agent/image-viewer.tsx'
+import { ToolResultImageProvider, type ToolResultImageLoader } from '../src/components/agent/tool-result-image.tsx'
+
+function mockImage(label: string, width: number, height: number, hue: number): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 70% 55%)"/><stop offset="1" stop-color="hsl(${hue + 60} 70% 35%)"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><rect x="24" y="24" width="${width - 48}" height="64" rx="8" fill="rgba(255,255,255,.25)"/><text x="50%" y="55%" font-family="monospace" font-size="${Math.round(height / 10)}" fill="white" text-anchor="middle">${label} ${width}x${height}</text></svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+const mockResultImages: ToolResultImageLoader = async (ref) =>
+  ref.sourceSeq === 51 ? undefined : mockImage(`seq ${ref.sourceSeq}`, 1440, 900, ref.sourceSeq * 7)
+
+async function mockHostImage(path: string): Promise<string | undefined> {
+  return path.startsWith('/nope') ? undefined : mockImage(path.split('/').pop() ?? path, 2400, 1600, 200)
+}
 
 const PROMPTS = [
   { key: 'none', label: '-' },
@@ -464,81 +478,97 @@ export function App() {
       </aside>
 
       <main className="flex min-w-0 flex-1 justify-center overflow-auto">
-        <div ref={surface} className="flex h-[80vh] min-h-0 min-w-0 flex-1 flex-col" style={width ? { maxWidth: width } : undefined}>
-          <ShellActionsProvider value={shellActions}>
-            <Transcript
-              stickyPrompt
-              state={state}
-              variant="terminal"
-              fontSize={fontSize}
-              lineHeight={lineHeight}
-              affordances={affordances}
-              scrubber={scrub}
-              bookmarks={
-                fixture === 'huge'
-                  ? [state.items[30]?.id, state.items[210]?.id, state.items[480]?.id].filter((id) => id !== undefined)
-                  : undefined
-              }
-              replaying={replayHold}
-              catchUp={catchUp}
-              jumpToRecapRef={jumpRef}
-              repinRef={repinRef}
-              className={cn('min-h-0 flex-1', grid && 'term-grid-overlay')}
-            />
-          </ShellActionsProvider>
-          <TranscriptVariantProvider value="terminal">
-            <Composer
-              attachments={stagedAttachments}
-              commands={DEV_COMMANDS}
-              skills={DEV_SKILLS}
-              clientCommands={DEV_CLIENT_COMMANDS}
-              onSearchFiles={async (query) =>
-                ['src/index.ts', 'docs/GOTCHAS.md', 'packages/ui/src/components/agent/Composer.tsx']
-                  .filter((p) => p.includes(query))
-                  .map((p) => ({ path: `/repo/${p}`, relative: p }))
-              }
-              onShellCommand={(command) => {
-                setAnswered(`shell: ${command}`)
-                runShell(command)
-              }}
-              onSend={(text) => {
-                repinRef.current?.()
-                setAnswered(`sent: ${text}`)
-                sendFixture(text)
-              }}
-              onInterrupt={() => setAnswered('interrupted')}
-              busy={false}
-              fontSize={fontSize}
-              lineHeight={lineHeight}
-              affordances={affordances}
-            />
-          </TranscriptVariantProvider>
-          <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} affordances={affordances} bleed="1ch" className="term-transcript">
-            <TerminalStatusLine
-              state={state}
-              connection="live"
-              onOpenStatus={() => setAnswered('open status')}
-              onOpenContext={() => setAnswered('open context')}
-              onOpenUsage={() => setAnswered('open usage')}
-            />
-          </TerminalSurface>
-          {prompt === 'none' ? null : (
+        <div
+          ref={surface}
+          className="relative flex h-[80vh] min-h-0 min-w-0 flex-1 flex-col"
+          style={width ? { maxWidth: width } : undefined}
+        >
+          <ImageViewerProvider>
+            <ToolResultImageProvider value={mockResultImages}>
+              <ShellActionsProvider value={shellActions}>
+                <Transcript
+                  stickyPrompt
+                  state={state}
+                  variant="terminal"
+                  fontSize={fontSize}
+                  lineHeight={lineHeight}
+                  affordances={affordances}
+                  scrubber={scrub}
+                  bookmarks={
+                    fixture === 'huge'
+                      ? [state.items[30]?.id, state.items[210]?.id, state.items[480]?.id].filter((id) => id !== undefined)
+                      : undefined
+                  }
+                  replaying={replayHold}
+                  catchUp={catchUp}
+                  jumpToRecapRef={jumpRef}
+                  repinRef={repinRef}
+                  hostImage={mockHostImage}
+                  attachmentUrl={() => mockImage('sketch', 800, 1200, 30)}
+                  className={cn('min-h-0 flex-1', grid && 'term-grid-overlay')}
+                />
+              </ShellActionsProvider>
+            </ToolResultImageProvider>
+            <TranscriptVariantProvider value="terminal">
+              <Composer
+                attachments={stagedAttachments}
+                commands={DEV_COMMANDS}
+                skills={DEV_SKILLS}
+                clientCommands={DEV_CLIENT_COMMANDS}
+                onSearchFiles={async (query) =>
+                  ['src/index.ts', 'docs/GOTCHAS.md', 'packages/ui/src/components/agent/Composer.tsx']
+                    .filter((p) => p.includes(query))
+                    .map((p) => ({ path: `/repo/${p}`, relative: p }))
+                }
+                onShellCommand={(command) => {
+                  setAnswered(`shell: ${command}`)
+                  runShell(command)
+                }}
+                onSend={(text) => {
+                  repinRef.current?.()
+                  setAnswered(`sent: ${text}`)
+                  sendFixture(text)
+                }}
+                onInterrupt={() => setAnswered('interrupted')}
+                busy={false}
+                fontSize={fontSize}
+                lineHeight={lineHeight}
+                affordances={affordances}
+              />
+            </TranscriptVariantProvider>
             <TerminalSurface fontSize={fontSize} lineHeight={lineHeight} affordances={affordances} bleed="1ch" className="term-transcript">
-              {prompt === 'ask' ? (
-                <TerminalQuestionPrompt
-                  request={QUESTIONS}
-                  onAnswer={(_, input) => setAnswered(JSON.stringify(input.answers))}
-                  onDismiss={() => setAnswered('dismissed')}
-                />
-              ) : (
-                <TerminalPermissionPrompt
-                  request={prompt === 'edit' ? EDIT_APPROVAL : BASH_APPROVAL}
-                  onApprove={() => setAnswered('approved')}
-                  onDeny={(_, message, interrupt) => setAnswered(`denied${interrupt ? ' + stop' : ''}${message ? `: ${message}` : ''}`)}
-                />
-              )}
+              <TerminalStatusLine
+                state={state}
+                connection="live"
+                onOpenStatus={() => setAnswered('open status')}
+                onOpenContext={() => setAnswered('open context')}
+                onOpenUsage={() => setAnswered('open usage')}
+              />
             </TerminalSurface>
-          )}
+            {prompt === 'none' ? null : (
+              <TerminalSurface
+                fontSize={fontSize}
+                lineHeight={lineHeight}
+                affordances={affordances}
+                bleed="1ch"
+                className="term-transcript"
+              >
+                {prompt === 'ask' ? (
+                  <TerminalQuestionPrompt
+                    request={QUESTIONS}
+                    onAnswer={(_, input) => setAnswered(JSON.stringify(input.answers))}
+                    onDismiss={() => setAnswered('dismissed')}
+                  />
+                ) : (
+                  <TerminalPermissionPrompt
+                    request={prompt === 'edit' ? EDIT_APPROVAL : BASH_APPROVAL}
+                    onApprove={() => setAnswered('approved')}
+                    onDeny={(_, message, interrupt) => setAnswered(`denied${interrupt ? ' + stop' : ''}${message ? `: ${message}` : ''}`)}
+                  />
+                )}
+              </TerminalSurface>
+            )}
+          </ImageViewerProvider>
         </div>
       </main>
     </div>

@@ -2,7 +2,7 @@ import type { FilePatch, PatchHunk } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
-import { IMAGE_BOX_LINES } from './image-box.ts'
+import { IMAGE_BOX_LINES, hostImagePathOf } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { shellBodyLines, shellFooterText, shellHeaderText } from './shell-row.ts'
 import { todoLine, todoPreview } from './todos.ts'
@@ -59,6 +59,10 @@ export function measureCh(surface: HTMLElement): number {
   probe.remove()
   return width
 }
+
+const MARKDOWN_IMAGE = /!\[[^\]]*\]\([^)]*\)/
+
+const MARKDOWN_IMAGE_LINE = /^\s*!\[[^\]]*\]\([^)\s]+\)\s*$/
 
 const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' })
 
@@ -276,7 +280,8 @@ function stripInline(s: string): string {
 }
 
 type MdBlock =
-  | { t: 'p'; lines: string[] }
+  | { t: 'p'; lines: string[]; images: boolean }
+  | { t: 'image' }
   | { t: 'h'; text: string }
   | { t: 'fence'; code: string }
   | { t: 'list'; items: { lines: string[]; gutter: number; indent: number }[] }
@@ -302,11 +307,37 @@ function hardLines(source: string[]): string[] {
   return out
 }
 
+function isBlank(s: string | undefined): boolean {
+  return s !== undefined && s.trim() === ''
+}
+
+function listMarker(s: string): { depth: number; ordered: boolean; text: string } | undefined {
+  const m = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(s)
+  if (!m) {
+    return undefined
+  }
+  return { depth: Math.floor(m[1]!.length / 2), ordered: /\d/.test(m[2]!), text: m[3]! }
+}
+
+function numberHunk(hunk: PatchHunk): { number: number; text: string }[] {
+  let newLine = hunk.newStart
+  let oldLine = hunk.oldStart
+  return hunk.lines.map((line) => {
+    const kind = line.startsWith('+') ? 'add' : line.startsWith('-') ? 'remove' : 'context'
+    const text = line.slice(1)
+    const number = kind === 'add' ? newLine++ : kind === 'remove' ? oldLine++ : newLine
+    if (kind === 'context') {
+      oldLine++
+      newLine++
+    }
+    return { number, text }
+  })
+}
+
 function parseBlocks(md: string): MdBlock[] {
   const lines = md.split('\n')
   const blocks: MdBlock[] = []
   let i = 0
-  const isBlank = (s: string | undefined) => s !== undefined && s.trim() === ''
   while (i < lines.length) {
     const line = lines[i]!
     if (line.trim() === '') {
@@ -358,15 +389,6 @@ function parseBlocks(md: string): MdBlock[] {
       }
       blocks.push({ t: 'quote', paras })
       continue
-    }
-    const listMarker = (s: string) => {
-      const m = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(s)
-      if (!m) {
-        return undefined
-      }
-      const depth = Math.floor(m[1]!.length / 2)
-      const ordered = /\d/.test(m[2]!)
-      return { depth, ordered, text: m[3]! }
     }
     if (listMarker(line)) {
       const items: { lines: string[]; gutter: number; indent: number }[] = []
@@ -431,7 +453,11 @@ function parseBlocks(md: string): MdBlock[] {
       para.push(lines[i]!)
       i += 1
     }
-    blocks.push({ t: 'p', lines: hardLines(para) })
+    if (para.length === 1 && MARKDOWN_IMAGE_LINE.test(para[0]!)) {
+      blocks.push({ t: 'image' })
+    } else {
+      blocks.push({ t: 'p', lines: hardLines(para), images: para.some((row) => MARKDOWN_IMAGE.test(row)) })
+    }
   }
   return blocks
 }
@@ -449,8 +475,12 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
       case 'p': {
         for (const line of block.lines) {
           const r = textLines(line, cols)
-          acc = add(acc, { px: r.lines * m.line, exact: r.exact })
+          acc = add(acc, { px: r.lines * m.line, exact: r.exact && !block.images })
         }
+        break
+      }
+      case 'image': {
+        acc = add(acc, { px: IMAGE_BOX_LINES * m.line, exact: true })
         break
       }
       case 'h': {
@@ -512,21 +542,7 @@ export function markdownHeight(md: string, m: CellMetrics, extraPx = 0): Acc {
 }
 
 function diffHeight(patch: FilePatch, m: CellMetrics, extraPx = 0): Acc {
-  const walk = (hunk: PatchHunk) => {
-    let newLine = hunk.newStart
-    let oldLine = hunk.oldStart
-    return hunk.lines.map((line) => {
-      const kind = line.startsWith('+') ? 'add' : line.startsWith('-') ? 'remove' : 'context'
-      const text = line.slice(1)
-      const number = kind === 'add' ? newLine++ : kind === 'remove' ? oldLine++ : newLine
-      if (kind === 'context') {
-        oldLine++
-        newLine++
-      }
-      return { number, text }
-    })
-  }
-  const hunks = patch.hunks.map(walk)
+  const hunks = patch.hunks.map(numberHunk)
   const numbered = patch.hunks.some((hunk) => hunk.newStart > 0)
   const width = numbered ? String(Math.max(...hunks.flat().map((row) => row.number), 1)).length : 0
   const columns = numbered ? width + 3 : 2
@@ -551,9 +567,9 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
   let acc = rowH(`${item.name}(${preview})${backend}`, m, { gutterCells: 2, extraPx })
 
-  const images = item.result?.images
-  if (images?.length) {
-    acc = add(acc, { px: images.length * IMAGE_BOX_LINES * m.line, exact: true })
+  const boxes = (item.result?.images?.length ?? 0) + (hostImagePathOf(item) === undefined ? 0 : 1)
+  if (boxes > 0) {
+    acc = add(acc, { px: boxes * IMAGE_BOX_LINES * m.line, exact: true })
   }
 
   if (item.patch) {

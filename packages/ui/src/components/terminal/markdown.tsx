@@ -5,6 +5,7 @@ import { parseFileLink } from '../../lib/file-link.ts'
 import { CopyAction, WithActions } from './affordances.tsx'
 import { useFileLinks } from './file-link.tsx'
 import { Band } from './row.tsx'
+import { MARKDOWN_REHYPE_PLUGINS, MarkdownImage } from '../agent/markdown-image.tsx'
 
 function codeText(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === 'boolean') {
@@ -116,6 +117,7 @@ const TERMINAL_COMPONENTS: Components = {
   ),
   em: ({ children }) => <em className="term-em">{children}</em>,
   a: ({ children, href }) => <Link href={href}>{children}</Link>,
+  img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} terminal />,
 
   table: ({ children }) => (
     <div className="term-block term-table-wrap">
@@ -148,6 +150,7 @@ export const TerminalMarkdown = memo(
         parseIncompleteMarkdown={streaming}
         controls={false}
         components={TERMINAL_COMPONENTS}
+        rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
         className={cn('term-md', className)}
       >
         {children}

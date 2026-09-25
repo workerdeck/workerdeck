@@ -11,6 +11,7 @@ import { Response } from './Response.tsx'
 import { ToolCallCard } from './ToolCallCard.tsx'
 import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
+import { ViewableImage } from './image-viewer.tsx'
 import { peerLabel } from '../terminal/items.tsx'
 import { useShellActions } from './shell-actions.tsx'
 import { AgentWriteAction, BookmarkAction, CopyAction, KillShellAction, OpenShellAction, WithActions } from '../terminal/affordances.tsx'
@@ -76,7 +77,7 @@ export function TranscriptItemView({
   terminal?: boolean
 }) {
   if (terminal) {
-    return <TerminalItemView item={item} fileUrl={fileUrl} />
+    return <TerminalItemView item={item} fileUrl={fileUrl} attachmentUrl={attachmentUrl} />
   }
   switch (item.kind) {
     case 'user': {
@@ -273,7 +274,9 @@ function SentAttachments({
       {attachments.map((attachment) => {
         const href = attachmentUrl?.(attachment.id)
         return attachment.mediaType.startsWith('image/') && href ? (
-          <img key={attachment.id} src={href} alt={attachment.name} className="size-20 rounded-md border border-border object-cover" />
+          <ViewableImage key={attachment.id} image={{ src: href, name: attachment.name }} className="rounded-md">
+            <img src={href} alt={attachment.name} className="size-20 rounded-md border border-border object-cover" />
+          </ViewableImage>
         ) : (
           <span key={attachment.id} className="rounded-full border border-border bg-surface px-2.5 py-1 text-body-xs text-fg-3">
             {attachment.name}

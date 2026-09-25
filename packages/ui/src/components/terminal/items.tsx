@@ -18,11 +18,12 @@ import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { usePeerNames } from './peer-names.tsx'
 import { Pressable, useRevealOnOpen, type PressModifiers } from './press.tsx'
-import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, imagePlaceholder } from './image-box.ts'
+import { IMAGE_BOX_LINES, IMAGE_UNAVAILABLE, baseName, hostImagePathOf, imagePlaceholder, resultImageName } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
 import { useToolResultFetcher } from '../agent/tool-result-fetch.tsx'
 import { useToolTitle } from '../agent/tool-titles.tsx'
-import { useToolResultImageSrc } from '../agent/tool-result-image.tsx'
+import { useHostImageSrc, useToolResultImageSrc, type ToolResultImageState } from '../agent/tool-result-image.tsx'
+import { ViewableImage, useOpenImage } from '../agent/image-viewer.tsx'
 import { isPeerSend, peerName, peerOneLine, peerSendTarget, peerSendText, planRun, runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
 import { useShellActions } from '../agent/shell-actions.tsx'
@@ -118,13 +119,24 @@ export function PeerSendRow({ item }: { item: ToolCallItem }) {
   )
 }
 
-export function UserRow({ item }: { item: Extract<TranscriptItem, { kind: 'user' }> }) {
+export function UserRow({
+  item,
+  attachmentUrl,
+}: {
+  item: Extract<TranscriptItem, { kind: 'user' }>
+  attachmentUrl?: (attachmentId: string) => string
+}) {
   return (
     <WithActions actions={<BookmarkAction id={item.id} />}>
       <div className="term-user" data-peer={item.origin ? '' : undefined}>
         {item.attachments?.length ? (
           <Row glyph={PROMPT_GLYPH} glyphTone="dim" tone="dim">
-            {item.attachments.map((attachment) => attachment.name).join(', ')}
+            {item.attachments.map((attachment, index) => (
+              <Fragment key={attachment.id}>
+                {index > 0 ? ', ' : null}
+                <AttachmentName attachment={attachment} href={attachmentUrl?.(attachment.id)} />
+              </Fragment>
+            ))}
           </Row>
         ) : null}
         {item.text
@@ -212,6 +224,7 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
   const copyable = typeof command === 'string' ? command : text
   const todos = todoPreview(item.name, item.input)
   const title = useToolTitle(item.name)
+  const hostPath = hostImagePathOf(item)
 
   return (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
@@ -233,8 +246,9 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
             {item.backend && item.backend !== 'server' ? <Ink tone="faint"> · {item.backend}</Ink> : null}
           </Row>
         </Pressable>
+        {hostPath !== undefined ? <TerminalHostImage path={hostPath} /> : null}
         {item.result?.images?.map((image) => (
-          <TerminalImage key={image.partIndex} toolUseId={item.id} image={image} />
+          <TerminalImage key={image.partIndex} toolUseId={item.id} name={resultImageName(item.name, image)} image={image} />
         ))}
         {item.patch && !open ? (
           <TerminalDiff patch={item.patch} />
@@ -315,10 +329,39 @@ function TerminalTodos({ preview }: { preview: TodoPreview }) {
   )
 }
 
+function AttachmentName({ attachment, href }: { attachment: { name: string; mediaType: string }; href?: string }) {
+  const open = useOpenImage()
+  if (!open || !href || !attachment.mediaType.startsWith('image/')) {
+    return <>{attachment.name}</>
+  }
+  return (
+    <button
+      type="button"
+      className="term-press term-link"
+      onClick={(event) => {
+        event.stopPropagation()
+        open({ src: href, name: attachment.name })
+      }}
+    >
+      {attachment.name}
+    </button>
+  )
+}
+
 type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']>[number]
 
-function TerminalImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
-  const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
+function TerminalImage({ toolUseId, name, image }: { toolUseId: string; name: string; image: ToolResultImage }) {
+  const state = useToolResultImageSrc({ toolUseId, ...image })
+  return <TerminalImageBox state={state} name={name} placeholder={imagePlaceholder(image)} />
+}
+
+function TerminalHostImage({ path }: { path: string }) {
+  const state = useHostImageSrc(path)
+  return <TerminalImageBox state={state} name={baseName(path)} placeholder={baseName(path)} />
+}
+
+function TerminalImageBox({ state, name, placeholder }: { state: ToolResultImageState; name: string; placeholder: string }) {
+  const { src, failed } = state
   return (
     <Row indent={1} columns={3}>
       <div
@@ -327,9 +370,11 @@ function TerminalImage({ toolUseId, image }: { toolUseId: string; image: ToolRes
         style={{ height: `calc(var(--term-line) * ${IMAGE_BOX_LINES})` }}
       >
         {src ? (
-          <img src={src} alt={imagePlaceholder(image)} />
+          <ViewableImage image={{ src, name }}>
+            <img src={src} alt={name} />
+          </ViewableImage>
         ) : (
-          <Ink tone="faint">{failed ? IMAGE_UNAVAILABLE : imagePlaceholder(image)}</Ink>
+          <Ink tone="faint">{failed ? IMAGE_UNAVAILABLE : placeholder}</Ink>
         )}
       </div>
     </Row>

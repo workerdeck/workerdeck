@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { TranscriptItem } from '@workerdeck/react'
 import { ChevronDown, Clock } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
@@ -9,27 +9,17 @@ import { toolInputPreview } from '../../lib/format.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
 import { useToolResultFetcher } from './tool-result-fetch.tsx'
 import { useToolTitle } from './tool-titles.tsx'
-import { useToolResultImageSrc } from './tool-result-image.tsx'
-import { IMAGE_UNAVAILABLE, imagePlaceholder } from '../terminal/image-box.ts'
+import { useHostImageSrc, useToolResultImageSrc, type HostImageLoader } from './tool-result-image.tsx'
+import { ViewableImage } from './image-viewer.tsx'
+import { IMAGE_UNAVAILABLE, baseName, hostImagePathOf, imagePlaceholder, resultImageName } from '../terminal/image-box.ts'
 
 export type ToolCallItem = Extract<TranscriptItem, { kind: 'tool_call' }>
 
 const RESULT_PREVIEW_CHARS = 2000
 
-const IMAGE_TOOLS = new Set(['CodexImageGeneration', 'CodexImageView'])
-
-function imagePathOf(item: ToolCallItem): string | undefined {
-  if (!IMAGE_TOOLS.has(item.name)) {
-    return undefined
-  }
-  const input = item.input as { savedPath?: unknown; path?: unknown } | null
-  const path = input?.savedPath ?? input?.path
-  return typeof path === 'string' ? path : undefined
-}
-
 export interface ToolCallCardProps {
   item: ToolCallItem
-  hostImage?: (path: string) => Promise<string | undefined>
+  hostImage?: HostImageLoader
   className?: string
 }
 
@@ -106,7 +96,7 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
   const [fullResult, setFullResult] = useState(false)
   const [fetching, setFetching] = useState(false)
   const fetchResult = useToolResultFetcher()
-  const imagePath = imagePathOf(item)
+  const imagePath = hostImagePathOf(item)
   const status: Status = item.status ?? (item.result === undefined ? 'running' : 'settled')
   const badge = STATE_BADGE[status]
   const isError = status === 'failed' || item.result?.isError === true
@@ -155,12 +145,12 @@ export function ToolCallCard({ item, hostImage, className }: ToolCallCardProps) 
     </div>
   ) : null
 
-  const image = imagePath && hostImage ? <HostImage path={imagePath} load={hostImage} /> : null
+  const image = imagePath ? <HostImage path={imagePath} load={hostImage} /> : null
 
   const resultImages = item.result?.images?.length ? (
     <div className="flex flex-col gap-2 border-t border-border p-2.5">
       {item.result.images.map((ref) => (
-        <ResultImage key={ref.partIndex} toolUseId={item.id} image={ref} />
+        <ResultImage key={ref.partIndex} toolUseId={item.id} name={resultImageName(item.name, ref)} image={ref} />
       ))}
     </div>
   ) : null
@@ -209,12 +199,14 @@ function PlainPayload({ code, label, className }: { code: string; label: string;
 
 type ToolResultImage = NonNullable<NonNullable<ToolCallItem['result']>['images']>[number]
 
-function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResultImage }) {
+function ResultImage({ toolUseId, name, image }: { toolUseId: string; name: string; image: ToolResultImage }) {
   const { src, failed } = useToolResultImageSrc({ toolUseId, ...image })
   return (
     <div className="flex h-60 items-start overflow-hidden rounded-md border border-border bg-surface-hover">
       {src ? (
-        <img src={src} alt={imagePlaceholder(image)} className="h-full max-w-full object-contain" />
+        <ViewableImage image={{ src, name }} className="h-full max-w-full">
+          <img src={src} alt={name} className="h-full max-w-full object-contain" />
+        </ViewableImage>
       ) : (
         <span className="p-2 text-label text-fg-4">{failed ? IMAGE_UNAVAILABLE : imagePlaceholder(image)}</span>
       )}
@@ -222,32 +214,17 @@ function ResultImage({ toolUseId, image }: { toolUseId: string; image: ToolResul
   )
 }
 
-function HostImage({ path, load }: { path: string; load: (path: string) => Promise<string | undefined> }) {
-  const [src, setSrc] = useState<string | undefined>()
-  useEffect(() => {
-    let cancelled = false
-    setSrc(undefined)
-    load(path)
-      .then((url) => {
-        if (!cancelled) {
-          setSrc(url)
-        }
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [path, load])
+function HostImage({ path, load }: { path: string; load?: HostImageLoader }) {
+  const { src } = useHostImageSrc(path, load)
   if (!src) {
     return null
   }
+  const name = baseName(path)
   return (
     <div className="border-t border-border p-2.5">
-      <img
-        src={src}
-        alt={path.split('/').pop() ?? 'Generated image'}
-        className="max-h-96 w-auto max-w-full rounded-md border border-border"
-      />
+      <ViewableImage image={{ src, name }} className="block max-w-full">
+        <img src={src} alt={name} className="max-h-96 w-auto max-w-full rounded-md border border-border" />
+      </ViewableImage>
     </div>
   )
 }
