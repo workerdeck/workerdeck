@@ -5,6 +5,34 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.0.0] - 2026-09-25
+
+### Added
+
+- **Images open in a viewer.** A picture a tool returned, an image codex generated or viewed, an
+  image you attached, and a markdown image in the agent's reply all draw inline and open a viewer
+  over the panel: fit and 1:1, zoom, pinch and ctrl-wheel zoom around the cursor, drag to pan,
+  download, and `Esc` to leave. A markdown image may point at a file on the host
+  (`![shot](/abs/path.png)`); it loads through the gateway's host-file routes.
+- **The agent can use shells.** With `workerdeck.host.shellAgentWrite` it can start, type into and
+  kill shells of its own, each keystroke on a permission card, and ask to take over one of yours.
+  Grant or revoke that from the shell's row, strip or card.
+- **Settings in seven groups**, one `WorkerDeck: Open Settings` command, and a Restart Now offer
+  when a setting that reaches the local server's command line changes.
+
+### Changed
+
+- **Row actions live under the row.** Bookmark, copy, shell and sub-agent actions show on hover in
+  the blank line below each block; `workerdeck.actionStyle` adds labels beside the icons.
+
+### Removed
+
+- **`workerdeck.transcriptDensity`.** The compact density is gone from every client.
+
+### Fixed
+
+- Typing `$` after backspacing the composer empty enters shell mode again.
+
 ## [2.14.0] - 2026-09-23
 
 ### Added

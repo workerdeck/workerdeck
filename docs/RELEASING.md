@@ -1318,6 +1318,32 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   description, `examples/provider-server.ts` and the smoke README follow. Not verified: the
   direct-API id `claude-opus-5-5` has not been run against a live key through the provider engine.
 
+  **3.0.0** - **the agent drives shells, row actions move under the row, and images open.** A
+  **major** by the standing 1.0.0 rule, and the maintainer's call this time went with the rule: the
+  hover-bar commit removed `@workerdeck/ui`'s `TranscriptDensity`, `TranscriptDensityProvider`,
+  `useTranscriptDensity` and `SHELL_AGENT_WRITE_GLYPH` and the `transcriptDensity` / `density` props
+  on `SessionPanel`, `SessionWorkspace` and `Transcript`. Unlike the 2.1.0 exception, density had
+  been a public export since 0.12.0, so it was priced as a major. **Protocol stays 1**: the wire
+  only gained `SessionInfo.shellAgentWrite`, which is additive. Three strands. **Shells the agent
+  can use** (stage 4a + 4b of `SHELL-WRITE-PATH`): interactive detection and a headless xterm
+  behind `shell_read`'s `screen` view with `waitFor`, then `shell_run` / `shell_write` / `shell_kill`
+  on the agent's own shells behind `--shell-agent-write` (read-only by default, every keystroke on a
+  card under `gated`), and the takeover: `shell_request_write` asks for a user shell and always
+  raises a card, the operator grants or revokes from the row, strip and card
+  (`POST /sessions/:id/shells/:shellId/agent-write`), and claude resolves `shell_list` /
+  `shell_read` by policy. `smoke:shell-write` drives it on real claude and codex. **The hover
+  action bar**: bookmark, copy, shell and sub-agent actions move from each block's first line into
+  the blank line under it and show on hover, in both themes (`affordances.labels`, the dashboard's
+  "Row actions", `workerdeck.actionStyle`). **Images**: every image the transcript draws opens a
+  full-panel viewer (fit / 1:1, zoom, cursor-anchored pinch, pan, download), the terminal theme
+  now draws codex's host-path images, and a markdown image with a host path renders on either
+  engine through the `hostFiles` routes. Plus the extension's seven grouped settings with a restart
+  prompt for argv-reaching changes, and the `$`-after-backspace composer fix. **Open, on purpose**:
+  iOS has no grant toggle and no image viewer, and still offers nothing for density's removal
+  beyond the picker going away; the `shells.test.ts` cap case is still timing-flaky under a full
+  parallel run; and no WorkerDeck-authored prompt tells an agent it may answer with
+  `![](path)`, so today that is up to the operator's profile `instructions`.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
