@@ -1338,10 +1338,17 @@ has the shape; these are the ways to get it wrong.
   gateway stalled that long while a `$` finishes. The wrapper (`CTTY_WRAPPER`) opens `/dev/tty`
   once, then `exec`s the login shell under the same pid with the command as `$1`, so `argv[0]`, the
   exit code, the pid the kill paths hold and the command text all reach the login shell unchanged
-  and nothing is re-quoted; it costs about 2 ms per command. The ordering on our side was never the
-  problem: node-pty emits `exit` only after the master socket closes, so every byte that reached the
-  gateway is in the artifact before the record turns `exited`. The `drain` case in `shells.test.ts`
+  and nothing is re-quoted; it costs about 2 ms per command. The `drain` case in `shells.test.ts`
   stalls the loop past the deadline and fails on a direct spawn.
+- **node-pty drops unread output if the loop stalls 200 ms as a shell exits. Open, not fixed.** After
+  the child exits, `UnixTerminal` waits for the master socket's `close` for `DESTROY_SOCKET_TIMEOUT_MS`
+  (200 ms), then **destroys the socket** and emits `exit`, discarding whatever the kernel still held.
+  Linux lets a writer finish into the tty buffers well past 4 KB, so a starved event loop reads only
+  the first 4095 bytes and settles the record `exited` with the rest gone. It shows as the
+  `artifact` cases in `shells.test.ts` receiving `bytes: 4095` on a loaded CI runner (it failed the
+  2.15.0 CI and the first 3.0.0 publish attempt), never on macOS, and it would bite a real gateway
+  stalled that long as a `$` finishes. Re-running is the workaround, and a re-run is not a fix: the
+  fix is to drain the fd on our side before settling, or to stop node-pty's destroy.
 - **The artifact is on disk under `<stateDir>/shells/`, index per session, spill per shell.** Small
   outputs live inline in the index; `SHELL_SPILL_BYTES` decides. The cap stops the file, never the
   process; the tail ring keeps advancing. Without a state dir the index is memory-only and every

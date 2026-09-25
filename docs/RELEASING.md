@@ -1340,8 +1340,9 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   engine through the `hostFiles` routes. Plus the extension's seven grouped settings with a restart
   prompt for argv-reaching changes, and the `$`-after-backspace composer fix. **Open, on purpose**:
   iOS has no grant toggle and no image viewer, and still offers nothing for density's removal
-  beyond the picker going away; the `shells.test.ts` cap case is still timing-flaky under a full
-  parallel run; and no WorkerDeck-authored prompt tells an agent it may answer with
+  beyond the picker going away; the `shells.test.ts` artifact cases fail intermittently on Linux CI,
+  which is a real node-pty output-loss race rather than test noise (`docs/GOTCHAS.md`), and the first
+  publish attempt failed on it and was re-run; and no WorkerDeck-authored prompt tells an agent it may answer with
   `![](path)`, so today that is up to the operator's profile `instructions`.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
