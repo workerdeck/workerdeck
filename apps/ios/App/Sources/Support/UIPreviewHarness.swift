@@ -103,19 +103,21 @@ private struct SessionsPreview: View {
     id: String, title: String, status: SessionStatus = .running, unseen: Int = 0,
     engine: ProfileEngine = .claude, model: String = "claude-opus-5", profile: String? = nil,
     cost: Double? = nil, context: Double? = nil, pending: Int = 0,
-    subagents: [SubagentInfo]? = nil, hostName: String = "mini"
+    subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
+    shells: [ShellInfo]? = nil, hostName: String = "mini"
   ) -> SessionRow {
     let info = SessionInfo(
       id: id, status: status, cwd: "/Users/you/projects/workerdeck", profile: profile,
       engine: engine, model: model, createdAt: 0, lastSeq: 0, pendingPermissionCount: pending,
       title: title, totalCostUsd: cost,
       lastActivityAt: Date().timeIntervalSince1970 * 1000 - 4 * 60 * 1000,
-      subagents: subagents,
+      subagents: subagents, checklist: checklist,
       project: ProjectInfo(
         name: "WorkerDeck", root: "/Users/you/projects/workerdeck", icon: .glyph(name: "layers")),
       contextUsage: context.map {
         ContextReading(totalTokens: Int($0 * 2_000), maxTokens: 200_000, percentage: $0)
-      })
+      },
+      shells: shells)
     return SessionRow(
       hostId: hostId.uuidString, hostName: hostName, local: true, adapter: engine.rawValue,
       state: sessionState(info), info: info, unseen: unseen)
@@ -141,6 +143,37 @@ private struct SessionsPreview: View {
     ]
   }
 
+  private static var checklist: [ChecklistItem] {
+    [
+      ChecklistItem(text: "Read the runner", status: .completed),
+      ChecklistItem(text: "Rewrite the fold", status: .inProgress),
+      ChecklistItem(text: "Update the docs", status: .pending),
+    ]
+  }
+
+  private static var now: Double { Date().timeIntervalSince1970 * 1000 }
+
+  private static var server: [ShellInfo] {
+    [
+      ShellInfo(
+        id: "sh1", sessionId: "3", ordinal: 1, command: "pnpm dev --port 4179",
+        label: "pnpm dev --port 4179", cwd: "/Users/you/projects/workerdeck", status: .running,
+        startedAt: now - 60_000),
+      ShellInfo(
+        id: "sh2", sessionId: "3", ordinal: 2, command: "pnpm test", label: "pnpm test",
+        cwd: "/Users/you/projects/workerdeck", status: .exited, startedAt: now - 50_000,
+        endedAt: now - 20_000, exitCode: 1, endReason: .exit),
+    ]
+  }
+
+  private static var background: [SubagentInfo] {
+    agents + [
+      SubagentInfo(
+        toolUseId: "bg", description: "node packages/cli/cli.ts --port 4179", status: .running,
+        startedAt: 0, toolCount: 0, stoppable: true)
+    ]
+  }
+
   private struct Item: Identifiable {
     let row: SessionRow
     var id: String { row.info.id }
@@ -149,8 +182,14 @@ private struct SessionsPreview: View {
   private var items: [Item] {
     [
       Item(row: Self.row(id: "1", title: "Session 1 Title", unseen: 5, context: 34, subagents: Self.agents)),
-      Item(row: Self.row(id: "2", title: "Session 2 Title", status: .idle, unseen: 3, context: 62)),
-      Item(row: Self.row(id: "3", title: "Session 3 Title", unseen: 5, context: 34, subagents: Self.agents)),
+      Item(
+        row: Self.row(
+          id: "2", title: "Session 2 Title", status: .idle, unseen: 3, context: 62,
+          checklist: Self.checklist)),
+      Item(
+        row: Self.row(
+          id: "3", title: "Session 3 Title", unseen: 5, context: 34, subagents: Self.background,
+          checklist: Self.checklist, shells: Self.server)),
       Item(
         row: Self.row(
           id: "4", title: "Rework the transcript reducer so replay holds across reconnects",
@@ -166,8 +205,13 @@ private struct SessionsPreview: View {
     ]
   }
 
-  @State private var subagents: SubagentDisplay = .active
+  @State private var config = ViewConfig.default
   @State private var path: [SessionRoute] = []
+
+  private func steps(_ row: SessionRow) -> [Step] {
+    sessionSteps(
+      row.info, config.subagents, now: Self.now, shells: config.shells, tasks: config.tasks)
+  }
 
   var body: some View {
     NavigationStack(path: $path) {
@@ -182,20 +226,23 @@ private struct SessionsPreview: View {
               Button { } label: { Label("Rename", systemImage: "pencil") }
               Button(role: .destructive) { } label: { Label("Close", systemImage: "xmark.circle") }
             })
-          ForEach(sessionSteps(item.row.info, subagents)) { step in
-            NavigationLink(value: Self.route(for: item.row, step: step)) {
-              SessionStepRow(step: step)
-            }
-            .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
+          .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps(item.row).isEmpty))
+          .listRowSeparator(steps(item.row).isEmpty ? .automatic : .hidden, edges: .bottom)
+          SessionStepRows(row: item.row, steps: steps(item.row)) { step in
+            step.killable ? {} : nil
           }
         }
       }
       .listStyle(.plain)
+      .environment(\.defaultMinListRowHeight, SessionStepRow.height)
       .navigationTitle("Sessions")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(id: "subagents", placement: .topBarTrailing) {
-          SubagentMenu(subagents: $subagents)
+        ToolbarItem(id: "search", placement: .topBarTrailing) {
+          Button {} label: { Label("Search", systemImage: "magnifyingglass") }
+        }
+        ToolbarItem(id: "filter", placement: .topBarTrailing) {
+          FilterMenu(config: $config, hosts: [], adapters: ["claude", "codex"], projects: [])
         }
       }
       .navigationDestination(for: SessionRoute.self) { route in
@@ -394,7 +441,7 @@ private struct StepsPreview: View {
   private static let hostId = UUID()
 
   var body: some View {
-    let steps = sessionSteps(Self.session)
+    let steps = sessionSteps(Self.session, .all, tasks: .all)
     // Inside a stack, and each row is the `NavigationLink` the list gives it -
     // a bare `SessionStepRow` is a *simpler* composition than the app ships, and
     // where a press goes is half of what these rows are for. The destination
@@ -409,18 +456,17 @@ private struct StepsPreview: View {
             ) {
               SessionStepRow(step: step)
             }
-            .listRowInsets(EdgeInsets(top: 4, leading: 42, bottom: 4, trailing: 16))
+            .listRowInsets(SessionStepRow.insets)
           }
         } header: {
-          Text("\(steps.count) agents only")
+          Text("\(steps.count) steps")
         } footer: {
           Text(
             """
             Expected, top to bottom: Explore (green, spinner, 7) · Plan (RED, alarm, 2) · \
-            general-purpose (green, tick, no count). The three untyped records in the fixture \
-            draw nothing at all - they are tasks, and tasks live in the session's own Tasks \
-            sheet. No row's own marker is an arrow: the trailing chevron is the list's, and \
-            every row here pushes its agent.
+            general-purpose (green, tick, no count), then the three untyped records as tasks \
+            in dispatch order (grey tick, grey spinner, RED alarm). An agent frames its \
+            takeover; a task reveals its tool call.
             """)
         }
       }
@@ -683,22 +729,6 @@ private struct PromptsPreview: View {
 }
 
 struct UIPreviewHarness: View {
-  private static var checklist: [ChecklistItem] {
-    [
-      ChecklistItem(text: "Read the runner", status: .completed),
-      ChecklistItem(text: "Rewriting the fold", status: .inProgress),
-      ChecklistItem(text: "Update the docs", status: .pending),
-    ]
-  }
-
-  private static var tasks: [SubagentInfo] {
-    [
-      SubagentInfo(
-        toolUseId: "t1", description: "Fix release build", status: .running, startedAt: 0,
-        toolCount: 2)
-    ]
-  }
-
   let variant: UIPreview
   /// Editing a fixture and watching it land is the whole point of this screen.
   @HotReloaded private var hot
@@ -958,9 +988,7 @@ struct UIPreviewHarness: View {
           onOpenMode: {},
           onOpenContext: {},
           onOpenUsage: {},
-          onOpenInfo: {},
-          tasks: sessionTasks(checklist: Self.checklist, subagents: Self.tasks),
-          onOpenTasks: {})
+          onOpenInfo: {})
           .padding(.horizontal, 12)
         Spacer()
       }

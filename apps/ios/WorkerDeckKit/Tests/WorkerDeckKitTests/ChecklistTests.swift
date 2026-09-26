@@ -111,4 +111,16 @@ struct ChecklistTests {
     #expect(visibleTasks(tasks, showCompleted: false).map(\.label) == ["b", "broke"])
     #expect(visibleTasks(tasks, showCompleted: true).count == 3)
   }
+
+  @Test("only a running spawn the engine names stoppable is stoppable")
+  func stoppable() {
+    let tasks = sessionTasks(
+      checklist: nil,
+      subagents: [
+        SubagentInfo(toolUseId: "a", status: .running, startedAt: 0, toolCount: 0, stoppable: true),
+        SubagentInfo(toolUseId: "b", status: .done, startedAt: 0, toolCount: 0, stoppable: true),
+        SubagentInfo(toolUseId: "c", status: .running, startedAt: 0, toolCount: 0),
+      ])
+    #expect(tasks.map(\.stoppable) == [true, false, false])
+  }
 }

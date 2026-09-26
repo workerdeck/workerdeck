@@ -90,11 +90,26 @@ public func promotedShells(_ info: SessionInfo, now: Double) -> [ShellInfo] {
   }
 }
 
-/// How much of a session's sub-agent list its card draws. A layout preference,
-/// not a facet filter, so `clearFilters` preserves it the way it preserves
-/// grouping and sort. Mirror of protocol's `SubagentDisplay`.
-public enum SubagentDisplay: String, Codable, Sendable, Hashable, CaseIterable {
+/// How much of one of a card's child lists (agents, shells, tasks) it draws. A
+/// layout preference, not a facet filter, so `clearFilters` preserves it the way
+/// it preserves grouping and sort. Mirror of protocol's `StepDisplay`.
+public enum StepDisplay: String, Codable, Sendable, Hashable, CaseIterable {
   case all, active, none
+}
+
+public typealias SubagentDisplay = StepDisplay
+
+/// `.active` is ``promotedShells``; `.all` adds every shell that has ended,
+/// whatever its exit. Mirror of protocol's `visibleShells`.
+public func visibleShells(_ info: SessionInfo, _ show: StepDisplay, now: Double) -> [ShellInfo] {
+  switch show {
+  case .none: return []
+  case .active: return promotedShells(info, now: now)
+  case .all:
+    return (info.shells ?? []).filter {
+      $0.status != .running || now - $0.startedAt >= WorkerProtocol.shellPromoteMs
+    }
+  }
 }
 
 /// A failed sub-agent is not a completed one: `.active` keeps it, because it is
@@ -187,13 +202,15 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
   public var scoped: Bool
   public var groupBy: GroupBy
   public var sortBy: SortBy
-  public var subagents: SubagentDisplay
+  public var subagents: StepDisplay
+  public var shells: StepDisplay
+  public var tasks: StepDisplay
 
   public init(
     search: String = "", gateways: [String] = [], adapters: [String] = [],
     states: [SessionState] = [], projects: [String] = [], scoped: Bool = true,
     groupBy: GroupBy = .state, sortBy: SortBy = .recent,
-    subagents: SubagentDisplay = .active
+    subagents: StepDisplay = .active, shells: StepDisplay = .active, tasks: StepDisplay = .active
   ) {
     self.search = search
     self.gateways = gateways
@@ -204,6 +221,8 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     self.groupBy = groupBy
     self.sortBy = sortBy
     self.subagents = subagents
+    self.shells = shells
+    self.tasks = tasks
   }
 
   /// Mirror of `DEFAULT_VIEW_CONFIG`.
@@ -231,14 +250,21 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     sortBy =
       (try c.decodeIfPresent(String.self, forKey: .sortBy)).flatMap { SortBy(rawValue: $0) }
       ?? .recent
-    subagents =
-      (try c.decodeIfPresent(String.self, forKey: .subagents)).flatMap {
-        SubagentDisplay(rawValue: $0)
-      } ?? .active
+    subagents = try Self.display(c, .subagents)
+    shells = try Self.display(c, .shells)
+    tasks = try Self.display(c, .tasks)
+  }
+
+  private static func display(
+    _ c: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys
+  ) throws -> StepDisplay {
+    (try c.decodeIfPresent(String.self, forKey: key)).flatMap { StepDisplay(rawValue: $0) }
+      ?? .active
   }
 
   private enum CodingKeys: String, CodingKey {
-    case search, gateways, adapters, states, projects, scoped, groupBy, sortBy, subagents
+    case search, gateways, adapters, states, projects, scoped, groupBy, sortBy, subagents, shells,
+      tasks
   }
 }
 
@@ -684,5 +710,21 @@ public func clearFilters(_ config: ViewConfig) -> ViewConfig {
   next.groupBy = config.groupBy
   next.sortBy = config.sortBy
   next.subagents = config.subagents
+  next.shells = config.shells
+  next.tasks = config.tasks
   return next
+}
+
+/// How many facets are narrowing the list - the filter button's count. Search
+/// and scope are not facets. Mirror of protocol's `facetFilterCount`.
+public func facetFilterCount(_ config: ViewConfig) -> Int {
+  [config.gateways.isEmpty, config.adapters.isEmpty, config.states.isEmpty, config.projects.isEmpty]
+    .filter { !$0 }.count
+}
+
+/// Whether any of the three card displays is off its default - the other half
+/// of what fills the filter glyph. Mirror of protocol's `displayCustomized`.
+public func displayCustomized(_ config: ViewConfig) -> Bool {
+  let d = ViewConfig.default
+  return config.subagents != d.subagents || config.shells != d.shells || config.tasks != d.tasks
 }

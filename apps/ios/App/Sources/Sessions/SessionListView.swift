@@ -23,6 +23,9 @@ struct SessionListView: View {
   /// so an editable label inside one fights the tap that opens the session.
   @State private var pendingRename: SessionRow?
   @State private var renameText = ""
+  /// The search bar is shown on request, like the dashboard's; closing it
+  /// clears the query, so a hidden search can never be what empties the list.
+  @State private var searchOpen = false
 
   /// Restarting identity for the poll loop: any of these changing means the
   /// current loop is polling for the wrong world (or should not run at all).
@@ -300,7 +303,9 @@ struct SessionListView: View {
                 .tint(.accentColor)
               }
               .contextMenu { rowActions(for: row, model: model) }
-              stepRows(for: row, show: model.config.subagents)
+              .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps(for: row, model: model).isEmpty))
+              .listRowSeparator(steps(for: row, model: model).isEmpty ? .automatic : .hidden, edges: .bottom)
+              stepRows(for: row, model: model)
             }
           }
         } header: {
@@ -311,7 +316,8 @@ struct SessionListView: View {
       }
     }
     .listStyle(.plain)
-    .searchable(text: $model.config.search, placement: .navigationBarDrawer(displayMode: .automatic))
+    .environment(\.defaultMinListRowHeight, SessionStepRow.height)
+    .modifier(SessionSearch(open: $searchOpen, text: $model.config.search))
     .refreshable { await model.refresh() }
   }
 
@@ -393,42 +399,35 @@ struct SessionListView: View {
 
   // MARK: - Step lines
 
-  /// One row per step, **agents first** and **all of them pressable** - the
-  /// order and the kind both come from the kit's `sessionSteps`, which is the
-  /// same derivation the dashboard and the extension draw from.
-  ///
-  /// Rows rather than a stack inside the session row: a full-width list row is
-  /// a real thumb target where a line inside a two-line row is not, and it
-  /// keeps every target its own frame.
-  ///
-  /// **What a press means is what tells the two kinds apart**, and that is the
-  /// whole of it. An *agent* has work of its own, so it opens that agent's
-  /// takeover. A *task* is a reference to a place in this transcript, so it
-  /// opens the session and travels to that tool call's row (`reveal:`). A task
-  /// used to be drawn inert here, on the argument that there was nowhere to
-  /// send it - but there always was, and a row that looks like a list item,
-  /// sits in a list, and does nothing under a thumb is the worse lie. Both are
-  /// `NavigationLink`s to the same case with different payloads, so this is one
-  /// row shape with one destination type, not a variant branch inside a row.
-  @ViewBuilder
-  private func stepRows(for row: SessionRow, show: SubagentDisplay) -> some View {
-    // `now` at the body pass, which is what decides whether a shell has lasted
-    // long enough to earn a line. The list re-derives on every poll, so the
-    // debounce and the linger both advance without a timer of their own.
-    ForEach(sessionSteps(row.info, show, now: Date().timeIntervalSince1970 * 1000)) { step in
-      let route = UUID(uuidString: row.hostId).map {
-        SessionRoute.step(hostId: $0, sessionId: row.info.id, step: step)
-      }
-      Group {
-        if let route {
-          NavigationLink(value: route) { SessionStepRow(step: step) }
-        } else {
-          // No gateway id to route to - a shape this list has never actually
-          // produced, but the row still draws rather than vanishing.
-          SessionStepRow(step: step)
-        }
-      }
-      .listRowInsets(EdgeInsets(top: 4, leading: 40, bottom: 4, trailing: 16))
+  /// The steps a card draws, under the list's three display settings. `now` at
+  /// the body pass decides whether a shell has lasted long enough to earn a
+  /// line; the list re-derives on every poll, so that advances without a timer.
+  private func steps(for row: SessionRow, model: SessionListModel) -> [Step] {
+    sessionSteps(
+      row.info, model.config.subagents, now: Date().timeIntervalSince1970 * 1000,
+      shells: model.config.shells, tasks: model.config.tasks)
+  }
+
+  /// One list row per step, in the kit's order: agents, tasks, shells. Rows
+  /// rather than a stack inside the card, because a full-width row is a real
+  /// thumb target and a line inside a two-line row is not. The press follows
+  /// the kind (`SessionRoute.step`).
+  private func stepRows(for row: SessionRow, model: SessionListModel) -> some View {
+    SessionStepRows(row: row, steps: steps(for: row, model: model)) {
+      kill($0, row: row, model: model)
+    }
+  }
+
+  private func kill(_ step: Step, row: SessionRow, model: SessionListModel) -> (() -> Void)? {
+    guard step.killable else { return nil }
+    switch step.kind {
+    case .shell:
+      return { Task { await model.killShell(row, shellId: step.key) } }
+    case .task:
+      guard let toolUseId = step.toolUseId else { return nil }
+      return { Task { await model.stopTask(row, toolUseId: toolUseId) } }
+    case .agent:
+      return nil
     }
   }
 
@@ -523,11 +522,11 @@ struct SessionListView: View {
         Label("Settings", systemImage: "gearshape")
       }
     }
-    ToolbarItem(id: "subagents", placement: .topBarTrailing) {
-      Group {
-        if let model {
-          SubagentMenu(subagents: Binding(get: { model.config.subagents }, set: { model.config.subagents = $0 }))
-        }
+    ToolbarItem(id: "search", placement: .topBarTrailing) {
+      Button {
+        searchOpen.toggle()
+      } label: {
+        Label("Search", systemImage: "magnifyingglass")
       }
     }
     ToolbarItem(id: "filter", placement: .topBarTrailing) {
@@ -571,5 +570,38 @@ struct SessionListView: View {
 
   private func seed(for host: Host) -> CreateSessionSeed {
     CreateSessionSeed(cwd: model?.context(for: host.id)?.recentCwds.first ?? "")
+  }
+}
+
+/// The list's search bar, drawn only while it is open. `.searchable` has no
+/// hidden state of its own, so the bar comes and goes with the modifier. Its
+/// Cancel closes it, and closing clears the query.
+private struct SessionSearch: ViewModifier {
+  @Binding var open: Bool
+  @Binding var text: String
+  @State private var active = false
+
+  func body(content: Content) -> some View {
+    Group {
+      if open {
+        content
+          .searchable(
+            text: $text, isPresented: $active,
+            placement: .navigationBarDrawer(displayMode: .always), prompt: "Search sessions")
+          // Opened by the button (the query is always empty then): focus it.
+          // Reopened for a persisted query: show it, leave the keyboard down.
+          .onAppear { if text.isEmpty { active = true } }
+          .onChange(of: active) { _, now in
+            if !now { open = false }
+          }
+      } else {
+        content
+      }
+    }
+    .onChange(of: open) { _, now in
+      if !now { text = "" }
+    }
+    // A query persisted from an earlier launch must stay visible.
+    .onAppear { if !text.isEmpty { open = true } }
   }
 }

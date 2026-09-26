@@ -1667,17 +1667,12 @@ agent's own work, so an agent can be the selected thing and `StepRow`'s `active`
 `--row-selected`. Dispatch order - the only order these records carry that means anything -
 survives the filter untouched.
 
-The card used to draw **tasks here too**, and that is what this section is a record of. Both kinds
-shared one disclosure and one badge, so `7/9` could not say whether the 7 were sub-agents or tasks;
-it needed two seams (`onSelectSubagent` for an agent, `onRevealStep` for a task) because framing a
-task's tool-use id matched nothing under `subagentItems` and drew an **empty agent view**. The fix
-was not a third affordance but a **scope**: the card is a list surface and keeps the list question,
-and tasks moved to the selected session's own Tasks surface, where `sessionTasks` unifies them with
-the engine's checklist. `Step.kind`, `Step.State.pending` and `onRevealStep` went with them - a
-`ui` major, taken rather than leaving a prop accepted and ignored. The **reveal chain itself
-survives** and only changed producer: the web's `?reveal=`/`rn`, the extension's
-`wd-reveal-tool-use`, and iOS's `SessionRoute.session(…, reveal:)` are now driven from inside the
-Tasks surface. `onSelectSubagent` is **optional**, and its absence is not a missing feature: a host
+The card once drew tasks beside its agents under one disclosure and one badge, so `7/9` could not
+say which were which, and framing a task's tool-use id as an agent drew an **empty agent view**.
+Tasks then moved to a per-session Tasks surface; they are back under the card now, but as their own
+`Step.kind` (`task`) with their own destination, never through the agent seam: a spawn reveals its
+tool call (`?reveal=`/`rn` on the web, `wd-reveal-tool-use` in the extension, `reveal:` on iOS),
+and a checklist item opens the session. `onSelectSubagent` is **optional**, and its absence is not a missing feature: a host
 that cannot frame an agent has nothing more to offer than opening the session, which is what the
 fallback does.
 It draws **projects** the way the extension's

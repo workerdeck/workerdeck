@@ -1,10 +1,11 @@
 import WorkerDeckKit
 import SwiftUI
 
-/// The three facets plus the two layout choices. Search is `.searchable` on the
-/// list itself; everything else lives here, which is why the subset line above
-/// the list is unconditional - with this menu closed it is the only thing saying
-/// rows are hidden.
+/// The facets, the two layout choices, and how much of each card's child lists
+/// (agents, shells, tasks) is drawn. Search is its own toggle in the title bar;
+/// everything else lives here, which is why the subset line above the list is
+/// unconditional - with this menu closed it is the only thing saying rows are
+/// hidden.
 ///
 /// **A view of its own, and `Equatable` over plain values.** It used to be a
 /// method on the list, which meant its body read `model.adapters` - a property
@@ -89,18 +90,37 @@ struct FilterMenu: View, Equatable {
           }
         }
       }
+      Section("Show under each session") {
+        display("Agents", \.subagents)
+        display("Shells", \.shells)
+        display("Tasks", \.tasks)
+      }
     } label: {
       Label(
         "Filter",
-        systemImage: facetFilterOn
+        systemImage: engaged
           ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
     }
+    .accessibilityIdentifier("Filter")
   }
 
-  /// Whether a *facet* is filtering (the funnel's fill). Search shows its own
-  /// state in the search field, so it does not light the funnel too.
-  private var facetFilterOn: Bool {
-    !config.gateways.isEmpty || !config.adapters.isEmpty || !config.states.isEmpty
+  /// The funnel fills while a facet is filtering or a card display is off its
+  /// default. Search shows its own state in the search field.
+  private var engaged: Bool {
+    facetFilterCount(config) > 0 || displayCustomized(config)
+  }
+
+  /// One card display as a submenu that names its current value, the same three
+  /// choices the dashboard's segmented control offers.
+  private func display(_ label: String, _ keyPath: WritableKeyPath<ViewConfig, StepDisplay>)
+    -> some View
+  {
+    Picker(label, selection: Binding(get: { config[keyPath: keyPath] }, set: { config[keyPath: keyPath] = $0 })) {
+      Text("All").tag(StepDisplay.all)
+      Text("Active").tag(StepDisplay.active)
+      Text("Hide").tag(StepDisplay.none)
+    }
+    .pickerStyle(.menu)
   }
 
   /// A Toggle binding for membership of one value in one facet array.
@@ -116,64 +136,5 @@ struct FilterMenu: View, Equatable {
           config[keyPath: keyPath].removeAll { $0 == value }
         }
       })
-  }
-}
-
-/// The sub-agent display preference, icon-only beside the funnel.
-///
-/// Its own control rather than a section inside `FilterMenu`, because it is not
-/// a filter over sessions: it says how much of a card is drawn. The glyph is the
-/// reading - a session line over two child rows, greying the rows the card is
-/// not drawing - so the state is legible without opening anything.
-struct SubagentMenu: View, Equatable {
-  @Binding var subagents: SubagentDisplay
-
-  nonisolated static func == (lhs: SubagentMenu, rhs: SubagentMenu) -> Bool {
-    lhs.subagents == rhs.subagents
-  }
-
-  var body: some View {
-    Menu {
-      Picker("Sub-agents", selection: $subagents) {
-        Text("All sub-agents").tag(SubagentDisplay.all)
-        Text("Hide completed").tag(SubagentDisplay.active)
-        Text("Hide sub-agents").tag(SubagentDisplay.none)
-      }
-    } label: {
-      SubagentGlyph(value: subagents)
-        .accessibilityLabel("Sub-agents")
-        .accessibilityIdentifier("Sub-agents")
-    }
-  }
-}
-
-/// The sub-agent display preference drawn as one glyph, mirroring the dashboard
-/// and the extension: a session line at full strength over two child rows, and a
-/// row the card is not drawing goes grey rather than getting struck through. A
-/// hidden sub-agent has not failed, and a cross would say it had.
-///
-/// Rows rather than an SF Symbol because no symbol says "how much of a card is
-/// drawn", and the three clients have to be one drawing.
-struct SubagentGlyph: View {
-  let value: SubagentDisplay
-
-  private static let width: CGFloat = 17
-  private static let thickness: CGFloat = 2
-  private static let indent: CGFloat = 0.68
-  private static let hidden: CGFloat = 0.34
-
-  var body: some View {
-    VStack(alignment: .trailing, spacing: 4) {
-      Capsule().frame(width: Self.width, height: Self.thickness)
-      row(dimmed: value == .none)
-      row(dimmed: value != .all)
-    }
-    .frame(width: Self.width, height: 16)
-  }
-
-  private func row(dimmed: Bool) -> some View {
-    Capsule()
-      .frame(width: Self.width * Self.indent, height: Self.thickness)
-      .opacity(dimmed ? Self.hidden : 1)
   }
 }

@@ -935,17 +935,19 @@ design has no room for, and `navigationLinkIndicatorVisibility(.hidden)` - annot
 only 26 honours it), so the modifier could not carry a 17.0 deployment target. A list-row button
 paints its label in the accent, which the card overrides to `.primary`; every other colour on the
 row is explicit already. **Sub-agent rows are simply drawn**, as they are on every other client:
-there is no per-row disclosure and no `1/3` chip that was also its handle, and how many rows a
-card carries is `ViewConfig.subagents` - the icon-only `SubagentMenu` beside the funnel in the
-list's toolbar, persisted with the rest of the config. Its glyph is `SubagentGlyph`, three
-capsules rather than an SF Symbol: no symbol says how much of a card is drawn, and the three
-clients have to be one drawing. No caret here - a toolbar item that opens a menu is iOS's own
-convention, and the dashboard's caret is paying for a header where that convention does not hold. `ViewConfig`'s lenient `init(from:)` is
+there is no per-row disclosure and no `1/3` chip that was also its handle. How many rows a card
+carries is three `ViewConfig` fields - `subagents`, `shells`, `tasks`, each `all` / `active` /
+`none` (labelled All / Active / Hide) - offered in the funnel's "Show under each session" section
+as menu pickers, persisted with the rest of the config. The funnel fills while a facet filters
+*or* a display is off its default (`facetFilterCount`, `displayCustomized`). Search is its own
+toolbar button: the `.searchable` bar is applied only while it is open (`SessionSearch`), its
+Cancel closes it, and closing clears the query, so a hidden search can never be what empties the
+list. `ViewConfig`'s lenient `init(from:)` is
 what lets that key be added: a config stored by an older build decodes with the new field at its
 default rather than failing and resetting every preference the person had. The claim is
 **pressed, not asserted**: `WorkerDeckAppUITests` runs the `UIPREVIEW=sessions` fixture and checks
-that sub-agent rows are there without a press, that the preference changes how many, and that the
-row still pushes (`xcodebuild test … -only-testing:WorkerDeckAppUITests`, in `apps/ios/README.md`).
+that step rows are there without a press, that the filter menu's displays change how many, that a
+row's stop button does not open the row, and that the row still pushes (`xcodebuild test … -only-testing:WorkerDeckAppUITests`, in `apps/ios/README.md`).
 The **context ring reads off the ring ramp**, not the bar ramp: the web draws two off one
 percentage and they turn in different places, so `meterSeverity` (80/95, neutral below) is now in
 the kit and tested there, `ringTint` maps it, and `usageTint` (70/90, accent below) stays what a
@@ -1023,37 +1025,27 @@ than component-local, because the height book must know every height - the frame
 twin therefore share one state. Codex draws no brief row at all, enforced where the row is built
 rather than where it is drawn: its spawn message is encrypted on the wire, and there is nothing to
 show.
-Sub-agents are **always drawn**, one full-width row each, and the count that used to sit on the
-row's trailing edge as a disclosure is gone. The control it doubled as is gone with it: what a
-session's agents are doing is the most answerable thing a card can say, and a twisty that started
-closed on every row hid it by default while costing a per-row tap and a second target inside a row
-that already takes the press. What survives is the *preference*, once for the whole list -
-`ViewConfig.subagents` (`all` / `active` / `none`, default `active`, which keeps failed records
-because a failed agent is not a completed one), offered as `SubagentMenu`, an icon-only menu in the
-list's toolbar beside the funnel. It is in the config rather than in `AppSettings` for the rule
-this file keeps elsewhere: a transcript-reading preference is the phone's own, and anything the
-three clients must agree about lives in `ViewConfig`.
+Steps are **always drawn**, one full-width row each, in the kit's `sessionSteps` order: agents,
+then tasks (the engine's checklist and untyped spawns, `displayedTasks`), then shells. Each kind
+follows its own `ViewConfig` display, default `active`, which keeps failures because a failed
+record is not a completed one. They live in the config rather than in `AppSettings` because
+anything the three clients must agree about lives in `ViewConfig`.
 
-An earlier pass put the disclosure in a **reserved left gutter**, 26pt on every row so the titles
-would line up. That is gone too, and for a reason that outlived it: it spent a column in front of
-the entire list to hold a control most rows never showed. Each agent is its **own full-width
-row**, which is a real thumb target where a line inside a two-line row is not, and it pushes
-`SessionRoute.session(…, subagent:)` - the session with that agent already framed, the phone's
-spelling of the dashboard's `?subagent=`. The rows come from the kit's `sessionSteps`
-(`SessionSteps.swift`, the port of `packages/ui`'s `SessionSteps.tsx`) and are **sub-agents only**:
-`isAgentRecord` decides membership, `visibleSubagents` decides how many, `SessionRoute.step` has one
-destination, and every step pushes its takeover.
+Each step is its **own full-width row**, a real thumb target where a line inside a two-line row is
+not, and `SessionRoute.step` gives each kind its destination: an agent pushes the session with that
+agent framed (`subagent:`), a spawned task pushes it revealing that tool call's row (`reveal:`), a
+checklist item just opens the session, and a shell opens its terminal (`shell:`). A checklist item
+still `in_progress` on a session whose turn has ended (`sessionLive`) draws as **pending**, not
+running: the agent forgot to settle it, and a spinner would claim work that is not happening.
 
-Tasks are the thing that is *not* here, and the omission is the design. They used to share that
-count, which made one badge answer two questions and answer neither - so they moved to the
-session's own **`TasksSheet`**, opened from the count on `SessionStatusBar` (a chip, because the app
-has no popovers: every status-line item is a case on `SessionView.Sheet` and a `.sheet(item:)`).
-Its rows come from `sessionTasks` (`Checklist.swift`), unifying the engine's checklist with the
-untyped spawns. `SessionRoute.session(…, reveal:)` survives and only changed caller: from inside the
-sheet the session is already open, so a spawn sets `focusTarget` directly (`toolCallItemIndex` → the
-same focus request a tapped notification rides, and so **terminal-renderer only**, since the cards
-renderer has no row model to land on - the sheet passes `onReveal: nil` there rather than drawing a
-press that cannot land).
+A running shell and a task the engine marks `stoppable` carry a **stop button** on their row
+(`WorkerClient.killShell` / `stopTask`, the latter `POST /sessions/:id/tasks/:toolUseId/stop`). It
+is a `.borderless` button inside the row's `NavigationLink`, which is what gives it a target of its
+own; the UI test presses it and checks nothing was pushed. The card and its steps read as **one
+block**: step rows lower the list's minimum row height to 30pt (`defaultMinListRowHeight`), start
+their marker on the title's column (leading 40), and no separator runs between the card and its
+steps - only under the last one, aligned to the title. The session screen's old `TasksSheet` and
+its status-bar count are gone with the web's Tasks dialog.
 
 Three parity ports share one shape worth stating once: **the phone reuses the kit's rule and
 supplies its own drawing.** `TerminalTodos` (the `TodoWrite` checklist as the transcript draws it - the

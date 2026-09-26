@@ -9,6 +9,12 @@ import SwiftUI
 /// is the thing that needed looking at, and a preview of the row alone cannot
 /// show it.
 struct SessionCardView<MenuContent: View>: View {
+  /// A card with steps under it gives up most of its bottom inset: the steps
+  /// are its continuation, and the gap belongs after the block.
+  static func insets(hasSteps: Bool) -> EdgeInsets {
+    EdgeInsets(top: 10, leading: 16, bottom: hasSteps ? 2 : 10, trailing: 16)
+  }
+
   let row: SessionRow
   let onOpen: () -> Void
   var hostName: String?

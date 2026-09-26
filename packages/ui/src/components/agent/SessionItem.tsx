@@ -119,7 +119,7 @@ export function SessionItem({
     },
     {
       show: tasks,
-      live: info.status === 'running' || info.status === 'starting',
+      live: info.status === 'running' || info.status === 'starting' || info.status === 'awaiting_approval',
       onSelect: (task) => (onSelectTask ? onSelectTask(task) : onSelect?.(NO_MODIFIERS)),
       onStop: onStopTask,
     },

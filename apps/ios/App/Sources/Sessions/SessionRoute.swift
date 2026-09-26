@@ -40,6 +40,10 @@ enum SessionRoute: Hashable {
     switch step.kind {
     case .agent:
       return .session(hostId: hostId, sessionId: sessionId, subagent: step.key)
+    case .task:
+      // A spawn travels to its tool call's row; a checklist item has no row, so
+      // it opens the session.
+      return .session(hostId: hostId, sessionId: sessionId, reveal: step.toolUseId)
     case .shell:
       return .session(hostId: hostId, sessionId: sessionId, shell: step.key)
     }

@@ -12,9 +12,8 @@ import Foundation
 /// agent drawing a checkmark, and blue where the product means green). One
 /// derivation, three renderers.
 ///
-/// Steps are sub-agents and **promoted shells**. A record with no agent type is
-/// a task, and tasks live in the selected session's own surface
-/// (``sessionTasks``), not under a list row.
+/// Steps are sub-agents, then tasks (the checklist and untyped spawns), then
+/// shells, each list under its own ``StepDisplay``.
 ///
 /// Unlike the web's `Step` this carries **no `onSelect`**. SwiftUI routes by
 /// value (`NavigationLink(value:)`), so a closure here would be a callback the
@@ -25,6 +24,9 @@ public struct Step: Sendable, Equatable, Identifiable, Hashable {
     case done
     case running
     case failed
+    /// Not started - or a checklist item left in progress after the turn ended,
+    /// which is not running either.
+    case pending
   }
 
   /// What the row is about, which is the only thing the renderer needs to know
@@ -32,11 +34,12 @@ public struct Step: Sendable, Equatable, Identifiable, Hashable {
   /// gets `$` and the shell accent, and neither borrows the other's colour.
   public enum Kind: String, Sendable, Equatable, Hashable {
     case agent
+    case task
     case shell
   }
 
-  /// The `tool_use` id, or the shell id - the identity, and the handle both
-  /// destinations ride.
+  /// The `tool_use` id, the task key, or the shell id - the identity, and the
+  /// handle agent and shell destinations ride.
   public let key: String
   public var id: String { key }
   public let kind: Kind
@@ -51,14 +54,16 @@ public struct Step: Sendable, Equatable, Identifiable, Hashable {
   /// The long reading, for accessibility and a long-press.
   public let title: String
 
-  /// True only for a **running** shell: nothing else on a card can be stopped
-  /// from the card, and a kill glyph beside a sub-agent would promise something
-  /// no client can do.
+  /// A running shell (kill) or a task the engine can stop. Never a sub-agent:
+  /// a stop glyph there would promise something no client can do.
   public let killable: Bool
+  /// A spawned task's `tool_use` id: where a press reveals it, and what a stop
+  /// names. Nil for agents, shells and checklist items.
+  public let toolUseId: String?
 
   public init(
     key: String, kind: Kind = .agent, label: String, noun: String = "agent", state: State,
-    detail: String? = nil, title: String, killable: Bool = false
+    detail: String? = nil, title: String, killable: Bool = false, toolUseId: String? = nil
   ) {
     self.key = key
     self.kind = kind
@@ -68,24 +73,26 @@ public struct Step: Sendable, Equatable, Identifiable, Hashable {
     self.detail = detail
     self.title = title
     self.killable = killable
+    self.toolUseId = toolUseId
   }
 }
 
-/// The sub-agents under one session, in dispatch order, then its promoted
+/// The sub-agents under one session in dispatch order, then its tasks, then its
 /// shells.
 ///
 /// Dispatch order is the only order these records have that means anything (it
 /// is the order the work was started in), so this filters and never reorders.
-/// Shells come last as a block: they are a different kind of thing, and a
-/// `$ npm run dev` interleaved by timestamp between two agents would read as
+/// Tasks and shells come after as blocks: they are different kinds of thing, and
+/// a `$ npm run dev` interleaved by timestamp between two agents would read as
 /// part of the agent's work.
 ///
 /// `now` is passed in rather than read from the clock so that which shells earn
-/// a line is a pure function of the caller's tick, exactly as it is on the web,
-/// where a poll's `now` decides it. `nil` leaves shells out entirely, which is
-/// what a surface with nowhere to route a shell press wants.
+/// a line is a pure function of the caller's tick, exactly as it is on the web.
+/// `nil` leaves shells out, and a nil `tasks` leaves tasks out - what a surface
+/// with nowhere to route those presses wants.
 public func sessionSteps(
-  _ info: SessionInfo, _ show: SubagentDisplay = .all, now: Double? = nil
+  _ info: SessionInfo, _ show: StepDisplay = .all, now: Double? = nil,
+  shells: StepDisplay = .active, tasks: StepDisplay? = nil
 ) -> [Step] {
   let agents = visibleSubagents(info, show).filter(isAgentRecord).map { sub -> Step in
     let label = subagentLabel(sub)
@@ -98,8 +105,38 @@ public func sessionSteps(
       detail: sub.toolCount > 0 ? String(sub.toolCount) : nil,
       title: "\(label) · \(sub.toolCount) tool\(sub.toolCount == 1 ? "" : "s")")
   }
-  guard let now else { return agents }
-  return agents + promotedShells(info, now: now).map(shellStep)
+  let live = sessionLive(info)
+  let taskSteps = tasks.map { displayedTasks(info, $0).map { taskStep($0, live: live) } } ?? []
+  guard let now else { return agents + taskSteps }
+  return agents + taskSteps + visibleShells(info, shells, now: now).map(shellStep)
+}
+
+/// Whether the session's turn is still in flight. A checklist item left
+/// `in_progress` on a session that is not is drawn as pending: the agent forgot
+/// to settle it, and a spinner would claim work that is not happening.
+public func sessionLive(_ info: SessionInfo) -> Bool {
+  info.status == .running || info.status == .starting || info.status == .awaitingApproval
+}
+
+private func taskStep(_ task: SessionTask, live: Bool) -> Step {
+  let stalled = task.source == .checklist && task.state == .running && !live
+  let state: Step.State
+  switch task.state {
+  case .pending: state = .pending
+  case .running: state = stalled ? .pending : .running
+  case .done: state = .done
+  case .failed: state = .failed
+  }
+  return Step(
+    key: task.key,
+    kind: .task,
+    label: task.label,
+    noun: "task",
+    state: state,
+    detail: task.detail,
+    title: stalled ? "\(task.label) · left in progress" : task.label,
+    killable: task.stoppable && task.toolUseId != nil,
+    toolUseId: task.toolUseId)
 }
 
 private func shellStep(_ shell: ShellInfo) -> Step {

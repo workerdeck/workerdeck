@@ -425,10 +425,14 @@ public struct SubagentInfo: Decodable, Sendable, Equatable, Identifiable {
   public let startedAt: Double
   /// Tool calls made so far - the progress reading while it runs.
   public let toolCount: Int
+  /// The engine can stop this record's background task on request
+  /// (`WorkerClient.stopTask`).
+  public let stoppable: Bool?
 
   public init(
     toolUseId: String, agentType: String? = nil, description: String? = nil,
-    isAgent: Bool? = nil, status: SubagentStatus, startedAt: Double, toolCount: Int
+    isAgent: Bool? = nil, status: SubagentStatus, startedAt: Double, toolCount: Int,
+    stoppable: Bool? = nil
   ) {
     self.toolUseId = toolUseId
     self.agentType = agentType
@@ -437,6 +441,7 @@ public struct SubagentInfo: Decodable, Sendable, Equatable, Identifiable {
     self.status = status
     self.startedAt = startedAt
     self.toolCount = toolCount
+    self.stoppable = stoppable
   }
 }
 

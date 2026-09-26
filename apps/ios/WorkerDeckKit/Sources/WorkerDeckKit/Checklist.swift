@@ -17,7 +17,7 @@ public struct ChecklistItem: Decodable, Sendable, Equatable, Hashable {
   }
 }
 
-/// One row of the selected session's Tasks surface - the port of
+/// One task under a session card - the port of
 /// `packages/protocol/src/checklist.ts`.
 ///
 /// Two sources, one row shape: the engine's own checklist and the `Task` spawns
@@ -47,10 +47,12 @@ public struct SessionTask: Sendable, Equatable, Identifiable, Hashable {
   public let detail: String?
   /// The reveal handle - spawns only.
   public let toolUseId: String?
+  /// A running spawn the engine can stop (``WorkerClient/stopTask(sessionId:toolUseId:)``).
+  public let stoppable: Bool
 
   public init(
     key: String, label: String, source: Source, state: State,
-    detail: String? = nil, toolUseId: String? = nil
+    detail: String? = nil, toolUseId: String? = nil, stoppable: Bool = false
   ) {
     self.key = key
     self.label = label
@@ -58,6 +60,7 @@ public struct SessionTask: Sendable, Equatable, Identifiable, Hashable {
     self.state = state
     self.detail = detail
     self.toolUseId = toolUseId
+    self.stoppable = stoppable
   }
 }
 
@@ -87,7 +90,8 @@ public func sessionTasks(checklist: [ChecklistItem]?, subagents: [SubagentInfo]?
       source: .spawn,
       state: spawnState(sub.status),
       detail: sub.toolCount > 0 ? String(sub.toolCount) : nil,
-      toolUseId: sub.toolUseId)
+      toolUseId: sub.toolUseId,
+      stoppable: sub.status == .running && sub.stoppable == true)
   }
   return items + spawns
 }
@@ -129,4 +133,10 @@ public func taskCountLabel(_ summary: TaskSummary) -> String? {
 /// to see, and hiding it behind a "completed" toggle would be a lie.
 public func visibleTasks(_ tasks: [SessionTask], showCompleted: Bool) -> [SessionTask] {
   showCompleted ? tasks : tasks.filter { $0.state != .done }
+}
+
+/// The tasks a card draws under one display setting. Mirror of protocol's
+/// `displayedTasks`.
+public func displayedTasks(_ info: SessionInfo, _ show: StepDisplay) -> [SessionTask] {
+  show == .none ? [] : visibleTasks(sessionTasks(info), showCompleted: show == .all)
 }

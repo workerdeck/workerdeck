@@ -18,7 +18,7 @@ struct SessionView: View {
   /// The modal screens over a session. `Identifiable` so one `.sheet(item:)`
   /// presents all of them.
   enum Sheet: String, Identifiable {
-    case context, usage, info, files, model, mode, addMedia, mcp, skills, tasks
+    case context, usage, info, files, model, mode, addMedia, mcp, skills
     var id: String { rawValue }
   }
 
@@ -365,10 +365,6 @@ struct SessionView: View {
             costUsd: vm.state.costUsd)
         case .info:
           SessionInfoSheet(state: vm.state, session: vm.session, fileAccess: vm.fileAccess)
-        case .tasks:
-          TasksSheet(
-            tasks: tasks,
-            onReveal: settings.transcriptVariant.isTerminal ? { revealTask($0) } : nil)
         case .files:
           if let scope = vm.hostFiles {
             HostFilesView(scope: scope)
@@ -1004,23 +1000,6 @@ struct SessionView: View {
     attachments.add(picked)
   }
 
-  /// The checklist is live off the reducer; the spawn half is the attach
-  /// snapshot, which is as fresh as this screen's own record of them.
-  private var tasks: [SessionTask] {
-    sessionTasks(checklist: vm.state.checklist, subagents: vm.session?.subagents)
-  }
-
-  /// From inside the sheet the session is already open, so a spawn travels to
-  /// its row directly rather than routing to the screen it is already on.
-  private func revealTask(_ toolUseId: String) {
-    guard let info = vm.session,
-      case .item(let item, let complete) = deepLinkPlacement(
-        item: toolCallItemIndex(vm.state.items, id: toolUseId), lastSeq: vm.state.lastSeq,
-        attachLastSeq: info.lastSeq)
-    else { return }
-    focusTarget = .init(item: item, nonce: item, complete: complete)
-  }
-
   private var statusBar: some View {
     SessionStatusBar(
       status: vm.state.status,
@@ -1037,9 +1016,7 @@ struct SessionView: View {
       onOpenMode: { sheet = .mode },
       onOpenContext: { sheet = .context },
       onOpenUsage: { sheet = .usage },
-      onOpenInfo: { sheet = .info },
-      tasks: tasks,
-      onOpenTasks: { sheet = .tasks })
+      onOpenInfo: { sheet = .info })
   }
 
   /// The request at the head of the queue, with its position when there is one.

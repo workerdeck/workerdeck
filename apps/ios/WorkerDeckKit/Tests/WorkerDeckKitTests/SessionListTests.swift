@@ -422,4 +422,25 @@ struct SessionListTests {
     #expect(hasFacetFilter(config))
     #expect(clearFilters(config).projects == [])
   }
+
+  @Test func clearFiltersKeepsEveryCardDisplay() {
+    var config = ViewConfig(states: [.working], subagents: .all, shells: .none, tasks: .all)
+    config.search = "x"
+    let cleared = clearFilters(config)
+    #expect(cleared.states.isEmpty && cleared.search.isEmpty)
+    #expect(cleared.subagents == .all && cleared.shells == .none && cleared.tasks == .all)
+  }
+
+  @Test func countsFacetsAndNoticesACustomDisplay() {
+    #expect(facetFilterCount(.default) == 0)
+    #expect(facetFilterCount(ViewConfig(search: "x", adapters: ["codex"], states: [.idle])) == 2)
+    #expect(!displayCustomized(.default))
+    #expect(displayCustomized(ViewConfig(tasks: .none)))
+  }
+
+  @Test func decodesAConfigThatPredatesShellsAndTasks() throws {
+    let data = Data(#"{"subagents":"all"}"#.utf8)
+    let config = try JSONDecoder().decode(ViewConfig.self, from: data)
+    #expect(config.subagents == .all && config.shells == .active && config.tasks == .active)
+  }
 }

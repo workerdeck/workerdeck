@@ -1867,9 +1867,9 @@ has the shape; these are the ways to get it wrong.
   `conversation_reset`, lagging at most one turn. It is a fold and must never be copied into
   `config`/`meta`.
 - **`SessionInfo` alone cannot serve an attached session's status bar.** `packages/react` seeds
-  `state.session` at attach and never re-seeds it, so the checklist half of the Tasks surface reads
-  `state.checklist` (live) while the spawn half reads whatever `subagents` snapshot the host
-  supplies.
+  `state.session` at attach and never re-seeds it, so anything inside a session that wants its
+  tasks must read `state.checklist` (live) for the checklist half and whatever `subagents`
+  snapshot the host supplies for the spawns. The list cards read both off the polled `SessionInfo`.
 
 ## Tool titles (the `tool_titles` event)
 

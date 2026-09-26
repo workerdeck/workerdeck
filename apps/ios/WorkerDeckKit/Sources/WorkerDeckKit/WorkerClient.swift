@@ -246,6 +246,15 @@ public struct WorkerClient: Sendable {
     return try decode(ShellResponse.self, from: data).shell
   }
 
+  /// Stop a running background task (a backgrounded Bash, a spawned task) by
+  /// the `tool_use` id that started it. Only offered where the record says
+  /// `stoppable`; a 404 means it had already finished.
+  public func stopTask(sessionId: String, toolUseId: String) async throws {
+    _ = try await call(
+      "POST",
+      "/sessions/\(Self.encodeComponent(sessionId))/tasks/\(Self.encodeComponent(toolUseId))/stop")
+  }
+
   // MARK: - Profiles
 
   /// The profiles this caller may use, plus whether it may create new ones.

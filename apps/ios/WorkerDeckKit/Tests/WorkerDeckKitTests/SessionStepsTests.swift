@@ -12,10 +12,14 @@ import Testing
 /// was on `running`.
 @Suite("SessionSteps")
 struct SessionStepsTests {
-  private func info(subagents: [SubagentInfo]?, shells: [ShellInfo]? = nil) -> SessionInfo {
+  private func info(
+    subagents: [SubagentInfo]?, shells: [ShellInfo]? = nil, checklist: [ChecklistItem]? = nil,
+    status: SessionStatus = .idle
+  ) -> SessionInfo {
     SessionInfo(
-      id: "sess-00000001", status: .idle, cwd: "/work/alpha", createdAt: 1_000, lastSeq: 0,
-      pendingPermissionCount: 0, lastActivityAt: 1_000, subagents: subagents, shells: shells)
+      id: "sess-00000001", status: status, cwd: "/work/alpha", createdAt: 1_000, lastSeq: 0,
+      pendingPermissionCount: 0, lastActivityAt: 1_000, subagents: subagents, checklist: checklist,
+      shells: shells)
   }
 
   private func shell(
@@ -39,11 +43,11 @@ struct SessionStepsTests {
 
   private func task(
     _ id: String, description: String? = "rewrite the loader",
-    status: SubagentStatus = .done, toolCount: Int = 0
+    status: SubagentStatus = .done, toolCount: Int = 0, stoppable: Bool? = nil
   ) -> SubagentInfo {
     SubagentInfo(
       toolUseId: id, agentType: nil, description: description, status: status, startedAt: 1_000,
-      toolCount: toolCount)
+      toolCount: toolCount, stoppable: stoppable)
   }
 
   // MARK: - Order
@@ -188,6 +192,69 @@ struct SessionStepsTests {
     let steps = sessionSteps(
       info(subagents: [agent("a1")], shells: [shell(startedAt: 0)]), .none, now: 5_000)
     #expect(steps.map(\.key) == ["sh_1"])
+  }
+
+  @Test("the shells display decides which shells draw")
+  func shellDisplay() {
+    let clean = shell(
+      "sh_2", status: .exited, startedAt: 0, endedAt: 4_000, exitCode: 0, endReason: .exit)
+    let session = info(subagents: nil, shells: [shell("sh_1", startedAt: 0), clean])
+    #expect(sessionSteps(session, .all, now: 5_000, shells: .active).map(\.key) == ["sh_1"])
+    #expect(sessionSteps(session, .all, now: 5_000, shells: .all).map(\.key) == ["sh_1", "sh_2"])
+    #expect(sessionSteps(session, .all, now: 5_000, shells: .none).isEmpty)
+    // Still too young to have earned a line, even under `.all`.
+    #expect(sessionSteps(session, .all, now: 1_000, shells: .all).map(\.key) == ["sh_2"])
+  }
+
+  // MARK: - Tasks
+
+  @Test("tasks draw between the agents and the shells")
+  func tasksSitBetween() {
+    let steps = sessionSteps(
+      info(
+        subagents: [agent("a1"), task("t1", status: .running)],
+        shells: [shell(startedAt: 0)],
+        checklist: [ChecklistItem(text: "plan", status: .pending)]),
+      .all, now: 5_000, tasks: .all)
+    #expect(steps.map(\.key) == ["a1", "checklist:0", "spawn:t1", "sh_1"])
+    #expect(steps.map(\.kind) == [.agent, .task, .task, .shell])
+    #expect(steps[2].toolUseId == "t1")
+  }
+
+  @Test("the tasks display hides completions, or everything")
+  func taskDisplay() {
+    let session = info(
+      subagents: nil,
+      checklist: [
+        ChecklistItem(text: "done", status: .completed),
+        ChecklistItem(text: "next", status: .pending),
+      ])
+    #expect(sessionSteps(session, tasks: .all).map(\.label) == ["done", "next"])
+    #expect(sessionSteps(session, tasks: .active).map(\.label) == ["next"])
+    #expect(sessionSteps(session, tasks: .none).isEmpty)
+    #expect(sessionSteps(session).isEmpty)
+  }
+
+  @Test("a checklist item left in progress after the turn is pending")
+  func stalledChecklist() {
+    let item = [ChecklistItem(text: "wire it", status: .inProgress)]
+    let idle = sessionSteps(info(subagents: nil, checklist: item), tasks: .all)
+    #expect(idle[0].state == .pending)
+    #expect(idle[0].title == "wire it · left in progress")
+    let working = sessionSteps(info(subagents: nil, checklist: item, status: .running), tasks: .all)
+    #expect(working[0].state == .running)
+    #expect(working[0].title == "wire it")
+  }
+
+  @Test("only a running task the engine can stop is killable")
+  func stoppableTasks() {
+    let steps = sessionSteps(
+      info(subagents: [
+        task("t1", status: .running, stoppable: true),
+        task("t2", status: .running),
+        task("t3", status: .done, stoppable: true),
+      ]), tasks: .all)
+    #expect(steps.map(\.killable) == [true, false, false])
   }
 
   // MARK: - Job runs

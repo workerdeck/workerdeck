@@ -315,6 +315,28 @@ final class SessionListModel {
     }
   }
 
+  /// Stop a background task the engine offered to stop (`stoppable`), then
+  /// refresh so its row settles.
+  func stopTask(_ row: SessionRow, toolUseId: String) async {
+    await act(on: row) { try await $0.stopTask(sessionId: row.info.id, toolUseId: toolUseId) }
+  }
+
+  func killShell(_ row: SessionRow, shellId: String) async {
+    await act(on: row) { _ = try await $0.killShell(sessionId: row.info.id, shellId: shellId) }
+  }
+
+  private func act(on row: SessionRow, _ body: (WorkerClient) async throws -> Void) async {
+    guard let hostId = UUID(uuidString: row.hostId),
+      let client = context(for: hostId)?.client
+    else { return }
+    do {
+      try await body(client)
+      await refresh()
+    } catch {
+      snapshots[hostId, default: HostSnapshot()].probe = .failed(Self.describe(error))
+    }
+  }
+
   static func describe(_ error: any Error) -> String {
     if let workerError = error as? WorkerClientError { return workerError.message }
     if let urlError = error as? URLError { return urlError.localizedDescription }
