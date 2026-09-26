@@ -3,6 +3,9 @@ import {
   DEFAULT_VIEW_CONFIG,
   adaptersOf,
   clearFilters,
+  displayCustomized,
+  displayedTasks,
+  facetFilterCount,
   filterRows,
   groupRows,
   hasFacetFilter,
@@ -17,6 +20,7 @@ import {
   sessionLabel,
   sessionState,
   subsetSummary,
+  visibleShells,
 } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, ShellInfo, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 
@@ -209,6 +213,73 @@ describe('clearFilters', () => {
 
   it('does not count scope as a facet filter', () => {
     expect(hasFacetFilter(config({ scoped: true }))).toBe(false)
+  })
+
+  it('keeps the shells and tasks display, which are layout rather than filters', () => {
+    const next = clearFilters(config({ states: ['idle'], shells: 'all', tasks: 'none' }))
+    expect(next.shells).toBe('all')
+    expect(next.tasks).toBe('none')
+  })
+})
+
+describe('filter engagement', () => {
+  it('counts facets, not search or scope', () => {
+    expect(facetFilterCount(config({ search: 'x', scoped: true }))).toBe(0)
+    expect(facetFilterCount(config({ states: ['idle'], projects: ['a'] }))).toBe(2)
+  })
+
+  it('reads a config persisted before shells and tasks existed as the defaults', () => {
+    expect(displayCustomized(config())).toBe(false)
+    expect(displayCustomized({ ...config(), shells: undefined, tasks: undefined })).toBe(false)
+    expect(displayCustomized(config({ tasks: 'all' }))).toBe(true)
+    expect(displayCustomized(config({ subagents: 'none' }))).toBe(true)
+  })
+})
+
+describe('visibleShells', () => {
+  const shellOf = (over: Partial<ShellInfo>): ShellInfo =>
+    ({
+      id: 's',
+      sessionId: 'x',
+      ordinal: 1,
+      command: 'ls',
+      cwd: '/',
+      owner: 'user',
+      status: 'running',
+      startedAt: 0,
+      bytes: 0,
+      ...over,
+    }) as ShellInfo
+  const inf = info({
+    shells: [
+      shellOf({ id: 'run' }),
+      shellOf({ id: 'young', startedAt: 9_000 }),
+      shellOf({ id: 'clean', status: 'exited', exitCode: 0, endedAt: 5_000 }),
+      shellOf({ id: 'bad', status: 'exited', exitCode: 1, endedAt: 9_500 }),
+    ],
+  })
+
+  it('draws running and recently failed shells for active, every settled one for all, none for none', () => {
+    expect(visibleShells(inf, 'active', 10_000).map((s) => s.id)).toEqual(['run', 'bad'])
+    expect(visibleShells(inf, 'all', 10_000).map((s) => s.id)).toEqual(['run', 'clean', 'bad'])
+    expect(visibleShells(inf, 'none', 10_000)).toEqual([])
+  })
+})
+
+describe('displayedTasks', () => {
+  const inf = info({
+    checklist: [
+      { text: 'plan', status: 'completed' },
+      { text: 'build', status: 'in_progress' },
+    ],
+    subagents: [{ toolUseId: 'b', description: 'node server.js', status: 'running', startedAt: 0, toolCount: 0, stoppable: true }],
+  })
+
+  it('hides settled tasks for active and carries the stop through', () => {
+    expect(displayedTasks(inf, 'all').map((t) => t.label)).toEqual(['plan', 'build', 'node server.js'])
+    expect(displayedTasks(inf, 'active').map((t) => t.label)).toEqual(['build', 'node server.js'])
+    expect(displayedTasks(inf, 'none')).toEqual([])
+    expect(displayedTasks(inf, 'all')[2]?.stoppable).toBe(true)
   })
 })
 

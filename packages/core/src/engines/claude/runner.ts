@@ -312,6 +312,15 @@ export class SessionRunner implements Runner {
     await this.#query?.interrupt()
   }
 
+  async stopTask(toolUseId: string): Promise<boolean> {
+    const taskId = this.#subagents.taskIdOf(toolUseId)
+    if (taskId === undefined || !this.#query) {
+      return false
+    }
+    await this.#query.stopTask(taskId)
+    return true
+  }
+
   async clearContext(): Promise<void> {
     if (this.#status === 'closed' || this.#status === 'failed') {
       throw new Error('session is closed')

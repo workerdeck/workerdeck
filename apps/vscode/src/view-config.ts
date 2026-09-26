@@ -8,6 +8,8 @@ export {
   STATE_ORDER,
   adaptersOf,
   clearFilters,
+  displayCustomized,
+  facetFilterCount,
   filterRows,
   groupRows,
   hasFacetFilter,

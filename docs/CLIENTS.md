@@ -291,10 +291,14 @@ out of the palette), which is why the gateway list the badge counts had to be ad
 ### The Sessions and Gateways views
 
 The Sessions view lists every gateway's sessions at once - gateway
-is a facet (filter/group/sort) beside adapter and state, not the frame - with search and
-the facet dropdowns behind the title bar's **filter toggle** (`$(filter)`/`$(filter-filled)`;
-the *host* owns that boolean, since the key lives where commands do, and closing the bar
-never clears the filters). **Gateways are their own collapsible view**, not a screen: a
+is a facet (filter/group/sort) beside adapter and state, not the frame. The title bar carries
+a **search toggle** (`$(search)`/`$(search-stop)`, `workerdeck.sessionsSearchOpen`; the *host*
+owns that boolean, since the key lives where commands do, and closing the bar clears the search
+so no hidden text keeps filtering the list) and a **filter button** that opens the shared
+`SessionFilters` as a popover the webview draws in its top-right corner (`wd-filters-toggle`;
+a press before the view has booted is held until `onReady`). The button is `$(filter-filled)`
+whenever a facet is set or a child list is off its default (`workerdeck.sessionsFiltered`,
+from protocol's `facetFilterCount`/`displayCustomized`). **Gateways are their own collapsible view**, not a screen: a
 gateway is a mode every session belongs to, so managing them sits beside the list
 permanently, with the connected count in the view header's description. There is **no
 implicit localhost gateway**.
@@ -345,8 +349,8 @@ for what the header can't do (clear a filter, widen a scope).
 
 **There is no activity-bar container.** The views are split across the two sidebars by
 default: **Sessions** into **Explorer**, beside the file tree (it is a workspace-level list,
-and it is where the `+` lives), and the other seven into a **`secondarySidebar` container
-titled "WorkerDeck"** - one tab, stacked vertically, Usage → Context → MCP Servers → Tasks →
+and it is where the `+` lives), and the other six into a **`secondarySidebar` container
+titled "WorkerDeck"** - one tab, stacked vertically, Usage → Context → MCP Servers →
 Session Info → Profiles → Gateways. The five detail views are `when`-gated on `workerdeck.hasSession`:
 they are *about the thing you have open*, which is Outline and Timeline's shape. That gating
 reverses the earlier "views must not appear and disappear under the pointer" rule on
@@ -356,7 +360,7 @@ section with nothing to say says it the only two ways that exist - the header's
 `description` (`no session`, `not reported`, `not supported`) and an empty state in the body.
 `viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
 it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
-`additionalProperties: false`, so on an older build the key is dropped and the seven views do
+`additionalProperties: false`, so on an older build the key is dropped and the six views do
 not exist at all. That floor is the whole cost of the layout, and it is what would keep the
 extension off a Cursor/VSCodium built on an older base. Two things a contributed location
 cannot do: it cannot order a view against a *built-in* one (extension views append after
@@ -511,30 +515,14 @@ it: what a sub-agent is doing is the most answerable thing a card can say, and a
 started closed on every row, on every client, unpersisted, hid it by default. How many rows draw
 is one preference instead - `ViewConfig.subagents`, `all` / `active` / `none`, default `active`
 (running and failed; a failed record is not a completed one) - read by `visibleSubagents` in
-protocol and offered as `SubagentToggle` in `packages/ui`: a glyph and a caret that opens a
-three-item menu. It was a press-to-cycle button first, and three stops is one more than a single
-glyph can report - the caret is what promises the other two. The glyph is the same drawing on
-every client: a session line at full strength over two child rows, greying the rows the card is
-not drawing. Nothing is struck through, because a sub-agent that is merely hidden has not failed.
-**This view has no header to put it in**, so here the trigger is the view title bar: three
-`contributes.submenus`, one per state, each gated on the same `workerdeck.sessionsSubagents`
-context key so exactly one is ever mounted, and each carrying that state's glyph as a light/dark
-SVG pair under `media/` (a command icon is not themed for you). Three submenus rather than one is
-what buys the icon-as-reading half of the pattern: a submenu's icon is static in the manifest, so
-the `when` clause is the only way it can follow the state. All three list the same three commands,
-whose `shortTitle` is what the menu draws; the title bar cannot tick the current item, which is
-the other reason the glyph has to report it. **Each command sets the state it names.** They used
-to set the *next* one - correct for the press-to-cycle button they were mounted in, and exactly
-backwards as menu items, where `Hide Completed` was setting `all`. The three labels are the
-dashboard's, in the dashboard's order (`all` / `active` / `none`), here and in the webview's own
-picker and in iOS's, because one control on three clients may not offer three vocabularies.
-The sessions title bar carries three buttons and no more - new, filter, sub-agents. **Refresh is
-in the overflow**, beside resume: the list is pushed over the socket, so a manual refresh is the
-thing you reach for when something has already gone wrong, and it was spending a permanent slot
-next to controls used every session. The commands survive for the palette, and the key is
-the `showCompletedTasks`/`hideCompletedTasks` pair one state wider: the host owns the key and the
-`globalState` write, pushes `wd-subagents`, and reads
-the webview's own `wd-view-config` back so the panel's picker and the title bar cannot disagree.
+protocol. Shells and tasks have the same three stops (`ViewConfig.shells`/`.tasks`, optional so
+an older persisted config reads as the default; `visibleShells`, `displayedTasks`), and all three
+live in the **filter popover** as segmented controls (`StepDisplayControl`, labelled All / Hide
+completed / Hide on every client). The title-bar sub-agent submenus, their `media/` glyphs and the
+`workerdeck.sessionsSubagents` key are gone; the three `workerdeck.subagents*` commands survive for
+the palette. The sessions title bar carries three buttons and no more - new, search, filter.
+**Refresh is in the overflow**, beside resume: the list is pushed over the socket, so a manual
+refresh is the thing you reach for when something has already gone wrong.
 Pressing a child selects the session and **hands the panel over to that agent's own work**
 (`wd-select-session`'s `subagentToolUseId` → `wd-open-subagent` → `SessionPanel.openSubagent`),
 still **without focusing the composer** - and now for a stronger reason than before: while a
@@ -545,10 +533,11 @@ survives untouched for other callers. A **task** takes the other road: `wd-selec
 **`wd-reveal-tool-use`** → `SessionPanel.reveal`, which stays on the conversation and travels to the
 row where that work was started and finished. A sibling field and a separate arm, not a flag,
 because the two go to different panel APIs - and conflating them is exactly how a task came to be
-framed as an agent, selecting no items and drawing an **empty agent view**. Tasks no longer draw
-under the card at all (they are in the **Tasks** view, `sessionTasks`), so the reveal road's
-producer moved rather than its plumbing: the chain below is unchanged and now driven from that
-view. `panel.ts` holds them
+framed as an agent, selecting no items and drawing an **empty agent view**. Tasks draw under the
+card again (the **Tasks** view is gone): a checklist item or a spawned task is a `task` step, and
+pressing one that carries a `toolUseId` drives this reveal road. A checklist item left
+`in_progress` after the turn ended draws as pending rather than spinning, and a live background
+task (a backgrounded Bash, say) offers a stop that posts `wd-stop-task` → `client.stopTask`. `panel.ts` holds them
 in a single `#pending` slot - one kind at a time, so asking for either withdraws the other and the
 mutual exclusion is structural rather than two queues clearing each other - flushed from
 `#pushActive` with one strictly-increasing nonce (per-kind values never repeat, which is what keeps

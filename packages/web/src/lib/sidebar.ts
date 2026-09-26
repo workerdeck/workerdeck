@@ -32,13 +32,12 @@ export function setSidebarCollapsed(section: SidebarSection, collapsed: boolean)
   writePref(collapsedKey(section), collapsed ? '1' : '0')
 }
 
-// Separate from the filters themselves: closing the bar hides the controls, it does not clear them.
-const FILTERS_KEY = 'workerdeck.sessions-filters-shown'
+const SEARCH_KEY = 'workerdeck.sessions-search-shown'
 
-export function getFiltersShown(): boolean {
-  return readPref(FILTERS_KEY) === '1'
+export function getSearchShown(): boolean {
+  return readPref(SEARCH_KEY) === '1'
 }
 
-export function setFiltersShown(shown: boolean): void {
-  writePref(FILTERS_KEY, shown ? '1' : '0')
+export function setSearchShown(shown: boolean): void {
+  writePref(SEARCH_KEY, shown ? '1' : '0')
 }

@@ -1,5 +1,6 @@
 import type { ChecklistItem, ChecklistStatus, SessionInfo } from './index.ts'
 import { isAgentRecord } from './session-list.ts'
+import type { StepDisplay } from './session-list.ts'
 
 export type SessionTaskState = 'pending' | 'running' | 'done' | 'failed'
 
@@ -12,6 +13,7 @@ export type SessionTask = {
   state: SessionTaskState
   detail?: string
   toolUseId?: string
+  stoppable?: boolean
 }
 
 export type TaskSummary = { total: number; done: number; running: number; failed: number }
@@ -81,6 +83,7 @@ export function sessionTasks(info: Pick<SessionInfo, 'checklist' | 'subagents'>)
       state: sub.status,
       detail: sub.toolCount > 0 ? String(sub.toolCount) : undefined,
       toolUseId: sub.toolUseId,
+      stoppable: sub.status === 'running' && sub.stoppable === true ? true : undefined,
     }))
   return [...checklist, ...spawns]
 }
@@ -107,4 +110,8 @@ export function taskCountLabel(summary: TaskSummary): string | undefined {
 
 export function visibleTasks(tasks: readonly SessionTask[], showCompleted: boolean): SessionTask[] {
   return showCompleted ? [...tasks] : tasks.filter((task) => task.state !== 'done')
+}
+
+export function displayedTasks(info: Pick<SessionInfo, 'checklist' | 'subagents'>, show: StepDisplay): SessionTask[] {
+  return show === 'none' ? [] : visibleTasks(sessionTasks(info), show === 'all')
 }

@@ -105,14 +105,6 @@
           "when": "workerdeck.hasSession"
         },
         {
-          "id": "workerdeck.tasks",
-          "type": "webview",
-          "name": "Tasks",
-          "contextualTitle": "WorkerDeck",
-          "icon": "media/sidebar.svg",
-          "when": "workerdeck.hasSession"
-        },
-        {
           "id": "workerdeck.sessionInfo",
           "type": "webview",
           "name": "Session Info",
@@ -161,14 +153,31 @@
         "icon": "$(history)"
       },
       {
+        "command": "workerdeck.showSearch",
+        "title": "Search Sessions",
+        "category": "WorkerDeck",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workerdeck.hideSearch",
+        "title": "Hide Session Search",
+        "category": "WorkerDeck",
+        "icon": "$(search-stop)"
+      },
+      {
+        "command": "workerdeck.toggleSearch",
+        "title": "Toggle Session Search",
+        "category": "WorkerDeck"
+      },
+      {
         "command": "workerdeck.showFilter",
         "title": "Filter Sessions",
         "category": "WorkerDeck",
         "icon": "$(filter)"
       },
       {
-        "command": "workerdeck.hideFilter",
-        "title": "Hide Session Filter",
+        "command": "workerdeck.showFilterActive",
+        "title": "Filter Sessions (filters active)",
         "category": "WorkerDeck",
         "icon": "$(filter-filled)"
       },
@@ -246,18 +255,6 @@
         "icon": "$(layout-panel)"
       },
       {
-        "command": "workerdeck.showCompletedTasks",
-        "title": "Show Completed Tasks",
-        "category": "WorkerDeck",
-        "icon": "$(eye-closed)"
-      },
-      {
-        "command": "workerdeck.hideCompletedTasks",
-        "title": "Hide Completed Tasks",
-        "category": "WorkerDeck",
-        "icon": "$(eye)"
-      },
-      {
         "command": "workerdeck.host.start",
         "title": "Start Server",
         "category": "WorkerDeck Host",
@@ -332,32 +329,6 @@
         "icon": "$(account)"
       }
     ],
-    "submenus": [
-      {
-        "id": "workerdeck.subagents.active",
-        "label": "Sub-agents",
-        "icon": {
-          "light": "media/subagents-active-light.svg",
-          "dark": "media/subagents-active-dark.svg"
-        }
-      },
-      {
-        "id": "workerdeck.subagents.all",
-        "label": "Sub-agents",
-        "icon": {
-          "light": "media/subagents-all-light.svg",
-          "dark": "media/subagents-all-dark.svg"
-        }
-      },
-      {
-        "id": "workerdeck.subagents.none",
-        "label": "Sub-agents",
-        "icon": {
-          "light": "media/subagents-none-light.svg",
-          "dark": "media/subagents-none-dark.svg"
-        }
-      }
-    ],
     "menus": {
       "editor/title": [
         {
@@ -373,43 +344,28 @@
           "group": "navigation@1"
         },
         {
-          "command": "workerdeck.showCompletedTasks",
-          "when": "view == workerdeck.tasks && !workerdeck.tasksShowCompleted",
-          "group": "navigation@1"
-        },
-        {
-          "command": "workerdeck.hideCompletedTasks",
-          "when": "view == workerdeck.tasks && workerdeck.tasksShowCompleted",
-          "group": "navigation@1"
-        },
-        {
           "command": "workerdeck.newSession",
           "when": "view == workerdeck.sessions",
           "group": "navigation@1"
         },
         {
+          "command": "workerdeck.showSearch",
+          "when": "view == workerdeck.sessions && !workerdeck.sessionsSearchOpen",
+          "group": "navigation@2"
+        },
+        {
+          "command": "workerdeck.hideSearch",
+          "when": "view == workerdeck.sessions && workerdeck.sessionsSearchOpen",
+          "group": "navigation@2"
+        },
+        {
           "command": "workerdeck.showFilter",
-          "when": "view == workerdeck.sessions && !workerdeck.sessionsFilterOpen",
-          "group": "navigation@2"
-        },
-        {
-          "command": "workerdeck.hideFilter",
-          "when": "view == workerdeck.sessions && workerdeck.sessionsFilterOpen",
-          "group": "navigation@2"
-        },
-        {
-          "submenu": "workerdeck.subagents.active",
-          "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'active'",
+          "when": "view == workerdeck.sessions && !workerdeck.sessionsFiltered",
           "group": "navigation@3"
         },
         {
-          "submenu": "workerdeck.subagents.all",
-          "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'all'",
-          "group": "navigation@3"
-        },
-        {
-          "submenu": "workerdeck.subagents.none",
-          "when": "view == workerdeck.sessions && workerdeck.sessionsSubagents == 'none'",
+          "command": "workerdeck.showFilterActive",
+          "when": "view == workerdeck.sessions && workerdeck.sessionsFiltered",
           "group": "navigation@3"
         },
         {
@@ -444,7 +400,15 @@
           "when": "false"
         },
         {
-          "command": "workerdeck.hideFilter",
+          "command": "workerdeck.showSearch",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.hideSearch",
+          "when": "false"
+        },
+        {
+          "command": "workerdeck.showFilterActive",
           "when": "false"
         },
         {
@@ -454,48 +418,6 @@
         {
           "command": "workerdeck.host.openSettings",
           "when": "false"
-        }
-      ],
-      "workerdeck.subagents.active": [
-        {
-          "command": "workerdeck.subagentsAll",
-          "group": "1_subagents@1"
-        },
-        {
-          "command": "workerdeck.subagentsActive",
-          "group": "1_subagents@2"
-        },
-        {
-          "command": "workerdeck.subagentsNone",
-          "group": "1_subagents@3"
-        }
-      ],
-      "workerdeck.subagents.all": [
-        {
-          "command": "workerdeck.subagentsAll",
-          "group": "1_subagents@1"
-        },
-        {
-          "command": "workerdeck.subagentsActive",
-          "group": "1_subagents@2"
-        },
-        {
-          "command": "workerdeck.subagentsNone",
-          "group": "1_subagents@3"
-        }
-      ],
-      "workerdeck.subagents.none": [
-        {
-          "command": "workerdeck.subagentsAll",
-          "group": "1_subagents@1"
-        },
-        {
-          "command": "workerdeck.subagentsActive",
-          "group": "1_subagents@2"
-        },
-        {
-          "command": "workerdeck.subagentsNone",
-          "group": "1_subagents@3"
         }
       ]
     },

@@ -5,16 +5,25 @@ import { clientFor } from './gateway.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost, SurfaceTarget } from './bridge-protocol.ts'
-import { DEFAULT_VIEW_CONFIG, buildRows, filterRows, runningSubagents, type SubagentDisplay, type ViewConfig } from './view-config.ts'
+import {
+  DEFAULT_VIEW_CONFIG,
+  buildRows,
+  displayCustomized,
+  facetFilterCount,
+  filterRows,
+  runningSubagents,
+  type SubagentDisplay,
+  type ViewConfig,
+} from './view-config.ts'
 import { WebviewViewHost } from './webview-host.ts'
 import { ProjectIconCache } from './project-icons.ts'
 
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 
-export const FILTER_CONTEXT_KEY = 'workerdeck.sessionsFilterOpen'
-const FILTER_OPEN_KEY = 'workerdeck.filterOpen.v1'
+const SEARCH_CONTEXT_KEY = 'workerdeck.sessionsSearchOpen'
+const SEARCH_OPEN_KEY = 'workerdeck.searchOpen.v1'
 
-export const SUBAGENTS_CONTEXT_KEY = 'workerdeck.sessionsSubagents'
+const FILTERED_CONTEXT_KEY = 'workerdeck.sessionsFiltered'
 
 export type SelectOptions = { subagentToolUseId?: string; revealToolUseId?: string; shellId?: string; target?: SurfaceTarget }
 
@@ -35,7 +44,8 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   readonly #model: SessionsModel
   readonly #delegate: SidebarDelegate
   #transports: WebviewTransportHost | undefined
-  #filterOpen = false
+  #searchOpen = false
+  #filtersRequested = false
   readonly #context: vscode.ExtensionContext
   #viewConfig: ViewConfig
   readonly #icons: ProjectIconCache
@@ -60,8 +70,8 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
     }
     // Seeds the context keys, so the title bar shows the right toggle icons before the view opens.
-    this.setFilterOpen(context.globalState.get<boolean>(FILTER_OPEN_KEY) ?? false)
-    this.setSubagents(this.#viewConfig.subagents)
+    this.setSearchOpen(context.globalState.get<boolean>(SEARCH_OPEN_KEY) ?? false)
+    this.#syncFiltered()
     model.onDidChange(() => this.#pushState())
   }
 
@@ -85,22 +95,37 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.#model.setWatching(SidebarProvider.viewId, false)
   }
 
-  setFilterOpen(open: boolean): void {
-    this.#filterOpen = open
-    void this.#context.globalState.update(FILTER_OPEN_KEY, open)
-    void vscode.commands.executeCommand('setContext', FILTER_CONTEXT_KEY, open)
-    this.post({ kind: 'wd-filter-open', open })
+  setSearchOpen(open: boolean): void {
+    this.#searchOpen = open
+    void this.#context.globalState.update(SEARCH_OPEN_KEY, open)
+    void vscode.commands.executeCommand('setContext', SEARCH_CONTEXT_KEY, open)
+    this.post({ kind: 'wd-search-open', open })
   }
 
-  toggleFilter(): void {
-    this.setFilterOpen(!this.#filterOpen)
+  toggleSearch(): void {
+    this.setSearchOpen(!this.#searchOpen)
+  }
+
+  // The popover lives in the webview, so a press on the title bar before the view has booted is held until `onReady`.
+  toggleFilters(): void {
+    if (this.view && this.ready) {
+      this.post({ kind: 'wd-filters-toggle' })
+      return
+    }
+    this.#filtersRequested = true
+    void vscode.commands.executeCommand(`${SidebarProvider.viewId}.focus`)
   }
 
   setSubagents(subagents: SubagentDisplay): void {
     this.#viewConfig = { ...this.#viewConfig, subagents }
     void this.#context.globalState.update(VIEW_CONFIG_KEY, this.#viewConfig)
-    void vscode.commands.executeCommand('setContext', SUBAGENTS_CONTEXT_KEY, subagents)
+    this.#syncFiltered()
     this.post({ kind: 'wd-subagents', subagents })
+  }
+
+  #syncFiltered(): void {
+    const filtered = facetFilterCount(this.#viewConfig) > 0 || displayCustomized(this.#viewConfig)
+    void vscode.commands.executeCommand('setContext', FILTERED_CONTEXT_KEY, filtered)
   }
 
   subagentsDisplay(): SubagentDisplay {
@@ -139,8 +164,12 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() })
     this.#pushState()
     // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
-    this.post({ kind: 'wd-filter-open', open: this.#filterOpen })
+    this.post({ kind: 'wd-search-open', open: this.#searchOpen })
     this.post({ kind: 'wd-subagents', subagents: this.#viewConfig.subagents })
+    if (this.#filtersRequested) {
+      this.#filtersRequested = false
+      this.post({ kind: 'wd-filters-toggle' })
+    }
   }
 
   protected override async onMessage(msg: SidebarToHost): Promise<void> {
@@ -150,12 +179,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         return
       }
       case 'wd-view-config': {
-        const changed = this.#viewConfig.subagents !== msg.config.subagents
         this.#viewConfig = msg.config
         void this.#context.globalState.update(VIEW_CONFIG_KEY, msg.config)
-        if (changed) {
-          void vscode.commands.executeCommand('setContext', SUBAGENTS_CONTEXT_KEY, msg.config.subagents)
-        }
+        this.#syncFiltered()
         this.#pushState()
         return
       }
@@ -167,6 +193,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           target: msg.target,
         })
         return
+      }
+      case 'wd-stop-task': {
+        return this.#stopTask(msg.hostId, msg.sessionId, msg.toolUseId)
       }
       case 'wd-kill-shell': {
         return this.#killShell(msg.hostId, msg.sessionId, msg.shellId)
@@ -293,6 +322,20 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       await client.killShell(sessionId, shellId)
     } catch (err) {
       void vscode.window.showErrorMessage(`WorkerDeck: kill failed - ${err instanceof Error ? err.message : String(err)}`)
+    }
+    await this.#model.refresh()
+  }
+
+  async #stopTask(hostId: string, sessionId: string, toolUseId: string): Promise<void> {
+    const host = this.#store.get(hostId)
+    const client = host && (await clientFor(this.#store, host))
+    if (!client) {
+      return
+    }
+    try {
+      await client.stopTask(sessionId, toolUseId)
+    } catch (err) {
+      void vscode.window.showErrorMessage(`WorkerDeck: stop failed - ${err instanceof Error ? err.message : String(err)}`)
     }
     await this.#model.refresh()
   }

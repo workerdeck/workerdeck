@@ -180,7 +180,12 @@ tokens); `session_closed` and the terminal statuses still settle everything, bec
 hosting those agents is gone, and evidence that is merely *replayed* is never spared for the same
 reason. A background agent's real verdict is the CLI's `task_notification` (`completed` → `done`,
 any other stop → `failed`), which on a resume survives only as the `<task-notification>` wrapper
-text - the `SYNTHETIC_USER_PREFIXES` argument again. The spawner name is **not** the rule
+text - the `SYNTHETIC_USER_PREFIXES` argument again. A `task_started` record also keeps the CLI's `task_id`, which is
+what makes it **stoppable** (`SubagentInfo.stoppable`, `Runner.stopTask` → `Query.stopTask`, `POST
+sessions/:id/tasks/:toolUseId/stop`), and the CLI's `background_tasks_changed` level signal settles
+any such record missing from the live set as `done`: that is what clears a background task the
+agent never reported on. Records without a task id are never judged by it, so an older CLI that
+sends no level changes nothing. The spawner name is **not** the rule
 (`Task` and `Agent` are both observed, and a third spelling is caught by `task_started`, the
 receipt, or the nested-event fallback); and it is **bounded** - every running record plus the newest
 `SUBAGENT_HISTORY` settled, evicted by settle order and not insertion order, because this rides
@@ -1647,7 +1652,10 @@ extension-specific. There is **no per-row disclosure**: the rows are always draw
 count that doubled as the twisty's handle is gone with `StepToggle`. How many draw is one global
 preference, `ViewConfig.subagents` (`all` / `active` / `none`, default `active` - running and
 failed, a failed record not being a completed one), applied by protocol's `visibleSubagents` and
-cycled by `SubagentToggle`, an icon-only button each client puts in its own top nav. A step is divided from the card's header by **indentation and its own rounded
+set, with `ViewConfig.shells` and `ViewConfig.tasks` beside it, from the `SessionFilters` popover
+(`SessionFiltersButton` in a host's header; `SessionBrowser` can still draw it inline with
+`showControls`, and draws `SessionSearch` on `showSearch`). Steps are agents, then tasks
+(`displayedTasks`: the checklist plus untyped spawns), then shells (`visibleShells`). A step is divided from the card's header by **indentation and its own rounded
 hit shape**, not by a rule. The rules came first, on the argument that at 11px (`text-micro`) an
 indent is not enough to say "list inside a row" - right about the reading and wrong about the
 cost: a stack of hairlines across every open card turned the list into a ledger, and a rule cannot

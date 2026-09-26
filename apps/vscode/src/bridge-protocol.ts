@@ -158,6 +158,12 @@ export type SidebarToHost =
       shellId: string
     }
   | {
+      kind: 'wd-stop-task'
+      hostId: string
+      sessionId: string
+      toolUseId: string
+    }
+  | {
       kind: 'wd-shell-agent-write'
       hostId: string
       sessionId: string
@@ -194,9 +200,10 @@ export type HostToSidebar =
   | TransportToWebview
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | {
-      kind: 'wd-filter-open'
+      kind: 'wd-search-open'
       open: boolean
     }
+  | { kind: 'wd-filters-toggle' }
   | {
       kind: 'wd-subagents'
       subagents: SubagentDisplay
@@ -237,7 +244,6 @@ export type HostToSection =
   | TransportToWebview
   | { kind: 'wd-sidebar-state'; state: SidebarState }
   | { kind: 'wd-vitals'; vitals?: SessionVitals }
-  | { kind: 'wd-tasks-show-completed'; showCompleted: boolean }
 
 export type WebviewToHost = PanelToHost | SidebarToHost | SectionToHost | GatewaysToHost | ProfilesToHost
 export type HostToWebview = HostToPanel | HostToSidebar | HostToSection | HostToGateways | HostToProfiles

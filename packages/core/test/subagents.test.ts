@@ -577,3 +577,68 @@ describe('SessionRunner background sub-agents', () => {
     expect(runner.info().subagents).toMatchObject([{ toolUseId: 'spawn-y', status: 'failed' }])
   })
 })
+
+function bashStarted(taskId: string, toolUseId: string, command: string) {
+  return {
+    type: 'system',
+    subtype: 'task_started',
+    task_id: taskId,
+    tool_use_id: toolUseId,
+    description: command,
+    task_type: 'local_bash',
+    is_backgrounded: true,
+    uuid: nextUuid(),
+    session_id: 'sdk-session-1',
+  } as unknown as SDKMessage
+}
+
+function backgroundTasks(taskIds: string[]) {
+  return {
+    type: 'system',
+    subtype: 'background_tasks_changed',
+    tasks: taskIds.map((task_id) => ({ task_id, task_type: 'local_bash', description: 'x' })),
+    uuid: nextUuid(),
+    session_id: 'sdk-session-1',
+  } as unknown as SDKMessage
+}
+
+describe('stoppable background tasks', () => {
+  it('marks a live background task stoppable and stops it through the SDK by its task id', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(bashStarted('b-1', 'bash-1', 'node packages/cli/cli.ts --port 4179'))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'bash-1', status: 'running', stoppable: true }])
+    expect(await runner.stopTask('bash-1')).toBe(true)
+    expect(harness.stopTask).toHaveBeenCalledWith('b-1')
+    expect(await runner.stopTask('nope')).toBe(false)
+  })
+
+  it('settles a task the level signal no longer lists, and stops offering the stop', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(bashStarted('b-1', 'bash-1', 'sleep 100'))
+    harness.emit(bashStarted('b-2', 'bash-2', 'sleep 200'))
+    harness.emit(backgroundTasks(['b-2']))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([
+      { toolUseId: 'bash-1', status: 'done' },
+      { toolUseId: 'bash-2', status: 'running', stoppable: true },
+    ])
+    expect(runner.info().subagents?.[0]?.stoppable).toBeUndefined()
+    expect(await runner.stopTask('bash-1')).toBe(false)
+  })
+
+  it('never offers a stop for a record without a task id', async () => {
+    const { harness, runner } = makeRunner()
+    void runner.start()
+    harness.emit(initMessage)
+    harness.emit(assistant([taskCall('sync-1', { subagent_type: 'Explore' })]))
+    harness.emit(backgroundTasks([]))
+    await tick()
+    expect(runner.info().subagents).toMatchObject([{ toolUseId: 'sync-1', status: 'running' }])
+    expect(runner.info().subagents?.[0]?.stoppable).toBeUndefined()
+  })
+})

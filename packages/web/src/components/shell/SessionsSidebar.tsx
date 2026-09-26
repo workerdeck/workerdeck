@@ -1,12 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
-import { filterRows, sessionLabel, type SessionRow } from '@workerdeck/protocol'
-import { Button, Empty, EmptyKey, EngineIcon, SessionBrowser, SessionStatusIcon, SubagentToggle, cn, toast } from '@workerdeck/ui'
-import { Filter, Layers, Plus, RefreshCw } from 'lucide-react'
+import { filterRows, sessionLabel, type SessionRow, type SessionTask } from '@workerdeck/protocol'
+import { Button, Empty, EmptyKey, EngineIcon, SessionBrowser, SessionFiltersButton, SessionStatusIcon, cn, toast } from '@workerdeck/ui'
+import { Layers, Plus, RefreshCw, Search } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
 import { clientFor, primaryHost } from '@/lib/hosts.ts'
-import { getFiltersShown, setFiltersShown } from '@/lib/sidebar.ts'
+import { getSearchShown, setSearchShown } from '@/lib/sidebar.ts'
 import { useProjectIcons } from '@workerdeck/react'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useViewConfig } from '@/hooks/useViewConfig.ts'
@@ -38,7 +38,7 @@ export function SessionsSidebar() {
   }
   const [config, setConfig] = useViewConfig()
   const [creating, setCreating] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(getFiltersShown)
+  const [searchOpen, setSearchOpen] = useState(getSearchShown)
   // The rail renders rows itself, so it has to apply the filter `SessionBrowser` would: collapsing must not widen the list.
   const visible = useMemo(() => filterRows(rows, config), [rows, config])
 
@@ -87,6 +87,30 @@ export function SessionsSidebar() {
       .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Rename failed'))
   }
 
+  const toggleSearch = () => {
+    const next = !searchOpen
+    setSearchOpen(next)
+    setSearchShown(next)
+    if (!next && config.search) {
+      setConfig({ ...config, search: '' })
+    }
+  }
+
+  const stopTask = (row: SessionRow, toolUseId: string) => {
+    void clientFor(row.hostId)
+      ?.stopTask(row.info.id, toolUseId)
+      .then(() => refresh())
+      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Stop failed'))
+  }
+
+  const revealNonce = useRef(0)
+  const openTask = (row: SessionRow, task: SessionTask) =>
+    void navigate({
+      to: '/sessions/$hostId/$sessionId',
+      params: { hostId: row.hostId, sessionId: row.info.id },
+      search: task.toolUseId ? { reveal: task.toolUseId, rn: ++revealNonce.current } : {},
+    })
+
   const create = (
     <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={() => setCreating(true)}>
       <Plus className="size-4" />
@@ -101,19 +125,16 @@ export function SessionsSidebar() {
         railActions={create}
         actions={
           <>
-            <SubagentToggle value={config.subagents} onChange={(subagents) => setConfig({ ...config, subagents })} />
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={filtersOpen ? 'Hide filters' : 'Show filters'}
-              aria-pressed={filtersOpen}
-              onClick={() => {
-                setFiltersOpen(!filtersOpen)
-                setFiltersShown(!filtersOpen)
-              }}
+              aria-label={searchOpen ? 'Hide search' : 'Search sessions'}
+              aria-pressed={searchOpen}
+              onClick={toggleSearch}
             >
-              <Filter className={cn('size-3.5', filtersOpen && 'fill-current text-fg-1')} />
+              <Search className={cn('size-3.5', searchOpen && 'text-fg-1')} />
             </Button>
+            <SessionFiltersButton config={config} onConfigChange={setConfig} rows={rows} />
             <Button variant="ghost" size="icon-sm" aria-label="Refresh" onClick={() => void refresh()}>
               <RefreshCw className="size-3.5" />
             </Button>
@@ -148,13 +169,17 @@ export function SessionsSidebar() {
             rows={rows}
             config={config}
             onConfigChange={setConfig}
-            showControls={filtersOpen}
+            showControls={false}
+            showSearch={searchOpen}
+            autoFocusSearch
             projectIcons={projectIcons}
             activeId={activeId}
             activeSubagentId={activeSubagentId}
             activeShellId={activeShellId}
             onSelect={open}
             onSelectSubagent={openSubagent}
+            onSelectTask={openTask}
+            onStopTask={stopTask}
             onSelectShell={openShell}
             onKillShell={killShell}
             onShellAgentWrite={shellAgentWrite}

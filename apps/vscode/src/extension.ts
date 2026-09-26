@@ -30,13 +30,10 @@ const SECTION_VIEWS: Record<SectionKind, string> = {
   context: 'workerdeck.context',
   usage: 'workerdeck.usage',
   mcp: 'workerdeck.mcp',
-  tasks: 'workerdeck.tasks',
 }
 
 const HAS_SESSION_KEY = 'workerdeck.hasSession'
 const PANEL_HAS_SESSION_KEY = 'workerdeck.panelHasSession'
-const TASKS_SHOW_COMPLETED_KEY = 'workerdeck.tasksShowCompleted.v1'
-const TASKS_SHOW_COMPLETED_CONTEXT_KEY = 'workerdeck.tasksShowCompleted'
 
 const UNREAD_WATCHER = 'workerdeck.statusBar.unread'
 
@@ -83,11 +80,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  let tasksShowCompleted = context.globalState.get<boolean>(TASKS_SHOW_COMPLETED_KEY) ?? false
   const feed = {
     state: () => model.sidebarState(),
     vitals: () => registry.focused.vitals,
-    tasksShowCompleted: () => tasksShowCompleted,
   }
   const sections = Object.fromEntries(
     (Object.keys(SECTION_VIEWS) as SectionKind[]).map((kind) => [kind, new SectionViewProvider(context.extensionUri, store, kind, feed)]),
@@ -151,6 +146,10 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (p === 'files') {
         await vscode.commands.executeCommand('workerdeck.openProjectFolder')
+        return
+      }
+      if (p === 'tasks') {
+        await vscode.commands.executeCommand(`${SidebarProvider.viewId}.focus`)
         return
       }
       await vscode.commands.executeCommand(`${SECTION_VIEWS[p]}.focus`)
@@ -364,14 +363,6 @@ export function activate(context: vscode.ExtensionContext): void {
   })
   syncSurfaces()
 
-  const setTasksShowCompleted = (showCompleted: boolean) => {
-    tasksShowCompleted = showCompleted
-    void context.globalState.update(TASKS_SHOW_COMPLETED_KEY, showCompleted)
-    void vscode.commands.executeCommand('setContext', TASKS_SHOW_COMPLETED_CONTEXT_KEY, showCompleted)
-    pushSections()
-  }
-  setTasksShowCompleted(tasksShowCompleted)
-
   // Must stay after the registry subscribers above, so restoring feeds the status bar and the `when` keys the way selecting would.
   const remembered = context.workspaceState.get<SurfaceState>(ACTIVE_SESSION_KEY)
   if (remembered) {
@@ -507,18 +498,18 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('workerdeck.resumeSession', () => resumeSession(sessionFlow)),
     vscode.commands.registerCommand('workerdeck.refreshSessions', () => model.refresh()),
 
-    vscode.commands.registerCommand('workerdeck.showFilter', () => sidebar.setFilterOpen(true)),
-    vscode.commands.registerCommand('workerdeck.hideFilter', () => sidebar.setFilterOpen(false)),
-    vscode.commands.registerCommand('workerdeck.toggleFilter', () => sidebar.toggleFilter()),
+    vscode.commands.registerCommand('workerdeck.showSearch', () => sidebar.setSearchOpen(true)),
+    vscode.commands.registerCommand('workerdeck.hideSearch', () => sidebar.setSearchOpen(false)),
+    vscode.commands.registerCommand('workerdeck.toggleSearch', () => sidebar.toggleSearch()),
+    vscode.commands.registerCommand('workerdeck.showFilter', () => sidebar.toggleFilters()),
+    vscode.commands.registerCommand('workerdeck.showFilterActive', () => sidebar.toggleFilters()),
+    vscode.commands.registerCommand('workerdeck.toggleFilter', () => sidebar.toggleFilters()),
 
     // Each command sets the state it names. They used to set the *next* one, which is what a
     // press-to-cycle title button needs and the opposite of what a menu item means.
     vscode.commands.registerCommand('workerdeck.subagentsActive', () => sidebar.setSubagents('active')),
     vscode.commands.registerCommand('workerdeck.subagentsAll', () => sidebar.setSubagents('all')),
     vscode.commands.registerCommand('workerdeck.subagentsNone', () => sidebar.setSubagents('none')),
-
-    vscode.commands.registerCommand('workerdeck.showCompletedTasks', () => setTasksShowCompleted(true)),
-    vscode.commands.registerCommand('workerdeck.hideCompletedTasks', () => setTasksShowCompleted(false)),
 
     vscode.commands.registerCommand('workerdeck.openSessionInEditor', async () => {
       const session = panel.session

@@ -299,6 +299,10 @@ export class WorkerDeckClient {
     return (body as { shell: ShellInfo }).shell
   }
 
+  async stopTask(sessionId: string, toolUseId: string): Promise<void> {
+    await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(toolUseId)}/stop`)
+  }
+
   async setShellAgentWrite(sessionId: string, shellId: string, enabled: boolean): Promise<ShellInfo> {
     const path = `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}/agent-write`
     const body = await this.#call('POST', path, { enabled })

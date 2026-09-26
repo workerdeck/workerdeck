@@ -52,7 +52,6 @@ import {
   type ComposerCommandRow,
 } from './composer-commands.ts'
 import { ContextDialog } from './ContextDialog.tsx'
-import { TasksDialog } from './TasksDialog.tsx'
 import { HostFilesDialog } from './HostFilesDialog.tsx'
 import { McpDialog } from './McpDialog.tsx'
 import { SkillsDialog } from './SkillsDialog.tsx'
@@ -266,8 +265,6 @@ export function SessionPanel({
   const controlsExternal = controlsSurface === 'external' || controlsInStatus
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined)
   const [panel, setPanel] = useState<Panel | undefined>()
-  const [showCompletedTasks, setShowCompletedTasks] = useState(false)
-  const [taskReveal, setTaskReveal] = useState<{ toolUseId: string; nonce: number } | undefined>()
   const {
     state,
     connection,
@@ -644,8 +641,6 @@ export function SessionPanel({
       onOpenStatus={external && !onOpenPanel ? undefined : () => openPanel('info')}
       onOpenContext={external && !onOpenPanel ? undefined : () => openPanel('context')}
       onOpenUsage={external && !onOpenPanel ? undefined : () => openPanel('usage')}
-      tasks={tasks}
-      onOpenTasks={external && !onOpenPanel ? undefined : () => openPanel('tasks')}
       actions={headerTakesActions ? undefined : menu}
     />
   )
@@ -765,7 +760,7 @@ export function SessionPanel({
                           bookmarks={bookmarks}
                           replaying={replaying}
                           catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
-                          reveal={taskReveal ?? frameReturnReveal ?? reveal}
+                          reveal={frameReturnReveal ?? reveal}
                           frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
                           onOpenSubagent={enterSubagent}
                           emptyState={emptyState}
@@ -905,18 +900,6 @@ export function SessionPanel({
                           canManageServers={capabilities.mcpServerActions}
                           open={panel === 'mcp'}
                           onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
-                        />
-                        <TasksDialog
-                          tasks={tasks}
-                          showCompleted={showCompletedTasks}
-                          onShowCompletedChange={setShowCompletedTasks}
-                          onSelectTask={(task) => {
-                            if (task.toolUseId) {
-                              setTaskReveal({ toolUseId: task.toolUseId, nonce: Date.now() })
-                            }
-                          }}
-                          open={panel === 'tasks'}
-                          onOpenChange={(next) => setPanel(next ? 'tasks' : undefined)}
                         />
                         <SkillsDialog
                           skills={state.skills}

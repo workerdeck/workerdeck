@@ -3,6 +3,7 @@ import { SUBAGENT_HISTORY, type ContentBlock, type SessionEventBody, type Subage
 type TrackedSubagent = SubagentInfo & {
   settledOrder?: number
   background?: 'live' | 'replay'
+  taskId?: string
 }
 
 const SPAWNER_NAMES = new Set(['Task', 'Agent'])
@@ -87,6 +88,12 @@ export class SubagentTracker {
           status?: unknown
           subagent_type?: unknown
           description?: unknown
+          task_id?: unknown
+          tasks?: unknown
+        }
+        if (p.type === 'system' && p.subtype === 'background_tasks_changed' && Array.isArray(p.tasks)) {
+          this.#reconcile(p.tasks)
+          return
         }
         if (p.type !== 'system' || typeof p.tool_use_id !== 'string') {
           return
@@ -94,6 +101,9 @@ export class SubagentTracker {
         if (p.subtype === 'task_started') {
           const record = this.#recordFor(p.tool_use_id, ts)
           record.background = 'live'
+          if (typeof p.task_id === 'string') {
+            record.taskId ??= p.task_id
+          }
           record.agentType ??= cleaned(p.subagent_type)
           record.description ??= cleaned(p.description)
           return
@@ -147,9 +157,36 @@ export class SubagentTracker {
         status: r.status,
         startedAt: r.startedAt,
         toolCount: r.toolCount,
+        stoppable: this.#stoppable(r) ? true : undefined,
       })
     }
     return out
+  }
+
+  taskIdOf(toolUseId: string): string | undefined {
+    const record = this.#records.get(toolUseId)
+    return record && this.#stoppable(record) ? record.taskId : undefined
+  }
+
+  #stoppable(record: TrackedSubagent): boolean {
+    return record.taskId !== undefined && record.status === 'running' && record.background === 'live'
+  }
+
+  // The CLI's level signal: a task we saw start that is no longer in the live set has ended, even when the agent
+  // never reported it. Only records carrying a task id are judged, so an older CLI that sends no level changes nothing.
+  #reconcile(tasks: unknown[]): void {
+    const live = new Set<string>()
+    for (const task of tasks) {
+      const id = (task as { task_id?: unknown } | null)?.task_id
+      if (typeof id === 'string') {
+        live.add(id)
+      }
+    }
+    for (const record of this.#records.values()) {
+      if (this.#stoppable(record) && !live.has(record.taskId!)) {
+        this.#settle(record, 'done')
+      }
+    }
   }
 
   #recordFor(toolUseId: string, ts: number): TrackedSubagent {

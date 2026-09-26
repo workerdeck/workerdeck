@@ -106,6 +106,26 @@ export async function handleSessions(
     await handleShells(ctx, req, res, route, runner ?? null, authSvc.isOperator(auth))
     return
   }
+  if (route.stopTaskId !== undefined) {
+    if (req.method !== 'POST') {
+      json(res, 405, { error: 'method not allowed' })
+      return
+    }
+    if (!runner) {
+      json(res, 409, { error: 'session is parked (it has no running tasks)' })
+      return
+    }
+    if (!runner.stopTask) {
+      json(res, 501, { error: `the ${runner.info().engine ?? 'claude'} engine cannot stop a task` })
+      return
+    }
+    if (!(await runner.stopTask(route.stopTaskId))) {
+      json(res, 404, { error: 'no running task to stop' })
+      return
+    }
+    json(res, 200, { ok: true })
+    return
+  }
   if (route.projectIcon) {
     handleProjectIcon(projects, req, res, (runner?.info() ?? parked!.info).cwd)
     return

@@ -13,6 +13,7 @@ export {
   AlertDialogTrigger,
 } from './components/ui/AlertDialog.tsx'
 export { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './components/ui/Menu.tsx'
+export { Popover, PopoverContent, PopoverTrigger } from './components/ui/Popover.tsx'
 export { Dialog, DialogBody, DialogClose, DialogContent, DialogHeader, DialogRow, DialogTrigger } from './components/ui/Dialog.tsx'
 export { Tip, TooltipContent, TooltipProvider } from './components/ui/Tooltip.tsx'
 export { Toaster, toast } from './components/ui/Sonner.tsx'
@@ -133,11 +134,26 @@ export { McpDialog, type McpDialogProps } from './components/agent/McpDialog.tsx
 export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsDialog.tsx'
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export { SessionList, SessionListItem, type SessionListItemProps, type SessionListProps } from './components/agent/SessionList.tsx'
-export { SessionBrowser, rowShapeClass, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
+export { SessionBrowser, SessionSearch, rowShapeClass, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
+export {
+  STEP_DISPLAY_OPTIONS,
+  SessionFilters,
+  SessionFiltersButton,
+  StepDisplayControl,
+  type SessionFiltersButtonProps,
+  type SessionFiltersProps,
+} from './components/agent/SessionFilters.tsx'
 export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
-export { type ShellStepOptions, type Step, type StepKind, StepRow, sessionSteps } from './components/agent/SessionSteps.tsx'
+export {
+  type ShellStepOptions,
+  type Step,
+  type StepKind,
+  type TaskStepOptions,
+  StepRow,
+  sessionSteps,
+} from './components/agent/SessionSteps.tsx'
 export {
   SUBAGENT_DISPLAY_META,
   SUBAGENT_DISPLAY_ORDER,

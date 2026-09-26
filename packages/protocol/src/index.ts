@@ -739,6 +739,8 @@ export type SubagentInfo = {
   status: 'running' | 'done' | 'failed'
   startedAt: number
   toolCount: number
+  // The engine can stop this record's background task on request (`POST .../tasks/:toolUseId/stop`).
+  stoppable?: boolean
 }
 
 export const SUBAGENT_HISTORY = 8

@@ -1,4 +1,4 @@
-import type { SessionRow, SubagentDisplay } from '@workerdeck/protocol'
+import type { SessionRow, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
 import { SessionItem, cn, type SelectModifiers } from '@workerdeck/ui'
 import { AppWindow, MoreHorizontal } from 'lucide-react'
 
@@ -7,6 +7,8 @@ export function SessionCard({
   showProject = true,
   showGateway,
   subagents,
+  shells,
+  tasks,
   projectIcons,
   selected,
   inEditor = false,
@@ -14,6 +16,8 @@ export function SessionCard({
   activeShellId,
   onSelect,
   onSelectSubagent,
+  onSelectTask,
+  onStopTask,
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
@@ -24,6 +28,8 @@ export function SessionCard({
   showProject?: boolean
   showGateway?: boolean
   subagents?: SubagentDisplay
+  shells?: StepDisplay
+  tasks?: StepDisplay
   projectIcons?: Record<string, string>
   selected: boolean
   inEditor?: boolean
@@ -31,6 +37,8 @@ export function SessionCard({
   activeShellId?: string
   onSelect: (modifiers: SelectModifiers) => void
   onSelectSubagent: (toolUseId: string) => void
+  onSelectTask: (task: SessionTask) => void
+  onStopTask: (toolUseId: string) => void
   onSelectShell: (shellId: string) => void
   onKillShell: (shellId: string) => void
   onShellAgentWrite?: (shellId: string, enabled: boolean) => void
@@ -45,9 +53,13 @@ export function SessionCard({
       showProject={showProject}
       showGateway={showGateway}
       subagents={subagents}
+      shells={shells}
+      tasks={tasks}
       projectIcons={projectIcons}
       onSelect={onSelect}
       onSelectSubagent={onSelectSubagent}
+      onSelectTask={onSelectTask}
+      onStopTask={onStopTask}
       onSelectShell={onSelectShell}
       onKillShell={onKillShell}
       onShellAgentWrite={onShellAgentWrite}

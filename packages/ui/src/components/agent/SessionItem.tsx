@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
-import type { SessionRow, SubagentDisplay } from '@workerdeck/protocol'
+import type { SessionRow, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
@@ -21,8 +21,12 @@ export interface SessionItemProps {
   showProject?: boolean
   projectIcons?: Record<string, string>
   subagents?: SubagentDisplay
+  shells?: StepDisplay
+  tasks?: StepDisplay
   onSelect?: (modifiers: SelectModifiers) => void
   onSelectSubagent?: (toolUseId: string) => void
+  onSelectTask?: (task: SessionTask) => void
+  onStopTask?: (toolUseId: string) => void
   onSelectShell?: (shellId: string) => void
   onKillShell?: (shellId: string) => void
   onShellAgentWrite?: (shellId: string, enabled: boolean) => void
@@ -45,8 +49,12 @@ export function SessionItem({
   showProject = true,
   projectIcons,
   subagents = 'active',
+  shells = 'active',
+  tasks = 'active',
   onSelect,
   onSelectSubagent,
+  onSelectTask,
+  onStopTask,
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
@@ -98,12 +106,24 @@ export function SessionItem({
   for (const extra of extras) {
     parts.push(<span key={extra}>{extra}</span>)
   }
-  const steps = sessionSteps(info, (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)), subagents, {
-    now: now ?? Date.now(),
-    onSelect: (shellId) => (onSelectShell ? onSelectShell(shellId) : onSelect?.(NO_MODIFIERS)),
-    onKill: onKillShell,
-    onAgentWrite: onShellAgentWrite,
-  })
+  const steps = sessionSteps(
+    info,
+    (toolUseId) => (onSelectSubagent ? onSelectSubagent(toolUseId) : onSelect?.(NO_MODIFIERS)),
+    subagents,
+    {
+      now: now ?? Date.now(),
+      show: shells,
+      onSelect: (shellId) => (onSelectShell ? onSelectShell(shellId) : onSelect?.(NO_MODIFIERS)),
+      onKill: onKillShell,
+      onAgentWrite: onShellAgentWrite,
+    },
+    {
+      show: tasks,
+      live: info.status === 'running' || info.status === 'starting',
+      onSelect: (task) => (onSelectTask ? onSelectTask(task) : onSelect?.(NO_MODIFIERS)),
+      onStop: onStopTask,
+    },
+  )
   const holdsOpenStep = steps.some((s) => s.key === activeStepKey)
 
   return (

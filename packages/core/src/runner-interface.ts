@@ -68,6 +68,8 @@ export interface Runner {
   setTitle(title: string | undefined): void
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>
+  // Resolves false when the record has no stoppable background task (unknown, settled, or not the engine's to stop).
+  stopTask?(toolUseId: string): Promise<boolean>
   clearContext?(): Promise<void>
   setPermissionMode(mode: PermissionMode): Promise<void>
   setModel(model?: string): Promise<void>

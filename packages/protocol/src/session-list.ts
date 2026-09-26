@@ -58,8 +58,10 @@ export type Facet = 'gateway' | 'adapter' | 'state' | 'project'
 export type GroupBy = 'none' | Facet
 export type SortBy = 'recent' | 'name' | Facet
 
-// How much of a session's sub-agent list its card draws. A layout preference, not a facet filter.
-export type SubagentDisplay = 'all' | 'active' | 'none'
+// How much of one of a card's child lists it draws. A layout preference, not a facet filter.
+export type StepDisplay = 'all' | 'active' | 'none'
+
+export type SubagentDisplay = StepDisplay
 
 export type ViewConfig = {
   search: string
@@ -71,6 +73,8 @@ export type ViewConfig = {
   groupBy: GroupBy
   sortBy: SortBy
   subagents: SubagentDisplay
+  shells?: StepDisplay
+  tasks?: StepDisplay
 }
 
 export const DEFAULT_VIEW_CONFIG: ViewConfig = {
@@ -83,6 +87,8 @@ export const DEFAULT_VIEW_CONFIG: ViewConfig = {
   groupBy: 'state',
   sortBy: 'recent',
   subagents: 'active',
+  shells: 'active',
+  tasks: 'active',
 }
 
 export type ScopeRoot = { hostId?: string; path: string }
@@ -171,6 +177,17 @@ export function promotedShells(info: SessionInfo, now: number): ShellInfo[] {
     }
     return shell.endedAt - shell.startedAt >= SHELL_PROMOTE_MS && now - shell.endedAt < SHELL_LINGER_MS
   })
+}
+
+// 'active' is `promotedShells`; 'all' adds every shell that has ended, whatever its exit.
+export function visibleShells(info: SessionInfo, show: StepDisplay, now: number): ShellInfo[] {
+  if (show === 'none') {
+    return []
+  }
+  if (show === 'active') {
+    return promotedShells(info, now)
+  }
+  return (info.shells ?? []).filter((shell) => shell.status !== 'running' || now - shell.startedAt >= SHELL_PROMOTE_MS)
 }
 
 function matchesSearch(row: SessionRow, needle: string): boolean {
@@ -322,6 +339,18 @@ export function hasFacetFilter(config: ViewConfig): boolean {
   )
 }
 
+export function facetFilterCount(config: ViewConfig): number {
+  return [config.gateways, config.adapters, config.states, config.projects ?? []].filter((facet) => facet.length > 0).length
+}
+
+export function displayCustomized(config: ViewConfig): boolean {
+  return (
+    config.subagents !== DEFAULT_VIEW_CONFIG.subagents ||
+    (config.shells ?? DEFAULT_VIEW_CONFIG.shells) !== DEFAULT_VIEW_CONFIG.shells ||
+    (config.tasks ?? DEFAULT_VIEW_CONFIG.tasks) !== DEFAULT_VIEW_CONFIG.tasks
+  )
+}
+
 export function clearFilters(config: ViewConfig): ViewConfig {
   return {
     ...DEFAULT_VIEW_CONFIG,
@@ -329,5 +358,7 @@ export function clearFilters(config: ViewConfig): ViewConfig {
     groupBy: config.groupBy,
     sortBy: config.sortBy,
     subagents: config.subagents,
+    shells: config.shells,
+    tasks: config.tasks,
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAgentRecord, visibleSubagents } from '@workerdeck/protocol'
 import type { ShellInfo, SubagentInfo } from '@workerdeck/protocol'
-import { sessionSteps } from '../src/components/agent/SessionSteps.tsx'
+import { sessionSteps, type TaskStepOptions } from '../src/components/agent/SessionSteps.tsx'
 import type { SessionInfo } from '@workerdeck/protocol'
 
 function sub(over: Partial<SubagentInfo>): SubagentInfo {
@@ -192,5 +192,34 @@ describe('visibleSubagents', () => {
 
   it('survives a session with no sub-agents at all', () => {
     expect(visibleSubagents({} as SessionInfo, 'all')).toEqual([])
+  })
+})
+
+describe('sessionSteps tasks', () => {
+  const opts = (over: Partial<TaskStepOptions> = {}): TaskStepOptions => ({ show: 'all', live: true, onSelect: () => {}, ...over })
+  const info = {
+    checklist: [{ text: 'build', status: 'in_progress' }],
+    subagents: [sub({ toolUseId: 'a', agentType: 'Explore' }), sub({ toolUseId: 'bg', description: 'node server.js', stoppable: true })],
+    shells: [shell({ id: 'sh1' })],
+  } as unknown as SessionInfo
+
+  it('draws tasks between agents and shells', () => {
+    const steps = sessionSteps(info, () => {}, 'all', { now: 10_000, onSelect: () => {} }, opts())
+    expect(steps.map((s) => s.kind)).toEqual(['agent', 'task', 'task', 'shell'])
+  })
+
+  it('draws a checklist item left in progress on an idle session as pending, not running', () => {
+    const [build] = sessionSteps(info, () => {}, 'none', undefined, opts({ live: false }))
+    expect(build?.state).toBe('pending')
+    expect(sessionSteps(info, () => {}, 'none', undefined, opts())[0]?.state).toBe('running')
+  })
+
+  it('offers a stop only on a stoppable task, and only when the caller can stop', () => {
+    const stopped: string[] = []
+    const steps = sessionSteps(info, () => {}, 'none', undefined, opts({ onStop: (id) => stopped.push(id) }))
+    expect(steps[0]?.onKill).toBeUndefined()
+    steps[1]?.onKill?.()
+    expect(stopped).toEqual(['bg'])
+    expect(sessionSteps(info, () => {}, 'none', undefined, opts())[1]?.onKill).toBeUndefined()
   })
 })

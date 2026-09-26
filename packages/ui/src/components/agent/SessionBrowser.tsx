@@ -1,23 +1,13 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Eraser, Layers, Pencil, Search, SearchX, Trash2, X } from 'lucide-react'
-import {
-  STATE_LABELS,
-  STATE_ORDER,
-  adaptersOf,
-  clearFilters,
-  filterRows,
-  groupRows,
-  hasFacetFilter,
-  projectsOf,
-  subsetSummary,
-} from '@workerdeck/protocol'
-import type { GroupBy, SessionRow, SessionState, SortBy, SubagentDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
+import { clearFilters, filterRows, groupRows, hasFacetFilter, subsetSummary } from '@workerdeck/protocol'
+import type { SessionRow, SessionTask, StepDisplay, SubagentDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
-import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
+import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem } from './SessionItem.tsx'
 import { cn } from '../../lib/utils.ts'
 
@@ -37,11 +27,16 @@ export interface SessionBrowserProps {
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
+  onSelectTask?: (row: SessionRow, task: SessionTask) => void
+  onStopTask?: (row: SessionRow, toolUseId: string) => void
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
   emptyState?: React.ReactNode
+  // The facet controls, drawn inline. A host with a header puts `SessionFiltersButton` there instead.
   showControls?: boolean
+  showSearch?: boolean
+  autoFocusSearch?: boolean
   projectIcons?: Record<string, string>
   className?: string
 }
@@ -64,121 +59,31 @@ export function SessionBrowser({
   onRename,
   onClearContext,
   onSelectSubagent,
+  onSelectTask,
+  onStopTask,
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
   emptyState,
   showControls = true,
+  showSearch = showControls,
+  autoFocusSearch,
   projectIcons,
   className,
 }: SessionBrowserProps) {
   const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
   const groups = useMemo(() => groupRows(visible, config), [visible, config])
   const subset = subsetSummary(config, scope, visible.length, rows.length)
-  const adapters = useMemo(() => adaptersOf(rows), [rows])
-  const projects = useMemo(() => projectsOf(rows), [rows])
-  const gateways = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const row of rows) {
-      seen.set(row.hostId, row.hostName)
-    }
-    return [...seen].map(([id, name]) => ({ id, name }))
-  }, [rows])
+  const gatewayCount = useMemo(() => new Set(rows.map((row) => row.hostId)).size, [rows])
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
 
   return (
     <div data-slot="session-browser" className={cn('flex flex-col gap-3', className)}>
-      <div className={cn('flex flex-col gap-1.5 px-2', !showControls && 'hidden')}>
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-fg-4" />
-          <Input
-            value={config.search}
-            onChange={(e) => set({ search: e.target.value })}
-            placeholder="Search sessions"
-            aria-label="Search sessions"
-            className="pl-8"
-          />
-        </div>
-        <FilterRow label="State">
-          <FacetSelect
-            label="State"
-            value={config.states}
-            options={STATE_ORDER.map((s) => ({ value: s, label: STATE_LABELS[s] }))}
-            onChange={(states) => set({ states: states as SessionState[] })}
-          />
-        </FilterRow>
-        {adapters.length > 1 ? (
-          <FilterRow label="Engine">
-            <FacetSelect
-              label="Engine"
-              value={config.adapters}
-              options={adapters.map((a) => ({ value: a, label: a }))}
-              onChange={(adapters) => set({ adapters })}
-            />
-          </FilterRow>
-        ) : null}
-        {gateways.length > 1 ? (
-          <FilterRow label="Gateway">
-            <FacetSelect
-              label="Gateway"
-              value={config.gateways}
-              options={gateways.map((g) => ({ value: g.id, label: g.name }))}
-              onChange={(gateways) => set({ gateways })}
-            />
-          </FilterRow>
-        ) : null}
-        {projects.length > 1 ? (
-          <FilterRow label="Project">
-            <FacetSelect
-              label="Project"
-              value={config.projects ?? []}
-              options={projects.map((p) => ({ value: p.key, label: p.label }))}
-              onChange={(next) => set({ projects: next })}
-            />
-          </FilterRow>
-        ) : null}
-        <FilterRow label="Group">
-          <OneOfSelect
-            label="Group"
-            value={config.groupBy}
-            options={[
-              { value: 'none', label: 'No grouping' },
-              { value: 'state', label: 'By state' },
-              { value: 'adapter', label: 'By engine' },
-              ...(projects.length > 1 ? [{ value: 'project' as const, label: 'By project' }] : []),
-              ...(gateways.length > 1 ? [{ value: 'gateway' as const, label: 'By gateway' }] : []),
-            ]}
-            onChange={(groupBy) => set({ groupBy: groupBy as GroupBy })}
-          />
-        </FilterRow>
-        <FilterRow label="Sub-agents">
-          <OneOfSelect
-            label="Sub-agents"
-            value={config.subagents}
-            options={[
-              { value: 'active', label: 'Hide completed' },
-              { value: 'all', label: 'Show all' },
-              { value: 'none', label: 'Hide all' },
-            ]}
-            onChange={(subagents) => set({ subagents: subagents as SubagentDisplay })}
-          />
-        </FilterRow>
-        <FilterRow label="Sort">
-          <OneOfSelect
-            label="Sort"
-            value={config.sortBy}
-            options={[
-              { value: 'recent', label: 'Recent' },
-              { value: 'name', label: 'Name' },
-              { value: 'state', label: 'State' },
-              ...(projects.length > 1 ? [{ value: 'project' as const, label: 'Project' }] : []),
-              ...(gateways.length > 1 ? [{ value: 'gateway' as const, label: 'Gateway' }] : []),
-            ]}
-            onChange={(sortBy) => set({ sortBy: sortBy as SortBy })}
-          />
-        </FilterRow>
-      </div>
+      {showSearch ? (
+        <SessionSearch value={config.search} onChange={(search) => set({ search })} autoFocus={autoFocusSearch} className="px-2" />
+      ) : null}
+      {showControls ? <SessionFilters config={config} onConfigChange={onConfigChange} rows={rows} scope={scope} className="px-2" /> : null}
 
       {subset ? (
         <div className="flex items-center gap-2 px-3 text-label text-fg-4">
@@ -231,15 +136,19 @@ export function SessionBrowser({
                   activeSubagentId={activeSubagentId}
                   activeShellId={activeShellId}
                   now={now}
-                  showGateway={gateways.length > 1 && config.groupBy !== 'gateway'}
+                  showGateway={gatewayCount > 1 && config.groupBy !== 'gateway'}
                   showProject={config.groupBy !== 'project'}
                   subagents={config.subagents}
+                  shells={config.shells}
+                  tasks={config.tasks}
                   projectIcons={projectIcons}
                   onSelect={onSelect}
                   onDelete={onDelete}
                   onRename={onRename}
                   onClearContext={onClearContext}
                   onSelectSubagent={onSelectSubagent}
+                  onSelectTask={onSelectTask}
+                  onStopTask={onStopTask}
                   onSelectShell={onSelectShell}
                   onKillShell={onKillShell}
                   onShellAgentWrite={onShellAgentWrite}
@@ -267,12 +176,16 @@ interface SessionRowItemProps {
   showGateway?: boolean
   showProject?: boolean
   subagents?: SubagentDisplay
+  shells?: StepDisplay
+  tasks?: StepDisplay
   projectIcons?: Record<string, string>
   onSelect?: (row: SessionRow) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
+  onSelectTask?: (row: SessionRow, task: SessionTask) => void
+  onStopTask?: (row: SessionRow, toolUseId: string) => void
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
@@ -287,12 +200,16 @@ function SessionRowItem({
   showGateway,
   showProject = true,
   subagents,
+  shells,
+  tasks,
   projectIcons,
   onSelect,
   onDelete,
   onRename,
   onClearContext,
   onSelectSubagent,
+  onSelectTask,
+  onStopTask,
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
@@ -309,9 +226,13 @@ function SessionRowItem({
       showGateway={showGateway}
       showProject={showProject}
       subagents={subagents}
+      shells={shells}
+      tasks={tasks}
       projectIcons={projectIcons}
       onSelect={() => onSelect?.(row)}
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
+      onSelectTask={onSelectTask ? (task) => onSelectTask(row, task) : undefined}
+      onStopTask={onStopTask ? (id) => onStopTask(row, id) : undefined}
       onSelectShell={onSelectShell ? (id) => onSelectShell(row, id) : undefined}
       onKillShell={onKillShell ? (id) => onKillShell(row, id) : undefined}
       onShellAgentWrite={onShellAgentWrite ? (id, enabled) => onShellAgentWrite(row, id, enabled) : undefined}
@@ -364,80 +285,46 @@ function RowAction({ label, title, onClick, children }: { label: string; title?:
   )
 }
 
-function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span aria-hidden className="w-14 shrink-0 truncate text-label text-fg-3">
-        {label}
-      </span>
-      <div className="min-w-0 flex-1">{children}</div>
-    </div>
-  )
-}
-
-function FacetSelect({
-  label,
+export function SessionSearch({
   value,
-  options,
   onChange,
+  autoFocus,
+  className,
+  inputClassName,
 }: {
-  label: string
-  value: string[]
-  options: { value: string; label: string }[]
-  onChange: (value: string[]) => void
+  value: string
+  onChange: (value: string) => void
+  autoFocus?: boolean
+  className?: string
+  inputClassName?: string
 }) {
   return (
-    <div className="flex items-center gap-1">
-      <Select multiple value={value} onValueChange={(v) => onChange(v as string[])}>
-        <SelectTrigger aria-label={label} className="min-w-0 flex-1">
-          <SelectValue>
-            {value.length === 0
-              ? 'All'
-              : value.length === 1
-                ? (options.find((o) => o.value === value[0])?.label ?? 'All')
-                : `${value.length} selected`}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              <SelectItemText>{option.label}</SelectItemText>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {value.length > 0 ? (
-        <Button variant="ghost" size="icon-sm" aria-label={`Clear ${label}`} onClick={() => onChange([])}>
-          <X className="size-3 text-fg-4" />
-        </Button>
+    <div className={cn('relative', className)}>
+      <Search className="pointer-events-none absolute top-1/2 left-4.5 size-3.5 -translate-y-1/2 text-fg-4" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && value) {
+            e.stopPropagation()
+            onChange('')
+          }
+        }}
+        placeholder="Search sessions"
+        aria-label="Search sessions"
+        autoFocus={autoFocus}
+        className={cn('pr-7 pl-8', inputClassName)}
+      />
+      {value ? (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={() => onChange('')}
+          className="absolute top-1/2 right-3.5 -translate-y-1/2 rounded p-0.5 text-fg-4 hover:text-fg-1"
+        >
+          <X className="size-3" />
+        </button>
       ) : null}
     </div>
-  )
-}
-
-function OneOfSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string
-  options: readonly { value: string; label: string }[]
-  onChange: (value: string) => void
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => onChange(v as string)}>
-      <SelectTrigger aria-label={label} className="w-full min-w-0">
-        <SelectValue>{options.find((o) => o.value === value)?.label ?? label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            <SelectItemText>{option.label}</SelectItemText>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   )
 }

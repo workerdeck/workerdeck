@@ -3,20 +3,17 @@ import { useEffect, useMemo, useState } from 'react'
 import type { SessionInfo, SessionRow } from '@workerdeck/protocol'
 import type { SidebarState, SurfaceTarget } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
-import { ProjectIcon, type SelectModifiers } from '@workerdeck/ui'
+import { ProjectIcon, SessionFilters, SessionSearch, type SelectModifiers } from '@workerdeck/ui'
 import { Empty, Key } from '../ui/Empty.tsx'
 import { SessionCard } from './SessionCard.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
-import { ViewConfigPanel } from './ViewConfigPanel.tsx'
 import {
   DEFAULT_VIEW_CONFIG,
-  adaptersOf,
   buildRows,
   clearFilters,
   filterRows,
   groupRows,
   hasFacetFilter,
-  projectsOf,
   scopeActive,
   subsetSummary,
   type ViewConfig,
@@ -46,7 +43,8 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
   // Merged, never replaced: the host sends each hash once as it resolves.
   const [projectIcons, setProjectIcons] = useState<Record<string, string>>({})
-  const [filterOpen, setFilterOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const persisted = bridge.getState<Persisted>()
   // Spread over the defaults: a config persisted by an older build is missing newer fields.
   const [config, setConfig] = useState<ViewConfig>({
@@ -75,8 +73,15 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             setProjectIcons((held) => ({ ...held, ...msg.icons }))
             return
           }
-          case 'wd-filter-open': {
-            setFilterOpen(msg.open)
+          case 'wd-search-open': {
+            setSearchOpen(msg.open)
+            if (!msg.open) {
+              setConfig((held) => (held.search ? { ...held, search: '' } : held))
+            }
+            return
+          }
+          case 'wd-filters-toggle': {
+            setFiltersOpen((open) => !open)
             return
           }
           case 'wd-subagents': {
@@ -91,8 +96,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const hosts = state?.hosts ?? []
   const scope = state?.scope
   const rows = useMemo(() => buildRows(state), [state])
-  const adapters = useMemo(() => adaptersOf(rows), [rows])
-  const projects = useMemo(() => projectsOf(rows), [rows])
+  const gateways = useMemo(() => hosts.map((host) => ({ id: host.id, name: host.name })), [hosts])
   const filtered = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
   const groups = useMemo(() => groupRows(filtered, config), [filtered, config])
   const connected = hosts.filter((h) => h.probe === 'connected')
@@ -103,8 +107,31 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
 
   return (
     <div className="flex h-screen flex-col text-body-sm">
-      {filterOpen ? (
-        <ViewConfigPanel config={config} hosts={hosts} adapters={adapters} projects={projects} scope={scope} onChange={setConfig} />
+      {searchOpen ? (
+        <SessionSearch
+          value={config.search}
+          onChange={(search) => setConfig({ ...config, search })}
+          autoFocus
+          className="shrink-0 border-b border-border px-2 py-1.5"
+          inputClassName="h-6 text-body-sm"
+        />
+      ) : null}
+      {filtersOpen ? (
+        <>
+          <div aria-hidden className="fixed inset-0 z-40" onMouseDown={() => setFiltersOpen(false)} />
+          <div
+            role="dialog"
+            aria-label="Session filters"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setFiltersOpen(false)
+              }
+            }}
+            className="fixed top-1 right-1 z-50 max-h-[calc(100vh-0.5rem)] w-[min(20rem,calc(100vw-0.5rem))] overflow-y-auto rounded-md border border-border bg-surface p-2 shadow-(--shadow-lg)"
+          >
+            <SessionFilters config={config} onConfigChange={setConfig} rows={rows} scope={scope} gateways={gateways} />
+          </div>
+        </>
       ) : null}
 
       {subset ? <SubsetLine subset={subset} onClear={() => setConfig(clearFilters(config))} /> : null}
@@ -192,6 +219,8 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                   showProject={config.groupBy !== 'project'}
                   showGateway={config.groupBy !== 'gateway' && hosts.length > 1}
                   subagents={config.subagents}
+                  shells={config.shells}
+                  tasks={config.tasks}
                   projectIcons={projectIcons}
                   selected={selectedIs(row) !== undefined}
                   inEditor={state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor'}
@@ -213,6 +242,22 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
                       hostId: row.hostId,
                       sessionId: row.info.id,
                       subagentToolUseId,
+                    })
+                  }
+                  onSelectTask={(task) =>
+                    bridge.post({
+                      kind: 'wd-select-session',
+                      hostId: row.hostId,
+                      sessionId: row.info.id,
+                      revealToolUseId: task.toolUseId,
+                    })
+                  }
+                  onStopTask={(toolUseId) =>
+                    bridge.post({
+                      kind: 'wd-stop-task',
+                      hostId: row.hostId,
+                      sessionId: row.info.id,
+                      toolUseId,
                     })
                   }
                   onSelectShell={(shellId) =>

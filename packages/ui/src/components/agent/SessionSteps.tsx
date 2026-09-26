@@ -1,6 +1,6 @@
-import { ArrowRight, Check, CircleAlert } from 'lucide-react'
-import { isAgentRecord, promotedShells, subagentLabel, visibleSubagents } from '@workerdeck/protocol'
-import type { SessionInfo, ShellInfo, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
+import { ArrowRight, Check, Circle, CircleAlert } from 'lucide-react'
+import { displayedTasks, isAgentRecord, subagentLabel, visibleShells, visibleSubagents } from '@workerdeck/protocol'
+import type { SessionInfo, SessionTask, ShellInfo, StepDisplay, SubagentDisplay, SubagentInfo } from '@workerdeck/protocol'
 import { Spinner } from '../ui/Spinner.tsx'
 import { cn } from '../../lib/utils.ts'
 import { AgentWriteIcon } from '../terminal/affordances.tsx'
@@ -16,27 +16,37 @@ import {
   shellTitle,
 } from '../terminal/shell-row.ts'
 
-export type StepKind = 'agent' | 'shell'
+export type StepKind = 'agent' | 'shell' | 'task'
 
 export type Step = {
   key: string
   kind: StepKind
   label: string
   noun: string
-  state: 'done' | 'running' | 'failed'
+  state: 'done' | 'running' | 'failed' | 'pending'
   detail?: string
   title: string
   onSelect: () => void
   onKill?: () => void
+  killLabel?: string
   agentWrite?: { granted: boolean; label: string; toggle: () => void }
 }
 
 export type ShellStepOptions = {
   now: number
+  show?: StepDisplay
   onSelect: (shellId: string) => void
   onKill?: (shellId: string) => void
   // Offered only where the session's agent holds the shell write tools.
   onAgentWrite?: (shellId: string, enabled: boolean) => void
+}
+
+export type TaskStepOptions = {
+  show: StepDisplay
+  // Whether the session is still working: a checklist item left in progress after the turn ended is not running.
+  live: boolean
+  onSelect: (task: SessionTask) => void
+  onStop?: (toolUseId: string) => void
 }
 
 export function sessionSteps(
@@ -44,6 +54,7 @@ export function sessionSteps(
   onSelect: (toolUseId: string) => void,
   show: SubagentDisplay = 'all',
   shells?: ShellStepOptions,
+  tasks?: TaskStepOptions,
 ): Step[] {
   const agents: Step[] = visibleSubagents(info, show)
     .filter(isAgentRecord)
@@ -57,11 +68,30 @@ export function sessionSteps(
       title: `${subagentLabel(sub)} · ${sub.toolCount} tool${sub.toolCount === 1 ? '' : 's'}`,
       onSelect: () => onSelect(sub.toolUseId),
     }))
+  const taskSteps = tasks === undefined ? [] : displayedTasks(info, tasks.show).map((task) => taskStep(task, tasks))
   if (shells === undefined) {
-    return agents
+    return [...agents, ...taskSteps]
   }
   const grants = info.shellAgentWrite !== undefined
-  return [...agents, ...promotedShells(info, shells.now).map((shell) => shellStep(shell, shells, grants))]
+  const shellSteps = visibleShells(info, shells.show ?? 'active', shells.now).map((shell) => shellStep(shell, shells, grants))
+  return [...agents, ...taskSteps, ...shellSteps]
+}
+
+function taskStep(task: SessionTask, options: TaskStepOptions): Step {
+  const stalled = task.source === 'checklist' && task.state === 'running' && !options.live
+  const toolUseId = task.toolUseId
+  return {
+    key: task.key,
+    kind: 'task',
+    label: task.label,
+    noun: 'task',
+    state: stalled ? 'pending' : task.state,
+    detail: task.detail,
+    title: stalled ? `${task.label} · left in progress` : task.label,
+    onSelect: () => options.onSelect(task),
+    onKill: task.stoppable && toolUseId !== undefined && options.onStop ? () => options.onStop?.(toolUseId) : undefined,
+    killLabel: 'Stop this task',
+  }
 }
 
 function shellStep(shell: ShellInfo, options: ShellStepOptions, grants: boolean): Step {
@@ -77,6 +107,7 @@ function shellStep(shell: ShellInfo, options: ShellStepOptions, grants: boolean)
     title: `${shellTitle(shell)} · ${status}`,
     onSelect: () => options.onSelect(shell.id),
     onKill: running && options.onKill ? () => options.onKill?.(shell.id) : undefined,
+    killLabel: 'Kill this shell',
     agentWrite:
       grants && options.onAgentWrite && shellGrantable(shell)
         ? {
@@ -103,7 +134,16 @@ function stepState(status: SubagentInfo['status']): Step['state'] {
 }
 
 export function StepRow({ step, active = false, onSelect }: { step: Step; active?: boolean; onSelect: () => void }) {
-  const body = step.state === 'failed' ? 'text-danger' : step.kind === 'shell' ? 'text-[var(--wd-shell-accent)]' : 'text-success'
+  const body =
+    step.state === 'failed'
+      ? 'text-danger'
+      : step.kind === 'shell'
+        ? 'text-[var(--wd-shell-accent)]'
+        : step.kind === 'task'
+          ? step.state === 'pending'
+            ? 'text-fg-4'
+            : 'text-fg-2'
+          : 'text-success'
   return (
     <div className={cn('flex w-full items-center rounded-[4px] pr-1.5', active ? 'bg-row-selected' : 'hover:bg-row-active', body)}>
       <button
@@ -119,7 +159,7 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
         <StepIcon step={step} />
         <span className="min-w-0 flex-1 truncate">{step.label}</span>
         {step.detail ? <span className="shrink-0 tabular-nums text-fg-4">{step.detail}</span> : null}
-        {step.kind === 'shell' ? null : <ArrowRight className="size-3.5 shrink-0 text-fg-4" />}
+        {step.kind === 'agent' ? <ArrowRight className="size-3.5 shrink-0 text-fg-4" /> : null}
       </button>
       {step.agentWrite ? (
         <button
@@ -142,8 +182,8 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
       {step.onKill ? (
         <button
           type="button"
-          aria-label={`Kill ${step.label}`}
-          title="Kill this shell"
+          aria-label={`${step.kind === 'task' ? 'Stop' : 'Kill'} ${step.label}`}
+          title={step.killLabel}
           onClick={(e) => {
             e.stopPropagation()
             step.onKill?.()
@@ -167,6 +207,9 @@ function StepIcon({ step }: { step: Step }) {
     }
     case 'failed': {
       return <CircleAlert className="size-[11px] shrink-0" />
+    }
+    case 'pending': {
+      return <Circle className="size-[11px] shrink-0" />
     }
     default: {
       return <Check className="size-[11px] shrink-0" />

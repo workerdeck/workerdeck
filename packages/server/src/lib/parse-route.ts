@@ -13,6 +13,7 @@ export type SessionRoute = {
   shells?: boolean
   shellId?: string
   shellAction?: 'output' | 'kill' | 'agent-write'
+  stopTaskId?: string
   resultSeq?: number
   projectIcon?: boolean
 }
@@ -61,6 +62,9 @@ export function parseSessionRoute(basePath: string, url: string): SessionRoute |
       shellId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
       shellAction: action,
     }
+  }
+  if (parts.length === 4 && parts[1] === 'tasks' && parts[3] === 'stop') {
+    return { id: decodeURIComponent(parts[0]!), stopTaskId: decodeURIComponent(parts[2]!) }
   }
   if (parts.length === 3 && parts[1] === 'project' && parts[2] === 'icon') {
     return { id: decodeURIComponent(parts[0]!), projectIcon: true }
