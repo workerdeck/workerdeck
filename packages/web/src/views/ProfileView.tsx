@@ -7,6 +7,7 @@ import { Code, Trash2 } from 'lucide-react'
 import { EditProfileCard } from '@/components/EditProfileCard.tsx'
 import { DetailBar, DetailBody, DetailRow } from '@/components/shell/DetailBar.tsx'
 import { client } from '@/lib/client.ts'
+import { useHosts } from '@/lib/hosts.ts'
 import { useProfileList } from '@/hooks/useProfiles.ts'
 import { openInVsCode } from './ProfilesView.tsx'
 
@@ -30,7 +31,8 @@ export function ProfileView() {
   const navigate = useNavigate()
   const { refresh } = useProfileList()
   // Polled: the plan usage on the record is the newest reading from any session on this account, and those keep spending.
-  const loaded = useAsync(async () => client()?.getProfile(profileName), [profileName], { pollMs: 60_000 })
+  const { ready } = useHosts()
+  const loaded = useAsync(async () => client()?.getProfile(profileName), [profileName, ready], { enabled: ready, pollMs: 60_000 })
   const detail = loaded.data
   const error = loaded.error === undefined ? undefined : errorMessage(loaded.error, 'Failed to load profile')
 

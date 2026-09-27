@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ListProfilesResponse, ProfileInfo } from '@workerdeck/protocol'
 import { client } from '../lib/client.ts'
+import { onHostsChange } from '../lib/hosts.ts'
 import { readPref, writePref } from '../lib/storage.ts'
 import { createPolledStore } from '../lib/store.ts'
 
@@ -16,6 +17,8 @@ async function loadProfiles(): Promise<void> {
 }
 
 export function useProfileList(): ListProfilesResponse & { refresh: () => Promise<void> } {
+  // A deep link subscribes before the gateway probe answers, and that first load finds no client.
+  useEffect(() => onHostsChange(() => void store.refresh()), [])
   return { ...store.use(), refresh: store.refresh }
 }
 
