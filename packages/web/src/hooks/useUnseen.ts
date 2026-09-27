@@ -24,12 +24,7 @@ export function useUnseen() {
   versionStore.use()
 
   const unseenFor = useCallback(
-    (hostId: string, info: SessionInfo) =>
-      unseenCount(watermarks.get(hostId, info.id), {
-        proseCount: info.proseCount,
-        activityCount: info.activityCount,
-        turns: info.numTurns,
-      }),
+    (hostId: string, info: SessionInfo) => unseenCount(watermarks.get(hostId, info.id), info),
     // `version` is read through the store subscription above, and this only runs in a render that re-subscribed.
     [],
   )

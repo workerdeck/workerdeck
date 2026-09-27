@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
@@ -14,11 +13,11 @@ import {
   shellChildEnv,
   shellPermitted,
   type ShellRegistry,
-  type ShellRegistryOptions,
   type StoredShellIndex,
 } from '../src/services/shells.ts'
 import { readProcessTable } from '../src/services/process-tree.ts'
 import { fakeRunner } from './helpers.ts'
+import { registryFixture } from './shell-helpers.ts'
 
 const pty = await loadPty()
 if (pty === null) {
@@ -26,33 +25,8 @@ if (pty === null) {
 }
 const withPty = describe.skipIf(pty === null)
 
-const dirs: string[] = []
-const registries: ShellRegistry[] = []
-afterEach(async () => {
-  for (const registry of registries.splice(0)) {
-    registry.killAll('server_stopped')
-    await registry.flush()
-  }
-  while (dirs.length) {
-    rmSync(dirs.pop()!, { recursive: true, force: true })
-  }
-})
-
-function tempDir(): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'wd-shells-')))
-  dirs.push(dir)
-  return dir
-}
-
-function makeRegistry(overrides: Partial<ShellRegistryOptions> = {}): ShellRegistry {
-  const created = createShellRegistry({ generation: 'gen-a', artifactDir: tempDir(), ...overrides })
-  registries.push(created)
-  return created
-}
-
-function runner(id: string, cwd = tempDir()): Runner {
-  return fakeRunner(id, { cwd })
-}
+const { tempDir, makeRegistry, runner, cleanup } = registryFixture('wd-shells-')
+afterEach(cleanup)
 
 function settled(source: { info: () => ShellInfo; subscribe: (l: () => void) => () => void }): Promise<ShellInfo> {
   return new Promise((resolve) => {
@@ -628,6 +602,10 @@ describe('shellPermitted', () => {
 describe('helpers', () => {
   it('shellChildEnv copies only defined entries', () => {
     expect(shellChildEnv({ A: '1', B: undefined })).toEqual({ A: '1' })
+  })
+
+  it('shellChildEnv never passes the gateway key on', () => {
+    expect(shellChildEnv({ A: '1', WORKERDECK_AUTH_KEY: 'gateway-secret', WORKERDECK_TOKEN: 't' })).toEqual({ A: '1' })
   })
 
   it('clampSize bounds and truncates', () => {

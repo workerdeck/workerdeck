@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ResolvePermissionRequest, UpdateSessionRequest } from '@workerdeck/protocol'
-import { contentTypeFor, json, readJsonBody, untrustedDownloadHeaders } from '../lib/http.ts'
-import type { SessionRoute } from '../lib/parse-route.ts'
+import { contentTypeFor, fail, json, readJsonBody, requireMethod, sendUntrusted } from '../lib/http.ts'
+import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
+import { permissionDecision } from '../lib/permissions.ts'
+import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
 import { isDormant } from '../services/session-store.ts'
 import type { ServerContext } from '../context.ts'
@@ -10,8 +12,44 @@ import { handleAttachments } from './attachments.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
 import { handleProjectIcon } from './project-icon.ts'
+import { requireLive, resolveSession, type ResolvedSession } from './session-lookup.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
+
+type ItemKind = SessionItemRoute['kind']
+
+type SessionCall<K extends ItemKind> = ResolvedSession & {
+  ctx: ServerContext
+  req: IncomingMessage
+  res: ServerResponse
+  auth: AuthContext
+  route: Extract<SessionItemRoute, { kind: K }>
+}
+
+type ItemHandlers = { [K in ItemKind]: (call: SessionCall<K>) => Promise<void> | void }
+
+const ITEM_HANDLERS: ItemHandlers = {
+  session: handleSession,
+  ws: handleSession,
+  attachments: ({ ctx, req, res, route, info }) => handleAttachments(ctx, req, res, route.id, info, route.attachmentId),
+  mcp: ({ ctx, req, res, route, runner }) =>
+    handleMcp(ctx, req, res, requireLive(runner, 'wake it before asking about MCP'), route.mcpServer),
+  files: handleFiles,
+  produced: ({ ctx, req, res, route }) => handleProducedFiles(ctx, req, res, route.id, route.producedFileId),
+  shells: ({ ctx, req, res, route, runner, auth }) => handleShells(ctx, req, res, route, runner ?? null, ctx.auth.isOperator(auth)),
+  'stop-task': handleStopTask,
+  'project-icon': ({ ctx, req, res, info }) => handleProjectIcon(ctx.projects, req, res, info.cwd),
+  'tool-result': ({ req, res, route, runner, parked }) => {
+    const snapshot = parked && !isDormant(parked) ? parked.snapshot.events : undefined
+    handleToolResult(
+      req,
+      res,
+      runner?.eventAt?.bind(runner) ?? (snapshot && ((seq: number) => snapshot.find((event) => event.seq === seq))),
+      route.resultSeq,
+    )
+  },
+  permission: handlePermission,
+}
 
 export async function handleSessions(
   ctx: ServerContext,
@@ -20,183 +58,109 @@ export async function handleSessions(
   route: SessionRoute,
   auth: AuthContext,
 ): Promise<void> {
-  const { attachmentStore, auth: authSvc, bridge, factory, parking, producedFiles, projects, registry } = ctx
+  if (route.kind === 'collection') {
+    await handleCollection(ctx, req, res, auth)
+    return
+  }
+  const resolved = await resolveSession(ctx, route.id, auth)
+  const handler = ITEM_HANDLERS[route.kind] as (call: SessionCall<ItemKind>) => Promise<void> | void
+  await handler({ ...resolved, ctx, req, res, auth, route })
+}
 
-  if (!route.id) {
-    if (req.method === 'GET') {
-      const sessions = [...registry.list(), ...(await parking.listInfo())]
-      json(res, 200, {
-        sessions: sessions.filter((session) => authSvc.canSee(auth, session)).map((session) => projects.withProject(session)),
-      })
-      return
-    }
-    if (req.method === 'POST') {
-      const vetted = vetCreateRequest(ctx, await readJsonBody(req, ctx.maxBodyBytes), auth)
-      if (!vetted.ok) {
-        json(res, vetted.status, { error: vetted.error })
-        return
-      }
-      const runner = await factory.createRunner(factory.buildRunnerConfig(vetted.request, { operator: authSvc.isOperator(auth) }))
-      factory.watchAuthSource(runner)
-      json(res, 201, { session: projects.withProject(runner.info()) })
-      return
-    }
-    json(res, 405, { error: 'method not allowed' })
-    return
-  }
-
-  const runner = registry.get(route.id)
-  const parked = runner ? null : await parking.get(route.id)
-  if (!runner && !parked) {
-    json(res, 404, { error: 'session not found' })
-    return
-  }
-  if (!authSvc.canSee(auth, runner?.info() ?? parked!.info)) {
-    json(res, 404, { error: 'session not found' })
-    return
-  }
-  if (route.attachments) {
-    await handleAttachments(ctx, req, res, route.id, runner?.info() ?? parked!.info, route.attachmentId)
-    return
-  }
-  if (route.mcp) {
-    if (!runner) {
-      json(res, 409, { error: 'session is parked (wake it before asking about MCP)' })
-      return
-    }
-    await handleMcp(ctx, req, res, runner, route.mcpServer)
-    return
-  }
-  if (route.files) {
-    if (req.method !== 'GET') {
-      json(res, 405, { error: 'method not allowed' })
-      return
-    }
-    const snapshotFiles = parked && !isDormant(parked) ? parked.snapshot.vfs : undefined
-    const vfs =
-      runner?.vfs ??
-      (snapshotFiles && {
-        list: () => Object.keys(snapshotFiles).sort(),
-        read: (path: string) => snapshotFiles[path]!,
-      })
-    if (!vfs) {
-      json(res, 404, { error: 'session has no file store' })
-      return
-    }
-    if (route.filePath === undefined) {
-      const files = vfs.list().map((path) => ({ path, bytes: vfs.read(path)?.length ?? 0 }))
-      json(res, 200, { files })
-      return
-    }
-    const content = vfs.read(route.filePath)
-    if (content === undefined) {
-      json(res, 404, { error: `no such file: ${route.filePath}` })
-      return
-    }
-    const filename = route.filePath.split('/').pop() || 'file'
-    res.writeHead(200, untrustedDownloadHeaders(filename, contentTypeFor(filename), Buffer.byteLength(content)))
-    res.end(content)
-    return
-  }
-  if (route.produced) {
-    await handleProducedFiles(ctx, req, res, route.id, route.producedFileId)
-    return
-  }
-  if (route.shells) {
-    await handleShells(ctx, req, res, route, runner ?? null, authSvc.isOperator(auth))
-    return
-  }
-  if (route.stopTaskId !== undefined) {
-    if (req.method !== 'POST') {
-      json(res, 405, { error: 'method not allowed' })
-      return
-    }
-    if (!runner) {
-      json(res, 409, { error: 'session is parked (it has no running tasks)' })
-      return
-    }
-    if (!runner.stopTask) {
-      json(res, 501, { error: `the ${runner.info().engine ?? 'claude'} engine cannot stop a task` })
-      return
-    }
-    if (!(await runner.stopTask(route.stopTaskId))) {
-      json(res, 404, { error: 'no running task to stop' })
-      return
-    }
-    json(res, 200, { ok: true })
-    return
-  }
-  if (route.projectIcon) {
-    handleProjectIcon(projects, req, res, (runner?.info() ?? parked!.info).cwd)
-    return
-  }
-  if (route.resultSeq !== undefined) {
-    const snapshot = parked && !isDormant(parked) ? parked.snapshot.events : undefined
-    handleToolResult(
-      req,
-      res,
-      runner?.eventAt?.bind(runner) ?? (snapshot && ((seq: number) => snapshot.find((event) => event.seq === seq))),
-      route.resultSeq,
-    )
-    return
-  }
-  if (route.permissionId) {
-    if (req.method !== 'POST') {
-      json(res, 405, { error: 'method not allowed' })
-      return
-    }
-    const body = (await readJsonBody(req, ctx.maxBodyBytes)) as ResolvePermissionRequest
-    if (body?.behavior !== 'allow' && body?.behavior !== 'deny') {
-      json(res, 400, { error: "behavior must be 'allow' or 'deny'" })
-      return
-    }
-    if (!runner) {
-      json(res, 409, { error: 'session is parked (it has no pending permission requests)' })
-      return
-    }
-    const decision: ResolvePermissionRequest =
-      body.behavior === 'allow'
-        ? { behavior: 'allow', updatedInput: body.updatedInput }
-        : { behavior: 'deny', message: body.message, interrupt: body.interrupt }
-    if (!runner.resolvePermission(route.permissionId, decision)) {
-      json(res, 404, { error: 'permission request not found (already resolved or expired)' })
-      return
-    }
-    json(res, 200, { resolved: true })
-    return
-  }
+async function handleCollection(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext): Promise<void> {
+  const { auth: authSvc, factory, parking, projects, registry } = ctx
+  requireMethod(req, 'GET', 'POST')
   if (req.method === 'GET') {
-    json(res, 200, { session: projects.withProject(runner?.info() ?? parked!.info) })
-    return
-  }
-  if (req.method === 'PATCH') {
-    if (!runner) {
-      json(res, 409, { error: 'session is parked (wake it before renaming)' })
-      return
-    }
-    const body = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateSessionRequest
-    if (body?.title !== undefined) {
-      if (body.title !== null && typeof body.title !== 'string') {
-        json(res, 400, { error: 'title must be a string or null' })
-        return
-      }
-      const title = typeof body.title === 'string' ? body.title.trim() : ''
-      runner.setTitle(title || undefined)
-      parking.touch(runner)
-    }
-    json(res, 200, { session: projects.withProject(runner.info()) })
-    return
-  }
-  if (req.method === 'DELETE') {
-    registry.remove(route.id)
-    bridge.remove(route.id)
-    await parking.discard(route.id)
-    attachmentStore.drop(route.id)
-    producedFiles.drop(route.id)
+    const sessions = [...registry.list(), ...(await parking.listInfo())]
     json(res, 200, {
-      session: projects.withProject(runner?.info() ?? { ...parked!.info, status: 'closed' as const }),
+      sessions: sessions.filter((session) => authSvc.canSee(auth, session)).map((session) => projects.withProject(session)),
     })
     return
   }
-  json(res, 405, { error: 'method not allowed' })
+  const vetted = vetCreateRequest(ctx, await readJsonBody(req, ctx.maxBodyBytes), auth)
+  if (!vetted.ok) {
+    fail(vetted.status, vetted.error)
+  }
+  const runner = await factory.createRunner(factory.buildRunnerConfig(vetted.request, { operator: authSvc.isOperator(auth) }))
+  json(res, 201, { session: projects.withProject(runner.info()) })
+}
+
+async function handleSession({ ctx, req, res, route, runner, parked, info }: SessionCall<'session' | 'ws'>): Promise<void> {
+  const { attachmentStore, bridge, parking, producedFiles, projects, registry } = ctx
+  requireMethod(req, 'GET', 'PATCH', 'DELETE')
+  if (req.method === 'GET') {
+    json(res, 200, { session: projects.withProject(info) })
+    return
+  }
+  if (req.method === 'PATCH') {
+    const live = requireLive(runner, 'wake it before renaming')
+    const body = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateSessionRequest
+    if (body?.title !== undefined) {
+      if (body.title !== null && typeof body.title !== 'string') {
+        fail(400, 'title must be a string or null')
+      }
+      const title = typeof body.title === 'string' ? body.title.trim() : ''
+      live.setTitle(title || undefined)
+      parking.touch(live)
+    }
+    json(res, 200, { session: projects.withProject(live.info()) })
+    return
+  }
+  registry.remove(route.id)
+  bridge.remove(route.id)
+  await parking.discard(route.id)
+  attachmentStore.drop(route.id)
+  producedFiles.drop(route.id)
+  json(res, 200, {
+    session: projects.withProject(runner?.info() ?? { ...parked!.info, status: 'closed' as const }),
+  })
+}
+
+function handleFiles({ req, res, route, runner, parked }: SessionCall<'files'>): void {
+  requireMethod(req, 'GET')
+  const snapshotFiles = parked && !isDormant(parked) ? parked.snapshot.vfs : undefined
+  const vfs =
+    runner?.vfs ??
+    (snapshotFiles && {
+      list: () => Object.keys(snapshotFiles).sort(),
+      read: (path: string) => snapshotFiles[path]!,
+    })
+  if (!vfs) {
+    fail(404, 'session has no file store')
+  }
+  if (route.filePath === undefined) {
+    json(res, 200, { files: vfs.list().map((path) => ({ path, bytes: vfs.read(path)?.length ?? 0 })) })
+    return
+  }
+  const content = vfs.read(route.filePath)
+  if (content === undefined) {
+    fail(404, `no such file: ${route.filePath}`)
+  }
+  const filename = route.filePath.split('/').pop() || 'file'
+  sendUntrusted(res, filename, contentTypeFor(filename), content)
+}
+
+async function handleStopTask({ req, res, route, runner }: SessionCall<'stop-task'>): Promise<void> {
+  requireMethod(req, 'POST')
+  const live = requireLive(runner, 'it has no running tasks')
+  if (!live.stopTask) {
+    fail(501, `the ${engineOf(live.info())} engine cannot stop a task`)
+  }
+  if (!(await live.stopTask(route.stopTaskId))) {
+    fail(404, 'no running task to stop')
+  }
+  json(res, 200, { ok: true })
+}
+
+async function handlePermission({ ctx, req, res, route, runner }: SessionCall<'permission'>): Promise<void> {
+  requireMethod(req, 'POST')
+  const body = (await readJsonBody(req, ctx.maxBodyBytes)) as ResolvePermissionRequest
+  if (body?.behavior !== 'allow' && body?.behavior !== 'deny') {
+    fail(400, "behavior must be 'allow' or 'deny'")
+  }
+  const live = requireLive(runner, 'it has no pending permission requests')
+  if (!live.resolvePermission(route.permissionId, permissionDecision(body))) {
+    fail(404, 'permission request not found (already resolved or expired)')
+  }
+  json(res, 200, { resolved: true })
 }

@@ -68,7 +68,7 @@ describe('CodexRunner: process contract, usage and rate limits', () => {
     ).toThrow(/unsupported attachment/)
   })
 
-  it('passes a complete child env with the CODEX_HOME pin winning, on every spawn', async () => {
+  it('passes a complete child env with the CODEX_HOME pin winning and the gateway key stripped, on every spawn', async () => {
     const peer = scriptedPeer()
     scriptTurn(peer, (emit, turnId) => {
       emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
@@ -77,7 +77,7 @@ describe('CodexRunner: process contract, usage and rate limits', () => {
       cwd: '/tmp',
       prompt: 'go',
       connectFn: peer.connectFn,
-      env: { PATH: '/usr/bin', HOME: '/Users/op', CODEX_HOME: '/elsewhere', GONE: undefined },
+      env: { PATH: '/usr/bin', HOME: '/Users/op', CODEX_HOME: '/elsewhere', GONE: undefined, WORKERDECK_AUTH_KEY: 'gateway-secret' },
       codexHome: '/profiles/codex-a',
     })
     await runner.start()

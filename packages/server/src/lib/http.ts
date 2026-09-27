@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Duplex } from 'node:stream'
 
 const CONTENT_TYPES: Record<string, string> = {
   json: 'application/json; charset=utf-8',
@@ -31,12 +32,63 @@ export function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(payload)
 }
 
+export type Refusal = { status: number; error: string }
+
+export class HttpError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+export function fail(status: number, message: string): never {
+  throw new HttpError(status, message)
+}
+
+export function requireMethod(req: IncomingMessage, ...methods: string[]): void {
+  if (!methods.includes(req.method ?? '')) {
+    fail(405, 'method not allowed')
+  }
+}
+
+export function sendUntrusted(res: ServerResponse, filename: string, contentType: string, bytes: Buffer | string): void {
+  res.writeHead(200, untrustedDownloadHeaders(filename, contentType, Buffer.byteLength(bytes)))
+  res.end(bytes)
+}
+
+export function httpErrorStatus(error: unknown): number {
+  if (error instanceof HttpError) {
+    return error.status
+  }
+  return error instanceof SyntaxError ? 400 : 500
+}
+
+// A cross-site page can send `text/plain` (or a typeless Blob) without a preflight, so a JSON route that parsed any
+// body would be reachable by a drive-by form post. Only an empty body may omit the header.
 export async function readJsonBody(req: IncomingMessage, maxBytes: number): Promise<Record<string, unknown>> {
+  const mime = mediaTypeOf(req.headers['content-type'])
+  if (mime !== undefined && !isJsonMediaType(mime)) {
+    throw new HttpError(415, 'expected content-type application/json')
+  }
   const body = await readRawBody(req, maxBytes)
   if (body.length === 0) {
     return {}
   }
+  if (mime === undefined) {
+    throw new HttpError(415, 'expected content-type application/json')
+  }
   return JSON.parse(body.toString('utf8')) as Record<string, unknown>
+}
+
+function mediaTypeOf(header: string | undefined): string | undefined {
+  const mime = header?.split(';')[0].trim().toLowerCase()
+  return mime === undefined || mime === '' ? undefined : mime
+}
+
+function isJsonMediaType(mime: string): boolean {
+  return mime === 'application/json' || (mime.startsWith('application/') && mime.endsWith('+json'))
 }
 
 export async function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
@@ -45,7 +97,7 @@ export async function readRawBody(req: IncomingMessage, maxBytes: number): Promi
   for await (const chunk of req) {
     size += (chunk as Buffer).length
     if (size > maxBytes) {
-      throw new Error('request body too large')
+      throw new HttpError(413, 'request body too large')
     }
     chunks.push(chunk as Buffer)
   }
@@ -65,4 +117,9 @@ export function asUtf8(bytes: Buffer): string | null {
 export function contentTypeFor(filename: string): string {
   const ext = filename.includes('.') ? filename.split('.').pop()!.toLowerCase() : ''
   return CONTENT_TYPES[ext] ?? 'text/plain; charset=utf-8'
+}
+
+export function refuseUpgrade(socket: Duplex, status: string): void {
+  socket.write(`HTTP/1.1 ${status}\r\n\r\n`)
+  socket.destroy()
 }

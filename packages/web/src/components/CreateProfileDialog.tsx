@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useState } from 'react'
 import type { CreateProfileRequest, ProfileEngine, SessionCapability } from '@workerdeck/protocol'
 import {
@@ -84,7 +85,7 @@ function CreateProfileForm({ onCreated }: { onCreated: (name: string) => void })
       toast.success(`Profile '${profile.name}' created`)
       onCreated(profile.name)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create profile')
+      toast.error(errorMessage(e, 'Failed to create profile'))
     } finally {
       setSaving(false)
     }

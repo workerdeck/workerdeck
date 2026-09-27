@@ -1,7 +1,9 @@
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CostLedgerState, ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
-import type { SessionInfo } from '@workerdeck/protocol'
+import { pickCreateSessionRequest, type SessionInfo } from '@workerdeck/protocol'
+import { isMissing, writeFileAtomic } from '../lib/atomic-file.ts'
+import { DURABLE_HOST_KEYS } from '../lib/host-only-keys.ts'
 
 export type ParkedSessionRecord = {
   kind?: 'parked' | 'live'
@@ -64,14 +66,19 @@ export class MemorySessionStore implements SessionStore {
   }
 }
 
-const EPHEMERAL_CONFIG_KEYS = ['queryFn', 'historyFn', 'extraOptions', 'env', 'peers', 'instructions', 'shells', 'shellAgentWrite'] as const
+function durableConfig(config: SessionRunnerConfig): SessionRunnerConfig {
+  const source = config as Record<string, unknown>
+  const durable: Record<string, unknown> = { ...pickCreateSessionRequest(source) }
+  for (const key of DURABLE_HOST_KEYS) {
+    if (source[key] !== undefined) {
+      durable[key] = source[key]
+    }
+  }
+  return durable as SessionRunnerConfig
+}
 
 export function toDurableRecord<T extends StoredSessionRecord>(record: T): T {
-  const config: SessionRunnerConfig = { ...record.config }
-  for (const key of EPHEMERAL_CONFIG_KEYS) {
-    delete config[key]
-  }
-  return { ...record, config }
+  return { ...record, config: durableConfig(record.config) }
 }
 
 const FORMAT_VERSION = 1
@@ -121,10 +128,7 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
         )
       }
       try {
-        await mkdir(dir, { recursive: true, mode: 0o700 })
-        const temp = `${path}.${process.pid}.tmp`
-        await writeFile(temp, payload, { mode: 0o600 })
-        await rename(temp, path)
+        await writeFileAtomic(path, payload)
       } catch (error) {
         options.onError?.(error, { path, op: 'save' })
         throw error
@@ -180,10 +184,6 @@ export function createFileSessionStore(options: FileSessionStoreOptions = {}): S
       }
     },
   }
-}
-
-function isMissing(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException).code === 'ENOENT'
 }
 
 function parseRecord(value: unknown): StoredSessionRecord | null {

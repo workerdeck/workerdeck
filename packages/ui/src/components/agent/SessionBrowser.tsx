@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Eraser, Layers, Pencil, Search, SearchX, Trash2, X } from 'lucide-react'
-import { clearFilters, filterRows, groupRows, hasFacetFilter, subsetSummary } from '@workerdeck/protocol'
+import { Eraser, FolderOpen, Layers, Pencil, Search, SearchX, Trash2, X } from 'lucide-react'
+import { clearFilters, filterRows, groupRows, hasFacetFilter, scopeActive, subsetSummary } from '@workerdeck/protocol'
 import type { SessionRow, SessionTask, StepDisplay, SubagentDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
-import { SessionItem } from './SessionItem.tsx'
+import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
 import { cn } from '../../lib/utils.ts'
 
 export { SessionStatusIcon } from './SessionStatusIcon.tsx'
@@ -22,7 +22,14 @@ export interface SessionBrowserProps {
   activeSubagentId?: string
   activeShellId?: string
   now?: number
-  onSelect?: (row: SessionRow) => void
+  // Overrides `activeId`, for a host whose session ids are unique only per gateway.
+  isActive?: (row: SessionRow) => boolean
+  // Replaces the pencil / eraser / trash; rename then falls back to the card's own double-click.
+  rowActions?: (row: SessionRow) => ReactNode
+  // Overrides the count of gateways among `rows` when deciding whether a card names its gateway.
+  gatewayCount?: number
+  showSubset?: boolean
+  onSelect?: (row: SessionRow, modifiers: SelectModifiers) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
@@ -32,7 +39,7 @@ export interface SessionBrowserProps {
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
-  emptyState?: React.ReactNode
+  emptyState?: ReactNode
   // The facet controls, drawn inline. A host with a header puts `SessionFiltersButton` there instead.
   showControls?: boolean
   showSearch?: boolean
@@ -54,6 +61,10 @@ export function SessionBrowser({
   activeSubagentId,
   activeShellId,
   now,
+  isActive = (row) => row.info.id === activeId,
+  rowActions,
+  gatewayCount,
+  showSubset = true,
   onSelect,
   onDelete,
   onRename,
@@ -74,7 +85,7 @@ export function SessionBrowser({
   const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
   const groups = useMemo(() => groupRows(visible, config), [visible, config])
   const subset = subsetSummary(config, scope, visible.length, rows.length)
-  const gatewayCount = useMemo(() => new Set(rows.map((row) => row.hostId)).size, [rows])
+  const rowGateways = useMemo(() => new Set(rows.map((row) => row.hostId)).size, [rows])
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
 
@@ -85,7 +96,7 @@ export function SessionBrowser({
       ) : null}
       {showControls ? <SessionFilters config={config} onConfigChange={onConfigChange} rows={rows} scope={scope} className="px-2" /> : null}
 
-      {subset ? (
+      {subset && showSubset ? (
         <div className="flex items-center gap-2 px-3 text-label text-fg-4">
           <span>
             {subset.shown} of {subset.total}
@@ -112,6 +123,14 @@ export function SessionBrowser({
             action="Clear filters"
             onAction={() => onConfigChange(clearFilters(config))}
           />
+        ) : scope && scopeActive(config, scope) ? (
+          <Empty
+            icon={<FolderOpen />}
+            title="Nothing in this folder"
+            description={`No session is running in ${scope.label}.`}
+            action="Show all folders"
+            onAction={() => set({ scoped: false })}
+          />
         ) : (
           <Empty icon={<Layers />} title="Nothing here" description="No session to show." />
         )
@@ -132,11 +151,12 @@ export function SessionBrowser({
                 <SessionRowItem
                   key={`${row.hostId}:${row.info.id}`}
                   row={row}
-                  active={row.info.id === activeId}
+                  active={isActive(row)}
                   activeSubagentId={activeSubagentId}
                   activeShellId={activeShellId}
+                  actions={rowActions?.(row)}
                   now={now}
-                  showGateway={gatewayCount > 1 && config.groupBy !== 'gateway'}
+                  showGateway={(gatewayCount ?? rowGateways) > 1 && config.groupBy !== 'gateway'}
                   showProject={config.groupBy !== 'project'}
                   subagents={config.subagents}
                   shells={config.shells}
@@ -170,6 +190,7 @@ function iconSrcOf(row: SessionRow | undefined, icons: Record<string, string> | 
 interface SessionRowItemProps {
   row: SessionRow
   active?: boolean
+  actions?: ReactNode
   activeSubagentId?: string
   activeShellId?: string
   now?: number
@@ -179,7 +200,7 @@ interface SessionRowItemProps {
   shells?: StepDisplay
   tasks?: StepDisplay
   projectIcons?: Record<string, string>
-  onSelect?: (row: SessionRow) => void
+  onSelect?: (row: SessionRow, modifiers: SelectModifiers) => void
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
@@ -194,6 +215,7 @@ interface SessionRowItemProps {
 function SessionRowItem({
   row,
   active,
+  actions,
   activeSubagentId,
   activeShellId,
   now,
@@ -221,7 +243,7 @@ function SessionRowItem({
     <SessionItem
       row={row}
       active={active === true}
-      activeStepKey={activeShellId ?? activeSubagentId}
+      activeStepKey={active ? (activeShellId ?? activeSubagentId) : undefined}
       now={now}
       showGateway={showGateway}
       showProject={showProject}
@@ -229,7 +251,7 @@ function SessionRowItem({
       shells={shells}
       tasks={tasks}
       projectIcons={projectIcons}
-      onSelect={() => onSelect?.(row)}
+      onSelect={(modifiers) => onSelect?.(row, modifiers)}
       onSelectSubagent={onSelectSubagent ? (id) => onSelectSubagent(row, id) : undefined}
       onSelectTask={onSelectTask ? (task) => onSelectTask(row, task) : undefined}
       onStopTask={onStopTask ? (id) => onStopTask(row, id) : undefined}
@@ -237,31 +259,33 @@ function SessionRowItem({
       onKillShell={onKillShell ? (id) => onKillShell(row, id) : undefined}
       onShellAgentWrite={onShellAgentWrite ? (id, enabled) => onShellAgentWrite(row, id, enabled) : undefined}
       onRename={onRename ? (title) => onRename(row, title) : undefined}
-      renameOn="external"
-      editing={editing}
-      onEditingChange={setEditing}
+      renameOn={actions === undefined ? 'external' : 'doubleClick'}
+      editing={actions === undefined ? editing : undefined}
+      onEditingChange={actions === undefined ? setEditing : undefined}
       actions={
-        <>
-          {onRename && !editing ? (
-            <RowAction label="Rename session" onClick={() => setEditing(true)}>
-              <Pencil className="size-3 text-fg-3" />
-            </RowAction>
-          ) : null}
-          {onClearContext && info.capabilities?.clearContext ? (
-            <RowAction
-              label="Clear context"
-              title="Clear the conversation - the session keeps running and the old conversation stays resumable"
-              onClick={() => onClearContext(row)}
-            >
-              <Eraser className="size-3 text-fg-3" />
-            </RowAction>
-          ) : null}
-          {onDelete ? (
-            <RowAction label="Close session" onClick={() => onDelete(row)}>
-              <Trash2 className="size-3 text-fg-3" />
-            </RowAction>
-          ) : null}
-        </>
+        actions ?? (
+          <>
+            {onRename && !editing ? (
+              <RowAction label="Rename session" onClick={() => setEditing(true)}>
+                <Pencil className="size-3 text-fg-3" />
+              </RowAction>
+            ) : null}
+            {onClearContext && info.capabilities?.clearContext ? (
+              <RowAction
+                label="Clear context"
+                title="Clear the conversation - the session keeps running and the old conversation stays resumable"
+                onClick={() => onClearContext(row)}
+              >
+                <Eraser className="size-3 text-fg-3" />
+              </RowAction>
+            ) : null}
+            {onDelete ? (
+              <RowAction label="Close session" onClick={() => onDelete(row)}>
+                <Trash2 className="size-3 text-fg-3" />
+              </RowAction>
+            ) : null}
+          </>
+        )
       }
     />
   )

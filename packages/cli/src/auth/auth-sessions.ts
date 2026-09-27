@@ -1,5 +1,6 @@
-import { chmod, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { join } from 'node:path'
+import { writeJsonAtomic } from '@workerdeck/server'
 import type { CliSessionStore, StoredSession } from './auth.ts'
 
 const FORMAT_VERSION = 1
@@ -66,13 +67,8 @@ export async function createAuthSessionStore(options: AuthSessionStoreOptions): 
 
   const write = async (entries: [string, StoredSession][]): Promise<void> => {
     const body: FileShape = { version: FORMAT_VERSION, sessions: entries.map(([key, s]) => [key, s.expiresAt]) }
-    const tmp = `${path}.${process.pid}.tmp`
     try {
-      await mkdir(dirname(path), { recursive: true, mode: 0o700 })
-      await writeFile(tmp, `${JSON.stringify(body)}\n`, { mode: 0o600 })
-      // `writeFile`'s mode applies only on creation, so a reused temp path would inherit whatever bits an earlier run left.
-      await chmod(tmp, 0o600)
-      await rename(tmp, path)
+      await writeJsonAtomic(path, body, { trailingNewline: true })
       warned = false
     } catch (error) {
       if (!warned) {

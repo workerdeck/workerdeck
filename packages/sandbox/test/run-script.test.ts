@@ -150,3 +150,57 @@ describe('runScript', () => {
     expect((result as { value: string }).value).toContain('host says no')
   })
 })
+
+describe('host-memory caps', () => {
+  it('refuses a vfs write over the per-file limit with a guest-visible error', async () => {
+    const vfs = createVfs(undefined, { maxFileBytes: 1024 })
+    const result = await runScript(await engine(), {
+      vfs,
+      script: `try { vfs.write('/big.txt', 'x'.repeat(2048)); 'written' } catch (e) { e.message }`,
+    })
+    expect(result).toMatchObject({ ok: true, value: 'vfs: /big.txt exceeds the 1024-byte per-file limit' })
+    expect(vfs.read('/big.txt')).toBeUndefined()
+  })
+
+  it('caps the file count and the total bytes, counting the seed', async () => {
+    const vfs = createVfs({ '/seed.txt': 'x'.repeat(600) }, { maxFiles: 2, maxTotalBytes: 1000 })
+    vfs.write('/a.txt', 'y'.repeat(300))
+    expect(() => vfs.write('/b.txt', 'z')).toThrow(/2-file limit/)
+    expect(() => vfs.write('/a.txt', 'y'.repeat(500))).toThrow(/1000-byte total limit/)
+    vfs.write('/a.txt', 'y'.repeat(400))
+    expect(vfs.read('/a.txt')).toHaveLength(400)
+  })
+
+  it('measures UTF-8 bytes, not UTF-16 units', () => {
+    const vfs = createVfs(undefined, { maxFileBytes: 5 })
+    expect(() => vfs.write('/e.txt', 'ééé')).toThrow(/6 bytes/)
+  })
+
+  it('refuses a single host call carrying an oversized string, even called directly', async () => {
+    const vfs = createVfs()
+    const result = await runScript(await engine(), {
+      vfs,
+      maxHostStringBytes: 1024,
+      script: `
+        const out = []
+        try { __host_vfs_write('/p', 'x'.repeat(4096)) } catch (e) { out.push(e.message) }
+        try { __host_vfs_write('/p', { toString() { return 'sneaky' } }) } catch (e) { out.push(e.message) }
+        out
+      `,
+    })
+    expect(result).toMatchObject({
+      ok: true,
+      value: ['vfs content exceeds the 1024-byte limit for one host call', 'vfs content must be a string'],
+    })
+  })
+
+  it('stops keeping console output past the log limit, behind one marker', async () => {
+    const result = await runScript(await engine(), {
+      maxLogBytes: 100,
+      script: `for (let i = 0; i < 1000; i++) console.log('0123456789'); 'done'`,
+    })
+    expect(result).toMatchObject({ ok: true, value: 'done' })
+    expect(result.logs).toHaveLength(11)
+    expect(result.logs.at(-1)).toEqual({ level: 'warn', text: '[console output truncated: log limit reached]' })
+  })
+})

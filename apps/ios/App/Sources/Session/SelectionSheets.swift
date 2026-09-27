@@ -216,7 +216,7 @@ struct ModePickerSheet: View {
   let modes: [PermissionMode]
   let current: PermissionMode?
   let defaultMode: PermissionMode?
-  /// Nil = unknown (an older server): offer it rather than block it.
+  /// Nil = unknown: offer it rather than block it.
   let canBypass: Bool?
   let onSelect: (PermissionMode) -> Void
 

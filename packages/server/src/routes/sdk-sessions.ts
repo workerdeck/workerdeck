@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ProfileInfo, SdkSessionSummary } from '@workerdeck/protocol'
-import { json } from '../lib/http.ts'
+import { fail, json, requireMethod } from '../lib/http.ts'
 import { cwdAllowed, engineOf } from '../lib/profile-env.ts'
 import type { SdkSessionLister } from '../options.ts'
 import type { AuthContext } from '../services/auth.ts'
@@ -14,10 +14,7 @@ function withinRoots(sessions: SdkSessionSummary[], roots: string[], limit?: num
 
 export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, auth: AuthContext): Promise<void> {
   const { adapterFor, factory, profiles } = ctx
-  if (req.method !== 'GET') {
-    json(res, 405, { error: 'method not allowed' })
-    return
-  }
+  requireMethod(req, 'GET')
   const url = new URL(req.url ?? '/', 'http://internal')
   const dir = url.searchParams.get('dir') ?? undefined
   const roots = ctx.options.allowedCwdRoots
@@ -28,8 +25,7 @@ export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage
   if (requested !== undefined) {
     const resolved = factory.resolveProfile(requested, auth.allowedProfiles)
     if (!resolved.ok) {
-      json(res, resolved.status, { error: resolved.error })
-      return
+      fail(resolved.status, resolved.error)
     }
     profile = resolved.profile
   } else {
@@ -59,18 +55,15 @@ export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage
             env: profile ? factory.sessionEnvFor(profile) : process.env,
           })
         }
+  const withinScope = roots !== undefined && roots.length > 0
+  if (withinScope && dir && !cwdAllowed(dir, roots)) {
+    fail(403, 'dir is outside the allowed roots')
+  }
   try {
-    if (roots && roots.length > 0) {
-      if (dir) {
-        if (!cwdAllowed(dir, roots)) {
-          json(res, 403, { error: 'dir is outside the allowed roots' })
-          return
-        }
-      } else {
-        // A bare listing spans every project on the host, so it filters after listing - which is why the paging is applied here too.
-        json(res, 200, { sdkSessions: withinRoots(await lister({}), roots, limit, offset) })
-        return
-      }
+    if (withinScope && !dir) {
+      // A bare listing spans every project on the host, so it filters after listing - which is why the paging is applied here too.
+      json(res, 200, { sdkSessions: withinRoots(await lister({}), roots, limit, offset) })
+      return
     }
     json(res, 200, { sdkSessions: await lister({ dir, limit, offset }) })
   } catch (error) {

@@ -2,6 +2,7 @@ export { createWorkerServer } from './server.ts'
 export type {
   Authenticator,
   CarriedSession,
+  DiagnosticSink,
   EngineRunnerContext,
   QueueServerOptions,
   SdkSessionLister,
@@ -12,6 +13,7 @@ export type {
 export { sandboxedProviderProfile } from './lib/sandboxed-profile.ts'
 export { createProviderRunner } from './lib/provider-runner.ts'
 export { reloadPlan, type ReloadPlan } from './lib/reload-plan.ts'
+export { isMissing, readJsonOr, writeFileAtomic, writeJsonAtomic, type JsonWriteOptions } from './lib/atomic-file.ts'
 export type { ProviderRunnerOptions } from './lib/provider-runner.ts'
 export { SessionRegistry } from './services/registry.ts'
 export type { SessionRegistryOptions } from './services/registry.ts'
@@ -20,7 +22,7 @@ export type { AttachmentStoreOptions } from './services/attachments.ts'
 export { ProducedFileStore } from './services/produced-files.ts'
 export type { ProducedFile } from './services/produced-files.ts'
 export { SessionNotifier } from './services/notifications.ts'
-export type { SessionNotificationOptions } from './services/notifications.ts'
+export type { NotificationErrorContext, SessionNotificationOptions } from './services/notifications.ts'
 export { ProfileUsageTracker } from './services/profile-usage.ts'
 export { SpendLedger, createFileSpendStore, dayKey, type SpendRecord, type SpendStore } from './services/spend-ledger.ts'
 export { BridgeHub } from './services/bridge.ts'

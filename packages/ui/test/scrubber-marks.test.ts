@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
-import { buildMarks, clusterMarks, nearestMember } from '../src/components/agent/scrubber-marks.ts'
+import { buildMarks, clusterMarks, nearestMember, proportionalPlacement } from '../src/components/agent/scrubber-marks.ts'
 
 let seq = 0
 function user(text: string): TranscriptItem {
@@ -92,6 +92,22 @@ describe('buildMarks', () => {
     expect(buildMarks(items, { frameParentId: 'task-1' }).map((m) => m.kind)).toEqual(['turn', 'turn'])
   })
 
+  it('marks a failed call only when it is its row outcome, the rule both rails share', () => {
+    const recovered = [user('x'), toolCall('failed'), toolCall('settled')]
+    expect(kinds(recovered)).toContain('toolFailed@1')
+    expect(buildMarks(recovered, { rowIndexFor: (i) => (i === 0 ? 0 : 1) }).map((m) => m.kind)).not.toContain('toolFailed')
+    const endsBroken = [user('x'), toolCall('settled'), toolCall('failed')]
+    expect(buildMarks(endsBroken, { rowIndexFor: (i) => (i === 0 ? 0 : 1) }).map((m) => `${m.kind}@${m.itemIndex}`)).toContain(
+      'toolFailed@2',
+    )
+  })
+
+  it('reads a failure off either spelling, status or result flag', () => {
+    const flagged: TranscriptItem = { ...toolCall('settled'), result: { text: 'no matches', isError: true } } as TranscriptItem
+    expect(kinds([flagged]).map((k) => k.split('@')[0])).toEqual(['toolFailed'])
+    expect(kinds([toolCall('running')])).toEqual([])
+  })
+
   it('injects bookmarks (bounds-checked) and the recap boundary', () => {
     const marks = buildMarks([user('a'), assistant('b')], {
       bookmarks: [1, 99],
@@ -107,7 +123,7 @@ describe('clusterMarks', () => {
   it('positions proportionally and keeps distant marks apart', () => {
     const filler = Array.from({ length: 6 }, () => toolCall('settled'))
     const items = [user('a'), assistant('b'), ...filler, user('c'), assistant('d')]
-    const clusters = clusterMarks(buildMarks(items), RAIL, items.length)
+    const clusters = clusterMarks(buildMarks(items), proportionalPlacement(RAIL, items.length))
     // Ten items over 100px: the prompts at items 0 and 8 sit at 0 and 80.
     expect(clusters.filter((c) => c.lane === 'l').map((c) => c.y)).toEqual([0, 80])
     expect(clusters.filter((c) => c.lane === 'r').map((c) => c.y)).toEqual([10, 90])
@@ -116,7 +132,7 @@ describe('clusterMarks', () => {
   it('merges adjacent marks per lane, loudest colour winning', () => {
     // Three items over 100px: 33px-tall marks one item apart touch, so the answer's mark and the session error merge.
     const items = [user('a'), assistant('b'), errorNotice('boom')]
-    const merged = clusterMarks(buildMarks(items), RAIL, items.length)
+    const merged = clusterMarks(buildMarks(items), proportionalPlacement(RAIL, items.length))
     const right = merged.filter((c) => c.lane === 'r')
     expect(right).toHaveLength(1)
     expect(right[0]!.kind).toBe('error')
@@ -128,13 +144,13 @@ describe('clusterMarks', () => {
   it('keeps the same pair apart once filler spreads them', () => {
     const filler = Array.from({ length: 8 }, () => toolCall('settled'))
     const items = [user('a'), assistant('b'), ...filler, errorNotice('boom')]
-    const clusters = clusterMarks(buildMarks(items), RAIL, items.length)
+    const clusters = clusterMarks(buildMarks(items), proportionalPlacement(RAIL, items.length))
     expect(clusters.filter((c) => c.lane === 'r')).toHaveLength(2)
   })
 
   it('clamps the last mark inside the rail', () => {
     const items = [user('a'), assistant('b')]
-    const clusters = clusterMarks(buildMarks(items), RAIL, items.length)
+    const clusters = clusterMarks(buildMarks(items), proportionalPlacement(RAIL, items.length))
     for (const cluster of clusters) {
       expect(cluster.y + cluster.h).toBeLessThanOrEqual(RAIL)
     }

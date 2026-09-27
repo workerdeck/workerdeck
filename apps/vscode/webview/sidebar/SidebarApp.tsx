@@ -1,25 +1,19 @@
-import { FolderOpen, Layers, Plug, SearchX } from 'lucide-react'
+import { Layers, Plug } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { SessionInfo, SessionRow } from '@workerdeck/protocol'
-import type { SidebarState, SurfaceTarget } from '../../src/bridge-protocol.ts'
+import type { SessionRow } from '@workerdeck/protocol'
+import type { SidebarState, SidebarToHost, SurfaceTarget } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
-import { ProjectIcon, SessionFilters, SessionSearch, type SelectModifiers } from '@workerdeck/ui'
+import { SessionBrowser, SessionFilters, SessionSearch, type SelectModifiers } from '@workerdeck/ui'
 import { Empty, Key } from '../ui/Empty.tsx'
-import { SessionCard } from './SessionCard.tsx'
+import { CardActions } from './CardActions.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
-import {
-  DEFAULT_VIEW_CONFIG,
-  buildRows,
-  clearFilters,
-  filterRows,
-  groupRows,
-  hasFacetFilter,
-  scopeActive,
-  subsetSummary,
-  type ViewConfig,
-} from '../../src/view-config.ts'
+import { DEFAULT_VIEW_CONFIG, buildRows, clearFilters, filterRows, subsetSummary, type ViewConfig } from '../../src/view-config.ts'
 
 type Persisted = { config?: ViewConfig }
+
+type RowMessage = Extract<SidebarToHost, { hostId: string; sessionId: string }>
+
+type RowExtra<K extends RowMessage['kind']> = Omit<Extract<RowMessage, { kind: K }>, 'kind' | 'hostId' | 'sessionId'>
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
@@ -32,11 +26,6 @@ function targetOf(modifiers: SelectModifiers): SurfaceTarget | undefined {
     return 'editor-beside'
   }
   return undefined
-}
-
-function iconSrcOf(info: SessionInfo | undefined, icons: Record<string, string>): string | undefined {
-  const icon = info?.project?.icon
-  return icon?.type === 'image' ? icons[icon.hash] : undefined
 }
 
 export function SidebarApp({ bridge }: { bridge: Bridge }) {
@@ -98,12 +87,12 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const rows = useMemo(() => buildRows(state), [state])
   const gateways = useMemo(() => hosts.map((host) => ({ id: host.id, name: host.name })), [hosts])
   const filtered = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
-  const groups = useMemo(() => groupRows(filtered, config), [filtered, config])
   const connected = hosts.filter((h) => h.probe === 'connected')
-  const scoping = scopeActive(config, scope)
   const subset = subsetSummary(config, scope, filtered.length, rows.length)
-  const selectedIs = (row: SessionRow) =>
-    state?.selected?.hostId === row.hostId && state.selected.sessionId === row.info.id ? state.selected : undefined
+  const selected = state?.selected
+  const isActive = (row: SessionRow) => selected?.hostId === row.hostId && selected.sessionId === row.info.id
+  const postRow = <K extends RowMessage['kind']>(kind: K, row: SessionRow, extra: RowExtra<K>) =>
+    bridge.post({ kind, hostId: row.hostId, sessionId: row.info.id, ...extra } as RowMessage)
 
   return (
     <div className="flex h-screen flex-col text-body-sm">
@@ -136,7 +125,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
 
       {subset ? <SubsetLine subset={subset} onClear={() => setConfig(clearFilters(config))} /> : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-1">
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {hosts.length === 0 ? (
           <Empty
             icon={<Plug />}
@@ -148,164 +137,67 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             }
           />
         ) : connected.length === 0 ? (
-          <Empty
-            icon={<Plug />}
-            title={
-              hosts.some((h) => h.probe === 'pending')
-                ? 'Connecting…'
-                : hosts.some((h) => h.probe === 'unauthorized')
-                  ? 'Unauthorized'
-                  : 'No gateway reachable'
-            }
-            description={
-              hosts.some((h) => h.probe === 'unauthorized')
-                ? 'Check the gateway’s auth key in the Gateways view.'
-                : hosts.some((h) => h.probe === 'pending')
-                  ? 'Reaching the configured gateways.'
-                  : 'Is `npx workerdeck` still running?'
+          <Unreachable hosts={hosts} />
+        ) : (
+          <SessionBrowser
+            rows={rows}
+            config={config}
+            onConfigChange={setConfig}
+            scope={scope}
+            showControls={false}
+            showSearch={false}
+            showSubset={false}
+            gatewayCount={hosts.length}
+            projectIcons={projectIcons}
+            isActive={isActive}
+            activeSubagentId={selected?.subagentToolUseId}
+            activeShellId={selected?.shellId}
+            rowActions={(row) => (
+              <CardActions
+                inEditor={state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor'}
+                onMenu={() => postRow('wd-session-menu', row, {})}
+              />
+            )}
+            onSelect={(row, modifiers) => postRow('wd-select-session', row, { target: targetOf(modifiers) })}
+            onSelectSubagent={(row, subagentToolUseId) => postRow('wd-select-session', row, { subagentToolUseId })}
+            onSelectTask={(row, task) => postRow('wd-select-session', row, { revealToolUseId: task.toolUseId })}
+            onStopTask={(row, toolUseId) => postRow('wd-stop-task', row, { toolUseId })}
+            onSelectShell={(row, shellId) => postRow('wd-select-session', row, { shellId })}
+            onKillShell={(row, shellId) => postRow('wd-kill-shell', row, { shellId })}
+            onShellAgentWrite={(row, shellId, enabled) => postRow('wd-shell-agent-write', row, { shellId, enabled })}
+            onRename={(row, title) => postRow('wd-rename-session', row, { title })}
+            emptyState={
+              <Empty
+                icon={<Layers />}
+                title="No sessions yet"
+                description={
+                  <>
+                    Start one with <Key>+</Key> above.
+                  </>
+                }
+              />
             }
           />
-        ) : groups.length === 0 ? (
-          subset ? (
-            scoping && !hasFacetFilter(config) ? (
-              <Empty
-                icon={<FolderOpen />}
-                title="Nothing in this folder"
-                description={`No session is running in ${scope?.label ?? 'this project'}.`}
-                action="Show all folders"
-                onAction={() => setConfig({ ...config, scoped: false })}
-              />
-            ) : (
-              <Empty
-                icon={<SearchX />}
-                title="No matches"
-                description="No session matches the current search and filters."
-                action="Clear filters"
-                onAction={() => setConfig(clearFilters(config))}
-              />
-            )
-          ) : (
-            <Empty
-              icon={<Layers />}
-              title="No sessions yet"
-              description={
-                <>
-                  Start one with <Key>+</Key> above.
-                </>
-              }
-            />
-          )
-        ) : (
-          groups.map((group) => (
-            <div key={group.key} className="flex flex-col gap-1">
-              {group.label ? (
-                <div className="flex items-center gap-1.5 px-1.5 pb-0.5 pt-1.5 text-label font-semibold uppercase tracking-wide text-fg-4">
-                  {/* Every row in the group shares the mark by construction (a group IS one
-                      project root), so the first row is a fair source. */}
-                  {config.groupBy === 'project' ? (
-                    <ProjectIcon
-                      icon={group.rows[0]?.info.project?.icon}
-                      src={iconSrcOf(group.rows[0]?.info, projectIcons)}
-                      name={group.label}
-                    />
-                  ) : null}
-                  {group.label}
-                </div>
-              ) : null}
-              {group.rows.map((row) => (
-                <SessionCard
-                  key={row.info.id}
-                  row={row}
-                  showProject={config.groupBy !== 'project'}
-                  showGateway={config.groupBy !== 'gateway' && hosts.length > 1}
-                  subagents={config.subagents}
-                  shells={config.shells}
-                  tasks={config.tasks}
-                  projectIcons={projectIcons}
-                  selected={selectedIs(row) !== undefined}
-                  inEditor={state?.open?.[`${row.hostId}:${row.info.id}`] === 'editor'}
-                  /* Only THIS card's frame: `selected` is one object for the whole list, so
-                     reading its `subagentToolUseId` unguarded turns every card grey. */
-                  activeSubagentId={selectedIs(row)?.subagentToolUseId}
-                  activeShellId={selectedIs(row)?.shellId}
-                  onSelect={(modifiers) =>
-                    bridge.post({
-                      kind: 'wd-select-session',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      target: targetOf(modifiers),
-                    })
-                  }
-                  onSelectSubagent={(subagentToolUseId) =>
-                    bridge.post({
-                      kind: 'wd-select-session',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      subagentToolUseId,
-                    })
-                  }
-                  onSelectTask={(task) =>
-                    bridge.post({
-                      kind: 'wd-select-session',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      revealToolUseId: task.toolUseId,
-                    })
-                  }
-                  onStopTask={(toolUseId) =>
-                    bridge.post({
-                      kind: 'wd-stop-task',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      toolUseId,
-                    })
-                  }
-                  onSelectShell={(shellId) =>
-                    bridge.post({
-                      kind: 'wd-select-session',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      shellId,
-                    })
-                  }
-                  onKillShell={(shellId) =>
-                    bridge.post({
-                      kind: 'wd-kill-shell',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      shellId,
-                    })
-                  }
-                  onShellAgentWrite={(shellId, enabled) =>
-                    bridge.post({
-                      kind: 'wd-shell-agent-write',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      shellId,
-                      enabled,
-                    })
-                  }
-                  onRename={(title) =>
-                    bridge.post({
-                      kind: 'wd-rename-session',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                      title,
-                    })
-                  }
-                  onMenu={() =>
-                    bridge.post({
-                      kind: 'wd-session-menu',
-                      hostId: row.hostId,
-                      sessionId: row.info.id,
-                    })
-                  }
-                />
-              ))}
-            </div>
-          ))
         )}
       </div>
     </div>
+  )
+}
+
+function Unreachable({ hosts }: { hosts: SidebarState['hosts'] }) {
+  const pending = hosts.some((h) => h.probe === 'pending')
+  const unauthorized = hosts.some((h) => h.probe === 'unauthorized')
+  return (
+    <Empty
+      icon={<Plug />}
+      title={pending ? 'Connecting…' : unauthorized ? 'Unauthorized' : 'No gateway reachable'}
+      description={
+        unauthorized
+          ? 'Check the gateway’s auth key in the Gateways view.'
+          : pending
+            ? 'Reaching the configured gateways.'
+            : 'Is `npx workerdeck` still running?'
+      }
+    />
   )
 }

@@ -172,7 +172,7 @@ struct QuestionPromptView: View {
         current.append(label)
       }
     } else {
-      current = current == [label] ? [] : [label]
+      current = [label]
     }
     selections[index] = current
   }

@@ -1,8 +1,9 @@
-import { SUBAGENT_HISTORY, type SubagentInfo } from '@workerdeck/protocol'
+import type { SubagentInfo } from '@workerdeck/protocol'
+import { SettledHistory } from '../../lib/settled-history.ts'
 
 export class CodexAgentTracker {
   #byThread = new Map<string, CodexAgent>()
-  #settleCounter = 0
+  #settled = new SettledHistory<string>()
 
   get(agentThreadId: string): CodexAgent | undefined {
     return this.#byThread.get(agentThreadId)
@@ -28,33 +29,13 @@ export class CodexAgentTracker {
 
   revive(record: CodexAgent): void {
     record.status = 'running'
-    record.settledOrder = undefined
+    this.#settled.forget(record.agentThreadId)
   }
 
   #settle(record: CodexAgent, status: 'done' | 'failed'): void {
     record.status = status
-    record.settledOrder = ++this.#settleCounter
-    let settled = 0
-    for (const r of this.#byThread.values()) {
-      if (r.settledOrder !== undefined) {
-        settled++
-      }
-    }
-    while (settled > SUBAGENT_HISTORY) {
-      let oldest: CodexAgent | undefined
-      for (const r of this.#byThread.values()) {
-        if (r.settledOrder === undefined) {
-          continue
-        }
-        if (!oldest || r.settledOrder < oldest.settledOrder!) {
-          oldest = r
-        }
-      }
-      if (!oldest) {
-        break
-      }
-      this.#byThread.delete(oldest.agentThreadId)
-      settled--
+    for (const evicted of this.#settled.settle(record.agentThreadId)) {
+      this.#byThread.delete(evicted)
     }
   }
 
@@ -75,6 +56,7 @@ export class CodexAgentTracker {
 
   forget(): void {
     this.#byThread.clear()
+    this.#settled.clear()
   }
 
   threadIds(): string[] {
@@ -118,6 +100,4 @@ export type CodexAgent = {
   // `imageGeneration` re-emits its card with the finished input, so ids are counted once.
   counted: Set<string>
   anchored?: boolean
-  // Insertion order cannot stand in: a slow early agent settles after a fast late one.
-  settledOrder?: number
 }

@@ -3,49 +3,36 @@ import { ToolLoopAgent, generateText, isStepCount, type LanguageModel, type Mode
 import {
   ENGINE_CAPABILITIES,
   snapshotRetains,
-  type ContentBlock,
-  type CreateSessionRequest,
+  supportsPermissionMode,
   type McpServerStatusInfo,
-  type PermissionDecisionSource,
   type PermissionMode,
   type PermissionRequest,
-  type SessionEvent,
-  type SessionEventBody,
   type SessionInfo,
-  type SessionStatus,
   type ToolExecutionBackend,
   type ByModel,
   tokenUsageFromWire,
+  errorMessage,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
-import { type AttachmentInput, attachmentRef, normalizeMediaType } from '../../lib/attachments.ts'
+import { type AttachmentInput, normalizeMediaType } from '../../lib/attachments.ts'
 import type {
+  EngineRunnerConfig,
   ParkedExecution,
   PermissionDecision,
   Runner,
   RunnerSnapshot,
   SendMessageOptions,
-  SessionEventListener,
 } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
-import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
-import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
-import { EventLog } from '../../lib/event-log.ts'
-import { LocalCommandQueue, localCommandEvent, type LocalCommandResult, type LocalShellSource } from '../../lib/local-command.ts'
-import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
-import { withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
-import type { ShellAgentWrite, ShellDirectory } from '../../lib/shells.ts'
-import { sessionTitle, withTitle } from '../../lib/title.ts'
-import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
+import { EngineRunner } from '../../lib/engine-runner.ts'
+import { approvalResolution, type ApprovalResolution, type CloseReason } from '../../lib/runner-core.ts'
+import { withPeerContext } from '../../lib/peers.ts'
+import { resolveInstructions } from '../../lib/instructions.ts'
+import { TurnStream, addUsage, newTurnUsage, settledToolCallIds, wireUsage, type TurnUsage } from './turn.ts'
 
-const SUPPORTED_PERMISSION_MODES: readonly PermissionMode[] = ['default', 'bypassPermissions', 'dontAsk']
-
-export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
-  epoch?: number
-  cwd?: string
+export type AiSdkRunnerConfig = EngineRunnerConfig & {
   languageModel: LanguageModel
   tools?: ToolSet
-  instructions?: SessionInstructions
   maxSteps?: number
   executor?: ToolExecutor
   executableTools?: string[]
@@ -54,14 +41,10 @@ export type AiSdkRunnerConfig = Omit<CreateSessionRequest, 'cwd'> & {
   executionBackend?: ToolExecutionBackend
   toolTitles?: Record<string, string>
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
-  defaultApprovalTimeoutMs?: number | null
   resolveModel?: (modelId: string | undefined) => LanguageModel
   reportMcpServers?: () => Promise<McpServerStatusInfo[] | undefined>
   onClose?: () => void | Promise<void>
   restore?: RunnerSnapshot
-  peers?: PeerDirectory
-  shells?: ShellDirectory
-  shellAgentWrite?: ShellAgentWrite
 }
 
 export type PendingToolCall = {
@@ -77,7 +60,7 @@ export type AiSdkSessionState = {
   pendingToolCalls: PendingToolCall[]
   dispatched: string[]
   numTurns: number
-  turnAccum?: { startedAt: number; input: number; output: number; cacheWrite: number; cacheRead: number }
+  turnAccum?: TurnUsage
   permissionMode: PermissionMode
   model?: string
   lastActivityAt?: number
@@ -87,51 +70,28 @@ export type AiSdkSessionState = {
 
 export type ToolCallOutput = { type: 'text'; value: string } | { type: 'json'; value: unknown }
 
-export class AiSdkRunner implements Runner {
-  readonly id: string
-  readonly createdAt: number
-
-  #config: AiSdkRunnerConfig
+export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runner {
   readonly #instructions: string | undefined
   #model: LanguageModel
-  #log = new EventLog()
-  #subscribers = new SubscriberSet()
-  #status: SessionStatus = 'starting'
-  #statusDetail: string | undefined
   #permissionMode: PermissionMode
   #messages: ModelMessage[] = []
-  #localCommands = new LocalCommandQueue((text, uuid, shell) => this.#emit(localCommandEvent(text, uuid, shell)))
   #pendingToolCalls = new Map<string, PendingToolCall>()
   #dispatched = new Set<string>()
   #turnChain: Promise<void> = Promise.resolve()
   #abort: AbortController | undefined
-  #turnAccum: { startedAt: number; input: number; output: number; cacheWrite: number; cacheRead: number } | undefined
+  #turnAccum: TurnUsage | undefined
   #numTurns = 0
-  #cost = new CostLedger()
   #started = false
-  #closed = false
   #parked = false
   #modelAlias: string | undefined
-  #pendingApprovals = new Map<
-    string,
-    {
-      request: PermissionRequest
-      toolCallId: string
-      timer?: ReturnType<typeof setTimeout>
-    }
-  >()
 
   constructor(config: AiSdkRunnerConfig, id: string = randomUUID()) {
+    super(config, config.restore?.id ?? id, config.restore?.createdAt ?? Date.now())
     const mode = config.permissionMode ?? 'default'
-    if (!SUPPORTED_PERMISSION_MODES.includes(mode)) {
-      throw new Error(`permission mode '${mode}' is not supported by the AI SDK engine`)
-    }
-    this.#config = config
+    assertPermissionMode(mode)
     this.#model = config.languageModel
     this.#permissionMode = mode
     this.#modelAlias = config.model
-    this.id = config.restore?.id ?? id
-    this.createdAt = config.restore?.createdAt ?? Date.now()
     this.#instructions = resolveInstructions(config.instructions, { sessionId: this.id, cwd: config.cwd, profile: config.profile })
     if (config.restore) {
       this.#restore(config.restore)
@@ -146,9 +106,9 @@ export class AiSdkRunner implements Runner {
     if (!state || !Array.isArray(state.messages)) {
       throw new Error('session snapshot is missing its provider-engine state')
     }
-    this.#log.restore(snapshot.events, snapshot.seq, state.lastActivityAt)
+    this.core.log.restore(snapshot.events, snapshot.seq, state.lastActivityAt)
     this.#messages = [...state.messages]
-    this.#localCommands.restore(state.pendingLocalCommands ?? [])
+    this.localCommands.restore(state.pendingLocalCommands ?? [])
     for (const call of state.pendingToolCalls) {
       const legacy = (call as { deferred?: boolean }).deferred
       this.#pendingToolCalls.set(call.toolCallId, legacy === undefined ? call : { ...call, parkable: call.parkable ?? legacy })
@@ -160,19 +120,11 @@ export class AiSdkRunner implements Runner {
       this.#turnAccum.startedAt += Date.now() - state.parkedAt
     }
     this.#permissionMode = state.permissionMode
-    this.#status = this.#pendingToolCalls.size > 0 ? 'parked' : 'idle'
-    if (state.model !== undefined && state.model !== this.#modelAlias && this.#config.resolveModel) {
+    this.core.restoreStatus(this.#pendingToolCalls.size > 0 ? 'parked' : 'idle')
+    if (state.model !== undefined && state.model !== this.#modelAlias && this.config.resolveModel) {
       this.#modelAlias = state.model
-      this.#model = this.#config.resolveModel(state.model)
+      this.#model = this.config.resolveModel(state.model)
     }
-  }
-
-  get status(): SessionStatus {
-    return this.#status
-  }
-
-  get lastSeq(): number {
-    return this.#log.seq
   }
 
   get messages(): ModelMessage[] {
@@ -183,57 +135,28 @@ export class AiSdkRunner implements Runner {
     return [...this.#pendingToolCalls.values()]
   }
 
-  get pendingApprovals(): PermissionRequest[] {
-    return [...this.#pendingApprovals.values()].map((a) => a.request)
-  }
-
   get vfs(): SandboxVfs | undefined {
-    return this.#config.vfs
+    return this.config.vfs
   }
 
   info(): SessionInfo {
     return {
-      id: this.id,
-      status: this.#status,
+      ...this.baseInfo(),
       // Never process.cwd(): this engine opens no directory, and the gateway's own deploy path
       // has no business on a client surface.
-      cwd: this.#config.cwd ?? '',
-      profile: this.#config.profile,
+      cwd: this.config.cwd ?? '',
       engine: 'provider',
-      shellAgentWrite: this.#config.shells ? this.#config.shellAgentWrite : undefined,
-      capabilities: this.#config.shouldApprove
+      capabilities: this.config.shouldApprove
         ? { ...ENGINE_CAPABILITIES.provider, interactiveApprovals: true }
         : ENGINE_CAPABILITIES.provider,
       model: this.#modelId(),
       permissionMode: this.#permissionMode,
-      createdAt: this.createdAt,
-      epoch: this.#config.epoch,
-      lastSeq: this.#log.seq,
-      activityCount: this.#log.activityCount,
-      proseCount: this.#log.proseCount,
-      contextUsage: this.#log.contextUsage,
-      checklist: this.#log.checklist,
-      pendingPermissionCount: this.#pendingApprovals.size,
-      meta: this.#config.meta,
-      scope: this.#config.scope,
-      title: sessionTitle(this.#config),
       numTurns: this.#numTurns || undefined,
-      costUsd: this.#cost.costUsd,
-      usageByModel: this.#cost.byModel,
-      lastActivityAt: this.#log.lastActivityAt,
     }
   }
 
-  carryCost(state: CostLedgerState): void {
-    this.#cost.carry(state)
-  }
-
-  costState(): CostLedgerState {
-    return this.#cost.snapshot()
-  }
-
-  #turnByModel(accum: { input: number; output: number; cacheWrite: number; cacheRead: number }): ByModel {
-    return { [this.#modelId() ?? 'unknown']: tokenUsageFromWire(turnUsage(accum)) }
+  #turnByModel(accum: TurnUsage): ByModel {
+    return { [this.#modelId() ?? 'unknown']: tokenUsageFromWire(wireUsage(accum)) }
   }
 
   start(): Promise<void> {
@@ -242,36 +165,34 @@ export class AiSdkRunner implements Runner {
     }
     this.#started = true
     this.#emitToolTitles()
-    if (this.#config.restore) {
+    if (this.config.restore) {
       return this.#turnChain
     }
-    this.#setStatus('idle')
-    if (this.#config.prompt) {
-      this.sendMessage(this.#config.prompt)
+    this.core.setStatus('idle')
+    if (this.config.prompt) {
+      this.sendMessage(this.config.prompt)
     }
     return this.#turnChain
   }
 
   park(): RunnerSnapshot | undefined {
-    if (this.#closed || this.#parked) {
+    if (this.core.closed || this.#parked) {
       return undefined
     }
     if (this.#abort || !this.#restingOnDeferred()) {
       return undefined
     }
-    this.#setStatus('parked')
+    this.core.setStatus('parked')
     const snapshot = this.#buildSnapshot()
     this.#parked = true
-    this.#subscribers.clear()
-    this.#localCommands.clear()
-    try {
-      void Promise.resolve(this.#config.onClose?.()).catch(() => {})
-    } catch {}
+    this.core.clearSubscribers()
+    this.localCommands.clear()
+    this.#runOnClose()
     return snapshot
   }
 
   snapshot(): RunnerSnapshot | undefined {
-    if (this.#closed || this.#parked || this.#abort) {
+    if (this.core.closed || this.#parked || this.#abort) {
       return undefined
     }
     if (this.#pendingToolCalls.size > 0 && !this.#restingOnDeferred()) {
@@ -286,7 +207,7 @@ export class AiSdkRunner implements Runner {
       toolName: call.toolName,
       expiresAt: call.expiresAt,
     }))
-    const pendingLocalCommands = this.#localCommands.materialize()
+    const pendingLocalCommands = this.localCommands.materialize()
     const state: AiSdkSessionState = {
       messages: this.#messages,
       pendingToolCalls: [...this.#pendingToolCalls.values()],
@@ -295,7 +216,7 @@ export class AiSdkRunner implements Runner {
       turnAccum: this.#turnAccum ? { ...this.#turnAccum } : undefined,
       permissionMode: this.#permissionMode,
       model: this.#modelAlias,
-      lastActivityAt: this.#log.lastActivityAt,
+      lastActivityAt: this.core.log.lastActivityAt,
       parkedAt: Date.now(),
       ...(pendingLocalCommands.length ? { pendingLocalCommands } : {}),
     }
@@ -303,21 +224,16 @@ export class AiSdkRunner implements Runner {
       engine: 'provider',
       id: this.id,
       createdAt: this.createdAt,
-      seq: this.#log.seq,
-      events: this.#log.events.filter((event) => snapshotRetains(event)),
-      vfs: this.#config.vfs?.snapshot(),
+      seq: this.core.log.seq,
+      events: this.core.log.events.filter((event) => snapshotRetains(event)),
+      vfs: this.config.vfs?.snapshot(),
       parked,
       state,
     }
   }
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
-    if (this.#parked) {
-      throw new Error('session is parked')
-    }
-    if (this.#closed) {
-      throw new Error('session is closed')
-    }
+    this.assertAccepting()
     const modelText = withPeerContext(text, options)
     const files = (attachments ?? []).map((attachment) => ({
       type: 'file' as const,
@@ -325,7 +241,7 @@ export class AiSdkRunner implements Runner {
       mediaType: normalizeMediaType(attachment.mediaType),
       filename: attachment.name,
     }))
-    const context = this.#localCommands.take()
+    const context = this.localCommands.take()
     const content =
       files.length || context
         ? [
@@ -335,25 +251,15 @@ export class AiSdkRunner implements Runner {
           ]
         : modelText
     this.#messages.push({ role: 'user', content })
-    this.#emit({
-      type: 'user_message',
-      message: { role: 'user', content: text },
-      parentToolUseId: null,
-      attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
-      uuid: randomUUID(),
-      ...(options?.origin ? { origin: options.origin } : {}),
-    })
+    this.echoUser(text, attachments, options)
     this.#scheduleTurn()
   }
 
-  queueLocalCommand(input: LocalCommandResult | LocalShellSource): void {
+  protected override assertAccepting(): void {
     if (this.#parked) {
       throw new Error('session is parked')
     }
-    if (this.#closed) {
-      throw new Error('session is closed')
-    }
-    this.#localCommands.push(input)
+    super.assertAccepting()
   }
 
   resolveToolCall(toolCallId: string, output: ToolCallOutput, options?: { isError?: boolean }): boolean {
@@ -368,7 +274,7 @@ export class AiSdkRunner implements Runner {
 
   #settlePendingCall(toolCallId: string, output: ToolCallOutput, isError: boolean): boolean {
     const pending = this.#pendingToolCalls.get(toolCallId)
-    if (!pending || this.#closed || this.#parked) {
+    if (!pending || this.core.closed || this.#parked) {
       return false
     }
     this.#pendingToolCalls.delete(toolCallId)
@@ -387,7 +293,7 @@ export class AiSdkRunner implements Runner {
         },
       ],
     })
-    this.#emit({
+    this.core.emit({
       type: 'user_message',
       message: {
         role: 'user',
@@ -407,48 +313,22 @@ export class AiSdkRunner implements Runner {
     return true
   }
 
-  resolvePermission(requestId: string, decision: PermissionDecision): boolean {
-    const approval = this.#pendingApprovals.get(requestId)
-    if (!approval) {
-      return false
-    }
-    clearTimeout(approval.timer)
-    this.#pendingApprovals.delete(requestId)
-    const source: PermissionDecisionSource = 'client'
+  #afterApproval(toolCallId: string, resolution: ApprovalResolution, decision: PermissionDecision): void {
     if (decision.behavior === 'allow') {
-      this.#emit({
-        type: 'permission_resolved',
-        requestId,
-        behavior: 'allow',
-        resolvedBy: source,
-      })
-      this.#dispatchSingle(approval.toolCallId, decision.updatedInput)
-    } else {
-      const message = decision.message ?? 'Permission denied by user'
-      this.#emit({
-        type: 'permission_resolved',
-        requestId,
-        behavior: 'deny',
-        resolvedBy: source,
-        message,
-      })
-      this.#applyExecutionResult(approval.toolCallId, {
-        status: 'failed',
-        reason: 'permission_denied',
-        error: message,
-      })
-      if (decision.interrupt) {
-        void this.interrupt()
-      }
+      this.#dispatchSingle(toolCallId, decision.updatedInput)
+      return
     }
-    return true
+    this.#applyExecutionResult(toolCallId, { status: 'failed', reason: 'permission_denied', error: resolution.message ?? '' })
+    if (decision.interrupt) {
+      void this.interrupt()
+    }
   }
 
   emitFileDelivered(file: { path: string; bytes: number; description?: string }): void {
-    if (this.#closed || this.#parked) {
+    if (this.core.closed || this.#parked) {
       return
     }
-    this.#emit({ type: 'file_delivered', ...file })
+    this.core.emit({ type: 'file_delivered', ...file })
   }
 
   async generateDigest(prompt: string): Promise<string> {
@@ -457,22 +337,18 @@ export class AiSdkRunner implements Runner {
       prompt,
       abortSignal: this.#abort?.signal,
     })
-    const accum = this.#turnAccum
-    if (accum) {
-      accum.input += result.usage.inputTokens ?? 0
-      accum.output += result.usage.outputTokens ?? 0
-      accum.cacheWrite += result.usage.inputTokenDetails?.cacheWriteTokens ?? 0
-      accum.cacheRead += result.usage.inputTokenDetails?.cacheReadTokens ?? 0
+    if (this.#turnAccum) {
+      addUsage(this.#turnAccum, result.usage)
     }
     return result.text
   }
 
   async clearContext(): Promise<void> {
-    if (this.#status === 'closed' || this.#status === 'failed') {
+    if (this.core.terminal) {
       throw new Error('session is closed')
     }
     const run = this.#turnChain.then(() => {
-      if (this.#closed) {
+      if (this.core.closed) {
         throw new Error('session is closed')
       }
       // Waiting cannot resolve parked external work - a bridged result is owed by a client that
@@ -481,8 +357,8 @@ export class AiSdkRunner implements Runner {
         throw new Error('cannot clear context while tool calls are outstanding')
       }
       this.#messages = []
-      this.#localCommands.clear()
-      this.#emit({ type: 'conversation_reset' })
+      this.localCommands.clear()
+      this.core.emit({ type: 'conversation_reset' })
     })
     this.#turnChain = run.then(
       () => undefined,
@@ -491,94 +367,56 @@ export class AiSdkRunner implements Runner {
     await run
   }
 
-  #cancelPendingApprovals(message: string): void {
-    for (const [requestId, { timer }] of this.#pendingApprovals) {
-      clearTimeout(timer)
-      this.#emit({ type: 'permission_resolved', requestId, behavior: 'deny', resolvedBy: 'client', message })
-    }
-    this.#pendingApprovals.clear()
-  }
-
   async interrupt(): Promise<void> {
-    this.#cancelPendingApprovals('interrupted')
+    this.core.settleAllApprovals({ behavior: 'deny', message: 'interrupted' }, 'client', false)
     if (this.#abort) {
       this.#abort.abort()
     } else if (this.#pendingToolCalls.size > 0) {
-      const accum = this.#turnAccum ?? { startedAt: Date.now(), input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+      const accum = this.#turnAccum ?? newTurnUsage()
       for (const call of Array.from(this.#pendingToolCalls.values())) {
         this.#settlePendingCall(call.toolCallId, { type: 'text', value: 'interrupted' }, true)
       }
       this.#dispatched.clear()
-      this.#numTurns += 1
-      this.#emit({
-        type: 'turn_result',
-        subtype: 'error_during_execution',
-        isError: true,
-        durationMs: Date.now() - accum.startedAt,
-        numTurns: this.#numTurns,
-        totalCostUsd: 0,
-        errors: ['interrupted'],
-        usage: turnUsage(accum),
-      })
-      this.#turnAccum = undefined
-      this.#setStatus('idle')
+      this.#failTurn(accum, 'interrupted')
     }
     await this.#turnChain
   }
 
   async setPermissionMode(mode: PermissionMode): Promise<void> {
-    if (!SUPPORTED_PERMISSION_MODES.includes(mode)) {
-      throw new Error(`permission mode '${mode}' is not supported by the AI SDK engine`)
-    }
+    assertPermissionMode(mode)
     this.#permissionMode = mode
-    this.#emit({ type: 'permission_mode_changed', mode })
+    this.core.emit({ type: 'permission_mode_changed', mode })
   }
 
   async setModel(model?: string): Promise<void> {
-    const resolve = this.#config.resolveModel
+    const resolve = this.config.resolveModel
     if (!resolve) {
       throw new Error('set_model is not supported by this session')
     }
     this.#model = resolve(model)
     this.#modelAlias = model
-    this.#emit({ type: 'model_changed', model })
+    this.core.emit({ type: 'model_changed', model })
   }
 
-  fail(message: string): void {
-    if (this.#closed) {
+  close(reason: CloseReason = 'client'): void {
+    if (this.#parked) {
       return
     }
-    this.#emit({ type: 'session_error', message })
-    this.#setStatus('failed')
-    this.close('error')
+    const closed = this.core.close(reason, () => {
+      this.#abort?.abort()
+      this.localCommands.clear()
+      this.#pendingToolCalls.clear()
+      this.#dispatched.clear()
+    })
+    if (closed) {
+      this.#runOnClose()
+    }
   }
 
-  close(reason: 'client' | 'server' | 'error' = 'client'): void {
-    if (this.#closed || this.#parked) {
-      return
-    }
-    this.#closed = true
-    this.#abort?.abort()
-    this.#localCommands.clear()
-    this.#pendingToolCalls.clear()
-    this.#dispatched.clear()
-    for (const { timer } of this.#pendingApprovals.values()) {
-      clearTimeout(timer)
-    }
-    this.#pendingApprovals.clear()
-    this.#emit({ type: 'session_closed', reason })
-    this.#setStatus('closed')
+  #runOnClose(): void {
     try {
-      void Promise.resolve(this.#config.onClose?.()).catch(() => {})
+      void Promise.resolve(this.config.onClose?.()).catch(() => {})
     } catch {}
-  }
-
-  eventAt(seq: number): SessionEvent | undefined {
-    return this.#log.at(seq)
-  }
-
-  subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
-    return this.#subscribers.subscribe(this.#log.events, listener, afterSeq, options, this.#log.resetSeq)
   }
 
   #scheduleTurn(): void {
@@ -586,7 +424,7 @@ export class AiSdkRunner implements Runner {
   }
 
   settleExecution(executionId: string, result: ToolExecutionResult): boolean {
-    if (this.#closed || this.#parked) {
+    if (this.core.closed || this.#parked) {
       return false
     }
     if (!this.#pendingToolCalls.has(executionId)) {
@@ -597,12 +435,12 @@ export class AiSdkRunner implements Runner {
   }
 
   #dispatchPending(): void {
-    const executor = this.#config.executor
+    const executor = this.config.executor
     if (!executor) {
       return
     }
-    const executable = this.#config.executableTools
-    const needsApproval = this.#permissionMode === 'default' && this.#config.shouldApprove
+    const executable = this.config.executableTools
+    const needsApproval = this.#permissionMode === 'default' && this.config.shouldApprove
     const inFlight: Array<Promise<unknown>> = []
     let anyDeferred = false
     let anyAwaiting = false
@@ -614,35 +452,11 @@ export class AiSdkRunner implements Runner {
         continue
       }
       if (needsApproval && needsApproval({ toolName: call.toolName, input: call.input as Record<string, unknown> })) {
-        if ([...this.#pendingApprovals.values()].some((a) => a.toolCallId === call.toolCallId)) {
+        if (this.core.findApproval((request) => request.toolUseId === call.toolCallId) !== undefined) {
           anyAwaiting = true
           continue
         }
-        const requestId = randomUUID()
-        const timeoutMs = resolveApprovalTimeoutMs(this.#config.approvalTimeoutMs, this.#config.defaultApprovalTimeoutMs)
-        const request: PermissionRequest = {
-          id: requestId,
-          toolName: call.toolName,
-          input: call.input as Record<string, unknown>,
-          toolUseId: call.toolCallId,
-          title: `Agent wants to run ${call.toolName}`,
-          displayName: call.toolName,
-          expiresAt: timeoutMs === undefined ? undefined : Date.now() + timeoutMs,
-        }
-        const timer =
-          timeoutMs === undefined
-            ? undefined
-            : setTimeout(() => {
-                if (!this.#pendingApprovals.has(requestId)) {
-                  return
-                }
-                this.resolvePermission(requestId, {
-                  behavior: 'deny',
-                  message: 'Approval timed out',
-                })
-              }, timeoutMs)
-        this.#pendingApprovals.set(requestId, { request, toolCallId: call.toolCallId, timer })
-        this.#emit({ type: 'permission_requested', request })
+        this.#requestApproval(call)
         anyAwaiting = true
         continue
       }
@@ -652,15 +466,33 @@ export class AiSdkRunner implements Runner {
       inFlight.push(dispatched.promise)
     }
     if (anyAwaiting) {
-      this.#setStatus('awaiting_approval')
+      this.core.setStatus('awaiting_approval')
     }
     if (anyDeferred) {
       void Promise.allSettled(inFlight).then(() => this.#announceParked())
     }
   }
 
+  #requestApproval(call: PendingToolCall): void {
+    const { timeoutMs, expiresAt } = this.approvalDeadline()
+    const request: PermissionRequest = {
+      id: randomUUID(),
+      toolName: call.toolName,
+      input: call.input as Record<string, unknown>,
+      toolUseId: call.toolCallId,
+      title: `Agent wants to run ${call.toolName}`,
+      displayName: call.toolName,
+      expiresAt,
+    }
+    this.core.requestApproval(request, {
+      timeoutMs,
+      respond: (decision, resolvedBy) => approvalResolution(decision, resolvedBy, 'Permission denied by user'),
+      after: (resolution, decision) => this.#afterApproval(call.toolCallId, resolution, decision),
+    })
+  }
+
   #dispatchSingle(toolCallId: string, updatedInput?: Record<string, unknown>): void {
-    const executor = this.#config.executor
+    const executor = this.config.executor
     if (!executor) {
       return
     }
@@ -702,18 +534,18 @@ export class AiSdkRunner implements Runner {
       sessionId: this.id,
       tool: call.toolName,
       input: call.input,
-      vfs: this.#config.vfs,
-      limits: this.#config.executionLimits,
+      vfs: this.config.vfs,
+      limits: this.config.executionLimits,
       signal: this.#abort?.signal,
     }
     const profile = executor.describe?.(toolCall) ?? {}
     call.parkable = profile.deferred === true ? true : undefined
     call.expiresAt = profile.timeoutMs === undefined ? undefined : Date.now() + profile.timeoutMs
-    this.#emit({
+    this.core.emit({
       type: 'execution_dispatched',
       executionId: call.toolCallId,
       toolName: call.toolName,
-      backend: profile.backend ?? this.#config.executionBackend ?? 'server',
+      backend: profile.backend ?? this.config.executionBackend ?? 'server',
       deferred: call.parkable,
       expiresAt: call.expiresAt,
     })
@@ -729,18 +561,18 @@ export class AiSdkRunner implements Runner {
         this.#applyExecutionResult(call.toolCallId, {
           status: 'failed',
           reason: 'dispatch_error',
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         })
       })
     return { deferred: call.parkable === true, promise }
   }
 
   #announceParked(): void {
-    if (this.#closed || this.#parked || this.#abort) {
+    if (this.core.closed || this.#parked || this.#abort) {
       return
     }
     if (this.#restingOnDeferred()) {
-      this.#setStatus('parked')
+      this.core.setStatus('parked')
     }
   }
 
@@ -759,12 +591,12 @@ export class AiSdkRunner implements Runner {
   #applyExecutionResult(executionId: string, result: ToolExecutionResult): void {
     // A parked instance is not the session any more: its rehydrated successor owns the pending
     // call, and applying here would write into a discarded history.
-    if (this.#closed || this.#parked) {
+    if (this.core.closed || this.#parked) {
       return
     }
     this.#dispatched.delete(executionId)
     if (result.status === 'ok') {
-      this.#emit({
+      this.core.emit({
         type: 'execution_result',
         executionId,
         output: { type: 'json', value: result.output },
@@ -773,7 +605,7 @@ export class AiSdkRunner implements Runner {
       this.resolveToolCall(executionId, { type: 'json', value: result.output })
       return
     }
-    this.#emit({
+    this.core.emit({
       type: 'execution_failed',
       executionId,
       reason: result.reason,
@@ -784,142 +616,40 @@ export class AiSdkRunner implements Runner {
   }
 
   async #runTurn(): Promise<void> {
-    if (this.#closed || this.#parked || this.#pendingToolCalls.size > 0) {
+    if (this.core.closed || this.#parked || this.#pendingToolCalls.size > 0) {
       return
     }
     if (this.#messages.at(-1)?.role === 'assistant') {
       return
     }
-    this.#setStatus('running')
+    this.core.setStatus('running')
     const agent = new ToolLoopAgent({
       model: this.#model,
-      tools: this.#config.tools ?? {},
+      tools: this.config.tools ?? {},
       instructions: this.#instructions,
-      stopWhen: isStepCount(this.#config.maxSteps ?? 20),
+      stopWhen: isStepCount(this.config.maxSteps ?? 20),
     })
     const abort = new AbortController()
     this.#abort = abort
-    const accum = (this.#turnAccum ??= {
-      startedAt: Date.now(),
-      input: 0,
-      output: 0,
-      cacheWrite: 0,
-      cacheRead: 0,
+    const accum = (this.#turnAccum ??= newTurnUsage())
+    const stream = new TurnStream({
+      emit: (body) => {
+        this.core.emit(body)
+      },
+      model: () => this.#modelId(),
+      partials: this.config.includePartialMessages !== false,
     })
-    let blocks: ContentBlock[] = []
-    const textBuf = new Map<string, string>()
-    const reasoningBuf = new Map<string, string>()
-    const flush = (): void => {
-      if (blocks.length === 0) {
-        return
-      }
-      this.#emit({
-        type: 'assistant_message',
-        message: { role: 'assistant', content: blocks, model: this.#modelId() },
-        parentToolUseId: null,
-        uuid: randomUUID(),
-      })
-      blocks = []
-    }
     try {
-      const result = await agent.stream({
-        messages: [...this.#messages],
-        abortSignal: abort.signal,
-      })
-      const partials = this.#config.includePartialMessages !== false
-      const emitToolResult = (toolCallId: string, content: string, isError?: boolean): void => {
-        flush()
-        this.#emit({
-          type: 'user_message',
-          message: {
-            role: 'user',
-            content: [{ type: 'tool_result', tool_use_id: toolCallId, content, is_error: isError }],
-          },
-          parentToolUseId: null,
-          synthetic: true,
-          uuid: randomUUID(),
-        })
-      }
-      let streamError: unknown
+      const result = await agent.stream({ messages: [...this.#messages], abortSignal: abort.signal })
       for await (const part of result.fullStream) {
-        if (this.#closed) {
+        if (this.core.closed) {
           break
         }
-        switch (part.type) {
-          case 'text-delta': {
-            textBuf.set(part.id, (textBuf.get(part.id) ?? '') + part.text)
-            if (partials) {
-              this.#emit({
-                type: 'stream_delta',
-                event: { type: 'content_block_delta', delta: { type: 'text_delta', text: part.text } },
-                parentToolUseId: null,
-                uuid: randomUUID(),
-              })
-            }
-            break
-          }
-          case 'text-end': {
-            const text = textBuf.get(part.id)
-            textBuf.delete(part.id)
-            if (text) {
-              blocks.push({ type: 'text', text })
-            }
-            break
-          }
-          case 'reasoning-delta': {
-            reasoningBuf.set(part.id, (reasoningBuf.get(part.id) ?? '') + part.text)
-            if (partials) {
-              this.#emit({
-                type: 'stream_delta',
-                event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: part.text } },
-                parentToolUseId: null,
-                uuid: randomUUID(),
-              })
-            }
-            break
-          }
-          case 'reasoning-end': {
-            const thinking = reasoningBuf.get(part.id)
-            reasoningBuf.delete(part.id)
-            if (thinking) {
-              blocks.push({ type: 'thinking', thinking })
-            }
-            break
-          }
-          case 'tool-call': {
-            blocks.push({
-              type: 'tool_use',
-              id: part.toolCallId,
-              name: part.toolName,
-              input: part.input,
-            })
-            flush()
-            break
-          }
-          case 'tool-result': {
-            emitToolResult(part.toolCallId, typeof part.output === 'string' ? part.output : JSON.stringify(part.output))
-            break
-          }
-          case 'tool-error': {
-            emitToolResult(part.toolCallId, errorText(part.error), true)
-            break
-          }
-          case 'finish-step': {
-            flush()
-            break
-          }
-          case 'error': {
-            streamError ??= part.error
-            break
-          }
-          default: {
-            break
-          }
-        }
+        stream.accept(part)
       }
-      flush()
-      if (streamError !== undefined) {
-        throw streamError
+      stream.flush()
+      if (stream.error !== undefined) {
+        throw stream.error
       }
       if (abort.signal.aborted) {
         throw new Error('interrupted')
@@ -930,69 +660,17 @@ export class AiSdkRunner implements Runner {
         result.toolCalls,
         result.text,
       ])
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
-      accum.input += usage.inputTokens ?? 0
-      accum.output += usage.outputTokens ?? 0
-      accum.cacheWrite += usage.inputTokenDetails?.cacheWriteTokens ?? 0
-      accum.cacheRead += usage.inputTokenDetails?.cacheReadTokens ?? 0
-      this.#messages.push(...(responseMessages as ModelMessage[]))
-      const settled = new Set<string>()
-      for (const message of responseMessages as ModelMessage[]) {
-        if (message.role !== 'tool' || !Array.isArray(message.content)) {
-          continue
-        }
-        for (const part of message.content) {
-          if (part.type === 'tool-result') {
-            settled.add(part.toolCallId)
-          }
-        }
-      }
-      for (const call of toolCalls) {
-        if (settled.has(call.toolCallId)) {
-          continue
-        }
-        this.#pendingToolCalls.set(call.toolCallId, {
-          toolCallId: call.toolCallId,
-          toolName: call.toolName,
-          input: call.input,
-        })
-      }
-      if (this.#pendingToolCalls.size > 0) {
-        this.#dispatchPending()
-        return
-      }
-      this.#finishTurn(text)
+      addUsage(accum, usage)
+      this.#settleResponse(responseMessages as ModelMessage[], toolCalls, text)
     } catch (error) {
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
-      for (const [, thinking] of reasoningBuf) {
-        if (thinking) {
-          blocks.push({ type: 'thinking', thinking })
-        }
-      }
-      for (const [, text] of textBuf) {
-        if (text) {
-          blocks.push({ type: 'text', text })
-        }
-      }
-      flush()
-      const message = error instanceof Error ? error.message : String(error)
-      this.#numTurns += 1
-      this.#emit({
-        type: 'turn_result',
-        subtype: 'error_during_execution',
-        isError: true,
-        durationMs: Date.now() - accum.startedAt,
-        numTurns: this.#numTurns,
-        totalCostUsd: 0,
-        errors: [abort.signal.aborted ? 'interrupted' : message],
-        usage: turnUsage(accum),
-      })
-      this.#turnAccum = undefined
-      this.#setStatus('idle')
+      stream.flushPartial()
+      this.#failTurn(accum, abort.signal.aborted ? 'interrupted' : errorMessage(error))
     } finally {
       if (this.#abort === abort) {
         this.#abort = undefined
@@ -1000,25 +678,53 @@ export class AiSdkRunner implements Runner {
     }
   }
 
-  #finishTurn(text: string): void {
-    const accum = this.#turnAccum ?? { startedAt: Date.now(), input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+  #settleResponse(
+    responseMessages: ModelMessage[],
+    toolCalls: readonly { toolCallId: string; toolName: string; input: unknown }[],
+    text: string,
+  ): void {
+    this.#messages.push(...responseMessages)
+    const settled = settledToolCallIds(responseMessages)
+    for (const call of toolCalls) {
+      if (!settled.has(call.toolCallId)) {
+        this.#pendingToolCalls.set(call.toolCallId, { toolCallId: call.toolCallId, toolName: call.toolName, input: call.input })
+      }
+    }
+    if (this.#pendingToolCalls.size > 0) {
+      this.#dispatchPending()
+      return
+    }
+    this.#finishTurn(text)
+  }
+
+  #failTurn(accum: TurnUsage, error: string): void {
     this.#numTurns += 1
-    const byModel = this.#turnByModel(accum)
-    this.#cost.observeDelta(byModel)
-    this.#emit({
-      type: 'turn_result',
-      subtype: 'success',
-      isError: false,
-      durationMs: Date.now() - accum.startedAt,
+    this.core.emitTurnResult({
+      startedAt: accum.startedAt,
+      numTurns: this.#numTurns,
+      totalCostUsd: 0,
+      errors: [error],
+      usage: wireUsage(accum),
+      costs: false,
+    })
+    this.#turnAccum = undefined
+    this.core.setStatus('idle')
+  }
+
+  #finishTurn(text: string): void {
+    const accum = this.#turnAccum ?? newTurnUsage()
+    this.#numTurns += 1
+    this.core.emitTurnResult({
+      startedAt: accum.startedAt,
       numTurns: this.#numTurns,
       totalCostUsd: 0,
       result: text,
-      usage: turnUsage(accum),
-      usageByModel: this.#cost.byModel,
-      costUsd: this.#cost.costUsd,
+      usage: wireUsage(accum),
+      byModel: this.#turnByModel(accum),
+      costs: true,
     })
     this.#turnAccum = undefined
-    this.#setStatus('idle')
+    this.core.setStatus('idle')
   }
 
   #modelId(): string | undefined {
@@ -1030,54 +736,25 @@ export class AiSdkRunner implements Runner {
   }
 
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
-    return (await this.#config.reportMcpServers?.()) ?? []
-  }
-
-  setTitle(title: string | undefined): void {
-    this.#config = withTitle(this.#config, title)
-  }
-
-  #setStatus(status: SessionStatus, detail?: string): void {
-    // Deduped on the (status, detail) pair: deduping on status alone would swallow a new detail
-    // for an unchanged status, which is the one update a detail exists to carry.
-    if (this.#status === status && this.#statusDetail === detail) {
-      return
-    }
-    if (this.#status === 'closed' || this.#status === 'failed') {
-      return
-    }
-    this.#status = status
-    this.#statusDetail = detail
-    this.#emit({ type: 'status_changed', status, detail })
+    return (await this.config.reportMcpServers?.()) ?? []
   }
 
   #emitToolTitles(): void {
-    const titles = this.#config.toolTitles
+    const titles = this.config.toolTitles
     if (titles && Object.keys(titles).length > 0) {
-      this.#emit({ type: 'tool_titles', titles })
+      this.core.emit({ type: 'tool_titles', titles })
     }
-  }
-
-  #emit(body: SessionEventBody): void {
-    this.#subscribers.emit(this.#log.append(body))
   }
 }
 
-function turnUsage(accum: { input: number; output: number; cacheWrite: number; cacheRead: number }) {
-  return {
-    input_tokens: accum.input,
-    output_tokens: accum.output,
-    cache_creation_input_tokens: accum.cacheWrite,
-    cache_read_input_tokens: accum.cacheRead,
+function assertPermissionMode(mode: PermissionMode): void {
+  if (!supportsPermissionMode('provider', mode)) {
+    throw new Error(`permission mode '${mode}' is not supported by the AI SDK engine`)
   }
 }
 
 function textValue(output: ToolCallOutput): string {
   return output.type === 'text' ? output.value : JSON.stringify(output.value)
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function callsTool(part: { type: string }, toolCallId: string): part is ToolCallPart {

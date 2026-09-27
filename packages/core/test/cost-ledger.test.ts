@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type ByModel, type TokenUsage, emptyTokenUsage } from '@workerdeck/protocol'
+import { type ByModel, type TokenUsage, emptyTokenUsage, mergePricing } from '@workerdeck/protocol'
 import { CostLedger } from '../src/lib/cost-ledger.ts'
 
 function opus(input: number): ByModel {
@@ -16,6 +16,17 @@ describe('CostLedger', () => {
     expect(ledger.byModel).toBeUndefined()
     expect(ledger.costUsd).toBeUndefined()
     expect(ledger.reportedCostUsd).toBeUndefined()
+  })
+
+  it('prices through the table it was built with, not the process-wide one', () => {
+    const ledger = new CostLedger(
+      mergePricing({ 'claude-opus-5': { input: 100, output: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 } }).pricing,
+    )
+    ledger.observeDelta(opus(1_000_000))
+    expect(ledger.costUsd).toBeCloseTo(100)
+    const standard = new CostLedger()
+    standard.observeDelta(opus(1_000_000))
+    expect(standard.costUsd).toBeCloseTo(5)
   })
 
   it('replaces rather than sums a cumulative reading, which is what an engine process reports', () => {

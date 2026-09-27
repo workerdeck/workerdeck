@@ -1,6 +1,3 @@
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ENGINE_CAPABILITIES,
@@ -23,40 +20,15 @@ import {
 import { createShellDirectory, createShellRegistry, loadPty, type ShellRegistry } from '../src/services/shells.ts'
 import { createFileSessionStore, sandboxedProviderProfile, type EngineRunnerContext, type WorkerServerOptions } from '../src/index.ts'
 import { fakeHarness, fakeRunner } from './helpers.ts'
-import { attachSocket, createSession, shellFixture } from './shell-helpers.ts'
+import { attachSocket, createSession, registryFixture, shellFixture } from './shell-helpers.ts'
 
 const ECHO_KEYS = 'echo reloaded; while read -r k; do echo "got $k"; done'
 
 const pty = await loadPty()
 const withPty = describe.skipIf(pty === null)
 
-const dirs: string[] = []
-const registries: ShellRegistry[] = []
-afterEach(async () => {
-  for (const registry of registries.splice(0)) {
-    registry.killAll('server_stopped')
-    await registry.flush()
-  }
-  while (dirs.length) {
-    rmSync(dirs.pop()!, { recursive: true, force: true })
-  }
-})
-
-function tempDir(): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'wd-shell-dir-')))
-  dirs.push(dir)
-  return dir
-}
-
-function makeRegistry(): ShellRegistry {
-  const created = createShellRegistry({ generation: 'gen-a', artifactDir: tempDir() })
-  registries.push(created)
-  return created
-}
-
-function runner(id: string): Runner {
-  return fakeRunner(id, { cwd: tempDir() })
-}
+const { tempDir, track, makeRegistry, runner, cleanup } = registryFixture('wd-shell-dir-')
+afterEach(cleanup)
 
 // A live runner as the directory sees it: the shell it starts must land a transcript row through queueLocalCommand.
 function agentRunner(id: string): Runner & { rows: LocalShellSource[] } {
@@ -134,7 +106,8 @@ withPty('createShellDirectory', () => {
     const id = await run(first, owner, "printf '\\033[?1049h\\033[5;3Hin the alt screen'")
     await first.flush()
     const second = createShellRegistry({ generation: 'gen-b', artifactDir: dir })
-    registries.push(first, second)
+    track(first)
+    track(second)
     await second.hydrate()
     const screen = await second.output('s1', id, { view: 'screen' })
     expect(screen).toBe('\n\n\n\n  in the alt screen')

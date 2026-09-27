@@ -1,4 +1,4 @@
-import type { SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
+import type { EngineCapabilities, PermissionMode, SkillInfo, SlashCommandInfo } from '@workerdeck/protocol'
 
 export type ClientCommand = {
   name: string
@@ -169,4 +169,83 @@ export function composerCommandRows(rows: readonly ComposerRow[]): ComposerComma
           insertText: `/${row.name} `,
         },
   )
+}
+
+export type ClientCommandPanel = 'info' | 'context' | 'usage' | 'mcp' | 'skills'
+
+export type ClientCommandSources = {
+  capabilities: Pick<EngineCapabilities, 'permissionModes' | 'clearContext' | 'mcpStatus' | 'contextUsage' | 'rateLimits' | 'skillsList'>
+  hasModels: boolean
+  setModel: (model: string) => void
+  setPermissionMode: (mode: PermissionMode) => void
+  clearContext: () => void
+  openPanel: (panel: ClientCommandPanel) => void
+}
+
+export function buildClientCommands({
+  capabilities,
+  hasModels,
+  setModel,
+  setPermissionMode,
+  clearContext,
+  openPanel,
+}: ClientCommandSources): ClientCommand[] {
+  const modes = capabilities.permissionModes
+  const built: ClientCommand[] = []
+  if (hasModels) {
+    built.push({
+      name: 'model',
+      description: 'Switch the model for this session',
+      argumentHint: '<model>',
+      requiresArgs: true,
+      run: (args) => {
+        const wanted = args.split(/\s+/)[0]
+        if (!wanted) {
+          return false
+        }
+        setModel(wanted)
+        return true
+      },
+    })
+  }
+  if (modes.length > 1) {
+    built.push({
+      name: 'permissions',
+      description: `Set the permission mode (${modes.join(', ')})`,
+      argumentHint: '<mode>',
+      requiresArgs: true,
+      run: (args) => {
+        const wanted = args.split(/\s+/)[0] as PermissionMode
+        if (!modes.includes(wanted)) {
+          return false
+        }
+        setPermissionMode(wanted)
+        return true
+      },
+    })
+  }
+  if (capabilities.clearContext) {
+    built.push({
+      name: 'clear',
+      description: 'Clear the conversation - the session keeps running and the old one stays resumable',
+      run: () => {
+        clearContext()
+        return true
+      },
+    })
+  }
+  if (capabilities.mcpStatus) {
+    built.push({ name: 'mcp', description: 'MCP servers and their status', run: () => (openPanel('mcp'), true) })
+  }
+  if (capabilities.contextUsage) {
+    built.push({ name: 'context', description: 'Context window usage', run: () => (openPanel('context'), true) })
+  }
+  built.push({ name: 'status', description: 'Session details', run: () => (openPanel('info'), true) })
+  if (capabilities.rateLimits) {
+    built.push({ name: 'usage', description: 'Rate limits and spend', run: () => (openPanel('usage'), true) })
+  }
+  if (capabilities.skillsList) {
+    built.push({ name: 'skills', description: 'Browse the skills this session can use', run: () => (openPanel('skills'), true) })
+  }
+  return built
 }

@@ -79,7 +79,7 @@ const RELEVANCE: Record<ActivityPhaseName, number> = {
 // Where a tool's one interesting argument lives, in the order a card should prefer them.
 const PREVIEW_KEYS = ['command', 'file_path', 'path', 'pattern', 'url', 'notebook_path', 'prompt', 'description'] as const
 
-function clamp(text: string, limit: number): string {
+export function clamp(text: string, limit: number): string {
   const flat = text.replace(/\s+/g, ' ').trim()
   return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`
 }

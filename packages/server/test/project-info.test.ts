@@ -279,8 +279,8 @@ describe('project icon route', () => {
     writeFileSync(join(repo, '.workerdeck.json'), JSON.stringify({ icon: './icon.png' }))
 
     const principals: Record<string, unknown> = {
-      alice: { scope: { user: 'alice' } },
-      carol: { scope: { user: 'carol' } },
+      alice: { scope: { user: 'alice' }, allowedProfiles: ['default'] },
+      carol: { scope: { user: 'carol' }, allowedProfiles: ['default'] },
     }
     const base = await startServer(root, {
       allowUnauthenticated: undefined,

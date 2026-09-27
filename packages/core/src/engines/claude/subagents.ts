@@ -1,7 +1,7 @@
-import { SUBAGENT_HISTORY, type ContentBlock, type SessionEventBody, type SubagentInfo } from '@workerdeck/protocol'
+import type { ContentBlock, SessionEventBody, SubagentInfo } from '@workerdeck/protocol'
+import { SettledHistory } from '../../lib/settled-history.ts'
 
 type TrackedSubagent = SubagentInfo & {
-  settledOrder?: number
   background?: 'live' | 'replay'
   taskId?: string
 }
@@ -10,7 +10,7 @@ const SPAWNER_NAMES = new Set(['Task', 'Agent'])
 
 export class SubagentTracker {
   #records = new Map<string, TrackedSubagent>()
-  #settleCounter = 0
+  #settled = new SettledHistory<string>()
 
   observe(body: SessionEventBody, ts: number): void {
     switch (body.type) {
@@ -136,6 +136,7 @@ export class SubagentTracker {
       }
       case 'conversation_reset': {
         this.#records.clear()
+        this.#settled.clear()
         return
       }
       default: {
@@ -219,28 +220,8 @@ export class SubagentTracker {
 
   #settle(record: TrackedSubagent, status: 'done' | 'failed'): void {
     record.status = status
-    record.settledOrder = ++this.#settleCounter
-    let settled = 0
-    for (const r of this.#records.values()) {
-      if (r.settledOrder !== undefined) {
-        settled++
-      }
-    }
-    while (settled > SUBAGENT_HISTORY) {
-      let oldestId: string | undefined
-      let oldestOrder = Infinity
-      for (const r of this.#records.values()) {
-        if (r.settledOrder === undefined || r.settledOrder >= oldestOrder) {
-          continue
-        }
-        oldestId = r.toolUseId
-        oldestOrder = r.settledOrder
-      }
-      if (oldestId === undefined) {
-        break
-      }
-      this.#records.delete(oldestId)
-      settled--
+    for (const evicted of this.#settled.settle(record.toolUseId)) {
+      this.#records.delete(evicted)
     }
   }
 }

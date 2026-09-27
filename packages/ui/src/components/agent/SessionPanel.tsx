@@ -17,7 +17,6 @@ import {
   usageInfos,
   type ModelOption,
   type PermissionMode,
-  type PermissionRequest,
   type RateLimitInfo,
   type SessionTask,
   type ShellInfo,
@@ -34,21 +33,20 @@ import {
   useToolCallHost,
   type ClientToolHandler,
   type ConnectionState,
-  type ProducedFileRef,
   type TranscriptState,
   type UseToolCallHostOptions,
 } from '@workerdeck/react'
-import { ChartPie, FolderTree, Gauge, Info, MoreHorizontal, Plug, Sparkles, TriangleAlert, X } from 'lucide-react'
+import { ChartPie, FolderTree, Gauge, Info, MoreHorizontal, Plug, Sparkles, TriangleAlert, X, type LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu.tsx'
 import { Composer, type ComposerHandle } from './Composer.tsx'
 import {
+  buildClientCommands,
   composerCommandRows,
   matchClientCommand,
   mergeComposerRows,
   skillPrompt,
-  type ClientCommand,
   type ComposerCommandRow,
 } from './composer-commands.ts'
 import { ContextDialog } from './ContextDialog.tsx'
@@ -57,66 +55,28 @@ import { McpDialog } from './McpDialog.tsx'
 import { SkillsDialog } from './SkillsDialog.tsx'
 import { ModelSelect } from './ModelSelect.tsx'
 import { PermissionModeSelect, permissionModeChoices, type PermissionModeChoice } from './PermissionModeSelect.tsx'
-import { PermissionPrompt } from './PermissionPrompt.tsx'
 import { SubagentStrip } from './SubagentStrip.tsx'
 import { useSubagentFrame } from './use-subagent-frame.ts'
 import { ShellStrip } from './ShellStrip.tsx'
 import { ShellTerminal } from './ShellTerminal.tsx'
 import { useShellFrame } from './use-shell-frame.ts'
-import { QuestionPrompt, parseUserQuestions } from './QuestionPrompt.tsx'
-import { TerminalPermissionPrompt } from '../terminal/PermissionPrompt.tsx'
-import { TerminalQuestionPrompt } from '../terminal/QuestionPrompt.tsx'
-import { TerminalSurface } from '../terminal/surface.tsx'
 import { BookmarkProvider, type BookmarkHandle, type TerminalAffordances } from '../terminal/affordances.tsx'
-import { FileLinkProvider, type FileLinkOpener } from '../terminal/file-link.tsx'
-
+import type { FileLinkOpener } from '../terminal/file-link.tsx'
+import { ApprovalPrompts, type ApprovalPromptProps } from './ApprovalPrompts.tsx'
+import { SessionPanelProviders } from './session-panel-providers.tsx'
+import { useCatchUp } from './use-catch-up.ts'
+import { useHostImage } from './use-host-image.ts'
 import { SessionInfoDialog } from './SessionInfoDialog.tsx'
 import { StatusBar } from './StatusBar.tsx'
 import { Transcript } from './Transcript.tsx'
-import { ToolResultFetchProvider } from './tool-result-fetch.tsx'
-import { ShellActionsProvider } from './shell-actions.tsx'
-import { ToolTitleProvider } from './tool-titles.tsx'
-import { ToolResultImageProvider, useToolResultImages } from './tool-result-image.tsx'
+import { useToolResultImages } from './tool-result-image.tsx'
 import { ImageViewerProvider } from './image-viewer.tsx'
-import { TranscriptVariantProvider, type TranscriptFont, type TranscriptVariant } from './transcript-variant.tsx'
+import type { TranscriptFont, TranscriptVariant } from './transcript-variant.tsx'
 import { UsageDialog } from './UsageDialog.tsx'
-
-function PromptSurface({
-  terminal,
-  metrics,
-  affordances,
-  children,
-}: {
-  terminal: boolean
-  metrics?: TerminalMetrics
-  affordances?: TerminalAffordances | boolean
-  children: ReactNode
-}) {
-  if (!terminal) {
-    return <div className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] flex-col gap-2">{children}</div>
-  }
-  return (
-    <TerminalSurface
-      fontSize={metrics?.fontSize}
-      lineHeight={metrics?.lineHeight}
-      affordances={affordances}
-      bleed="1ch"
-      className="term-transcript"
-    >
-      {children}
-    </TerminalSurface>
-  )
-}
 
 export type TerminalMetrics = { fontSize?: number; lineHeight?: number }
 
-// Deliberately the built-in prompts' own callback shapes, so `PermissionPrompt` and
-// `TerminalPermissionPrompt` stay drop-in fallbacks for an input a host declines to draw.
-export interface ApprovalPromptProps {
-  request: PermissionRequest
-  onApprove: (requestId: string, updatedInput?: Record<string, unknown>) => void
-  onDeny: (requestId: string, message?: string, interrupt?: boolean) => void
-}
+export type { ApprovalPromptProps }
 
 export interface SessionPanelProps {
   client: WorkerDeckClient
@@ -191,6 +151,16 @@ const INTERACTIVE = [
 
 export type SessionSurfacePanel = 'info' | 'context' | 'usage' | 'mcp' | 'files' | 'skills' | 'tasks'
 type Panel = SessionSurfacePanel
+type MenuPanel = Exclude<Panel, 'tasks'>
+
+const PANEL_ITEMS: { panel: MenuPanel; label: string; Icon: LucideIcon }[] = [
+  { panel: 'context', label: 'Context', Icon: ChartPie },
+  { panel: 'usage', label: 'Usage', Icon: Gauge },
+  { panel: 'info', label: 'Session info', Icon: Info },
+  { panel: 'mcp', label: 'MCP servers', Icon: Plug },
+  { panel: 'skills', label: 'Skills', Icon: Sparkles },
+  { panel: 'files', label: 'Project files', Icon: FolderTree },
+]
 
 export type SessionVitals = {
   status: TranscriptState['status']
@@ -256,8 +226,10 @@ export function SessionPanel({
   fontSize,
   className,
 }: SessionPanelProps) {
-  const effectiveTermFontSize = terminalMetrics?.fontSize ?? fontSize
-  const effectiveTermLineHeight = terminalMetrics?.lineHeight ?? (fontSize !== undefined ? Math.round(fontSize * (18 / 13)) : undefined)
+  const cell = {
+    fontSize: terminalMetrics?.fontSize ?? fontSize,
+    lineHeight: terminalMetrics?.lineHeight ?? (fontSize !== undefined ? Math.round(fontSize * (18 / 13)) : undefined),
+  }
 
   const external = panelSurface === 'external'
   const statusExternal = statusSurface === 'external'
@@ -323,12 +295,7 @@ export function SessionPanel({
     return returnReveal ?? shellReturnReveal
   }, [returnReveal, shellReturnReveal])
 
-  const [caughtUp, setCaughtUp] = useState(false)
-  useEffect(() => {
-    setCaughtUp(false)
-  }, [sessionId])
-  const [catchUpMark] = useState(unseen)
-  const catchUp = caughtUp ? undefined : catchUpMark
+  const { mark: catchUp, dismiss: dismissCatchUp } = useCatchUp(sessionId, unseen)
   const newCount = catchUp ? Math.max(0, state.items.length - catchUp.itemCount) : 0
 
   const openPanel = useCallback(
@@ -383,66 +350,11 @@ export function SessionPanel({
     [state.checklist, subagents, state.session?.subagents],
   )
 
-  const clientCommands = useMemo((): ClientCommand[] => {
-    const modes = capabilities.permissionModes
-    const built: ClientCommand[] = []
-    if (models.length > 0) {
-      built.push({
-        name: 'model',
-        description: 'Switch the model for this session',
-        argumentHint: '<model>',
-        requiresArgs: true,
-        run: (args) => {
-          const wanted = args.split(/\s+/)[0]
-          if (!wanted) {
-            return false
-          }
-          setModel(wanted)
-          return true
-        },
-      })
-    }
-    if (modes.length > 1) {
-      built.push({
-        name: 'permissions',
-        description: `Set the permission mode (${modes.join(', ')})`,
-        argumentHint: '<mode>',
-        requiresArgs: true,
-        run: (args) => {
-          const wanted = args.split(/\s+/)[0] as PermissionMode
-          if (!modes.includes(wanted)) {
-            return false
-          }
-          setPermissionMode(wanted)
-          return true
-        },
-      })
-    }
-    if (capabilities.clearContext) {
-      built.push({
-        name: 'clear',
-        description: 'Clear the conversation - the session keeps running and the old one stays resumable',
-        run: () => {
-          clearContext()
-          return true
-        },
-      })
-    }
-    if (capabilities.mcpStatus) {
-      built.push({ name: 'mcp', description: 'MCP servers and their status', run: () => (openPanel('mcp'), true) })
-    }
-    if (capabilities.contextUsage) {
-      built.push({ name: 'context', description: 'Context window usage', run: () => (openPanel('context'), true) })
-    }
-    built.push({ name: 'status', description: 'Session details', run: () => (openPanel('info'), true) })
-    if (capabilities.rateLimits) {
-      built.push({ name: 'usage', description: 'Rate limits and spend', run: () => (openPanel('usage'), true) })
-    }
-    if (capabilities.skillsList) {
-      built.push({ name: 'skills', description: 'Browse the skills this session can use', run: () => (openPanel('skills'), true) })
-    }
-    return built
-  }, [capabilities, models.length, openPanel, clearContext, setModel, setPermissionMode])
+  const hasModels = models.length > 0
+  const clientCommands = useMemo(
+    () => buildClientCommands({ capabilities, hasModels, setModel, setPermissionMode, clearContext, openPanel }),
+    [capabilities, hasModels, openPanel, clearContext, setModel, setPermissionMode],
+  )
 
   const composerCommands = useMemo(
     () =>
@@ -463,45 +375,34 @@ export function SessionPanel({
     () => permissionModeChoices(capabilities.permissionModes, state.session?.canBypassPermissions),
     [capabilities.permissionModes, state.session?.canBypassPermissions],
   )
-  useEffect(() => {
-    onVitalsRef.current?.({
-      status: state.status,
-      connection,
-      engine: state.engine,
-      capabilities: state.capabilities,
-      model: vitalsModel,
-      models,
-      permissionMode: state.permissionMode,
-      permissionModes,
-      skills: state.skills,
-      composerCommands,
-      cwd: state.cwd,
-      contextUsage: state.contextUsage,
-      tasks,
-      rateLimits,
-      rateLimitsUpdatedAt: usageUpdatedAt,
-      itemCount: state.items.length,
-      totalCostUsd: state.totalCostUsd,
-    })
-  }, [
-    state.status,
+  const vitals: SessionVitals = {
+    status: state.status,
     connection,
-    state.engine,
-    state.capabilities,
-    vitalsModel,
+    engine: state.engine,
+    capabilities: state.capabilities,
+    model: vitalsModel,
     models,
-    state.permissionMode,
+    permissionMode: state.permissionMode,
     permissionModes,
-    state.skills,
+    skills: state.skills,
     composerCommands,
-    state.cwd,
-    state.contextUsage,
+    cwd: state.cwd,
+    contextUsage: state.contextUsage,
     tasks,
     rateLimits,
-    usageUpdatedAt,
-    state.items.length,
-    state.totalCostUsd,
-  ])
+    rateLimitsUpdatedAt: usageUpdatedAt,
+    itemCount: state.items.length,
+    totalCostUsd: state.totalCostUsd,
+  }
+  const lastVitals = useRef<SessionVitals | undefined>(undefined)
+  // Every render, compared field by field: a streamed token changes none of them and never reaches the host.
+  useEffect(() => {
+    if (lastVitals.current && sameVitals(lastVitals.current, vitals)) {
+      return
+    }
+    lastVitals.current = vitals
+    onVitalsRef.current?.(vitals)
+  })
 
   const onControlsRef = useRef(onControls)
   onControlsRef.current = onControls
@@ -557,11 +458,19 @@ export function SessionPanel({
         return
       }
     }
-    setCaughtUp(true)
+    dismissCatchUp()
     repinTranscript.current?.()
     send(text, attachmentIds)
   }
 
+  const menuShows: Record<MenuPanel, boolean> = {
+    context: capabilities.contextUsage,
+    usage: capabilities.rateLimits,
+    info: true,
+    mcp: capabilities.mcpStatus,
+    skills: capabilities.skillsList,
+    files: hostFiles.available,
+  }
   const actionsMenu = (
     <Menu>
       <MenuTrigger
@@ -572,39 +481,17 @@ export function SessionPanel({
         }
       />
       <MenuContent>
-        {capabilities.contextUsage ? (
-          <MenuItem onClick={() => openPanel('context')}>
-            <ChartPie className="size-3.5 text-fg-3" /> Context
+        {PANEL_ITEMS.filter((item) => menuShows[item.panel]).map(({ panel: target, label, Icon }) => (
+          <MenuItem key={target} onClick={() => openPanel(target)}>
+            <Icon className="size-3.5 text-fg-3" /> {label}
           </MenuItem>
-        ) : null}
-        {capabilities.rateLimits ? (
-          <MenuItem onClick={() => openPanel('usage')}>
-            <Gauge className="size-3.5 text-fg-3" /> Usage
-          </MenuItem>
-        ) : null}
-        <MenuItem onClick={() => openPanel('info')}>
-          <Info className="size-3.5 text-fg-3" /> Session info
-        </MenuItem>
-        {capabilities.mcpStatus ? (
-          <MenuItem onClick={() => openPanel('mcp')}>
-            <Plug className="size-3.5 text-fg-3" /> MCP servers
-          </MenuItem>
-        ) : null}
-        {capabilities.skillsList ? (
-          <MenuItem onClick={() => openPanel('skills')}>
-            <Sparkles className="size-3.5 text-fg-3" /> Skills
-          </MenuItem>
-        ) : null}
-        {hostFiles.available ? (
-          <MenuItem onClick={() => openPanel('files')}>
-            <FolderTree className="size-3.5 text-fg-3" /> Project files
-          </MenuItem>
-        ) : null}
+        ))}
       </MenuContent>
     </Menu>
   )
 
   const menu = external ? null : actionsMenu
+  const dialog = (target: Panel) => ({ open: panel === target, onOpenChange: (next: boolean) => setPanel(next ? target : undefined) })
   const headerTakesActions = typeof header === 'function'
 
   const sessionControls = (
@@ -689,304 +576,190 @@ export function SessionPanel({
   }
 
   return (
-    <TranscriptVariantProvider value={transcriptVariant}>
-      <FileLinkProvider value={fileLinks}>
-        <ToolResultFetchProvider value={loadFullResult}>
-          <ShellActionsProvider value={shellActions}>
-            <ToolTitleProvider value={state.toolTitles}>
-              <ToolResultImageProvider value={resultImages}>
-                <div
-                  ref={panelRef}
-                  data-slot="session-panel"
-                  data-agent-font={transcriptFont}
-                  onClick={handleClick}
-                  className={cn('relative flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}
-                  style={fontSize !== undefined ? ({ '--wd-font-size': `${Math.round(fontSize)}px` } as React.CSSProperties) : undefined}
-                >
-                  <ImageViewerProvider>
-                    {headerTakesActions ? header({ actions: menu }) : header}
-                    {statusPlacement === 'top' ? statusBar : null}
-                    {protocolMismatch !== undefined ? (
-                      <Notice level="warning">
-                        Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
-                      </Notice>
-                    ) : null}
-                    {protocolError ? (
-                      <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
-                        {protocolError}
-                      </Notice>
-                    ) : null}
-                    {framedShellId !== undefined ? (
-                      <ShellStrip
-                        shell={framedShell}
-                        label={framedShellLabel}
-                        onBack={leaveShell}
-                        onKill={() => void killShell(framedShellId)}
-                        onAgentWrite={agentWrite ? (enabled) => void agentWrite(framedShellId, enabled) : undefined}
-                        terminal={terminal}
-                        fontSize={effectiveTermFontSize}
-                        lineHeight={effectiveTermLineHeight}
-                      />
-                    ) : null}
-                    {framedShellId === undefined && subagentId !== undefined ? (
-                      <SubagentStrip
-                        task={subagentTask}
-                        items={subagentFrameItems}
-                        label={subagentFallbackLabel}
-                        onBack={leaveSubagent}
-                        terminal={terminal}
-                        fontSize={effectiveTermFontSize}
-                        lineHeight={effectiveTermLineHeight}
-                      />
-                    ) : null}
-                    {framedShellId !== undefined ? (
-                      <ShellTerminal key={framedShellId} handle={handle} shellId={framedShellId} fontSize={effectiveTermFontSize} />
-                    ) : (
-                      <BookmarkProvider value={bookmarkHandle}>
-                        <Transcript
-                          key={subagentId ?? 'session'}
-                          state={state}
-                          fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-                          attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
-                          canBrowseFiles={hostFiles.available}
-                          sessionNames={peers.names}
-                          hostImage={hostImage}
-                          variant={transcriptVariant}
-                          fontSize={effectiveTermFontSize}
-                          lineHeight={effectiveTermLineHeight}
-                          affordances={affordances}
-                          stickyPrompt={stickyPrompt}
-                          scrubber={scrubber}
-                          bookmarks={bookmarks}
-                          replaying={replaying}
-                          catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
-                          reveal={frameReturnReveal ?? reveal}
-                          frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
-                          onOpenSubagent={enterSubagent}
-                          emptyState={emptyState}
-                          jumpToRecapRef={jumpToRecap}
-                          repinRef={repinTranscript}
-                        />
-                      </BookmarkProvider>
-                    )}
-                    {catchUp && newCount > 0 && !replaying && subagentId === undefined && framedShellId === undefined ? (
-                      <div className="px-3 pb-1">
-                        <div
-                          data-slot="catch-up"
-                          className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-fg-3"
-                        >
-                          <span aria-hidden className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
-                            ※
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">
-                            {newCount} new {newCount === 1 ? 'row' : 'rows'}
-                            {catchUp.since !== undefined ? ` since you were last here` : ''}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => jumpToRecap.current?.()}
-                            className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
-                          >
-                            jump
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCaughtUp(true)}
-                            className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline"
-                          >
-                            dismiss
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                    {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
-                      <div className={cn(terminal ? 'pb-2' : 'px-3 pb-2')}>
-                        <PromptSurface
-                          terminal={terminal}
-                          metrics={{ fontSize: effectiveTermFontSize, lineHeight: effectiveTermLineHeight }}
-                          affordances={affordances}
-                        >
-                          {state.pendingApprovals.map((request) => {
-                            // Before the variant split: a host's entry is the renderer for its tool in
-                            // both themes, and it overrides the built-in entries rather than racing them.
-                            const HostPrompt = approvalPrompts?.[request.toolName]
-                            if (HostPrompt) {
-                              return <HostPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
-                            }
-                            const isQuestion = request.toolName === 'AskUserQuestion' && parseUserQuestions(request.input).length > 0
-                            if (terminal) {
-                              return isQuestion ? (
-                                <TerminalQuestionPrompt
-                                  key={request.id}
-                                  request={request}
-                                  onAnswer={approve}
-                                  onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                                />
-                              ) : (
-                                <TerminalPermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
-                              )
-                            }
-                            return isQuestion ? (
-                              <QuestionPrompt
-                                key={request.id}
-                                request={request}
-                                onAnswer={approve}
-                                onDismiss={(id) => deny(id, 'Question dismissed by user')}
-                              />
-                            ) : (
-                              <PermissionPrompt key={request.id} request={request} onApprove={approve} onDeny={deny} />
-                            )
-                          })}
-                        </PromptSurface>
-                      </div>
-                    ) : null}
-                    {readOnly || subagentId !== undefined || framedShellId !== undefined ? null : (
-                      <>
-                        <Composer
-                          ref={composerRef}
-                          onSend={handleSend}
-                          onInterrupt={interrupt}
-                          busy={busy}
-                          disabled={ended || !sessionId}
-                          commands={capabilities.slashCommands ? state.commands : undefined}
-                          skills={capabilities.skillsList ? state.skills : undefined}
-                          clientCommands={clientCommands}
-                          attachments={attachments}
-                          draft={draft}
-                          onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
-                          peers={peers.peers}
-                          onShellCommand={shell ? runShell : undefined}
-                          layout={controlsExternal ? 'inline' : 'stacked'}
-                          toolbar={controlsExternal ? undefined : sessionControls}
-                          fontSize={effectiveTermFontSize}
-                          lineHeight={effectiveTermLineHeight}
-                          affordances={affordances}
-                        />
-                      </>
-                    )}
-                    {statusPlacement === 'bottom' ? statusBar : null}
+    <SessionPanelProviders
+      variant={transcriptVariant}
+      fileLinks={fileLinks}
+      loadFullResult={loadFullResult}
+      shellActions={shellActions}
+      toolTitles={state.toolTitles}
+      resultImages={resultImages}
+    >
+      <div
+        ref={panelRef}
+        data-slot="session-panel"
+        data-agent-font={transcriptFont}
+        onClick={handleClick}
+        className={cn('relative flex h-full min-h-0 flex-col overflow-hidden bg-bg', className)}
+        style={fontSize !== undefined ? ({ '--wd-font-size': `${Math.round(fontSize)}px` } as React.CSSProperties) : undefined}
+      >
+        <ImageViewerProvider>
+          {headerTakesActions ? header({ actions: menu }) : header}
+          {statusPlacement === 'top' ? statusBar : null}
+          {protocolMismatch !== undefined ? (
+            <Notice level="warning">
+              Server speaks protocol v{protocolMismatch}, this build renders v{PROTOCOL_VERSION}. Some events may not render.
+            </Notice>
+          ) : null}
+          {protocolError ? (
+            <Notice level="error" onDismiss={() => setProtocolError(undefined)}>
+              {protocolError}
+            </Notice>
+          ) : null}
+          {framedShellId !== undefined ? (
+            <ShellStrip
+              shell={framedShell}
+              label={framedShellLabel}
+              onBack={leaveShell}
+              onKill={() => void killShell(framedShellId)}
+              onAgentWrite={agentWrite ? (enabled) => void agentWrite(framedShellId, enabled) : undefined}
+              terminal={terminal}
+              {...cell}
+            />
+          ) : null}
+          {framedShellId === undefined && subagentId !== undefined ? (
+            <SubagentStrip
+              task={subagentTask}
+              items={subagentFrameItems}
+              label={subagentFallbackLabel}
+              onBack={leaveSubagent}
+              terminal={terminal}
+              {...cell}
+            />
+          ) : null}
+          {framedShellId !== undefined ? (
+            <ShellTerminal key={framedShellId} handle={handle} shellId={framedShellId} fontSize={cell.fontSize} />
+          ) : (
+            <BookmarkProvider value={bookmarkHandle}>
+              <Transcript
+                key={subagentId ?? 'session'}
+                state={state}
+                fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+                attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+                canBrowseFiles={hostFiles.available}
+                sessionNames={peers.names}
+                hostImage={hostImage}
+                variant={transcriptVariant}
+                {...cell}
+                affordances={affordances}
+                stickyPrompt={stickyPrompt}
+                scrubber={scrubber}
+                bookmarks={bookmarks}
+                replaying={replaying}
+                catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
+                reveal={frameReturnReveal ?? reveal}
+                frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
+                onOpenSubagent={enterSubagent}
+                emptyState={emptyState}
+                jumpToRecapRef={jumpToRecap}
+                repinRef={repinTranscript}
+              />
+            </BookmarkProvider>
+          )}
+          {catchUp && newCount > 0 && !replaying && subagentId === undefined && framedShellId === undefined ? (
+            <CatchUpBanner
+              count={newCount}
+              since={catchUp.since}
+              terminal={terminal}
+              onJump={() => jumpToRecap.current?.()}
+              onDismiss={dismissCatchUp}
+            />
+          ) : null}
+          {!readOnly && capabilities.interactiveApprovals && state.pendingApprovals.length > 0 ? (
+            <ApprovalPrompts
+              requests={state.pendingApprovals}
+              terminal={terminal}
+              {...cell}
+              affordances={affordances}
+              hostPrompts={approvalPrompts}
+              onApprove={approve}
+              onDeny={deny}
+            />
+          ) : null}
+          {readOnly || subagentId !== undefined || framedShellId !== undefined ? null : (
+            <>
+              <Composer
+                ref={composerRef}
+                onSend={handleSend}
+                onInterrupt={interrupt}
+                busy={busy}
+                disabled={ended || !sessionId}
+                commands={capabilities.slashCommands ? state.commands : undefined}
+                skills={capabilities.skillsList ? state.skills : undefined}
+                clientCommands={clientCommands}
+                attachments={attachments}
+                draft={draft}
+                onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
+                peers={peers.peers}
+                onShellCommand={shell ? runShell : undefined}
+                layout={controlsExternal ? 'inline' : 'stacked'}
+                toolbar={controlsExternal ? undefined : sessionControls}
+                {...cell}
+                affordances={affordances}
+              />
+            </>
+          )}
+          {statusPlacement === 'bottom' ? statusBar : null}
 
-                    {!external ? (
-                      <>
-                        <SessionInfoDialog
-                          state={state}
-                          client={client}
-                          sessionId={sessionId}
-                          open={panel === 'info'}
-                          onOpenChange={(next) => setPanel(next ? 'info' : undefined)}
-                        />
-                        <ContextDialog
-                          usage={state.contextUsage}
-                          engine={state.engine ?? 'claude'}
-                          open={panel === 'context'}
-                          onOpenChange={(next) => setPanel(next ? 'context' : undefined)}
-                        />
-                        <UsageDialog
-                          rateLimits={windows}
-                          subscriptionType={state.subscriptionType}
-                          engine={state.engine ?? 'claude'}
-                          totalCostUsd={state.totalCostUsd}
-                          costUsd={state.costUsd}
-                          usageByModel={state.usageByModel}
-                          pricing={pricing}
-                          spend={profileSpend}
-                          updatedAt={usageUpdatedAt}
-                          open={panel === 'usage'}
-                          onOpenChange={(next) => setPanel(next ? 'usage' : undefined)}
-                        />
-                        <McpDialog
-                          client={client}
-                          sessionId={sessionId}
-                          canManageServers={capabilities.mcpServerActions}
-                          open={panel === 'mcp'}
-                          onOpenChange={(next) => setPanel(next ? 'mcp' : undefined)}
-                        />
-                        <SkillsDialog
-                          skills={state.skills}
-                          open={panel === 'skills'}
-                          onOpenChange={(next) => setPanel(next ? 'skills' : undefined)}
-                          onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
-                        />
-                        <HostFilesDialog
-                          client={client}
-                          cwd={state.cwd}
-                          open={panel === 'files'}
-                          onOpenChange={(next) => setPanel(next ? 'files' : undefined)}
-                        />
-                      </>
-                    ) : null}
-                  </ImageViewerProvider>
-                </div>
-              </ToolResultImageProvider>
-            </ToolTitleProvider>
-          </ShellActionsProvider>
-        </ToolResultFetchProvider>
-      </FileLinkProvider>
-    </TranscriptVariantProvider>
+          {!external ? (
+            <>
+              <SessionInfoDialog state={state} client={client} sessionId={sessionId} {...dialog('info')} />
+              <ContextDialog usage={state.contextUsage} engine={state.engine ?? 'claude'} {...dialog('context')} />
+              <UsageDialog
+                rateLimits={windows}
+                subscriptionType={state.subscriptionType}
+                engine={state.engine ?? 'claude'}
+                totalCostUsd={state.totalCostUsd}
+                costUsd={state.costUsd}
+                usageByModel={state.usageByModel}
+                pricing={pricing}
+                spend={profileSpend}
+                updatedAt={usageUpdatedAt}
+                {...dialog('usage')}
+              />
+              <McpDialog client={client} sessionId={sessionId} canManageServers={capabilities.mcpServerActions} {...dialog('mcp')} />
+              <SkillsDialog
+                skills={state.skills}
+                {...dialog('skills')}
+                onUse={(skill) => composerRef.current?.insertText(skillPrompt(skill))}
+              />
+              <HostFilesDialog client={client} cwd={state.cwd} {...dialog('files')} />
+            </>
+          ) : null}
+        </ImageViewerProvider>
+      </div>
+    </SessionPanelProviders>
   )
 }
 
-function useHostImage(
-  client: WorkerDeckClient,
-  sessionId: string | undefined,
-  producedFiles: Record<string, ProducedFileRef> | undefined,
-): (path: string) => Promise<string | undefined> {
-  const cache = useRef(new Map<string, Promise<string | undefined>>())
-  const objectUrls = useRef<string[]>([])
-  useEffect(
-    () => () => {
-      for (const url of objectUrls.current) {
-        URL.revokeObjectURL(url)
-      }
-      objectUrls.current = []
-    },
-    [],
-  )
-  return useCallback(
-    (path: string) => {
-      const produced = producedFiles?.[path]
-      const key = produced ? `produced:${produced.fileId}` : `fs:${path}`
-      const hit = cache.current.get(key)
-      if (hit) {
-        return hit
-      }
-      const pending =
-        produced && sessionId
-          ? client
-              .readProducedFile(sessionId, produced.fileId)
-              .then((blob) => {
-                if (blob.size === 0) {
-                  return undefined
-                }
-                const url = URL.createObjectURL(blob)
-                objectUrls.current.push(url)
-                return url
-              })
-              .catch(() => undefined)
-          : client
-              .readHostFile(path)
-              .then((file) => {
-                if (file.encoding !== 'base64') {
-                  return undefined
-                }
-                const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-                const mediaType = IMAGE_MEDIA_TYPES[extension]
-                return mediaType ? `data:${mediaType};base64,${file.content}` : undefined
-              })
-              .catch(() => undefined)
-      cache.current.set(key, pending)
-      return pending
-    },
-    [client, sessionId, producedFiles],
+type CatchUpBannerProps = { count: number; since: number | undefined; terminal: boolean; onJump: () => void; onDismiss: () => void }
+
+function CatchUpBanner({ count, since, terminal, onJump, onDismiss }: CatchUpBannerProps) {
+  return (
+    <div className="px-3 pb-1">
+      <div
+        data-slot="catch-up"
+        className="mx-auto flex w-full max-w-[var(--wd-transcript-max-width)] items-center gap-2 text-label text-fg-3"
+      >
+        <span aria-hidden className={cn('select-none', terminal ? 'text-fg-3' : 'text-accent')}>
+          ※
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {count} new {count === 1 ? 'row' : 'rows'}
+          {since !== undefined ? ` since you were last here` : ''}
+        </span>
+        <button type="button" onClick={onJump} className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline">
+          jump
+        </button>
+        <button type="button" onClick={onDismiss} className="shrink-0 underline-offset-2 hover:text-fg-1 hover:underline">
+          dismiss
+        </button>
+      </div>
+    </div>
   )
 }
 
-const IMAGE_MEDIA_TYPES: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
+function sameVitals(a: SessionVitals, b: SessionVitals): boolean {
+  return (Object.keys(b) as (keyof SessionVitals)[]).every((key) => Object.is(a[key], b[key]))
 }
 
 function Notice({ level, onDismiss, children }: { level: 'warning' | 'error'; onDismiss?: () => void; children: ReactNode }) {

@@ -8,6 +8,7 @@ import {
   createWorkerServer,
   type CarriedSession,
   type WorkerServer,
+  type WorkerServerOptions,
 } from '@workerdeck/server'
 import { dashboardDir } from '@workerdeck/web'
 import { createApnsRoute } from '../apns/routes.ts'
@@ -68,6 +69,20 @@ export function createHostGuard(allowedHosts: Set<string> | null): (req: Incomin
     }
     return isLoopbackHostname(hostname) || allowedHosts.has(hostname)
   }
+}
+
+// Push is server-wide: a registered phone hears about every session, so only an operator may aim one. Mirrors the
+// server's own `isOperator`, since a declared session policy withdraws the unscoped-means-operator default.
+export function isOperatorPrincipal(principal: unknown, policyDeclared: boolean): boolean {
+  if (principal === null || principal === undefined || principal === false) {
+    return false
+  }
+  const { operator, scope } = (typeof principal === 'object' ? principal : {}) as { operator?: unknown; scope?: unknown }
+  if (typeof operator === 'boolean') {
+    return operator
+  }
+  const scoped = typeof scope === 'object' && scope !== null && Object.keys(scope).length > 0
+  return !scoped && !policyDeclared
 }
 
 // The order here is the contract: auth endpoints first (they are how a browser gets a session at all), then the APNs
@@ -177,47 +192,29 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   }
   const hostAllowed = createHostGuard(config.allowedHosts)
 
+  // The same hook `/v1` runs, so a config file's own `authenticate` guards push too rather than the (then open) built-in.
+  const authenticateRequest = config.hostAuthenticates ? config.options.authenticate! : auth.authenticate
+  const policyDeclared = config.options.authorizeSession !== undefined
+  const authenticatePush = async (req: IncomingMessage): Promise<unknown> => {
+    if (!hostAllowed(req)) {
+      return null
+    }
+    const principal = await authenticateRequest(req)
+    return isOperatorPrincipal(principal, policyDeclared) ? principal : null
+  }
   // A bad key path throws before we listen: better a refusal at startup than a phone that never buzzes.
-  const authenticateHost = (req: IncomingMessage): unknown => (hostAllowed(req) ? auth.authenticate(req) : null)
   const apns =
     config.apns === undefined
       ? undefined
       : await createApnsForwarder({
           config: config.apns,
           stateDir: config.stateDir,
-          authenticate: authenticateHost,
+          authenticate: authenticatePush,
         })
 
-  const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest ?? createApnsRoute(null, authenticateHost))
+  const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest ?? createApnsRoute(null, authenticatePush))
 
-  const parking = { ...config.options.parking }
-  if (config.stateDir && !parking.store) {
-    parking.store = createFileSessionStore({
-      dir: join(config.stateDir, 'parked'),
-      onError: (error, context) => {
-        process.stderr.write(
-          `[workerdeck] parked-session store ${context.op} failed for ${context.path}: ` +
-            `${error instanceof Error ? error.message : String(error)}\n`,
-        )
-      },
-    })
-  }
-
-  // Profiles created over /v1/profiles live beside the parked sessions. With no state dir there is nowhere to put them,
-  // so management stays refused rather than silently forgetting every profile on restart.
-  const profileStore = config.profileStore && config.stateDir ? createFileProfileStore(join(config.stateDir, 'profiles.json')) : undefined
-
-  const shell = { ...config.options.shell }
-  if (config.stateDir && shell.artifactDir === undefined) {
-    shell.artifactDir = join(config.stateDir, 'shells')
-  }
-
-  const spend = { ...config.options.spend }
-  if (config.stateDir && !spend.store) {
-    spend.store = createFileSpendStore(join(config.stateDir, 'spend.json'), (error) => {
-      process.stderr.write(`[workerdeck] spend ledger write failed: ${error instanceof Error ? error.message : String(error)}\n`)
-    })
-  }
+  const { parking, profileStore, shell, spend } = stateDirDefaults(config)
 
   const server = createWorkerServer({
     ...config.options,
@@ -242,9 +239,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     ...(config.corsOrigins.length ? { cors: { origins: config.corsOrigins } } : {}),
     // A config file's own `authenticate` wins outright: mixing two auth schemes on one hook is a bypass nobody meant to
     // write. The unauthenticated case still supplies one rather than `allowUnauthenticated`, so the Host check covers `/v1`.
-    authenticate: config.hostAuthenticates
-      ? (req) => (hostAllowed(req) ? config.options.authenticate!(req) : null)
-      : (req) => (hostAllowed(req) ? auth.authenticate(req) : null),
+    authenticate: (req) => (hostAllowed(req) ? authenticateRequest(req) : null),
   })
 
   const wake = config.keepAwake
@@ -303,51 +298,8 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   })
 
   if (!options.quiet) {
-    const line = (text: string): void => void process.stdout.write(`${text}\n`)
-    line('')
-    line(`  workerdeck  ${url}`)
-    if (config.hostAuthenticates) {
-      line('  auth: the config file supplies its own `authenticate`')
-    } else if (generated?.source === 'created') {
-      line(`  auth: generated key  ${generated.key}`)
-      line(`        stored in ${generated.path} - later starts reuse it without printing it`)
-    } else if (generated?.source === 'ephemeral') {
-      line(`  auth: generated key  ${generated.key}`)
-      line('        ephemeral - no state dir to keep it, so the next start mints a new one')
-    } else if (generated?.source === 'stored') {
-      line(`  auth: shared key from ${generated.path}`)
-    } else if (auth.enabled) {
-      line('  auth: shared key - browsers sign in, services send a header')
-    } else {
-      line('  NO AUTH - anyone who can reach this port gets a session')
-    }
-    if (!config.web) {
-      line('  dashboard: off - bare gateway, /v1 and /auth only')
-    }
-    if (!config.keepAwake) {
-      line('  keep-awake: off - this machine may sleep mid-turn')
-    }
-    if (config.corsOrigins.length) {
-      line(`  cors: ${config.corsOrigins.join(', ')} may call /v1 (still key-gated)`)
-    }
-    line(
-      config.stateDir
-        ? `  parked sessions persist in ${join(config.stateDir, 'parked')}`
-        : '  parked sessions are in memory only - a restart drops them',
-    )
-    if (apns) {
-      const count = apns.deviceCount()
-      const cards = apns.activity.count()
-      line(
-        `  push: APNs forwarder on ${config.apns?.topic} - ` +
-          `${count === 0 ? 'no devices registered yet' : `${count} device(s)`}` +
-          `${cards === 0 ? '' : `, ${cards} live card(s)`}`,
-      )
-    }
-    if (config.configPath) {
-      line(`  config ${config.configPath}`)
-    }
-    line('')
+    const push = apns && { topic: config.apns?.topic, devices: apns.deviceCount(), cards: apns.activity.count() }
+    process.stdout.write(bannerLines({ url, config, generated, authEnabled: auth.enabled, push }).join('\n') + '\n')
   }
 
   return {
@@ -376,4 +328,86 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
       resolveClosed()
     },
   }
+}
+
+type StateDirDefaults = Pick<WorkerServerOptions, 'parking' | 'profileStore' | 'shell' | 'spend'>
+
+// Everything the state dir backs by default. A config file's own store wins; with no state dir everything stays in memory,
+// and profile management stays refused rather than silently forgetting every profile on restart.
+export function stateDirDefaults(config: ResolvedConfig): StateDirDefaults {
+  const { stateDir } = config
+  const parking = { ...config.options.parking }
+  const shell = { ...config.options.shell }
+  const spend = { ...config.options.spend }
+  if (!stateDir) {
+    return { parking, shell, spend }
+  }
+  parking.store ??= createFileSessionStore({
+    dir: join(stateDir, 'parked'),
+    onError: (error, context) => {
+      process.stderr.write(
+        `[workerdeck] parked-session store ${context.op} failed for ${context.path}: ` +
+          `${error instanceof Error ? error.message : String(error)}\n`,
+      )
+    },
+  })
+  if (shell.artifactDir === undefined) {
+    shell.artifactDir = join(stateDir, 'shells')
+  }
+  spend.store ??= createFileSpendStore(join(stateDir, 'spend.json'), (error) => {
+    process.stderr.write(`[workerdeck] spend ledger write failed: ${error instanceof Error ? error.message : String(error)}\n`)
+  })
+  const profileStore = config.profileStore ? createFileProfileStore(join(stateDir, 'profiles.json')) : undefined
+  return { parking, shell, spend, ...(profileStore ? { profileStore } : {}) }
+}
+
+export type BannerInput = {
+  url: string
+  config: ResolvedConfig
+  generated: MaterializedAuthKey | null
+  authEnabled: boolean
+  push: { topic: string | undefined; devices: number; cards: number } | undefined
+}
+
+export function bannerLines({ url, config, generated, authEnabled, push }: BannerInput): string[] {
+  const lines = ['', `  workerdeck  ${url}`]
+  if (config.hostAuthenticates) {
+    lines.push('  auth: the config file supplies its own `authenticate`')
+  } else if (generated?.source === 'created') {
+    lines.push(`  auth: generated key  ${generated.key}`, `        stored in ${generated.path} - later starts reuse it without printing it`)
+  } else if (generated?.source === 'ephemeral') {
+    lines.push(`  auth: generated key  ${generated.key}`, '        ephemeral - no state dir to keep it, so the next start mints a new one')
+  } else if (generated?.source === 'stored') {
+    lines.push(`  auth: shared key from ${generated.path}`)
+  } else if (authEnabled) {
+    lines.push('  auth: shared key - browsers sign in, services send a header')
+  } else {
+    lines.push('  NO AUTH - anyone who can reach this port gets a session')
+  }
+  if (!config.web) {
+    lines.push('  dashboard: off - bare gateway, /v1 and /auth only')
+  }
+  if (!config.keepAwake) {
+    lines.push('  keep-awake: off - this machine may sleep mid-turn')
+  }
+  if (config.corsOrigins.length) {
+    lines.push(`  cors: ${config.corsOrigins.join(', ')} may call /v1 (still key-gated)`)
+  }
+  lines.push(
+    config.stateDir
+      ? `  parked sessions persist in ${join(config.stateDir, 'parked')}`
+      : '  parked sessions are in memory only - a restart drops them',
+  )
+  if (push) {
+    lines.push(
+      `  push: APNs forwarder on ${push.topic} - ` +
+        `${push.devices === 0 ? 'no devices registered yet' : `${push.devices} device(s)`}` +
+        `${push.cards === 0 ? '' : `, ${push.cards} live card(s)`}`,
+    )
+  }
+  if (config.configPath) {
+    lines.push(`  config ${config.configPath}`)
+  }
+  lines.push('')
+  return lines
 }

@@ -304,28 +304,25 @@ export function normalizeListPrefixText(text: string, markdownEnabled: boolean):
  * preserved, while an unterminated fence does not suppress later bullets.
  */
 export function normalizeListPrefixes(segments: Segment[], markdownEnabled: boolean): Segment[] {
-  const globalLines: string[] = []
-  segments.forEach((seg) => {
-    if (seg.type === 'text') {
-      globalLines.push(...seg.text.split('\n'))
-    }
-  })
-  const protectedLines = fenceProtectedLineIndices(globalLines)
+  const protectedLines = fenceProtectedLineIndices(segmentsToPlainText(segments).split('\n'))
 
-  let globalIndex = 0
+  let line = 0
+  // A chip is inline, so text right after one continues its line rather than starting a new one.
+  let atLineStart = true
   let changed = false
   const result = segments.map((seg) => {
     if (seg.type !== 'text') {
+      atLineStart = false
       return seg
     }
-    const newText = seg.text
-      .split('\n')
-      .map((line) => {
-        const out = protectedLines.has(globalIndex) ? line : swapListPrefixLine(line, markdownEnabled)
-        globalIndex++
-        return out
-      })
+    const pieces = seg.text.split('\n')
+    const newText = pieces
+      .map((piece, k) => ((k > 0 || atLineStart) && !protectedLines.has(line + k) ? swapListPrefixLine(piece, markdownEnabled) : piece))
       .join('\n')
+    line += pieces.length - 1
+    if (pieces.length > 1 || seg.text !== '') {
+      atLineStart = pieces[pieces.length - 1] === ''
+    }
     if (newText === seg.text) {
       return seg
     }

@@ -9,6 +9,7 @@ import {
   type SessionInfo,
   type SessionStatus,
 } from '@workerdeck/protocol'
+import { defineToolFamily, globalSlot, lateBoundDirectory, type GatewayToolOutput, type GatewayToolSpec } from './gateway-tools.ts'
 
 export type PeerSessionSummary = {
   id: string
@@ -61,7 +62,7 @@ export const PEER_RECENT_DEFAULT = 8
 export const PEER_RECENT_MAX = 40
 const RECENT_LINE_MAX_CHARS = 400
 
-const PEER_DIRECTORY_SLOT = Symbol.for('workerdeck.peers.directory')
+const PEER_DIRECTORY_SLOT = globalSlot<PeerDirectory>('workerdeck.peers.directory')
 
 export const PEER_TOOL_SHAPES = {
   peers_list: {
@@ -99,72 +100,52 @@ export const PEER_TOOL_SHAPES = {
 
 export type PeerToolName = keyof typeof PEER_TOOL_SHAPES
 
-export const PEER_TOOL_NAMES = Object.keys(PEER_TOOL_SHAPES) as PeerToolName[]
+export type PeerToolSpec = GatewayToolSpec<PeerToolName>
 
-export type PeerToolSpec = { name: PeerToolName; description: string; inputSchema: Record<string, unknown> }
+export type PeerToolOutput = GatewayToolOutput
 
-export type PeerToolOutput = { text: string; isError: boolean }
+const PEER_TOOLS = defineToolFamily<typeof PEER_TOOL_SHAPES, PeerDirectory>(PEER_TOOL_SHAPES, {
+  peers_list: async (peers, from) => {
+    const rows = await peers.list(from)
+    return { text: rows.length ? JSON.stringify(rows, null, 2) : 'No other sessions are reachable from this one.', isError: false }
+  },
+  peers_peek: async (peers, from, input) => {
+    const peek = await peers.peek(from, input.sessionId, { recent: input.recent })
+    if (!peek) {
+      return { text: `no such session: ${input.sessionId}`, isError: true }
+    }
+    return { text: JSON.stringify(peek, null, 2), isError: false }
+  },
+  peers_send: async (peers, from, input) => {
+    const result = await peers.send(from, input.sessionId, input.text)
+    if (!result.delivered) {
+      return { text: `not delivered: ${result.reason}`, isError: true }
+    }
+    const head = peerDeliveredPrefix(result.sessionId, result.name)
+    return {
+      text: result.queued
+        ? `${head}; it is mid-turn and will read the message between tool calls. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`
+        : `${head}; it was idle and has started a turn on your message. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`,
+      isError: false,
+    }
+  },
+})
+
+export const PEER_TOOL_NAMES = PEER_TOOLS.names
 
 export function peerToolSpecs(): PeerToolSpec[] {
-  return PEER_TOOL_NAMES.map((name) => {
-    const { description, shape } = PEER_TOOL_SHAPES[name]
-    return { name, description, inputSchema: z.toJSONSchema(z.object(shape)) as Record<string, unknown> }
-  })
+  return PEER_TOOLS.specs()
 }
 
 export function isPeerToolName(name: string): name is PeerToolName {
-  return Object.hasOwn(PEER_TOOL_SHAPES, name)
+  return PEER_TOOLS.is(name)
 }
 
 export async function runPeerTool(peers: PeerDirectory, from: string, name: string, args: unknown): Promise<PeerToolOutput> {
   if (!isPeerToolName(name)) {
     return { text: `unknown peer tool: ${name}`, isError: true }
   }
-  try {
-    switch (name) {
-      case 'peers_list': {
-        const rows = await peers.list(from)
-        return { text: rows.length ? JSON.stringify(rows, null, 2) : 'No other sessions are reachable from this one.', isError: false }
-      }
-      case 'peers_peek': {
-        const input = z.object(PEER_TOOL_SHAPES.peers_peek.shape).safeParse(args ?? {})
-        if (!input.success) {
-          return invalidArguments(name, input.error)
-        }
-        const peek = await peers.peek(from, input.data.sessionId, { recent: input.data.recent })
-        if (!peek) {
-          return { text: `no such session: ${input.data.sessionId}`, isError: true }
-        }
-        return { text: JSON.stringify(peek, null, 2), isError: false }
-      }
-      case 'peers_send': {
-        const input = z.object(PEER_TOOL_SHAPES.peers_send.shape).safeParse(args ?? {})
-        if (!input.success) {
-          return invalidArguments(name, input.error)
-        }
-        const result = await peers.send(from, input.data.sessionId, input.data.text)
-        if (!result.delivered) {
-          return { text: `not delivered: ${result.reason}`, isError: true }
-        }
-        const head = peerDeliveredPrefix(result.sessionId, result.name)
-        return {
-          text: result.queued
-            ? `${head}; it is mid-turn and will read the message between tool calls. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`
-            : `${head}; it was idle and has started a turn on your message. Do not wait for a reply: it arrives as a message if the peer chooses to answer.`,
-          isError: false,
-        }
-      }
-    }
-  } catch (error) {
-    return { text: error instanceof Error ? error.message : String(error), isError: true }
-  }
-}
-
-function invalidArguments(name: string, error: z.ZodError): PeerToolOutput {
-  return {
-    text: `invalid arguments for ${name}: ${error.issues.map((issue) => `${issue.path.join('.') || 'input'}: ${issue.message}`).join('; ')}`,
-    isError: true,
-  }
+  return PEER_TOOLS.run(peers, from, name, args)
 }
 
 // What the model reads when a peer's message lands. The transcript keeps the bare text on the event with `origin`; only
@@ -297,28 +278,19 @@ function clip(text: string): string {
   return flat.length > RECENT_LINE_MAX_CHARS ? `${flat.slice(0, RECENT_LINE_MAX_CHARS)}...` : flat
 }
 
-// The one directory in the process, installed by the gateway and read by every runner through this handle. A hot
-// reload keeps the old generation's runners alive with the config they were born with; resolving the directory per
-// call, rather than capturing it, is what lets a carried session keep reaching the registry that now holds its peers.
 export function installPeerDirectory(directory: PeerDirectory | undefined): void {
-  ;(globalThis as Record<symbol, unknown>)[PEER_DIRECTORY_SLOT] = directory
+  PEER_DIRECTORY_SLOT.install(directory)
 }
 
 export function installedPeerDirectory(): PeerDirectory | undefined {
-  return (globalThis as Record<symbol, unknown>)[PEER_DIRECTORY_SLOT] as PeerDirectory | undefined
+  return PEER_DIRECTORY_SLOT.installed()
 }
 
-export function peerDirectoryHandle(): PeerDirectory {
-  const resolve = (): PeerDirectory => {
-    const directory = installedPeerDirectory()
-    if (!directory) {
-      throw new Error('peer messaging is not available on this gateway')
-    }
-    return directory
-  }
-  return {
-    list: async (from) => resolve().list(from),
-    peek: async (from, sessionId, options) => resolve().peek(from, sessionId, options),
-    send: async (from, sessionId, text, options) => resolve().send(from, sessionId, text, options),
-  }
+export function peerDirectoryHandle(own?: () => PeerDirectory | undefined): PeerDirectory {
+  return lateBoundDirectory<PeerDirectory>(
+    ['list', 'peek', 'send'],
+    PEER_DIRECTORY_SLOT,
+    own,
+    'peer messaging is not available on this gateway',
+  )
 }

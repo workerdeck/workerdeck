@@ -5,7 +5,6 @@ export function fontMode(): 'editor' | 'sans' {
 }
 
 export function transcriptVariant(): 'terminal' | 'cards' {
-  // Anything not `cards` resolves to `terminal`, which is what carries a settings file still holding the retired `lines` value.
   return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
 }
 
@@ -56,8 +55,9 @@ export function webviewHtml(
     `style-src ${webview.cspSource} 'unsafe-inline'`,
     `script-src ${webview.cspSource}`,
     `font-src ${webview.cspSource}`,
-    // http(s) is for inline images served by a KEYLESS gateway - header auth cannot ride an `<img>`.
-    `img-src ${webview.cspSource} data: blob: http: https:`,
+    // Loopback is for inline images served by a KEYLESS local gateway (header auth cannot ride an `<img>`); nothing wider,
+    // or a transcript's markdown could beacon anywhere.
+    `img-src ${webview.cspSource} data: blob: http://127.0.0.1:* http://localhost:*`,
   ].join('; ')
   return `<!DOCTYPE html>
 <html lang="en"${options.font ? ` data-font="${fontMode()}"` : ''}>

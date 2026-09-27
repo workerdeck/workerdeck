@@ -1,17 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { json } from '../lib/http.ts'
+import { fail, requireMethod } from '../lib/http.ts'
 import { readContained } from '../services/host-files.ts'
 import { MAX_PROJECT_ICON_BYTES, type ProjectInfoService } from '../services/project-info.ts'
 
 export function handleProjectIcon(projects: ProjectInfoService, req: IncomingMessage, res: ServerResponse, cwd: string): void {
-  if (req.method !== 'GET') {
-    json(res, 405, { error: 'method not allowed' })
-    return
-  }
+  requireMethod(req, 'GET')
   const icon = projects.iconFor(cwd)
   if (!icon) {
-    json(res, 404, { error: 'no project icon' })
-    return
+    fail(404, 'no project icon')
   }
   const etag = `"${icon.hash}"`
   if (req.headers['if-none-match'] === etag) {
@@ -21,8 +17,7 @@ export function handleProjectIcon(projects: ProjectInfoService, req: IncomingMes
   }
   const read = readContained(icon.path)
   if (!read.ok || read.data.length > MAX_PROJECT_ICON_BYTES) {
-    json(res, 404, { error: 'no project icon' })
-    return
+    fail(404, 'no project icon')
   }
   res.writeHead(200, {
     'content-type': icon.mediaType,

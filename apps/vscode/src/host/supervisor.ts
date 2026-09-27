@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { randomBytes } from 'node:crypto'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdir, open, readFile } from 'node:fs/promises'
@@ -262,7 +263,7 @@ export class HostSupervisor implements vscode.Disposable {
         await log.close()
       }
     } catch (err) {
-      this.#set({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
+      this.#set({ kind: 'error', message: errorMessage(err) })
       return
     }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
+import { useBookmarks } from '@workerdeck/react'
 import {
   Button,
   SessionPanel,
@@ -9,6 +10,7 @@ import {
   type SessionControls,
   type TerminalAffordances,
   type TerminalMetrics,
+  type TranscriptVariant,
 } from '@workerdeck/ui'
 import type { SurfaceState } from '../src/bridge-protocol.ts'
 import type { Bridge } from './bridge.ts'
@@ -22,40 +24,6 @@ type Shown = {
   unseen?: { itemCount: number; since: number }
 }
 
-// Same contract as the dashboard's useBookmarks: item ids per session, persisted client-side.
-// The webview's localStorage is per-extension-origin and survives reloads; losing it costs
-// starred rows only, so every access swallows (webviews can run with storage denied).
-const BOOKMARKS_KEY = 'workerdeck.bookmarks.v1'
-
-function useBookmarks(sessionKey: string) {
-  const [map, setMap] = useState<Record<string, string[]>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(BOOKMARKS_KEY) ?? '{}') as Record<string, string[]>
-    } catch {
-      return {}
-    }
-  })
-  const bookmarks = map[sessionKey] ?? []
-  const toggle = useCallback(
-    (itemId: string) => {
-      setMap((previous) => {
-        const current = previous[sessionKey] ?? []
-        const next = current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]
-        const merged = { ...previous, [sessionKey]: next }
-        if (next.length === 0) {
-          delete merged[sessionKey]
-        }
-        try {
-          localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(merged))
-        } catch {}
-        return merged
-      })
-    },
-    [sessionKey],
-  )
-  return { bookmarks, toggle }
-}
-
 export function App({
   bridge,
   variant,
@@ -65,7 +33,7 @@ export function App({
   fontSize,
 }: {
   bridge: Bridge
-  variant: 'terminal' | 'cards'
+  variant: TranscriptVariant
   catchUp: boolean
   terminalMetrics: TerminalMetrics
   affordances: TerminalAffordances | boolean
@@ -153,7 +121,7 @@ export function App({
 
   // Called unconditionally (hooks rule) - the empty key never accumulates entries because toggle
   // is only reachable from a mounted panel.
-  const { bookmarks, toggle: toggleBookmark } = useBookmarks(shown ? `${shown.baseUrl}#${shown.sessionId}` : '')
+  const { bookmarks, toggle: toggleBookmark } = useBookmarks(shown ? `${shown.baseUrl}#${shown.sessionId}` : undefined)
 
   if (held && !shown) {
     return (

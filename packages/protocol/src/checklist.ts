@@ -113,5 +113,9 @@ export function visibleTasks(tasks: readonly SessionTask[], showCompleted: boole
 }
 
 export function displayedTasks(info: Pick<SessionInfo, 'checklist' | 'subagents'>, show: StepDisplay): SessionTask[] {
-  return show === 'none' ? [] : visibleTasks(sessionTasks(info), show === 'all')
+  if (show === 'none') {
+    return []
+  }
+  const tasks = sessionTasks(info)
+  return show === 'all' ? tasks : tasks.filter((task) => task.state === 'running' || task.state === 'pending')
 }

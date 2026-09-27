@@ -295,7 +295,7 @@ public struct TranscriptState: Sendable, Equatable {
   public var cwd: String?
   public var sdkSessionId: String?
   /// Engine running the session, from the attach snapshot. Gates CLI-only
-  /// affordances; absent (an older server) reads as `.claude`.
+  /// affordances; absent reads as `.claude`.
   public var engine: ProfileEngine?
   /// Models the session can switch to (from the `capabilities` event).
   public var models: [ModelOption]?

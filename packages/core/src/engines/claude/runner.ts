@@ -16,26 +16,20 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import {
   ENGINE_CAPABILITIES,
-  type CreateSessionRequest,
+  errorMessage,
   type McpServerStatusInfo,
   type ModelOption,
   type PermissionMode,
   type PermissionRequest,
-  type SessionEvent,
   type SessionEventBody,
   type SessionInfo,
   type SessionStatus,
 } from '@workerdeck/protocol'
-import { type AttachmentInput, attachmentContentBlocks, attachmentRef } from '../../lib/attachments.ts'
+import { type AttachmentInput, attachmentContentBlocks } from '../../lib/attachments.ts'
+import { withoutGatewaySecrets } from '../../lib/child-env.ts'
 import { TaskChecklist, checklistFromBody, sameChecklist } from '../../lib/checklist.ts'
 import { InputQueue } from '../../lib/input-queue.ts'
-import {
-  LocalCommandQueue,
-  isSlashCommand,
-  localCommandEvent,
-  type LocalCommandResult,
-  type LocalShellSource,
-} from '../../lib/local-command.ts'
+import { isSlashCommand } from '../../lib/local-command.ts'
 import {
   type UsageRateLimits,
   defaultModelFromSdk,
@@ -46,24 +40,14 @@ import {
   rateLimitEventsFromUsage,
   toApiMessage,
 } from '../../lib/normalize.ts'
-import type { PermissionDecision, Runner, SendMessageOptions, SessionEventListener } from '../../runner-interface.ts'
-import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
-import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
-import { EventLog } from '../../lib/event-log.ts'
-import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
-import { hostTitle, sessionTitle, withTitle } from '../../lib/title.ts'
-import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
-import { PEER_MCP_SERVER, PEER_TOOL_SHAPES, PEER_TOOL_NAMES, withPeerContext, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
-import {
-  SHELL_TOOL_SHAPES,
-  runShellTool,
-  shellToolNames,
-  shellToolNeedsCard,
-  shellToolOf,
-  shellWriteToolOf,
-  type ShellAgentWrite,
-  type ShellDirectory,
-} from '../../lib/shells.ts'
+import type { EngineRunnerConfig, PermissionDecision, Runner, SendMessageOptions } from '../../runner-interface.ts'
+import { EngineRunner } from '../../lib/engine-runner.ts'
+import { QUESTIONS_DISABLED_MESSAGE, approvalResolution, type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
+import { hostTitle } from '../../lib/title.ts'
+import { resolveInstructions } from '../../lib/instructions.ts'
+import { PEER_MCP_SERVER, withPeerContext } from '../../lib/peers.ts'
+import { sessionTools } from '../../lib/session-tools.ts'
+import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { SubagentTracker } from './subagents.ts'
 
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
@@ -75,54 +59,27 @@ export type HistoryFn = (sdkSessionId: string, options: { dir?: string }) => Pro
 
 export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SDKSessionInfo | undefined>
 
-export type SessionRunnerConfig = CreateSessionRequest & {
-  epoch?: number
+export type SessionRunnerConfig = EngineRunnerConfig & {
   queryFn?: QueryFn
-  env?: Record<string, string | undefined>
   pathToClaudeCodeExecutable?: string
   extraOptions?: Partial<Options>
-  instructions?: SessionInstructions
-  defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
   historyFn?: HistoryFn
   sessionInfoFn?: SessionInfoFn
-  peers?: PeerDirectory
-  shells?: ShellDirectory
-  shellAgentWrite?: ShellAgentWrite
-  // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell
-  // write tools are offered only to a session an operator created.
-  createdByOperator?: boolean
 }
 
-type PendingApproval = {
-  request: PermissionRequest
-  resolve: (result: PermissionResult) => void
-  timer?: ReturnType<typeof setTimeout>
-}
-
-export class SessionRunner implements Runner {
-  readonly id: string
-  readonly createdAt: number
-
-  #config: SessionRunnerConfig
+export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements Runner {
   readonly #cwd: string
   readonly #instructions: string | undefined
-  #log = new EventLog()
-  #subscribers = new SubscriberSet()
   #tasks = new TaskChecklist()
-  #status: SessionStatus = 'starting'
-  #statusDetail: string | undefined
   #sdkSessionId: string | undefined
   #model: string | undefined
   #apiKeySource: string | undefined
   #permissionMode: PermissionMode | undefined
-  #pending = new Map<string, PendingApproval>()
   #turnOverWhileBlocked = false
   #subagents = new SubagentTracker()
-  #cost = new CostLedger()
   #numTurns: number | undefined
   #input = new InputQueue()
-  #localCommands = new LocalCommandQueue((text, uuid, shell) => this.#emit(localCommandEvent(text, uuid, shell)))
   // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
   // settles it. The boundary has a uuid of its own, but it is the *end* of the compaction, so
   // correlating here is what lets one row settle rather than two rows appear.
@@ -137,88 +94,52 @@ export class SessionRunner implements Runner {
   #engineTitle: string | undefined
   #lastRateLimitPoll = 0
   #started = false
-  #closed = false
   #runPromise: Promise<void> | undefined
 
   constructor(config: SessionRunnerConfig, id: string = randomUUID()) {
+    super(config, id, Date.now(), { cost: 'reconcile' })
     if (!config.cwd) {
       throw new Error('the claude engine requires a cwd')
     }
     this.#cwd = config.cwd
-    this.#config = config
     this.#permissionMode = config.permissionMode
-    this.id = id
-    this.createdAt = Date.now()
     this.#instructions = resolveInstructions(config.instructions, { sessionId: id, cwd: config.cwd, profile: config.profile })
     if (this.#instructions !== undefined && config.extraOptions?.systemPrompt !== undefined) {
       throw new Error('instructions and extraOptions.systemPrompt both set - the host must pick one')
     }
   }
 
-  get status(): SessionStatus {
-    return this.#status
+  protected override coreHooks(): RunnerCoreHooks {
+    return {
+      observe: (body, event) => this.#subagents.observe(body, event.ts),
+      settled: (body) => this.#followChecklist(body),
+      holdStatus: (status) => this.#holdIdleWhileCompacting(status),
+    }
   }
 
   get sdkSessionId(): string | undefined {
     return this.#sdkSessionId
   }
 
-  get lastSeq(): number {
-    return this.#log.seq
-  }
-
   get apiKeySource(): string | undefined {
     return this.#apiKeySource
   }
 
-  get pendingApprovals(): PermissionRequest[] {
-    return [...this.#pending.values()].map((p) => p.request)
-  }
-
   info(): SessionInfo {
     return {
-      id: this.id,
+      ...this.baseInfo(this.#engineTitle),
       sdkSessionId: this.#sdkSessionId,
-      status: this.#status,
       cwd: this.#cwd,
-      profile: this.#config.profile,
       engine: 'claude',
-      shellAgentWrite: this.#config.shells ? this.#config.shellAgentWrite : undefined,
       capabilities: ENGINE_CAPABILITIES.claude,
-      model: this.#model ?? this.#config.model,
+      model: this.#model ?? this.config.model,
       permissionMode: this.#permissionMode,
-      canBypassPermissions: this.#config.permissionMode === 'bypassPermissions' || this.#config.allowDangerouslySkipPermissions === true,
+      canBypassPermissions: this.config.permissionMode === 'bypassPermissions' || this.config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
-      createdAt: this.createdAt,
-      epoch: this.#config.epoch,
-      lastSeq: this.#log.seq,
-      activityCount: this.#log.activityCount,
-      proseCount: this.#log.proseCount,
-      contextUsage: this.#log.contextUsage,
-      pendingPermissionCount: this.#pending.size,
       subagents: this.#subagents.list(),
-      checklist: this.#log.checklist,
-      meta: this.#config.meta,
-      scope: this.#config.scope,
-      title: sessionTitle(this.#config, this.#engineTitle),
-      totalCostUsd: this.#cost.reportedCostUsd,
-      costUsd: this.#cost.costUsd,
-      usageByModel: this.#cost.byModel,
+      totalCostUsd: this.core.cost.reportedCostUsd,
       numTurns: this.#numTurns,
-      lastActivityAt: this.#log.lastActivityAt,
     }
-  }
-
-  setTitle(title: string | undefined): void {
-    this.#config = withTitle(this.#config, title)
-  }
-
-  carryCost(state: CostLedgerState): void {
-    this.#cost.carryUnlessRestored(state)
-  }
-
-  costState(): CostLedgerState {
-    return this.#cost.snapshot()
   }
 
   start(): Promise<void> {
@@ -226,20 +147,18 @@ export class SessionRunner implements Runner {
       return this.#runPromise!
     }
     this.#started = true
-    if (this.#config.prompt) {
-      this.sendMessage(this.#config.prompt)
+    if (this.config.prompt) {
+      this.sendMessage(this.config.prompt)
     }
     this.#runPromise = this.#run()
     return this.#runPromise
   }
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
-    if (this.#closed) {
-      throw new Error('session is closed')
-    }
+    this.assertAccepting()
     const blocks = attachments?.length ? attachmentContentBlocks(attachments) : []
     // A slash command is matched on the message text by the CLI, so held output waits for the next plain message.
-    const context = isSlashCommand(text) ? undefined : this.#takeLocalCommands()
+    const context = isSlashCommand(text) ? undefined : this.localCommands.take()
     if (context) {
       blocks.unshift({ type: 'text', text: context })
     }
@@ -254,25 +173,7 @@ export class SessionRunner implements Runner {
       parent_tool_use_id: null,
       session_id: this.#sdkSessionId,
     })
-    this.#emit({
-      type: 'user_message',
-      message: { role: 'user', content: text },
-      parentToolUseId: null,
-      attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
-      uuid: randomUUID(),
-      ...(options?.origin ? { origin: options.origin } : {}),
-    })
-  }
-
-  queueLocalCommand(input: LocalCommandResult | LocalShellSource): void {
-    if (this.#closed) {
-      throw new Error('session is closed')
-    }
-    this.#localCommands.push(input)
-  }
-
-  #takeLocalCommands(): string | undefined {
-    return this.#localCommands.take()
+    this.echoUser(text, attachments, options)
   }
 
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
@@ -299,15 +200,6 @@ export class SessionRunner implements Runner {
     await query.toggleMcpServer(name, enabled)
   }
 
-  resolvePermission(requestId: string, decision: PermissionDecision): boolean {
-    const pending = this.#pending.get(requestId)
-    if (!pending) {
-      return false
-    }
-    this.#settleApproval(requestId, pending, decision, 'client')
-    return true
-  }
-
   async interrupt(): Promise<void> {
     await this.#query?.interrupt()
   }
@@ -322,67 +214,43 @@ export class SessionRunner implements Runner {
   }
 
   async clearContext(): Promise<void> {
-    if (this.#status === 'closed' || this.#status === 'failed') {
+    if (this.core.terminal) {
       throw new Error('session is closed')
     }
-    this.#localCommands.clear()
+    this.localCommands.clear()
     this.sendMessage('/clear')
   }
 
   async setPermissionMode(mode: PermissionMode): Promise<void> {
     await this.#query?.setPermissionMode(mode)
     this.#permissionMode = mode
-    this.#emit({ type: 'permission_mode_changed', mode })
+    this.core.emit({ type: 'permission_mode_changed', mode })
   }
 
   async setModel(model?: string): Promise<void> {
     await this.#query?.setModel(model)
     this.#model = model
-    this.#emit({ type: 'model_changed', model })
+    this.core.emit({ type: 'model_changed', model })
   }
 
-  fail(message: string): void {
-    if (this.#closed) {
-      return
-    }
-    this.#emit({ type: 'session_error', message })
-    this.#setStatus('failed')
-    this.close('error')
-  }
-
-  close(reason: 'client' | 'server' | 'error' = 'client'): void {
-    if (this.#closed) {
-      return
-    }
-    this.#closed = true
-    this.#localCommands.clear()
-    for (const [id, pending] of this.#pending) {
-      this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
-    }
-    this.#input.end()
-    this.#query?.close()
-    this.#emit({ type: 'session_closed', reason })
-    this.#setStatus('closed')
-  }
-
-  eventAt(seq: number): SessionEvent | undefined {
-    return this.#log.at(seq)
-  }
-
-  subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
-    return this.#subscribers.subscribe(this.#log.events, listener, afterSeq, options, this.#log.resetSeq)
+  close(reason: CloseReason = 'client'): void {
+    this.core.close(reason, () => {
+      this.localCommands.clear()
+      this.#input.end()
+      this.#query?.close()
+    })
   }
 
   async #run(): Promise<void> {
-    const queryFn = this.#config.queryFn ?? (sdkQuery as QueryFn)
+    const queryFn = this.config.queryFn ?? (sdkQuery as QueryFn)
     try {
       await this.#backfillHistory()
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
       this.#query = queryFn({ prompt: this.#input, options: this.#buildOptions() })
-      if (!this.#config.prompt) {
-        this.#setStatus('idle')
+      if (!this.config.prompt) {
+        this.core.setStatus('idle')
         void this.#fetchCapabilities()
         void this.#fetchContextUsage()
         void this.#fetchRateLimits()
@@ -390,26 +258,14 @@ export class SessionRunner implements Runner {
       for await (const message of this.#query) {
         this.#handleMessage(message)
       }
-      if (!this.#closed) {
-        this.#closed = true
-        this.#input.end()
-        this.#emit({ type: 'session_closed', reason: 'server' })
-        this.#setStatus('closed')
-      }
+      this.core.close('server', () => this.#input.end(), { settleApprovals: false })
     } catch (error) {
-      if (!this.#closed) {
-        this.#emit({
-          type: 'session_error',
-          message: error instanceof Error ? error.message : String(error),
-        })
-        this.#setStatus('failed')
-        this.close('error')
-      }
+      this.fail(errorMessage(error))
     }
   }
 
   async #backfillHistory(): Promise<void> {
-    const c = this.#config
+    const c = this.config
     if (!c.resume || c.backfillHistory === false) {
       return
     }
@@ -421,12 +277,12 @@ export class SessionRunner implements Runner {
       return
     }
     for (const m of messages) {
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
       if (m.type === 'user') {
         const message = toApiMessage(m.message)
-        this.#emit({
+        this.core.emit({
           type: 'user_message',
           message,
           parentToolUseId: m.parent_tool_use_id,
@@ -435,7 +291,7 @@ export class SessionRunner implements Runner {
           uuid: m.uuid,
         })
       } else if (m.type === 'assistant') {
-        this.#emit({
+        this.core.emit({
           type: 'assistant_message',
           message: toApiMessage(m.message),
           parentToolUseId: m.parent_tool_use_id,
@@ -447,7 +303,7 @@ export class SessionRunner implements Runner {
   }
 
   #buildOptions(): Options {
-    const c = this.#config
+    const c = this.config
     const options: Options = {
       cwd: this.#cwd,
       permissionMode: c.permissionMode,
@@ -464,7 +320,7 @@ export class SessionRunner implements Runner {
       includePartialMessages: c.includePartialMessages ?? true,
       forwardSubagentText: true,
       canUseTool: this.#canUseTool,
-      env: c.env,
+      env: withoutGatewaySecrets(c.env ?? process.env),
       pathToClaudeCodeExecutable: c.pathToClaudeCodeExecutable,
       ...(c.permissionMode === 'bypassPermissions' || c.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
       ...c.extraOptions,
@@ -476,30 +332,16 @@ export class SessionRunner implements Runner {
   }
 
   #mcpServersOption(): Options['mcpServers'] {
-    const declared = this.#config.mcpServers as Options['mcpServers']
-    const peers = this.#config.peers
-    const shells = this.#config.shells
-    if (!peers && !shells) {
+    const declared = this.config.mcpServers as Options['mcpServers']
+    if (!this.config.peers && !this.config.shells) {
       return declared
     }
-    const tools = [
-      ...(peers
-        ? PEER_TOOL_NAMES.map((name) =>
-            sdkTool(name, PEER_TOOL_SHAPES[name].description, PEER_TOOL_SHAPES[name].shape, async (args) => {
-              const output = await runPeerTool(peers, this.id, name, args)
-              return { content: [{ type: 'text', text: output.text }], isError: output.isError }
-            }),
-          )
-        : []),
-      ...(shells
-        ? shellToolNames(this.#config.shellAgentWrite !== undefined).map((name) =>
-            sdkTool(name, SHELL_TOOL_SHAPES[name].description, SHELL_TOOL_SHAPES[name].shape, async (args) => {
-              const output = await runShellTool(shells, this.id, name, args, { write: this.#config.shellAgentWrite !== undefined })
-              return { content: [{ type: 'text', text: output.text }], isError: output.isError }
-            }),
-          )
-        : []),
-    ]
+    const tools = sessionTools(this.toolSources, () => this.id).map((gatewayTool) =>
+      sdkTool(gatewayTool.name, gatewayTool.description, gatewayTool.shape, async (args) => {
+        const output = await gatewayTool.run(args)
+        return { content: [{ type: 'text', text: output.text }], isError: output.isError }
+      }),
+    )
     return { ...declared, [PEER_MCP_SERVER]: createSdkMcpServer({ name: PEER_MCP_SERVER, tools }) }
   }
 
@@ -509,7 +351,7 @@ export class SessionRunner implements Runner {
       this.#model = msg.model
       this.#permissionMode = msg.permissionMode
       this.#apiKeySource = msg.apiKeySource
-      this.#emit({
+      this.core.emit({
         type: 'system_init',
         sdkSessionId: msg.session_id,
         model: msg.model,
@@ -523,7 +365,7 @@ export class SessionRunner implements Runner {
         mcpServers: msg.mcp_servers,
       })
       this.#turnOverWhileBlocked = false
-      this.#setStatus('running')
+      this.core.setStatus('running')
       void this.#fetchCapabilities()
       void this.#fetchToolTitles()
       void this.#fetchContextUsage()
@@ -532,7 +374,7 @@ export class SessionRunner implements Runner {
       return
     }
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
-      if (this.#pending.size > 0) {
+      if (this.core.pendingCount > 0) {
         if (msg.state === 'idle') {
           this.#turnOverWhileBlocked = true
         } else if (msg.state === 'running') {
@@ -541,16 +383,16 @@ export class SessionRunner implements Runner {
         return
       }
       if (msg.state === 'idle') {
-        this.#setStatus('idle')
+        this.core.setStatus('idle')
       } else if (msg.state === 'running') {
-        this.#setStatus('running')
+        this.core.setStatus('running')
       }
       return
     }
     if (msg.type === 'system' && msg.subtype === 'commands_changed') {
       // Ignored before the first fetch resolves: supportedCommands() tracks the latest push, so the
       // fetch already returns this list, and re-emitting here would ship an empty model list.
-      if (this.#capabilitiesEmitted && !this.#closed) {
+      if (this.#capabilitiesEmitted && !this.core.closed) {
         this.#emitCapabilities(msg.commands)
       }
       return
@@ -566,10 +408,10 @@ export class SessionRunner implements Runner {
     }
     const body = normalizeSdkMessage(msg)
     if (body) {
-      this.#emit(body)
+      this.core.emit(body)
       if (body.type === 'conversation_reset') {
-        this.#cost.rollover()
-        this.#localCommands.clear()
+        this.core.cost.rollover()
+        this.localCommands.clear()
         if (body.sdkSessionId) {
           this.#sdkSessionId = body.sdkSessionId
         }
@@ -583,13 +425,13 @@ export class SessionRunner implements Runner {
         if (this.#compactionTurns > 1) {
           this.#settleCompaction()
         }
-        this.#cost.observeCumulative(body.usageByModel, body.totalCostUsd)
-        body.totalCostUsd = this.#cost.reportedCostUsd ?? body.totalCostUsd
-        body.usageByModel = this.#cost.byModel
-        body.costUsd = this.#cost.costUsd
+        this.core.cost.observeCumulative(body.usageByModel, body.totalCostUsd)
+        body.totalCostUsd = this.core.cost.reportedCostUsd ?? body.totalCostUsd
+        body.usageByModel = this.core.cost.byModel
+        body.costUsd = this.core.cost.costUsd
         this.#numTurns = body.numTurns
-        if (this.#pending.size === 0) {
-          this.#setStatus('idle')
+        if (this.core.pendingCount === 0) {
+          this.core.setStatus('idle')
         } else {
           this.#turnOverWhileBlocked = true
         }
@@ -604,8 +446,8 @@ export class SessionRunner implements Runner {
     if (msg.status === 'compacting') {
       this.#compactionId ??= randomUUID()
       this.#compactionTurns = 0
-      this.#emit({ type: 'context_compacted', uuid: this.#compactionId, pending: true })
-      this.#setStatus('running')
+      this.core.emit({ type: 'context_compacted', uuid: this.#compactionId, pending: true })
+      this.core.setStatus('running')
       return
     }
     if (msg.compact_result === 'failed') {
@@ -622,9 +464,9 @@ export class SessionRunner implements Runner {
       return
     }
     this.#compactionId = undefined
-    this.#emit({ type: 'context_compacted', uuid, ...settled })
-    if (this.#idleWhileCompacting && this.#pending.size === 0) {
-      this.#setStatus('idle')
+    this.core.emit({ type: 'context_compacted', uuid, ...settled })
+    if (this.#idleWhileCompacting && this.core.pendingCount === 0) {
+      this.core.setStatus('idle')
     }
     this.#idleWhileCompacting = false
   }
@@ -633,7 +475,7 @@ export class SessionRunner implements Runner {
   // is reported only when the CLI happens to forward it.
   async #fetchToolTitles(): Promise<void> {
     const servers = await this.mcpServers().catch(() => undefined)
-    if (this.#closed || !servers) {
+    if (this.core.closed || !servers) {
       return
     }
     const titles: Record<string, string> = {}
@@ -645,7 +487,7 @@ export class SessionRunner implements Runner {
       }
     }
     if (Object.keys(titles).length > 0) {
-      this.#emit({ type: 'tool_titles', titles })
+      this.core.emit({ type: 'tool_titles', titles })
     }
   }
 
@@ -659,7 +501,7 @@ export class SessionRunner implements Runner {
     }
     try {
       const [models, commands] = await Promise.all([query.supportedModels(), query.supportedCommands()])
-      if (this.#closed || this.#capabilitiesEmitted) {
+      if (this.core.closed || this.#capabilitiesEmitted) {
         return
       }
       this.#capabilitiesEmitted = true
@@ -670,7 +512,7 @@ export class SessionRunner implements Runner {
   }
 
   #emitCapabilities(commands: readonly { name: string; description?: string; argumentHint?: string; aliases?: string[] }[]): void {
-    this.#emit({
+    this.core.emit({
       type: 'capabilities',
       models: this.#models ?? [],
       defaultModel: this.#defaultModel,
@@ -684,17 +526,17 @@ export class SessionRunner implements Runner {
   }
 
   async #fetchEngineTitle(): Promise<void> {
-    if (hostTitle(this.#config.meta)) {
+    if (hostTitle(this.config.meta)) {
       return
     }
     const sdkSessionId = this.#sdkSessionId
     if (!sdkSessionId) {
       return
     }
-    const read = this.#config.sessionInfoFn ?? getSessionInfo
+    const read = this.config.sessionInfoFn ?? getSessionInfo
     try {
       const info = await read(sdkSessionId, { dir: this.#cwd })
-      if (this.#closed || !info) {
+      if (this.core.closed || !info) {
         return
       }
       const summary = info.summary && info.summary !== info.firstPrompt ? info.summary : undefined
@@ -712,10 +554,10 @@ export class SessionRunner implements Runner {
     }
     try {
       const usage = await query.getContextUsage()
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
-      this.#emit({
+      this.core.emit({
         type: 'context_usage',
         usage: {
           categories: usage.categories.map((c) => ({
@@ -751,23 +593,23 @@ export class SessionRunner implements Runner {
     }
     try {
       const usage = (await fetchUsage.call(query)) as UsageRateLimits
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
       const subscriptionType = usage.subscription_type
       if (subscriptionType && subscriptionType !== this.#subscriptionType) {
         this.#subscriptionType = subscriptionType
-        this.#emit({ type: 'plan_info', subscriptionType })
+        this.core.emit({ type: 'plan_info', subscriptionType })
       }
       for (const body of rateLimitEventsFromUsage(usage)) {
-        this.#emit(body)
+        this.core.emit(body)
       }
     } catch {}
   }
 
   #canUseTool: CanUseTool = (toolName, input, options) => {
     const id = randomUUID()
-    const timeoutMs = resolveApprovalTimeoutMs(this.#config.approvalTimeoutMs, this.#config.defaultApprovalTimeoutMs)
+    const { timeoutMs, expiresAt } = this.approvalDeadline()
     const request: PermissionRequest = {
       id,
       toolName,
@@ -778,9 +620,9 @@ export class SessionRunner implements Runner {
       description: options.description,
       decisionReason: options.decisionReason,
       agentId: options.agentID,
-      expiresAt: timeoutMs === undefined ? undefined : Date.now() + timeoutMs,
+      expiresAt,
     }
-    const questionBehavior = this.#config.questionBehavior ?? 'ask'
+    const questionBehavior = this.config.questionBehavior ?? 'ask'
     if (toolName === 'AskUserQuestion' && questionBehavior !== 'ask') {
       delete request.expiresAt
       return Promise.resolve(this.#resolveQuestionByPolicy(request, questionBehavior))
@@ -790,63 +632,40 @@ export class SessionRunner implements Runner {
       return Promise.resolve(this.#allowByPolicy(request))
     }
     return new Promise<PermissionResult>((resolve) => {
-      const timer =
-        timeoutMs === undefined
-          ? undefined
-          : setTimeout(() => {
-              const pending = this.#pending.get(id)
-              if (pending) {
-                this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
-              }
-            }, timeoutMs)
-      this.#pending.set(id, { request, resolve, timer })
-      options.signal.addEventListener('abort', () => {
-        const pending = this.#pending.get(id)
-        if (pending) {
-          this.#settleApproval(id, pending, { behavior: 'deny', message: 'Turn aborted' }, 'policy')
-        }
+      this.core.requestApproval(request, {
+        timeoutMs,
+        respond: (decision, resolvedBy) => {
+          resolve(permissionResult(request, decision))
+          return approvalResolution(decision, resolvedBy)
+        },
+        after: () => this.#afterApproval(),
       })
-      this.#emit({ type: 'permission_requested', request })
-      this.#setStatus('awaiting_approval')
+      options.signal.addEventListener('abort', () => {
+        this.core.resolveApproval(id, { behavior: 'deny', message: 'Turn aborted' }, 'policy')
+      })
+      this.core.setStatus('awaiting_approval')
     })
   }
 
   // Reading a shell never writes to it and the tools are offered to operator sessions only, so the read pair never
   // waits on a click; a write tool skips the card only under `allow`, and a grant request never does.
   #allowsShellToolByPolicy(toolName: string): boolean {
-    const tool = this.#config.shells ? shellToolOf(toolName) : undefined
+    const tool = this.config.shells ? shellToolOf(toolName) : undefined
     if (tool === undefined) {
       return false
     }
-    return shellWriteToolOf(toolName) === undefined || !shellToolNeedsCard(toolName, this.#config.shellAgentWrite)
+    return shellWriteToolOf(toolName) === undefined || !shellToolNeedsCard(toolName, this.config.shellAgentWrite)
   }
 
-  // The card still reaches the transcript, resolved by policy, so an operator who chose `allow` can see what ran.
   #allowByPolicy(request: PermissionRequest): PermissionResult {
-    this.#emit({ type: 'permission_requested', request })
-    this.#emit({ type: 'permission_resolved', requestId: request.id, behavior: 'allow', resolvedBy: 'policy' })
+    this.core.resolveByPolicy(request, 'allow')
     return { behavior: 'allow', updatedInput: request.input, toolUseID: request.toolUseId }
   }
 
   #resolveQuestionByPolicy(request: PermissionRequest, mode: 'auto' | 'deny'): PermissionResult {
-    this.#emit({ type: 'permission_requested', request })
-    if (mode === 'deny') {
-      const message = 'Interactive questions are disabled for this session - choose the most reasonable option yourself and continue.'
-      this.#emit({
-        type: 'permission_resolved',
-        requestId: request.id,
-        behavior: 'deny',
-        resolvedBy: 'policy',
-        message,
-      })
-      return { behavior: 'deny', message, toolUseID: request.toolUseId }
+    if (!this.core.resolveQuestionByPolicy(request, mode)) {
+      return { behavior: 'deny', message: QUESTIONS_DISABLED_MESSAGE, toolUseID: request.toolUseId }
     }
-    this.#emit({
-      type: 'permission_resolved',
-      requestId: request.id,
-      behavior: 'allow',
-      resolvedBy: 'policy',
-    })
     return {
       behavior: 'allow',
       updatedInput: { ...request.input, answers: recommendedAnswers(request.input) },
@@ -854,78 +673,49 @@ export class SessionRunner implements Runner {
     }
   }
 
-  #settleApproval(id: string, pending: PendingApproval, decision: PermissionDecision, resolvedBy: 'client' | 'timeout' | 'policy'): void {
-    clearTimeout(pending.timer)
-    this.#pending.delete(id)
-    if (decision.behavior === 'allow') {
-      pending.resolve({
-        behavior: 'allow',
-        updatedInput: decision.updatedInput ?? pending.request.input,
-        toolUseID: pending.request.toolUseId,
-      })
-    } else {
-      pending.resolve({
-        behavior: 'deny',
-        message: decision.message ?? 'Denied',
-        interrupt: decision.interrupt,
-        toolUseID: pending.request.toolUseId,
-      })
+  #afterApproval(): void {
+    if (this.core.pendingCount > 0) {
+      return
     }
-    this.#emit({
-      type: 'permission_resolved',
-      requestId: id,
-      behavior: decision.behavior,
-      resolvedBy,
-      message: decision.behavior === 'deny' ? (decision.message ?? 'Denied') : undefined,
-    })
-    if (this.#pending.size === 0) {
-      const endedWhileBlocked = this.#turnOverWhileBlocked
-      this.#turnOverWhileBlocked = false
-      if (endedWhileBlocked) {
-        this.#setStatus('idle')
-      } else if (this.#status === 'awaiting_approval') {
-        this.#setStatus('running')
-      }
+    const endedWhileBlocked = this.#turnOverWhileBlocked
+    this.#turnOverWhileBlocked = false
+    if (endedWhileBlocked) {
+      this.core.setStatus('idle')
+    } else if (this.core.status === 'awaiting_approval') {
+      this.core.setStatus('running')
     }
   }
 
-  #setStatus(status: SessionStatus, detail?: string): void {
-    // Summarising is work even when the engine calls the turn that asked for it over, and a
-    // session that reports idle mid-compaction invites a prompt the engine cannot take yet.
+  // Summarising is work even when the engine calls the turn that asked for it over, and a
+  // session that reports idle mid-compaction invites a prompt the engine cannot take yet.
+  #holdIdleWhileCompacting(status: SessionStatus): boolean {
     if (status === 'idle' && this.#compactionId !== undefined) {
       this.#idleWhileCompacting = true
-      return
+      return true
     }
     this.#idleWhileCompacting = false
-    if (this.#status === status && this.#statusDetail === detail) {
-      return
-    }
-    if (this.#status === 'closed' || this.#status === 'failed') {
-      return
-    }
-    this.#status = status
-    this.#statusDetail = detail
-    this.#emit({ type: 'status_changed', status, detail })
+    return false
   }
 
   // The checklist emit must follow the fan-out: emitting from inside `observe` appends seq n+1 and
   // delivers it before seq n, and every reducer's `seq <= lastSeq` dedupe then drops the message.
-  #emit(body: SessionEventBody): void {
-    const event = this.#log.append(body)
-    this.#subagents.observe(body, event.ts)
-    this.#subscribers.emit(event)
+  #followChecklist(body: SessionEventBody): void {
     const todos = checklistFromBody(body)
-    if (todos) {
-      this.#tasks.reset()
-    }
-    if (body.type === 'conversation_reset') {
+    if (todos || body.type === 'conversation_reset') {
       this.#tasks.reset()
     }
     const items = todos ?? this.#tasks.observe(body)
-    if (items && !sameChecklist(this.#log.checklist, items)) {
-      this.#emit({ type: 'checklist', items })
+    if (items && !sameChecklist(this.core.log.checklist, items)) {
+      this.core.emit({ type: 'checklist', items })
     }
   }
+}
+
+function permissionResult(request: PermissionRequest, decision: PermissionDecision): PermissionResult {
+  if (decision.behavior === 'allow') {
+    return { behavior: 'allow', updatedInput: decision.updatedInput ?? request.input, toolUseID: request.toolUseId }
+  }
+  return { behavior: 'deny', message: decision.message ?? 'Denied', interrupt: decision.interrupt, toolUseID: request.toolUseId }
 }
 
 function recommendedAnswers(input: Record<string, unknown>): Record<string, string> {

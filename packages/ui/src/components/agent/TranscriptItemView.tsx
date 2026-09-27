@@ -1,5 +1,5 @@
 import type { MessageAttachment } from '@workerdeck/protocol'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ShellItem, TranscriptItem } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
 import { compactionText, formatCost, formatDuration, formatRelativeTime } from '../../lib/format.ts'
@@ -13,17 +13,9 @@ import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { ViewableImage } from './image-viewer.tsx'
 import { peerLabel } from '../terminal/items.tsx'
-import { useShellActions } from './shell-actions.tsx'
-import { AgentWriteAction, BookmarkAction, CopyAction, KillShellAction, OpenShellAction, WithActions } from '../terminal/affordances.tsx'
-import {
-  shellAgentWriteLabel,
-  shellBodyLines,
-  shellFailed,
-  shellFooterText,
-  shellGrantable,
-  shellLabel,
-  shellStatusText,
-} from '../terminal/shell-row.ts'
+import { ShellItemActions, useShellActions, useVerifyRunning } from './shell-actions.tsx'
+import { BookmarkAction, CopyAction, WithActions } from '../terminal/affordances.tsx'
+import { shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from '../terminal/shell-row.ts'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
   return (
@@ -166,37 +158,15 @@ function ToolCard({
 function ShellCard({ item }: { item: ShellItem }) {
   const [open, setOpen] = useState(false)
   const actions = useShellActions()
-  const running = item.shell.status === 'running'
   const failed = shellFailed(item)
   const lines = shellBodyLines(item, open)
   const footer = shellFooterText(item, open, lines.length)
 
   const shellId = item.shell.id
-  const verify = actions.verify
-  useEffect(() => {
-    if (running) {
-      void verify(shellId)
-    }
-  }, [running, shellId, verify])
+  useVerifyRunning(item)
 
   return (
-    <WithActions
-      actions={
-        <>
-          {actions.open ? <OpenShellAction onOpen={() => actions.open?.(shellId)} /> : null}
-          {actions.agentWrite && shellGrantable(item.shell) ? (
-            <AgentWriteAction
-              granted={item.shell.agentWrite === true}
-              label={shellAgentWriteLabel(item.shell)}
-              onToggle={() => void actions.agentWrite?.(shellId, item.shell.agentWrite !== true)}
-            />
-          ) : null}
-          {running ? <KillShellAction onKill={() => void actions.kill(shellId)} /> : null}
-          <BookmarkAction id={item.id} />
-          <CopyAction text={item.shell.command} label="Copy command" />
-        </>
-      }
-    >
+    <WithActions actions={<ShellItemActions item={item} />}>
       <div data-slot="shell" className="overflow-hidden rounded-md border border-border bg-surface">
         <div className="flex items-center gap-2 px-3 py-1.5">
           <span className="font-mono text-label text-[var(--wd-shell-accent)]">$</span>

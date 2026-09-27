@@ -1,12 +1,13 @@
 import { listSessions as sdkListSessions } from '@anthropic-ai/claude-agent-sdk'
 import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import { checkClaudeAuth } from './auth.ts'
-import { SessionRunner } from './runner.ts'
+import { SessionRunner, type SessionRunnerConfig } from './runner.ts'
 import type { EngineAdapter } from '../adapter.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
+import { claudeSessionEnv } from './session-env.ts'
 import { composeInstructions } from '../../lib/instructions.ts'
 
-export const claudeAdapter: EngineAdapter = {
+export const claudeAdapter: EngineAdapter<SessionRunnerConfig> = {
   engine: 'claude',
   capabilities: ENGINE_CAPABILITIES.claude,
   catalog: CLAUDE_CATALOG,
@@ -32,6 +33,7 @@ export const claudeAdapter: EngineAdapter = {
     }
     return new SessionRunner({ ...config, instructions: composeInstructions(profile?.session?.instructions, config.instructions) }, id)
   },
+  sessionEnv: claudeSessionEnv,
   async listSessions({ dir, limit, offset }) {
     const sessions = await sdkListSessions({ dir, limit, offset })
     return sessions.map((s) => ({

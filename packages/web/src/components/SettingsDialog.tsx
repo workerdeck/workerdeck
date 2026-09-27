@@ -1,16 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectItemText,
-  SelectTrigger,
-  SelectValue,
-} from '@workerdeck/ui'
+import { Dialog, DialogBody, DialogContent, DialogHeader, OptionSelect, type TranscriptFont, type TranscriptVariant } from '@workerdeck/ui'
 import { ThemeToggle } from './shell/ThemeToggle.tsx'
 import {
   getActionStyle,
@@ -25,8 +14,6 @@ import {
   setTranscriptVariant,
   type ActionStyle,
   type CatchUp,
-  type TranscriptFont,
-  type TranscriptVariant,
 } from '@/lib/settings.ts'
 
 // Reads its stored value on open rather than tracking it live: the panel stamps these at mount, and reshaping every
@@ -45,27 +32,12 @@ function PrefSelect<T extends string>({
   onChange?: (value: T) => void
 }) {
   const [value, setValue] = useState<T>(read)
-  return (
-    <Select
-      value={value}
-      onValueChange={(next) => {
-        setValue(next as T)
-        write(next as T)
-        onChange?.(next as T)
-      }}
-    >
-      <SelectTrigger aria-label={label} className="min-w-40">
-        <SelectValue>{options.find((o) => o.value === value)?.label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            <SelectItemText>{option.label}</SelectItemText>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
+  const change = (next: T) => {
+    setValue(next)
+    write(next)
+    onChange?.(next)
+  }
+  return <OptionSelect label={label} value={value} options={options} onChange={change} className="min-w-40" />
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

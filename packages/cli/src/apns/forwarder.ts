@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { SessionInfo, SessionNotification, SessionNotificationType } from '@workerdeck/protocol'
+import type { SessionNotification, SessionNotificationType } from '@workerdeck/protocol'
 import { type ApnsClient, type ApnsConfig, type ApnsEnvironment, createApnsClient, loadApnsKey, type ApnsRequest } from './client.ts'
 import { createActivityRegistry, type ActivityRegistry } from './activities.ts'
 import { createDeviceRegistry, wantsNotification, type DeviceRegistry } from './devices.ts'
-import { buildLiveActivityPush, type ActivityAttributes, type ActivityContentState } from './live-activity.ts'
+import { buildLiveActivityPush, clamp, sessionLabel, type ActivityAttributes, type ActivityContentState } from './live-activity.ts'
 import { createApnsRoute } from './routes.ts'
 
 // Under APNs' 4 KB payload cap, with room for the alert dictionary to grow.
@@ -32,20 +32,6 @@ const CATEGORY = {
   permission: 'PERMISSION_REQUEST',
   event: 'SESSION_EVENT',
 } as const
-
-function label(session: SessionInfo): string {
-  const title = session.title?.trim()
-  if (title !== undefined && title !== '') {
-    return title
-  }
-  const leaf = session.cwd.split('/').filter(Boolean).at(-1)
-  return leaf !== undefined && leaf !== '' ? leaf : session.id
-}
-
-function oneLine(text: string | undefined, limit = BODY_LIMIT): string {
-  const flat = (text ?? '').replace(/\s+/g, ' ').trim()
-  return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`
-}
 
 // Hashed rather than truncated to 64 bytes: two session ids sharing a prefix must not collapse into each other.
 function collapseKey(sessionId: string): string {
@@ -84,7 +70,7 @@ function titleFor(notification: SessionNotification, name: string): string {
 }
 
 function bodyFor(notification: SessionNotification): string {
-  const preview = oneLine(notification.preview)
+  const preview = clamp(notification.preview ?? '', BODY_LIMIT)
   if (preview !== '') {
     return preview
   }
@@ -107,7 +93,7 @@ function bodyFor(notification: SessionNotification): string {
 // The payload carries routing only - never transcript text - and `requestId` is what a lock-screen Approve has to POST to.
 export function buildPush(notification: SessionNotification, hostId: string | undefined): Omit<ApnsRequest, 'deviceToken' | 'environment'> {
   const permission = notification.type === 'permission_requested'
-  const name = label(notification.session)
+  const name = sessionLabel(notification.session)
   let body = bodyFor(notification)
 
   const build = (text: string): Record<string, unknown> => ({
@@ -129,7 +115,7 @@ export function buildPush(notification: SessionNotification, hostId: string | un
 
   let payload = build(body)
   while (Buffer.byteLength(JSON.stringify(payload)) > MAX_PAYLOAD_BYTES && body.length > 16) {
-    body = oneLine(body, Math.floor(body.length / 2))
+    body = clamp(body, Math.floor(body.length / 2))
     payload = build(body)
   }
 

@@ -7,7 +7,7 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
 ## Tooling
 
 - **oxfmt** formats (`.oxfmtrc.json` at the root, `pnpm format` / `pnpm format:check`).
-- **oxlint** lints (`oxlint.json` at the root, `pnpm lint`, `oxlint --fix` for autofixable rules).
+- **oxlint** lints (`.oxlintrc.json` at the root, `pnpm lint`, `oxlint --fix` for autofixable rules).
 - **VS Code**: the `oxc.oxc-vscode` extension (recommended in `.vscode/extensions.json`) is the
   default formatter for JS/TS with format-on-save enabled in `.vscode/settings.json`.
 
@@ -20,7 +20,7 @@ that `pnpm format` + `pnpm lint --fix` converge the whole repo, and format-on-sa
   multi-line expressions into dense one-liners. 140 is the compromise - we never use
   `// oxfmt-ignore`.
 - **Trailing commas in multi-line structures** (`trailingComma: "all"`). Single-line structures -
-  which is what imports normally are at width 160 - never get one.
+  which is what imports normally are at width 140 - never get one.
 - 2-space indent, spaces not tabs.
 
 ## Lint-enforced (oxlint)
@@ -145,7 +145,7 @@ carries critical information must reach `docs/` before it is removed, not instea
   This flipped on 2026-08-31 (1124 call sites, via `_docs/tools/arrow-to-function.mjs`). Arrow
   functions remain the form for everything that is a *value*: callbacks, object-literal members,
   and anything relying on lexical `this`.
-- **Keep function signatures on one line.** Width 160 makes this the default; don't hand-wrap.
+- **Keep function signatures on one line.** Width 140 makes this the default; don't hand-wrap.
 
 ## Known formatter tradeoff
 

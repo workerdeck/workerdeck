@@ -178,3 +178,24 @@ describe('provider availability probe', () => {
     })
   })
 })
+
+describe('adapter hooks', () => {
+  it('declares forkSession for the claude engine only', () => {
+    expect(ENGINE_CAPABILITIES.claude.forkSession).toBe(true)
+    expect(ENGINE_CAPABILITIES.codex.forkSession).toBe(false)
+    expect(ENGINE_CAPABILITIES.provider.forkSession).toBe(false)
+  })
+
+  it('pins CLAUDE_CONFIG_DIR only when the profile names a different config dir', () => {
+    const sessionEnv = claudeAdapter.sessionEnv!
+    const base = { CLAUDE_CONFIG_DIR: '/tmp/wd-claude-a', HOME: '/home/x' }
+    expect(sessionEnv({ name: 'same', configDir: '/tmp/wd-claude-a' }, base)).toBe(base)
+    expect(sessionEnv({ name: 'none' }, base)).toBe(base)
+    expect(sessionEnv({ name: 'other', configDir: '/tmp/wd-claude-b' }, base)).toEqual({ ...base, CLAUDE_CONFIG_DIR: '/tmp/wd-claude-b' })
+  })
+
+  it('leaves the session env to the adapters that own one', () => {
+    expect(codexAdapter.sessionEnv).toBeUndefined()
+    expect(providerAdapter.sessionEnv).toBeUndefined()
+  })
+})

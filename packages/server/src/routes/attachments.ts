@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { attachmentKind } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
-import { json, readRawBody, untrustedDownloadHeaders } from '../lib/http.ts'
+import { fail, json, readRawBody, sendUntrusted } from '../lib/http.ts'
+import { engineOf } from '../lib/profile-env.ts'
 import type { ServerContext } from '../context.ts'
 
 export async function handleAttachments(
@@ -17,29 +18,23 @@ export async function handleAttachments(
     const url = new URL(req.url ?? '/', 'http://internal')
     const mediaType = req.headers['content-type']
     if (!mediaType) {
-      json(res, 400, { error: 'content-type header is required' })
-      return
+      fail(400, 'content-type header is required')
     }
-    const accepted = (session.capabilities ?? ENGINE_CAPABILITIES[session.engine ?? 'claude']).attachments
+    const accepted = (session.capabilities ?? ENGINE_CAPABILITIES[engineOf(session)]).attachments
     const kind = attachmentKind(mediaType)
     if (kind && !accepted.includes(kind === 'document' ? 'pdf' : kind)) {
-      json(res, 415, {
-        error: `the ${session.engine ?? 'claude'} engine does not accept ${kind} attachments`,
-      })
-      return
+      fail(415, `the ${engineOf(session)} engine does not accept ${kind} attachments`)
     }
     let body: Buffer
     try {
       body = await readRawBody(req, attachmentStore.maxFileBytes)
     } catch {
-      json(res, 413, { error: 'attachment is larger than the limit' })
-      return
+      fail(413, 'attachment is larger than the limit')
     }
     const result = attachmentStore.put(sessionId, url.searchParams.get('name') ?? 'attachment', mediaType, body)
     if (!result.ok) {
       const status = result.error.code === 'unsupported_type' ? 415 : result.error.code === 'empty' ? 400 : 413
-      json(res, status, { error: result.error.message })
-      return
+      fail(status, result.error.message)
     }
     json(res, 201, { attachment: result.attachment })
     return
@@ -47,12 +42,9 @@ export async function handleAttachments(
   if (req.method === 'GET' && attachmentId !== undefined) {
     const found = attachmentStore.get(sessionId, attachmentId)
     if (!found) {
-      json(res, 404, { error: 'attachment not found' })
-      return
+      fail(404, 'attachment not found')
     }
-    const bytes = Buffer.from(found.data, 'base64')
-    res.writeHead(200, untrustedDownloadHeaders(found.name, found.mediaType, bytes.length))
-    res.end(bytes)
+    sendUntrusted(res, found.name, found.mediaType, Buffer.from(found.data, 'base64'))
     return
   }
   json(res, 405, { error: 'method not allowed' })

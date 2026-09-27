@@ -133,8 +133,7 @@ export function activePricing(): PricingTable {
   return activeTable
 }
 
-// The table is process-wide configuration, like the bundled rates it replaces entries in, so the gateway sets it
-// once at start and every pricing call that names no table of its own reads it.
+/** @deprecated Mutates a process-wide table that every caller naming no table reads. Merge with `mergePricing` and pass the table explicitly. */
 export function setPricingOverrides(overrides: unknown): PricingMerge {
   const merged = mergePricing(overrides)
   activeTable = merged.pricing

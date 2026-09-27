@@ -1,7 +1,13 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import type { Runner } from '@workerdeck/core'
-import { type ByModel, type ProfileSpend, costOfByModel, mergeByModel, subscriptionComparison } from '@workerdeck/protocol'
+import {
+  type ByModel,
+  type PricingTable,
+  type ProfileSpend,
+  costOfByModel,
+  mergeByModel,
+  subscriptionComparison,
+} from '@workerdeck/protocol'
+import { readJsonOr, writeJsonAtomic } from '../lib/atomic-file.ts'
 
 export type SpendRecord = { days: Record<string, Record<string, ByModel>> }
 
@@ -11,6 +17,7 @@ export type SpendStore = {
 }
 
 export type SpendLedgerOptions = {
+  pricing?: PricingTable
   store?: SpendStore
   monthlySubscriptionUsd?: (profile: string) => number | undefined
   retentionDays?: number
@@ -130,11 +137,11 @@ export class SpendLedger {
     if (Object.keys(month).length === 0) {
       return undefined
     }
-    const weekCost = costOfByModel(week)
+    const weekCost = costOfByModel(week, this.#options.pricing)
     const monthlySubscriptionUsd = this.#options.monthlySubscriptionUsd?.(profile)
     return {
       weekUsd: weekCost.total,
-      monthUsd: costOfByModel(month).total,
+      monthUsd: costOfByModel(month, this.#options.pricing).total,
       weekByModel: week,
       unpricedShare: weekCost.unpricedShare,
       monthlySubscriptionUsd,
@@ -195,22 +202,15 @@ export class SpendLedger {
 export function createFileSpendStore(path: string, onError?: (error: unknown) => void): SpendStore {
   return {
     async load() {
-      try {
-        const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown
-        if (parsed === null || typeof parsed !== 'object' || typeof (parsed as SpendRecord).days !== 'object') {
-          return undefined
-        }
-        return parsed as SpendRecord
-      } catch {
+      const parsed = await readJsonOr(path, undefined)
+      if (parsed === null || typeof parsed !== 'object' || typeof (parsed as SpendRecord).days !== 'object') {
         return undefined
       }
+      return parsed as SpendRecord
     },
     async save(record) {
       try {
-        await mkdir(dirname(path), { recursive: true })
-        const temp = `${path}.${process.pid}.tmp`
-        await writeFile(temp, JSON.stringify(record))
-        await rename(temp, path)
+        await writeJsonAtomic(path, record)
       } catch (error) {
         onError?.(error)
       }

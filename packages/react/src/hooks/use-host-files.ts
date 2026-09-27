@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { isRouteUnsupported, useAliveRef } from '../lib/async-guards.ts'
@@ -135,7 +136,7 @@ export function useHostFileTree(client: WorkerDeckClient, cwd: string | undefine
             setUnsupported(true)
             return
           }
-          setError(e instanceof Error ? e.message : 'Could not read that directory')
+          setError(errorMessage(e, 'Could not read that directory'))
         })
     },
     [client, unsupported],

@@ -49,6 +49,9 @@ export class SessionRegistry {
     const existing = this.#sessions.get(runner.id)
     this.#sessions.set(runner.id, runner)
     if (existing !== runner) {
+      if (existing) {
+        this.#detach(runner.id)
+      }
       this.#retain(runner.id, this.#options.onRegister?.(runner))
       for (const listener of this.#observers) {
         this.#retain(runner.id, listener(runner))
@@ -57,8 +60,8 @@ export class SessionRegistry {
     return runner
   }
 
-  // For a watcher attached outside `onRegister` - `watchAuthSource` is the one in this package - that must still
-  // come off when the runner leaves. Without it a released runner keeps a listener from a discarded generation.
+  // For a watcher attached outside `onRegister` that must still come off when the runner leaves. Without it a
+  // released runner keeps a listener from a discarded generation.
   retain(id: string, detach: () => void): void {
     this.#retain(id, detach)
   }

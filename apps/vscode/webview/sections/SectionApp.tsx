@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { WorkerDeckClient } from '@workerdeck/client'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
-import type { SessionVitals } from '@workerdeck/ui'
+import { rateLimitWindows } from '@workerdeck/react'
+import { ContextPanel, UsageMeters, type SessionVitals } from '@workerdeck/ui'
 import type { SidebarState } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
-import { ContextSection, InfoSection, McpSection, UsageSection } from './content.tsx'
+import { InfoSection, McpSection } from './content.tsx'
 
 export type SectionKind = 'info' | 'context' | 'usage' | 'mcp'
 
@@ -62,7 +63,7 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
       }
       return (
         <Pad>
-          <ContextSection usage={vitals?.contextUsage} />
+          <ContextPanel usage={vitals?.contextUsage} engine={engine} />
         </Pad>
       )
     }
@@ -70,9 +71,14 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
       if (!caps.rateLimits) {
         return <Empty>{engine} reports no plan usage.</Empty>
       }
+      const windows = rateLimitWindows({ rateLimits: vitals?.rateLimits })
       return (
         <Pad>
-          <UsageSection rateLimits={vitals?.rateLimits} />
+          {windows.length === 0 ? (
+            <div className="py-1 text-body-sm text-fg-4">No plan-usage reading yet.</div>
+          ) : (
+            <UsageMeters windows={windows} className="gap-4" />
+          )}
         </Pad>
       )
     }
@@ -82,7 +88,7 @@ export function SectionApp({ bridge, kind }: { bridge: Bridge; kind: SectionKind
       }
       return (
         <Pad>
-          <McpSection client={client} sessionId={info.id} />
+          <McpSection client={client} sessionId={info.id} canManageServers={caps.mcpServerActions} />
         </Pad>
       )
     }

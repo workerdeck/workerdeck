@@ -85,7 +85,7 @@ describe('sessionSteps', () => {
       ],
     } as unknown as SessionInfo
     expect(sessionSteps(info, () => {}, 'all').map((s) => s.key)).toEqual(['run', 'done', 'bad'])
-    expect(sessionSteps(info, () => {}, 'active').map((s) => s.key)).toEqual(['run', 'bad'])
+    expect(sessionSteps(info, () => {}, 'active').map((s) => s.key)).toEqual(['run'])
     expect(sessionSteps(info, () => {}, 'none')).toEqual([])
   })
 })
@@ -157,9 +157,10 @@ describe('sessionSteps shells', () => {
     const info = {
       shells: [shell({ id: 'run' }), shell({ id: 'bad', ordinal: 2, status: 'exited', exitCode: 1, endedAt: 9000 })],
     } as unknown as SessionInfo
-    const steps = sessionSteps(info, () => {}, 'all', opts())
+    const steps = sessionSteps(info, () => {}, 'all', opts({ show: 'all' }))
     expect(steps.map((s) => s.state)).toEqual(['running', 'failed'])
     expect(steps.map((s) => s.detail)).toEqual([undefined, 'exit 1'])
+    expect(sessionSteps(info, () => {}, 'all', opts()).map((s) => s.key)).toEqual(['run'])
   })
 
   it('never promotes a clean exit', () => {
@@ -181,8 +182,8 @@ describe('visibleSubagents', () => {
     subagents: [sub({ toolUseId: 'run' }), sub({ toolUseId: 'done', status: 'done' }), sub({ toolUseId: 'bad', status: 'failed' })],
   } as unknown as SessionInfo
 
-  it('keeps a failed record under active: it is not a completed one', () => {
-    expect(visibleSubagents(info, 'active').map((s) => s.toolUseId)).toEqual(['run', 'bad'])
+  it('keeps only running records under active', () => {
+    expect(visibleSubagents(info, 'active').map((s) => s.toolUseId)).toEqual(['run'])
   })
 
   it('keeps every record under all, and none under none', () => {

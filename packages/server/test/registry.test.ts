@@ -1,5 +1,5 @@
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SessionRegistry } from '../src/services/registry.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
@@ -83,5 +83,21 @@ describe('SessionRegistry detachers', () => {
     registry.register(runner('a'))
     expect(() => registry.evict('a')).not.toThrow()
     expect(seen).toEqual(['a'])
+  })
+})
+
+describe('SessionRegistry.register', () => {
+  it("runs the replaced runner's detachers when another runner takes its id", () => {
+    const detached: string[] = []
+    const registry = new SessionRegistry({ onRegister: (r) => () => detached.push(r.id) })
+    const first = runner('a')
+    const detachFirst = vi.fn()
+    registry.retain('a', detachFirst)
+    registry.register(first)
+    registry.register(runner('a'))
+    expect(detachFirst).toHaveBeenCalledTimes(1)
+    expect(detached).toEqual(['a'])
+    registry.evict('a')
+    expect(detached).toEqual(['a', 'a'])
   })
 })

@@ -1,44 +1,22 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ListProfilesResponse, ProfileInfo } from '@workerdeck/protocol'
 import { client } from '../lib/client.ts'
 import { readPref, writePref } from '../lib/storage.ts'
+import { createPolledStore } from '../lib/store.ts'
 
 const EMPTY: ListProfilesResponse = { profiles: [] }
-let cache: ListProfilesResponse | undefined
-let inflight: Promise<ListProfilesResponse> | undefined
-const subscribers = new Set<(value: ListProfilesResponse) => void>()
+const store = createPolledStore<ListProfilesResponse>(EMPTY, { load: loadProfiles })
 
-async function load(): Promise<ListProfilesResponse> {
+async function loadProfiles(): Promise<void> {
   // No gateway yet, because the probe is still out or none is configured: answer empty rather than throw.
-  const loaded = await (client()
+  const listed = await client()
     ?.listProfiles()
-    .catch(() => EMPTY) ?? Promise.resolve(EMPTY))
-  cache = loaded
-  for (const notify of subscribers) {
-    notify(loaded)
-  }
-  return loaded
+    .catch(() => EMPTY)
+  store.set(listed ?? EMPTY)
 }
 
 export function useProfileList(): ListProfilesResponse & { refresh: () => Promise<void> } {
-  const [value, setValue] = useState<ListProfilesResponse>(cache ?? EMPTY)
-
-  useEffect(() => {
-    subscribers.add(setValue)
-    if (!cache) {
-      void (inflight ??= load())
-    }
-    return () => {
-      subscribers.delete(setValue)
-    }
-  }, [])
-
-  const refresh = useCallback(async () => {
-    inflight = load()
-    await inflight
-  }, [])
-
-  return { ...value, refresh }
+  return { ...store.use(), refresh: store.refresh }
 }
 
 export function useProfiles(): ProfileInfo[] {

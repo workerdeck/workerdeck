@@ -312,6 +312,40 @@ describe('deferred execution: parking and result ingestion', () => {
     expect(jobEvents.map((e) => e.type)).toContain('job_resumed')
     expect(second.id).not.toBe(first.id)
   })
+
+  it('leaves a queued job running, slot and all, when the runner refuses the park', async () => {
+    const refusing: ParkableRunner[] = []
+    const jobEvents: JobEvent[] = []
+    const h = await startServer({
+      queue: { maxConcurrency: 1, onEvent: (event) => jobEvents.push(event) },
+      createEngineRunner: ({ config }) => {
+        const runner = new ParkableRunner(`refusing-${refusing.length + 1}`, config)
+        runner.park = () => undefined
+        refusing.push(runner)
+        return runner
+      },
+    })
+    const submit = async (): Promise<JobInfo> => {
+      const res = await fetch(`${h.base}/jobs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ session: { cwd: '/tmp/project', profile: 'kimi', prompt: 'go' } }),
+      })
+      return ((await res.json()) as { job: JobInfo }).job
+    }
+    const first = await submit()
+    await submit()
+    await vi.waitFor(() => expect(refusing).toHaveLength(1))
+
+    refusing[0]!.defer('exec-1')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const job = (await fetch(`${h.base}/jobs/${first.id}`).then((r) => r.json())) as { job: JobInfo }
+    expect(job.job.status).toBe('running')
+    expect(refusing).toHaveLength(1)
+    expect(jobEvents.map((e) => e.type)).not.toContain('job_parked')
+    const stats = (await fetch(`${h.base}/queue`).then((r) => r.json())) as { stats: { running: number; parked: number } }
+    expect(stats.stats).toMatchObject({ running: 1, parked: 0 })
+  })
 })
 
 // Two servers over one directory, sequentially - the only way a file store is ever legal.

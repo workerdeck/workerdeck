@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
-import { isJobRun, sessionState, type SessionInfo, type SessionRow } from '@workerdeck/protocol'
+import { isJobRun, sessionState, type SessionInfo, type SessionRow, errorMessage } from '@workerdeck/protocol'
 import { clientFor, currentHosts, isLocal, onHostsChange, type GatewayHost } from '../lib/hosts.ts'
-import { createStore } from '../lib/store.ts'
+import { createPolledStore } from '../lib/store.ts'
 import { useUnseen } from './useUnseen.ts'
 
 const IDLE_MS = 5_000
@@ -18,44 +18,35 @@ export type HostSnapshot = {
 
 type State = { snapshots: HostSnapshot[]; loaded: boolean }
 
-const store = createStore<State>({ snapshots: [], loaded: false })
-const emit = store.set
+const store = createPolledStore<State>({ snapshots: [], loaded: false }, { load: loadSessions })
 
-let inFlight: Promise<void> | undefined
 let lastFetchAt = 0
 let nudgeTimer: ReturnType<typeof setTimeout> | undefined
 
 // Concurrent callers share the one pass in flight.
 export function refreshSessions(): Promise<void> {
-  inFlight ??= (async () => {
-    lastFetchAt = Date.now()
-    try {
-      const hosts = currentHosts()
-      const previous = new Map(store.get().snapshots.map((s) => [s.host.id, s]))
-      const snapshots = await Promise.all(
-        hosts.map(async (host): Promise<HostSnapshot> => {
-          const client = clientFor(host.id)
-          if (!client) {
-            return { host, sessions: [], error: 'unusable address' }
-          }
-          try {
-            return { host, sessions: await client.listSessions() }
-          } catch (e) {
-            // Keep this gateway's last good rows, because one failed poll is a blip.
-            return {
-              host,
-              sessions: previous.get(host.id)?.sessions ?? [],
-              error: e instanceof Error ? e.message : String(e),
-            }
-          }
-        }),
-      )
-      emit({ snapshots, loaded: true })
-    } finally {
-      inFlight = undefined
-    }
-  })()
-  return inFlight
+  return store.refresh()
+}
+
+async function loadSessions(): Promise<void> {
+  lastFetchAt = Date.now()
+  const hosts = currentHosts()
+  const previous = new Map(store.get().snapshots.map((s) => [s.host.id, s]))
+  const snapshots = await Promise.all(
+    hosts.map(async (host): Promise<HostSnapshot> => {
+      const client = clientFor(host.id)
+      if (!client) {
+        return { host, sessions: [], error: 'unusable address' }
+      }
+      try {
+        return { host, sessions: await client.listSessions() }
+      } catch (e) {
+        // Keep this gateway's last good rows, because one failed poll is a blip.
+        return { host, sessions: previous.get(host.id)?.sessions ?? [], error: errorMessage(e) }
+      }
+    }),
+  )
+  store.set({ snapshots, loaded: true })
 }
 
 // Coalesced and rate limited, so it is safe to call from a streaming callback.
@@ -98,12 +89,7 @@ export function useSessions() {
     }),
   )
 
-  useEffect(() => {
-    arm(busy)
-    if (!store.get().loaded) {
-      void refreshSessions()
-    }
-  }, [busy])
+  useEffect(() => arm(busy), [busy])
 
   return { ...snapshot, refresh: refreshSessions }
 }

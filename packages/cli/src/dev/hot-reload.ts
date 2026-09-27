@@ -47,7 +47,7 @@ async function persistProvider(parking: Parking, runner: CarriedRunner): Promise
 // `unsupported` rather than a throw: the flag reaches this CLI from a VS Code setting and a config file as well as
 // from a keyboard, and a gateway that refuses to start because one dev convenience is unavailable is the worse
 // failure. The caller serves without it and says so.
-export async function runHotReload(flags: CliFlags): Promise<number | 'unsupported'> {
+export async function runHotReload(flags: CliFlags, env: NodeJS.ProcessEnv = process.env): Promise<number | 'unsupported'> {
   if (!here.endsWith('.ts') || !existsSync(join(packagesDir, 'server', 'src'))) {
     process.stderr.write(
       '[workerdeck] --hot-reload needs a source checkout; this build is one bundled file with nothing to swap.\n' +
@@ -93,7 +93,7 @@ export async function runHotReload(flags: CliFlags): Promise<number | 'unsupport
     const config = (await import(`${packagesUrl}cli/src/config.ts`)) as typeof import('../config.ts')
     const lib = (await import(`${packagesUrl}cli/src/lib/instance.ts`)) as typeof import('../lib/instance.ts')
     const loaded = await config.loadConfigFile(flags.config)
-    const resolved = config.resolveInstanceConfig(flags, loaded)
+    const resolved = config.resolveInstanceConfig(flags, loaded, env)
     stateDir = resolved.stateDir
     // One store object for the whole process. A file store is single-process by contract, and two generations
     // holding two of them over one directory is exactly the two-servers-one-directory case it refuses to be; an

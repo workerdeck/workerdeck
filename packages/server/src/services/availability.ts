@@ -2,7 +2,7 @@ import { checkClaudeAuth } from '@workerdeck/core'
 import type { ClaudeAuthProbe, EngineAdapter, EngineAvailability } from '@workerdeck/core'
 import type { ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
 import { engineOf } from '../lib/profile-env.ts'
-import type { Refusal } from './profiles.ts'
+import type { Refusal } from '../lib/http.ts'
 
 const AVAILABILITY_TTL_MS = 60_000
 
@@ -11,6 +11,7 @@ export type AvailabilityTrackerOptions = {
   requireAvailableProfile?: boolean
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
   sessionEnvFor: (profile: ProfileInfo) => Record<string, string | undefined>
+  onError?: (error: unknown) => void
 }
 
 export class AvailabilityTracker {
@@ -64,7 +65,7 @@ export class AvailabilityTracker {
           this.#warned.delete(profile.name)
         }
       })
-      .catch(() => {})
+      .catch((error: unknown) => this.#opts.onError?.(error))
   }
 
   checkAvailable(profile: ProfileInfo | undefined): Refusal | null {

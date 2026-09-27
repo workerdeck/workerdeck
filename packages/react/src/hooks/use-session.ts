@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { WorkerDeckError } from '@workerdeck/client'
 import type { WorkerDeckClient, SessionHandle } from '@workerdeck/client'
 import { DEFAULT_PRICING, PROTOCOL_VERSION, mergePricing } from '@workerdeck/protocol'
 import type { AttachedFrame, ModelOption, PermissionMode, PricingTable, SessionEvent, ShellInfo } from '@workerdeck/protocol'
@@ -249,8 +250,10 @@ export function useClaudeSession(
         const text = await client.shellOutput(sessionId, shellId, { view: 'text' })
         dispatch({ type: 'transcript_hydrate_shell_output', shellId, text })
         return true
-      } catch {
-        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: undefined })
+      } catch (error) {
+        if (isNotFound(error)) {
+          dispatch({ type: 'transcript_hydrate_shell', shellId, shell: undefined })
+        }
         return false
       }
     },
@@ -259,16 +262,21 @@ export function useClaudeSession(
 
   const verifyShell = useCallback(
     async (shellId: string): Promise<boolean> => {
-      if (!sessionId || verifiedRef.current.has(shellId)) {
+      const verified = verifiedRef.current
+      if (!sessionId || verified.has(shellId)) {
         return false
       }
-      verifiedRef.current.add(shellId)
+      verified.add(shellId)
       try {
         const record = await client.getShell(sessionId, shellId)
         dispatch({ type: 'transcript_hydrate_shell', shellId, shell: record })
         return true
-      } catch {
-        dispatch({ type: 'transcript_hydrate_shell', shellId, shell: undefined })
+      } catch (error) {
+        if (isNotFound(error)) {
+          dispatch({ type: 'transcript_hydrate_shell', shellId, shell: undefined })
+        } else {
+          verified.delete(shellId)
+        }
         return false
       }
     },
@@ -307,6 +315,21 @@ export function useClaudeSession(
     [client, sessionId],
   )
 
+  const actions = useMemo(
+    () => ({
+      send: (text: string, attachmentIds?: string[]) => handleRef.current?.send(text, attachmentIds),
+      approve: (requestId: string, updatedInput?: Record<string, unknown>) => handleRef.current?.approve(requestId, updatedInput),
+      deny: (requestId: string, message?: string, interrupt?: boolean) => handleRef.current?.deny(requestId, message, interrupt),
+      interrupt: () => handleRef.current?.interrupt(),
+      clearContext: () => handleRef.current?.clearContext(),
+      runShell: (command: string) => handleRef.current?.runShell(command),
+      setPermissionMode: (mode: PermissionMode) => handleRef.current?.setPermissionMode(mode),
+      setModel: (model?: string) => handleRef.current?.setModel(model),
+      closeSession: () => handleRef.current?.closeSession(),
+    }),
+    [],
+  )
+
   return useMemo(
     () => ({
       state,
@@ -319,15 +342,7 @@ export function useClaudeSession(
       models,
       effectiveModel: state.model ?? state.defaultModel,
       handle: handleState,
-      send: (text, attachmentIds) => handleRef.current?.send(text, attachmentIds),
-      approve: (requestId, updatedInput) => handleRef.current?.approve(requestId, updatedInput),
-      deny: (requestId, message, interrupt) => handleRef.current?.deny(requestId, message, interrupt),
-      interrupt: () => handleRef.current?.interrupt(),
-      clearContext: () => handleRef.current?.clearContext(),
-      runShell: (command) => handleRef.current?.runShell(command),
-      setPermissionMode: (mode) => handleRef.current?.setPermissionMode(mode),
-      setModel: (model) => handleRef.current?.setModel(model),
-      closeSession: () => handleRef.current?.closeSession(),
+      ...actions,
       reconnectNow,
       loadFullResult,
       loadShellOutput,
@@ -345,6 +360,7 @@ export function useClaudeSession(
       pricing,
       models,
       handleState,
+      actions,
       reconnectNow,
       loadFullResult,
       loadShellOutput,
@@ -353,6 +369,10 @@ export function useClaudeSession(
       setShellAgentWrite,
     ],
   )
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof WorkerDeckError && error.status === 404
 }
 
 function useProfileModelFallback(client: WorkerDeckClient, sessionId: string | undefined, state: TranscriptState): ModelOption[] {

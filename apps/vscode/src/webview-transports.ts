@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { WebSocket as NodeWebSocket } from 'ws'
 import type { HostStore, GatewayHost } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
@@ -99,7 +100,7 @@ export class WebviewTransportHost {
         kind: 'wd-fetch-result',
         id: msg.id,
         ok: false,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       })
     } finally {
       this.#aborts.delete(msg.id)

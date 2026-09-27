@@ -99,25 +99,21 @@ public enum StepDisplay: String, Codable, Sendable, Hashable, CaseIterable {
 
 public typealias SubagentDisplay = StepDisplay
 
-/// `.active` is ``promotedShells``; `.all` adds every shell that has ended,
-/// whatever its exit. Mirror of protocol's `visibleShells`.
+/// `.active` is the promoted running shells; `.all` adds every shell that has
+/// ended, whatever its exit. Mirror of protocol's `visibleShells`.
 public func visibleShells(_ info: SessionInfo, _ show: StepDisplay, now: Double) -> [ShellInfo] {
-  switch show {
-  case .none: return []
-  case .active: return promotedShells(info, now: now)
-  case .all:
-    return (info.shells ?? []).filter {
-      $0.status != .running || now - $0.startedAt >= WorkerProtocol.shellPromoteMs
-    }
+  guard show != .none else { return [] }
+  let shells = (info.shells ?? []).filter {
+    $0.status != .running || now - $0.startedAt >= WorkerProtocol.shellPromoteMs
   }
+  return show == .active ? shells.filter { $0.status == .running } : shells
 }
 
-/// A failed sub-agent is not a completed one: `.active` keeps it, because it is
-/// the row most worth reading. Mirror of protocol's `visibleSubagents`.
+/// `.active` keeps only running records. Mirror of protocol's `visibleSubagents`.
 public func visibleSubagents(_ info: SessionInfo, _ show: SubagentDisplay) -> [SubagentInfo] {
   guard show != .none else { return [] }
   let subagents = info.subagents ?? []
-  return show == .all ? subagents : subagents.filter { $0.status != .done }
+  return show == .all ? subagents : subagents.filter { $0.status == .running }
 }
 
 /// A sub-agent's identity on one line: `Explore · find the auth check`.

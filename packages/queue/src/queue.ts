@@ -12,7 +12,7 @@ import {
   type QueueStats,
   type SessionEvent,
 } from '@workerdeck/protocol'
-import { InMemoryQueueAdapter, type JobRecord, type QueueAdapter } from './adapter.ts'
+import { earliestRunAt, InMemoryQueueAdapter, type JobRecord, type QueueAdapter } from './adapter.ts'
 
 export type JobQueueOptions = {
   createRunner: (config: SessionRunnerConfig) => Runner | Promise<Runner>
@@ -30,7 +30,14 @@ export type JobQueueOptions = {
   webhookAttempts?: number
   webhookRetryDelayMs?: number
   onEvent?: (event: JobEvent) => void
+  onError?: (error: unknown, context: JobQueueErrorContext) => void
 }
+
+export type JobQueueErrorPhase = 'pump' | 'start' | 'event' | 'finalize' | 'park' | 'resume'
+
+export type JobQueueErrorContext = { jobId?: string; phase: JobQueueErrorPhase }
+
+type StartingJob = { canceled: boolean }
 
 type RunningJob = {
   record: JobRecord
@@ -50,6 +57,20 @@ type RunningJob = {
   parkedExecutionId?: string
   parkTimer?: ReturnType<typeof setTimeout>
   parkedMs: number
+}
+
+const MAX_TIMER_MS = 2 ** 31 - 1
+
+const PUMP_RETRY_MS = 5_000
+
+function nextUtcMidnight(epochMs: number): number {
+  const now = new Date(epochMs)
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)
+}
+
+function reportToConsole(error: unknown, context: JobQueueErrorContext): void {
+  const job = context.jobId ? ` (job ${context.jobId})` : ''
+  console.warn(`[workerdeck] queue ${context.phase} failed${job}: ${error instanceof Error ? error.message : String(error)}`)
 }
 
 function dayKey(epochMs: number): string {
@@ -102,8 +123,13 @@ export class JobQueue {
   #adapter: QueueAdapter
   #running = new Map<string, RunningJob>()
   #parked = new Map<string, RunningJob>()
+  #starting = new Map<string, StartingJob>()
   #pumping = false
+  #pumpRequested = false
+  #paused = false
   #closed = false
+  #wakeTimer: ReturnType<typeof setTimeout> | undefined
+  #wakeAt = Number.POSITIVE_INFINITY
   #offWork: (() => void) | undefined
   #sweepTimer: ReturnType<typeof setInterval> | undefined
   #retryTimers = new Set<ReturnType<typeof setTimeout>>()
@@ -111,7 +137,7 @@ export class JobQueue {
   constructor(options: JobQueueOptions) {
     this.#options = options
     this.#adapter = options.adapter ?? new InMemoryQueueAdapter()
-    this.#offWork = this.#adapter.onWork?.(() => void this.#pump())
+    this.#offWork = this.#adapter.onWork?.(() => this.#pump())
     const retention = options.retention
     if (retention) {
       const interval = retention.sweepIntervalMs ?? Math.min(retention.maxAgeMs, 60_000)
@@ -155,7 +181,7 @@ export class JobQueue {
     this.#emit(record, { type: 'job_submitted', job: info, ts: Date.now() }, undefined, {
       skipWebhook: true,
     })
-    void this.#pump()
+    this.#pump()
     return info
   }
 
@@ -165,6 +191,11 @@ export class JobQueue {
 
   async list(): Promise<JobInfo[]> {
     return (await this.#adapter.list()).map((j) => j.info)
+  }
+
+  canParkSession(sessionId: string): boolean {
+    const job = this.#bySession(this.#running, sessionId)
+    return !job || (!job.finalized && !job.killReason)
   }
 
   onSessionParking(sessionId: string, executionId: string): boolean {
@@ -184,29 +215,13 @@ export class JobQueue {
     job.parkedExecutionId = executionId
     this.#running.delete(job.record.info.id)
     this.#parked.set(job.record.info.id, job)
-    const parkedLimit = this.#options.maxParkedDurationMs
-    if (parkedLimit !== undefined) {
-      job.parkTimer = setTimeout(
-        () => this.#kill(job, `job exceeded max parked duration (${parkedLimit}ms)`),
-        Math.max(0, parkedLimit - job.parkedMs),
-      )
-      job.parkTimer.unref?.()
-    }
-    void this.#recordPark(job, executionId)
-    return true
-  }
-
-  async #recordPark(job: RunningJob, executionId: string): Promise<void> {
-    const updated = await this.#adapter.update(job.record.info.id, {
-      status: 'parked',
-      parkedAt: job.parkedAt,
-      parkedExecutionId: executionId,
+    this.#armLimit(job, 'parkTimer', this.#options.maxParkedDurationMs, job.parkedMs, 'max parked duration')
+    const patch: Partial<JobInfo> = { status: 'parked', parkedAt: job.parkedAt, parkedExecutionId: executionId }
+    this.#spawn('park', job.record.info.id, async () => {
+      await this.#recordTransition(job, patch, (info) => ({ type: 'job_parked', job: info, executionId, ts: Date.now() }))
+      this.#pump()
     })
-    if (updated) {
-      job.record = updated
-    }
-    this.#emit(job.record, { type: 'job_parked', job: job.record.info, executionId, ts: Date.now() }, job)
-    void this.#pump()
+    return true
   }
 
   onSessionResumed(sessionId: string, runner: Runner): void {
@@ -225,28 +240,29 @@ export class JobQueue {
     job.runner = runner
     this.#parked.delete(job.record.info.id)
     this.#running.set(job.record.info.id, job)
-    const durationLimit = this.#effectiveDurationLimit(job.record.request)
-    if (durationLimit !== undefined) {
-      job.durationTimer = setTimeout(
-        () => this.#kill(job, `job exceeded max duration (${durationLimit}ms)`),
-        Math.max(0, durationLimit - job.runningMs),
-      )
-      job.durationTimer.unref?.()
-    }
-    job.unsubscribe = runner.subscribe((event) => void this.#handleEvent(job, event), job.lastSeq)
-    void this.#recordResume(job, executionId)
+    this.#armLimit(job, 'durationTimer', this.#effectiveDurationLimit(job.record.request), job.runningMs, 'max duration')
+    job.unsubscribe = this.#subscribe(job, job.lastSeq)
+    const patch: Partial<JobInfo> = { status: 'running', parkedAt: undefined, parkedExecutionId: undefined }
+    this.#spawn('resume', job.record.info.id, () =>
+      this.#recordTransition(job, patch, (info) => ({ type: 'job_resumed', job: info, executionId, ts: Date.now() })),
+    )
   }
 
-  async #recordResume(job: RunningJob, executionId: string): Promise<void> {
-    const updated = await this.#adapter.update(job.record.info.id, {
-      status: 'running',
-      parkedAt: undefined,
-      parkedExecutionId: undefined,
-    })
+  async #recordTransition(job: RunningJob, patch: Partial<JobInfo>, event: (info: JobInfo) => JobEvent): Promise<void> {
+    const updated = await this.#adapter.update(job.record.info.id, patch)
     if (updated) {
       job.record = updated
     }
-    this.#emit(job.record, { type: 'job_resumed', job: job.record.info, executionId, ts: Date.now() }, job)
+    this.#emit(job.record, event(job.record.info), job)
+  }
+
+  #armLimit(job: RunningJob, key: 'durationTimer' | 'parkTimer', limit: number | undefined, spentMs: number, label: string): void {
+    if (limit === undefined) {
+      return
+    }
+    const timer = setTimeout(() => this.#kill(job, `job exceeded ${label} (${limit}ms)`), Math.max(0, limit - spentMs))
+    timer.unref?.()
+    job[key] = timer
   }
 
   #bySession(jobs: Map<string, RunningJob>, sessionId: string): RunningJob | undefined {
@@ -270,9 +286,21 @@ export class JobQueue {
       await this.#finalize(running, this.#abortPatch(running, 'canceled'))
       return running.record.info
     }
+    const starting = this.#starting.get(id)
+    if (starting) {
+      if (starting.canceled) {
+        return record.info
+      }
+      starting.canceled = true
+      return this.#markCanceled(id)
+    }
     if (record.info.status !== 'queued') {
       return record.info
     }
+    return this.#markCanceled(id)
+  }
+
+  async #markCanceled(id: string): Promise<JobInfo | null> {
     const updated = await this.#adapter.update(id, {
       status: 'canceled',
       finishedAt: Date.now(),
@@ -284,19 +312,35 @@ export class JobQueue {
     return updated?.info ?? null
   }
 
+  pause(): void {
+    this.#paused = true
+  }
+
+  resume(): void {
+    if (!this.#paused) {
+      return
+    }
+    this.#paused = false
+    this.#pump()
+  }
+
+  get paused(): boolean {
+    return this.#paused
+  }
+
   async stats(): Promise<QueueStats> {
     const jobs = await this.#adapter.list()
     const dailyTokensUsed = await this.#adapter.dailyTokens(dayKey(Date.now()))
     const dailyTokenLimit = this.#options.dailyTokenLimit
     return {
       maxConcurrency: this.#options.maxConcurrency ?? 1,
-      running: this.#running.size,
+      running: this.#running.size + this.#starting.size,
       parked: this.#parked.size,
       queued: jobs.filter((j) => j.info.status === 'queued').length,
       sessionTokenLimit: this.#options.sessionTokenLimit,
       dailyTokenLimit,
       dailyTokensUsed,
-      paused: dailyTokenLimit !== undefined && dailyTokensUsed >= dailyTokenLimit,
+      paused: this.#paused || (dailyTokenLimit !== undefined && dailyTokensUsed >= dailyTokenLimit),
     }
   }
 
@@ -304,6 +348,8 @@ export class JobQueue {
     this.#closed = true
     this.#offWork?.()
     clearInterval(this.#sweepTimer)
+    clearTimeout(this.#wakeTimer)
+    this.#wakeTimer = undefined
     for (const timer of this.#retryTimers) {
       clearTimeout(timer)
     }
@@ -318,31 +364,85 @@ export class JobQueue {
     this.#adapter.prune(retention.maxAgeMs).catch(() => {})
   }
 
-  async #pump(): Promise<void> {
-    if (this.#pumping || this.#closed) {
+  #pump(): void {
+    if (this.#closed || this.#paused) {
+      return
+    }
+    if (this.#pumping) {
+      this.#pumpRequested = true
       return
     }
     this.#pumping = true
+    this.#spawn('pump', undefined, () => this.#drainRequests())
+  }
+
+  async #drainRequests(): Promise<void> {
     try {
-      const maxConcurrency = this.#options.maxConcurrency ?? 1
-      while (this.#running.size < maxConcurrency) {
-        const limit = this.#options.dailyTokenLimit
-        if (limit !== undefined && (await this.#adapter.dailyTokens(dayKey(Date.now()))) >= limit) {
-          return
-        }
-        const record = await this.#adapter.claimNext()
-        if (!record) {
-          return
-        }
-        await this.#start(record)
-      }
+      do {
+        this.#pumpRequested = false
+        await this.#fill()
+      } while (this.#pumpRequested && !this.#closed && !this.#paused)
+    } catch (error) {
+      this.#wake(Date.now() + PUMP_RETRY_MS)
+      throw error
     } finally {
       this.#pumping = false
     }
   }
 
+  async #fill(): Promise<void> {
+    const maxConcurrency = this.#options.maxConcurrency ?? 1
+    while (this.#running.size + this.#starting.size < maxConcurrency && !this.#closed && !this.#paused) {
+      const limit = this.#options.dailyTokenLimit
+      if (limit !== undefined && (await this.#adapter.dailyTokens(dayKey(Date.now()))) >= limit) {
+        this.#wake(nextUtcMidnight(Date.now()))
+        return
+      }
+      const record = await this.#adapter.claimNext()
+      if (!record) {
+        const next = await this.#nextRunAt()
+        if (next !== undefined) {
+          this.#wake(next)
+        }
+        return
+      }
+      if (this.#closed || this.#paused) {
+        await this.#adapter.update(record.info.id, { status: 'queued' })
+        return
+      }
+      const id = record.info.id
+      this.#starting.set(id, { canceled: false })
+      this.#spawn('start', id, () => this.#start(record))
+    }
+  }
+
+  async #nextRunAt(): Promise<number | undefined> {
+    if (this.#adapter.nextRunAt) {
+      return this.#adapter.nextRunAt()
+    }
+    return earliestRunAt(await this.#adapter.list(), Date.now())
+  }
+
+  #wake(at: number): void {
+    if (this.#closed || (this.#wakeTimer !== undefined && this.#wakeAt <= at)) {
+      return
+    }
+    clearTimeout(this.#wakeTimer)
+    this.#wakeAt = at
+    this.#wakeTimer = setTimeout(
+      () => {
+        this.#wakeTimer = undefined
+        this.#wakeAt = Number.POSITIVE_INFINITY
+        this.#pump()
+      },
+      Math.min(MAX_TIMER_MS, Math.max(0, at - Date.now())),
+    )
+    this.#wakeTimer.unref?.()
+  }
+
   async #start(record: JobRecord): Promise<void> {
     const id = record.info.id
+    const starting = this.#starting.get(id) ?? { canceled: false }
     const build = this.#options.buildRunnerConfig ?? ((req: CreateSessionRequest) => req)
     let runner: Runner
     try {
@@ -353,6 +453,11 @@ export class JobQueue {
       }
       runner = await this.#options.createRunner(build(request))
     } catch (error) {
+      this.#starting.delete(id)
+      this.#pump()
+      if (starting.canceled) {
+        return
+      }
       const failed = await this.#adapter.update(id, {
         status: 'failed',
         finishedAt: Date.now(),
@@ -361,6 +466,12 @@ export class JobQueue {
       if (failed) {
         this.#emit(failed, { type: 'job_completed', job: failed.info, ts: Date.now() })
       }
+      return
+    }
+    this.#starting.delete(id)
+    if (starting.canceled) {
+      runner.close('server')
+      this.#pump()
       return
     }
     const job: RunningJob = {
@@ -377,20 +488,34 @@ export class JobQueue {
       parkedMs: 0,
     }
     this.#running.set(id, job)
-    const updated = await this.#adapter.update(id, {
-      startedAt: Date.now(),
-      sessionId: runner.id,
+    const updated = await this.#adapter.update(id, { startedAt: Date.now(), sessionId: runner.id }).catch((error: unknown) => {
+      this.#report(error, { jobId: id, phase: 'start' })
+      return null
     })
     if (updated) {
       job.record = updated
     }
     this.#emit(job.record, { type: 'job_started', job: job.record.info, ts: Date.now() })
-    const durationLimit = this.#effectiveDurationLimit(record.request)
-    if (durationLimit !== undefined) {
-      job.durationTimer = setTimeout(() => this.#kill(job, `job exceeded max duration (${durationLimit}ms)`), durationLimit)
-      job.durationTimer.unref?.()
+    this.#armLimit(job, 'durationTimer', this.#effectiveDurationLimit(record.request), 0, 'max duration')
+    job.unsubscribe = this.#subscribe(job)
+  }
+
+  #subscribe(job: RunningJob, afterSeq?: number): () => void {
+    return job.runner.subscribe((event) => this.#spawn('event', job.record.info.id, () => this.#handleEvent(job, event)), afterSeq)
+  }
+
+  #spawn(phase: JobQueueErrorPhase, jobId: string | undefined, run: () => Promise<void>): void {
+    try {
+      run().catch((error: unknown) => this.#report(error, { jobId, phase }))
+    } catch (error) {
+      this.#report(error, { jobId, phase })
     }
-    job.unsubscribe = runner.subscribe((event) => void this.#handleEvent(job, event))
+  }
+
+  #report(error: unknown, context: JobQueueErrorContext): void {
+    try {
+      ;(this.#options.onError ?? reportToConsole)(error, context)
+    } catch {}
   }
 
   // How a run that never produced a `turn_result` is written down. There is no authoritative
@@ -410,13 +535,14 @@ export class JobQueue {
       return
     }
     job.killReason = reason
+    const id = job.record.info.id
     if (job.parkedAt !== undefined) {
-      void this.#finalize(job, this.#abortPatch(job, reason))
+      this.#spawn('finalize', id, () => this.#finalize(job, this.#abortPatch(job, reason)))
       return
     }
     void job.runner.interrupt().catch(() => {})
     job.forceTimer = setTimeout(() => {
-      void this.#finalize(job, this.#abortPatch(job, reason))
+      this.#spawn('finalize', id, () => this.#finalize(job, this.#abortPatch(job, reason)))
     }, this.#options.killGraceMs ?? 5000)
     job.forceTimer.unref?.()
   }
@@ -494,19 +620,25 @@ export class JobQueue {
   }
 
   #effectiveTokenLimit(request: CreateJobRequest): number | undefined {
-    const limits = [request.maxTokens, this.#options.sessionTokenLimit].filter((n): n is number => typeof n === 'number')
-    return limits.length > 0 ? Math.min(...limits) : undefined
+    return tightest(request.maxTokens, this.#options.sessionTokenLimit)
   }
 
   #effectiveDurationLimit(request: CreateJobRequest): number | undefined {
-    const limits = [request.maxDurationMs, this.#options.maxJobDurationMs].filter((n): n is number => typeof n === 'number')
-    return limits.length > 0 ? Math.min(...limits) : undefined
+    return tightest(request.maxDurationMs, this.#options.maxJobDurationMs)
   }
 
   async #finalize(job: RunningJob, patch: Partial<JobInfo>): Promise<void> {
     if (job.finalized) {
       return
     }
+    try {
+      await this.#settle(job, patch)
+    } finally {
+      this.#pump()
+    }
+  }
+
+  async #settle(job: RunningJob, patch: Partial<JobInfo>): Promise<void> {
     job.finalized = true
     job.unsubscribe()
     clearTimeout(job.durationTimer)
@@ -552,12 +684,11 @@ export class JobQueue {
         this.#emit(updated, { type: 'job_retrying', job: updated.info, ts: Date.now() }, job)
         const timer = setTimeout(() => {
           this.#retryTimers.delete(timer)
-          void this.#pump()
+          this.#pump()
         }, delay)
         timer.unref?.()
         this.#retryTimers.add(timer)
       }
-      void this.#pump()
       return
     }
     const updated = await this.#adapter.update(job.record.info.id, {
@@ -571,7 +702,6 @@ export class JobQueue {
       this.#emit(job.record, { type: 'job_completed', job: updated.info, ts: Date.now() }, job)
     }
     this.#sweep()
-    void this.#pump()
   }
 
   #progress(job: RunningJob, progress: JobProgress): void {
@@ -622,4 +752,9 @@ export class JobQueue {
       }
     }
   }
+}
+
+function tightest(...limits: (number | undefined)[]): number | undefined {
+  const set = limits.filter((n): n is number => typeof n === 'number')
+  return set.length > 0 ? Math.min(...set) : undefined
 }

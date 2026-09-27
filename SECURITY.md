@@ -26,6 +26,18 @@ software, so it is not a vulnerability by itself. What *is* in scope:
   without satisfying the `authenticate` hook or the instance's `--auth-key`; attaching to someone
   else's session; a cross-site page attaching a WebSocket (the `Origin` check); DNS rebinding
   against the unauthenticated loopback default.
+- **Cross-site requests against the keyless loopback default.** Running without a key trusts every
+  local *process*, not every web page the operator's browser opens. The gateway refuses a foreign or
+  opaque `Origin` (and a cross-site unsafe request that carries none) on every `/v1` request and
+  upgrade even with auth off, and refuses a JSON route's body unless it is declared
+  `application/json`. A page that gets past either and reaches a session route is in scope.
+- **A non-operator principal reaching host authority** - an embedded end user (a scoped principal,
+  or any principal under a declared `authorizeSession` that is not `operator: true`) starting a
+  claude or codex profile it was not explicitly given in `allowedProfiles`, asking for
+  `bypassPermissions`/`dontAsk`, `settingSources`, a stdio MCP server, or resuming an SDK session it
+  cannot see.
+- **Zero-click exfiltration from rendered output** - a transcript, tool result or markdown image
+  that makes a client fetch an attacker's URL without the user choosing to open it.
 - **Escaping a declared boundary** - `allowedCwdRoots`, `allowedConfigDirRoots`,
   `allowedTools`/`disallowedTools`, `disableBypassPermissions`, or a profile's granted
   capabilities not holding; a session request widening what its profile grants.
@@ -35,14 +47,23 @@ software, so it is not a vulnerability by itself. What *is* in scope:
   or process; escaping the interpreter's memory or time limits; a bridged (`eval_script`)
   execution reaching an *authoritative* tool.
 - **Credential exposure** - a credential appearing in a protocol event, a REST response, a
-  `ProfileInfo`, a log line, or a parked-session record.
+  `ProfileInfo`, a log line, or a parked-session record; the gateway's own key
+  (`WORKERDECK_AUTH_KEY`) reaching the environment of an engine, a shell, or anything else the
+  gateway spawns.
+- **Server-side request forgery** - `web_fetch` or a sandbox's granted `fetchText` reaching a
+  loopback, private, link-local or otherwise internal address, directly, through an IPv6 form that
+  embeds one, through a redirect, or (on the default transport, not a host-supplied `fetchImpl`)
+  through a DNS answer that changes between check and connect.
+- **Host resource exhaustion from the sandbox** - untrusted guest code growing host-side memory (the
+  VFS, console output, a single host call) past the documented caps.
 - **Deferred-execution abuse** - delivering a result for an `executionId` you shouldn't be able
   to, or replaying one to apply twice.
 
 Out of scope, because they are documented properties rather than defects:
 
 - An **unauthenticated instance** you deliberately exposed with `--insecure` or
-  `allowUnauthenticated: true`.
+  `allowUnauthenticated: true`, and any **local process** reaching a keyless loopback gateway: the
+  Origin check stops browsers, not programs already running as you.
 - A session doing damage **within** the roots and permission mode it was granted - including
   anything under `bypassPermissions` or `dontAsk`.
 - The **parked-session directory** and the SDK's own transcript store holding plaintext

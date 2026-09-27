@@ -14,7 +14,18 @@ export interface QueueAdapter {
   prune(olderThanMs: number): Promise<number>
   addDailyTokens(dayKey: string, tokens: number): Promise<number>
   dailyTokens(dayKey: string): Promise<number>
+  nextRunAt?(): Promise<number | undefined>
   onWork?(listener: () => void): () => void
+}
+
+export function earliestRunAt(jobs: Iterable<JobRecord>, now: number): number | undefined {
+  let earliest: number | undefined
+  for (const { info } of jobs) {
+    if (info.status === 'queued' && info.nextRunAt !== undefined && info.nextRunAt > now) {
+      earliest = earliest === undefined ? info.nextRunAt : Math.min(earliest, info.nextRunAt)
+    }
+  }
+  return earliest
 }
 
 export class InMemoryQueueAdapter implements QueueAdapter {
@@ -76,5 +87,9 @@ export class InMemoryQueueAdapter implements QueueAdapter {
 
   dailyTokens(dayKey: string): Promise<number> {
     return Promise.resolve(this.#dailyTokens.get(dayKey) ?? 0)
+  }
+
+  nextRunAt(): Promise<number | undefined> {
+    return Promise.resolve(earliestRunAt(this.#jobs.values(), Date.now()))
   }
 }

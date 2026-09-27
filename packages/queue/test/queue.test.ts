@@ -660,4 +660,174 @@ describe('JobQueue', () => {
       expect(queue.onSessionParking('not-a-job-session', 'exec-2')).toBe(true)
     })
   })
+
+  describe('wake-ups', () => {
+    it('re-runs the pump for a submit that lands while a claim is in flight', async () => {
+      const adapter = new InMemoryQueueAdapter()
+      const claim = adapter.claimNext.bind(adapter)
+      let release: () => void = () => {}
+      let gated = false
+      adapter.claimNext = async () => {
+        const claimed = await claim()
+        if (gated) {
+          await new Promise<void>((resolve) => (release = resolve))
+        }
+        return claimed
+      }
+      const { queue, runners } = makeQueue({ adapter, maxConcurrency: 2 })
+      await queue.submit(jobRequest())
+      gated = true
+      await tick()
+      expect(runners).toHaveLength(1)
+      gated = false
+      const second = await queue.submit(jobRequest())
+      release()
+      await settles(() => expect(runners).toHaveLength(2))
+      expect((await queue.get(second.id))?.status).toBe('running')
+    })
+
+    it('starts held jobs again once the daily budget rolls over at UTC midnight', async () => {
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(Date.UTC(2026, 0, 1, 23, 59, 0))
+        const { queue, runners } = makeQueue({ dailyTokenLimit: 80 })
+        await queue.submit(jobRequest())
+        await vi.advanceTimersByTimeAsync(0)
+        runners[0]!.emit(successResult(100))
+        await vi.advanceTimersByTimeAsync(0)
+        const held = await queue.submit(jobRequest())
+        await vi.advanceTimersByTimeAsync(0)
+        expect((await queue.get(held.id))?.status).toBe('queued')
+        await vi.advanceTimersByTimeAsync(61_000)
+        expect(runners).toHaveLength(2)
+        expect((await queue.get(held.id))?.status).toBe('running')
+        queue.close()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('arms a timer for a future nextRunAt nobody else will wake', async () => {
+      vi.useFakeTimers()
+      try {
+        const adapter = new InMemoryQueueAdapter()
+        const request = jobRequest()
+        await adapter.add({
+          info: {
+            id: 'stored',
+            status: 'queued',
+            cwd: '/tmp/project',
+            prompt: 'do the thing',
+            createdAt: Date.now(),
+            attempt: 2,
+            maxAttempts: 2,
+            nextRunAt: Date.now() + 1_000,
+            usage: { tokens: 0, totalCostUsd: 0, numTurns: 0 },
+          },
+          request,
+        })
+        const { queue, runners } = makeQueue({ adapter })
+        queue.pause()
+        queue.resume()
+        await vi.advanceTimersByTimeAsync(500)
+        expect(runners).toHaveLength(0)
+        await vi.advanceTimersByTimeAsync(600)
+        expect(runners).toHaveLength(1)
+        queue.close()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does not hold the dispatch loop while one runner is still being created', async () => {
+      const pending: Array<(runner: SessionRunner) => void> = []
+      const createRunner = vi.fn(() => new Promise<SessionRunner>((resolve) => pending.push(resolve)))
+      const { queue } = makeQueue({ createRunner, maxConcurrency: 2 })
+      await queue.submit(jobRequest())
+      await queue.submit(jobRequest())
+      await queue.submit(jobRequest())
+      await settles(() => expect(createRunner).toHaveBeenCalledTimes(2))
+      expect((await queue.stats()).running).toBe(2)
+    })
+
+    it('holds dispatch while paused and resumes on resume()', async () => {
+      const { queue, runners } = makeQueue()
+      queue.pause()
+      const job = await queue.submit(jobRequest())
+      await tick()
+      expect(runners).toHaveLength(0)
+      expect((await queue.stats()).paused).toBe(true)
+      queue.resume()
+      await settles(() => expect(runners).toHaveLength(1))
+      expect((await queue.get(job.id))?.status).toBe('running')
+    })
+  })
+
+  it('honours a cancel that lands while the runner is still being created', async () => {
+    let resolveRunner: (runner: SessionRunner) => void = () => {}
+    const createRunner = vi.fn(() => new Promise<SessionRunner>((resolve) => (resolveRunner = resolve)))
+    const { queue, events } = makeQueue({ createRunner })
+    const job = await queue.submit(jobRequest())
+    await settles(() => expect(createRunner).toHaveBeenCalledTimes(1))
+    const canceled = await queue.cancel(job.id)
+    expect(canceled?.status).toBe('canceled')
+    const runner = new FakeRunner()
+    resolveRunner(runner as unknown as SessionRunner)
+    await settles(() => expect(runner.closed).toBe(true))
+    expect((await queue.get(job.id))?.status).toBe('canceled')
+    expect(events.some((e) => e.type === 'job_started')).toBe(false)
+    expect((await queue.stats()).running).toBe(0)
+  })
+
+  describe('adapter failures', () => {
+    it('reports a rejected write through onError instead of an unhandled rejection', async () => {
+      const adapter = new InMemoryQueueAdapter()
+      const onError = vi.fn()
+      const { queue, runners } = makeQueue({ adapter, onError })
+      const job = await queue.submit(jobRequest())
+      await tick()
+      adapter.update = () => Promise.reject(new Error('disk full'))
+      runners[0]!.emit({ type: 'system_init', sdkSessionId: 'sdk-1' } as SessionEventBody)
+      await settles(() => expect(onError).toHaveBeenCalledWith(expect.any(Error), { jobId: job.id, phase: 'event' }))
+      runners[0]!.emit(successResult())
+      await settles(() => expect(onError).toHaveBeenCalledTimes(2))
+      expect((await queue.stats()).running).toBe(0)
+    })
+
+    it('reports a failing claim with the pump phase and keeps accepting work', async () => {
+      const adapter = new InMemoryQueueAdapter()
+      adapter.claimNext = () => Promise.reject(new Error('db down'))
+      const onError = vi.fn()
+      const { queue } = makeQueue({ adapter, onError })
+      await queue.submit(jobRequest())
+      await settles(() => expect(onError).toHaveBeenCalledWith(expect.any(Error), { jobId: undefined, phase: 'pump' }))
+      queue.close()
+    })
+
+    it('falls back to a console warning when no onError is given', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      try {
+        const adapter = new InMemoryQueueAdapter()
+        adapter.claimNext = () => Promise.reject(new Error('db down'))
+        const { queue } = makeQueue({ adapter })
+        await queue.submit(jobRequest())
+        await settles(() => expect(warn).toHaveBeenCalledWith(expect.stringContaining('queue pump failed')))
+        queue.close()
+      } finally {
+        warn.mockRestore()
+      }
+    })
+  })
+
+  it('canParkSession vetoes without committing anything', async () => {
+    const { queue, runners } = makeQueue({ sessionTokenLimit: 30 })
+    await queue.submit(jobRequest())
+    await tick()
+    expect(queue.canParkSession(runners[0]!.id)).toBe(true)
+    expect((await queue.stats()).parked).toBe(0)
+    runners[0]!.emit(assistantWithUsage(100))
+    await tick()
+    expect(queue.canParkSession(runners[0]!.id)).toBe(false)
+    expect(queue.canParkSession('not-a-job-session')).toBe(true)
+  })
 })

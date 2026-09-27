@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import type { McpServerActionRequest, McpServerStatusInfo, McpServerToolInfo } from '@workerdeck/protocol'
+import { useAsync } from '@workerdeck/react'
+import { errorMessage, type McpServerActionRequest, type McpServerStatusInfo, type McpServerToolInfo } from '@workerdeck/protocol'
 import { ChevronLeft, ChevronRight, Power, PowerOff, RotateCw } from 'lucide-react'
 import { Badge, type BadgeProps } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'
@@ -17,6 +18,27 @@ export interface McpDialogProps {
   className?: string
 }
 
+export interface McpPanelModel {
+  servers: McpServerStatusInfo[] | undefined
+  server: McpServerStatusInfo | undefined
+  tool: McpServerToolInfo | undefined
+  loading: boolean
+  busyServer: string | undefined
+  error: string | undefined
+  title: string
+  description: string | undefined
+  selectServer: (name: string | undefined) => void
+  selectTool: (name: string | undefined) => void
+  back: (() => void) | undefined
+  reload: () => void
+  act: (name: string, action: McpServerActionRequest['action']) => Promise<void>
+}
+
+export interface McpPanelProps {
+  model: McpPanelModel
+  canManageServers?: boolean
+}
+
 const STATUS_VARIANT: Record<string, NonNullable<BadgeProps['variant']>> = {
   connected: 'success',
   failed: 'danger',
@@ -26,94 +48,106 @@ const STATUS_VARIANT: Record<string, NonNullable<BadgeProps['variant']>> = {
 }
 
 export function McpDialog({ client, sessionId, open, onOpenChange, canManageServers = true, className }: McpDialogProps) {
-  const [servers, setServers] = useState<McpServerStatusInfo[] | undefined>()
-  const [error, setError] = useState<string | undefined>()
-  const [loading, setLoading] = useState(false)
+  const mcp = useMcpPanel(client, sessionId, open)
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className={className}>
+        <DialogHeader title={mcp.title} description={mcp.description} actions={<McpPanelActions model={mcp} />} />
+        <DialogBody>
+          <McpPanel model={mcp} canManageServers={canManageServers} />
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function useMcpPanel(client: WorkerDeckClient | undefined, sessionId: string | undefined, active = true): McpPanelModel {
+  const listed = useAsync(() => client!.listMcpServers(sessionId!), [client, sessionId], { enabled: active && !!client && !!sessionId })
+  const [actError, setActError] = useState<string | undefined>()
   const [busyServer, setBusyServer] = useState<string | undefined>()
   const [selectedServer, setSelectedServer] = useState<string | undefined>()
   const [selectedTool, setSelectedTool] = useState<string | undefined>()
 
-  const load = useCallback(async () => {
-    if (!sessionId) {
-      return
-    }
-    setLoading(true)
-    setError(undefined)
-    try {
-      setServers(await client.listMcpServers(sessionId))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not read MCP status')
-    } finally {
-      setLoading(false)
-    }
-  }, [client, sessionId])
-
   useEffect(() => {
-    if (!open) {
-      return
+    if (active) {
+      setSelectedServer(undefined)
+      setSelectedTool(undefined)
+      setActError(undefined)
     }
-    setSelectedServer(undefined)
-    setSelectedTool(undefined)
-    void load()
-  }, [open, load])
+  }, [active, client, sessionId])
 
-  const act = async (name: string, action: McpServerActionRequest['action']) => {
-    if (!sessionId) {
-      return
-    }
-    setBusyServer(name)
-    setError(undefined)
-    try {
-      setServers(await client.mcpServerAction(sessionId, name, action))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Could not ${action} ${name}`)
-    } finally {
-      setBusyServer(undefined)
-    }
-  }
-
+  const servers = listed.data
   const server = servers?.find((s) => s.name === selectedServer)
   const tool = server?.tools?.find((t) => t.name === selectedTool)
-  const title = tool?.name ?? server?.name ?? 'MCP servers'
+  return {
+    servers,
+    server,
+    tool,
+    loading: listed.loading,
+    busyServer,
+    error: actError ?? (listed.error === undefined ? undefined : errorMessage(listed.error, 'Could not read MCP status')),
+    title: tool?.name ?? server?.name ?? 'MCP servers',
+    description: tool ? `${server?.name} tool` : server ? server.serverInfo?.name : undefined,
+    selectServer: setSelectedServer,
+    selectTool: setSelectedTool,
+    back: selectedServer ? () => (selectedTool ? setSelectedTool(undefined) : setSelectedServer(undefined)) : undefined,
+    reload: () => {
+      setActError(undefined)
+      void listed.reload()
+    },
+    act: async (name, action) => {
+      if (!client || !sessionId) {
+        return
+      }
+      setBusyServer(name)
+      setActError(undefined)
+      try {
+        listed.setData(await client.mcpServerAction(sessionId, name, action))
+      } catch (e) {
+        setActError(errorMessage(e, `Could not ${action} ${name}`))
+      } finally {
+        setBusyServer(undefined)
+      }
+    },
+  }
+}
 
+export function McpPanelActions({ model }: { model: McpPanelModel }) {
+  if (model.back) {
+    return (
+      <Button variant="ghost" size="xs" onClick={model.back}>
+        <ChevronLeft className="size-3.5" />
+        Back
+      </Button>
+    )
+  }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={className}>
-        <DialogHeader
-          title={title}
-          description={tool ? `${server?.name} tool` : server ? server.serverInfo?.name : undefined}
-          actions={
-            selectedServer ? (
-              <Button variant="ghost" size="xs" onClick={() => (selectedTool ? setSelectedTool(undefined) : setSelectedServer(undefined))}>
-                <ChevronLeft className="size-3.5" />
-                Back
-              </Button>
-            ) : (
-              <Button variant="ghost" size="xs" onClick={() => void load()} disabled={loading}>
-                {loading ? <Spinner className="size-3 text-current" /> : <RotateCw className="size-3" />}
-                Refresh
-              </Button>
-            )
-          }
+    <Button variant="ghost" size="xs" onClick={model.reload} disabled={model.loading}>
+      {model.loading ? <Spinner className="size-3 text-current" /> : <RotateCw className="size-3" />}
+      Refresh
+    </Button>
+  )
+}
+
+export function McpPanel({ model, canManageServers = true }: McpPanelProps) {
+  const { error, servers, server, tool } = model
+  return (
+    <>
+      {error ? <div className="mb-3 rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger">{error}</div> : null}
+      {tool ? (
+        <ToolView tool={tool} />
+      ) : server ? (
+        <ServerView
+          server={server}
+          busy={model.busyServer === server.name}
+          canManage={canManageServers}
+          onAct={(action) => void model.act(server.name, action)}
+          onSelectTool={model.selectTool}
         />
-        <DialogBody>
-          {error ? <div className="mb-3 rounded-md bg-danger-bg px-3 py-2 text-body-sm text-danger">{error}</div> : null}
-          {tool ? (
-            <ToolView tool={tool} />
-          ) : server ? (
-            <ServerView
-              server={server}
-              busy={busyServer === server.name}
-              canManage={canManageServers}
-              onAct={(action) => void act(server.name, action)}
-              onSelectTool={setSelectedTool}
-            />
-          ) : error && !servers ? null : (
-            <ServerList servers={servers} loading={loading} onSelect={setSelectedServer} />
-          )}
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
+      ) : error && !servers ? null : (
+        <ServerList servers={servers} loading={model.loading} onSelect={model.selectServer} />
+      )}
+    </>
   )
 }
 

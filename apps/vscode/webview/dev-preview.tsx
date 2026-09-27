@@ -1,7 +1,8 @@
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 import { sessionState } from '@workerdeck/protocol'
-import { SessionCard } from './sidebar/SessionCard.tsx'
+import { SessionItem } from '@workerdeck/ui'
+import { CardActions } from './sidebar/CardActions.tsx'
 
 const base = {
   engine: 'claude' as const,
@@ -124,7 +125,7 @@ createRoot(document.getElementById('root')!).render(
   <div className="flex flex-col text-body-sm">
     <div className="flex flex-col gap-1 p-1">
       {rows.map((r: never, i) => (
-        <SessionCard
+        <SessionItem
           key={i}
           row={{
             hostId: 'local',
@@ -136,8 +137,8 @@ createRoot(document.getElementById('root')!).render(
             unseen: unseen[(r as { id: string }).id] ?? 0,
           }}
           projectIcons={projectIcons}
-          selected={i === 0}
-          activeSubagentId={i === 0 ? 'a' : undefined}
+          active={i === 0}
+          activeStepKey={i === 0 ? 'a' : undefined}
           onSelect={() => {}}
           onSelectSubagent={() => {}}
           onSelectTask={() => {}}
@@ -145,7 +146,7 @@ createRoot(document.getElementById('root')!).render(
           onSelectShell={() => {}}
           onKillShell={() => {}}
           onRename={() => {}}
-          onMenu={() => {}}
+          actions={<CardActions inEditor={false} onMenu={() => {}} />}
         />
       ))}
     </div>

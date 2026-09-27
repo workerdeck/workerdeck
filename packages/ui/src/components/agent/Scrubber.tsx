@@ -1,19 +1,17 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
-import { toolInputPreview } from '../../lib/format.ts'
 import { cn } from '../../lib/utils.ts'
 import {
   approvalCluster,
   buildMarks,
   clusterMarks,
-  doneLine,
-  excerpt,
-  KIND_NAME,
   nearestMember,
+  proportionalPlacement,
   type Cluster,
   type Mark,
 } from './scrubber-marks.ts'
+import { CARD_PEEK, peekContent } from './scrubber-peek.tsx'
 
 export interface ScrubberProps {
   items: readonly TranscriptItem[]
@@ -24,74 +22,6 @@ export interface ScrubberProps {
   interactive?: boolean
   onJumpToItem?: (itemIndex: number) => void
   className?: string
-}
-
-function peekContent(
-  cluster: Cluster,
-  first: Mark | undefined,
-  items: readonly TranscriptItem[],
-  pendingApprovals: readonly PermissionRequest[],
-): ReactNode {
-  const more = cluster.marks.length > 1 ? ` · ${cluster.marks.length} marks` : ''
-  let body: ReactNode = null
-  if (cluster.kind === 'approval') {
-    const request = pendingApprovals[0]
-    body = request ? (
-      <>
-        <div>{request.title ?? 'Permission required'}</div>
-        <div className="wd-scrub-ex" data-tone="muted">
-          {`${request.displayName ?? request.toolName}(${toolInputPreview(request.input)})`}
-        </div>
-      </>
-    ) : null
-  } else if (first && first.kind !== 'recap') {
-    const item = items[first.itemIndex]
-    if (first.kind === 'turn' || first.kind === 'turnFailed') {
-      const turn = first.turnIndex === undefined ? undefined : items[first.turnIndex]
-      body = (
-        <>
-          {item?.kind === 'assistant_text' ? <div className="wd-scrub-ex">{item.text}</div> : null}
-          {turn?.kind === 'turn_result' ? (
-            <>
-              <div data-tone={turn.isError ? 'danger' : 'muted'}>{doneLine(turn)}</div>
-              {turn.errors?.map((message, index) => (
-                <div key={index} data-tone="danger">
-                  {message}
-                </div>
-              ))}
-            </>
-          ) : null}
-        </>
-      )
-    } else if (item) {
-      const failure =
-        first.kind === 'toolFailed' && item.kind === 'tool_call'
-          ? item.result?.text.split('\n').find((line) => line.trim() !== '')
-          : undefined
-      body = (
-        <>
-          <div className="wd-scrub-ex" data-tone={first.kind === 'error' || first.kind === 'toolFailed' ? 'danger' : undefined}>
-            {first.kind === 'user' ? <span data-tone="muted">{'❯ '}</span> : null}
-            {excerpt(item)}
-          </div>
-          {failure ? (
-            <div className="wd-scrub-ex" data-tone="danger">
-              {failure}
-            </div>
-          ) : null}
-        </>
-      )
-    }
-  }
-  return (
-    <>
-      <div data-tone="muted">
-        {KIND_NAME[first?.kind ?? cluster.kind]}
-        {more}
-      </div>
-      {body}
-    </>
-  )
 }
 
 export function Scrubber({
@@ -138,7 +68,8 @@ export function Scrubber({
     if (railH <= 0) {
       return []
     }
-    const built = clusterMarks(buildMarks(items, { frameParentId, bookmarks, recapItemIndex }), railH, items.length)
+    const marks = buildMarks(items, { frameParentId, bookmarks, recapItemIndex })
+    const built = clusterMarks(marks, proportionalPlacement(railH, items.length))
     if (pendingApprovals.length > 0) {
       built.push(approvalCluster(railH))
     }
@@ -191,7 +122,7 @@ export function Scrubber({
       ))}
       {peek ? (
         <div ref={peekRef} className="wd-scrub-peek" style={{ top: peek.y }}>
-          {peekContent(peek.cluster, peek.mark, items, pendingApprovals)}
+          {peekContent({ cluster: peek.cluster, first: peek.mark, items, pendingApprovals }, CARD_PEEK)}
         </div>
       ) : null}
     </div>

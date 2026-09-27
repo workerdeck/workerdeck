@@ -1,6 +1,5 @@
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { AppShell } from '@/components/shell/AppShell.tsx'
-import { IMPLICIT_HOST_ID } from '@/lib/hosts.ts'
 import { GatewayView } from '@/views/GatewayView.tsx'
 import { GatewaysView } from '@/views/GatewaysView.tsx'
 import { JobView } from '@/views/JobView.tsx'
@@ -44,18 +43,6 @@ const sessionRoute = createRoute({
   }),
 })
 
-const legacySessionRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/sessions/$sessionId',
-  beforeLoad: ({ params }) => {
-    throw redirect({
-      to: '/sessions/$hostId/$sessionId',
-      params: { hostId: IMPLICIT_HOST_ID, sessionId: params.sessionId },
-      search: {},
-    })
-  },
-})
-
 const gatewaysRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/gateways',
@@ -92,27 +79,17 @@ const profileRoute = createRoute({
   component: ProfileView,
 })
 
-const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/settings',
-  beforeLoad: () => {
-    throw redirect({ to: '/sessions' })
-  },
-})
-
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
     sessionsRoute,
     sessionRoute,
-    legacySessionRoute,
     gatewaysRoute,
     gatewayRoute,
     jobsRoute,
     jobRoute,
     profilesRoute,
     profileRoute,
-    settingsRoute,
   ]),
   history: createHashHistory(),
 })

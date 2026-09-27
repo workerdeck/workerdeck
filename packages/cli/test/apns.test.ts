@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { SessionNotification } from '@workerdeck/protocol'
 import { afterAll, describe, expect, it } from 'vitest'
 import { type ApnsConfig, type ApnsEnvironment, createApnsClient, createProviderToken } from '../src/apns/client.ts'
-import { createDeviceRegistry, createDeviceRoute, wantsNotification } from '../src/apns/devices.ts'
+import { createDeviceRegistry, createDeviceRoute, MAX_DEVICES, wantsNotification } from '../src/apns/devices.ts'
 import { createActivityRegistry, createActivityRoute } from '../src/apns/activities.ts'
 import { createApnsRoute } from '../src/apns/routes.ts'
 import { buildPush } from '../src/apns/forwarder.ts'
@@ -409,12 +409,13 @@ async function call(
   method: string,
   url: string,
   body?: unknown,
+  headers: Record<string, string> = { 'content-type': 'application/json' },
 ): Promise<{ consumed: boolean; status: number; text: string; json: unknown }> {
   const listeners = new Map<string, ((value?: unknown) => void)[]>()
   const req = {
     method,
     url,
-    headers: {},
+    headers,
     on(event: string, handler: (value?: unknown) => void) {
       listeners.set(event, [...(listeners.get(event) ?? []), handler])
       return req
@@ -438,8 +439,8 @@ async function call(
   } as never
 
   const pending = route(req, res)
-  // The body has to be fed after the handler has subscribed.
-  await Promise.resolve()
+  // The body has to be fed after the handler has subscribed, which is behind an awaited authenticate.
+  await new Promise((resolve) => setImmediate(resolve))
   if (body !== undefined) {
     for (const handler of listeners.get('data') ?? []) {
       handler(Buffer.from(JSON.stringify(body)))
@@ -483,6 +484,42 @@ describe('device route', () => {
     })
     expect(result.status).toBe(401)
     expect(registry.list()).toEqual([])
+  })
+
+  it('awaits an async authenticator and fails closed on its null', async () => {
+    const registry = await createDeviceRegistry({ dir: null })
+    const result = await call(
+      createDeviceRoute(registry, async () => null),
+      'POST',
+      '/apns/devices',
+      { token: TOKEN, environment: 'development' },
+    )
+    expect(result.status).toBe(401)
+    expect(registry.list()).toEqual([])
+  })
+
+  it('refuses a body that is not declared JSON', async () => {
+    const registry = await createDeviceRegistry({ dir: null })
+    const route = createDeviceRoute(registry, allow)
+    const result = await call(
+      route,
+      'POST',
+      '/apns/devices',
+      { token: TOKEN, environment: 'development' },
+      { 'content-type': 'text/plain' },
+    )
+    expect(result.status).toBe(415)
+    expect(registry.list()).toEqual([])
+  })
+
+  it('caps the registry, while an already registered device can still refresh', async () => {
+    const registry = await createDeviceRegistry({ dir: null })
+    for (let i = 0; i < MAX_DEVICES; i++) {
+      await registry.register({ token: i.toString(16).padStart(64, '0'), environment: 'development' })
+    }
+    const route = createDeviceRoute(registry, allow)
+    expect((await call(route, 'POST', '/apns/devices', { token: TOKEN, environment: 'development' })).status).toBe(409)
+    expect((await call(route, 'POST', '/apns/devices', { token: '0'.repeat(64), environment: 'production' })).status).toBe(200)
   })
 
   it('registers, then unregisters', async () => {

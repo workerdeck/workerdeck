@@ -3,25 +3,18 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
-import type { EngineAdapter, Runner, SessionRunnerConfig } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, type ProfileInfo, type SessionEvent, type SessionEventBody, type SessionInfo } from '@workerdeck/protocol'
+import type { EngineAdapter, SessionRunnerConfig } from '@workerdeck/core'
+import { ENGINE_CAPABILITIES, type ProfileInfo, type SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { ScriptedRunner } from './helpers.ts'
 
 // Counts what the gateway asks of an engine that can report the account's windows. The reading only ever moved at a
 // turn boundary before this, so an idle session served whatever it last heard, for days.
-class UsageRunner implements Runner {
-  readonly id: string
-  readonly createdAt = Date.now()
-  readonly pendingApprovals = []
+class UsageRunner extends ScriptedRunner {
   refreshes = 0
-  #config: SessionRunnerConfig
-  #events: SessionEvent[] = []
-  #listeners = new Set<(event: SessionEvent) => void>()
-  #seq = 0
 
   constructor(id: string, config: SessionRunnerConfig) {
-    this.id = id
-    this.#config = config
+    super(id, config, { engine: 'claude', capabilities: ENGINE_CAPABILITIES.claude })
   }
 
   async refreshUsage(): Promise<void> {
@@ -29,49 +22,7 @@ class UsageRunner implements Runner {
   }
 
   reportSevenDay(utilization: number, ts: number): void {
-    this.#emitAt({ type: 'rate_limit', info: { status: 'allowed', rateLimitType: 'seven_day', utilization } }, ts)
-  }
-
-  async start(): Promise<void> {}
-  info(): SessionInfo {
-    return {
-      id: this.id,
-      status: 'idle',
-      cwd: this.#config.cwd ?? '',
-      profile: this.#config.profile,
-      engine: 'claude',
-      capabilities: ENGINE_CAPABILITIES.claude,
-      createdAt: this.createdAt,
-      lastSeq: this.#seq,
-      pendingPermissionCount: 0,
-    }
-  }
-  subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {
-    for (const event of this.#events) {
-      if (event.seq > afterSeq) {
-        listener(event)
-      }
-    }
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
-  sendMessage(): void {}
-  setTitle(): void {}
-  resolvePermission(): boolean {
-    return false
-  }
-  async interrupt(): Promise<void> {}
-  async setPermissionMode(): Promise<void> {}
-  async setModel(): Promise<void> {}
-  fail(): void {}
-  close(): void {}
-
-  #emitAt(body: SessionEventBody, ts: number): void {
-    const event = { ...body, seq: ++this.#seq, ts } as SessionEvent
-    this.#events.push(event)
-    for (const listener of this.#listeners) {
-      listener(event)
-    }
+    this.emitAt({ type: 'rate_limit', info: { status: 'allowed', rateLimitType: 'seven_day', utilization } }, ts)
   }
 }
 

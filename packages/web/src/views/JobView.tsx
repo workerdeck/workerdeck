@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import type { JobInfo } from '@workerdeck/protocol'
@@ -101,7 +102,7 @@ function JobHeader({ job, onChanged, actions }: { job: JobInfo; onChanged: () =>
       await client()!.cancelJob(job.id)
       onChanged()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Cancel failed')
+      toast.error(errorMessage(e, 'Cancel failed'))
     }
   }
   return (

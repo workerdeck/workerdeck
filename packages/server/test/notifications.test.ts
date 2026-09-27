@@ -1,53 +1,10 @@
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { SessionInfo, SessionNotification } from '@workerdeck/protocol'
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { SessionEvent, SessionInfo, SessionNotification } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
-
-// The SDK stand-in: tests hold `canUseTool` open to raise a permission request.
-function fakeHarness() {
-  const buffered: SDKMessage[] = []
-  let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
-  const captured: { options?: Options } = {}
-
-  const emit = (msg: SDKMessage) => {
-    if (waiter) {
-      const resolve = waiter
-      waiter = null
-      resolve({ value: msg, done: false })
-    } else {
-      buffered.push(msg)
-    }
-  }
-  const query = {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next(): Promise<IteratorResult<SDKMessage>> {
-      const next = buffered.shift()
-      if (next !== undefined) {
-        return Promise.resolve({ value: next, done: false })
-      }
-      return new Promise((resolve) => {
-        waiter = resolve
-      })
-    },
-    interrupt: async () => {},
-    setModel: async () => {},
-    close: () => {},
-  } as unknown as Query
-
-  const queryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => {
-    captured.options = params.options
-    void (async () => {
-      for await (const _ of params.prompt as AsyncIterable<SDKUserMessage>) {
-        // Drained so the runner's input queue doesn't block.
-      }
-    })()
-    return query
-  }
-  return { emit, captured, queryFn }
-}
+import { SessionNotifier, type NotificationErrorContext } from '../src/services/notifications.ts'
+import { fakeHarness, fakeRunner } from './helpers.ts'
 
 const turnResult = {
   type: 'result',
@@ -262,5 +219,49 @@ describe('session notifications', () => {
       // 2 = the turn_result's own num_turns, which SessionInfo accumulates.
       expect(((await res.json()) as { session: SessionInfo }).session.numTurns).toBe(2)
     })
+  })
+})
+
+describe('SessionNotifier diagnostics', () => {
+  function emittingRunner() {
+    let listener: ((event: SessionEvent) => void) | undefined
+    const runner = {
+      ...fakeRunner('s1', { cwd: '/tmp' }),
+      subscribe: (next: (event: SessionEvent) => void) => {
+        listener = next
+        return () => {}
+      },
+    }
+    const emit = () => listener?.({ type: 'session_error', message: 'boom', seq: 1, ts: Date.now() } as SessionEvent)
+    return { runner, emit }
+  }
+
+  it('hands a throwing hook and an exhausted webhook to onError instead of swallowing them', async () => {
+    const errors: { op: string; message: string }[] = []
+    const onError = (error: unknown, context: NotificationErrorContext) =>
+      errors.push({ op: context.op, message: error instanceof Error ? error.message : String(error) })
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 500 }))
+    try {
+      const notifier = new SessionNotifier({
+        webhook: { url: 'http://127.0.0.1:9/hook' },
+        attempts: 2,
+        retryDelayMs: 1,
+        onNotification: () => {
+          throw new Error('hook failed')
+        },
+        onError,
+      })
+      const { runner, emit } = emittingRunner()
+      notifier.watch(runner)
+      emit()
+      await vi.waitFor(() => expect(errors).toHaveLength(2))
+      expect(errors).toEqual([
+        { op: 'hook', message: 'hook failed' },
+        { op: 'webhook', message: 'webhook answered HTTP 500' },
+      ])
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      fetchMock.mockRestore()
+    }
   })
 })

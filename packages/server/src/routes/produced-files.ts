@@ -1,7 +1,7 @@
 import { createReadStream, statSync } from 'node:fs'
 import { basename } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { contentTypeFor, json, untrustedDownloadHeaders } from '../lib/http.ts'
+import { contentTypeFor, fail, json, requireMethod, untrustedDownloadHeaders } from '../lib/http.ts'
 import type { ServerContext } from '../context.ts'
 
 export async function handleProducedFiles(
@@ -12,10 +12,7 @@ export async function handleProducedFiles(
   fileId?: string,
 ): Promise<void> {
   const { producedFiles } = ctx
-  if (req.method !== 'GET') {
-    json(res, 405, { error: 'method not allowed' })
-    return
-  }
+  requireMethod(req, 'GET')
   if (fileId === undefined) {
     json(res, 200, {
       files: producedFiles.list(sessionId).map(({ fileId: id, path, mediaType, bytes }) => ({
@@ -29,20 +26,17 @@ export async function handleProducedFiles(
   }
   const found = producedFiles.get(sessionId, fileId)
   if (!found) {
-    json(res, 404, { error: 'no such produced file' })
-    return
+    fail(404, 'no such produced file')
   }
   // statSync follows symlinks deliberately: a link the engine created is part of what it produced, and there is no root to realpath against.
   let stat
   try {
     stat = statSync(found.path)
   } catch {
-    json(res, 404, { error: 'produced file is no longer on disk' })
-    return
+    fail(404, 'produced file is no longer on disk')
   }
   if (!stat.isFile()) {
-    json(res, 404, { error: 'produced file is not a regular file' })
-    return
+    fail(404, 'produced file is not a regular file')
   }
   const filename = basename(found.path) || 'file'
   res.writeHead(200, untrustedDownloadHeaders(filename, found.mediaType ?? contentTypeFor(filename), stat.size))

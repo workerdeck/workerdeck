@@ -1,11 +1,12 @@
 import { PROTOCOL_VERSION } from '@workerdeck/protocol'
+import { withoutGatewaySecrets } from '../../lib/child-env.ts'
 
-// The operator's environment reaches the child whole - WorkerDeck resolves no credential of its
-// own - and the profile's CODEX_HOME is the one key it pins, last, so a profile always wins over
+// The operator's environment reaches the child whole but for the gateway's own key - WorkerDeck resolves
+// no credential of its own - and the profile's CODEX_HOME is the one key it pins, last, so a profile always wins over
 // an inherited value. Every path that spawns or connects to an app-server goes through here.
 export function codexChildEnv(base: Record<string, string | undefined>, codexHome?: string): Record<string, string> {
   const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(base)) {
+  for (const [key, value] of Object.entries(withoutGatewaySecrets(base))) {
     if (value !== undefined) {
       env[key] = value
     }

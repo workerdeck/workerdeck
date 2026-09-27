@@ -1,15 +1,22 @@
 import {
   supportsPermissionMode,
   type CreateSessionRequest,
+  type EngineCapabilities,
   type PermissionMode,
+  type PricingTable,
   type ProfileEngine,
   type ProfileInfo,
 } from '@workerdeck/protocol'
 import type { EngineAdapter, PeerDirectory, Runner, RunnerSnapshot, SessionRunnerConfig, ShellDirectory } from '@workerdeck/core'
+import type { Refusal } from '../lib/http.ts'
+import { refusePermissionMode } from '../lib/permissions.ts'
 import { checkScope, sameScope } from '../lib/scope.ts'
-import { claudeSessionEnv, cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
-import type { EngineRunnerContext, LateBoundRefs, ShellAgentWriteOption } from '../options.ts'
+import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
+import type { EngineRunnerContext, ShellAgentWriteOption } from '../options.ts'
+import type { BridgeHub } from './bridge.ts'
+import type { SessionParkManager } from './parking.ts'
 import type { ProfileService } from './profiles.ts'
+import type { SessionRegistry } from './registry.ts'
 
 export type SessionFactoryDeps = {
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
@@ -23,7 +30,10 @@ export type SessionFactoryDeps = {
   peers?: PeerDirectory
   shells?: ShellDirectory
   shellAgentWrite?: ShellAgentWriteOption
-  refs: LateBoundRefs
+  pricing?: PricingTable
+  registry: SessionRegistry
+  parking: SessionParkManager
+  bridge: BridgeHub
 }
 
 // A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
@@ -34,13 +44,43 @@ export type SessionPrincipal = { operator: boolean }
 
 export type SessionFactory = ReturnType<typeof createSessionFactory>
 
+type EngineGrant = {
+  refuses: (req: CreateSessionRequest, caps: EngineCapabilities) => boolean
+  error: (engine: string, name: string) => string
+}
+
+const ENGINE_GRANTS: readonly EngineGrant[] = [
+  {
+    refuses: (req, caps) => !caps.sessionMcpServers && !!req.mcpServers && Object.keys(req.mcpServers).length > 0,
+    error: (engine, name) =>
+      `profile '${name}' runs the ${engine} engine, whose MCP servers are declared outside the session request - a request cannot add its own`,
+  },
+  {
+    refuses: (req, caps) => !caps.budgets && (req.maxTurns !== undefined || req.maxBudgetUsd !== undefined),
+    error: (engine) => `the ${engine} engine does not honor maxTurns/maxBudgetUsd`,
+  },
+  {
+    refuses: (req, caps) => !caps.settingSources && req.settingSources !== undefined,
+    error: (engine) => `the ${engine} engine does not load settingSources`,
+  },
+  { refuses: (req, caps) => !caps.resume && req.resume !== undefined, error: (engine) => `the ${engine} engine cannot resume a session` },
+  {
+    refuses: (req, caps) => !!req.forkSession && caps.forkSession !== true,
+    error: (engine) => `the ${engine} engine cannot fork a resumed session`,
+  },
+  {
+    refuses: (req, caps) => req.reasoningEffort !== undefined && (!caps.reasoningEfforts || caps.reasoningEfforts.length === 0),
+    error: (engine) => `the ${engine} engine does not take a reasoningEffort`,
+  },
+]
+
 // Applied after the host's hook for the same reason as scope: the hook may rebuild the config from the request.
 function withPrincipal(config: SessionRunnerConfig, operator: boolean | undefined): SessionRunnerConfig {
   return operator === undefined ? config : { ...config, createdByOperator: operator }
 }
 
 export function createSessionFactory(deps: SessionFactoryDeps) {
-  const { adapterFor, profiles, refs } = deps
+  const { adapterFor, profiles, registry, parking, bridge } = deps
 
   const subscriptionNoticeShown = new Set<string>()
 
@@ -48,8 +88,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     if (!deps.disableBypassPermissions) {
       return null
     }
-    if (req.permissionMode === 'bypassPermissions') {
-      return 'bypassPermissions is disabled on this server (disableBypassPermissions)'
+    const refused = refusePermissionMode(req.permissionMode, { operator: true, disableBypass: true })
+    if (refused) {
+      return refused
     }
     delete req.allowDangerouslySkipPermissions
     return null
@@ -67,29 +108,10 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   }
 
   const checkEngineGrants = (req: CreateSessionRequest, profile: ProfileInfo | undefined): string | null => {
-    const engine = engineOf(profile)
     const caps = adapterFor(profile?.engine).capabilities
-    const name = profile?.name ?? 'default'
-    if (!caps.sessionMcpServers && req.mcpServers && Object.keys(req.mcpServers).length > 0) {
-      return (
-        `profile '${name}' runs the ${engine} engine, whose MCP servers are declared ` +
-        'outside the session request - a request cannot add its own'
-      )
-    }
-    if (!caps.budgets && (req.maxTurns !== undefined || req.maxBudgetUsd !== undefined)) {
-      return `the ${engine} engine does not honor maxTurns/maxBudgetUsd`
-    }
-    if (!caps.settingSources && req.settingSources !== undefined) {
-      return `the ${engine} engine does not load settingSources`
-    }
-    if (!caps.resume && req.resume !== undefined) {
-      return `the ${engine} engine cannot resume a session`
-    }
-    if (req.forkSession && engine !== 'claude') {
-      return `the ${engine} engine cannot fork a resumed session`
-    }
-    if (req.reasoningEffort !== undefined && (!caps.reasoningEfforts || caps.reasoningEfforts.length === 0)) {
-      return `the ${engine} engine does not take a reasoningEffort`
+    const grant = ENGINE_GRANTS.find((candidate) => candidate.refuses(req, caps))
+    if (grant) {
+      return grant.error(engineOf(profile), profile?.name ?? 'default')
     }
     if (!profile || !isProviderProfile(profile)) {
       return null
@@ -114,7 +136,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
   }
 
-  const applyScope = (req: CreateSessionRequest, auth: { scope?: Record<string, string> }): { status: number; error: string } | null => {
+  const applyScope = (req: CreateSessionRequest, auth: { scope?: Record<string, string> }): Refusal | null => {
     const invalid = checkScope(req.scope)
     if (invalid) {
       return { status: 400, error: invalid }
@@ -138,12 +160,12 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     return null
   }
 
-  const checkCwd = (req: CreateSessionRequest, profile: ProfileInfo | undefined): { status: number; error: string } | null => {
+  const checkCwd = (req: CreateSessionRequest, profile: ProfileInfo | undefined): Refusal | null => {
     if (req.cwd !== undefined && typeof req.cwd !== 'string') {
       return { status: 400, error: 'cwd must be a string' }
     }
     if (!req.cwd) {
-      // Absent = true, so an engine record predating the field keeps the old always-required behaviour.
+      // Absent = true: an engine record that omits the field keeps the always-required behaviour.
       return adapterFor(profile?.engine).capabilities.hostCwd === false ? null : { status: 400, error: 'cwd is required' }
     }
     return cwdAllowed(req.cwd, deps.allowedCwdRoots) ? null : { status: 403, error: 'cwd is outside the allowed roots' }
@@ -159,28 +181,22 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
 
   const buildRunnerConfig = (req: CreateRequestWithPrincipal, principal?: SessionPrincipal): SessionRunnerConfig => {
     const profile = req.profile !== undefined ? profiles.get(req.profile) : undefined
-    const operator = principal?.operator ?? req.createdByOperator
-    if (!profile) {
-      return withApprovalDefault(withPrincipal(withScope(deps.hostBuildRunnerConfig(req), req.scope), operator))
-    }
+    const effective = profile
+      ? {
+          ...req,
+          model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
+          permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
+        }
+      : req
     const config = withApprovalDefault(
-      withPrincipal(
-        withScope(
-          deps.hostBuildRunnerConfig({
-            ...req,
-            model: req.model ?? profile.defaults?.model ?? profile.provider?.model,
-            permissionMode: req.permissionMode ?? profile.defaults?.permissionMode,
-          }),
-          req.scope,
-        ),
-        operator,
-      ),
+      withPrincipal(withScope(deps.hostBuildRunnerConfig(effective), req.scope), principal?.operator ?? req.createdByOperator),
     )
-    if (engineOf(profile) !== 'claude') {
+    const sessionEnv = profile ? adapterFor(profile.engine).sessionEnv : undefined
+    if (!profile || !sessionEnv) {
       return config
     }
     const base = config.env ?? process.env
-    const env = claudeSessionEnv(profile, base)
+    const env = sessionEnv(profile, base)
     // A skipped pin returns `base` itself - leaving the config alone keeps an unset `env` unset, so the SDK spawns on process.env.
     return env === base ? config : { ...config, env }
   }
@@ -189,7 +205,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     try {
       return buildRunnerConfig({ cwd: process.cwd(), profile: profile.name }).env ?? process.env
     } catch {
-      return engineOf(profile) === 'claude' ? claudeSessionEnv(profile, process.env) : process.env
+      return adapterFor(profile.engine).sessionEnv?.(profile, process.env) ?? process.env
     }
   }
 
@@ -204,7 +220,11 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     // tools are offered only where a shell of this session's could exist at all: enabled on the gateway, host cwd
     // engine. The write tools need, on top, the gateway's say-so and a session an operator created; both are read
     // afresh on every build, so a record never carries a stale grant.
-    const config: SessionRunnerConfig = { ...built, ...(deps.peers ? { peers: deps.peers } : {}) }
+    const config: SessionRunnerConfig = {
+      ...built,
+      ...(deps.peers ? { peers: deps.peers } : {}),
+      ...(deps.pricing ? { pricing: deps.pricing } : {}),
+    }
     delete config.shells
     delete config.shellAgentWrite
     if (deps.shells && capabilities.hostCwd === true) {
@@ -220,7 +240,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     const runner =
       profile && isProviderProfile(profile)
         ? // Non-null: startup refuses a provider profile when no factory was wired.
-          await deps.createEngineRunner!({ config, profile, bridge: refs.bridge!, restore, id })
+          await deps.createEngineRunner!({ config, profile, bridge, restore, id })
         : // The in-repo adapters refuse `restore` themselves - neither binary can rebuild a parked session.
           await adapterFor(profile?.engine).createRunner({ config, profile, restore, id })
     const reported = runner.info().scope
@@ -234,10 +254,10 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   }
 
   const createRunner = async (config: SessionRunnerConfig): Promise<Runner> => {
-    const runner = refs.registry!.register(await buildRunner(config))
+    const runner = registry.register(await buildRunner(config))
     // Watchers first, then start: a session must not emit anything before the things that persist and account for it are listening.
-    refs.parking!.remember(runner.id, config)
-    refs.parking!.watch(runner)
+    parking.remember(runner.id, config)
+    parking.watch(runner)
     void runner.start()
     return runner
   }

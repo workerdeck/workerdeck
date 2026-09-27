@@ -1,11 +1,11 @@
 import { sessionState } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
+import { hostCommands, pickCommand, registerCommands, sessionCommands, viewCommands } from './commands.ts'
 import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore } from './hosts.ts'
-import { isLocalHost } from './machine.ts'
 import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 import { SessionPanelView } from './panel.ts'
 import { SessionEditorTab } from './session-tab.ts'
@@ -17,12 +17,12 @@ import { addProfile, editProfile, manageProfiles, removeProfile, type ProfileFlo
 import { ProfilesModel } from './profiles-model.ts'
 import { ProfilesViewProvider } from './profiles-view.ts'
 import { SectionViewProvider, type SectionKind } from './section-view.ts'
-import { hostActions, HostStatusItem } from './host/status-item.ts'
+import { HostStatusItem } from './host/status-item.ts'
 import { HostSupervisor } from './host/supervisor.ts'
 import { HOST_SECTION, needsRestart } from './host/settings.ts'
 import { SessionsModel } from './sessions-model.ts'
 import { SidebarProvider } from './sidebar.ts'
-import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled, currentModel, modelLabel } from './status-bar.ts'
+import { SessionStatusBar, SubagentStatusItem, UnreadStatusItem, badgeEnabled } from './status-bar.ts'
 import { createWatermarks, unseenCount } from './watermarks.ts'
 
 const SECTION_VIEWS: Record<SectionKind, string> = {
@@ -121,8 +121,6 @@ export function activate(context: vscode.ExtensionContext): void {
     const unseen: Record<string, number> = {}
     for (const [hostId, list] of Object.entries(sessions)) {
       for (const info of list) {
-        // `unseenCount` owns the prose → rows → turns ladder; a second copy of it here is
-        // how this badge and the dashboard's came to disagree.
         const fresh = unseenCount(watermarks.get(hostId, info.id), info)
         if (fresh > 0) {
           unseen[`${hostId}:${info.id}`] = fresh
@@ -474,168 +472,27 @@ export function activate(context: vscode.ExtensionContext): void {
       isCaseSensitive: true,
     }),
 
-    vscode.commands.registerCommand('workerdeck.host.start', () => requireHost()?.start()),
-    vscode.commands.registerCommand('workerdeck.host.stop', () => requireHost()?.stop()),
-    vscode.commands.registerCommand('workerdeck.host.restart', () => requireHost()?.restart()),
-    vscode.commands.registerCommand('workerdeck.host.reload', () => requireHost()?.hotReload()),
-    vscode.commands.registerCommand('workerdeck.host.openDashboard', () => requireHost()?.openDashboard()),
-    vscode.commands.registerCommand('workerdeck.host.showLog', () => requireHost()?.showLog()),
-    vscode.commands.registerCommand('workerdeck.host.actions', () => hostActions(hostSupervisor?.state ?? { kind: 'disabled' })),
-    vscode.commands.registerCommand('workerdeck.openSettings', () =>
-      vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${context.extension.id}`),
+    ...registerCommands(
+      hostCommands({ extensionId: context.extension.id, supervisor: hostSupervisor, require: requireHost }),
+      viewCommands({ sidebar }),
+      sessionCommands({ store, panel, registry, selectSession, moveToPanel }),
+      {
+        'workerdeck.manageProfiles': () => manageProfiles(profileFlow),
+        'workerdeck.showProfiles': () => profiles.reveal(),
+        'workerdeck.addProfile': () => addProfile(profileFlow),
+        'workerdeck.refreshProfiles': () => profilesModel.refresh(),
+        'workerdeck.addGateway': () => addGateway(gatewayFlow),
+        'workerdeck.showGateways': () => gateways.reveal(),
+        'workerdeck.newSession': () => createSession(sessionFlow),
+        'workerdeck.resumeSession': () => resumeSession(sessionFlow),
+        'workerdeck.refreshSessions': () => model.refresh(),
+      },
     ),
-    vscode.commands.registerCommand('workerdeck.host.openSettings', () =>
-      vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${context.extension.id} ${HOST_SECTION}`),
-    ),
-
-    vscode.commands.registerCommand('workerdeck.manageProfiles', () => manageProfiles(profileFlow)),
-    vscode.commands.registerCommand('workerdeck.showProfiles', () => profiles.reveal()),
-    vscode.commands.registerCommand('workerdeck.addProfile', () => addProfile(profileFlow)),
-    vscode.commands.registerCommand('workerdeck.refreshProfiles', () => profilesModel.refresh()),
-    vscode.commands.registerCommand('workerdeck.addGateway', () => addGateway(gatewayFlow)),
-    vscode.commands.registerCommand('workerdeck.showGateways', () => gateways.reveal()),
-    vscode.commands.registerCommand('workerdeck.newSession', () => createSession(sessionFlow)),
-    vscode.commands.registerCommand('workerdeck.resumeSession', () => resumeSession(sessionFlow)),
-    vscode.commands.registerCommand('workerdeck.refreshSessions', () => model.refresh()),
-
-    vscode.commands.registerCommand('workerdeck.showSearch', () => sidebar.setSearchOpen(true)),
-    vscode.commands.registerCommand('workerdeck.hideSearch', () => sidebar.setSearchOpen(false)),
-    vscode.commands.registerCommand('workerdeck.toggleSearch', () => sidebar.toggleSearch()),
-    vscode.commands.registerCommand('workerdeck.showFilter', () => sidebar.toggleFilters()),
-    vscode.commands.registerCommand('workerdeck.showFilterActive', () => sidebar.toggleFilters()),
-    vscode.commands.registerCommand('workerdeck.toggleFilter', () => sidebar.toggleFilters()),
-
-    // Each command sets the state it names. They used to set the *next* one, which is what a
-    // press-to-cycle title button needs and the opposite of what a menu item means.
-    vscode.commands.registerCommand('workerdeck.subagentsActive', () => sidebar.setSubagents('active')),
-    vscode.commands.registerCommand('workerdeck.subagentsAll', () => sidebar.setSubagents('all')),
-    vscode.commands.registerCommand('workerdeck.subagentsNone', () => sidebar.setSubagents('none')),
-
-    vscode.commands.registerCommand('workerdeck.openSessionInEditor', async () => {
-      const session = panel.session
-      if (!session) {
-        void vscode.window.showInformationMessage('WorkerDeck: open a session in the Agent panel first.')
-        return
-      }
-      await selectSession(session.host.id, session.sessionId, { target: 'editor' })
-    }),
-    vscode.commands.registerCommand('workerdeck.moveSessionToPanel', async () => {
-      const focused = registry.focused
-      const tab = registry.activeTab() ?? (focused.kind === 'editor' ? (focused as SessionEditorTab) : undefined)
-      if (!tab) {
-        void vscode.window.showInformationMessage('WorkerDeck: no session tab is active.')
-        return
-      }
-      await moveToPanel(tab)
-    }),
-
-    vscode.commands.registerCommand('workerdeck.selectModel', async () => {
-      const surface = registry.focused
-      const vitals = surface.vitals
-      const models = vitals?.models ?? []
-      if (models.length === 0) {
-        void vscode.window.showInformationMessage('WorkerDeck: no models to switch to yet.')
-        return
-      }
-      const current = currentModel(vitals)
-      const picked = await vscode.window.showQuickPick(
-        models.map((m) => ({
-          label: m.displayName,
-          description: m.value === current?.value ? 'current' : undefined,
-          detail: m.description ?? m.resolvedModel ?? m.value,
-          value: m.value,
-        })),
-        { title: 'WorkerDeck: model', placeHolder: modelLabel(vitals) },
-      )
-      if (picked) {
-        surface.setModel(picked.value)
-      }
-    }),
-    vscode.commands.registerCommand('workerdeck.selectPermissionMode', async () => {
-      const surface = registry.focused
-      const vitals = surface.vitals
-      const modes = vitals?.permissionModes ?? []
-      if (modes.length === 0) {
-        void vscode.window.showInformationMessage('WorkerDeck: this session has no mode switch.')
-        return
-      }
-      const current = vitals?.permissionMode
-      const picked = await vscode.window.showQuickPick(
-        modes.map((m) => ({
-          label: m.dangerous ? `$(warning) ${m.label}` : m.label,
-          description: m.value === current ? 'current' : undefined,
-          detail: m.description,
-          mode: m.value,
-          // A mode the session can never be granted stays visible and unpickable.
-          alwaysShow: true,
-          picked: m.value === current,
-          disabled: m.disabled,
-        })),
-        { title: 'WorkerDeck: permission mode' },
-      )
-      if (picked && !picked.disabled) {
-        surface.setPermissionMode(picked.mode)
-      }
-    }),
-
-    vscode.commands.registerCommand('workerdeck.useSkill', () => pickCommand(registry.focused)),
-
-    vscode.commands.registerCommand('workerdeck.openProjectFolder', async () => {
-      const session = registry.focused.session
-      if (!session?.cwd) {
-        void vscode.window.showInformationMessage('WorkerDeck: open a session first.')
-        return
-      }
-      const uri = (await isLocalHost(store, session.host))
-        ? vscode.Uri.file(session.cwd)
-        : vscode.Uri.from({
-            scheme: WorkerdeckFileSystem.scheme,
-            authority: session.host.id.toLowerCase(),
-            path: session.cwd,
-          })
-      const name =
-        uri.scheme === WorkerdeckFileSystem.scheme ? `${session.host.name}: ${session.cwd.split('/').pop() ?? session.cwd}` : undefined
-      vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, {
-        uri,
-        name,
-      })
-    }),
   )
 }
 
 function sameRef(a: SessionRef, b: SessionRef): boolean {
   return a.host.id === b.host.id && a.sessionId === b.sessionId
-}
-
-// The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts - this QuickPick is its
-// native stand-in, over the same merged list the composer's `/` offers.
-async function pickCommand(surface: AnySurface): Promise<void> {
-  const rows = surface.vitals?.composerCommands
-  if (!rows) {
-    void vscode.window.showInformationMessage('WorkerDeck: commands are listed once the session connects - send a message first.')
-    return
-  }
-  if (rows.length === 0) {
-    void vscode.window.showInformationMessage('WorkerDeck: this session offers no commands or skills.')
-    return
-  }
-  const picked = await vscode.window.showQuickPick(
-    rows.map((row) => ({
-      label: row.label,
-      description: [row.kind === 'skill' ? 'skill' : undefined, row.scope, row.enabled ? undefined : 'disabled']
-        .filter(Boolean)
-        .join(' - '),
-      detail: row.description?.split('\n')[0],
-      insertText: row.insertText,
-      // A skill the session reported but disabled stays visible and unpickable, like an ungrantable permission mode.
-      alwaysShow: true,
-      disabled: !row.enabled,
-    })),
-    { title: 'WorkerDeck: commands and skills', placeHolder: 'Insert into the composer' },
-  )
-  if (picked && !picked.disabled) {
-    surface.insertComposerText(picked.insertText)
-  }
 }
 
 export function deactivate(): void {}

@@ -68,3 +68,28 @@ export const SelectItem: FunctionComponent<SelectPrimitive.Item.Props> = ({ clas
     </SelectPrimitive.ItemIndicator>
   </SelectPrimitive.Item>
 )
+
+export interface OptionSelectProps<T extends string> {
+  label: string
+  value: T
+  options: readonly { value: T; label: string }[]
+  onChange: (value: T) => void
+  className?: string
+}
+
+export function OptionSelect<T extends string>({ label, value, options, onChange, className }: OptionSelectProps<T>) {
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as T)}>
+      <SelectTrigger aria-label={label} className={className}>
+        <SelectValue>{options.find((o) => o.value === value)?.label ?? label}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            <SelectItemText>{option.label}</SelectItemText>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}

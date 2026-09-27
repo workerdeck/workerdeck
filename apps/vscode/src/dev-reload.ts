@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import { watch, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
@@ -50,7 +51,7 @@ export function startDevReload(context: vscode.ExtensionContext, views: readonly
     watchers.push(watch(join(dist, 'webview'), (_e, file) => onChange(file, false)))
     output.appendLine(`watching ${dist} for rebuilds`)
   } catch (err) {
-    output.appendLine(`dev reload off: ${err instanceof Error ? err.message : String(err)}`)
+    output.appendLine(`dev reload off: ${errorMessage(err)}`)
   }
 
   return new vscode.Disposable(() => {

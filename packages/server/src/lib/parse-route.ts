@@ -1,96 +1,97 @@
-export type SessionRoute = {
-  id?: string
-  ws?: boolean
-  permissionId?: string
-  files?: boolean
-  filePath?: string
-  attachments?: boolean
-  attachmentId?: string
-  mcp?: boolean
-  mcpServer?: string
-  produced?: boolean
-  producedFileId?: string
-  shells?: boolean
-  shellId?: string
-  shellAction?: 'output' | 'kill' | 'agent-write'
-  stopTaskId?: string
-  resultSeq?: number
-  projectIcon?: boolean
-}
+import { HttpError } from './http.ts'
 
+export type ShellRouteAction = 'output' | 'kill' | 'agent-write'
+
+export type SessionItemRoute =
+  | { kind: 'session'; id: string }
+  | { kind: 'ws'; id: string }
+  | { kind: 'permission'; id: string; permissionId: string }
+  | { kind: 'attachments'; id: string; attachmentId?: string }
+  | { kind: 'produced'; id: string; producedFileId?: string }
+  | { kind: 'shells'; id: string; shellId?: string; shellAction?: ShellRouteAction }
+  | { kind: 'stop-task'; id: string; stopTaskId: string }
+  | { kind: 'project-icon'; id: string }
+  | { kind: 'tool-result'; id: string; resultSeq: number }
+  | { kind: 'mcp'; id: string; mcpServer?: string }
+  | { kind: 'files'; id: string; filePath?: string }
+
+export type SessionRoute = { kind: 'collection' } | SessionItemRoute
+
+const SHELL_ACTIONS = new Set<string>(['output', 'kill', 'agent-write'])
+
+// Whole-segment matching: `/sessionsX` is not a session path. A segment that is not valid percent-encoding is a 400,
+// and an empty session id is no route at all, so `/sessions//permissions/x` can never reach the collection.
 export function parseSessionRoute(basePath: string, url: string): SessionRoute | null {
   const pathname = new URL(url, 'http://internal').pathname
-  if (!pathname.startsWith(basePath + '/sessions')) {
+  const prefix = basePath + '/sessions'
+  if (pathname !== prefix && !pathname.startsWith(prefix + '/')) {
     return null
   }
-  const rest = pathname.slice((basePath + '/sessions').length)
+  const rest = pathname.slice(prefix.length)
   if (rest === '' || rest === '/') {
-    return {}
+    return { kind: 'collection' }
   }
-  const parts = rest.replace(/^\//, '').split('/')
-  if (parts.length === 1) {
-    return { id: decodeURIComponent(parts[0]!) }
+  const parts = rest.slice(1).split('/')
+  if (parts[0] === '') {
+    return null
   }
-  if (parts.length === 2 && parts[1] === 'ws') {
-    return { id: decodeURIComponent(parts[0]!), ws: true }
+  return itemRoute(parts[0]!, parts)
+}
+
+function itemRoute(rawId: string, parts: string[]): SessionItemRoute | null {
+  const [, section, third, fourth] = parts
+  const length = parts.length
+  if (length === 1) {
+    return { kind: 'session', id: decode(rawId) }
   }
-  if (parts.length === 3 && parts[1] === 'permissions') {
-    return { id: decodeURIComponent(parts[0]!), permissionId: decodeURIComponent(parts[2]!) }
+  if (length === 2 && section === 'ws') {
+    return { kind: 'ws', id: decode(rawId) }
   }
-  if (parts.length <= 3 && parts[1] === 'attachments') {
-    return {
-      id: decodeURIComponent(parts[0]!),
-      attachments: true,
-      attachmentId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
-    }
+  if (length === 3 && section === 'permissions') {
+    const permissionId = decode(third!)
+    return permissionId === '' ? null : { kind: 'permission', id: decode(rawId), permissionId }
   }
-  if (parts.length <= 3 && parts[1] === 'produced') {
-    return {
-      id: decodeURIComponent(parts[0]!),
-      produced: true,
-      producedFileId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
-    }
+  if (length <= 3 && section === 'attachments') {
+    return { kind: 'attachments', id: decode(rawId), attachmentId: optional(third) }
   }
-  if (parts[1] === 'shells' && parts.length <= 4) {
-    const action = parts[3]
-    if (action !== undefined && action !== 'output' && action !== 'kill' && action !== 'agent-write') {
+  if (length <= 3 && section === 'produced') {
+    return { kind: 'produced', id: decode(rawId), producedFileId: optional(third) }
+  }
+  if (section === 'shells' && length <= 4) {
+    if (fourth !== undefined && !SHELL_ACTIONS.has(fourth)) {
       return null
     }
-    return {
-      id: decodeURIComponent(parts[0]!),
-      shells: true,
-      shellId: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
-      shellAction: action,
-    }
+    return { kind: 'shells', id: decode(rawId), shellId: optional(third), shellAction: fourth as ShellRouteAction | undefined }
   }
-  if (parts.length === 4 && parts[1] === 'tasks' && parts[3] === 'stop') {
-    return { id: decodeURIComponent(parts[0]!), stopTaskId: decodeURIComponent(parts[2]!) }
+  if (length === 4 && section === 'tasks' && fourth === 'stop') {
+    return { kind: 'stop-task', id: decode(rawId), stopTaskId: decode(third!) }
   }
-  if (parts.length === 3 && parts[1] === 'project' && parts[2] === 'icon') {
-    return { id: decodeURIComponent(parts[0]!), projectIcon: true }
+  if (length === 3 && section === 'project' && third === 'icon') {
+    return { kind: 'project-icon', id: decode(rawId) }
   }
-  if (parts.length === 4 && parts[1] === 'events' && parts[3] === 'result') {
-    const seq = Number(parts[2])
-    if (!Number.isInteger(seq) || seq < 0) {
-      return null
-    }
-    return { id: decodeURIComponent(parts[0]!), resultSeq: seq }
+  if (length === 4 && section === 'events' && fourth === 'result') {
+    const seq = Number(third)
+    return Number.isInteger(seq) && seq >= 0 ? { kind: 'tool-result', id: decode(rawId), resultSeq: seq } : null
   }
-  if (parts.length <= 3 && parts[1] === 'mcp') {
+  if (length <= 3 && section === 'mcp') {
     // MCP server names are opaque and may contain ':' (plugin:gtm:gtm) - one segment, decoded whole.
-    return {
-      id: decodeURIComponent(parts[0]!),
-      mcp: true,
-      mcpServer: parts[2] === undefined ? undefined : decodeURIComponent(parts[2]),
-    }
+    return { kind: 'mcp', id: decode(rawId), mcpServer: optional(third) }
   }
-  if (parts.length >= 2 && parts[1] === 'files') {
-    const filePath = parts.slice(2).map(decodeURIComponent).join('/')
-    return {
-      id: decodeURIComponent(parts[0]!),
-      files: true,
-      filePath: filePath === '' ? undefined : '/' + filePath,
-    }
+  if (length >= 2 && section === 'files') {
+    const filePath = parts.slice(2).map(decode).join('/')
+    return { kind: 'files', id: decode(rawId), filePath: filePath === '' ? undefined : '/' + filePath }
   }
   return null
+}
+
+function optional(segment: string | undefined): string | undefined {
+  return segment === undefined ? undefined : decode(segment)
+}
+
+function decode(segment: string): string {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    throw new HttpError(400, 'malformed percent-encoding in path')
+  }
 }

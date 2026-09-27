@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import type { PermissionRequest } from '@workerdeck/protocol'
 import { toolInputPreview } from '../../lib/format.ts'
-import { planFromRequest } from '../../lib/plan-request.ts'
-import { shellRequestLines, shellRequestPayload, shellRequestTitle } from '../../lib/shell-request.ts'
+import { permissionPromptModel } from '../../lib/permission-prompt.ts'
+import { shellRequestLines } from '../../lib/shell-request.ts'
 import { TerminalDiff, previewPatch } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { Choices, Hint, PromptInput, PromptTitle, Rule } from './prompt.tsx'
@@ -29,15 +29,10 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
     setDenying(false)
   }
 
-  const plan = planFromRequest(request)
-  const shell = plan ? undefined : shellRequestPayload(request)
+  const model = permissionPromptModel(request)
+  const { plan, shell, heading } = model
   const patch = plan || shell ? undefined : previewPatch(request.input)
   const summary = plan || shell ? '' : toolInputPreview(request.input)
-  const heading = plan
-    ? 'Plan ready for review'
-    : shell
-      ? shellRequestTitle(shell)
-      : (request.displayName ?? request.title ?? 'Permission needed')
   const subject = patch?.path ?? (summary || undefined)
 
   const reasonInput = denying ? (
@@ -46,25 +41,16 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
       onChange={setReason}
       onSubmit={() => deny(false)}
       onCancel={() => setDenying(false)}
-      placeholder={
-        plan
-          ? 'What should change? (optional) - the agent keeps planning and reads this'
-          : 'Reason (optional) - the agent reads this and can try something else'
-      }
+      placeholder={model.denyPlaceholder}
     />
   ) : undefined
 
-  const options = plan
-    ? [
-        { key: 'allow', label: 'Approve plan' },
-        { key: 'deny', label: 'Keep planning - tell it what to change', detail: reasonInput },
-        { key: 'stop', label: 'No, and stop the turn', danger: true },
-      ]
-    : [
-        { key: 'allow', label: 'Yes' },
-        { key: 'deny', label: 'No, and tell the agent what to do differently', detail: reasonInput },
-        { key: 'stop', label: 'No, and stop the turn', danger: true },
-      ]
+  const options = model.choices.map((choice) => ({
+    key: choice.key,
+    label: choice.option,
+    danger: choice.danger,
+    detail: choice.key === 'deny' ? reasonInput : undefined,
+  }))
 
   return (
     <div
@@ -104,14 +90,14 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
           <Blank />
           <Rule dashed />
         </>
-      ) : request.description ? (
+      ) : model.description ? (
         <>
-          <Row tone="dim">{request.description}</Row>
+          <Row tone="dim">{model.description}</Row>
           <Blank />
         </>
       ) : null}
-      {request.decisionReason ? <Row tone="faint">{request.decisionReason}</Row> : null}
-      <Row>{plan ? 'Ready to implement this plan?' : shell ? 'Do you want to let it?' : (request.title ?? `Do you want to proceed?`)}</Row>
+      {model.decisionReason ? <Row tone="faint">{model.decisionReason}</Row> : null}
+      <Row>{model.question}</Row>
       <Choices
         label={heading}
         options={options}
@@ -119,11 +105,12 @@ export function TerminalPermissionPrompt({ request, onApprove, onDeny, className
         onFocus={setFocused}
         active={!denying}
         onChoose={(index) => {
-          if (index === 0) {
+          const key = model.choices[index]?.key
+          if (key === 'allow') {
             onApprove(request.id)
-          } else if (index === 1) {
+          } else if (key === 'deny') {
             setDenying(true)
-          } else {
+          } else if (key === 'stop') {
             deny(true)
           }
         }}

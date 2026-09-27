@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { ClaudeAuthStatus } from '@workerdeck/core'
+import { withoutGatewaySecrets, type ClaudeAuthStatus } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 
 let fakeHome = ''
@@ -72,7 +72,8 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port)).status).toBe(201)
     await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
-    expect(harness.captured.options?.env).toBeUndefined()
+    // Unpinned means the process env as-is; the runner only ever removes the gateway's own key from it.
+    expect(harness.captured.options?.env).toEqual(withoutGatewaySecrets(process.env))
   })
 
   it('does not pin a declared profile that names ~/.claude (even unnormalized)', async () => {
@@ -147,7 +148,8 @@ describe('CLAUDE_CONFIG_DIR pinning', () => {
     const { port } = await running.listen(0, '127.0.0.1')
     expect((await createSession(port)).status).toBe(201)
     await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
-    expect(harness.captured.options?.env).toBeUndefined()
+    // Unpinned means the process env as-is; the runner only ever removes the gateway's own key from it.
+    expect(harness.captured.options?.env).toEqual(withoutGatewaySecrets(process.env))
   })
 })
 

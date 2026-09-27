@@ -279,14 +279,29 @@ function slashCommandText(text: string): string | undefined {
   return args ? `${name} ${args}` : name
 }
 
-function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] {
-  const index = items.findIndex((existing) => existing.id === item.id && existing.kind === item.kind)
+// Streaming ids are unique per agent and the in-flight row sits at the tail, so a token scans a few items, not the transcript.
+function findLastIndexOf(items: readonly TranscriptItem[], kind: TranscriptItem['kind'], id: string): number {
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index]
+    if (item?.id === id && item.kind === kind) {
+      return index
+    }
+  }
+  return -1
+}
+
+function replaceAt(items: TranscriptItem[], index: number, item: TranscriptItem): TranscriptItem[] {
   if (index === -1) {
     return [...items, item]
   }
   const next = [...items]
   next[index] = item
   return next
+}
+
+function upsert(items: TranscriptItem[], item: TranscriptItem): TranscriptItem[] {
+  const index = items.findIndex((existing) => existing.id === item.id && existing.kind === item.kind)
+  return replaceAt(items, index, item)
 }
 
 export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): TranscriptState {
@@ -311,7 +326,7 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
   }
 }
 
-export function rateLimitWindows(state: TranscriptState): UsageWindowRow[] {
+export function rateLimitWindows(state: Pick<TranscriptState, 'rateLimits' | 'rateLimitsUpdatedAt'>): UsageWindowRow[] {
   return orderUsageWindows(mergeUsage({ rateLimits: state.rateLimits, updatedAt: state.rateLimitsUpdatedAt }, undefined))
 }
 
@@ -596,9 +611,8 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       }
       if (delta.delta?.type === 'text_delta') {
         const id = streamingTextId(event.parentToolUseId)
-        const existing = base.items.find(
-          (item): item is Extract<TranscriptItem, { kind: 'assistant_text' }> => item.kind === 'assistant_text' && item.id === id,
-        )
+        const index = findLastIndexOf(base.items, 'assistant_text', id)
+        const existing = index === -1 ? undefined : (base.items[index] as Extract<TranscriptItem, { kind: 'assistant_text' }>)
         const item: TranscriptItem = {
           kind: 'assistant_text',
           id,
@@ -606,13 +620,12 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           streaming: true,
           parentToolUseId: event.parentToolUseId,
         }
-        return { ...base, items: upsert(base.items, item) }
+        return { ...base, items: replaceAt(base.items, index, item) }
       }
       if (delta.delta?.type === 'thinking_delta') {
         const id = streamingThinkingId(event.parentToolUseId)
-        const existing = base.items.find(
-          (item): item is Extract<TranscriptItem, { kind: 'thinking' }> => item.kind === 'thinking' && item.id === id,
-        )
+        const index = findLastIndexOf(base.items, 'thinking', id)
+        const existing = index === -1 ? undefined : (base.items[index] as Extract<TranscriptItem, { kind: 'thinking' }>)
         const text = (existing?.text ?? '') + (delta.delta.thinking ?? '')
         // Whitespace-only (encrypted) thinking creates no item - `turn_result` would finalize a permanent empty row; text rebuilds from `existing`, so skipping loses nothing.
         if (text.trim() === '') {
@@ -624,7 +637,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
           text,
           parentToolUseId: event.parentToolUseId,
         }
-        return { ...base, items: upsert(base.items, item) }
+        return { ...base, items: replaceAt(base.items, index, item) }
       }
       return base
     }

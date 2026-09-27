@@ -11,6 +11,16 @@ export type InputOptions = {
   validate?: (value: string) => string | undefined
 }
 
+export type PickOptions<T extends vscode.QuickPickItem> = {
+  title: string
+  placeHolder?: string
+  activeItem?: T
+  value?: string
+  step?: number
+  totalSteps?: number
+  freeText?: (value: string) => T | undefined
+}
+
 export const CANCEL = Symbol('cancel')
 export const BACK = Symbol('back')
 export type Answer<T> = T | typeof CANCEL | typeof BACK
@@ -66,28 +76,31 @@ export function showInput(options: InputOptions): Promise<Answer<string>> {
   })
 }
 
-export function showPick<T extends vscode.QuickPickItem>(
-  items: readonly T[],
-  options: { title: string; placeHolder?: string; step?: number; totalSteps?: number },
-): Promise<Answer<T>> {
+export function showPick<T extends vscode.QuickPickItem>(items: readonly T[], options: PickOptions<T>): Promise<Answer<T>> {
   return new Promise((resolve) => {
     const pick = vscode.window.createQuickPick<T>()
     pick.title = options.title
     pick.placeholder = options.placeHolder
-    pick.items = items
+    pick.step = options.step
+    pick.totalSteps = options.totalSteps
     pick.ignoreFocusOut = true
-    if (options.step !== undefined) {
-      pick.step = options.step
-      pick.totalSteps = options.totalSteps
-      if (options.step > 1) {
-        pick.buttons = [vscode.QuickInputButtons.Back]
-      }
+    pick.items = [...items]
+    if ((options.step ?? 1) > 1) {
+      pick.buttons = [vscode.QuickInputButtons.Back]
     }
+
     let answered = false
     const finish = (answer: Answer<T>) => {
       answered = true
       resolve(answer)
       pick.hide()
+    }
+    if (options.freeText) {
+      const base = [...items]
+      pick.onDidChangeValue((value) => {
+        const extra = options.freeText?.(value)
+        pick.items = extra ? [extra, ...base] : base
+      })
     }
     pick.onDidTriggerButton((button) => {
       if (button === vscode.QuickInputButtons.Back) {
@@ -95,17 +108,27 @@ export function showPick<T extends vscode.QuickPickItem>(
       }
     })
     pick.onDidAccept(() => {
-      const selected = pick.selectedItems[0]
+      const [selected] = pick.selectedItems
       if (selected) {
         finish(selected)
       }
     })
+    // Fires for `esc` and for a real hide alike, so it must not clobber an answer already resolved.
     pick.onDidHide(() => {
       if (!answered) {
         resolve(CANCEL)
       }
       pick.dispose()
     })
+    // After the change handler is registered: assigning `value` fires it, and the free-text
+    // row has to be computed against the prefill rather than an empty box.
+    if (options.value) {
+      pick.value = options.value
+    }
+    // …and the active row after *that*: reassigning `items` resets the cursor to the first.
+    if (options.activeItem) {
+      pick.activeItems = [options.activeItem]
+    }
     pick.show()
   })
 }

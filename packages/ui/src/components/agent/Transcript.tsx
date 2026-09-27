@@ -243,3 +243,16 @@ export function Transcript({
     </TranscriptVariantProvider>
   )
 }
+
+export interface TerminalTranscriptProps {
+  state: TranscriptState
+  fileUrl?: (path: string) => string
+  fontSize?: number
+  lineHeight?: number
+  affordances?: TerminalAffordances | boolean
+  className?: string
+}
+
+export function TerminalTranscript(props: TerminalTranscriptProps) {
+  return <Transcript {...props} variant="terminal" />
+}

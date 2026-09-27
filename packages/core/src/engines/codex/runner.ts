@@ -1,562 +1,88 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   ENGINE_CAPABILITIES,
-  type ContentBlock,
-  type CreateSessionRequest,
-  type FilePatch,
+  supportsPermissionMode,
   type McpServerStatusInfo,
-  type PermissionDecisionSource,
   type PermissionMode,
   type PermissionRequest,
-  type SessionEvent,
   type SessionEventBody,
   type SessionInfo,
-  type SessionStatus,
-  type SkillInfo,
-  type UserQuestion,
   tokenUsageFromWire,
+  errorMessage,
 } from '@workerdeck/protocol'
-import { resolveApprovalTimeoutMs } from '../../lib/approval-timeout.ts'
-import { attachmentKind, attachmentRef, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
-import { LocalCommandQueue, localCommandEvent, type LocalCommandResult, type LocalShellSource } from '../../lib/local-command.ts'
-import { parseUnifiedDiff } from '../../lib/patch.ts'
-import type { PermissionDecision, Runner, SendMessageOptions, SessionEventListener } from '../../runner-interface.ts'
+import { attachmentKind, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
+import type { EngineRunnerConfig, Runner, SendMessageOptions } from '../../runner-interface.ts'
 import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
-import { CostLedger, type CostLedgerState } from '../../lib/cost-ledger.ts'
-import { EventLog } from '../../lib/event-log.ts'
-import { SubscriberSet, type SubscribeOptions } from '../../lib/subscribers.ts'
-import { sessionTitle, withTitle } from '../../lib/title.ts'
-import { resolveInstructions, type SessionInstructions } from '../../lib/instructions.ts'
-import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
-import { JsonRpcError } from './jsonrpc.ts'
-import { CodexAgentTracker, type CodexAgent, type ItemScope } from './subagents.ts'
-import { untrustedProjectNotice } from './trust.ts'
-import { isPeerToolName, peerToolSpecs, runPeerTool, withPeerContext, type PeerDirectory } from '../../lib/peers.ts'
+import { EngineRunner } from '../../lib/engine-runner.ts'
+import { type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
+import { resolveInstructions } from '../../lib/instructions.ts'
+import { withPeerContext } from '../../lib/peers.ts'
+import { runSessionTool, sessionToolSpecs } from '../../lib/session-tools.ts'
+import { isShellToolName, shellToolNeedsCard, shellWriteDeniedText } from '../../lib/shells.ts'
 import {
-  isShellToolName,
-  runShellTool,
-  shellToolNeedsCard,
-  shellToolSpecs,
-  shellWriteDeniedText,
-  type ShellAgentWrite,
-  type ShellDirectory,
-} from '../../lib/shells.ts'
+  APPROVAL_CHANNELS,
+  SHELL_WRITE_CHANNEL,
+  answerApproval,
+  offeredDecisions,
+  recommendedAnswers,
+  type ApprovalChannel,
+  type ShellWriteVerdict,
+} from './approvals.ts'
+import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
+import { incompleteHistoryNotice, loadHistory, replayTurns, type HistorySink, type ResumedHistory } from './history.ts'
+import {
+  emitDelta,
+  fileProducedEvent,
+  itemCompleted,
+  itemContext,
+  itemProgress,
+  reasoningDelta,
+  settleAgentTurn,
+  threadIdOf,
+  type ItemContext,
+} from './items.ts'
+import { JsonRpcError } from './jsonrpc.ts'
+import { mcpServerInfo, type McpStartupStatus } from './mcp.ts'
+import {
+  SHELL_WRITE_GATE_MODES,
+  modePolicy,
+  readWorkspaceWrite,
+  threadSandbox,
+  turnSandboxPolicy,
+  type CodexWorkspaceWrite,
+} from './policy.ts'
+import { mentionsSkill, skillCatalog, withSkillItems } from './skills.ts'
+import { CodexAgentTracker, type ItemScope } from './subagents.ts'
+import { untrustedProjectNotice } from './trust.ts'
 import type {
-  AppServerCollabAgentToolCallItem,
-  AppServerCommandApprovalParams,
   AppServerConnection,
   AppServerConnectFn,
   AppServerDynamicToolCallParams,
-  AppServerElicitationParams,
-  AppServerFileChangeApprovalParams,
   AppServerHistoryTurn,
-  AppServerImageGenerationItem,
   AppServerItem,
-  AppServerMcpServerStatus,
   AppServerMcpServerStatusResponse,
   AppServerMcpStatusUpdate,
-  AppServerPermissionsApprovalParams,
   AppServerPlanUpdate,
   AppServerRateLimits,
-  AppServerSkillMetadata,
   AppServerSkillsListResponse,
   AppServerTokenUsage,
   AppServerTokenUsageUpdate,
   AppServerTurn,
-  AppServerUnknownItem,
   AppServerUserInput,
-  AppServerUserInputParams,
-  AppServerUserInputQuestion,
-  AppServerUserMessageItem,
 } from './types.ts'
 
-const THREAD_SANDBOX_BY_MODE: Partial<Record<PermissionMode, string>> = {
-  default: 'read-only',
-  acceptEdits: 'workspace-write',
-  auto: 'workspace-write',
-  bypassPermissions: 'danger-full-access',
-}
-
-// Only `#turnSandboxPolicy` may send the workspaceWrite entry: every unstated field of that
-// variant is serde-defaulted, so a bare object resets the operator's networkAccess and
-// writableRoots on every turn.
-const TURN_SANDBOX_BY_MODE: Partial<Record<PermissionMode, { type: string }>> = {
-  default: { type: 'readOnly' },
-  acceptEdits: { type: 'workspaceWrite' },
-  auto: { type: 'workspaceWrite' },
-  bypassPermissions: { type: 'dangerFullAccess' },
-}
-
-type CodexWorkspaceWrite = {
-  writableRoots: string[]
-  networkAccess: boolean
-  excludeTmpdirEnvVar: boolean
-  excludeSlashTmp: boolean
-}
-
-const GRANULAR_ASK = {
-  granular: {
-    sandbox_approval: true,
-    rules: true,
-    mcp_elicitations: true,
-    request_permissions: true,
-    skill_approval: true,
-  },
-}
-const GRANULAR_NEVER = {
-  granular: {
-    sandbox_approval: false,
-    rules: false,
-    mcp_elicitations: false,
-    request_permissions: false,
-    skill_approval: false,
-  },
-}
 const THREAD_SCOPED_NOTIFICATIONS = new Set(['turn/started', 'turn/completed', 'thread/tokenUsage/updated', 'turn/plan/updated'])
 
-const APPROVAL_POLICY_BY_MODE: Partial<Record<PermissionMode, object>> = {
-  default: GRANULAR_ASK,
-  acceptEdits: GRANULAR_ASK,
-  auto: GRANULAR_ASK,
-  bypassPermissions: GRANULAR_NEVER,
-}
+const TOKEN_FIELDS = ['inputTokens', 'cachedInputTokens', 'cacheWriteInputTokens', 'outputTokens', 'reasoningOutputTokens'] as const
 
-const APPROVALS_REVIEWER_BY_MODE: Partial<Record<PermissionMode, string>> = {
-  default: 'user',
-  acceptEdits: 'user',
-  auto: 'auto_review',
-  bypassPermissions: 'user',
-}
-
-export const CODEX_IMAGE_TOOL = 'CodexImageGeneration'
-
-export const CODEX_AGENT_TOOL = 'CodexAgent'
-
-export const CODEX_COLLAB_TOOL = 'CodexCollab'
-
-function agentName(agentPath: string | null | undefined): string | undefined {
-  if (typeof agentPath !== 'string') {
-    return undefined
-  }
-  const name = agentPath.split('/').filter(Boolean).at(-1)
-  return name || undefined
-}
-
-function collabInput(item: AppServerCollabAgentToolCallItem): Record<string, unknown> {
-  return {
-    tool: item.tool,
-    ...(item.receiverThreadIds?.length ? { receiverThreadIds: item.receiverThreadIds } : {}),
-    ...(item.prompt ? { prompt: item.prompt } : {}),
-    ...(item.model ? { model: item.model } : {}),
-  }
-}
-
-function turnReport(turn: AppServerTurn): string | undefined {
-  const items = Array.isArray(turn.items) ? turn.items : []
-  for (let index = items.length - 1; index >= 0; index--) {
-    const item = items[index]
-    if (item?.type === 'agentMessage' && typeof item.text === 'string' && item.text) {
-      return item.text
-    }
-  }
-  return undefined
-}
-
-const MAX_IMAGE_RESULT_CHARS = 512
-
-function shortResult(result: string): boolean {
-  return result.length > 0 && result.length <= MAX_IMAGE_RESULT_CHARS && !result.startsWith('data:')
-}
-
-function producedFileId(path: string): string {
-  return createHash('sha256').update(path).digest('hex').slice(0, 32)
-}
-
-const PRODUCED_MEDIA_TYPES: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  svg: 'image/svg+xml',
-  pdf: 'application/pdf',
-}
-
-function producedMediaType(path: string): string | undefined {
-  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-  return PRODUCED_MEDIA_TYPES[extension]
-}
-
-function skillInfo(skill: AppServerSkillMetadata): SkillInfo {
-  return {
-    name: skill.name,
-    ...(skill.description ? { description: skill.description } : {}),
-    ...((skill.interface?.shortDescription ?? skill.shortDescription)
-      ? { shortDescription: skill.interface?.shortDescription ?? skill.shortDescription }
-      : {}),
-    ...(skill.interface?.displayName ? { displayName: skill.interface.displayName } : {}),
-    ...(skill.interface?.defaultPrompt ? { defaultPrompt: skill.interface.defaultPrompt } : {}),
-    ...(skill.scope ? { scope: skill.scope } : {}),
-    // Codex omits `enabled` for a skill it considers live; defaulting to false would hide it.
-    enabled: skill.enabled !== false,
-  }
-}
-
-const SKILL_MENTION = /(^|[^A-Za-z0-9_$-])\$([a-z0-9][a-z0-9-]*)(?![A-Za-z0-9_-])/g
-
-export function withSkillItems(input: readonly AppServerUserInput[], paths: ReadonlyMap<string, string>): AppServerUserInput[] {
-  const present = new Set(input.flatMap((item) => (item.type === 'skill' ? [item.name] : [])))
-  const added: AppServerUserInput[] = []
-  for (const item of input) {
-    if (item.type !== 'text') {
-      continue
-    }
-    for (const match of item.text.matchAll(SKILL_MENTION)) {
-      const name = match[2]!
-      const path = paths.get(name)
-      if (path === undefined || present.has(name)) {
-        continue
-      }
-      present.add(name)
-      added.push({ type: 'skill', name, path })
-    }
-  }
-  return added.length > 0 ? [...input, ...added] : [...input]
-}
-
-function mentionsSkill(input: readonly AppServerUserInput[]): boolean {
-  return input.some((item) => item.type === 'text' && /(^|[^A-Za-z0-9_$-])\$[a-z0-9]/.test(item.text))
-}
-
-function mcpStatusOf(
-  authStatus: string | undefined,
-  update: { status: string; failureReason?: string } | undefined,
-  hasTools: boolean,
-): string {
-  if (update?.status === 'failed') {
-    return update.failureReason === 'reauthenticationRequired' ? 'needs-auth' : 'failed'
-  }
-  if (update?.status === 'cancelled') {
-    return 'failed'
-  }
-  if (authStatus === 'notLoggedIn') {
-    return 'needs-auth'
-  }
-  if (update?.status === 'ready') {
-    return 'connected'
-  }
-  if (hasTools) {
-    return 'connected'
-  }
-  return 'pending'
-}
-
-function mcpServerInfo(
-  server: AppServerMcpServerStatus,
-  update: { status: string; error?: string; failureReason?: string } | undefined,
-): McpServerStatusInfo {
-  const tools = Object.entries(server.tools ?? {}).flatMap(([key, tool]) => {
-    if (!tool) {
-      return []
-    }
-    const annotations = tool.annotations
-    return [
-      {
-        name: tool.name ?? key,
-        ...(tool.description ? { description: tool.description } : {}),
-        ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : {}),
-        ...(annotations
-          ? {
-              annotations: {
-                ...(annotations.readOnlyHint != null ? { readOnly: annotations.readOnlyHint } : {}),
-                ...(annotations.destructiveHint != null ? { destructive: annotations.destructiveHint } : {}),
-                ...(annotations.openWorldHint != null ? { openWorld: annotations.openWorldHint } : {}),
-              },
-            }
-          : {}),
-      },
-    ]
-  })
-  return {
-    name: server.name,
-    status: mcpStatusOf(server.authStatus ?? undefined, update, tools.length > 0),
-    ...(update?.error ? { error: update.error } : {}),
-    ...(server.serverInfo?.name ? { serverInfo: { name: server.serverInfo.name, version: server.serverInfo.version ?? '' } } : {}),
-    ...(tools.length > 0 ? { tools } : {}),
-  }
-}
-
-function imageGenerationInput(item: AppServerImageGenerationItem): Record<string, unknown> {
-  return {
-    ...(item.revisedPrompt ? { prompt: item.revisedPrompt } : {}),
-    ...(item.savedPath ? { savedPath: item.savedPath } : {}),
-  }
-}
-
-function offeredDecisions(params: unknown): Set<string> | undefined {
-  const raw = (params as { availableDecisions?: unknown })?.availableDecisions
-  if (!Array.isArray(raw)) {
-    return undefined
-  }
-  const names = new Set<string>()
-  for (const entry of raw) {
-    if (typeof entry === 'string') {
-      names.add(entry)
-    } else if (entry && typeof entry === 'object') {
-      for (const key of Object.keys(entry)) {
-        names.add(key)
-      }
-    }
-  }
-  return names.size > 0 ? names : undefined
-}
-
-function pickDecision(behavior: 'allow' | 'deny', interrupt: boolean, offered: Set<string> | undefined): string | undefined {
-  const has = (name: string) => !offered || offered.has(name)
-  if (behavior === 'allow') {
-    return has('accept') ? 'accept' : undefined
-  }
-  if (interrupt && has('cancel')) {
-    return 'cancel'
-  }
-  return 'decline'
-}
-
-function userQuestionsFromCodex(questions: readonly AppServerUserInputQuestion[]): UserQuestion[] {
-  return questions.map((question) => ({
-    question: question.question,
-    header: question.header ?? '',
-    options: (question.options ?? []).map((option) => ({
-      label: option.label,
-      description: option.description,
-    })),
-  }))
-}
-
-function historyUserText(item: AppServerUserMessageItem): string {
-  if (!Array.isArray(item.content)) {
-    return ''
-  }
-  let images = 0
-  const text = item.content
-    .map((part) => {
-      const candidate = part as { type?: string; text?: unknown } | null
-      if (candidate?.type === 'text' && typeof candidate.text === 'string') {
-        return candidate.text
-      }
-      if (typeof candidate?.type === 'string' && candidate.type.toLowerCase().includes('image')) {
-        images += 1
-      }
-      return ''
-    })
-    .filter(Boolean)
-    .join('\n')
-  if (text) {
-    return text
-  }
-  return images > 0 ? `[${images === 1 ? 'image' : `${images} images`}]` : ''
-}
-
-function codexAnswers(
-  questions: readonly AppServerUserInputQuestion[],
-  answers: Record<string, unknown> | undefined,
-): Record<string, { answers: string[] }> {
-  const out: Record<string, { answers: string[] }> = {}
-  for (const question of questions) {
-    const value = answers?.[question.question] ?? answers?.[question.id]
-    if (typeof value === 'string' && value.length > 0) {
-      out[question.id] = { answers: [value] }
-    }
-  }
-  return out
-}
-
-type ApprovalSurface = Pick<PermissionRequest, 'toolName' | 'input' | 'title' | 'displayName' | 'description' | 'decisionReason'>
-
-type ApprovalChannel = {
-  describe(params: unknown): ApprovalSurface
-  itemId(params: unknown): string | undefined
-  allow(
-    params: unknown,
-    updatedInput: Record<string, unknown> | undefined,
-    offered: Set<string> | undefined,
-  ): { response: unknown; decision?: string } | undefined
-  deny(params: unknown, interrupt: boolean, offered: Set<string> | undefined, message?: string): { response: unknown; decision?: string }
-}
-
-type ShellWriteVerdict = { allowed: true; updatedInput?: Record<string, unknown> } | { allowed: false; message?: string }
-
-// The gateway's own gate on the agent's shell write tools: codex answers `item/tool/call` with no reviewer of its
-// own, so the card is raised here before the call runs. The verdict is what the awaiting caller reads; `decision`
-// is left unset on a deny so an interrupting deny also interrupts the turn, which a tool error alone would not.
-const SHELL_WRITE_CHANNEL: ApprovalChannel = {
-  describe: (raw) => {
-    const call = raw as AppServerDynamicToolCallParams
-    const input = typeof call.arguments === 'object' && call.arguments !== null ? (call.arguments as Record<string, unknown>) : {}
-    return { toolName: call.tool, input, title: `Agent wants to run ${call.tool}`, displayName: call.tool }
-  },
-  itemId: (raw) => (raw as AppServerDynamicToolCallParams).callId,
-  allow: (_raw, updatedInput) => ({ response: { allowed: true, updatedInput } satisfies ShellWriteVerdict }),
-  deny: (_raw, _interrupt, _offered, message) => ({ response: { allowed: false, message } satisfies ShellWriteVerdict }),
-}
-
-const SHELL_WRITE_GATE_MODES: ReadonlySet<PermissionMode> = new Set(['default', 'acceptEdits'])
-
-function decisionChannel(describe: (params: unknown) => ApprovalSurface, itemId: (params: unknown) => string | undefined): ApprovalChannel {
-  return {
-    describe,
-    itemId,
-    allow: (_params, _updatedInput, offered) => {
-      const decision = pickDecision('allow', false, offered)
-      return decision ? { response: { decision }, decision } : undefined
-    },
-    deny: (_params, interrupt, offered) => {
-      const decision = pickDecision('deny', interrupt, offered)!
-      return { response: { decision }, decision }
-    },
-  }
-}
-
-const APPROVAL_CHANNELS: Record<string, ApprovalChannel> = {
-  'item/commandExecution/requestApproval': decisionChannel(
-    (raw) => {
-      const params = raw as AppServerCommandApprovalParams
-      const command = params.command ?? undefined
-      return {
-        toolName: 'CodexCommand',
-        input: {
-          ...(command !== undefined ? { command } : {}),
-          ...(params.cwd ? { cwd: params.cwd } : {}),
-          ...(params.reason ? { reason: params.reason } : {}),
-        },
-        title: params.reason ?? (command ? `Codex wants to run: ${command}` : 'Codex wants to run a command'),
-        displayName: 'Run command',
-        description: params.reason && command ? command : (params.cwd ?? undefined),
-        decisionReason: params.reason ?? undefined,
-      }
-    },
-    (raw) => (raw as AppServerCommandApprovalParams).itemId,
-  ),
-  'item/fileChange/requestApproval': decisionChannel(
-    (raw) => {
-      const params = raw as AppServerFileChangeApprovalParams
-      return {
-        toolName: 'CodexFileChange',
-        input: {
-          ...(params.grantRoot ? { grantRoot: params.grantRoot } : {}),
-          ...(params.reason ? { reason: params.reason } : {}),
-        },
-        title: params.reason ?? 'Codex wants to apply file changes',
-        displayName: 'Apply file changes',
-        description: params.grantRoot ? `write access under ${params.grantRoot}` : undefined,
-        decisionReason: params.reason ?? undefined,
-      }
-    },
-    (raw) => (raw as AppServerFileChangeApprovalParams).itemId,
-  ),
-  'item/permissions/requestApproval': {
-    describe: (raw) => {
-      const params = raw as AppServerPermissionsApprovalParams
-      return {
-        toolName: 'CodexPermissions',
-        input: {
-          ...(params.permissions ? { permissions: params.permissions } : {}),
-          ...(params.cwd ? { cwd: params.cwd } : {}),
-          ...(params.reason ? { reason: params.reason } : {}),
-        },
-        title: params.reason ?? 'Codex requests additional permissions',
-        displayName: 'Grant permissions',
-        description: undefined,
-        decisionReason: params.reason ?? undefined,
-      }
-    },
-    itemId: (raw) => (raw as AppServerPermissionsApprovalParams).itemId,
-    allow: (raw, updatedInput) => ({
-      response: {
-        permissions:
-          (updatedInput?.permissions as Record<string, unknown> | undefined) ??
-          (raw as AppServerPermissionsApprovalParams).permissions ??
-          {},
-      },
-    }),
-    deny: () => ({ response: { permissions: {} } }),
-  },
-  'item/tool/requestUserInput': {
-    describe: (raw) => ({
-      toolName: 'AskUserQuestion',
-      input: {
-        questions: userQuestionsFromCodex((raw as AppServerUserInputParams).questions ?? []),
-      },
-      title: 'Codex asks a question',
-      displayName: 'Answer questions',
-      description: undefined,
-      decisionReason: undefined,
-    }),
-    itemId: (raw) => (raw as AppServerUserInputParams).itemId,
-    allow: (raw, updatedInput) => ({
-      response: {
-        answers: codexAnswers(
-          (raw as AppServerUserInputParams).questions ?? [],
-          updatedInput?.answers as Record<string, unknown> | undefined,
-        ),
-      },
-    }),
-    deny: () => ({ response: { answers: {} } }),
-  },
-  'mcpServer/elicitation/request': {
-    describe: (raw) => {
-      const params = raw as AppServerElicitationParams
-      return {
-        toolName: 'CodexMcpElicitation',
-        input: {
-          ...(params.serverName ? { serverName: params.serverName } : {}),
-          ...(params.message ? { message: params.message } : {}),
-          ...(params.mode ? { mode: params.mode } : {}),
-          ...(params.requestedSchema !== undefined ? { requestedSchema: params.requestedSchema } : {}),
-          ...(params.url ? { url: params.url } : {}),
-        },
-        title: params.serverName ? `MCP server '${params.serverName}' requests input` : 'An MCP server requests input',
-        displayName: 'MCP elicitation',
-        description: params.message ?? undefined,
-        decisionReason: undefined,
-      }
-    },
-    itemId: () => undefined,
-    allow: (_raw, updatedInput) => ({
-      response: {
-        action: 'accept',
-        ...(updatedInput !== undefined ? { content: updatedInput } : {}),
-      },
-    }),
-    deny: (_raw, interrupt) => ({ response: { action: interrupt ? 'cancel' : 'decline' } }),
-  },
-}
-
-type PendingCodexApproval = {
-  request: PermissionRequest
-  channel: ApprovalChannel
-  params: unknown
-  offered: Set<string> | undefined
-  wireId: string | number | undefined
-  timer?: ReturnType<typeof setTimeout>
-  respond: (response: unknown) => void
-}
-
-export type CodexRunnerConfig = CreateSessionRequest & {
-  epoch?: number
+export type CodexRunnerConfig = EngineRunnerConfig & {
   connectFn: AppServerConnectFn
-  env?: Record<string, string | undefined>
   codexHome?: string
   codexPathOverride?: string
-  instructions?: SessionInstructions
-  defaultApprovalTimeoutMs?: number | null
   backfillHistory?: boolean
-  peers?: PeerDirectory
-  shells?: ShellDirectory
-  shellAgentWrite?: ShellAgentWrite
 }
 
 type QueuedTurn = { input: AppServerUserInput[] }
@@ -600,6 +126,24 @@ function rateLimitWindowName(minutes: number | null | undefined): string | undef
   return `window_${minutes}m`
 }
 
+type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void; reject: (error: Error) => void }
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+function assertPermissionMode(mode: PermissionMode): void {
+  if (!supportsPermissionMode('codex', mode)) {
+    throw new Error(`permission mode '${mode}' is not supported by the codex engine`)
+  }
+}
+
 type ActiveTurn = ItemScope & {
   turnId?: string
   interrupted: boolean
@@ -617,17 +161,9 @@ type ActiveTurn = ItemScope & {
   reject: (error: Error) => void
 }
 
-export class CodexRunner implements Runner {
-  readonly id: string
-  readonly createdAt: number
-
-  #config: CodexRunnerConfig
+export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runner {
   readonly #cwd: string
   readonly #instructions: string | undefined
-  #log = new EventLog()
-  #subscribers = new SubscriberSet()
-  #status: SessionStatus = 'starting'
-  #statusDetail: string | undefined
   #sdkSessionId: string | undefined
   #model: string | undefined
   #permissionMode: PermissionMode
@@ -636,7 +172,6 @@ export class CodexRunner implements Runner {
   #planType: string | undefined
   #resolvedEffort: string | undefined
   #queue: QueuedTurn[] = []
-  #localCommands = new LocalCommandQueue((text, uuid, shell) => this.#emit(localCommandEvent(text, uuid, shell)))
   #turnChain: Promise<void> = Promise.resolve()
   #activeTurn: ActiveTurn | undefined
   #connection: AppServerConnection | undefined
@@ -644,30 +179,46 @@ export class CodexRunner implements Runner {
   #threadLoaded = false
   #threadMaterialized: boolean
   #numTurns = 0
-  #cost = new CostLedger()
   #started = false
-  #closed = false
   #imageDir: string | undefined
-  #approvals = new Map<string, PendingCodexApproval>()
   #backfillPending = false
-  #resumedHistory: { turns: AppServerHistoryTurn[]; partial: boolean } | undefined
+  #resumedHistory: ResumedHistory | undefined
   #replayingHistory = false
   #skillsFingerprint: string | undefined
   #skillsRefresh: Promise<void> | undefined
   #skillPaths = new Map<string, string>()
   #producedPaths = new Set<string>()
-  #mcpStatus = new Map<string, { status: string; error?: string; failureReason?: string }>()
+  #mcpStatus = new Map<string, McpStartupStatus>()
   #agents = new CodexAgentTracker()
   #idleScope: ItemScope = { nonce: 'codex', toolUseEmitted: new Set(), sectionIndex: new Map() }
   #clearedThreads = new Set<string>()
   #cannotSteer = new WeakSet<AppServerConnection>()
   #clearsPending = 0
+  readonly #sink: HistorySink = {
+    agents: this.#agents,
+    model: () => this.#model ?? this.#resolvedModel,
+    rootThreadId: () => this.#sdkSessionId,
+    replaying: () => this.#replayingHistory,
+    partials: () => this.config.includePartialMessages !== false,
+    emit: (body) => {
+      this.core.emit(body)
+    },
+    fileProduced: (path, toolUseId) => this.#emitFileProduced(path, toolUseId),
+    finalText: (text) => {
+      if (this.#activeTurn) {
+        this.#activeTurn.finalText = text
+      }
+    },
+    closed: () => this.core.closed,
+    setReplaying: (replaying) => {
+      this.#replayingHistory = replaying
+    },
+  }
 
   constructor(config: CodexRunnerConfig, id: string = randomUUID()) {
+    super(config, id, Date.now())
     const mode = config.permissionMode ?? 'default'
-    if (!ENGINE_CAPABILITIES.codex.permissionModes.includes(mode)) {
-      throw new Error(`permission mode '${mode}' is not supported by the codex engine`)
-    }
+    assertPermissionMode(mode)
     if (config.forkSession) {
       throw new Error('the codex engine cannot fork a resumed thread')
     }
@@ -675,23 +226,20 @@ export class CodexRunner implements Runner {
       throw new Error('the codex engine requires a cwd')
     }
     this.#cwd = config.cwd
-    this.#config = config
     this.#permissionMode = mode
     this.#model = config.model
     this.#reasoningEffort = config.reasoningEffort
     this.#sdkSessionId = config.resume
     this.#threadMaterialized = config.resume !== undefined
-    this.id = id
-    this.createdAt = Date.now()
     this.#instructions = resolveInstructions(config.instructions, { sessionId: id, cwd: config.cwd, profile: config.profile })
   }
 
   #childEnv(): Record<string, string> {
-    return codexChildEnv(this.#config.env ?? process.env, this.#config.codexHome)
+    return codexChildEnv(this.config.env ?? process.env, this.config.codexHome)
   }
 
-  get status(): SessionStatus {
-    return this.#status
+  protected override coreHooks(): RunnerCoreHooks {
+    return { prepare: (body) => this.#markReplay(body) }
   }
 
   get sdkSessionId(): string | undefined {
@@ -703,57 +251,20 @@ export class CodexRunner implements Runner {
     return this.#threadMaterialized ? this.#sdkSessionId : undefined
   }
 
-  get lastSeq(): number {
-    return this.#log.seq
-  }
-
-  get pendingApprovals(): PermissionRequest[] {
-    return [...this.#approvals.values()].map((pending) => pending.request)
-  }
-
   info(): SessionInfo {
     return {
-      id: this.id,
+      ...this.baseInfo(),
       sdkSessionId: this.#resumableThreadId(),
-      status: this.#status,
       cwd: this.#cwd,
-      profile: this.#config.profile,
       engine: 'codex',
-      shellAgentWrite: this.#config.shells ? this.#config.shellAgentWrite : undefined,
       capabilities: ENGINE_CAPABILITIES.codex,
       model: this.#model ?? this.#resolvedModel,
       permissionMode: this.#permissionMode,
       canBypassPermissions: true,
-      createdAt: this.createdAt,
-      epoch: this.#config.epoch,
-      lastSeq: this.#log.seq,
-      activityCount: this.#log.activityCount,
-      proseCount: this.#log.proseCount,
-      contextUsage: this.#log.contextUsage,
-      pendingPermissionCount: this.#approvals.size,
-      meta: this.#config.meta,
-      scope: this.#config.scope,
-      title: sessionTitle(this.#config),
-      totalCostUsd: this.#cost.reportedCostUsd,
-      costUsd: this.#cost.costUsd,
-      usageByModel: this.#cost.byModel,
+      totalCostUsd: this.core.cost.reportedCostUsd,
       numTurns: this.#numTurns || undefined,
-      lastActivityAt: this.#log.lastActivityAt,
       subagents: this.#agents.list(),
-      checklist: this.#log.checklist,
     }
-  }
-
-  setTitle(title: string | undefined): void {
-    this.#config = withTitle(this.#config, title)
-  }
-
-  carryCost(state: CostLedgerState): void {
-    this.#cost.carry(state)
-  }
-
-  costState(): CostLedgerState {
-    return this.#cost.snapshot()
   }
 
   start(): Promise<void> {
@@ -762,16 +273,16 @@ export class CodexRunner implements Runner {
     }
     this.#started = true
     this.#warnUntrustedProject()
-    if (this.#config.resume && this.#config.backfillHistory !== false) {
+    if (this.config.resume && this.config.backfillHistory !== false) {
       this.#backfillPending = true
       this.#turnChain = this.#turnChain.then(() => this.#backfillHistory())
     } else {
-      this.#setStatus('idle')
+      this.core.setStatus('idle')
     }
-    if (this.#config.prompt) {
-      this.sendMessage(this.#config.prompt)
+    if (this.config.prompt) {
+      this.sendMessage(this.config.prompt)
     }
-    if (!this.#config.prompt && !this.#config.resume) {
+    if (!this.config.prompt && !this.config.resume) {
       void this.#probeSkills()
     }
     return this.#turnChain
@@ -790,7 +301,7 @@ export class CodexRunner implements Runner {
       const codexHome = pin ?? join(env.HOME ?? homedir(), '.codex')
       const message = untrustedProjectNotice({ cwd: this.#cwd, codexHome })
       if (message) {
-        this.#emit({ type: 'session_error', message })
+        this.core.emit({ type: 'session_error', message })
       }
     } catch {}
   }
@@ -799,7 +310,7 @@ export class CodexRunner implements Runner {
     let connection: AppServerConnection | undefined
     try {
       connection = await this.#openScratchConnection()
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
       await this.#refreshSkills(connection)
@@ -810,7 +321,7 @@ export class CodexRunner implements Runner {
   }
 
   async #openScratchConnection(): Promise<AppServerConnection> {
-    const connection = this.#config.connectFn({ env: this.#childEnv() })
+    const connection = this.config.connectFn({ env: this.#childEnv() })
     try {
       await connection.request('initialize', INITIALIZE_PARAMS)
       connection.notify('initialized')
@@ -822,28 +333,18 @@ export class CodexRunner implements Runner {
   }
 
   sendMessage(text: string, attachments?: readonly AttachmentInput[], options?: SendMessageOptions): void {
-    if (this.#closed) {
-      throw new Error('session is closed')
-    }
+    this.assertAccepting()
     if (text.trim() === '/clear' && !attachments?.length && !options?.origin) {
       void this.clearContext().catch((error: unknown) => {
-        this.#emit({
+        this.core.emit({
           type: 'session_error',
-          message: `could not clear the conversation: ${error instanceof Error ? error.message : String(error)}`,
+          message: `could not clear the conversation: ${errorMessage(error)}`,
         })
       })
       return
     }
     const input = this.#buildInput(withPeerContext(text, options), attachments ?? [])
-    const echo = () =>
-      this.#emit({
-        type: 'user_message',
-        message: { role: 'user', content: text },
-        parentToolUseId: null,
-        attachments: attachments?.length ? attachments.map(attachmentRef) : undefined,
-        uuid: randomUUID(),
-        ...(options?.origin ? { origin: options.origin } : {}),
-      })
+    const echo = (): void => this.echoUser(text, attachments, options)
     if (this.#backfillPending) {
       this.#turnChain = this.#turnChain.then(echo)
     } else {
@@ -890,7 +391,7 @@ export class CodexRunner implements Runner {
   }
 
   #enqueueTurn(input: AppServerUserInput[]): void {
-    if (this.#closed) {
+    if (this.core.closed) {
       return
     }
     this.#queue.push({ input })
@@ -936,39 +437,21 @@ export class CodexRunner implements Runner {
     if (text) {
       parts.push({ type: 'text', text })
     }
-    const context = this.#localCommands.take()
+    const context = this.localCommands.take()
     if (context) {
       parts.unshift({ type: 'text', text: context })
     }
     return withSkillItems(parts, this.#skillPaths)
   }
 
-  queueLocalCommand(input: LocalCommandResult | LocalShellSource): void {
-    if (this.#closed) {
-      throw new Error('session is closed')
-    }
-    this.#localCommands.push(input)
-  }
-
-  resolvePermission(requestId: string, decision: PermissionDecision): boolean {
-    const pending = this.#approvals.get(requestId)
-    if (!pending) {
-      return false
-    }
-    this.#settleApproval(requestId, pending, decision, 'client')
-    return true
-  }
-
   async interrupt(): Promise<void> {
-    for (const [id, pending] of this.#approvals) {
-      this.#settleApproval(id, pending, { behavior: 'deny', message: 'interrupted', interrupt: true }, 'policy')
-    }
+    this.core.settleAllApprovals({ behavior: 'deny', message: 'interrupted', interrupt: true }, 'policy')
     await this.#interruptTurn()
     await this.#turnChain
   }
 
   async clearContext(): Promise<void> {
-    if (this.#closed) {
+    if (this.core.closed) {
       throw new Error('session is closed')
     }
     this.#clearsPending += 1
@@ -985,7 +468,7 @@ export class CodexRunner implements Runner {
   }
 
   async #clearNow(): Promise<void> {
-    if (this.#closed) {
+    if (this.core.closed) {
       throw new Error('session is closed')
     }
     const previousThread = this.#sdkSessionId
@@ -1007,12 +490,10 @@ export class CodexRunner implements Runner {
       this.#clearedThreads.add(agent)
     }
     this.#agents.forget()
-    for (const [id, pending] of this.#approvals) {
-      this.#settleApproval(id, pending, { behavior: 'deny', message: 'the conversation was cleared' }, 'policy')
-    }
+    this.core.settleAllApprovals({ behavior: 'deny', message: 'the conversation was cleared' }, 'policy')
     this.#resumedHistory = undefined
-    this.#localCommands.clear()
-    this.#emit({ type: 'conversation_reset', sdkSessionId: this.#resumableThreadId() })
+    this.localCommands.clear()
+    this.core.emit({ type: 'conversation_reset', sdkSessionId: this.#resumableThreadId() })
   }
 
   async #interruptTurn(): Promise<void> {
@@ -1039,14 +520,12 @@ export class CodexRunner implements Runner {
   }
 
   async setPermissionMode(mode: PermissionMode): Promise<void> {
-    if (!ENGINE_CAPABILITIES.codex.permissionModes.includes(mode)) {
-      throw new Error(`permission mode '${mode}' is not supported by the codex engine`)
-    }
+    assertPermissionMode(mode)
     if (this.#activeTurn) {
       throw new Error("cannot change the permission mode mid-turn (the running turn's sandbox is fixed)")
     }
     this.#permissionMode = mode
-    this.#emit({ type: 'permission_mode_changed', mode })
+    this.core.emit({ type: 'permission_mode_changed', mode })
   }
 
   async setModel(model?: string): Promise<void> {
@@ -1054,183 +533,137 @@ export class CodexRunner implements Runner {
       throw new Error("cannot change the model mid-turn (the running turn's model is fixed)")
     }
     this.#model = model
-    this.#emit({ type: 'model_changed', model })
+    this.core.emit({ type: 'model_changed', model })
   }
 
-  fail(message: string): void {
-    if (this.#closed) {
-      return
-    }
-    this.#emit({ type: 'session_error', message })
-    this.#setStatus('failed')
-    this.close('error')
-  }
-
-  close(reason: 'client' | 'server' | 'error' = 'client'): void {
-    if (this.#closed) {
-      return
-    }
-    this.#closed = true
-    this.#queue.length = 0
-    this.#localCommands.clear()
-    for (const [id, pending] of this.#approvals) {
-      this.#settleApproval(id, pending, { behavior: 'deny', message: 'Session closed' }, 'policy')
-    }
-    this.#connection?.close()
-    this.#connection = undefined
-    this.#agents.sweep()
-    this.#activeTurn?.reject(new Error('session closed'))
-    if (this.#imageDir) {
-      try {
-        rmSync(this.#imageDir, { recursive: true, force: true })
-      } catch {}
-    }
-    this.#emit({ type: 'session_closed', reason })
-    this.#setStatus('closed')
-  }
-
-  eventAt(seq: number): SessionEvent | undefined {
-    return this.#log.at(seq)
-  }
-
-  subscribe(listener: SessionEventListener, afterSeq = 0, options?: SubscribeOptions): () => void {
-    return this.#subscribers.subscribe(this.#log.events, listener, afterSeq, options, this.#log.resetSeq)
+  close(reason: CloseReason = 'client'): void {
+    this.core.close(reason, () => {
+      this.#queue.length = 0
+      this.localCommands.clear()
+      this.#connection?.close()
+      this.#connection = undefined
+      this.#agents.sweep()
+      this.#activeTurn?.reject(new Error('session closed'))
+      if (this.#imageDir) {
+        try {
+          rmSync(this.#imageDir, { recursive: true, force: true })
+        } catch {}
+      }
+    })
   }
 
   #scheduleTurn(): void {
     this.#turnChain = this.#turnChain.then(() => this.#runTurn())
   }
 
-  async #readWorkspaceWrite(connection: AppServerConnection): Promise<void> {
-    this.#workspaceWrite = undefined
-    try {
-      const result = (await connection.request('config/read', { cwd: this.#cwd })) as {
-        config?: { sandbox_workspace_write?: Record<string, unknown> | null } | null
-      }
-      const block = result?.config?.sandbox_workspace_write
-      if (!block) {
-        return
-      }
-      const roots = block.writable_roots
-      this.#workspaceWrite = {
-        writableRoots: Array.isArray(roots) ? roots.filter((r): r is string => typeof r === 'string') : [],
-        networkAccess: block.network_access === true,
-        excludeTmpdirEnvVar: block.exclude_tmpdir_env_var === true,
-        excludeSlashTmp: block.exclude_slash_tmp === true,
-      }
-    } catch {}
-  }
-
-  #turnSandboxPolicy(): { type: string } | undefined {
-    const policy = TURN_SANDBOX_BY_MODE[this.#permissionMode]
-    if (policy?.type !== 'workspaceWrite' || !this.#workspaceWrite) {
-      return policy
-    }
-    return { type: 'workspaceWrite', ...this.#workspaceWrite }
-  }
-
   async #ensureThread(): Promise<AppServerConnection> {
-    if (this.#closed) {
+    if (this.core.closed) {
       throw new Error('session is closed')
     }
-    let connection = this.#connection
-    if (!connection) {
-      connection = this.#config.connectFn({ env: this.#childEnv() })
-      this.#connection = connection
-      this.#threadLoaded = false
-      connection.onNotification((method, params) => this.#handleNotification(method, params))
-      connection.onRequest((method, params, id) => this.#answerServerRequest(method, params, id))
-      connection.onClose((message) => {
-        if (this.#connection === connection) {
-          this.#connection = undefined
-          this.#threadLoaded = false
-        }
-        for (const [id, pending] of this.#approvals) {
-          this.#settleApproval(id, pending, { behavior: 'deny', message }, 'policy')
-        }
-        this.#agents.sweep()
-        this.#activeTurn?.reject(new Error(message))
-      })
-      try {
-        await connection.request('initialize', INITIALIZE_PARAMS)
-      } catch (error) {
-        // Don't leave a half-initialized child around: the next message must respawn from scratch.
-        connection.close()
-        if (this.#connection === connection) {
-          this.#connection = undefined
-        }
-        if (error instanceof JsonRpcError) {
-          throw new Error(
-            'codex app-server rejected initialize (capabilities.experimentalApi: true is required ' +
-              'for the granular approval policy, and WorkerDeck has no non-experimental fallback): ' +
-              error.message,
-            { cause: error },
-          )
-        }
-        throw error
-      }
-      connection.notify('initialized')
-      await this.#readWorkspaceWrite(connection)
-    }
+    const connection = this.#connection ?? (await this.#connect())
     if (!this.#threadLoaded) {
-      const options: Record<string, unknown> = {
-        cwd: this.#cwd,
-        approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
-        sandbox: THREAD_SANDBOX_BY_MODE[this.#permissionMode],
-        approvalsReviewer: APPROVALS_REVIEWER_BY_MODE[this.#permissionMode],
-      }
-      if (this.#model) {
-        options.model = this.#model
-      }
-      if (this.#instructions !== undefined) {
-        options.developerInstructions = this.#instructions
-      }
-      const dynamic = [
-        ...(this.#config.peers ? peerToolSpecs() : []),
-        ...(this.#config.shells ? shellToolSpecs(this.#config.shellAgentWrite !== undefined) : []),
-      ]
-      if (dynamic.length) {
-        options.dynamicTools = dynamic.map((spec) => ({ type: 'function', ...spec }))
-      }
-      const resuming = this.#resumableThreadId()
-      let lostThread: string | undefined
-      let result: AppServerThreadResult
-      if (resuming !== undefined) {
-        try {
-          result = (await connection.request('thread/resume', { threadId: resuming, ...options })) as AppServerThreadResult
-        } catch (error) {
-          if (!rolloutMissing(error)) {
-            throw error
-          }
-          lostThread = resuming
-          result = (await connection.request('thread/start', options)) as AppServerThreadResult
-        }
-      } else {
-        result = (await connection.request('thread/start', options)) as AppServerThreadResult
-      }
-      if (typeof result?.thread?.id === 'string') {
-        this.#sdkSessionId = result.thread.id
-      }
-      if (lostThread !== undefined) {
-        this.#threadMaterialized = false
-        this.#emit({ type: 'session_error', message: threadLostNotice(lostThread) })
-      }
-      if (typeof result?.model === 'string') {
-        this.#resolvedModel = result.model
-      }
-      if (typeof result?.reasoningEffort === 'string') {
-        this.#resolvedEffort = result.reasoningEffort
-      }
-      if (resuming !== undefined && lostThread === undefined && this.#backfillPending && !this.#resumedHistory) {
-        this.#resumedHistory = {
-          turns: Array.isArray(result?.thread?.turns) ? result.thread.turns : [],
-          partial: typeof result?.turnsBackwardsCursor === 'string',
-        }
-      }
+      await this.#openThread(connection)
       this.#threadLoaded = true
     }
     void this.#refreshSkills(connection)
     return connection
+  }
+
+  async #connect(): Promise<AppServerConnection> {
+    const connection = this.config.connectFn({ env: this.#childEnv() })
+    this.#connection = connection
+    this.#threadLoaded = false
+    connection.onNotification((method, params) => this.#handleNotification(method, params))
+    connection.onRequest((method, params, id) => this.#answerServerRequest(method, params, id))
+    connection.onClose((message) => {
+      if (this.#connection === connection) {
+        this.#connection = undefined
+        this.#threadLoaded = false
+      }
+      this.core.settleAllApprovals({ behavior: 'deny', message }, 'policy')
+      this.#agents.sweep()
+      this.#activeTurn?.reject(new Error(message))
+    })
+    try {
+      await connection.request('initialize', INITIALIZE_PARAMS)
+    } catch (error) {
+      // Don't leave a half-initialized child around: the next message must respawn from scratch.
+      connection.close()
+      if (this.#connection === connection) {
+        this.#connection = undefined
+      }
+      if (error instanceof JsonRpcError) {
+        throw new Error(
+          'codex app-server rejected initialize (capabilities.experimentalApi: true is required ' +
+            'for the granular approval policy, and WorkerDeck has no non-experimental fallback): ' +
+            error.message,
+          { cause: error },
+        )
+      }
+      throw error
+    }
+    connection.notify('initialized')
+    this.#workspaceWrite = await readWorkspaceWrite(connection, this.#cwd)
+    return connection
+  }
+
+  async #openThread(connection: AppServerConnection): Promise<void> {
+    const policy = modePolicy(this.#permissionMode)
+    const options: Record<string, unknown> = {
+      cwd: this.#cwd,
+      approvalPolicy: policy.approvalPolicy,
+      sandbox: threadSandbox(this.#permissionMode),
+      approvalsReviewer: policy.approvalsReviewer,
+    }
+    if (this.#model) {
+      options.model = this.#model
+    }
+    if (this.#instructions !== undefined) {
+      options.developerInstructions = this.#instructions
+    }
+    const dynamic = sessionToolSpecs(this.toolSources)
+    if (dynamic.length) {
+      options.dynamicTools = dynamic.map((spec) => ({ type: 'function', ...spec }))
+    }
+    const resuming = this.#resumableThreadId()
+    const { result, lostThread } = await this.#resumeOrStart(connection, resuming, options)
+    if (typeof result?.thread?.id === 'string') {
+      this.#sdkSessionId = result.thread.id
+    }
+    if (lostThread !== undefined) {
+      this.#threadMaterialized = false
+      this.core.emit({ type: 'session_error', message: threadLostNotice(lostThread) })
+    }
+    if (typeof result?.model === 'string') {
+      this.#resolvedModel = result.model
+    }
+    if (typeof result?.reasoningEffort === 'string') {
+      this.#resolvedEffort = result.reasoningEffort
+    }
+    if (resuming !== undefined && lostThread === undefined && this.#backfillPending && !this.#resumedHistory) {
+      this.#resumedHistory = {
+        turns: Array.isArray(result?.thread?.turns) ? result.thread.turns : [],
+        partial: typeof result?.turnsBackwardsCursor === 'string',
+      }
+    }
+  }
+
+  async #resumeOrStart(
+    connection: AppServerConnection,
+    resuming: string | undefined,
+    options: Record<string, unknown>,
+  ): Promise<{ result: AppServerThreadResult; lostThread?: string }> {
+    if (resuming !== undefined) {
+      try {
+        return { result: (await connection.request('thread/resume', { threadId: resuming, ...options })) as AppServerThreadResult }
+      } catch (error) {
+        if (!rolloutMissing(error)) {
+          throw error
+        }
+        return { result: (await connection.request('thread/start', options)) as AppServerThreadResult, lostThread: resuming }
+      }
+    }
+    return { result: (await connection.request('thread/start', options)) as AppServerThreadResult }
   }
 
   async #refreshSkills(connection: AppServerConnection): Promise<void> {
@@ -1239,36 +672,18 @@ export class CodexRunner implements Runner {
     }
     const run = (async () => {
       try {
-        const result = (await connection.request('skills/list', {
-          cwds: [this.#cwd],
-        })) as AppServerSkillsListResponse
-        if (this.#closed) {
+        const result = (await connection.request('skills/list', { cwds: [this.#cwd] })) as AppServerSkillsListResponse
+        if (this.core.closed) {
           return
         }
-        const entries = Array.isArray(result?.data) ? result.data : []
-        const seen = new Set<string>()
-        const skills: SkillInfo[] = []
-        const paths = new Map<string, string>()
-        for (const entry of entries) {
-          for (const skill of entry?.skills ?? []) {
-            if (typeof skill?.name !== 'string' || seen.has(skill.name)) {
-              continue
-            }
-            seen.add(skill.name)
-            skills.push(skillInfo(skill))
-            if (typeof skill.path === 'string' && skill.path) {
-              paths.set(skill.name, skill.path)
-            }
-          }
-        }
+        const { skills, paths } = skillCatalog(result)
         this.#skillPaths = paths
-        skills.sort((a, b) => a.name.localeCompare(b.name))
         const fingerprint = JSON.stringify(skills)
         if (fingerprint === this.#skillsFingerprint) {
           return
         }
         this.#skillsFingerprint = fingerprint
-        this.#emit({ type: 'skills', skills })
+        this.core.emit({ type: 'skills', skills })
       } catch {
       } finally {
         this.#skillsRefresh = undefined
@@ -1279,7 +694,7 @@ export class CodexRunner implements Runner {
   }
 
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
-    if (this.#closed) {
+    if (this.core.closed) {
       return undefined
     }
     const live = this.#connection
@@ -1307,92 +722,41 @@ export class CodexRunner implements Runner {
         bytes = stat.size
       }
     } catch {}
-    this.#emit({
-      type: 'file_produced',
-      fileId: producedFileId(path),
-      path,
-      ...(producedMediaType(path) ? { mediaType: producedMediaType(path) } : {}),
-      ...(bytes !== undefined ? { bytes } : {}),
-      toolUseId,
-    })
+    this.core.emit(fileProducedEvent(path, toolUseId, bytes))
   }
 
   async #backfillHistory(): Promise<void> {
     try {
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
       const connection = await this.#ensureThread()
       const resumed = this.#resumedHistory
       this.#resumedHistory = undefined
-      let turns = resumed?.turns ?? []
-      let partialReason: string | undefined
-      if (resumed?.partial) {
-        try {
-          const read = (await connection.request('thread/read', {
-            threadId: this.#sdkSessionId,
-            includeTurns: true,
-          })) as { thread?: { turns?: AppServerHistoryTurn[] } }
-          const full = read?.thread?.turns
-          if (Array.isArray(full) && full.length >= turns.length) {
-            turns = full
-          } else {
-            partialReason = 'thread/read returned less history than the resume page'
-          }
-        } catch (error) {
-          partialReason = error instanceof Error ? error.message : String(error)
-        }
+      const history = await loadHistory(connection, this.#sdkSessionId, resumed)
+      if (history.incomplete) {
+        this.core.emit({ type: 'session_error', message: incompleteHistoryNotice(history.incomplete) })
       }
-      if (partialReason) {
-        this.#emit({
-          type: 'session_error',
-          message: `Resumed thread history is incomplete: older turns could not be loaded (${partialReason})`,
-        })
-      }
-      this.#replayTurns(turns)
+      replayTurns(this.#sink, history.turns)
     } catch {
     } finally {
       this.#backfillPending = false
-      this.#setStatus('idle')
+      this.core.setStatus('idle')
     }
   }
 
-  #replayTurns(turns: readonly AppServerHistoryTurn[]): void {
-    for (const turn of turns) {
-      if (this.#closed) {
+  #newTurnState(): { active: ActiveTurn; outcome: Promise<AppServerTurn> } {
+    const steerGate = deferred<void>()
+    const outcome = deferred<AppServerTurn>()
+    const settle = (finish: () => void): void => {
+      if (active.settled) {
         return
       }
-      const state = this.#newTurnState()
-      this.#replayingHistory = true
-      try {
-        for (const item of turn.items ?? []) {
-          if (item.type === 'userMessage') {
-            const text = historyUserText(item)
-            if (!text) {
-              continue
-            }
-            this.#emit({
-              type: 'user_message',
-              message: { role: 'user', content: text },
-              parentToolUseId: null,
-              uuid: `${state.nonce}:${item.id}`,
-            })
-            continue
-          }
-          this.#handleItemCompleted(item, state)
-        }
-      } finally {
-        this.#replayingHistory = false
-      }
+      active.settled = true
+      active.openSteerGate()
+      finish()
     }
-  }
-
-  #newTurnState(): ActiveTurn {
-    let openSteerGate!: () => void
-    const steerGate = new Promise<void>((resolve) => {
-      openSteerGate = resolve
-    })
-    return {
+    const active: ActiveTurn = {
       nonce: randomUUID(),
       interrupted: false,
       usage: {
@@ -1407,43 +771,26 @@ export class CodexRunner implements Runner {
       toolUseEmitted: new Set(),
       sectionIndex: new Map(),
       settled: false,
-      steerGate,
-      openSteerGate,
+      steerGate: steerGate.promise,
+      openSteerGate: () => steerGate.resolve(),
       steerChain: Promise.resolve(),
-      resolve: () => {},
-      reject: () => {},
+      resolve: (turn) => settle(() => outcome.resolve(turn)),
+      reject: (error) => settle(() => outcome.reject(error)),
     }
+    return { active, outcome: outcome.promise }
   }
 
   async #runTurn(): Promise<void> {
-    if (this.#closed) {
+    if (this.core.closed) {
       return
     }
     const turn = this.#queue.shift()
     if (!turn) {
       return
     }
-    this.#setStatus('running')
+    this.core.setStatus('running')
     const startedAt = Date.now()
-    const active: ActiveTurn = this.#newTurnState()
-    const outcome = new Promise<AppServerTurn>((resolve, reject) => {
-      active.resolve = (turnResult) => {
-        if (active.settled) {
-          return
-        }
-        active.settled = true
-        active.openSteerGate()
-        resolve(turnResult)
-      }
-      active.reject = (error) => {
-        if (active.settled) {
-          return
-        }
-        active.settled = true
-        active.openSteerGate()
-        reject(error)
-      }
-    })
+    const { active, outcome } = this.#newTurnState()
     this.#activeTurn = active
     this.#idleScope = { nonce: active.nonce, toolUseEmitted: new Set(), sectionIndex: new Map() }
     try {
@@ -1453,13 +800,14 @@ export class CodexRunner implements Runner {
         await this.#skillsRefresh
         turn.input = withSkillItems(turn.input, this.#skillPaths)
       }
+      const policy = modePolicy(this.#permissionMode)
       const params: Record<string, unknown> = {
         threadId: this.#sdkSessionId,
         input: turn.input,
         cwd: this.#cwd,
-        approvalPolicy: APPROVAL_POLICY_BY_MODE[this.#permissionMode],
-        sandboxPolicy: this.#turnSandboxPolicy(),
-        approvalsReviewer: APPROVALS_REVIEWER_BY_MODE[this.#permissionMode],
+        approvalPolicy: policy.approvalPolicy,
+        sandboxPolicy: turnSandboxPolicy(this.#permissionMode, this.#workspaceWrite),
+        approvalsReviewer: policy.approvalsReviewer,
       }
       const model = this.#model ?? this.#resolvedModel
       if (model) {
@@ -1485,7 +833,7 @@ export class CodexRunner implements Runner {
         (error: unknown) => active.reject(error instanceof Error ? error : new Error(String(error))),
       )
       const result = await outcome
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
       if (result.status === 'completed') {
@@ -1498,11 +846,10 @@ export class CodexRunner implements Runner {
         this.#finishTurn('failure', startedAt, active, [reason])
       }
     } catch (error) {
-      if (this.#closed) {
+      if (this.core.closed) {
         return
       }
-      const message = error instanceof Error ? error.message : String(error)
-      this.#finishTurn('failure', startedAt, active, [active.interrupted ? 'interrupted' : message])
+      this.#finishTurn('failure', startedAt, active, [active.interrupted ? 'interrupted' : errorMessage(error)])
     } finally {
       if (this.#activeTurn === active) {
         this.#activeTurn = undefined
@@ -1511,14 +858,14 @@ export class CodexRunner implements Runner {
   }
 
   #handleNotification(method: string, params: unknown): void {
-    if (this.#closed) {
+    if (this.core.closed) {
       return
     }
     if (THREAD_SCOPED_NOTIFICATIONS.has(method) && !this.#isRootThread(params)) {
       if (method === 'turn/completed') {
-        this.#settleAgentTurn(params)
+        settleAgentTurn(this.#sink, params)
       } else if (method === 'turn/started') {
-        const threadId = this.#threadIdOf(params)
+        const threadId = threadIdOf(params)
         const record = threadId ? this.#agents.get(threadId) : undefined
         if (record && record.status !== 'running') {
           this.#agents.revive(record)
@@ -1530,72 +877,27 @@ export class CodexRunner implements Runner {
   }
 
   #isRootThread(params: unknown): boolean {
-    const threadId = this.#threadIdOf(params)
+    const threadId = threadIdOf(params)
     if (threadId === undefined) {
       return true
     }
     return threadId === this.#sdkSessionId
   }
 
-  #threadIdOf(params: unknown): string | undefined {
-    const threadId = (params as { threadId?: unknown })?.threadId
-    return typeof threadId === 'string' ? threadId : undefined
-  }
-
-  #agentFor(params: unknown): CodexAgent | undefined {
-    const threadId = this.#threadIdOf(params)
-    if (threadId === undefined || threadId === this.#sdkSessionId) {
-      return undefined
-    }
-    const known = this.#agents.get(threadId)
-    if (known) {
-      return known
-    }
-    if (this.#clearedThreads.has(threadId)) {
-      return undefined
-    }
-    const nonce = this.#activeTurn?.nonce ?? 'codex'
-    const record = this.#agents.open(threadId, `${nonce}:agent:${threadId}`, undefined, Date.now())
-    record.anchored = true
-    this.#emitToolUse(record.toolUseId, CODEX_AGENT_TOOL, { agentThreadId: threadId })
-    return record
-  }
-
-  #settleAgentTurn(params: unknown): void {
-    const threadId = this.#threadIdOf(params)
-    const record = threadId ? this.#agents.get(threadId) : undefined
-    if (!record || record.status !== 'running') {
-      return
-    }
-    const turn = (params as { turn?: AppServerTurn })?.turn
-    const status = turn?.status === 'completed' ? 'done' : 'failed'
-    this.#agents.settle(record, status)
-    const report = (turn ? turnReport(turn) : undefined) ?? turn?.error?.message ?? (status === 'done' ? '' : (turn?.status ?? 'failed'))
-    this.#emitToolResult(record.toolUseId, report, status === 'failed')
+  #itemContext(params: unknown): ItemContext | undefined {
+    return itemContext(this.#sink, params, {
+      activeScope: this.#activeTurn,
+      idleScope: this.#idleScope,
+      clearedThreads: this.#clearedThreads,
+    })
   }
 
   #reasoningDelta(method: string): (params: unknown) => void {
     return (params) => {
       const context = this.#itemContext(params)
-      if (!context) {
-        return
+      if (context) {
+        reasoningDelta(this.#sink, method, params, context)
       }
-      const { scope, agent } = context
-      const payload = params as {
-        delta?: string
-        itemId?: string
-        contentIndex?: number
-        summaryIndex?: number
-      }
-      if (typeof payload?.delta !== 'string' || !payload.delta) {
-        return
-      }
-      const index = payload.contentIndex ?? payload.summaryIndex ?? 0
-      const key = `${payload.itemId ?? ''}:${method}`
-      const previous = scope.sectionIndex.get(key)
-      scope.sectionIndex.set(key, index)
-      const separator = previous !== undefined && index > previous ? '\n\n' : ''
-      this.#emitDelta({ type: 'thinking_delta', thinking: separator + payload.delta }, agent?.toolUseId ?? null)
     }
   }
 
@@ -1605,27 +907,7 @@ export class CodexRunner implements Runner {
     if (!context || !item) {
       return
     }
-    this.#handleItemProgress(item, context.scope, context.agent)
-  }
-
-  // A child's items resolve through the agent's own scope, so they survive the root turn ending
-  // while the agent works. On the root thread the scope is the live turn; between turns only a
-  // subAgentActivity item is heard, because a settle or a relabel is the one thing codex can still
-  // say about an agent it spawned earlier.
-  #itemContext(params: unknown): { scope: ItemScope; agent?: CodexAgent } | undefined {
-    const agent = this.#agentFor(params)
-    if (agent) {
-      return { scope: agent.scope, agent }
-    }
-    const active = this.#activeTurn
-    if (active) {
-      return { scope: active }
-    }
-    const item = (params as { item?: AppServerItem })?.item
-    if (item?.type === 'subAgentActivity') {
-      return { scope: this.#idleScope }
-    }
-    return undefined
+    itemProgress(this.#sink, item, context.scope, context.agent)
   }
 
   readonly #notifications: Record<string, (params: unknown) => void> = {
@@ -1663,7 +945,7 @@ export class CodexRunner implements Runner {
       if (!context || !item) {
         return
       }
-      this.#handleItemCompleted(item, context.scope, context.agent)
+      itemCompleted(this.#sink, item, context.scope, context.agent)
     },
     'item/agentMessage/delta': (params) => {
       const context = this.#itemContext(params)
@@ -1672,7 +954,7 @@ export class CodexRunner implements Runner {
       }
       const delta = (params as { delta?: string })?.delta
       if (typeof delta === 'string' && delta) {
-        this.#emitDelta({ type: 'text_delta', text: delta }, context.agent?.toolUseId ?? null)
+        emitDelta(this.#sink, { type: 'text_delta', text: delta }, context.agent?.toolUseId ?? null)
       }
     },
     'item/reasoning/textDelta': this.#reasoningDelta('item/reasoning/textDelta'),
@@ -1687,11 +969,9 @@ export class CodexRunner implements Runner {
         return
       }
       active.sawUsage = true
-      active.usage.inputTokens += last.inputTokens ?? 0
-      active.usage.cachedInputTokens += last.cachedInputTokens ?? 0
-      active.usage.cacheWriteInputTokens = (active.usage.cacheWriteInputTokens ?? 0) + (last.cacheWriteInputTokens ?? 0)
-      active.usage.outputTokens += last.outputTokens ?? 0
-      active.usage.reasoningOutputTokens += last.reasoningOutputTokens ?? 0
+      for (const field of TOKEN_FIELDS) {
+        active.usage[field] = (active.usage[field] ?? 0) + (last[field] ?? 0)
+      }
       const update = params as AppServerTokenUsageUpdate
       active.contextTokens = last.totalTokens ?? undefined
       active.contextWindow = update.tokenUsage?.modelContextWindow ?? undefined
@@ -1721,8 +1001,8 @@ export class CodexRunner implements Runner {
         return
       }
       const items = checklistFromPlan((params as AppServerPlanUpdate)?.plan)
-      if (items && !sameChecklist(this.#log.checklist, items)) {
-        this.#emit({ type: 'checklist', items })
+      if (items && !sameChecklist(this.core.log.checklist, items)) {
+        this.core.emit({ type: 'checklist', items })
       }
     },
     'serverRequest/resolved': (params) => {
@@ -1730,12 +1010,10 @@ export class CodexRunner implements Runner {
       if (requestId === undefined) {
         return
       }
-      for (const [id, pending] of this.#approvals) {
-        if (pending.wireId === requestId) {
-          // Reported as a deny because codex's own choice is unknowable; the message says who decided.
-          this.#settleApproval(id, pending, { behavior: 'deny', message: 'resolved by codex' }, 'policy')
-          return
-        }
+      const id = this.core.findApproval((_request, wireId) => wireId === requestId)
+      if (id !== undefined) {
+        // Reported as a deny because codex's own choice is unknowable; the message says who decided.
+        this.core.resolveApproval(id, { behavior: 'deny', message: 'resolved by codex' }, 'policy')
       }
     },
     // Mostly retry noise (`willRetry: true`); the last message is what explains a turn that
@@ -1756,67 +1034,70 @@ export class CodexRunner implements Runner {
     }
     if (method === 'item/tool/call') {
       const call = params as AppServerDynamicToolCallParams
-      const peers = this.#config.peers
-      const shells = this.#config.shells
-      if (peers && isPeerToolName(call.tool)) {
-        const output = await runPeerTool(peers, this.id, call.tool, call.arguments)
-        return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
-      }
-      if (shells && isShellToolName(call.tool)) {
-        const write = this.#config.shellAgentWrite !== undefined
-        let args = call.arguments
-        if (write && shellToolNeedsCard(call.tool, this.#config.shellAgentWrite) && SHELL_WRITE_GATE_MODES.has(this.#permissionMode)) {
-          const verdict = (await this.#requestApproval(SHELL_WRITE_CHANNEL, method, call, undefined)) as ShellWriteVerdict
-          if (!verdict.allowed) {
-            return { success: false, contentItems: [{ type: 'inputText', text: shellWriteDeniedText(call.tool, verdict.message) }] }
-          }
-          args = verdict.updatedInput ?? args
+      let args = call.arguments
+      if (this.#needsShellWriteCard(call.tool)) {
+        const verdict = (await this.#requestApproval(SHELL_WRITE_CHANNEL, method, call, undefined)) as ShellWriteVerdict
+        if (!verdict.allowed) {
+          return { success: false, contentItems: [{ type: 'inputText', text: shellWriteDeniedText(call.tool, verdict.message) }] }
         }
-        const output = await runShellTool(shells, this.id, call.tool, args, { write })
+        args = verdict.updatedInput ?? args
+      }
+      const output = await runSessionTool(this.toolSources, this.id, call.tool, args)
+      if (output) {
         return { success: !output.isError, contentItems: [{ type: 'inputText', text: output.text }] }
       }
     }
     throw new JsonRpcError(-32601, `workerdeck does not handle server request '${method}'`)
   }
 
+  #needsShellWriteCard(tool: string): boolean {
+    return (
+      this.config.shells !== undefined &&
+      isShellToolName(tool) &&
+      shellToolNeedsCard(tool, this.config.shellAgentWrite) &&
+      SHELL_WRITE_GATE_MODES.has(this.#permissionMode)
+    )
+  }
+
   #requestApproval(channel: ApprovalChannel, method: string, params: unknown, wireId: string | number | undefined): Promise<unknown> {
     if (method === 'item/tool/requestUserInput') {
-      const behavior = this.#config.questionBehavior ?? 'ask'
+      const behavior = this.config.questionBehavior ?? 'ask'
       if (behavior !== 'ask') {
         return Promise.resolve(this.#resolveQuestionByPolicy(channel, params, behavior))
       }
     }
     const id = randomUUID()
-    const timeoutMs = resolveApprovalTimeoutMs(this.#config.approvalTimeoutMs, this.#config.defaultApprovalTimeoutMs)
+    const { timeoutMs, expiresAt } = this.approvalDeadline()
     const itemId = channel.itemId(params)
     const request: PermissionRequest = {
       id,
       ...channel.describe(params),
       toolUseId: itemId ? `${this.#activeTurn?.nonce ?? 'codex'}:${itemId}` : id,
-      expiresAt: timeoutMs === undefined ? undefined : Date.now() + timeoutMs,
+      expiresAt,
     }
     return new Promise<unknown>((resolve) => {
-      const timer =
-        timeoutMs === undefined
-          ? undefined
-          : setTimeout(() => {
-              const pending = this.#approvals.get(id)
-              if (pending) {
-                this.#settleApproval(id, pending, { behavior: 'deny', message: 'Approval timed out' }, 'timeout')
-              }
-            }, timeoutMs)
-      this.#approvals.set(id, {
-        request,
-        channel,
-        params,
-        offered: offeredDecisions(params),
+      const offered = offeredDecisions(params)
+      let sent: { response: unknown; decision?: string } | undefined
+      this.core.requestApproval(request, {
+        timeoutMs,
         wireId,
-        timer,
-        respond: resolve,
+        respond: (decision, resolvedBy) => {
+          const answer = answerApproval(channel, params, offered, decision, resolvedBy)
+          sent = answer.sent
+          resolve(answer.sent.response)
+          return answer.resolution
+        },
+        after: (resolution, decision) => {
+          if (resolution.behavior === 'deny' && decision.behavior === 'deny' && decision.interrupt && sent?.decision !== 'cancel') {
+            void this.#interruptTurn()
+          }
+          if (!this.core.closed && this.core.pendingCount === 0 && this.core.status === 'awaiting_approval') {
+            this.core.setStatus('running')
+          }
+        },
       })
-      this.#emit({ type: 'permission_requested', request })
       if (this.#activeTurn) {
-        this.#setStatus('awaiting_approval')
+        this.core.setStatus('awaiting_approval')
       }
     })
   }
@@ -1828,365 +1109,11 @@ export class CodexRunner implements Runner {
       ...channel.describe(params),
       toolUseId: itemId ? `${this.#activeTurn?.nonce ?? 'codex'}:${itemId}` : randomUUID(),
     }
-    this.#emit({ type: 'permission_requested', request })
-    if (mode === 'deny') {
-      this.#emit({
-        type: 'permission_resolved',
-        requestId: request.id,
-        behavior: 'deny',
-        resolvedBy: 'policy',
-        message: 'Interactive questions are disabled for this session: choose the most reasonable option yourself and continue.',
-      })
-      return { answers: {} }
-    }
-    const answers: Record<string, { answers: string[] }> = {}
-    for (const question of (params as AppServerUserInputParams).questions ?? []) {
-      const first = question.options?.[0]?.label
-      if (first) {
-        answers[question.id] = { answers: [first] }
-      }
-    }
-    this.#emit({
-      type: 'permission_resolved',
-      requestId: request.id,
-      behavior: 'allow',
-      resolvedBy: 'policy',
-    })
-    return { answers }
-  }
-
-  #settleApproval(id: string, pending: PendingCodexApproval, decision: PermissionDecision, resolvedBy: PermissionDecisionSource): void {
-    clearTimeout(pending.timer)
-    this.#approvals.delete(id)
-    let behavior = decision.behavior
-    let message = decision.behavior === 'deny' ? (decision.message ?? 'Denied') : undefined
-    let sent: { response: unknown; decision?: string }
-    if (decision.behavior === 'allow') {
-      const allowed = pending.channel.allow(pending.params, decision.updatedInput, pending.offered)
-      if (allowed) {
-        sent = allowed
-      } else {
-        behavior = 'deny'
-        resolvedBy = 'policy'
-        message = 'codex offered no plain accept for this request (only broader session/policy grants), denied instead'
-        sent = pending.channel.deny(pending.params, false, pending.offered)
-      }
-    } else {
-      sent = pending.channel.deny(pending.params, decision.interrupt === true, pending.offered, message)
-    }
-    pending.respond(sent.response)
-    this.#emit({ type: 'permission_resolved', requestId: id, behavior, resolvedBy, message })
-    if (behavior === 'deny' && decision.behavior === 'deny' && decision.interrupt && sent.decision !== 'cancel') {
-      void this.#interruptTurn()
-    }
-    if (!this.#closed && this.#approvals.size === 0 && this.#status === 'awaiting_approval') {
-      this.#setStatus('running')
-    }
-  }
-
-  #handleItemProgress(item: AppServerItem, active: ItemScope, agent?: CodexAgent): void {
-    const id = `${active.nonce}:${item.id}`
-    if (item.type === 'subAgentActivity') {
-      this.#itemCompleted.subAgentActivity(item, active, id, agent)
-      return
-    }
-    if (item.type === 'commandExecution' && !active.toolUseEmitted.has(id)) {
-      active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, 'CodexCommand', { command: item.command }, agent)
-      return
-    }
-    if (item.type === 'mcpToolCall' && !active.toolUseEmitted.has(id)) {
-      active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments, agent)
-      return
-    }
-    if (item.type === 'dynamicToolCall' && !active.toolUseEmitted.has(id)) {
-      active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, item.tool, item.arguments, agent)
-      return
-    }
-    if (item.type === 'contextCompaction' && !active.toolUseEmitted.has(id)) {
-      // Reuses the tool-use ledger only as a once-per-item latch; the row it draws is the
-      // compaction boundary, which `item/completed` then settles under the same id.
-      active.toolUseEmitted.add(id)
-      this.#emit({ type: 'context_compacted', uuid: id, pending: true, parentToolUseId: agent?.toolUseId ?? null })
-      return
-    }
-    if (item.type === 'collabAgentToolCall' && !active.toolUseEmitted.has(id)) {
-      active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)
-      return
-    }
-    if (item.type === 'imageGeneration' && !active.toolUseEmitted.has(id)) {
-      active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item), agent)
-      if (item.savedPath) {
-        this.#emitFileProduced(item.savedPath, id)
-      }
-    }
-  }
-
-  #handleItemCompleted(item: AppServerItem, active: ItemScope, agent?: CodexAgent): void {
-    const id = `${active.nonce}:${item.id}`
-    const handler = this.#itemCompleted[item.type] as
-      | ((item: AppServerItem, active: ItemScope, id: string, agent?: CodexAgent) => void)
-      | undefined
-    if (handler) {
-      handler(item, active, id, agent)
-      return
-    }
-    const unknown = item as AppServerUnknownItem
-    this.#emit({ type: 'sdk_event', payload: { type: `codex.${unknown.type}`, item: unknown } })
-  }
-
-  readonly #itemCompleted: {
-    [K in AppServerItem['type']]: (item: Extract<AppServerItem, { type: K }>, active: ItemScope, id: string, agent?: CodexAgent) => void
-  } = {
-    userMessage: (item, active, _id, agent) => {
-      if (!agent) {
-        return
-      }
-      const text = historyUserText(item)
-      if (!text) {
-        return
-      }
-      this.#emit({
-        type: 'user_message',
-        message: { role: 'user', content: text },
-        parentToolUseId: agent.toolUseId,
-        uuid: `${active.nonce}:${item.id}`,
-      })
-    },
-    agentMessage: (item, _active, id, agent) => {
-      const text = typeof item.text === 'string' ? item.text : ''
-      this.#emitAssistant(id, [{ type: 'text', text }], agent?.toolUseId ?? null)
-      if (!agent && this.#activeTurn) {
-        this.#activeTurn.finalText = text
-      }
-    },
-    reasoning: (item, _active, id, agent) => {
-      const summary = Array.isArray(item.summary) ? item.summary.filter(Boolean) : []
-      const content = Array.isArray(item.content) ? item.content.filter(Boolean) : []
-      const thinking = (summary.length > 0 ? summary : content).join('\n\n')
-      if (thinking) {
-        this.#emitAssistant(id, [{ type: 'thinking', thinking }], agent?.toolUseId ?? null)
-      }
-    },
-    commandExecution: (item, active, id, agent) => {
-      if (!active.toolUseEmitted.has(id)) {
-        active.toolUseEmitted.add(id)
-        this.#emitToolUse(id, 'CodexCommand', { command: item.command }, agent)
-      }
-      const exitCode = item.exitCode ?? undefined
-      const failed = item.status === 'failed' || item.status === 'declined' || (exitCode !== undefined && exitCode !== 0)
-      const output = (item.aggregatedOutput ?? '') + (exitCode !== undefined && exitCode !== 0 ? `\n(exit code ${exitCode})` : '')
-      this.#emitToolResult(id, output, failed, undefined, agent?.toolUseId ?? null)
-    },
-    fileChange: (item, _active, id, agent) => {
-      this.#emitToolUse(id, 'CodexFileChange', { changes: item.changes }, agent)
-      const lines = item.changes.map((change) => {
-        const kind = typeof change.kind === 'string' ? change.kind : change.kind?.type
-        return `${kind ?? 'change'}: ${change.path}`
-      })
-      // A patch names one file, and a multi-file edit has no honest way to say which.
-      const only = item.changes.length === 1 ? item.changes[0] : undefined
-      this.#emitToolResult(
-        id,
-        lines.join('\n') || item.status,
-        item.status === 'failed' || item.status === 'declined',
-        only?.diff ? parseUnifiedDiff(only.diff, only.path) : undefined,
-        agent?.toolUseId ?? null,
-      )
-    },
-    mcpToolCall: (item, active, id, agent) => {
-      if (!active.toolUseEmitted.has(id)) {
-        active.toolUseEmitted.add(id)
-        this.#emitToolUse(id, `mcp__${item.server}__${item.tool}`, item.arguments, agent)
-      }
-      const isError = (item.error !== undefined && item.error !== null) || item.status === 'failed'
-      this.#emitToolResult(
-        id,
-        item.error?.message ?? (item.result === undefined || item.result === null ? '' : JSON.stringify(item.result)),
-        isError,
-        undefined,
-        agent?.toolUseId ?? null,
-      )
-    },
-    dynamicToolCall: (item, active, id, agent) => {
-      if (!active.toolUseEmitted.has(id)) {
-        active.toolUseEmitted.add(id)
-        this.#emitToolUse(id, item.tool, item.arguments, agent)
-      }
-      const text = (item.contentItems ?? [])
-        .map((part) => part.text)
-        .filter((part): part is string => typeof part === 'string')
-        .join('\n')
-      this.#emitToolResult(id, text, item.success === false || item.status === 'failed', undefined, agent?.toolUseId ?? null)
-    },
-    webSearch: (item, _active, id, agent) => {
-      this.#emitToolUse(id, 'CodexWebSearch', { query: item.query }, agent)
-      this.#emitToolResult(id, '', false, undefined, agent?.toolUseId ?? null)
-    },
-    imageGeneration: (item, active, id, agent) => {
-      // Re-emitted without the `toolUseEmitted` guard: `savedPath` only exists now, and the
-      // reducer upserts a tool_use by id, so this replaces the in-progress card's input.
-      active.toolUseEmitted.add(id)
-      this.#emitToolUse(id, CODEX_IMAGE_TOOL, imageGenerationInput(item), agent)
-      if (item.savedPath) {
-        this.#emitFileProduced(item.savedPath, id)
-      }
-      const lines = [
-        item.savedPath ? `Saved to ${item.savedPath}` : 'No saved path reported',
-        ...(shortResult(item.result) ? [item.result] : []),
-      ]
-      this.#emitToolResult(id, lines.join('\n'), item.status === 'failed', undefined, agent?.toolUseId ?? null)
-    },
-    imageView: (item, _active, id, agent) => {
-      this.#emitToolUse(id, 'CodexImageView', { path: item.path }, agent)
-      this.#emitToolResult(id, item.path, false, undefined, agent?.toolUseId ?? null)
-    },
-    contextCompaction: (_item, _active, id, agent) => {
-      this.#emit({ type: 'context_compacted', uuid: id, parentToolUseId: agent?.toolUseId ?? null })
-    },
-    subAgentActivity: (item, _active, id, agent) => {
-      // Codex names the counterpart of an interaction, and the counterpart of a sub-agent's message
-      // back is this session's own thread (`agentPath: '/root'`). It is not an agent of itself.
-      if (item.agentThreadId === this.#sdkSessionId) {
-        return
-      }
-      if (this.#replayingHistory) {
-        if (item.kind !== 'started') {
-          return
-        }
-        this.#emitToolUse(
-          id,
-          CODEX_AGENT_TOOL,
-          {
-            ...(agentName(item.agentPath) ? { subagent_type: agentName(item.agentPath) } : {}),
-            agentThreadId: item.agentThreadId,
-            ...(item.agentPath ? { agentPath: item.agentPath } : {}),
-          },
-          agent,
-        )
-        // A resumed thread's history holds the root's items only, so a replayed agent row closes
-        // neutrally: the one claim history cannot back is that the agent failed.
-        this.#emitToolResult(
-          id,
-          "(ran in its own thread, so its work is not part of this thread's stored history)",
-          false,
-          undefined,
-          agent?.toolUseId ?? null,
-        )
-        return
-      }
-      const record = this.#agents.get(item.agentThreadId) ?? this.#agents.open(item.agentThreadId, id, undefined, Date.now())
-      const name = agentName(item.agentPath)
-      const relabel = record.agentType === undefined && name !== undefined
-      if (relabel) {
-        record.agentType = name
-      }
-      if (!record.anchored || relabel) {
-        record.anchored = true
-        this.#emitToolUse(
-          record.toolUseId,
-          CODEX_AGENT_TOOL,
-          {
-            ...(record.agentType ? { subagent_type: record.agentType } : {}),
-            agentThreadId: item.agentThreadId,
-            ...(item.agentPath ? { agentPath: item.agentPath } : {}),
-          },
-          agent,
-        )
-      }
-      if (item.kind === 'interrupted') {
-        if (record.status === 'running') {
-          this.#agents.settle(record, 'failed')
-          this.#emitToolResult(record.toolUseId, 'interrupted', true)
-        }
-        return
-      }
-      // The agent thread's own turn/completed is the richer signal and settles first when it
-      // arrives, but it is not guaranteed to reach a thread we never subscribed to.
-      if (item.kind === 'completed') {
-        if (record.status === 'running') {
-          this.#agents.settle(record, 'done')
-          this.#emitToolResult(record.toolUseId, '', false)
-        }
-        return
-      }
-      if (item.kind !== 'started' && record.status !== 'running') {
-        this.#agents.revive(record)
-      }
-    },
-    collabAgentToolCall: (item, active, id, agent) => {
-      if (!active.toolUseEmitted.has(id)) {
-        active.toolUseEmitted.add(id)
-        this.#emitToolUse(id, CODEX_COLLAB_TOOL, collabInput(item), agent)
-      }
-      if (item.status === 'inProgress') {
-        return
-      }
-      const failed = item.status === 'failed' || item.status === 'declined'
-      this.#emitToolResult(id, failed ? item.status : '', failed, undefined, agent?.toolUseId ?? null)
-    },
-  }
-
-  #emitDelta(delta: { type: 'text_delta'; text: string } | { type: 'thinking_delta'; thinking: string }, parent: string | null): void {
-    if (this.#config.includePartialMessages === false) {
-      return
-    }
-    this.#emit({
-      type: 'stream_delta',
-      event: { type: 'content_block_delta', delta },
-      parentToolUseId: parent,
-      uuid: randomUUID(),
-    })
-  }
-
-  #emitAssistant(uuid: string, content: ContentBlock[], parent: string | null): void {
-    this.#emit({
-      type: 'assistant_message',
-      message: { role: 'assistant', content, model: this.#model ?? this.#resolvedModel },
-      parentToolUseId: parent,
-      uuid,
-    })
-  }
-
-  #emitToolUse(id: string, name: string, input: unknown, agent?: CodexAgent): void {
-    if (agent && !agent.counted.has(id)) {
-      agent.counted.add(id)
-      agent.toolCount += 1
-    }
-    this.#emit({
-      type: 'assistant_message',
-      message: {
-        role: 'assistant',
-        content: [{ type: 'tool_use', id, name, input }],
-        model: this.#model ?? this.#resolvedModel,
-      },
-      parentToolUseId: agent?.toolUseId ?? null,
-      uuid: `${id}-use`,
-    })
-  }
-
-  #emitToolResult(toolUseId: string, content: string, isError: boolean, patch?: FilePatch, parent: string | null = null): void {
-    this.#emit({
-      type: 'user_message',
-      message: {
-        role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: toolUseId, content, is_error: isError || undefined }],
-      },
-      parentToolUseId: parent,
-      synthetic: true,
-      patch,
-      uuid: `${toolUseId}-result`,
-    })
+    return { answers: this.core.resolveQuestionByPolicy(request, mode) ? recommendedAnswers(params) : {} }
   }
 
   #finishTurn(kind: 'success' | 'failure', startedAt: number, active: ActiveTurn, errors?: string[]): void {
-    for (const [id, pending] of this.#approvals) {
-      this.#settleApproval(id, pending, { behavior: 'deny', message: 'Turn ended' }, 'policy')
-    }
+    this.core.settleAllApprovals({ behavior: 'deny', message: 'Turn ended' }, 'policy')
     this.#numTurns += 1
     const usage = active.sawUsage ? active.usage : undefined
     const wire = usage
@@ -2197,25 +1124,17 @@ export class CodexRunner implements Runner {
           cache_read_input_tokens: usage.cachedInputTokens,
         }
       : undefined
-    const turnByModel = wire ? { [this.#model ?? this.#resolvedModel ?? 'unknown']: tokenUsageFromWire(wire) } : undefined
-    if (turnByModel) {
-      this.#cost.observeDelta(turnByModel)
-    }
-    this.#emit({
-      type: 'turn_result',
-      subtype: kind === 'success' ? 'success' : 'error_during_execution',
-      isError: kind !== 'success',
-      durationMs: Date.now() - startedAt,
+    this.core.emitTurnResult({
+      startedAt,
       numTurns: this.#numTurns,
-      totalCostUsd: this.#cost.reportedCostUsd ?? 0,
       result: kind === 'success' ? (active.finalText ?? '') : undefined,
       errors,
       usage: wire,
-      usageByModel: this.#cost.byModel,
-      costUsd: this.#cost.costUsd,
+      byModel: wire ? { [this.#model ?? this.#resolvedModel ?? 'unknown']: tokenUsageFromWire(wire) } : undefined,
+      costs: true,
     })
     this.#emitContextUsage(active)
-    this.#setStatus('idle')
+    this.core.setStatus('idle')
   }
 
   #emitRateLimits(limits: AppServerRateLimits | undefined | null): void {
@@ -2227,7 +1146,7 @@ export class CodexRunner implements Runner {
       if (!window || window.usedPercent === null || window.usedPercent === undefined) {
         continue
       }
-      this.#emit({
+      this.core.emit({
         type: 'rate_limit',
         info: {
           status,
@@ -2239,7 +1158,7 @@ export class CodexRunner implements Runner {
     }
     if (limits.planType && limits.planType !== this.#planType) {
       this.#planType = limits.planType
-      this.#emit({ type: 'plan_info', subscriptionType: limits.planType })
+      this.core.emit({ type: 'plan_info', subscriptionType: limits.planType })
     }
   }
 
@@ -2249,7 +1168,7 @@ export class CodexRunner implements Runner {
     if (totalTokens === undefined || !maxTokens || maxTokens <= 0) {
       return
     }
-    this.#emit({
+    this.core.emit({
       type: 'context_usage',
       usage: {
         categories: [],
@@ -2261,24 +1180,7 @@ export class CodexRunner implements Runner {
     })
   }
 
-  #setStatus(status: SessionStatus, detail?: string): void {
-    // Deduped on the (status, detail) pair: deduping on status alone would swallow a new detail
-    // for an unchanged status, which is the one update a detail exists to carry.
-    if (this.#status === status && this.#statusDetail === detail) {
-      return
-    }
-    if (this.#status === 'closed' || this.#status === 'failed') {
-      return
-    }
-    this.#status = status
-    this.#statusDetail = detail
-    this.#emit({ type: 'status_changed', status, detail })
-  }
-
-  #emit(body: SessionEventBody): void {
-    if (this.#replayingHistory && (body.type === 'assistant_message' || body.type === 'user_message')) {
-      body = { ...body, replay: true }
-    }
-    this.#subscribers.emit(this.#log.append(body))
+  #markReplay(body: SessionEventBody): SessionEventBody {
+    return this.#replayingHistory && (body.type === 'assistant_message' || body.type === 'user_message') ? { ...body, replay: true } : body
   }
 }

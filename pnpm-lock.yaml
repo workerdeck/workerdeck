@@ -379,18 +379,9 @@ importers:
 
   packages/core:
     dependencies:
-      '@ai-sdk/anthropic':
-        specifier: ^4.0.61
-        version: 4.0.61(zod@4.6.5)
       '@ai-sdk/mcp':
         specifier: ^2.0.53
         version: 2.0.53(zod@4.6.5)
-      '@ai-sdk/moonshotai':
-        specifier: ^3.0.53
-        version: 3.0.53(zod@4.6.5)
-      '@ai-sdk/openai':
-        specifier: ^4.0.70
-        version: 4.0.70(zod@4.6.5)
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.280
         version: 0.3.280(@anthropic-ai/sdk@0.93.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(zod@4.6.5)

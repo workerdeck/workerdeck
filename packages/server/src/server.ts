@@ -1,34 +1,20 @@
 import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
-import { WebSocketServer, type WebSocket } from 'ws'
+import { WebSocketServer } from 'ws'
 import { getEngineAdapter, installPeerDirectory, installShellDirectory, peerDirectoryHandle, shellDirectoryHandle } from '@workerdeck/core'
-import type { EngineAdapter } from '@workerdeck/core'
+import type { EngineAdapter, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
-import {
-  PROTOCOL_VERSION,
-  sessionState,
-  setPricingOverrides,
-  type CreateSessionRequest,
-  type JobEvent,
-  type ProfileEngine,
-  type QueueServerFrame,
-} from '@workerdeck/protocol'
-import type { SessionRunnerConfig } from '@workerdeck/core'
+import { mergePricing, type CreateSessionRequest, type ProfileEngine } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
-import { json } from './lib/http.ts'
-import { machineId } from './lib/machine-id.ts'
+import { createServerLifecycle } from './lifecycle.ts'
+import { httpErrorStatus, json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
-import { parseSessionRoute } from './lib/parse-route.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
-import type { DrainReport, LateBoundRefs, WorkerServer, WorkerServerOptions } from './options.ts'
-import { handleExecutionResult } from './routes/executions.ts'
-import { handleHostFiles } from './routes/fs.ts'
-import { handleJobs } from './routes/jobs.ts'
-import { handleProfiles } from './routes/profiles.ts'
-import { handleSdkSessions } from './routes/sdk-sessions.ts'
-import { handleSessions } from './routes/sessions.ts'
-import { attachClient } from './routes/ws.ts'
+import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
+import { createQueueSocketHub } from './routes/queue-ws.ts'
+import { upgradeSession } from './routes/session-upgrade.ts'
+import { dispatchRoute, httpRoutes } from './routes/table.ts'
 import { AttachmentStore } from './services/attachments.ts'
 import { createAuthService } from './services/auth.ts'
 import { AvailabilityTracker } from './services/availability.ts'
@@ -43,9 +29,9 @@ import { SpendLedger } from './services/spend-ledger.ts'
 import { createPeerService } from './services/peers.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
-import { createSessionFactory } from './services/session-factory.ts'
+import { createSessionFactory, type SessionFactory } from './services/session-factory.ts'
 import { createShellDirectory, createShellRegistry, type ShellRegistry } from './services/shells.ts'
-import { isDormant, MemorySessionStore } from './services/session-store.ts'
+import { isDormant, MemorySessionStore, type StoredSessionRecord } from './services/session-store.ts'
 
 export type {
   Authenticator,
@@ -56,39 +42,12 @@ export type {
   WorkerServerOptions,
 } from './options.ts'
 
-// How long a client gets to acknowledge the shutdown close frame before its socket is torn down.
-const SOCKET_CLOSE_GRACE_MS = 250
-
-// The outer bound on close(): it resolves by then whether or not the runtime ever reports the drains complete.
-const CLOSE_DEADLINE_MS = 1_000
-
 // How old the account-level rate-limit reading may be before a profiles read asks a live session for a newer one.
 // Generous: the windows move over hours, and the point is to bound staleness at minutes rather than at days.
 const USAGE_STALE_MS = 5 * 60_000
 
-// Split live sessions into "will finish by itself" and "needs a person".
-//
-// `sessionState` is the vocabulary the dashboard, the session list and `workerdeck guard` already sort by, and it
-// draws exactly the line a drain needs: `working` covers starting/running and running subagents, while `attention`
-// covers a pending approval. Re-spelling that set here is how the two definitions would drift apart.
-function surveyDrain(registry: SessionRegistry, shells: ShellRegistry | null): DrainReport {
-  const working: string[] = []
-  const awaitingHuman: string[] = []
-  for (const info of registry.list()) {
-    const state = sessionState(info)
-    if (state === 'working') {
-      working.push(info.id)
-    } else if (state === 'attention') {
-      awaitingHuman.push(info.id)
-    }
-  }
-  const running = (shells?.running() ?? []).map(({ sessionId, id, label }) => ({ sessionId, id, label }))
-  return { working, awaitingHuman, timedOut: false, shells: running }
-}
-
-function sameDrain(a: DrainReport, b: DrainReport): boolean {
-  return a.working.join() === b.working.join() && a.awaitingHuman.join() === b.awaitingHuman.join()
-}
+// Every client frame is a command or a bridged result; images travel over the attachments route, never the socket.
+const WS_MAX_PAYLOAD_BYTES = 4 * 1024 * 1024
 
 export function createWorkerServer(options: WorkerServerOptions = {}): WorkerServer {
   if (!options.authenticate && !options.allowUnauthenticated) {
@@ -98,9 +57,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const fallback = options.fallback
   const corsOrigins = options.cors?.origins.length ? new Set(options.cors.origins) : undefined
   const maxBodyBytes = options.maxBodyBytes ?? 1024 * 1024
+  const diagnose: DiagnosticSink = options.onDiagnostic ?? (() => {})
   const adapterFor = (engine: ProfileEngine | undefined): EngineAdapter => options.engines?.[engine ?? 'claude'] ?? getEngineAdapter(engine)
 
-  const pricing = setPricingOverrides(options.pricing?.overrides)
+  const pricing = mergePricing(options.pricing?.overrides)
   if (pricing.dropped.length > 0) {
     console.warn(
       `[workerdeck] Ignoring pricing.overrides for ${pricing.dropped.join(', ')}: ` +
@@ -111,32 +71,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const profileDefaultModels = new Map<string, string>()
   const profileUsage = new ProfileUsageTracker()
   const spendLedger = new SpendLedger({
+    pricing: pricing.pricing,
     store: options.spend?.store,
     monthlySubscriptionUsd: (name) => options.spend?.monthlySubscriptionUsd?.[name] ?? options.spend?.monthlySubscriptionUsd?.['*'],
     onError: (error) => options.spend?.onError?.(error),
   })
   void spendLedger.load()
-  // The backstop behind the attach-time refresh, for the surface that reads the account number without opening a
-  // session at all. Fire and forget: this request still answers with what is known, and the newer reading arrives
-  // as a `rate_limit` event moments later. One session per profile is enough - the reading is account-level - and
-  // the runner's own throttle is what keeps a page of profiles from becoming a page of control requests.
-  const refreshStaleUsage = (name: string): void => {
-    const held = profileUsage.usage(name)
-    const newest = Math.max(0, ...Object.values(held ?? {}).map((window) => window.updatedAt ?? 0))
-    if (Date.now() - newest < USAGE_STALE_MS) {
-      return
-    }
-    for (const info of refs.registry?.list() ?? []) {
-      if (info.profile !== name) {
-        continue
-      }
-      const runner = refs.registry?.get(info.id)
-      if (runner?.refreshUsage) {
-        void runner.refreshUsage().catch(() => {})
-        return
-      }
-    }
-  }
   // With a store in play, detection seeds it on first launch instead of declaring anything: a
   // declared profile cannot be edited over the API, and an auto-detected one is exactly the profile
   // an operator most wants to rename or retarget.
@@ -153,7 +93,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       defaultModel: (name) => profileDefaultModels.get(name),
       availability: (name) => availability.get(name),
       usage: (name) => {
-        refreshStaleUsage(name)
+        refreshStaleUsage(registry, profileUsage, name, diagnose)
         return profileUsage.usage(name)
       },
       spend: (name) => spendLedger.spend(name),
@@ -166,54 +106,18 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
   }
 
-  const refs: LateBoundRefs = {}
   const generation = randomUUID()
-  const shells =
-    options.shell?.enabled === true
-      ? createShellRegistry({
-          generation,
-          artifactDir: options.shell.artifactDir ?? null,
-          timeoutMs: options.shell.timeoutMs,
-          artifactMaxBytes: options.shell.artifactMaxBytes,
-          artifactTtlMs: options.shell.artifactTtlMs,
-          maxRunningPerSession: options.shell.maxRunningPerSession,
-          onError: (error, context) =>
-            console.warn(`[workerdeck] shell ${context.op} error (${context.shellId ?? context.sessionId ?? '-'}): ${String(error)}`),
-        })
-      : null
+  const shells = options.shell?.enabled === true ? shellRegistryFor(options.shell, generation) : null
   const projects = new ProjectInfoService({ decorate: (info) => (shells ? shells.decorate(info) : info) })
-  const peers = options.peers?.enabled === false ? undefined : createPeerService({ refs, projects, options: options.peers })
-  if (peers) {
-    installPeerDirectory(peers)
-  }
-  installShellDirectory(shells ? createShellDirectory(shells, { runnerFor: (id) => refs.registry?.get(id) }) : undefined)
-  const factory = createSessionFactory({
-    adapterFor,
-    profiles,
-    hostBuildRunnerConfig: options.buildRunnerConfig ?? ((req: CreateSessionRequest): SessionRunnerConfig => req),
-    createEngineRunner: options.createEngineRunner,
-    allowedCwdRoots: options.allowedCwdRoots,
-    disableBypassPermissions: options.disableBypassPermissions,
-    approvalTimeoutMs: options.approvalTimeoutMs,
-    requireApiKey: options.requireApiKey,
-    peers: peers ? peerDirectoryHandle() : undefined,
-    shells: shells ? shellDirectoryHandle() : undefined,
-    shellAgentWrite: options.shell?.agentWrite,
-    refs,
-  })
-
-  const availability = new AvailabilityTracker({
-    checkCredentials: options.checkCredentials,
-    requireAvailableProfile: options.requireAvailableProfile,
-    adapterFor,
-    sessionEnvFor: factory.sessionEnvFor,
-  })
 
   const notifier = new SessionNotifier({
     ...options.notifications,
     decorateInfo: (info) => projects.withProject(info),
+    onError: options.notifications?.onError ?? ((error, context) => diagnose(error, `notification-${context.op}`)),
   })
   const producedFiles = new ProducedFileStore()
+  // Built first because everything else holds it. The watchers it attaches read the later-built services only when
+  // a runner registers, which no code path does before this function returns.
   const registry = new SessionRegistry({
     // Every watcher here hands back its detach, and the registry runs them when the runner leaves. A hot reload is
     // the case that needs it: the runner outlives this server, and these closures would otherwise keep delivering
@@ -226,6 +130,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         spendLedger.watch(runner),
         shells?.watch(runner),
         peers?.watch(runner),
+        factory.watchAuthSource(runner),
       ]
       const profile = runner.info().profile
       if (profile) {
@@ -260,62 +165,54 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     expiredGraceMs: options.parking?.expiredGraceMs,
     persistLive: options.parking?.persistLive,
     onError: options.parking?.onError,
-    rebuild: (record) =>
-      isDormant(record)
-        ? factory.buildRunner(
-            {
-              ...factory.buildRunnerConfig({
-                ...record.config,
-                prompt: undefined,
-                meta: record.info.title ? { ...record.config.meta, title: record.info.title } : record.config.meta,
-                resume: record.sdkSessionId,
-              }),
-              // Applied after the host's hook, which is free to rebuild the config from the
-              // request and would drop a field it has never heard of.
-              epoch: (record.info.epoch ?? 0) + 1,
-            },
-            undefined,
-            record.id,
-          )
-        : factory.buildRunner(record.config, record.snapshot),
+    rebuild: (record) => rebuildRunner(factory, record),
     attachedCount: (sessionId) => bridge.attachedCount(sessionId),
-    onParking: (sessionId, executionId) => queue?.onSessionParking(sessionId, executionId) ?? true,
+    onParking: (sessionId) => queue?.canParkSession(sessionId) ?? true,
+    onParked: (sessionId, executionId) => void queue?.onSessionParking(sessionId, executionId),
     onResumed: (sessionId, runner) => queue?.onSessionResumed(sessionId, runner),
   })
-  refs.registry = registry
-  refs.parking = parking
-  refs.bridge = bridge
 
-  const auth = createAuthService({ options, refs })
-
-  const wss = new WebSocketServer({ noServer: true })
-  let closing: Promise<void> | undefined
-  let draining = false
-
-  const queueSockets = new Set<WebSocket>()
-  const sendQueueFrame = (ws: WebSocket, frame: QueueServerFrame): void => {
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify(frame))
-    }
+  const peers =
+    options.peers?.enabled === false ? undefined : createPeerService({ refs: { registry, parking }, projects, options: options.peers })
+  const shellDirectory = shells ? createShellDirectory(shells, { runnerFor: (id) => registry.get(id) }) : undefined
+  // Each runner resolves its own server's directory first and the process-wide slot only once that server has
+  // closed, which is the hot-reload handover: a carried runner then reaches whichever generation installed last.
+  let ownPeers = peers
+  let ownShells = shellDirectory
+  if (peers) {
+    installPeerDirectory(peers)
   }
-  const broadcastJobEvent = (event: JobEvent): void => {
-    if (queueSockets.size === 0) {
-      return
-    }
-    for (const ws of queueSockets) {
-      sendQueueFrame(ws, { type: 'job_event', event })
-    }
-    if (event.type !== 'job_progress') {
-      void queue
-        ?.stats()
-        .then((stats) => {
-          for (const ws of queueSockets) {
-            sendQueueFrame(ws, { type: 'queue_stats', stats })
-          }
-        })
-        .catch(() => {})
-    }
-  }
+  installShellDirectory(shellDirectory)
+  const factory = createSessionFactory({
+    adapterFor,
+    profiles,
+    hostBuildRunnerConfig: options.buildRunnerConfig ?? ((req: CreateSessionRequest): SessionRunnerConfig => req),
+    createEngineRunner: options.createEngineRunner,
+    allowedCwdRoots: options.allowedCwdRoots,
+    disableBypassPermissions: options.disableBypassPermissions,
+    approvalTimeoutMs: options.approvalTimeoutMs,
+    requireApiKey: options.requireApiKey,
+    peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
+    shells: shellDirectory ? shellDirectoryHandle(() => ownShells) : undefined,
+    shellAgentWrite: options.shell?.agentWrite,
+    pricing: pricing.pricing,
+    registry,
+    parking,
+    bridge,
+  })
+
+  const availability = new AvailabilityTracker({
+    checkCredentials: options.checkCredentials,
+    requireAvailableProfile: options.requireAvailableProfile,
+    adapterFor,
+    sessionEnvFor: factory.sessionEnvFor,
+    onError: (error) => diagnose(error, 'availability-probe'),
+  })
+
+  const auth = createAuthService({ options, registry })
+
+  const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES })
+  const queueSockets = createQueueSocketHub({ wss, auth, queue: () => queue, diagnose })
 
   const queue = options.queue
     ? new JobQueue({
@@ -324,14 +221,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           try {
             options.queue?.onEvent?.(event)
           } finally {
-            broadcastJobEvent(event)
+            queueSockets.broadcast(event)
           }
         },
-        createRunner: async (config) => {
-          const runner = await factory.createRunner(config)
-          factory.watchAuthSource(runner)
-          return runner
-        },
+        createRunner: (config) => factory.createRunner(config),
         buildRunnerConfig: factory.buildRunnerConfig,
         discardSession: (sessionId) => parking.discard(sessionId),
       })
@@ -366,127 +259,25 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     generation,
     pricingOverrides: Object.keys(pricing.overrides).length > 0 ? pricing.overrides : undefined,
   }
+  const routes = httpRoutes(ctx)
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const pathname = new URL(req.url ?? '/', 'http://internal').pathname
-
-    const origin = req.headers.origin
-    const originAllowed = typeof origin === 'string' && corsOrigins !== undefined && corsOrigins.has(origin)
-    if (originAllowed) {
-      res.setHeader('access-control-allow-origin', origin)
-      res.setHeader('vary', 'origin')
-    }
-    if (req.method === 'OPTIONS' && req.headers['access-control-request-method'] !== undefined) {
-      if (!originAllowed) {
-        res.writeHead(403)
-        res.end()
-        return
-      }
-      res.setHeader('access-control-allow-methods', 'GET, HEAD, POST, PATCH, PUT, DELETE')
-      res.setHeader('access-control-allow-headers', 'authorization, content-type, x-workerdeck-key')
-      res.setHeader('access-control-max-age', '600')
-      // Chrome's Private Network Access: a public page reaching a private address (a tailnet, a LAN) preflights for this explicitly.
-      if (req.headers['access-control-request-private-network'] === 'true') {
-        res.setHeader('access-control-allow-private-network', 'true')
-      }
-      res.writeHead(204)
-      res.end()
+    if (answerCors(req, res, corsOrigins)) {
       return
     }
-
+    const pathname = new URL(req.url ?? '/', 'http://internal').pathname
     if (fallback && pathname !== basePath && !pathname.startsWith(basePath + '/')) {
       await fallback(req, res)
       return
     }
-    if (pathname === basePath + '/jobs' || pathname.startsWith(basePath + '/jobs/') || pathname === basePath + '/queue') {
-      const authCtx = await auth.authenticate(req)
-      if (!authCtx.ok) {
-        json(res, 401, { error: 'unauthorized' })
-        return
-      }
-      await handleJobs(ctx, req, res, pathname, authCtx)
-      return
-    }
-    if (pathname === basePath + '/profiles' || pathname.startsWith(basePath + '/profiles/')) {
-      const authCtx = await auth.authenticate(req)
-      if (!authCtx.ok) {
-        json(res, 401, { error: 'unauthorized' })
-        return
-      }
-      await handleProfiles(ctx, req, res, pathname, authCtx)
-      return
-    }
-    if (pathname.startsWith(basePath + '/executions/')) {
-      const authCtx = await auth.authenticate(req)
-      if (!authCtx.ok) {
-        json(res, 401, { error: 'unauthorized' })
-        return
-      }
-      await handleExecutionResult(ctx, req, res, pathname, authCtx)
-      return
-    }
-    if (pathname === basePath + '/sdk-sessions') {
-      const authCtx = await auth.authenticate(req)
-      if (!authCtx.ok) {
-        json(res, 401, { error: 'unauthorized' })
-        return
-      }
-      if (!auth.isOperator(authCtx)) {
-        json(res, 404, { error: 'not found' })
-        return
-      }
-      await handleSdkSessions(ctx, req, res, authCtx)
-      return
-    }
-    if (pathname === basePath + '/meta') {
-      const authCtx = await auth.authenticate(req)
-      if (!authCtx.ok) {
-        json(res, 401, { error: 'unauthorized' })
-        return
-      }
-      // Operator-only, same as `/fs`: the fingerprint is only ever acted on by a client that also
-      // means to read this machine's files, so it is gated behind the same principal.
-      json(res, 200, { protocolVersion: PROTOCOL_VERSION, ...(auth.isOperator(authCtx) ? { machineId: machineId() } : {}) })
-      return
-    }
-    if (pathname.startsWith(basePath + '/fs/')) {
-      // Authenticated before the 404-when-unconfigured answer: an unauthenticated caller must not learn whether a filesystem is exposed.
-      const authCtx = await auth.authenticate(req)
-      if (!authCtx.ok) {
-        json(res, 401, { error: 'unauthorized' })
-        return
-      }
-      if (!auth.isOperator(authCtx)) {
-        json(res, 404, { error: 'not found' })
-        return
-      }
-      await handleHostFiles(ctx, req, res, pathname)
-      return
-    }
-    const route = parseSessionRoute(basePath, req.url ?? '/')
-    if (!route || route.ws) {
-      json(res, 404, { error: 'not found' })
-      return
-    }
-    // Starting a turn we have already promised to stop waiting for would make the drain unable to converge.
-    // Existing sessions stay fully controllable - including approvals, which is how an operator unblocks one.
-    if (draining && req.method === 'POST' && route.id === undefined) {
-      json(res, 503, { error: 'server is shutting down' })
-      return
-    }
-    const authCtx = await auth.authenticate(req)
-    if (!authCtx.ok) {
-      json(res, 401, { error: 'unauthorized' })
-      return
-    }
-    await handleSessions(ctx, req, res, route, authCtx)
+    await dispatchRoute(ctx, routes, req, res, lifecycle.draining())
   }
 
   const server = createServer((req, res) => {
     handleRequest(req, res).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'internal error'
       if (!res.headersSent) {
-        json(res, error instanceof SyntaxError ? 400 : 500, { error: message })
+        json(res, httpErrorStatus(error), { error: message })
       } else {
         res.end()
       }
@@ -497,59 +288,26 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     void (async () => {
       const pathname = new URL(req.url ?? '/', 'http://internal').pathname
       if (pathname === basePath + '/queue/ws') {
-        if (!queue) {
-          socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
-          socket.destroy()
-          return
-        }
-        const queueAuth = await auth.authenticate(req)
-        if (!queueAuth.ok) {
-          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
-          socket.destroy()
-          return
-        }
-        if (!auth.isOperator(queueAuth)) {
-          socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
-          socket.destroy()
-          return
-        }
-        wss.handleUpgrade(req, socket, head, (ws) => {
-          queueSockets.add(ws)
-          ws.on('close', () => queueSockets.delete(ws))
-          void queue
-            .stats()
-            .then((stats) => sendQueueFrame(ws, { type: 'queue_attached', protocolVersion: PROTOCOL_VERSION, stats }))
-            .catch(() => {})
-        })
+        await queueSockets.upgrade(req, socket, head)
         return
       }
-      const route = parseSessionRoute(basePath, req.url ?? '/')
-      if (!route?.ws || !route.id) {
-        socket.destroy()
-        return
-      }
-      const authCtx = await auth.authenticate(req)
-      if (!authCtx.ok) {
-        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
-        socket.destroy()
-        return
-      }
-      const known = registry.get(route.id)?.info() ?? (await parking.get(route.id))?.info
-      if (known && !auth.canSee(authCtx, known)) {
-        socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
-        socket.destroy()
-        return
-      }
-      const runner = await parking.ensureLive(route.id).catch(() => undefined)
-      if (!runner || !auth.canSee(authCtx, runner.info())) {
-        socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
-        socket.destroy()
-        return
-      }
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        attachClient(ctx, ws, runner, req, { operator: auth.isOperator(authCtx) })
-      })
+      await upgradeSession(ctx, wss, req, socket, head)
     })().catch(() => socket.destroy())
+  })
+
+  const lifecycle = createServerLifecycle({
+    server,
+    wss,
+    registry,
+    parking,
+    shells,
+    queue,
+    closeQueueSockets: queueSockets.clear,
+    diagnose,
+    releaseDirectories: () => {
+      ownPeers = undefined
+      ownShells = undefined
+    },
   })
 
   return {
@@ -593,68 +351,94 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         return false
       }
       parking.adopt(runner, config)
-      registry.retain(runner.id, factory.watchAuthSource(runner))
       return true
     },
-    drain: async (drainOptions = {}) => {
-      const { timeoutMs = 30_000, pollMs = 250, onProgress } = drainOptions
-      draining = true
-      const deadline = Date.now() + timeoutMs
-      let report = surveyDrain(registry, shells)
-      onProgress?.(report)
-      while (report.working.length > 0 && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, pollMs))
-        const next = surveyDrain(registry, shells)
-        // Only speak when something actually changed: a shutdown that reports on its own progress should be
-        // readable, not a per-tick redraw of the same two lines.
-        if (!sameDrain(next, report)) {
-          onProgress?.(next)
-        }
-        report = next
-      }
-      report = { ...surveyDrain(registry, shells), timedOut: false }
-      report.timedOut = report.working.length > 0
-      onProgress?.(report)
-      return report
-    },
-    close: () => {
-      closing ??= new Promise((resolve) => {
-        queue?.close()
-        // Before the runners close: their `session_closed` would settle every shell as `killed`, and a graceful stop is
-        // `server_stopped`. The index lands through `flushed` below, ahead of resolving.
-        shells?.killAll('server_stopped')
-        const flushed = shells?.flush().catch(() => {}) ?? Promise.resolve()
-        // Ordering is load-bearing: parking's `#closed` guard must be set before the registry closes runners with
-        // reason 'server', or shutdown discards every dormant record. See docs/GOTCHAS.md.
-        parking.close()
-        registry.closeAll()
-        // `wss` is `noServer`, so `wss.close()` only waits for `clients` to empty, and `server.closeAllConnections()`
-        // never reaches an upgraded socket: close every client ourselves, then terminate what has not acknowledged.
-        for (const ws of wss.clients) {
-          ws.close(1001, 'server shutting down')
-        }
-        queueSockets.clear()
-        const force = setTimeout(() => {
-          for (const ws of wss.clients) {
-            ws.terminate()
-          }
-        }, SOCKET_CLOSE_GRACE_MS)
-        force.unref()
-        const finish = (): void => void flushed.then(() => resolve())
-        const deadline = setTimeout(finish, CLOSE_DEADLINE_MS)
-        deadline.unref()
-        const drained = Promise.all([
-          new Promise<void>((done) => wss.close(() => done())),
-          new Promise<void>((done) => server.close(() => done())),
-        ])
-        server.closeAllConnections()
-        void drained.then(() => {
-          clearTimeout(force)
-          clearTimeout(deadline)
-          finish()
-        })
-      })
-      return closing
-    },
+    drain: lifecycle.drain,
+    close: lifecycle.close,
   }
+}
+
+// The backstop behind the attach-time refresh, for the surface that reads the account number without opening a
+// session at all. Fire and forget: this request still answers with what is known, and the newer reading arrives
+// as a `rate_limit` event moments later. One session per profile is enough - the reading is account-level - and
+// the runner's own throttle is what keeps a page of profiles from becoming a page of control requests.
+function refreshStaleUsage(registry: SessionRegistry, profileUsage: ProfileUsageTracker, name: string, diagnose: DiagnosticSink): void {
+  const held = profileUsage.usage(name)
+  const newest = Math.max(0, ...Object.values(held ?? {}).map((window) => window.updatedAt ?? 0))
+  if (Date.now() - newest < USAGE_STALE_MS) {
+    return
+  }
+  for (const info of registry.list()) {
+    if (info.profile !== name) {
+      continue
+    }
+    const runner = registry.get(info.id)
+    if (runner?.refreshUsage) {
+      void runner.refreshUsage().catch((error: unknown) => diagnose(error, 'usage-refresh'))
+      return
+    }
+  }
+}
+
+function answerCors(req: IncomingMessage, res: ServerResponse, corsOrigins: Set<string> | undefined): boolean {
+  const origin = req.headers.origin
+  const originAllowed = typeof origin === 'string' && corsOrigins !== undefined && corsOrigins.has(origin)
+  if (originAllowed) {
+    res.setHeader('access-control-allow-origin', origin)
+    res.setHeader('vary', 'origin')
+  }
+  if (req.method !== 'OPTIONS' || req.headers['access-control-request-method'] === undefined) {
+    return false
+  }
+  if (!originAllowed) {
+    res.writeHead(403)
+    res.end()
+    return true
+  }
+  res.setHeader('access-control-allow-methods', 'GET, HEAD, POST, PATCH, PUT, DELETE')
+  res.setHeader('access-control-allow-headers', 'authorization, content-type, x-workerdeck-key')
+  res.setHeader('access-control-max-age', '600')
+  // Chrome's Private Network Access: a public page reaching a private address (a tailnet, a LAN) preflights for this explicitly.
+  if (req.headers['access-control-request-private-network'] === 'true') {
+    res.setHeader('access-control-allow-private-network', 'true')
+  }
+  res.writeHead(204)
+  res.end()
+  return true
+}
+
+function shellRegistryFor(shell: NonNullable<WorkerServerOptions['shell']>, generation: string): ShellRegistry {
+  return createShellRegistry({
+    generation,
+    artifactDir: shell.artifactDir ?? null,
+    timeoutMs: shell.timeoutMs,
+    artifactMaxBytes: shell.artifactMaxBytes,
+    artifactTtlMs: shell.artifactTtlMs,
+    maxRunningPerSession: shell.maxRunningPerSession,
+    onError: (error, context) =>
+      console.warn(`[workerdeck] shell ${context.op} error (${context.shellId ?? context.sessionId ?? '-'}): ${String(error)}`),
+  })
+}
+
+// A dormant record holds only the config and the SDK id to resume from, so it goes back through the host's hook; a
+// parked one carries its own snapshot.
+function rebuildRunner(factory: SessionFactory, record: StoredSessionRecord): Promise<Runner> {
+  if (!isDormant(record)) {
+    return factory.buildRunner(record.config, record.snapshot)
+  }
+  return factory.buildRunner(
+    {
+      ...factory.buildRunnerConfig({
+        ...record.config,
+        prompt: undefined,
+        meta: record.info.title ? { ...record.config.meta, title: record.info.title } : record.config.meta,
+        resume: record.sdkSessionId,
+      }),
+      // Applied after the host's hook, which is free to rebuild the config from the
+      // request and would drop a field it has never heard of.
+      epoch: (record.info.epoch ?? 0) + 1,
+    },
+    undefined,
+    record.id,
+  )
 }

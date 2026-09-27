@@ -32,13 +32,12 @@ export function runningSubagents(info: SessionInfo): SubagentInfo[] {
   return (info.subagents ?? []).filter((sub) => sub.status === 'running')
 }
 
-// A failed sub-agent is not a completed one: 'active' keeps it, because it is the row most worth reading.
 export function visibleSubagents(info: SessionInfo, show: SubagentDisplay): SubagentInfo[] {
   if (show === 'none') {
     return []
   }
   const subagents = info.subagents ?? []
-  return show === 'all' ? [...subagents] : subagents.filter((sub) => sub.status !== 'done')
+  return show === 'all' ? [...subagents] : subagents.filter((sub) => sub.status === 'running')
 }
 
 export function isAgentRecord(sub: SubagentInfo): boolean {
@@ -179,15 +178,12 @@ export function promotedShells(info: SessionInfo, now: number): ShellInfo[] {
   })
 }
 
-// 'active' is `promotedShells`; 'all' adds every shell that has ended, whatever its exit.
 export function visibleShells(info: SessionInfo, show: StepDisplay, now: number): ShellInfo[] {
   if (show === 'none') {
     return []
   }
-  if (show === 'active') {
-    return promotedShells(info, now)
-  }
-  return (info.shells ?? []).filter((shell) => shell.status !== 'running' || now - shell.startedAt >= SHELL_PROMOTE_MS)
+  const shells = (info.shells ?? []).filter((shell) => shell.status !== 'running' || now - shell.startedAt >= SHELL_PROMOTE_MS)
+  return show === 'active' ? shells.filter((shell) => shell.status === 'running') : shells
 }
 
 function matchesSearch(row: SessionRow, needle: string): boolean {

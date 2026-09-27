@@ -1,55 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
-import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { TOOL_RESULT_HEAD_CHARS, type ServerFrame, type SessionEvent, type SessionInfo, type ToolResultBlock } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { fakeHarness } from './helpers.ts'
 
 const BIG = 'x'.repeat(TOOL_RESULT_HEAD_CHARS + 12_000)
-
-function fakeHarness() {
-  const buffered: SDKMessage[] = []
-  let waiter: ((r: IteratorResult<SDKMessage>) => void) | null = null
-  let done = false
-  const emit = (msg: SDKMessage) => {
-    if (waiter) {
-      const resolve = waiter
-      waiter = null
-      resolve({ value: msg, done: false })
-    } else {
-      buffered.push(msg)
-    }
-  }
-  const query = {
-    [Symbol.asyncIterator]() {
-      return this
-    },
-    next(): Promise<IteratorResult<SDKMessage>> {
-      const next = buffered.shift()
-      if (next !== undefined) {
-        return Promise.resolve({ value: next, done: false })
-      }
-      if (done) {
-        return Promise.resolve({ value: undefined, done: true })
-      }
-      return new Promise((resolve) => {
-        waiter = resolve
-      })
-    },
-    close: () => {
-      done = true
-      waiter?.({ value: undefined, done: true })
-    },
-  } as unknown as Query
-  const queryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => {
-    void (async () => {
-      for await (const _ of params.prompt) {
-        // The turn's content is emitted by the test, not derived from input.
-      }
-    })()
-    return query
-  }
-  return { emit, queryFn }
-}
 
 let running: WorkerServer | undefined
 afterEach(async () => {
@@ -198,7 +154,7 @@ const IMG_B64 = IMG.toString('base64')
 
 const imagePart = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG_B64 } }
 
-async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string) {
+async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string, part: Record<string, unknown> = imagePart) {
   const id = await createSession(base)
   harness.emit({
     type: 'assistant',
@@ -217,7 +173,7 @@ async function seedImage(harness: ReturnType<typeof fakeHarness>, base: string) 
         {
           type: 'tool_result',
           tool_use_id: 'call-img',
-          content: [{ type: 'text', text: 'read the screenshot' }, imagePart],
+          content: [{ type: 'text', text: 'read the screenshot' }, part],
         },
       ],
     },
@@ -276,6 +232,22 @@ describe('image-ref replay', () => {
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toBe('image/png')
       expect(Buffer.from(await res.arrayBuffer())).toEqual(IMG)
+    })
+
+    it('serves a tool-claimed non-raster type as an inert download', async () => {
+      const harness = fakeHarness()
+      const { base, wsBase } = await start(harness)
+      const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
+      const part = { type: 'image', source: { type: 'base64', media_type: 'image/svg+xml', data: svg.toString('base64') } }
+      const id = await seedImage(harness, base, part)
+      const seq = seqOfImage(await replay(wsBase, id, '?imageRefs=1'))
+
+      const res = await fetch(`${base}/sessions/${id}/events/${seq}/result?toolUseId=call-img&part=1`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('application/octet-stream')
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(res.headers.get('content-disposition')).toMatch(/^attachment;/)
+      expect(res.headers.get('content-security-policy')).toMatch(/^sandbox/)
     })
 
     it('404s for a part that is not a base64 image', async () => {

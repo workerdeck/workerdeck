@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useState } from 'react'
 import type { QueueStats } from '@workerdeck/protocol'
 import {
@@ -111,7 +112,7 @@ function ScheduleJobForm({ onScheduled }: { onScheduled: () => void }) {
       toast.success('Job scheduled')
       onScheduled()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to schedule job')
+      toast.error(errorMessage(e, 'Failed to schedule job'))
     } finally {
       setCreating(false)
     }

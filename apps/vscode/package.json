@@ -540,8 +540,8 @@
               "Bypass - no permission checks at all. Decided at creation and unchangeable after."
             ],
             "default": "remember",
-            "description": "Permission mode for sessions created from VS Code. A mode the chosen engine does not support falls back to that profile's own default.",
-            "scope": "machine-overridable",
+            "description": "Permission mode for sessions created from VS Code. A mode the chosen engine does not support falls back to that profile's own default. Read from user settings only: a workspace cannot choose it.",
+            "scope": "machine",
             "order": 1,
             "enumItemLabels": [
               "Remember last",

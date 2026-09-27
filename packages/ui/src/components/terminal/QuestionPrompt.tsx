@@ -1,20 +1,9 @@
 import { useState } from 'react'
 import type { PermissionRequest, UserQuestion } from '@workerdeck/protocol'
 import { parseUserQuestions } from '../agent/QuestionPrompt.tsx'
+import { answerFor, useQuestionAnswers, type Selection } from '../../lib/question-answers.ts'
 import { Box, Choices, Hint, PromptInput, Rule, TabStrip, type Choice } from './prompt.tsx'
 import { Blank, Ink, Row } from './row.tsx'
-
-type Selection = { labels: string[]; other: string; otherActive: boolean }
-
-const EMPTY: Selection = { labels: [], other: '', otherActive: false }
-
-function answerFor(selection: Selection): string {
-  const parts = [...selection.labels]
-  if (selection.otherActive && selection.other.trim()) {
-    parts.push(selection.other.trim())
-  }
-  return parts.join(', ')
-}
 
 export interface TerminalQuestionPromptProps {
   request: PermissionRequest
@@ -25,43 +14,15 @@ export interface TerminalQuestionPromptProps {
 
 export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className }: TerminalQuestionPromptProps) {
   const questions = parseUserQuestions(request.input)
-  const [selections, setSelections] = useState<Selection[]>(() => questions.map(() => EMPTY))
+  const { selectionFor, answered, complete, update, toggle, toggleOther, answers } = useQuestionAnswers(questions)
   const [cursors, setCursors] = useState<number[]>(() => questions.map(() => 0))
   const [tab, setTab] = useState(0)
   const [reviewCursor, setReviewCursor] = useState(0)
 
   const review = tab >= questions.length
-  const selection = selections[tab] ?? EMPTY
-  const answered = (index: number) => answerFor(selections[index] ?? EMPTY) !== ''
-  const complete = questions.every((_, index) => answered(index))
+  const selection = selectionFor(tab)
 
-  const update = (index: number, patch: Partial<Selection>) =>
-    setSelections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)))
-
-  const toggle = (index: number, label: string, multiSelect: boolean) => {
-    setSelections((prev) =>
-      prev.map((current, i) => {
-        if (i !== index) {
-          return current
-        }
-        if (!multiSelect) {
-          return { ...current, labels: [label], otherActive: false }
-        }
-        return {
-          ...current,
-          labels: current.labels.includes(label) ? current.labels.filter((l) => l !== label) : [...current.labels, label],
-        }
-      }),
-    )
-  }
-
-  const submit = () => {
-    const answers: Record<string, string> = {}
-    questions.forEach((question, index) => {
-      answers[question.question] = answerFor(selections[index] ?? EMPTY)
-    })
-    onAnswer(request.id, { ...request.input, answers })
-  }
+  const submit = () => onAnswer(request.id, { ...request.input, answers: answers() })
 
   const dismiss = () => onDismiss(request.id, 'Question dismissed by user')
 
@@ -100,7 +61,7 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
       {review ? (
         <ReviewStep
           questions={questions}
-          answers={questions.map((_, index) => answerFor(selections[index] ?? EMPTY))}
+          answers={questions.map((_, index) => answerFor(selectionFor(index)))}
           complete={complete}
           cursor={reviewCursor}
           onCursor={setReviewCursor}
@@ -115,8 +76,9 @@ export function TerminalQuestionPrompt({ request, onAnswer, onDismiss, className
           selection={selection}
           cursor={cursors[tab] ?? 0}
           onCursor={(next) => setCursors((prev) => prev.map((c, i) => (i === tab ? next : c)))}
-          onToggle={(label) => toggle(tab, label, questions[tab]!.multiSelect === true)}
+          onToggle={(label) => toggle(tab, label)}
           onOther={(patch) => update(tab, patch)}
+          onToggleOther={() => toggleOther(tab)}
           onAdvance={() => move(1)}
           onDismiss={dismiss}
         />
@@ -138,6 +100,7 @@ function QuestionStep({
   onCursor,
   onToggle,
   onOther,
+  onToggleOther,
   onAdvance,
   onDismiss,
 }: {
@@ -147,6 +110,7 @@ function QuestionStep({
   onCursor: (index: number) => void
   onToggle: (label: string) => void
   onOther: (patch: Partial<Selection>) => void
+  onToggleOther: () => void
   onAdvance: () => void
   onDismiss: () => void
 }) {
@@ -214,7 +178,7 @@ function QuestionStep({
             return
           }
           if (index === question.options.length) {
-            onOther({ otherActive: !selection.otherActive })
+            onToggleOther()
             return
           }
           if (multiSelect && index === question.options.length + 1) {

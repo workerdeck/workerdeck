@@ -1,71 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import type { ProfileInfo, RateLimitInfo, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
+import type { SessionRunnerConfig } from '@workerdeck/core'
+import type { ProfileInfo, RateLimitInfo, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { ScriptedRunner } from './helpers.ts'
 
-// `emitRateLimit` takes an explicit event timestamp because the ordering rule under test is by event clock, not arrival.
-class ReportingRunner implements Runner {
-  readonly id: string
-  readonly createdAt = Date.now()
-  readonly pendingApprovals = []
-  readonly config: SessionRunnerConfig
-  #events: SessionEvent[] = []
-  #listeners = new Set<(event: SessionEvent) => void>()
-  #seq = 0
-
+class ReportingRunner extends ScriptedRunner {
   constructor(id: string, config: SessionRunnerConfig) {
-    this.id = id
-    this.config = config
+    super(id, config, { engine: 'provider', model: 'test-model' })
   }
 
   emitRateLimit(info: RateLimitInfo, ts = Date.now()): void {
-    this.#emit({ type: 'rate_limit', info }, ts)
+    this.emitAt({ type: 'rate_limit', info }, ts)
   }
 
-  async start(): Promise<void> {}
-
-  info(): SessionInfo {
-    return {
-      id: this.id,
-      status: 'idle',
-      cwd: this.config.cwd ?? '',
-      profile: this.config.profile,
-      engine: 'provider',
-      model: 'test-model',
-      createdAt: this.createdAt,
-      lastSeq: this.#seq,
-      pendingPermissionCount: 0,
-    }
-  }
-
-  subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {
-    for (const event of this.#events) {
-      if (event.seq > afterSeq) {
-        listener(event)
-      }
-    }
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
-  sendMessage(): void {}
-  setTitle(): void {}
-  resolvePermission(): boolean {
-    return false
-  }
-  async interrupt(): Promise<void> {}
-  async setPermissionMode(): Promise<void> {}
-  async setModel(): Promise<void> {}
-  fail(): void {}
-  close(): void {
-    this.#emit({ type: 'session_closed', reason: 'server' }, Date.now())
-  }
-
-  #emit(body: SessionEventBody, ts: number): void {
-    const event = { ...body, seq: ++this.#seq, ts } as SessionEvent
-    this.#events.push(event)
-    for (const listener of this.#listeners) {
-      listener(event)
-    }
+  override close(): void {
+    this.emitAt({ type: 'session_closed', reason: 'server' })
   }
 }
 

@@ -5,7 +5,7 @@ import { STATE_LABELS, STATE_ORDER, adaptersOf, displayCustomized, facetFilterCo
 import type { GroupBy, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover.tsx'
-import { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
+import { OptionSelect, Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from '../ui/Select.tsx'
 import { cn } from '../../lib/utils.ts'
 
 export type SessionFiltersProps = {
@@ -44,7 +44,8 @@ export function SessionFilters({ config, onConfigChange, rows, scope, gateways: 
       <Section title="Filter">
         {scope ? (
           <FilterRow label="Scope">
-            <OneOfSelect
+            <OptionSelect
+              className="w-full min-w-0"
               label="Scope"
               value={config.scoped ? 'scoped' : 'all'}
               options={[
@@ -97,7 +98,8 @@ export function SessionFilters({ config, onConfigChange, rows, scope, gateways: 
 
       <Section title="Layout">
         <FilterRow label="Group">
-          <OneOfSelect
+          <OptionSelect
+            className="w-full min-w-0"
             label="Group"
             value={config.groupBy}
             options={[
@@ -111,7 +113,8 @@ export function SessionFilters({ config, onConfigChange, rows, scope, gateways: 
           />
         </FilterRow>
         <FilterRow label="Sort">
-          <OneOfSelect
+          <OptionSelect
+            className="w-full min-w-0"
             label="Sort"
             value={config.sortBy}
             options={[
@@ -259,32 +262,5 @@ function FacetSelect({
         </Button>
       ) : null}
     </div>
-  )
-}
-
-function OneOfSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string
-  options: readonly { value: string; label: string }[]
-  onChange: (value: string) => void
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => onChange(v as string)}>
-      <SelectTrigger aria-label={label} className="w-full min-w-0">
-        <SelectValue>{options.find((o) => o.value === value)?.label ?? label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            <SelectItemText>{option.label}</SelectItemText>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   )
 }

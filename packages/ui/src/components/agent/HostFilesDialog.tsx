@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useCallback, useEffect, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import type { HostDirEntry, HostFileMatch } from '@workerdeck/protocol'
@@ -37,7 +38,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
         setEntries(response.entries)
         setTruncated(response.truncated ?? false)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not read that directory')
+        setError(errorMessage(e, 'Could not read that directory'))
       } finally {
         setLoading(false)
       }
@@ -87,7 +88,7 @@ export function HostFilesDialog({ client, cwd, open, onOpenChange }: HostFilesDi
         content: response.encoding === 'utf8' ? response.content : '(binary file - not shown)',
       })
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not read that file')
+      setError(errorMessage(e, 'Could not read that file'))
     } finally {
       setLoading(false)
     }

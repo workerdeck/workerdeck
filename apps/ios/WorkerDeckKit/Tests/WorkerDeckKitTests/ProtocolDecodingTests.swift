@@ -209,18 +209,20 @@ struct ProtocolDecodingTests {
     #expect(sessionTasks(info).isEmpty)
   }
 
-  /// A protocol-6 gateway sends no `skillsList` - that must read as "no skills
-  /// panel", not as a session whose whole capability record failed to decode.
-  @Test func anOlderRecordWithoutSkillsListStillDecodes() throws {
+  /// `clearContext` and `hostCwd` are optional on the wire: absent reads as
+  /// "no clear verb" and nil, not as a failed decode of the whole record.
+  @Test func aRecordWithoutTheOptionalCapabilitiesDecodes() throws {
     let json = #"""
       {"interactiveApprovals":true,"permissionModes":["default"],
        "defaultPermissionMode":"default","resume":true,"resumeBackfill":true,
        "listSessions":true,"contextUsage":true,"rateLimits":true,"mcpStatus":true,
-       "sessionMcpServers":true,"slashCommands":true,"settingSources":true,
-       "budgets":true,"attachments":["image"],"vfs":false,"streaming":"token"}
+       "mcpServerActions":false,"sessionMcpServers":true,"slashCommands":true,
+       "skillsList":false,"settingSources":true,"budgets":true,"attachments":["image"],
+       "vfs":false,"streaming":"token"}
       """#
     let record = try JSONDecoder().decode(EngineCapabilities.self, from: Data(json.utf8))
-    #expect(record.skillsList == false)
+    #expect(record.clearContext == false)
+    #expect(record.hostCwd == nil)
     #expect(record.slashCommands == true)
   }
 
@@ -270,9 +272,8 @@ struct ProtocolDecodingTests {
     #expect(unknownMedia.project?.icon == nil)
   }
 
-  /// An older gateway (or no `.workerdeck.json` at all - the wire cannot tell
-  /// them apart and a client must not try): absent means "render the folder
-  /// basename", exactly what this client drew before the field existed.
+  /// No `.workerdeck.json` in the cwd's ancestry: absent means "render the
+  /// folder basename".
   @Test func aSessionWithoutAProjectStillDecodes() throws {
     let session = try JSONDecoder().decode(
       SessionInfo.self,
@@ -299,7 +300,7 @@ struct ProtocolDecodingTests {
     #expect(!previousOpus.matches("claude-opus-5[1m]"))
     #expect(previousOpus.matches("claude-opus-4-8"))
 
-    // No `resolvedModel` (an older server, or a CLI that omits it): the family
+    // No `resolvedModel` (a CLI that omits it): the family
     // token still gets the name right.
     let sonnet = ModelOption(value: "sonnet", displayName: "Sonnet")
     #expect(sonnet.matches("claude-sonnet-5[1m]"))

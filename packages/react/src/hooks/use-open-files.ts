@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { WorkerDeckError, type WorkerDeckClient } from '@workerdeck/client'
 import { currentText, initialOpenFilesState, isDirty, openFilesReducer, type OpenFile, type OpenFilesState } from '../lib/open-files.ts'
@@ -72,7 +73,7 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
         dispatch({
           type: 'failed',
           path,
-          error: e instanceof Error ? e.message : 'Could not read that file',
+          error: errorMessage(e, 'Could not read that file'),
         })
       })
     }
@@ -102,7 +103,7 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
         dispatch({
           type: 'failed',
           path,
-          error: e instanceof Error ? e.message : 'Could not re-read that file',
+          error: errorMessage(e, 'Could not re-read that file'),
         })
       })
     },
@@ -133,7 +134,7 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
           type: 'saveFailed',
           path,
           conflict,
-          error: conflict ? 'This file changed on disk since you opened it.' : e instanceof Error ? e.message : 'Could not save that file',
+          error: conflict ? 'This file changed on disk since you opened it.' : errorMessage(e, 'Could not save that file'),
         })
       }
     },
@@ -174,7 +175,7 @@ export function useOpenFiles(client: WorkerDeckClient): UseOpenFilesResult {
         dispatch({
           type: 'saveFailed',
           path,
-          error: e instanceof Error ? e.message : 'Could not save that file',
+          error: errorMessage(e, 'Could not save that file'),
         })
       }
     },

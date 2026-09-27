@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, SessionInfo } from '@workerdeck/protocol'
-import { createWorkerServer, type WorkerServer } from '../src/index.ts'
+import { createWorkerServer, MemorySessionStore, type WorkerServer } from '../src/index.ts'
 import { fakeHarness, frameCollector, listenOn } from './helpers.ts'
 
 const initMessage = {
@@ -289,6 +289,31 @@ describe('createWorkerServer', () => {
       const body = (await res.json()) as { session: SessionInfo }
       expect(body.session.status).toBe('failed')
     })
+  })
+
+  it('fails closed on subscription credentials for a session woken from its dormant record', async () => {
+    const harness = fakeHarness()
+    const store = new MemorySessionStore()
+    await store.save({
+      kind: 'dormant',
+      id: 'woken',
+      info: { id: 'woken', status: 'idle', cwd: '/tmp/project', createdAt: 1, lastSeq: 0, pendingPermissionCount: 0 },
+      config: { cwd: '/tmp/project' },
+      sdkSessionId: 'sdk-old',
+      savedAt: 1,
+    })
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      requireApiKey: true,
+      parking: { store },
+      buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn, backfillHistory: false }),
+    })
+    await running.listen(0, '127.0.0.1')
+    const runner = await running.parking.ensureLive('woken')
+    expect(runner?.id).toBe('woken')
+
+    harness.emit({ ...(initMessage as object), apiKeySource: 'oauth' } as typeof initMessage)
+    await vi.waitFor(() => expect(runner?.info().status).toBe('failed'))
   })
 
   it('enforces cwd roots and auth', async () => {

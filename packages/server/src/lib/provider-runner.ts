@@ -31,26 +31,8 @@ export type ProviderRunnerOptions = {
 
 export async function createProviderRunner(ctx: EngineRunnerContext, options: ProviderRunnerOptions): Promise<Runner> {
   const { config, profile, bridge, restore, id } = ctx
-  const resolveModel = (modelId: string | undefined): LanguageModel =>
-    typeof options.model === 'function' ? options.model(modelId) : options.model
-  const resolveBridged = (): ToolExecutor => ({
-    dispatch: (call) => bridge.executorFor(call.sessionId).dispatch(call),
-  })
-  const resolveExecutor = (raw: ToolExecutor | 'browser'): ToolExecutor => (raw === 'browser' ? resolveBridged() : raw)
-
-  const isPerCall = typeof options.executor === 'function'
-  const selectExecutor: EngineSessionOptions['selectExecutor'] = isPerCall
-    ? (call: ToolExecutionCall) => resolveExecutor((options.executor as (call: ToolExecutionCall) => ToolExecutor | 'browser')(call))
-    : () => resolveExecutor(options.executor as ToolExecutor | 'browser')
-  const backend: EngineSessionOptions['backend'] = isPerCall
-    ? (call: ToolExecutionCall) => {
-        const raw = (options.executor as (call: ToolExecutionCall) => ToolExecutor | 'browser')(call)
-        return raw === 'browser' ? 'browser' : 'server'
-      }
-    : options.executor === 'browser'
-      ? 'browser'
-      : 'server'
-
+  const languageModel = typeof options.model === 'function' ? options.model(config.model) : options.model
+  const executor = providerExecutor(options.executor, bridge)
   // Under `gated` the agent's shell write tools must raise a card even when the embedder wired no reviewer of its
   // own; `needsApproval` fires only through `shouldApprove`, so the default is supplied here and defers to the
   // embedder's for every other tool.
@@ -62,15 +44,15 @@ export async function createProviderRunner(ctx: EngineRunnerContext, options: Pr
   return createEngineSession({
     config: {
       ...config,
-      languageModel: resolveModel(config.model),
+      languageModel,
+      ...(typeof options.model === 'function' && { resolveModel: options.model }),
       restore,
       onClose: options.onClose,
     },
     id,
     profile,
-    resolveModel: (_profile, c) => resolveModel(c.model),
-    selectExecutor,
-    backend,
+    resolveModel: () => languageModel,
+    selectExecutor: () => executor,
     capabilities: options.capabilities,
     tools: options.tools,
     mcp: options.mcp,
@@ -81,4 +63,23 @@ export async function createProviderRunner(ctx: EngineRunnerContext, options: Pr
     approvalTimeoutMs: config.defaultApprovalTimeoutMs === undefined ? options.approvalTimeoutMs : config.defaultApprovalTimeoutMs,
     seedVfs: options.seedVfs,
   })
+}
+
+// One executor, routed once per call, whose profile names the backend the call went to.
+function providerExecutor(executor: ProviderRunnerOptions['executor'], bridge: EngineRunnerContext['bridge']): ToolExecutor {
+  const bridged: ToolExecutor = { dispatch: (call) => bridge.executorFor(call.sessionId).dispatch(call) }
+  if (typeof executor !== 'function') {
+    return executor === 'browser' ? { ...bridged, describe: () => ({ backend: 'browser' }) } : executor
+  }
+  const route = (call: ToolExecutionCall): { target: ToolExecutor; backend: 'browser' | 'server' } => {
+    const raw = executor(call)
+    return raw === 'browser' ? { target: bridged, backend: 'browser' } : { target: raw, backend: 'server' }
+  }
+  return {
+    describe: (call) => {
+      const { target, backend } = route(call)
+      return { ...target.describe?.(call), backend }
+    },
+    dispatch: (call) => route(call).target.dispatch(call),
+  }
 }

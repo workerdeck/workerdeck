@@ -1,12 +1,11 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
-import { createFileSessionStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { fakeHarness, fakeRunner, listenOn } from './helpers.ts'
+import { createFileSessionStore, createWorkerServer } from '../src/index.ts'
+import { fakeHarness, fakeRunner, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
   type: 'system',
@@ -26,17 +25,8 @@ const initMessage = {
   uuid: 'uuid-init',
 } as unknown as SDKMessage
 
-const servers: WorkerServer[] = []
-const dirs: string[] = []
-
-afterEach(async () => {
-  for (const server of servers.splice(0)) {
-    await server.close()
-  }
-  for (const dir of dirs.splice(0)) {
-    await rm(dir, { recursive: true, force: true, maxRetries: 5 })
-  }
-})
+const { servers, stateDir, cleanup } = gatewayFixture('wd-instructions-')
+afterEach(cleanup)
 
 // The pattern the seam is designed around: `meta` is the durable public input, the instruction
 // text is derived from it, and the runner id is only knowable to the resolver.
@@ -55,12 +45,6 @@ async function startGateway(dir: string) {
   servers.push(server)
   const { base, wsBase } = await listenOn(server)
   return { server, harness, base, wsBase }
-}
-
-async function stateDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'wd-instructions-'))
-  dirs.push(dir)
-  return dir
 }
 
 function appended(harness: ReturnType<typeof fakeHarness>): string | undefined {

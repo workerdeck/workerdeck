@@ -376,4 +376,42 @@ describe('AiSdkRunner', () => {
       content: [{ type: 'tool-result', toolCallId: 'c1', output: { type: 'error-text' } }],
     })
   })
+
+  it('close() resolves a pending approval as a policy deny before session_closed', async () => {
+    const seen: unknown[] = []
+    const h = approvalHarness(seen)
+    h.runner.sendMessage('clean up')
+    await waitFor(() => h.runner.pendingApprovals.length === 1)
+    const requestId = h.runner.pendingApprovals[0]!.id
+
+    h.runner.close('client')
+
+    expect(h.runner.pendingApprovals).toEqual([])
+    const types = h.events.map((e) => e.type)
+    expect(types.indexOf('permission_resolved')).toBeLessThan(types.indexOf('session_closed'))
+    expect(h.eventsOf('permission_resolved')).toEqual([
+      expect.objectContaining({ requestId, behavior: 'deny', resolvedBy: 'policy', message: 'Session closed' }),
+    ])
+    expect(h.eventsOf('execution_failed')).toEqual([])
+    expect(seen).toEqual([])
+  })
+
+  it('an approval deadline resolves as a timeout deny', async () => {
+    const seen: unknown[] = []
+    const model = new MockLanguageModelV3({ modelId: 'mock-1', doStream: [streamCall('c1', 'run', { cmd: 'ls' }), streamText('done')] })
+    const tools = { run: tool({ inputSchema: z.object({ cmd: z.string() }) }) }
+    const h = makeRunner({
+      languageModel: model,
+      tools,
+      executor: recordingExecutor(seen),
+      shouldApprove: () => true,
+      approvalTimeoutMs: 20,
+    })
+    h.runner.sendMessage('list')
+    await waitFor(() => h.eventsOf('turn_result').length === 1)
+
+    expect(h.eventsOf('permission_resolved')[0]).toMatchObject({ behavior: 'deny', resolvedBy: 'timeout', message: 'Approval timed out' })
+    expect(h.eventsOf('execution_failed')[0]).toMatchObject({ executionId: 'c1', reason: 'permission_denied', error: 'Approval timed out' })
+    expect(seen).toEqual([])
+  })
 })

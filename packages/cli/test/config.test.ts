@@ -66,6 +66,64 @@ describe('parseArgs', () => {
   it('treats a missing value as an error, not as the next flag', () => {
     expect(() => parseArgs(['--auth-key', '--port', '9000'])).toThrow(/requires a value/)
   })
+
+  it('reads every flag into its field', () => {
+    const argv = [
+      '--config wd.mjs --port 9000 --host h --auth-key k --profile a=./p --profile-root ./pr --no-profile-store',
+      '--cwd-root ./c --fs-root ./f --fs-write --shell --shell-agent-write gated --allowed-origin https://o',
+      '--allowed-host ah --insecure-host ih --trust-proxy --approval-timeout 2s --state-dir ./s --no-parking-store',
+      '--insecure --no-web --no-keep-awake --cors-origin https://x --open --hot-reload --help --version',
+    ].flatMap((line) => line.split(' '))
+    expect(parseArgs(argv)).toEqual({
+      config: 'wd.mjs',
+      port: 9000,
+      host: 'h',
+      authKey: 'k',
+      profiles: [{ name: 'a', configDir: resolve('./p') }],
+      profileRoots: [resolve('./pr')],
+      profileStore: false,
+      cwdRoots: [resolve('./c')],
+      fsRoots: [resolve('./f')],
+      fsWrite: true,
+      shell: true,
+      shellAgentWrite: 'gated',
+      allowedOrigins: ['https://o'],
+      allowedHosts: ['ah'],
+      insecureHosts: ['ih'],
+      trustProxy: true,
+      approvalTimeoutMs: 2000,
+      stateDir: resolve('./s'),
+      parking: false,
+      insecure: true,
+      web: false,
+      keepAwake: false,
+      corsOrigins: ['https://x'],
+      open: true,
+      hotReload: true,
+      help: true,
+      version: true,
+    })
+  })
+
+  it('accepts the short aliases', () => {
+    expect(parseArgs(['-h', '-v', '-c', 'x.mjs', '-p', '1'])).toMatchObject({ help: true, version: true, config: 'x.mjs', port: 1 })
+  })
+
+  it('names the flag in every refusal', () => {
+    const cases: [string[], string][] = [
+      [['-p'], '-p requires a value'],
+      [['--cors-origin'], '--cors-origin requires a value'],
+      [['-p', 'x'], '-p: not a valid port: x'],
+      [['--approval-timeout', 'x'], "--approval-timeout: expected a duration like 300000, 30s, 5m - or 'none'; got: x"],
+      [['--shell-agent-write', 'yes'], "--shell-agent-write must be read-only, gated or allow (got 'yes')"],
+      [['--profile', '=d'], '--profile expects name=dir, got: =d'],
+      [['--profile', 'n='], '--profile n= is missing a directory'],
+      [['toString'], 'unknown option: toString'],
+    ]
+    for (const [argv, message] of cases) {
+      expect(() => parseArgs(argv)).toThrow(new ConfigError(message))
+    }
+  })
 })
 
 describe('runtime profile management', () => {

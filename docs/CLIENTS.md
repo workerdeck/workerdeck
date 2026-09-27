@@ -16,6 +16,14 @@ Vite for the webview, both from `@workerdeck/source`), importing `client`/`react
 webview CSP has no external `connect-src`, and the bridge refuses URLs not belonging to a
 registered gateway.
 
+`activate()` wires the models, views and surfaces; the commands are tables keyed by command id
+(`src/commands.ts`: `hostCommands`, `viewCommands`, `sessionCommands`, registered by
+`registerCommands`), and the model / permission-mode / skills pickers share `pickFromVitals`
+(empty message, then a QuickPick whose `disabled` rows stay visible and unpickable). Every native
+multi-step flow (gateways, profiles, sessions) uses `quick-input.ts`'s one `showPick`/`showInput`
+and its `BACK`/`CANCEL` symbols, and both polled models refresh through `refreshPerHost`
+(`src/gateway.ts`), one snapshot per gateway with the removed ones pruned.
+
 **`@types/vscode` is pinned with a tilde to the `engines.vscode` floor (`~1.106.0`), and a
 dependency sweep must not carrot it up.** The types version *is* the API surface you compile
 against, so types newer than the declared floor let a call to an API that does not exist in the
@@ -332,8 +340,10 @@ the gateway's session list rather than remembered at create time, because an ope
 switched either one *mid-session* did it through the in-session pickers and a stored copy of
 what they asked for at creation would not know. Mode is a default and never a step - two
 questions is one too many for a flow whose point is that `enter` gets you a session - with
-`workerdeck.newSession.permissionMode` to pin it ("always start on Auto") and a clamp against
-the profile's own capability record, since a mode carried over from another engine would be
+`workerdeck.newSession.permissionMode` to pin it ("always start on Auto"; `scope: "machine"`, and
+`new-session.ts` reads only the user-level value, because the extension runs in untrusted
+workspaces and a cloned repo's `.vscode/settings.json` must never start a session on bypass) and a
+clamp against the profile's own capability record, since a mode carried over from another engine would be
 refused by the gateway. The **first-prompt step is gone**: interactively you are about to be
 looking at a composer, and it was load-bearing for a real bug (a woken session re-ran
 `config.prompt`). The poll behind all of it is **ref-counted**
@@ -358,6 +368,9 @@ purpose; Sessions, Profiles and Gateways stay ungated, which is what keeps both 
 stable. A view that *is* contributed cannot be disabled or collapsed through the API, so a
 section with nothing to say says it the only two ways that exist - the header's
 `description` (`no session`, `not reported`, `not supported`) and an empty state in the body.
+The Context and MCP bodies are `packages/ui`'s `ContextPanel` and `McpPanel` (the dialogs' own
+bodies, so the dashboard and the extension cannot drift), Usage is `UsageMeters`, and Session Info
+stays drawn here because it reads the polled REST record rather than a transcript.
 `viewsContainers.secondarySidebar` is what sets `engines.vscode` to **`^1.106.0`**:
 it was proposed-only in 1.104/1.105 and finalized in 1.106, and the schema is
 `additionalProperties: false`, so on an older build the key is dropped and the six views do
@@ -401,13 +414,16 @@ gating it on `unread` alone left someone who turned unread off watching a frozen
 ### The session card (`SessionItem`)
 
 The list is drawn as **inset rounded cards** (the Figma sidebar design) - and the card itself is
-now `packages/ui`'s **`SessionItem`**, which is why `SessionCard.tsx` is ~95 lines of props where
-it used to be ~380 of hand-kept markup. The card was born here (the dashboard had no sub-agent
+now `packages/ui`'s **`SessionItem`**, and the list around it is `packages/ui`'s **`SessionBrowser`**
+(grouping, filtering, the empty states), so `SidebarApp` keeps only what is this host's: the search
+bar, the filter popover, the subset line, the gateway empty states, and one `postRow(kind, row,
+extra)` turning each card intent into its bridge message. `CardActions.tsx` is the one piece of card
+markup left here (the editor-tab glyph and the `⋯`); it used to be ~380 lines of hand-kept markup. The card was born here (the dashboard had no sub-agent
 rows, no context ring and no vendor colour until they were lifted out of this webview) and for a
 while the two lists were two copies of one design, agreeing on the model and disagreeing on every
 measurement. Its prop is the whole **`row: SessionRow`** now, not `info` + `unseen` + `hostName` -
-the view model the shared card reads - plus `showProject`/`showGateway`; `SidebarApp` passes the
-row it already had, and `dev-preview` builds one.
+the view model the shared card reads - plus `showProject`/`showGateway`; `SessionBrowser` passes the
+row, and `dev-preview` builds one.
 The card keeps the two rules this design reversed, deliberately. The **state glyph leads the
 title**: the earlier rule optimised for reading one row, this one for scanning twenty, and the
 glyph is what tells you which row to read. And **selection is the card's own fill** rather than a
@@ -468,8 +484,7 @@ became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which 
 popover anchored in a 280px view would be clipped by the view's own bounds, and a card that went
 stale between the poll and the press must not offer Stop for a finished session. That QuickPick
 is also where **Clear context** lives - the first Clear control on any client - gated on
-`SessionInfo.capabilities.clearContext` (absent = false, so an older gateway simply does not offer
-it), sent as a session command over a transient attach exactly like Stop, and confirmed with copy
+`SessionInfo.capabilities.clearContext` (absent = false, so the verb is simply not offered), sent as a session command over a transient attach exactly like Stop, and confirmed with copy
 that never says "deleted": the session keeps running, the conversation starts fresh, and the old
 one stays resumable from the resume picker. Second, **rename is a double-click on the title** -
 `SessionItem`'s default `renameOn`, and the editor's own feel - where the dashboard, spending its
@@ -484,13 +499,13 @@ without a `--vscode-*` variable being named in the component.
 The webview build has **no dev server**: `localResourceRoots` means every asset must be a real
 file on disk, so the dev loop is `vite build --watch` plus `src/dev-reload.ts` re-rendering the
 views in place. Vite's dep optimizer therefore never runs here, and none of its traps are
-inherited. The CSP has no external `connect-src`, but `img-src` does allow `http:`/`https:`, and
-that is the one hole: an inline transcript image loads directly only from a **keyless** gateway,
-header auth being unable to ride an `<img>` - the same trade the iOS client makes. Project icons
-are exempt because the host fetches their bytes and hands them over as data URLs. And
-`transcriptVariant` resolves **anything that is not `cards`** to `terminal` rather than matching
-`'terminal'` exactly, which is deliberate compatibility: a settings file still holding the retired
-`lines` value must land on the terminal theme rather than on an unhandled variant.
+inherited. The CSP has no external `connect-src`, and `img-src` admits only loopback beyond the
+webview's own sources (`http://127.0.0.1:*`, `http://localhost:*`): an inline transcript image loads
+directly only from a **keyless local** gateway, header auth being unable to ride an `<img>`. It used
+to allow every `http:`/`https:` source, which let markdown an agent wrote beacon anywhere the moment
+it rendered; a remote markdown image now renders as a link instead (see `packages/ui`), and a keyless
+gateway on another machine no longer shows sent-attachment thumbnails here. Project icons are
+exempt because the host fetches their bytes and hands them over as data URLs.
 `dev/preview.html` + `pnpm dev:preview` renders the cards in a browser against canned data,
 because every state worth checking is otherwise rare or expensive to produce on demand; its
 fidelity risk is that it hand-supplies the `--vscode-*` variables, so a token it
@@ -514,7 +529,7 @@ There is **no per-row disclosure**, and the `1/3` count that doubled as its hand
 it: what a sub-agent is doing is the most answerable thing a card can say, and a control that
 started closed on every row, on every client, unpersisted, hid it by default. How many rows draw
 is one preference instead - `ViewConfig.subagents`, `all` / `active` / `none`, default `active`
-(running and failed; a failed record is not a completed one) - read by `visibleSubagents` in
+(running only; done and failed records need `all`) - read by `visibleSubagents` in
 protocol. Shells and tasks have the same three stops (`ViewConfig.shells`/`.tasks`, optional so
 an older persisted config reads as the default; `visibleShells`, `displayedTasks`), and all three
 live in the **filter popover** as segmented controls (`StepDisplayControl`, labelled All / Hide
@@ -580,11 +595,7 @@ The cards carry it per session - an **unread badge** of messages since that sess
 screen (`src/watermarks.ts`, globalState, written **only while the panel is visible and
 showing it**, and monotonic so a compaction can't resurrect read rows). Messages, from
 `SessionInfo.proseCount`: the badge answers *is there something to read*, so a
-session grinding through forty tool calls badges nothing until it speaks. `unseenCount` walks
-prose → rows → turns, the two lower rungs being what a gateway without the field can still
-say -
-rows (`activityCount`) because turns undercount badly (five tool calls in one turn is one turn)
-and `lastSeq` overcounts absurdly (every stream delta). The panel turns the same mark into catch-up. The window's open
+session grinding through forty tool calls badges nothing until it speaks. The panel turns the same mark into catch-up. The window's open
 folders are a facet too, and the only one **on by default**: `workspaceScope()` turns them
 into scope roots, and a session is inside one only when the *gateway* could be - a `file:`
 folder scopes loopback gateways alone (a remote gateway's identical-looking path is another
@@ -721,8 +732,7 @@ The agent-view preferences are mirrored too (`AppSettings.swift`): variant as an
 value the rows read, and the font as one `fontDesign` on the session view - with the composer's
 `UITextView` told separately, since UIKit sits outside SwiftUI's font environment. `lines` is
 **gone**, replaced by a native Swift **terminal** renderer (`App/Sources/Session/Terminal/`
-over `WorkerDeckKit/.../Terminal/`); a stored `lines` preference migrates to it rather than
-falling back to cards, because someone who turned boxes off should keep them off. Density is
+over `WorkerDeckKit/.../Terminal/`). Density is
 gone everywhere - every client dropped it - and font stays Cards-only here, as it does on the
 web clients. The port carries
 the rules across - the two folds, the row-covers-a-*membership* addressing, the cell/wrap model,
@@ -1027,8 +1037,8 @@ rather than where it is drawn: its spawn message is encrypted on the wire, and t
 show.
 Steps are **always drawn**, one full-width row each, in the kit's `sessionSteps` order: agents,
 then tasks (the engine's checklist and untyped spawns, `displayedTasks`), then shells. Each kind
-follows its own `ViewConfig` display, default `active`, which keeps failures because a failed
-record is not a completed one. They live in the config rather than in `AppSettings` because
+follows its own `ViewConfig` display, default `active`, which draws only what is still running
+(and, for tasks, pending); failures and completions need `all`. They live in the config rather than in `AppSettings` because
 anything the three clients must agree about lives in `ViewConfig`.
 
 Each step is its **own full-width row**, a real thumb target where a line inside a two-line row is

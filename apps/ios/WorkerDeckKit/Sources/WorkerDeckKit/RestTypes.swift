@@ -40,8 +40,8 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   public let sessionMcpServers: Bool
   public let slashCommands: Bool
   /// The `clear_context` session command is honored - offer the "Clear
-  /// context" verb. Absent (an older gateway) reads as false: hidden, never a
-  /// button the server would ignore.
+  /// context" verb. Absent reads as false: hidden, never a button the server
+  /// would ignore.
   public let clearContext: Bool
   /// `skills` events can occur. False: hide the skills panel entirely rather
   /// than showing an empty one. Orthogonal to `slashCommands` - codex has
@@ -56,7 +56,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   public let reasoningEfforts: [String]?
   public let vfs: Bool
   /// The engine runs against a host directory, so a create must name a `cwd`.
-  /// Absent = true (an older gateway), which is the always-required behaviour.
+  /// Absent = true, which is the always-required behaviour.
   public let hostCwd: Bool?
   /// 'token' | 'item' | 'none' - anything ≠ 'token' renders without a typing cursor.
   public let streaming: String
@@ -111,26 +111,16 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     contextUsage = try c.decode(Bool.self, forKey: .contextUsage)
     rateLimits = try c.decode(Bool.self, forKey: .rateLimits)
     mcpStatus = try c.decode(Bool.self, forKey: .mcpStatus)
-    // decodeIfPresent: a protocol-6 gateway has no such key, and "older server"
-    // must read as "no action buttons", not as a failed decode.
-    mcpServerActions = try c.decodeIfPresent(Bool.self, forKey: .mcpServerActions) ?? false
+    mcpServerActions = try c.decode(Bool.self, forKey: .mcpServerActions)
     sessionMcpServers = try c.decode(Bool.self, forKey: .sessionMcpServers)
     slashCommands = try c.decode(Bool.self, forKey: .slashCommands)
-    // decodeIfPresent for the same reason as `skillsList` below: the key is
-    // optional on the wire, and absent must read as "no clear verb", not as a
-    // failed decode.
     clearContext = try c.decodeIfPresent(Bool.self, forKey: .clearContext) ?? false
-    // decodeIfPresent, unlike its siblings: a protocol-6 gateway's record has
-    // no such key, and "the server is older" must read as "no skills panel",
-    // not as a failed decode of the whole session.
-    skillsList = try c.decodeIfPresent(Bool.self, forKey: .skillsList) ?? false
+    skillsList = try c.decode(Bool.self, forKey: .skillsList)
     settingSources = try c.decode(Bool.self, forKey: .settingSources)
     budgets = try c.decode(Bool.self, forKey: .budgets)
     attachments = try c.decode([String].self, forKey: .attachments)
     reasoningEfforts = try c.decodeIfPresent([String].self, forKey: .reasoningEfforts)
     vfs = try c.decode(Bool.self, forKey: .vfs)
-    // decodeIfPresent, and absent reads as `true`: an older gateway required a
-    // cwd from everyone, so nil must not be mistaken for "no host filesystem".
     hostCwd = try c.decodeIfPresent(Bool.self, forKey: .hostCwd)
     streaming = try c.decode(String.self, forKey: .streaming)
   }
@@ -568,8 +558,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public let model: String?
   public let permissionMode: PermissionMode?
   /// Whether this session may be switched into `bypassPermissions` - decided when
-  /// it was created and fixed for its lifetime. Absent (an older server) reads as
-  /// unknown, and the picker offers the mode rather than hiding it.
+  /// it was created and fixed for its lifetime. Absent reads as unknown, and the
+  /// picker offers the mode rather than hiding it.
   public let canBypassPermissions: Bool?
   /// 'oauth' = claude.ai subscription credentials. Kept as String.
   public let apiKeySource: String?
@@ -600,28 +590,22 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// unit) - a monotonic counter a client can diff against a remembered value to
   /// answer "how much happened while I wasn't looking", without attaching.
   /// `numTurns` cannot (five tool calls inside one turn are one turn) and
-  /// `lastSeq` cannot either (it counts every stream delta). Absent on an older
-  /// server; fall back to `numTurns` rather than showing nothing.
+  /// `lastSeq` cannot either (it counts every stream delta).
   public let activityCount: Int?
   /// Rows of the kind a person is actually waiting to read - protocol's
   /// `transcriptProse`: assistant prose, a failed turn, an error, a delivered
   /// file, and nothing a sub-agent said to its parent. **This is the unread
   /// badge's unit**; `activityCount` stays "has anything happened at all",
-  /// which is what sorting and dormancy read. Absent on a gateway that predates
-  /// the field - fall back to `activityCount` rather than going silent.
+  /// which is what sorting and dormancy read.
   public let proseCount: Int?
   /// Epoch ms of the most recent emitted event.
   public let lastActivityAt: Double?
   /// Sub-agents this session has running, plus a short tail of settled ones.
   ///
-  /// Absent on an engine with no sidechains and on an older gateway, and
-  /// **absent and empty mean the same thing** - render nothing rather than
-  /// "0 sub-agents". Bounded by the gateway (every running one, plus the newest
-  /// settled ones): it rides every row of a list polled at 1.2s.
-  ///
-  /// Mirrored late. The phone read `sessionState` off `status` alone, which was
-  /// wrong for a *background* agent - see `sessionState` in `SessionList.swift`
-  /// - and it could not be right without this field to count.
+  /// Absent on an engine with no sidechains, and **absent and empty mean the
+  /// same thing** - render nothing rather than "0 sub-agents". Bounded by the
+  /// gateway (every running one, plus the newest settled ones): it rides every
+  /// row of a list polled at 1.2s.
   public let subagents: [SubagentInfo]?
   /// The engine's own task checklist - Claude's `TodoWrite`, codex's plan.
   /// Absent and empty mean the same thing. A codex session that woke from
@@ -634,9 +618,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// Project identity discovered from the session's `cwd` - stamped by the
   /// **gateway at serve time** (runners never set it; a runner-echoed copy
   /// would be persisted into parking records and replay a stale name forever).
-  /// Absent = no `.workerdeck.json` in the cwd's ancestry, and also = an older
-  /// gateway: both mean "render the folder basename", which is exactly what
-  /// this client drew before the field existed.
+  /// Absent = no `.workerdeck.json` in the cwd's ancestry: render the folder
+  /// basename.
   public let project: ProjectInfo?
   /// The session's latest context-window reading, served on the list so a row
   /// can show where a session is bloating **without attaching to it** - the same
@@ -646,7 +629,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// **Absent is not zero.** A promptless session, a parked one from before the
   /// field existed, or an engine that reports no window has no reading: draw
   /// nothing, never an empty ring, which claims the context is empty rather than
-  /// unknown. Also absent on an older gateway.
+  /// unknown.
   public let contextUsage: ContextReading?
   /// The session's tracked shells, decorated by the gateway: everything still
   /// running, plus non-zero exits for a while after. Absent and empty mean the

@@ -65,6 +65,23 @@ function makeRunner(overrides: Partial<SessionRunnerConfig> = {}, capabilities?:
 }
 
 describe('SessionRunner', () => {
+  it('never hands the gateway key to the Claude child, with or without a config env', async () => {
+    const withEnv = makeRunner({ env: { PATH: '/usr/bin', WORKERDECK_AUTH_KEY: 'gateway-secret', WORKERDECK_TOKEN: 't' } })
+    void withEnv.runner.start()
+    await tick()
+    expect(withEnv.harness.captured.options!.env).toEqual({ PATH: '/usr/bin' })
+    vi.stubEnv('WORKERDECK_AUTH_KEY', 'gateway-secret')
+    try {
+      const inherited = makeRunner()
+      void inherited.runner.start()
+      await tick()
+      expect(inherited.harness.captured.options!.env).not.toHaveProperty('WORKERDECK_AUTH_KEY')
+      expect(inherited.harness.captured.options!.env!.PATH).toBe(process.env.PATH)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('emits system_init, transcript events, and status transitions', async () => {
     const { harness, runner, events } = makeRunner()
     void runner.start()

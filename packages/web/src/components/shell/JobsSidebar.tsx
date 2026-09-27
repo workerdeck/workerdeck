@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import type { JobInfo, JobStatus } from '@workerdeck/protocol'
@@ -188,7 +189,7 @@ function JobRow({ job, active, onOpen, onChanged }: { job: JobInfo; active: bool
               void client()
                 ?.cancelJob(job.id)
                 .then(onChanged)
-                .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Cancel failed'))
+                .catch((e: unknown) => toast.error(errorMessage(e, 'Cancel failed')))
             }}
           >
             <X className="size-3" />

@@ -52,8 +52,8 @@ enum ActivityRegistration {
     let (data, response) = try await URLSession.shared.data(for: request)
     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
     // 404 means either "no forwarder" or "not my card". Both end the same way for the caller - stop
-    // asking this host - so they are not worth telling apart, and 405 is the pre-contract gateway
-    // whose SPA catch-all answered for an unclaimed path (see DeviceRegistration).
+    // asking this host - so they are not worth telling apart, and 405 is a gateway that predates the
+    // activities route, whose SPA catch-all answered for the unclaimed path.
     if status == 404 || status == 405 { return method == "POST" ? .unknown : .unsupported }
     guard (200..<300).contains(status) else {
       let detail = String(decoding: data.prefix(200), as: UTF8.self)

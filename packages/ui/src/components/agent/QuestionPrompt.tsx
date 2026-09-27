@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { parseUserQuestions, type PermissionRequest, type QuestionBehavior } from '@workerdeck/protocol'
 
 // Re-exported, not redefined: the parse moved to protocol so the CLI's Live Activity builder could
@@ -7,6 +6,7 @@ import { MessageCircleQuestion, X } from 'lucide-react'
 import { Badge } from '../ui/Badge.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Textarea } from '../ui/Textarea.tsx'
+import { useQuestionAnswers } from '../../lib/question-answers.ts'
 import { cn } from '../../lib/utils.ts'
 
 export { parseUserQuestions }
@@ -23,18 +23,6 @@ export const QUESTION_BEHAVIORS: QuestionBehaviorMeta[] = [
   { value: 'deny', label: 'Disabled', description: 'the agent is told to decide on its own' },
 ]
 
-type Selection = { labels: string[]; other: string; otherActive: boolean }
-
-const EMPTY_SELECTION: Selection = { labels: [], other: '', otherActive: false }
-
-function answerFor(selection: Selection): string {
-  const parts = [...selection.labels]
-  if (selection.otherActive && selection.other.trim()) {
-    parts.push(selection.other.trim())
-  }
-  return parts.join(', ')
-}
-
 export interface QuestionPromptProps {
   request: PermissionRequest
   onAnswer: (requestId: string, updatedInput: Record<string, unknown>) => void
@@ -44,32 +32,9 @@ export interface QuestionPromptProps {
 
 export function QuestionPrompt({ request, onAnswer, onDismiss, className }: QuestionPromptProps) {
   const questions = parseUserQuestions(request.input)
-  const [selections, setSelections] = useState<Selection[]>(() => questions.map(() => EMPTY_SELECTION))
+  const { selectionFor, update, toggle, toggleOther, complete, answers } = useQuestionAnswers(questions)
 
-  const update = (index: number, patch: Partial<Selection>) => {
-    setSelections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)))
-  }
-
-  const toggle = (index: number, label: string, multiSelect: boolean) => {
-    const current = selections[index] ?? EMPTY_SELECTION
-    if (multiSelect) {
-      update(index, {
-        labels: current.labels.includes(label) ? current.labels.filter((l) => l !== label) : [...current.labels, label],
-      })
-    } else {
-      update(index, { labels: current.labels[0] === label ? [] : [label], otherActive: false })
-    }
-  }
-
-  const complete = questions.every((_, i) => answerFor(selections[i] ?? EMPTY_SELECTION) !== '')
-
-  const submit = () => {
-    const answers: Record<string, string> = {}
-    questions.forEach((q, i) => {
-      answers[q.question] = answerFor(selections[i] ?? EMPTY_SELECTION)
-    })
-    onAnswer(request.id, { ...request.input, answers })
-  }
+  const submit = () => onAnswer(request.id, { ...request.input, answers: answers() })
 
   return (
     <div data-slot="question-prompt" className={cn('rounded-lg border border-info/40 bg-info-bg p-3', className)}>
@@ -77,7 +42,7 @@ export function QuestionPrompt({ request, onAnswer, onDismiss, className }: Ques
         <MessageCircleQuestion className="mt-0.5 size-4 shrink-0 text-info" />
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           {questions.map((q, index) => {
-            const selection = selections[index] ?? EMPTY_SELECTION
+            const selection = selectionFor(index)
             return (
               <div key={index} className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
@@ -91,7 +56,7 @@ export function QuestionPrompt({ request, onAnswer, onDismiss, className }: Ques
                       <button
                         key={option.label}
                         type="button"
-                        onClick={() => toggle(index, option.label, q.multiSelect === true)}
+                        onClick={() => toggle(index, option.label)}
                         className={cn(
                           'rounded-md border px-2.5 py-1.5 text-left transition-colors',
                           selected ? 'border-info bg-bg' : 'border-border bg-bg/50 hover:border-border-strong hover:bg-bg',
@@ -110,7 +75,7 @@ export function QuestionPrompt({ request, onAnswer, onDismiss, className }: Ques
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => update(index, { otherActive: !selection.otherActive })}
+                      onClick={() => toggleOther(index)}
                       className={cn(
                         'shrink-0 rounded-md border px-2.5 py-1.5 text-body-sm font-medium transition-colors',
                         selection.otherActive

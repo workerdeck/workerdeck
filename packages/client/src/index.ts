@@ -34,6 +34,9 @@ import type {
 } from '@workerdeck/protocol'
 import { SessionHandle, type AttachOptions } from './session-handle.ts'
 import { QueueHandle } from './queue-handle.ts'
+import { sessionWsUrl } from './ws-url.ts'
+
+type ToolResultResponse = { seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }
 
 export type FetchBody = NonNullable<NonNullable<Parameters<typeof fetch>[1]>['body']>
 
@@ -73,33 +76,27 @@ export class WorkerDeckClient {
   }
 
   async createSession(request: CreateSessionRequest): Promise<SessionInfo> {
-    const body = await this.#call('POST', '/sessions', request)
-    return (body as { session: SessionInfo }).session
+    return await this.#pick('POST', '/sessions', 'session', request)
   }
 
   async listSessions(): Promise<SessionInfo[]> {
-    const body = await this.#call('GET', '/sessions')
-    return (body as { sessions: SessionInfo[] }).sessions
+    return await this.#pick('GET', '/sessions', 'sessions')
   }
 
   async getSession(id: string): Promise<SessionInfo> {
-    const body = await this.#call('GET', `/sessions/${encodeURIComponent(id)}`)
-    return (body as { session: SessionInfo }).session
+    return await this.#pick('GET', this.#sess(id), 'session')
   }
 
   async updateSession(id: string, patch: UpdateSessionRequest): Promise<SessionInfo> {
-    const body = await this.#call('PATCH', `/sessions/${encodeURIComponent(id)}`, patch)
-    return (body as { session: SessionInfo }).session
+    return await this.#pick('PATCH', this.#sess(id), 'session', patch)
   }
 
   async deleteSession(id: string): Promise<SessionInfo> {
-    const body = await this.#call('DELETE', `/sessions/${encodeURIComponent(id)}`)
-    return (body as { session: SessionInfo }).session
+    return await this.#pick('DELETE', this.#sess(id), 'session')
   }
 
   async listSessionFiles(sessionId: string): Promise<SessionFileInfo[]> {
-    const body = await this.#call('GET', `/sessions/${encodeURIComponent(sessionId)}/files`)
-    return (body as ListSessionFilesResponse).files
+    return await this.#pick<ListSessionFilesResponse['files']>('GET', this.#sess(sessionId, '/files'), 'files')
   }
 
   async fetchSessionFile(sessionId: string, path: string): Promise<string> {
@@ -108,7 +105,7 @@ export class WorkerDeckClient {
   }
 
   async uploadAttachment(sessionId: string, file: { name: string; mediaType: string; data: FetchBody }): Promise<MessageAttachment> {
-    const url = `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/attachments?name=${encodeURIComponent(file.name)}`
+    const url = `${this.#options.baseUrl}${this.#sess(sessionId, '/attachments')}?name=${encodeURIComponent(file.name)}`
     const res = await this.#callRaw(
       url,
       { method: 'POST', headers: { ...this.#options.headers, 'content-type': file.mediaType }, body: file.data },
@@ -118,74 +115,61 @@ export class WorkerDeckClient {
   }
 
   attachmentUrl(sessionId: string, attachmentId: string): string {
-    return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`
+    return `${this.#options.baseUrl}${this.#sess(sessionId, `/attachments/${encodeURIComponent(attachmentId)}`)}`
   }
 
   producedFileUrl(sessionId: string, fileId: string): string {
-    return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/produced/${encodeURIComponent(fileId)}`
+    return `${this.#options.baseUrl}${this.#sess(sessionId, `/produced/${encodeURIComponent(fileId)}`)}`
   }
 
   async readProducedFile(sessionId: string, fileId: string): Promise<Blob> {
-    const res = await this.#callRaw(
-      this.producedFileUrl(sessionId, fileId),
-      { headers: { ...this.#options.headers } },
-      'produced file request failed',
-    )
-    return await res.blob()
+    return await this.#blob(this.producedFileUrl(sessionId, fileId), 'produced file request failed')
   }
 
   projectIconUrl(sessionId: string): string {
-    return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/project/icon`
+    return `${this.#options.baseUrl}${this.#sess(sessionId, '/project/icon')}`
   }
 
   async projectIcon(sessionId: string): Promise<Blob> {
-    const res = await this.#callRaw(
-      this.projectIconUrl(sessionId),
-      { headers: { ...this.#options.headers } },
-      'project icon request failed',
-    )
-    return await res.blob()
+    return await this.#blob(this.projectIconUrl(sessionId), 'project icon request failed')
   }
 
   async listMcpServers(sessionId: string): Promise<McpServerStatusInfo[]> {
-    const body = await this.#call('GET', `/sessions/${encodeURIComponent(sessionId)}/mcp`)
-    return (body as McpServersResponse).servers
+    return await this.#pick<McpServersResponse['servers']>('GET', this.#sess(sessionId, '/mcp'), 'servers')
   }
 
   async mcpServerAction(sessionId: string, serverName: string, action: McpServerActionRequest['action']): Promise<McpServerStatusInfo[]> {
-    const body = await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/mcp/${encodeURIComponent(serverName)}`, { action })
-    return (body as McpServersResponse).servers
+    const path = this.#sess(sessionId, `/mcp/${encodeURIComponent(serverName)}`)
+    return await this.#pick<McpServersResponse['servers']>('POST', path, 'servers', { action })
   }
 
   sessionFileUrl(sessionId: string, path: string): string {
     const encoded = path.split('/').filter(Boolean).map(encodeURIComponent).join('/')
-    return `${this.#options.baseUrl}/sessions/${encodeURIComponent(sessionId)}/files/${encoded}`
+    return `${this.#options.baseUrl}${this.#sess(sessionId, `/files/${encoded}`)}`
   }
 
   async resolvePermission(sessionId: string, requestId: string, decision: ResolvePermissionRequest): Promise<void> {
-    await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}`, decision)
+    await this.#call('POST', this.#sess(sessionId, `/permissions/${encodeURIComponent(requestId)}`), decision)
   }
 
   async submitExecutionResult(executionId: string, result: SubmitExecutionResultRequest): Promise<SubmitExecutionResultResponse> {
-    return (await this.#call('POST', `/executions/${encodeURIComponent(executionId)}/result`, result)) as SubmitExecutionResultResponse
+    return await this.#call('POST', `/executions/${encodeURIComponent(executionId)}/result`, result)
   }
 
   async listProfiles(): Promise<ListProfilesResponse> {
-    return (await this.#call('GET', '/profiles')) as ListProfilesResponse
+    return await this.#call('GET', '/profiles')
   }
 
   async getProfile(name: string): Promise<GetProfileResponse> {
-    return (await this.#call('GET', `/profiles/${encodeURIComponent(name)}`)) as GetProfileResponse
+    return await this.#call('GET', `/profiles/${encodeURIComponent(name)}`)
   }
 
   async createProfile(profile: CreateProfileRequest): Promise<ProfileInfo> {
-    const body = await this.#call('POST', '/profiles', profile)
-    return (body as SaveProfileResponse).profile
+    return await this.#pick<SaveProfileResponse['profile']>('POST', '/profiles', 'profile', profile)
   }
 
   async updateProfile(name: string, patch: UpdateProfileRequest): Promise<ProfileInfo> {
-    const body = await this.#call('PATCH', `/profiles/${encodeURIComponent(name)}`, patch)
-    return (body as SaveProfileResponse).profile
+    return await this.#pick<SaveProfileResponse['profile']>('PATCH', `/profiles/${encodeURIComponent(name)}`, 'profile', patch)
   }
 
   async deleteProfile(name: string): Promise<void> {
@@ -193,101 +177,66 @@ export class WorkerDeckClient {
   }
 
   async listSdkSessions(params?: { dir?: string; limit?: number; offset?: number; profile?: string }): Promise<SdkSessionSummary[]> {
-    const search = new URLSearchParams()
-    if (params?.dir) {
-      search.set('dir', params.dir)
-    }
-    if (params?.limit !== undefined) {
-      search.set('limit', String(params.limit))
-    }
-    if (params?.offset !== undefined) {
-      search.set('offset', String(params.offset))
-    }
-    if (params?.profile) {
-      search.set('profile', params.profile)
-    }
-    const qs = search.size > 0 ? `?${search.toString()}` : ''
-    const body = await this.#call('GET', `/sdk-sessions${qs}`)
-    return (body as { sdkSessions: SdkSessionSummary[] }).sdkSessions
+    const qs = query({ dir: params?.dir || undefined, limit: params?.limit, offset: params?.offset, profile: params?.profile || undefined })
+    return await this.#pick('GET', `/sdk-sessions${qs}`, 'sdkSessions')
   }
 
   async listHostRoots(): Promise<ListHostRootsResponse> {
-    return (await this.#call('GET', '/fs/roots')) as ListHostRootsResponse
+    return await this.#call('GET', '/fs/roots')
   }
 
   async meta(): Promise<GatewayMeta> {
-    return (await this.#call('GET', '/meta')) as GatewayMeta
+    return await this.#call('GET', '/meta')
   }
 
   async listHostDir(path: string): Promise<ListHostDirResponse> {
-    const qs = `?path=${encodeURIComponent(path)}`
-    return (await this.#call('GET', `/fs/list${qs}`)) as ListHostDirResponse
+    return await this.#call('GET', `/fs/list${query({ path })}`)
   }
 
-  async findHostFiles(path: string, query = '', limit?: number): Promise<FindHostFilesResponse> {
-    const search = new URLSearchParams({ path, q: query })
-    if (limit !== undefined) {
-      search.set('limit', String(limit))
-    }
-    return (await this.#call('GET', `/fs/find?${search.toString()}`)) as FindHostFilesResponse
+  async findHostFiles(path: string, q = '', limit?: number): Promise<FindHostFilesResponse> {
+    return await this.#call('GET', `/fs/find${query({ path, q, limit })}`)
   }
 
   async readHostFile(path: string): Promise<ReadHostFileResponse> {
-    const qs = `?path=${encodeURIComponent(path)}`
-    return (await this.#call('GET', `/fs/read${qs}`)) as ReadHostFileResponse
+    return await this.#call('GET', `/fs/read${query({ path })}`)
   }
 
   async writeHostFile(request: WriteHostFileRequest): Promise<WriteHostFileResponse> {
-    return (await this.#call('PUT', '/fs/write', request)) as WriteHostFileResponse
+    return await this.#call('PUT', '/fs/write', request)
   }
 
   async createJob(request: CreateJobRequest): Promise<JobInfo> {
-    const body = await this.#call('POST', '/jobs', request)
-    return (body as { job: JobInfo }).job
+    return await this.#pick('POST', '/jobs', 'job', request)
   }
 
   async listJobs(): Promise<JobInfo[]> {
-    const body = await this.#call('GET', '/jobs')
-    return (body as { jobs: JobInfo[] }).jobs
+    return await this.#pick('GET', '/jobs', 'jobs')
   }
 
   async getJob(id: string): Promise<JobInfo> {
-    const body = await this.#call('GET', `/jobs/${encodeURIComponent(id)}`)
-    return (body as { job: JobInfo }).job
+    return await this.#pick('GET', `/jobs/${encodeURIComponent(id)}`, 'job')
   }
 
   async cancelJob(id: string): Promise<JobInfo> {
-    const body = await this.#call('DELETE', `/jobs/${encodeURIComponent(id)}`)
-    return (body as { job: JobInfo }).job
+    return await this.#pick('DELETE', `/jobs/${encodeURIComponent(id)}`, 'job')
   }
 
   async queueStats(): Promise<QueueStats> {
-    const body = await this.#call('GET', '/queue')
-    return (body as { stats: QueueStats }).stats
+    return await this.#pick('GET', '/queue', 'stats')
   }
 
   async listShells(sessionId: string): Promise<ShellInfo[]> {
-    const body = await this.#call('GET', `/sessions/${encodeURIComponent(sessionId)}/shells`)
-    return (body as { shells: ShellInfo[] }).shells
+    return await this.#pick('GET', this.#sess(sessionId, '/shells'), 'shells')
   }
 
   async getShell(sessionId: string, shellId: string): Promise<ShellInfo> {
-    const body = await this.#call('GET', `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}`)
-    return (body as { shell: ShellInfo }).shell
+    return await this.#pick('GET', this.#shell(sessionId, shellId), 'shell')
   }
 
   async shellOutput(sessionId: string, shellId: string, options?: { view?: 'text' | 'raw' | 'screen'; tail?: number }): Promise<string> {
-    const search = new URLSearchParams()
-    if (options?.view) {
-      search.set('view', options.view)
-    }
-    if (options?.tail !== undefined) {
-      search.set('tail', String(options.tail))
-    }
-    const qs = search.size > 0 ? `?${search.toString()}` : ''
-    const path = `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}/output${qs}`
+    const qs = query({ view: options?.view || undefined, tail: options?.tail })
     const res = await this.#callRaw(
-      `${this.#options.baseUrl}${path}`,
+      `${this.#options.baseUrl}${this.#shell(sessionId, shellId, `/output${qs}`)}`,
       { headers: { ...this.#options.headers } },
       'shell output request failed',
     )
@@ -295,18 +244,15 @@ export class WorkerDeckClient {
   }
 
   async killShell(sessionId: string, shellId: string): Promise<ShellInfo> {
-    const body = await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}/kill`)
-    return (body as { shell: ShellInfo }).shell
+    return await this.#pick('POST', this.#shell(sessionId, shellId, '/kill'), 'shell')
   }
 
   async stopTask(sessionId: string, toolUseId: string): Promise<void> {
-    await this.#call('POST', `/sessions/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(toolUseId)}/stop`)
+    await this.#call('POST', this.#sess(sessionId, `/tasks/${encodeURIComponent(toolUseId)}/stop`))
   }
 
   async setShellAgentWrite(sessionId: string, shellId: string, enabled: boolean): Promise<ShellInfo> {
-    const path = `/sessions/${encodeURIComponent(sessionId)}/shells/${encodeURIComponent(shellId)}/agent-write`
-    const body = await this.#call('POST', path, { enabled })
-    return (body as { shell: ShellInfo }).shell
+    return await this.#pick('POST', this.#shell(sessionId, shellId, '/agent-write'), 'shell', { enabled })
   }
 
   attach(sessionId: string, options?: AttachOptions): SessionHandle {
@@ -318,35 +264,22 @@ export class WorkerDeckClient {
   }
 
   openSocket(sessionId: string, afterSeq: number, truncateResults = false, imageRefs = false): WebSocket {
-    const query = `afterSeq=${afterSeq}` + (truncateResults ? '&truncateResults=1' : '') + (imageRefs ? '&imageRefs=1' : '')
     const url =
       this.#options.buildWsUrl?.(sessionId, afterSeq, truncateResults, imageRefs) ??
-      `${this.#options.baseUrl.replace(/^http/, 'ws')}/sessions/${encodeURIComponent(sessionId)}/ws?${query}`
+      sessionWsUrl(this.#options.baseUrl, sessionId, afterSeq, truncateResults, imageRefs)
     return new this.#WebSocketImpl(url)
   }
 
-  async toolResult(
-    sessionId: string,
-    seq: number,
-    toolUseId: string,
-    options?: { imageRefs?: boolean },
-  ): Promise<{ seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }> {
-    return (await this.#call(
+  async toolResult(sessionId: string, seq: number, toolUseId: string, options?: { imageRefs?: boolean }): Promise<ToolResultResponse> {
+    return await this.#call(
       'GET',
-      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result?toolUseId=${encodeURIComponent(toolUseId)}` +
-        (options?.imageRefs ? '&imageRefs=1' : ''),
-    )) as { seq: number; toolUseId: string; content: ToolResultBlock['content']; isError: boolean }
+      this.#sess(sessionId, `/events/${seq}/result${query({ toolUseId, imageRefs: options?.imageRefs ? 1 : undefined })}`),
+    )
   }
 
   async toolResultImage(sessionId: string, seq: number, toolUseId: string, partIndex: number): Promise<Blob> {
-    const path =
-      `/sessions/${encodeURIComponent(sessionId)}/events/${seq}/result` + `?toolUseId=${encodeURIComponent(toolUseId)}&part=${partIndex}`
-    const res = await this.#callRaw(
-      `${this.#options.baseUrl}${path}`,
-      { headers: { ...this.#options.headers } },
-      'image part request failed',
-    )
-    return await res.blob()
+    const url = `${this.#options.baseUrl}${this.#sess(sessionId, `/events/${seq}/result${query({ toolUseId, part: partIndex })}`)}`
+    return await this.#blob(url, 'image part request failed')
   }
 
   openQueueSocket(): WebSocket {
@@ -364,7 +297,25 @@ export class WorkerDeckClient {
     return res
   }
 
-  async #call(method: string, path: string, body?: unknown): Promise<unknown> {
+  #sess(sessionId: string, suffix = ''): string {
+    return `/sessions/${encodeURIComponent(sessionId)}${suffix}`
+  }
+
+  #shell(sessionId: string, shellId: string, suffix = ''): string {
+    return this.#sess(sessionId, `/shells/${encodeURIComponent(shellId)}${suffix}`)
+  }
+
+  async #blob(url: string, failure: string): Promise<Blob> {
+    const res = await this.#callRaw(url, { headers: { ...this.#options.headers } }, failure)
+    return await res.blob()
+  }
+
+  async #pick<T>(method: string, path: string, key: string, body?: unknown): Promise<T> {
+    const payload = await this.#call<Record<string, T>>(method, path, body)
+    return payload[key]!
+  }
+
+  async #call<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await this.#fetch(`${this.#options.baseUrl}${path}`, {
       method,
       headers: {
@@ -377,8 +328,18 @@ export class WorkerDeckClient {
     if (!res.ok) {
       throw new WorkerDeckError(payload.error ?? `${method} ${path} failed with ${res.status}`, res.status)
     }
-    return payload
+    return payload as T
   }
+}
+
+function query(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [name, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      search.set(name, String(value))
+    }
+  }
+  return search.size > 0 ? `?${search.toString()}` : ''
 }
 
 export { SessionHandle } from './session-handle.ts'

@@ -170,7 +170,9 @@ export async function listCodexSessions(options: {
   return options.limit === undefined ? summaries.slice(start) : summaries.slice(start, start + options.limit)
 }
 
-export const codexAdapter: EngineAdapter = {
+export type CodexAdapterConfig = Omit<CodexRunnerConfig, 'connectFn'>
+
+export const codexAdapter: EngineAdapter<CodexAdapterConfig> = {
   engine: 'codex',
   capabilities: ENGINE_CAPABILITIES.codex,
   catalog: CODEX_CATALOG,
@@ -179,7 +181,7 @@ export const codexAdapter: EngineAdapter = {
     if (restore) {
       throw new Error('the codex engine cannot rebuild a parked session')
     }
-    const executable = (config as CodexRunnerConfig).codexPathOverride ?? resolveBundledCodexExecutable()
+    const executable = config.codexPathOverride ?? resolveBundledCodexExecutable()
     if (!executable) {
       throw new Error(NOT_INSTALLED)
     }

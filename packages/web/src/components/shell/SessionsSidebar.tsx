@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
-import { filterRows, sessionLabel, type SessionRow, type SessionTask } from '@workerdeck/protocol'
+import { filterRows, sessionLabel, type SessionRow, type SessionTask, errorMessage } from '@workerdeck/protocol'
 import { Button, Empty, EmptyKey, EngineIcon, SessionBrowser, SessionFiltersButton, SessionStatusIcon, cn, toast } from '@workerdeck/ui'
 import { Layers, Plus, RefreshCw, Search } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
@@ -70,21 +70,21 @@ export function SessionsSidebar() {
     void clientFor(row.hostId)
       ?.killShell(row.info.id, shellId)
       .then(() => refresh())
-      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Kill failed'))
+      .catch((e: unknown) => toast.error(errorMessage(e, 'Kill failed')))
   }
 
   const shellAgentWrite = (row: SessionRow, shellId: string, enabled: boolean) => {
     void clientFor(row.hostId)
       ?.setShellAgentWrite(row.info.id, shellId, enabled)
       .then(() => refresh())
-      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : enabled ? 'Grant failed' : 'Revoke failed'))
+      .catch((e: unknown) => toast.error(errorMessage(e, enabled ? 'Grant failed' : 'Revoke failed')))
   }
 
   const rename = (row: SessionRow, title: string) => {
     void clientFor(row.hostId)
       ?.updateSession(row.info.id, { title: title || null })
       .then(() => refresh())
-      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Rename failed'))
+      .catch((e: unknown) => toast.error(errorMessage(e, 'Rename failed')))
   }
 
   const toggleSearch = () => {
@@ -100,7 +100,7 @@ export function SessionsSidebar() {
     void clientFor(row.hostId)
       ?.stopTask(row.info.id, toolUseId)
       .then(() => refresh())
-      .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Stop failed'))
+      .catch((e: unknown) => toast.error(errorMessage(e, 'Stop failed')))
   }
 
   const revealNonce = useRef(0)
@@ -211,7 +211,7 @@ export function SessionsSidebar() {
               void clientFor(row.hostId)
                 ?.deleteSession(row.info.id)
                 .then(() => refresh())
-                .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'Delete failed'))
+                .catch((e: unknown) => toast.error(errorMessage(e, 'Delete failed')))
             }}
             emptyState={
               <Empty

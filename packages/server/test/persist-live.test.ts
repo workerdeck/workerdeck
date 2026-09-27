@@ -1,10 +1,8 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { ProfileInfo, SessionEvent, SessionInfo } from '@workerdeck/protocol'
 import { createFileSessionStore, createWorkerServer, type SessionStore, type WorkerServer } from '../src/index.ts'
+import { gatewayFixture } from './helpers.ts'
 import { ParkableRunner } from './parkable-runner.ts'
 
 function profile(name: string): ProfileInfo {
@@ -21,17 +19,8 @@ type Gateway = {
   built: ParkableRunner[]
 }
 
-const servers: WorkerServer[] = []
-const dirs: string[] = []
-
-afterEach(async () => {
-  for (const server of servers.splice(0)) {
-    await server.close()
-  }
-  for (const dir of dirs.splice(0)) {
-    await rm(dir, { recursive: true, force: true, maxRetries: 5 })
-  }
-})
+const { servers, stateDir, cleanup } = gatewayFixture('wd-live-')
+afterEach(cleanup)
 
 async function startGateway(store: SessionStore, persistLive = true): Promise<Gateway> {
   const built: ParkableRunner[] = []
@@ -62,12 +51,6 @@ async function create(base: string, scope?: Record<string, string>): Promise<Ses
 
 async function list(base: string): Promise<SessionInfo[]> {
   return ((await (await fetch(`${base}/sessions`)).json()) as { sessions: SessionInfo[] }).sessions
-}
-
-async function stateDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'wd-live-'))
-  dirs.push(dir)
-  return dir
 }
 
 async function openSocket(base: string, id: string): Promise<{ socket: WebSocket; events: SessionEvent[] }> {

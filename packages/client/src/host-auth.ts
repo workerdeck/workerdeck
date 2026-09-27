@@ -1,4 +1,5 @@
 import type { ClientOptions } from './index.ts'
+import { sessionWsUrl } from './ws-url.ts'
 
 export function hostAuth(options: { baseUrl: string; key: string }): Pick<ClientOptions, 'headers' | 'buildWsUrl' | 'buildQueueWsUrl'> {
   const { baseUrl, key } = options
@@ -11,7 +12,8 @@ export function hostAuth(options: { baseUrl: string; key: string }): Pick<Client
 
   return {
     headers: { authorization: `Bearer ${key}` },
-    buildWsUrl: (sessionId, afterSeq) => withKey(`${wsRoot}/sessions/${encodeURIComponent(sessionId)}/ws?afterSeq=${afterSeq}`),
+    buildWsUrl: (sessionId, afterSeq, truncateResults, imageRefs) =>
+      withKey(sessionWsUrl(baseUrl, sessionId, afterSeq, truncateResults, imageRefs)),
     buildQueueWsUrl: () => withKey(`${wsRoot}/queue/ws`),
   }
 }

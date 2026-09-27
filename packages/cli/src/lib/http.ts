@@ -31,3 +31,16 @@ export function readBody(req: IncomingMessage, maxBytes: number): Promise<string
 export function respondJson(res: ServerResponse, status: number, body: Record<string, unknown>, headers?: Record<string, string>): void {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers }).end(JSON.stringify(body))
 }
+
+export type RequestAuthenticator = (req: IncomingMessage) => unknown
+
+// Awaited on purpose: a config file's `authenticate` may be async, and a pending promise is not `null`.
+export async function isAuthenticated(authenticate: RequestAuthenticator, req: IncomingMessage): Promise<boolean> {
+  const principal = await authenticate(req)
+  return principal !== null && principal !== undefined && principal !== false
+}
+
+// A cross-site page can send `text/plain` without a preflight; it cannot send `application/json`.
+export function isJsonRequest(req: IncomingMessage): boolean {
+  return (req.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase() === 'application/json'
+}

@@ -3,8 +3,9 @@ import { z } from 'zod'
 import { createVfs, type SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import type { WebFetchFn } from './web-fetch.ts'
-import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, runPeerTool, type PeerDirectory } from '../../lib/peers.ts'
-import { SHELL_TOOL_SHAPES, runShellTool, shellToolNames, type ShellDirectory } from '../../lib/shells.ts'
+import type { PeerDirectory } from '../../lib/peers.ts'
+import type { ShellDirectory } from '../../lib/shells.ts'
+import { sessionTools } from '../../lib/session-tools.ts'
 
 export type ToolTrust = 'sandboxed' | 'authoritative'
 
@@ -108,43 +109,23 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
     })
   }
 
-  if (options.peers) {
-    const peers = options.peers
-    const selfId = options.selfId ?? (() => options.sessionId)
-    for (const name of PEER_TOOL_NAMES) {
-      definitions.push({
-        name,
-        trust: 'authoritative',
-        tool: tool({
-          description: PEER_TOOL_SHAPES[name].description,
-          inputSchema: z.object(PEER_TOOL_SHAPES[name].shape),
-          execute: async (args) => {
-            const output = await runPeerTool(peers, selfId(), name, args)
-            return output.isError ? { error: output.text } : { result: output.text }
-          },
-        }),
-      })
-    }
-  }
-
-  if (options.shells) {
-    const shells = options.shells
-    const write = options.shellWrite === true
-    const selfId = options.selfId ?? (() => options.sessionId)
-    for (const name of shellToolNames(write)) {
-      definitions.push({
-        name,
-        trust: 'authoritative',
-        tool: tool({
-          description: SHELL_TOOL_SHAPES[name].description,
-          inputSchema: z.object(SHELL_TOOL_SHAPES[name].shape),
-          execute: async (args) => {
-            const output = await runShellTool(shells, selfId(), name, args, { write })
-            return output.isError ? { error: output.text } : { result: output.text }
-          },
-        }),
-      })
-    }
+  const gatewayTools = sessionTools(
+    { peers: options.peers, shells: options.shells, write: options.shellWrite === true },
+    options.selfId ?? (() => options.sessionId),
+  )
+  for (const gatewayTool of gatewayTools) {
+    definitions.push({
+      name: gatewayTool.name,
+      trust: 'authoritative',
+      tool: tool({
+        description: gatewayTool.description,
+        inputSchema: z.object(gatewayTool.shape),
+        execute: async (args) => {
+          const output = await gatewayTool.run(args)
+          return output.isError ? { error: output.text } : { result: output.text }
+        },
+      }),
+    })
   }
 
   if (options.search) {

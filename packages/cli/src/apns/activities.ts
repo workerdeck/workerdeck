@@ -1,8 +1,13 @@
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
-import type { IncomingMessage, ServerResponse } from 'node:http'
-import { join } from 'node:path'
 import type { ApnsEnvironment } from './client.ts'
-import { readBody, respondJson } from '../lib/http.ts'
+import {
+  isEnvironment,
+  jsonPushRoute,
+  jsonRecordFile,
+  TOKEN_PATTERN,
+  type JsonRegistryOptions,
+  type PushRouteHandler,
+} from './json-registry.ts'
+import { respondJson, type RequestAuthenticator } from '../lib/http.ts'
 
 // `starting` is a card the gateway has asked APNs to raise but whose update token has not come
 // back yet. It is the state that forbids a second start for the same pair - that is how a phone
@@ -44,12 +49,6 @@ export type ActivityRegistry = {
 }
 
 const FILENAME = 'apns-activities.json'
-const TOKEN_PATTERN = /^[0-9a-fA-F]{32,200}$/
-const MAX_BODY_BYTES = 4096
-
-function isEnvironment(value: unknown): value is ApnsEnvironment {
-  return value === 'development' || value === 'production'
-}
 
 function keyOf(deviceToken: string, sessionId: string): string {
   return `${deviceToken}:${sessionId}`
@@ -62,39 +61,16 @@ function persistable(record: ActivityRecord): Persisted {
   return { deviceToken, sessionId, hostId, environment, updateToken, phase, startedAt }
 }
 
-export async function createActivityRegistry(options: {
-  dir: string | null
-  onError?: (error: unknown, context: { op: string; path: string }) => void
-}): Promise<ActivityRegistry> {
-  const path = options.dir === null ? null : join(options.dir, FILENAME)
+export async function createActivityRegistry(options: JsonRegistryOptions): Promise<ActivityRegistry> {
+  const file = jsonRecordFile(options, FILENAME, 'activities')
   const records = new Map<string, ActivityRecord>()
-
-  if (path !== null) {
-    try {
-      const parsed = JSON.parse(await readFile(path, 'utf8')) as { activities?: ActivityRecord[] }
-      for (const record of parsed.activities ?? []) {
-        if (typeof record?.deviceToken === 'string' && typeof record.sessionId === 'string' && isEnvironment(record.environment)) {
-          records.set(keyOf(record.deviceToken, record.sessionId), record)
-        }
-      }
-    } catch {
-      // Same rule as the device registry: missing, unreadable and corrupt all mean "start empty".
-      // A lost record costs an orphaned card that `stale-date` and the app's reconcile both close.
+  // A lost record costs an orphaned card that `stale-date` and the app's reconcile both close.
+  for (const record of (await file.load()) as ActivityRecord[]) {
+    if (typeof record?.deviceToken === 'string' && typeof record.sessionId === 'string' && isEnvironment(record.environment)) {
+      records.set(keyOf(record.deviceToken, record.sessionId), record)
     }
   }
-
-  const persist = async (): Promise<void> => {
-    if (path === null) {
-      return
-    }
-    try {
-      await mkdir(options.dir!, { recursive: true, mode: 0o700 })
-      await writeFile(path, `${JSON.stringify({ activities: [...records.values()].map(persistable) }, null, 2)}\n`, { mode: 0o600 })
-      await chmod(path, 0o600)
-    } catch (error) {
-      options.onError?.(error, { op: 'write', path })
-    }
-  }
+  const persist = (): Promise<void> => file.save([...records.values()].map(persistable))
 
   return {
     list: () => [...records.values()],
@@ -161,81 +137,38 @@ export async function createActivityRegistry(options: {
   }
 }
 
-export function createActivityRoute(
-  registry: ActivityRegistry | null,
-  authenticate: (req: IncomingMessage) => unknown,
-): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
-  return async (req, res) => {
-    let pathname: string
-    try {
-      pathname = new URL(req.url ?? '/', 'http://internal').pathname
-    } catch {
-      return false
-    }
-    if (pathname !== '/apns/activities') {
-      return false
-    }
-
-    if (registry === null) {
-      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
-      res.end('this gateway runs without push\n')
-      return true
-    }
-
-    if (req.method !== 'POST' && req.method !== 'DELETE') {
-      res.writeHead(405, { allow: 'POST, DELETE' }).end()
-      return true
-    }
-    if (authenticate(req) === null) {
-      respondJson(res, 401, { error: 'unauthorized' })
-      return true
-    }
-
-    const raw = await readBody(req, MAX_BODY_BYTES)
-    if (raw === null) {
-      respondJson(res, 413, { error: 'body too large' })
-      res.once('finish', () => req.destroy())
-      return true
-    }
-    let body: Record<string, unknown>
-    try {
-      body = JSON.parse(raw) as Record<string, unknown>
-    } catch {
-      respondJson(res, 400, { error: 'invalid JSON body' })
-      return true
-    }
-
+export function createActivityRoute(registry: ActivityRegistry | null, authenticate: RequestAuthenticator): PushRouteHandler {
+  return jsonPushRoute('/apns/activities', registry, authenticate, async (activities, req, res, body) => {
     const token = body.token
     if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) {
       respondJson(res, 400, { error: 'token must be a hex Live Activity update token' })
-      return true
+      return
     }
 
     if (req.method === 'DELETE') {
-      await registry.removeByUpdateToken(token)
+      await activities.removeByUpdateToken(token)
       res.writeHead(204).end()
-      return true
+      return
     }
 
     const sessionId = body.sessionId
     if (typeof sessionId !== 'string' || sessionId === '') {
       respondJson(res, 400, { error: 'sessionId is required' })
-      return true
+      return
     }
     if (!isEnvironment(body.environment)) {
       respondJson(res, 400, { error: "environment must be 'development' or 'production'" })
-      return true
+      return
     }
     const deviceToken = typeof body.deviceToken === 'string' && TOKEN_PATTERN.test(body.deviceToken) ? body.deviceToken : undefined
 
-    const record = await registry.attach({ sessionId, deviceToken, environment: body.environment }, token)
+    const record = await activities.attach({ sessionId, deviceToken, environment: body.environment }, token)
     if (record === undefined) {
       // A card this gateway never raised. The app forgets the token rather than retrying, which is
       // what stops a phone with two gateways from POSTing at whichever one answers first.
       respondJson(res, 404, { error: 'no activity awaiting a token for this session' })
-      return true
+      return
     }
     respondJson(res, 200, { attached: true, sessionId })
-    return true
-  }
+  })
 }

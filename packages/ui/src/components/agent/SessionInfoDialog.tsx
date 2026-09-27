@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import type { SessionFileInfo } from '@workerdeck/protocol'
-import type { TranscriptState } from '@workerdeck/react'
+import { useAsync, type TranscriptState } from '@workerdeck/react'
 import { Download } from 'lucide-react'
 import { CopyButton } from '../ui/CopyButton.tsx'
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogRow } from '../ui/Dialog.tsx'
@@ -17,43 +15,56 @@ export interface SessionInfoDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+export interface SessionInfoPanelProps {
+  state: TranscriptState
+  client: WorkerDeckClient
+  sessionId: string | undefined
+  active?: boolean
+}
+
 export function SessionInfoDialog({ state, client, sessionId, open, onOpenChange }: SessionInfoDialogProps) {
-  const session = state.session
-  const mode = state.permissionMode ? permissionModeMeta(state.permissionMode) : undefined
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader title="Session info" description={session?.title} />
+        <DialogHeader title="Session info" description={state.session?.title} />
         <DialogBody>
-          <div className="flex flex-col divide-y divide-border">
-            <div className="pb-2">
-              <DialogRow label="Engine">{state.engine ?? 'claude'}</DialogRow>
-              {session?.profile ? <DialogRow label="Profile">{session.profile}</DialogRow> : null}
-              {state.model ? (
-                <DialogRow label="Model" mono>
-                  {state.model}
-                </DialogRow>
-              ) : null}
-              {mode ? <DialogRow label="Permission mode">{mode.label}</DialogRow> : null}
-              {session?.apiKeySource ? <DialogRow label="Credentials">{session.apiKeySource}</DialogRow> : null}
-            </div>
-            <div className="py-2">
-              {state.cwd ? <CopyRow label="Working directory" value={state.cwd} /> : null}
-              {state.sdkSessionId ? <CopyRow label="Engine session id" value={state.sdkSessionId} /> : null}
-              {session ? <CopyRow label="Gateway session id" value={session.id} /> : null}
-            </div>
-            <div className="py-2">
-              {session?.createdAt ? <DialogRow label="Started">{formatRelativeTime(session.createdAt)}</DialogRow> : null}
-              {session?.numTurns !== undefined ? <DialogRow label="Turns">{session.numTurns}</DialogRow> : null}
-              <DialogRow label="Cost" mono>
-                {formatCost(state.costUsd ?? (state.totalCostUsd || undefined))}
-              </DialogRow>
-            </div>
-            {state.capabilities.vfs ? <SessionFiles client={client} sessionId={sessionId} open={open} /> : null}
-          </div>
+          <SessionInfoPanel state={state} client={client} sessionId={sessionId} active={open} />
         </DialogBody>
       </DialogContent>
     </Dialog>
+  )
+}
+
+export function SessionInfoPanel({ state, client, sessionId, active = true }: SessionInfoPanelProps) {
+  const session = state.session
+  const mode = state.permissionMode ? permissionModeMeta(state.permissionMode) : undefined
+  return (
+    <div className="flex flex-col divide-y divide-border">
+      <div className="pb-2">
+        <DialogRow label="Engine">{state.engine ?? 'claude'}</DialogRow>
+        {session?.profile ? <DialogRow label="Profile">{session.profile}</DialogRow> : null}
+        {state.model ? (
+          <DialogRow label="Model" mono>
+            {state.model}
+          </DialogRow>
+        ) : null}
+        {mode ? <DialogRow label="Permission mode">{mode.label}</DialogRow> : null}
+        {session?.apiKeySource ? <DialogRow label="Credentials">{session.apiKeySource}</DialogRow> : null}
+      </div>
+      <div className="py-2">
+        {state.cwd ? <CopyRow label="Working directory" value={state.cwd} /> : null}
+        {state.sdkSessionId ? <CopyRow label="Engine session id" value={state.sdkSessionId} /> : null}
+        {session ? <CopyRow label="Gateway session id" value={session.id} /> : null}
+      </div>
+      <div className="py-2">
+        {session?.createdAt ? <DialogRow label="Started">{formatRelativeTime(session.createdAt)}</DialogRow> : null}
+        {session?.numTurns !== undefined ? <DialogRow label="Turns">{session.numTurns}</DialogRow> : null}
+        <DialogRow label="Cost" mono>
+          {formatCost(state.costUsd ?? (state.totalCostUsd || undefined))}
+        </DialogRow>
+      </div>
+      {state.capabilities.vfs ? <SessionFiles client={client} sessionId={sessionId} active={active} /> : null}
+    </div>
   )
 }
 
@@ -69,37 +80,10 @@ function CopyRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function SessionFiles({ client, sessionId, open }: { client: WorkerDeckClient; sessionId: string | undefined; open: boolean }) {
-  const [files, setFiles] = useState<SessionFileInfo[] | undefined>()
-  const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    if (!open || !sessionId) {
-      return
-    }
-    let cancelled = false
-    setLoading(true)
-    client
-      .listSessionFiles(sessionId)
-      .then((list) => {
-        if (!cancelled) {
-          setFiles(list)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFiles([])
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [client, sessionId, open])
+function SessionFiles({ client, sessionId, active }: { client: WorkerDeckClient; sessionId: string | undefined; active: boolean }) {
+  const { data: files, loading } = useAsync(() => client.listSessionFiles(sessionId!), [client, sessionId], {
+    enabled: active && !!sessionId,
+  })
 
   return (
     <div className="pt-3">

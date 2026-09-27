@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createWebFetch, htmlToMarkdown, isPrivateAddress } from '../src/engines/provider/web-fetch.ts'
+import { createWebFetch, guardedFetch, htmlToMarkdown, isPrivateAddress } from '../src/engines/provider/web-fetch.ts'
 
 // Literal public IPs (TEST-NET) so the SSRF guard never touches real DNS.
 const PAGE = 'http://203.0.113.5/page'
@@ -170,7 +170,53 @@ describe('isPrivateAddress', () => {
     ['fe80::1', true],
     ['::ffff:10.0.0.1', true],
     ['2606:4700::1111', false],
+    ['::ffff:7f00:1', true],
+    ['[::ffff:7f00:1]', true],
+    ['::ffff:a9fe:a9fe', true],
+    ['::ffff:0808:0808', false],
+    ['::7f00:1', true],
+    ['::ffff:0:7f00:1', true],
+    ['64:ff9b::7f00:1', true],
+    ['64:ff9b::808:808', false],
+    ['64:ff9b:1::1', true],
+    ['2002:7f00:1::', true],
+    ['2002:a9fe:a9fe::1', true],
+    ['2002:808:808::1', false],
+    ['2001:0:4136:e378:8000:63bf:3fff:fdd2', true],
+    ['fe80::1%lo0', true],
+    ['febf::1', true],
+    ['fec0::1', true],
+    ['ff02::1', true],
+    ['100::1', true],
+    ['198.18.0.1', true],
+    ['not-an-ip', false],
   ])('%s → %s', (address, expected) => {
     expect(isPrivateAddress(address)).toBe(expected)
+  })
+})
+
+describe('the WHATWG-normalised forms reach the guard', () => {
+  it.each([
+    'http://[::ffff:127.0.0.1]/',
+    'http://[::127.0.0.1]/',
+    'http://[64:ff9b::127.0.0.1]/',
+    'http://[2002:7f00:1::]/',
+    'http://0x7f.1/',
+  ])('%s is refused before any request', async (url) => {
+    const fetchImpl = vi.fn()
+    const webFetch = createWebFetch({ fetchImpl: fetchImpl as unknown as typeof fetch })
+    expect((await webFetch(url, 'x')).error).toMatch(/not allowed/)
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+})
+
+describe('guardedFetch', () => {
+  it('refuses a private literal without connecting', async () => {
+    await expect(guardedFetch('http://127.0.0.1:1/')).rejects.toThrow(/not allowed/)
+    await expect(guardedFetch('http://[::ffff:7f00:1]:1/')).rejects.toThrow(/not allowed/)
+  })
+
+  it('refuses at connect time when the name resolves to a private address', async () => {
+    await expect(guardedFetch('http://localhost:1/')).rejects.toThrow(/private address/)
   })
 })

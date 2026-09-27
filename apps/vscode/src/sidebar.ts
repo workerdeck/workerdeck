@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
 import type { SessionHandle } from '@workerdeck/client'
@@ -321,7 +322,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     try {
       await client.killShell(sessionId, shellId)
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: kill failed - ${err instanceof Error ? err.message : String(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: kill failed - ${errorMessage(err)}`)
     }
     await this.#model.refresh()
   }
@@ -335,7 +336,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     try {
       await client.stopTask(sessionId, toolUseId)
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: stop failed - ${err instanceof Error ? err.message : String(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: stop failed - ${errorMessage(err)}`)
     }
     await this.#model.refresh()
   }
@@ -350,7 +351,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       await client.setShellAgentWrite(sessionId, shellId, enabled)
     } catch (err) {
       const verb = enabled ? 'grant' : 'revoke'
-      void vscode.window.showErrorMessage(`WorkerDeck: ${verb} failed - ${err instanceof Error ? err.message : String(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: ${verb} failed - ${errorMessage(err)}`)
     }
     await this.#model.refresh()
   }
@@ -364,7 +365,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     try {
       await client.updateSession(sessionId, { title: title.trim() || null })
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: rename failed - ${err instanceof Error ? err.message : String(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: rename failed - ${errorMessage(err)}`)
     }
     await this.#model.refresh()
   }
@@ -390,7 +391,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     try {
       await client.deleteSession(sessionId)
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: delete failed - ${err instanceof Error ? err.message : String(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: delete failed - ${errorMessage(err)}`)
     }
     await this.#delegate.sessionDeleted(hostId, sessionId)
     await this.#model.refresh()

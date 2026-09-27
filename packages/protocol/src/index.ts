@@ -479,6 +479,7 @@ export type EngineCapabilities = {
   defaultPermissionMode: PermissionMode
   resume: boolean
   resumeBackfill: boolean
+  forkSession?: boolean
   listSessions: boolean
   contextUsage: boolean
   rateLimits: boolean
@@ -505,6 +506,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     defaultPermissionMode: 'default',
     resume: true,
     resumeBackfill: true,
+    forkSession: true,
     listSessions: true,
     contextUsage: true,
     rateLimits: true,
@@ -529,6 +531,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     defaultPermissionMode: 'default',
     resume: true,
     resumeBackfill: true,
+    forkSession: false,
     listSessions: true,
     contextUsage: true,
     rateLimits: true,
@@ -553,6 +556,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     defaultPermissionMode: 'default',
     resume: false,
     resumeBackfill: false,
+    forkSession: false,
     listSessions: false,
     contextUsage: false,
     rateLimits: false,
@@ -818,10 +822,8 @@ export type SessionInfo = {
   usageByModel?: ByModel
   numTurns?: number
   activityCount?: number
-  // Rows of the kind a person is actually waiting to read - see `transcriptProse`.
-  // Absent from a gateway that predates it - additive, so no `PROTOCOL_VERSION` bump -
-  // which is why every reader falls back to `activityCount`. This is the badge's number; `activityCount` stays the "has
-  // anything happened at all" measure that sorting and dormancy read.
+  // Rows of the kind a person is actually waiting to read - see `transcriptProse`. This is the badge's number;
+  // `activityCount` stays the "has anything happened at all" measure that sorting and dormancy read.
   proseCount?: number
   lastActivityAt?: number
   contextUsage?: ContextReading
@@ -1196,6 +1198,8 @@ export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
 
 export * from './checklist.ts'
+export * from './errors.ts'
+export * from './paths.ts'
 export * from './pricing.ts'
 export * from './peer-mentions.ts'
 export * from './session-list.ts'

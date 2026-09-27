@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ProfileInfo, UpdateProfileRequest } from '@workerdeck/protocol'
-import { json, readJsonBody } from '../lib/http.ts'
+import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import { readProfileConfig } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
+import type { ProfileService } from '../services/profiles.ts'
 import type { ServerContext } from '../context.ts'
 
 export async function handleProfiles(
@@ -13,16 +14,9 @@ export async function handleProfiles(
   auth: AuthContext,
 ): Promise<void> {
   const { auth: authSvc, availability, basePath, profiles } = ctx
-  const saveManaged = async (incoming: ProfileInfo): Promise<void> => {
-    const saved = await profiles.saveManaged(incoming)
-    if (!saved.ok) {
-      json(res, saved.status, { error: saved.error })
-    } else {
-      json(res, 200, { profile: saved.profile })
-    }
-  }
   const rest = pathname.slice((basePath + '/profiles').length).replace(/^\//, '')
   if (rest === '') {
+    requireMethod(req, 'GET', 'POST')
     if (req.method === 'GET') {
       const visible = auth.allowedProfiles ? profiles.all().filter((p) => auth.allowedProfiles!.includes(p.name)) : profiles.all()
       availability.refresh(visible)
@@ -32,37 +26,26 @@ export async function handleProfiles(
       })
       return
     }
-    if (req.method === 'POST') {
-      const refused = profiles.manageGuard(auth)
-      if (refused) {
-        json(res, refused.status, { error: refused.error })
-        return
-      }
-      const body = (await readJsonBody(req, ctx.maxBodyBytes)) as ProfileInfo
-      if (!body.name || typeof body.name !== 'string') {
-        json(res, 400, { error: 'name is required' })
-        return
-      }
-      if (profiles.get(body.name)) {
-        json(res, 409, { error: `profile already exists: ${body.name}` })
-        return
-      }
-      await saveManaged(body)
-      return
+    refuseWith(profiles.manageGuard(auth))
+    const body = (await readJsonBody(req, ctx.maxBodyBytes)) as ProfileInfo
+    if (!body.name || typeof body.name !== 'string') {
+      fail(400, 'name is required')
     }
-    json(res, 405, { error: 'method not allowed' })
+    if (profiles.get(body.name)) {
+      fail(409, `profile already exists: ${body.name}`)
+    }
+    await saveManaged(profiles, res, body)
     return
   }
   const name = decodeURIComponent(rest)
   const profile = name.includes('/') ? undefined : profiles.get(name)
   if (!profile) {
-    json(res, 404, { error: 'profile not found' })
-    return
+    fail(404, 'profile not found')
   }
   if (auth.allowedProfiles && !auth.allowedProfiles.includes(profile.name)) {
-    json(res, 403, { error: `profile not allowed: ${profile.name}` })
-    return
+    fail(403, `profile not allowed: ${profile.name}`)
   }
+  requireMethod(req, 'GET', 'PATCH', 'DELETE')
   if (req.method === 'GET') {
     json(res, 200, {
       profile: profiles.forResponse(profile),
@@ -70,21 +53,27 @@ export async function handleProfiles(
     })
     return
   }
-  if (req.method === 'PATCH' || req.method === 'DELETE') {
-    const refused = profiles.manageGuard(auth) ?? profiles.declaredGuard(profile)
-    if (refused) {
-      json(res, refused.status, { error: refused.error })
-      return
-    }
-    if (req.method === 'DELETE') {
-      await ctx.options.profileStore!.delete(profile.name)
-      await profiles.refreshStored()
-      res.writeHead(204).end()
-      return
-    }
-    const patch = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateProfileRequest
-    await saveManaged({ ...profile, ...patch, name: profile.name })
+  refuseWith(profiles.manageGuard(auth) ?? profiles.declaredGuard(profile))
+  if (req.method === 'DELETE') {
+    await ctx.options.profileStore!.delete(profile.name)
+    await profiles.refreshStored()
+    res.writeHead(204).end()
     return
   }
-  json(res, 405, { error: 'method not allowed' })
+  const patch = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateProfileRequest
+  await saveManaged(profiles, res, { ...profile, ...patch, name: profile.name })
+}
+
+function refuseWith(refused: { status: number; error: string } | null): void {
+  if (refused) {
+    fail(refused.status, refused.error)
+  }
+}
+
+async function saveManaged(profiles: ProfileService, res: ServerResponse, incoming: ProfileInfo): Promise<void> {
+  const saved = await profiles.saveManaged(incoming)
+  if (!saved.ok) {
+    fail(saved.status, saved.error)
+  }
+  json(res, 200, { profile: saved.profile })
 }

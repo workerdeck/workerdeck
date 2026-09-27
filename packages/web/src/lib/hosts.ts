@@ -16,7 +16,7 @@ function keyKey(id: string) {
   return `workerdeck.host.${id}.key`
 }
 
-// The string the single-gateway build used, so watermarks written before this existed keep counting.
+// Changing it re-keys every stored watermark and badges the operator's whole history.
 export const IMPLICIT_HOST_ID = 'gateway'
 
 type State = {

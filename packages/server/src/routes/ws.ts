@@ -3,7 +3,10 @@ import type { WebSocket } from 'ws'
 import { isSlashCommand, type Runner } from '@workerdeck/core'
 import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
-import { shellPermitted, SHELL_REFUSAL, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
+import { permissionDecision, refusePermissionMode } from '../lib/permissions.ts'
+import { engineOf } from '../lib/profile-env.ts'
+import { takesLocalCommands } from '../services/shell-directory.ts'
+import { shellPermitted, SHELL_REFUSAL, startShell, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
 
 // What the upgrade established about the principal; computed once there so the attach never re-authenticates.
 export type AttachAccess = { operator: boolean }
@@ -13,6 +16,8 @@ type Client = { send: (frame: ServerFrame) => void; open: () => boolean; buffere
 
 export const SHELL_SOCKET_BUFFERED_MAX = 4 * 1024 * 1024
 export const SHELL_DETACHED_BACKPRESSURE = 'backpressure'
+export const SESSION_SOCKET_BUFFERED_MAX = 16 * 1024 * 1024
+export const SESSION_SOCKET_BACKPRESSURE_CODE = 1013
 
 export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, req: IncomingMessage, access: AttachAccess): void {
   const { bridge, parking } = ctx
@@ -36,11 +41,20 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     ...(shellPermitted(ctx.shells, runner, access.operator) ? { shell: true } : {}),
     ...(ctx.pricingOverrides ? { pricingOverrides: ctx.pricingOverrides } : {}),
   })
-  const unsubscribe = runner.subscribe((event) => send({ type: 'event', event }), afterSeq, {
-    coalesceReplay: true,
-    truncateResults,
-    imageRefs,
-  })
+  let live = false
+  const unsubscribe = runner.subscribe(
+    (event) => {
+      // Replay is exempt: it is bounded by the log, and capping it would refuse every attach to a long session.
+      if (live && ws.bufferedAmount > SESSION_SOCKET_BUFFERED_MAX) {
+        ws.close(SESSION_SOCKET_BACKPRESSURE_CODE, 'backpressure')
+        return
+      }
+      send({ type: 'event', event })
+    },
+    afterSeq,
+    { coalesceReplay: true, truncateResults, imageRefs },
+  )
+  live = true
   const detachBridge = bridge.attach(runner.id, send)
 
   // After the replay is wired, so a fresh reading arrives as a live event behind the history rather than racing it.
@@ -94,18 +108,7 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       return
     }
     case 'permission_decision': {
-      if (frame.behavior === 'allow') {
-        runner.resolvePermission(frame.requestId, {
-          behavior: 'allow',
-          updatedInput: frame.updatedInput,
-        })
-      } else {
-        runner.resolvePermission(frame.requestId, {
-          behavior: 'deny',
-          message: frame.message,
-          interrupt: frame.interrupt,
-        })
-      }
+      runner.resolvePermission(frame.requestId, permissionDecision(frame))
       return
     }
     case 'interrupt': {
@@ -114,14 +117,15 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
     }
     case 'clear_context': {
       if (!runner.clearContext) {
-        throw new Error(`the ${runner.info().engine ?? 'claude'} engine cannot clear a conversation`)
+        throw new Error(`the ${engineOf(runner.info())} engine cannot clear a conversation`)
       }
       await runner.clearContext()
       return
     }
     case 'set_permission_mode': {
-      if (frame.mode === 'bypassPermissions' && ctx.options.disableBypassPermissions) {
-        throw new Error('bypassPermissions is disabled on this server (disableBypassPermissions)')
+      const refused = refusePermissionMode(frame.mode, { operator: access.operator, disableBypass: ctx.options.disableBypassPermissions })
+      if (refused) {
+        throw new Error(refused)
       }
       await runner.setPermissionMode(frame.mode)
       return
@@ -153,17 +157,10 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       if (frame.command.trim() === '') {
         throw new Error('shell command is empty')
       }
-      if (!runner.queueLocalCommand) {
-        throw new Error(`the ${runner.info().engine ?? 'claude'} engine cannot take shell output`)
+      if (!takesLocalCommands(runner)) {
+        throw new Error(`the ${engineOf(runner.info())} engine cannot take shell output`)
       }
-      const { shell, source } = await shells.spawn({ runner, command: frame.command, owner: 'user' })
-      try {
-        runner.queueLocalCommand(source)
-      } catch (error) {
-        // queueLocalCommand throws before it pushes, so without this the shell would run with no transcript row.
-        shells.kill(runner.id, shell.id)
-        throw error
-      }
+      await startShell(shells, { runner, command: frame.command, owner: 'user' })
       return
     }
     case 'shell_attach': {

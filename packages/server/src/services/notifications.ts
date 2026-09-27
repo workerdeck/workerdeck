@@ -7,7 +7,11 @@ export type SessionNotificationOptions = {
   attempts?: number
   retryDelayMs?: number
   decorateInfo?: (info: SessionInfo) => SessionInfo
+  // A throwing `onNotification`, or a webhook that failed every attempt. Delivery is best-effort either way.
+  onError?: (error: unknown, context: NotificationErrorContext) => void
 }
+
+export type NotificationErrorContext = { op: 'hook' | 'webhook'; sessionId: string }
 
 export class SessionNotifier {
   readonly #options: SessionNotificationOptions
@@ -90,7 +94,9 @@ export class SessionNotifier {
 
     try {
       this.#options.onNotification?.(notification)
-    } catch {}
+    } catch (error) {
+      this.#options.onError?.(error, { op: 'hook', sessionId: runner.id })
+    }
 
     if (!webhook || !wanted) {
       return
@@ -108,6 +114,7 @@ export class SessionNotifier {
   async #deliver(webhook: SessionWebhookConfig, notification: SessionNotification): Promise<void> {
     const attempts = this.#options.attempts ?? 3
     const baseDelay = this.#options.retryDelayMs ?? 500
+    let failure: unknown
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {
         const res = await fetch(webhook.url, {
@@ -118,10 +125,16 @@ export class SessionNotifier {
         if (res.ok) {
           return
         }
-      } catch {}
+        failure = new Error(`webhook answered HTTP ${res.status}`)
+      } catch (error) {
+        failure = error
+      }
       if (attempt < attempts - 1) {
         await new Promise((resolve) => setTimeout(resolve, baseDelay * 2 ** attempt))
       }
+    }
+    if (failure !== undefined) {
+      this.#options.onError?.(failure, { op: 'webhook', sessionId: notification.sessionId })
     }
   }
 }

@@ -1,10 +1,13 @@
 // Shared fakes for the gateway suites. Every one of these existed in two to four copies
 // before; `parkable-runner.ts` next door is the same idea for the parking suites.
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { vi } from 'vitest'
 import type WebSocket from 'ws'
 import type { Options, Query, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { Runner, SessionRunnerConfig } from '@workerdeck/core'
-import type { ServerFrame, SessionInfo } from '@workerdeck/protocol'
+import type { ServerFrame, SessionEvent, SessionEventBody, SessionInfo } from '@workerdeck/protocol'
 import type { WorkerServer } from '../src/index.ts'
 
 // Controllable stand-in for the Claude Agent SDK. `models` makes the fake query answer
@@ -165,8 +168,89 @@ export function fakeRunner(id: string, config: SessionRunnerConfig): Runner {
   }
 }
 
+// Gateways and state dirs torn down together after each test. `servers` is exposed so a test that closes one itself
+// can take it off the list first.
+export function gatewayFixture(prefix: string) {
+  const servers: WorkerServer[] = []
+  const dirs: string[] = []
+  const stateDir = async (): Promise<string> => {
+    const dir = await mkdtemp(join(tmpdir(), prefix))
+    dirs.push(dir)
+    return dir
+  }
+  const cleanup = async (): Promise<void> => {
+    for (const server of servers.splice(0)) {
+      await server.close()
+    }
+    for (const dir of dirs.splice(0)) {
+      await rm(dir, { recursive: true, force: true, maxRetries: 5 })
+    }
+  }
+  return { servers, stateDir, cleanup }
+}
+
 // Bind a server to an ephemeral loopback port and hand back both API roots.
 export async function listenOn(server: WorkerServer): Promise<{ base: string; wsBase: string }> {
   const { port } = await server.listen(0, '127.0.0.1')
   return { base: `http://127.0.0.1:${port}/v1`, wsBase: `ws://127.0.0.1:${port}/v1` }
+}
+
+// A runner whose log a test writes by hand: `emitAt` takes an explicit event timestamp, because some rules under test
+// order by event clock rather than arrival. `identity` is merged over the idle `info()`.
+export class ScriptedRunner implements Runner {
+  readonly id: string
+  readonly createdAt = Date.now()
+  readonly pendingApprovals = []
+  readonly config: SessionRunnerConfig
+  #identity: Partial<SessionInfo>
+  #events: SessionEvent[] = []
+  #listeners = new Set<(event: SessionEvent) => void>()
+  #seq = 0
+
+  constructor(id: string, config: SessionRunnerConfig, identity: Partial<SessionInfo> = {}) {
+    this.id = id
+    this.config = config
+    this.#identity = identity
+  }
+
+  async start(): Promise<void> {}
+  info(): SessionInfo {
+    return {
+      id: this.id,
+      status: 'idle',
+      cwd: this.config.cwd ?? '',
+      profile: this.config.profile,
+      createdAt: this.createdAt,
+      lastSeq: this.#seq,
+      pendingPermissionCount: 0,
+      ...this.#identity,
+    }
+  }
+  subscribe(listener: (event: SessionEvent) => void, afterSeq = 0): () => void {
+    for (const event of this.#events) {
+      if (event.seq > afterSeq) {
+        listener(event)
+      }
+    }
+    this.#listeners.add(listener)
+    return () => this.#listeners.delete(listener)
+  }
+  sendMessage(): void {}
+  setTitle(): void {}
+  resolvePermission(): boolean {
+    return false
+  }
+  async interrupt(): Promise<void> {}
+  async setPermissionMode(): Promise<void> {}
+  async setModel(): Promise<void> {}
+  fail(): void {}
+  close(): void {}
+
+  emitAt(body: SessionEventBody, ts = Date.now()): void {
+    const event = { ...body, seq: ++this.#seq, ts } as SessionEvent
+    this.#events.push(event)
+    for (const listener of this.#listeners) {
+      listener(event)
+    }
+  }
 }

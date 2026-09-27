@@ -10,7 +10,16 @@ import {
   type ShellInfo,
   type ShellOwner,
   type ShellStatus,
+  errorMessage,
 } from '@workerdeck/protocol'
+import {
+  defineToolFamily,
+  globalSlot,
+  invalidArguments,
+  lateBoundDirectory,
+  type GatewayToolOutput,
+  type GatewayToolSpec,
+} from './gateway-tools.ts'
 
 export type ShellSummary = {
   id: string
@@ -77,7 +86,7 @@ export const SHELL_WRITE_REFUSAL = 'the agent may not start, type into or kill s
 
 export const SHELL_KEYS_MAX = 64
 
-const SHELL_DIRECTORY_SLOT = Symbol.for('workerdeck.shells.directory')
+const SHELL_DIRECTORY_SLOT = globalSlot<ShellDirectory>('workerdeck.shells.directory')
 
 const CTRL_LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
@@ -256,17 +265,67 @@ export const SHELL_TOOL_SHAPES = {
 
 export type ShellToolName = keyof typeof SHELL_TOOL_SHAPES
 
-export const SHELL_TOOL_NAMES = Object.keys(SHELL_TOOL_SHAPES) as ShellToolName[]
-
 export const SHELL_READ_TOOL_NAMES: readonly ShellToolName[] = ['shell_list', 'shell_read']
 
 export const SHELL_WRITE_TOOL_NAMES: readonly ShellToolName[] = ['shell_run', 'shell_write', 'shell_kill', 'shell_request_write']
 
-export type ShellToolSpec = { name: ShellToolName; description: string; inputSchema: Record<string, unknown> }
+export type ShellToolSpec = GatewayToolSpec<ShellToolName>
 
-export type ShellToolOutput = { text: string; isError: boolean }
+export type ShellToolOutput = GatewayToolOutput
 
 export type ShellToolOptions = { write?: boolean }
+
+const SHELL_TOOLS = defineToolFamily<typeof SHELL_TOOL_SHAPES, ShellDirectory>(SHELL_TOOL_SHAPES, {
+  shell_list: async (shells, from) => {
+    const rows = await shells.list(from)
+    return { text: rows.length ? JSON.stringify(rows, null, 2) : 'No shell commands have run in this session.', isError: false }
+  },
+  shell_read: async (shells, from, { shellId, view, tail, waitFor, timeoutMs }) => {
+    const result = await shells.read(from, shellId, { tail: clampShellTail(tail), view, waitFor: needles(waitFor), timeoutMs })
+    if (!result) {
+      return noSuchShell(shellId)
+    }
+    return { text: shellReadText(result), isError: false }
+  },
+  shell_run: async (shells, from, { command, waitFor, timeoutMs }) => {
+    const result = await shells.run(from, { command, waitFor: needles(waitFor), timeoutMs })
+    return { text: shellReadText(result, 'started'), isError: false }
+  },
+  shell_write: async (shells, from, { shellId, data, keys, waitFor, timeoutMs }) => {
+    if (!data && !keys) {
+      return invalidArguments('shell_write', 'give data, keys or both')
+    }
+    try {
+      encodeShellKeys(keys ?? [])
+    } catch (error) {
+      return invalidArguments('shell_write', errorMessage(error))
+    }
+    const result = await shells.write(from, shellId, { data, keys, waitFor: needles(waitFor), timeoutMs })
+    if (!result) {
+      return noSuchShell(shellId)
+    }
+    return { text: shellReadText(result, 'typed'), isError: false }
+  },
+  shell_kill: async (shells, from, { shellId }) => {
+    const result = await shells.kill(from, shellId)
+    if (!result) {
+      return noSuchShell(shellId)
+    }
+    return { text: shellKillText(result), isError: false }
+  },
+  shell_request_write: async (shells, from, { shellId }) => {
+    const shell = await shells.grant(from, shellId)
+    if (!shell) {
+      return noSuchShell(shellId)
+    }
+    return {
+      text: `granted: you may now type into and kill shell #${shell.ordinal} ${shell.id} ($ ${shell.command}) until it ends or the user revokes it`,
+      isError: false,
+    }
+  },
+})
+
+export const SHELL_TOOL_NAMES = SHELL_TOOLS.names
 
 // The tools a session is offered: the two read tools always, the three write tools only where the agent may write.
 export function shellToolNames(write: boolean): ShellToolName[] {
@@ -274,14 +333,11 @@ export function shellToolNames(write: boolean): ShellToolName[] {
 }
 
 export function shellToolSpecs(write = false): ShellToolSpec[] {
-  return shellToolNames(write).map((name) => {
-    const { description, shape } = SHELL_TOOL_SHAPES[name]
-    return { name, description, inputSchema: z.toJSONSchema(z.object(shape)) as Record<string, unknown> }
-  })
+  return SHELL_TOOLS.specs(shellToolNames(write))
 }
 
 export function isShellToolName(name: string): name is ShellToolName {
-  return Object.hasOwn(SHELL_TOOL_SHAPES, name)
+  return SHELL_TOOLS.is(name)
 }
 
 export function isShellWriteToolName(name: string): boolean {
@@ -413,82 +469,11 @@ export async function runShellTool(
   if (isShellWriteToolName(name) && options.write !== true) {
     return { text: SHELL_WRITE_REFUSAL, isError: true }
   }
-  try {
-    switch (name) {
-      case 'shell_list': {
-        const rows = await shells.list(from)
-        return { text: rows.length ? JSON.stringify(rows, null, 2) : 'No shell commands have run in this session.', isError: false }
-      }
-      case 'shell_read': {
-        const input = z.object(SHELL_TOOL_SHAPES.shell_read.shape).safeParse(args ?? {})
-        if (!input.success) {
-          return invalidArguments(name, input.error)
-        }
-        const { shellId, view, tail, waitFor, timeoutMs } = input.data
-        const result = await shells.read(from, shellId, { tail: clampShellTail(tail), view, waitFor: needles(waitFor), timeoutMs })
-        if (!result) {
-          return { text: `no such shell: ${input.data.shellId}`, isError: true }
-        }
-        return { text: shellReadText(result), isError: false }
-      }
-      case 'shell_run': {
-        const input = z.object(SHELL_TOOL_SHAPES.shell_run.shape).safeParse(args ?? {})
-        if (!input.success) {
-          return invalidArguments(name, input.error)
-        }
-        const { command, waitFor, timeoutMs } = input.data
-        const result = await shells.run(from, { command, waitFor: needles(waitFor), timeoutMs })
-        return { text: shellReadText(result, 'started'), isError: false }
-      }
-      case 'shell_write': {
-        const input = z.object(SHELL_TOOL_SHAPES.shell_write.shape).safeParse(args ?? {})
-        if (!input.success) {
-          return invalidArguments(name, input.error)
-        }
-        const { shellId, data, keys, waitFor, timeoutMs } = input.data
-        if (!data && !keys) {
-          return { text: `invalid arguments for ${name}: give data, keys or both`, isError: true }
-        }
-        try {
-          encodeShellKeys(keys ?? [])
-        } catch (error) {
-          return { text: `invalid arguments for ${name}: ${error instanceof Error ? error.message : String(error)}`, isError: true }
-        }
-        const result = await shells.write(from, shellId, { data, keys, waitFor: needles(waitFor), timeoutMs })
-        if (!result) {
-          return { text: `no such shell: ${shellId}`, isError: true }
-        }
-        return { text: shellReadText(result, 'typed'), isError: false }
-      }
-      case 'shell_kill': {
-        const input = z.object(SHELL_TOOL_SHAPES.shell_kill.shape).safeParse(args ?? {})
-        if (!input.success) {
-          return invalidArguments(name, input.error)
-        }
-        const result = await shells.kill(from, input.data.shellId)
-        if (!result) {
-          return { text: `no such shell: ${input.data.shellId}`, isError: true }
-        }
-        return { text: shellKillText(result), isError: false }
-      }
-      case 'shell_request_write': {
-        const input = z.object(SHELL_TOOL_SHAPES.shell_request_write.shape).safeParse(args ?? {})
-        if (!input.success) {
-          return invalidArguments(name, input.error)
-        }
-        const shell = await shells.grant(from, input.data.shellId)
-        if (!shell) {
-          return { text: `no such shell: ${input.data.shellId}`, isError: true }
-        }
-        return {
-          text: `granted: you may now type into and kill shell #${shell.ordinal} ${shell.id} ($ ${shell.command}) until it ends or the user revokes it`,
-          isError: false,
-        }
-      }
-    }
-  } catch (error) {
-    return { text: error instanceof Error ? error.message : String(error), isError: true }
-  }
+  return SHELL_TOOLS.run(shells, from, name, args)
+}
+
+function noSuchShell(shellId: string): ShellToolOutput {
+  return { text: `no such shell: ${shellId}`, isError: true }
 }
 
 function needles(waitFor: string | string[] | undefined): string[] | undefined {
@@ -496,13 +481,6 @@ function needles(waitFor: string | string[] | undefined): string[] | undefined {
     return undefined
   }
   return typeof waitFor === 'string' ? [waitFor] : waitFor
-}
-
-function invalidArguments(name: string, error: z.ZodError): ShellToolOutput {
-  return {
-    text: `invalid arguments for ${name}: ${error.issues.map((issue) => `${issue.path.join('.') || 'input'}: ${issue.message}`).join('; ')}`,
-    isError: true,
-  }
 }
 
 export function shellReadText(result: ShellReadResult, verb?: 'started' | 'typed'): string {
@@ -552,31 +530,14 @@ function shellState(shell: ShellSummary): string {
   return `ended (${shell.endReason ?? 'exit'})`
 }
 
-// The one directory in the process, installed by the gateway and read by every runner through this handle. A hot
-// reload keeps the old generation's runners alive with the config they were born with; resolving the directory per
-// call, rather than capturing it, is what lets a carried session keep reaching the registry that now holds its shells.
 export function installShellDirectory(directory: ShellDirectory | undefined): void {
-  ;(globalThis as Record<symbol, unknown>)[SHELL_DIRECTORY_SLOT] = directory
+  SHELL_DIRECTORY_SLOT.install(directory)
 }
 
 export function installedShellDirectory(): ShellDirectory | undefined {
-  return (globalThis as Record<symbol, unknown>)[SHELL_DIRECTORY_SLOT] as ShellDirectory | undefined
+  return SHELL_DIRECTORY_SLOT.installed()
 }
 
-export function shellDirectoryHandle(): ShellDirectory {
-  const resolve = (): ShellDirectory => {
-    const directory = installedShellDirectory()
-    if (!directory) {
-      throw new Error(SHELL_REFUSAL)
-    }
-    return directory
-  }
-  return {
-    list: async (from) => resolve().list(from),
-    read: async (from, shellId, options) => resolve().read(from, shellId, options),
-    run: async (from, options) => resolve().run(from, options),
-    write: async (from, shellId, options) => resolve().write(from, shellId, options),
-    kill: async (from, shellId) => resolve().kill(from, shellId),
-    grant: async (from, shellId) => resolve().grant(from, shellId),
-  }
+export function shellDirectoryHandle(own?: () => ShellDirectory | undefined): ShellDirectory {
+  return lateBoundDirectory<ShellDirectory>(['list', 'read', 'run', 'write', 'kill', 'grant'], SHELL_DIRECTORY_SLOT, own, SHELL_REFUSAL)
 }

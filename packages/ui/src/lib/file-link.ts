@@ -1,3 +1,5 @@
+import { resolvePosix } from '@workerdeck/protocol'
+
 export type FileLink = {
   path: string
   line?: number
@@ -45,26 +47,11 @@ export function parseFileLink(href: string | undefined, cwd: string | undefined)
     return undefined
   }
 
-  const path = target.startsWith('/') ? normalize(target) : cwd ? normalize(`${cwd}/${target}`) : undefined
+  const path = resolvePosix(target, cwd)
   return path ? { path, ...(line === undefined ? {} : { line }) } : undefined
 }
 
 function readLine(value: string | undefined): number | undefined {
   const parsed = value === undefined ? Number.NaN : Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
-}
-
-function normalize(path: string): string {
-  const out: string[] = []
-  for (const part of path.split('/')) {
-    if (part === '' || part === '.') {
-      continue
-    }
-    if (part === '..') {
-      out.pop()
-      continue
-    }
-    out.push(part)
-  }
-  return `/${out.join('/')}`
 }

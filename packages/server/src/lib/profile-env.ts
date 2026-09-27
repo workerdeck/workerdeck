@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import type { ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
@@ -7,8 +7,8 @@ export function isProviderProfile(profile: ProfileInfo): boolean {
   return profile.engine === 'provider'
 }
 
-export function engineOf(profile: ProfileInfo | undefined): ProfileEngine {
-  return profile?.engine ?? 'claude'
+export function engineOf(source: { engine?: ProfileEngine } | undefined): ProfileEngine {
+  return source?.engine ?? 'claude'
 }
 
 export function cliConfigDir(env: Record<string, string | undefined>): string {
@@ -33,19 +33,6 @@ export function detectDefaultProfiles(env: Record<string, string | undefined> = 
     detected.push({ name: 'codex', engine: 'codex', codexHome: codex })
   }
   return detected
-}
-
-export function canonicalDir(path: string): string {
-  try {
-    return realpathSync(path)
-  } catch {
-    return resolvePath(path)
-  }
-}
-
-// Skipping the pin is load-bearing: CLAUDE_CONFIG_DIR set at all moves the CLI off the macOS Keychain.
-export function claudeSessionEnv(profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined> {
-  return canonicalDir(profile.configDir!) === canonicalDir(cliConfigDir(base)) ? base : { ...base, CLAUDE_CONFIG_DIR: profile.configDir! }
 }
 
 export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {

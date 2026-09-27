@@ -10,7 +10,10 @@ stamped with a monotonic `seq`, plus a small command set (`SessionCommand`); cli
 WebSocket, optionally replaying from a known `seq`, and drive the session with commands. API
 message content is modelled structurally (`ApiMessage`) so a client can render a transcript without
 the Agent SDK. Dependency-free, browser-safe, depends
-on nothing and everything depends on it. Breaking → bump `PROTOCOL_VERSION`, which is **1**:
+on nothing and everything depends on it. Two helpers ride along because every client needs them to agree:
+`errorMessage(e, fallback?)` (an `Error`'s message, else the fallback, else `String(e)`) and
+`resolvePosix(target, cwd)` (a file link's normalized absolute path, or nothing for a relative one
+before the cwd is known; the dashboard's file links and the extension's both resolve through it). Breaking → bump `PROTOCOL_VERSION`, which is **1**:
 it was collapsed from 7 before the public launch, the counter having been climbing through a
 period when every consumer was rebuilt from this repo anyway and nothing in the wild spoke an
 older one. **From the public launch it is locked** - after that a bump is a real promise to
@@ -32,8 +35,8 @@ for a minute was ticking a badge 6, 7, 8 with nothing yet said. A successful `tu
 scores zero too - it already carried its own prose, and counting both double-counts every
 answer. The two numbers are **not interchangeable**: `activityCount` stays "has anything
 happened at all", which is what sorting and dormancy read; `proseCount` is "is there something
-to read". Purely additive - an optional field an older client ignores and a newer one falls
-back from - so deliberately **no `PROTOCOL_VERSION` bump**, the 0.18.0 precedent. `SessionInfo.epoch`
+to read". Purely additive - an optional field an older client ignores - so deliberately
+**no `PROTOCOL_VERSION` bump**, the 0.18.0 precedent. `SessionInfo.epoch`
 is the third rule of this kind, and the shortest: **a `seq` only means anything in the log it was
 numbered in.** A dormant wake starts the log again from zero, so anything that keeps a seq across
 one - a push on a lock screen, a cached tool-result address - must carry the epoch beside it and
@@ -41,8 +44,9 @@ refuse a mismatch; absent on either side means "same log", which is what keeps t
 `context_compacted` is the fourth: the **same uuid is emitted twice**, once with `pending` while
 the engine summarises and once without it when the boundary lands, and a reader upserts on it
 rather than appends - one compaction is one row, whatever the engine underneath. `unseenCount`
-walks prose → rows → turns so a gateway without the field badges exactly as it did before, and reads a watermark with no `prose` as *caught up* - the alternative badges
-every previously-visited session with its entire history the first time it polls. A **subagent's own messages score
+diffs prose alone (`proseCount` is in every 1.x gateway, so there is no rows or turns fallback; a
+record without it badges nothing), and reads a watermark persisted with no `prose` as *caught up* -
+the alternative badges every previously-visited session with its entire history the first time it polls. A **subagent's own messages score
 zero** (any event carrying a `parentToolUseId`): they render *inside* the `Task` call that
 spawned them, which is itself a counted row, and one Task can outnumber everything a person
 typed that day - a badge is a promise about what is on screen. It is deliberately not the
@@ -162,7 +166,7 @@ is otherwise **attach-only** (it exists on the wire only as `parentToolUseId`, r
 the reducer), and a sessions list never attaches, so a list could not know a session was running
 six agents inside one turn. A **runner-owned rollup computed at read time**, exactly
 `pendingPermissionCount`'s shape - which is what puts it on the REST list, the attach snapshot
-and parking snapshots for free - folded in the claude runner's `#emit`, the one chokepoint, so a
+and parking snapshots for free - folded in the claude runner's `RunnerCore` `observe` hook, the one chokepoint, so a
 dormant rebuild reconstructs it from the resume backfill with no second path. Three rules that
 are bugs if dropped: `status` is the sub-agent's **own** `tool_result.is_error`, which is now also
 what `taskFailed` draws the `Task` row with - it had been "or any child's", and the argument made
@@ -264,7 +268,7 @@ name when the list is already grouped by project, i.e. where in the project the 
 nothing at all at the root, and
 the scope-containment rule where a gateway-tagged root scopes only that gateway and an
 untagged one only loopback), and `watermarks.ts` is the **unread model** (monotonic marks
-behind a `WatermarkStore` seam, and `unseenCount`'s rows-not-turns arithmetic). They are
+behind a `WatermarkStore` seam, and `unseenCount`'s prose arithmetic). They are
 rules, not preferences: the extension's unread status-bar item counts the *same* rows its
 list shows, so a client that filtered differently would announce work it is hiding. Tests live
 in `packages/react/test/session-list.test.ts` + `watermarks.test.ts` (protocol has no
@@ -437,7 +441,7 @@ over its `codex app-server` JSON-RPC surface: one child per *session* held acros
 hand-rolled NDJSON client with zero new deps, token streaming, interactive approvals over the
 server→client ask channels (granular policy under `experimentalApi`, no fallback - a codex
 command approval is an *escalation after a sandbox refusal*, see `docs/GOTCHAS.md` §Codex),
-complete child env always - a spawn env *replaces*, never merges; and the `ThreadItem` union in
+complete child env always - a spawn env *replaces*, never merges; and the `AppServerItem` union in
 `engines/codex/types.ts` must cover what the binary emits, because an unmapped item is
 **invisible**, not merely unstyled; and `skills/list`'s per-skill `path` is kept in a private
 name-to-path map so a `$name` mention in the user text becomes a `{ type: 'skill', name, path }`
@@ -517,9 +521,17 @@ shapes as zod (`PEER_TOOL_SHAPES`, the one source both the SDK's `tool()` and co
 `dynamicTools` are derived from), `runPeerTool` (the dispatcher every engine calls, which answers
 errors as tool output and never throws), `peerMessageEnvelope` (what the model reads; the event
 keeps the bare text plus `origin`) and `recentLines` (the peek digest: top-level prose and
-prompts only). `Runner.sendMessage` grew a third argument, `{ origin }`, for the delivery. The
-directory reaches a runner as `peerDirectoryHandle()`, resolved per call from a process-wide slot,
-which is what keeps a hot-reload-carried runner pointed at the live registry.
+prompts only). Both it and `shells.ts` are one `defineToolFamily(shapes, handlers)` each
+(`src/lib/gateway-tools.ts`: argument validation, the `invalid arguments for` text, the
+never-throw wrapper and the JSON-schema specs, written once), and both slots are a
+`globalSlot`/`lateBoundDirectory` pair from the same file. `src/lib/session-tools.ts` is what the
+engines consume: `sessionTools` (the offered list, peers before shells, with a bound `run`), which
+the claude MCP server and the provider's tool context map in one place each, `sessionToolSpecs`
+for codex's `dynamicTools`, and `runSessionTool`, which resolves by name rather than by offer so a
+write tool the session does not hold still answers with `SHELL_WRITE_REFUSAL`. `Runner.sendMessage` grew a third argument, `{ origin }`, for the delivery. The
+directory reaches a runner as `peerDirectoryHandle(own)`, resolved per call: its own server's
+directory first, the process-wide slot once that server has closed, which keeps two servers in one
+process apart and a hot-reload-carried runner pointed at the live registry.
 
 `src/lib/shells.ts` is the same file for shells: `ShellDirectory` (`list`, `read`, `run`, `write`,
 `kill`, caller id first), `SHELL_TOOL_SHAPES` for the two read tools and the three write tools,
@@ -551,6 +563,50 @@ by construction: the field is not on `CreateSessionRequest`, the gateway 400s th
 function form cannot cross JSON at all. Invariants, and why the text is never persisted, in
 `docs/GOTCHAS.md` §Host instructions.
 
+`src/lib/runner-core.ts` is the lifecycle the three runners used to hand-copy: `RunnerCore` owns
+the `EventLog`, the `SubscriberSet`, the status machine, the `fail`/`close` protocol, the
+`CostLedger` (`cost: 'reconcile'` for claude, additive otherwise), the pending approvals on
+`PendingRequestRegistry`, the policy answer to a disabled question (`resolveQuestionByPolicy`) and
+the one `turn_result` shape codex and the provider report (`emitTurnResult`). The three runners
+extend `EngineRunner` (`src/lib/engine-runner.ts`), which holds the core, the config and the
+`LocalCommandQueue` as protected members and implements everything that was a one-line forward to
+them: `status`, `lastSeq`, `pendingApprovals`, `subscribe`, `eventAt`, `resolvePermission`,
+`carryCost`/`costState`, `fail`, `setTitle`, `queueLocalCommand` (behind `assertAccepting`, which
+the provider overrides to refuse a parked session first), the `user_message` echo, the approval
+deadline and the common `info()` fields (`baseInfo`). An engine overrides behaviour only;
+`coreHooks()` is how it hands `RunnerCore` its hooks, and it runs from the base constructor, so a
+hook may close over the engine's own fields but never read them there. A runner raises an approval
+with `requestApproval(request, { timeoutMs, wireId, respond, after })`: `respond` answers the engine and
+returns what `permission_resolved` reports (codex rewrites an allow it cannot express into a policy
+deny there), `after` runs the engine's follow-up (status, dispatch, interrupt). `resolveByPolicy`
+is the requested-then-resolved pair for a card nobody is asked about. Engine differences are
+`RunnerCoreHooks`, not forks of the skeleton; the invariants are in `docs/GOTCHAS.md` §Engine
+adapters. Every runner config extends `EngineRunnerConfig` (`src/runner-interface.ts`: the wire
+request plus `epoch`, `pricing`, `env`, `instructions`, `defaultApprovalTimeoutMs`, `peers`,
+`shells`, `shellAgentWrite`, `createdByOperator`), and `EngineAdapter<C>` types each adapter's
+`createRunner` on its own config (`claudeAdapter` on `SessionRunnerConfig`, `codexAdapter` on
+`CodexAdapterConfig`), so no adapter casts. The optional `sessionEnv(profile, base)` hook is
+where an engine pins its profile into the child env (the claude adapter's `CLAUDE_CONFIG_DIR`,
+`engines/claude/session-env.ts`).
+
+The codex engine is split by concern: `codex/runner.ts` keeps the connection, the thread and turn
+lifecycle, steering, notifications routing and the server-request door; `codex/policy.ts` is the
+sandbox/approval-policy/reviewer tables by permission mode plus the `config/read` workspace-write
+block; `codex/approvals.ts` is the ask channels (`APPROVAL_CHANNELS`, `SHELL_WRITE_CHANNEL`) and
+`answerApproval`, the one place a `PermissionDecision` becomes a codex response; `codex/items.ts`
+maps `ThreadItem`s to transcript events through an `ItemSink`, holds no connection and does no
+I/O, and is unit-tested on its own (`test/codex-items.test.ts`);
+`codex/history.ts` completes a partial resume page with `thread/read` and replays turns through
+the same mapper; `codex/skills.ts` is `skills/list` folding and `$name` mention expansion;
+`codex/mcp.ts` is the MCP status projection. The provider engine's turn body is
+`provider/turn.ts`: `TurnStream` folds a `fullStream` into deltas, assistant messages and
+synthetic tool results (and `flushPartial` keeps what an interrupted turn had said), and
+`addUsage`/`wireUsage` are the one usage accumulator `#runTurn` and `generateDigest` share. Core
+depends on no model provider package: `@ai-sdk/anthropic`, `@ai-sdk/openai` and
+`@ai-sdk/moonshotai` were never imported by it and are declared by the host that uses them
+(`apps/embedded`, the root `examples/`). `@ai-sdk/mcp` stays a dependency, loaded lazily by
+`connectMcpTools`.
+
 ## `packages/sandbox`
 
 untrusted-code boundary: QuickJS-NG WASM guest, in-memory map VFS (not a
@@ -560,7 +616,10 @@ browser share one guest. The VFS is **per call** - seeded from the task's docume
 when the call ends, and reachable from the guest only through the by-value bridge (`vfs.read` /
 `write` / `list` over the `__host_vfs_*` host functions). The tab-side tool host builds one per
 bridged call, which is the reason it must stay a plain path→content map: a node-flavored fs
-emulation drags `node:buffer` in with it, and that package must run unpolyfilled.
+emulation drags `node:buffer` in with it, and that package must run unpolyfilled. It is also
+**capped**, since the guest's memory limit bounds one string and not the host-side copies:
+`createVfs(seed, limits)` and `runScript`'s `maxHostStringBytes`/`maxLogBytes` (defaults and
+semantics in `docs/GOTCHAS.md` §Tool trust & the sandbox).
 
 **QuickJS is held at `^0.31.0` on purpose - 0.32.0 is broken for us, and the caret hides it.**
 `quickjs-emscripten-core` and the two `@jitl/quickjs-*-asyncify` variants move as one set (0.32.0
@@ -584,7 +643,10 @@ this - which is exactly how it was found.
 
 `JobQueue` + `QueueAdapter` (in-memory bundled; `claimNext` must stay atomic
 and skip future `nextRunAt`). Concurrency, token budgets, webhooks, retries, watchdog, retention.
-Jobs are one-shot, but a run that parks frees its slot and stops its duration clock. `#start`
+Jobs are one-shot, but a run that parks frees its slot and stops its duration clock. The pump,
+wake timers, `pause()`/`resume()`, cancel-during-start and the `onError(error, { jobId, phase })`
+report are described under `docs/ARCHITECTURE.md` §Job lifecycle; an adapter may implement the
+optional `nextRunAt()` so an idle pump need not `list()` to find its next wake-up. `#start`
 projects the stored `session` block through protocol's `pickCreateSessionRequest` before
 `buildRunnerConfig` sees it: the HTTP door stores a projected block, but a durable adapter can
 hold one written before it did, and the record is the second place a smuggled key can live.
@@ -623,9 +685,60 @@ one number the gateway cannot discover.
 
 **Pricing overrides** (`options.pricing.overrides`, keyed by canonical model id, each a full
 `ModelRate` in USD per million tokens) are merged over `DEFAULT_PRICING` once at start by
-`setPricingOverrides`; malformed entries are dropped with one warning. The accepted subset rides
+`mergePricing`, per server instance: the table is passed explicitly to the spend ledger and, as
+`config.pricing`, to every runner's `CostLedger`, so two gateways in one process never price with
+each other's rates. `setPricingOverrides` (protocol) is a deprecated shim over the process-wide
+table that a call naming no table still falls back to; the gateway no longer writes it. Malformed
+entries are dropped with one warning. The accepted subset rides
 `AttachedFrame.pricingOverrides` so every client merges the same table and prices for itself; the
 bundled table itself never goes over the wire.
+
+**A non-operator principal cannot reach host authority through a create request**
+(`refuseHostAuthority` in `routes/create-vet.ts`, run by both create doors after the profile
+resolves; `set_permission_mode` over the socket applies the same mode rule). "Non-operator" is the
+server's own `isOperator`: a scoped principal, any principal under a declared `authorizeSession`
+that does not say `operator: true`, or one that says `operator: false`. For those callers, all 403:
+a **claude or codex profile** (the host engines, including the unnamed `default`) unless the
+principal's `allowedProfiles` names it explicitly; `bypassPermissions`, `dontAsk` and
+`allowDangerouslySkipPermissions`; any `settingSources` (they load hooks from the host); any
+`mcpServers` entry that is not `http`/`sse` (stdio runs a command); and `resume`/`forkSession` of an
+SDK session id that no live session the caller can see carries. Resume ownership is checked against
+the live registry only, so a non-operator cannot resume a parked session's SDK id by create; it
+wakes that one by attaching. The reference embedding (`apps/embedded`) is unaffected: it runs a
+provider profile with `allowedProfiles: ['wiki-agent']`. A tenant client with the operator key
+(`packages/cli`, the extension, iOS) is unscoped and untouched.
+
+**JSON bodies must say so.** `readJsonBody` answers 415 for a non-empty body without
+`application/json` (or a `+json` type), and for any declared non-JSON type: a cross-site page can
+send `text/plain` or a typeless Blob without a preflight, never `application/json`. An empty body may
+omit the header, which is what every in-repo client does for a bodiless POST. An oversized body is
+413 rather than the 500 it used to fall through to (`HttpError`, mapped in `server.ts`'s request
+wrapper, so a `routes/table.ts` handler or a route parser can throw one). The route handlers lean on that
+mapping for every refusal: `lib/http.ts`'s `fail(status, error)` throws an `HttpError` and
+`requireMethod(req, ...methods)` is the 405, both answering the same `{ error }` body a direct
+`json(...)` would. A throw inside a handler's own `try` is caught by that `try`, so a guard never
+sits inside one that answers differently (`sdk-sessions.ts` checks its roots before its `try` for
+that reason). `routes/session-lookup.ts` resolves the runner-or-parked record once
+(`resolveSession`, the uniform 404) and `requireLive` is the 409 for an arm that needs a live
+runner; `routes/sessions.ts` dispatches item routes through a table keyed by the parsed route's
+`kind`, and `routes/fs.ts` does the same for `/fs/*`. Refusals in the create ladder are one
+`Refusal = { status, error }` chained with `??`; `lib/permissions.ts` holds the one
+operator-only-mode rule (`refusePermissionMode`) the create door, the bypass policy and
+`set_permission_mode` share, and the allow/deny mapping the REST and socket approval paths share.
+
+Every JSON file the gateway or the CLI owns is written through `lib/atomic-file.ts`
+(`writeJsonAtomic`/`writeFileAtomic`, exported from the package for `packages/cli`): temp file,
+`chmod`, rename, files `0600` and directories `0700`. The spend ledger and the profile store
+used to write with default modes, and the APNs registries used to write in place; all of them
+now go through the same helper. Client
+frames on the socket are capped at 4 MiB (`maxPayload`): every frame is a command or a bridged
+result, and images reach the gateway through the attachments route instead.
+
+The tool-result image route (`GET …/result?part=N`) serves the bytes a tool produced under the
+media type the tool claimed, so only `image/png`, `image/jpeg`, `image/gif` and `image/webp` keep
+theirs; anything else, SVG included, goes out as `application/octet-stream`, and every response
+carries `untrustedDownloadHeaders` plus `Content-Security-Policy: sandbox`. The UI loads these
+through `fetch` into a blob URL, which none of those headers affect.
 
 Plus: optional `/jobs` + `/queue` routes, profiles (+ `profileStore` CRUD),
 `GET /sessions/:id/files`,
@@ -770,6 +883,11 @@ architectural question the embedder should be asked. The per-call form lets one 
 `clientTools` on `SessionPanel` (or `toolHost.clientTools`) is the client half of a
 client-registered tool - the server declares the schema, the client handles the call.
 
+**`onDiagnostic(error, where)`** receives the errors the gateway swallows because nobody is waiting on
+them: a stale-usage refresh, a `/queue/ws` stats frame, the shell flush at close, a credential probe
+that threw, and (unless `notifications.onError` is set) a throwing `onNotification` or a webhook
+that failed every attempt. Silent by default; it never changes control flow.
+
 `createEngineRunner` may be async - assembly that has to await (a per-session MCP connect, a
 credential lookup) belongs there with `onClose` as the disposer, and a rejection fails the create:
 the session POST answers 500 with the message, a job goes straight to `failed`.
@@ -779,7 +897,8 @@ maxRunningPerSession?, agentWrite? }` (default off, no wall clock, agent read-on
 place this package spawns a shell** (`services/process-tree.ts` runs `ps` synchronously at kill time to find a shell's
 descendants, and nothing else) - everything else that runs a process belongs to an engine. It
 backs `$` shell mode:
-`services/shells.ts` is the shell registry, and every `$` is a PTY (`@lydell/node-pty`, an optional
+`services/shells.ts` is the shell registry (split across `shell-*.ts` beside it; the map is in
+`docs/GOTCHAS.md` § Shell sessions), and every `$` is a PTY (`@lydell/node-pty`, an optional
 dependency) in the session's cwd with a tracked `ShellInfo` record, an on-disk artifact under
 `artifactDir` and a `LocalShellSource` handed to `runner.queueLocalCommand`, which draws and redraws
 one transcript row. Records reconcile by generation on boot, never by pid. `routes/shells.ts` serves
@@ -810,7 +929,7 @@ from every session. `createSessionFactory` stamps `peers` into the config in `bu
 one chokepoint, so parked and dormant rebuilds get it too, and `session-store.ts` strips it from
 records. Invariants in `docs/GOTCHAS.md` §Peer messaging.
 
-`services/shells.ts` also builds the server's `ShellDirectory` (`createShellDirectory(registry, {
+`services/shell-directory.ts` (re-exported from `shells.ts`) builds the server's `ShellDirectory` (`createShellDirectory(registry, {
 runnerFor })`), reading the artifact's text view and slicing the trailing lines, so raw bytes never
 reach a model. The registry's maps are already keyed by session, so scope is structural rather than
 a check. Its `run` spawns through the same `registry.spawn` with `owner: 'agent'` and queues the
@@ -876,7 +995,9 @@ and the gateway's `machineId` are for (`docs/CLIENTS.md` § the extension's file
 already existed (iOS `Host.apiURL`, the extension's port) and a third was coming. `hostAuth` is
 browser-shaped on purpose: a Node host such as the extension sends the key as a header on both
 transports and needs none of it. Should a gateway ever mint short-lived WS tickets, only the body
-of `buildWsUrl` changes and callers do not.
+of `buildWsUrl` changes and callers do not. Its `buildWsUrl` builds the query through the same
+`sessionWsUrl` (`src/ws-url.ts`) that `openSocket` uses and only appends the key: it once dropped
+`truncateResults` and `imageRefs`, so every keyed gateway the dashboard added replayed in full.
 ## `packages/react`
 
 headless: `useClaudeSession`, the pure transcript reducer
@@ -967,6 +1088,31 @@ the mirror of the Swift `PromptTokens`), and the browser tool host (`tool-host.t
 server-bridged calls in the tab. Companions must ride the hook's own `handle` - the bridge asks
 the first attached client, so a second handle sees nothing. `TranscriptState.capabilities` is
 always populated, and is what every surface renders from (see `docs/GOTCHAS.md`).
+
+`useClaudeSession`'s result object changes on every event, but its **actions never do**: `send`,
+`approve`, `deny`, `interrupt`, `clearContext`, `runShell`, `setPermissionMode`, `setModel` and
+`closeSession` are created once and route through the live handle, so a consumer can key memos on
+them without re-running per streamed token (that is what used to rebuild the panel's `/` list and
+fire `onVitals` on every delta). A shell row is marked `missing` **only on a 404** from the
+gateway: a network error or a 5xx leaves the row as it was, and `verifyShell` forgets a failed
+attempt so the next render may ask again, while a success or a 404 is recorded once per shell id.
+The stream-delta path finds its in-flight row by scanning from the tail, where it always is.
+
+`useAsync(load, deps, { enabled, pollMs })` is the one load-with-cancel every REST reader rides
+(`useSessionInfo`, the session info panel's files, `useMcpPanel`, the dashboard's profile page):
+a change of `deps` drops the previous answer, while `enabled` turning on, a poll and `reload` keep it
+until the next one lands, and an answer a newer request superseded is dropped by generation rather
+than by a per-effect `cancelled` flag. `setData` is there for a mutation that returns the new record.
+
+`useBookmarks(sessionKey)` is the one bookmark store for every web-technology host: item ids per
+session under `workerdeck.bookmarks.v1` (`BOOKMARKS_STORAGE_KEY`), with the key's format the
+host's own (`<hostId>:<sessionId>` on the dashboard, `<baseUrl>#<sessionId>` in the extension's
+webview, which is its own origin). Three things a naive copy gets wrong, which is why the two
+copies it replaced were merged here: **a toggle is read-modify-write against storage as it
+stands**, not against a snapshot taken at mount, and a `storage` event re-reads it, so two tabs
+never clobber each other; storage that throws (a webview can run with it denied) degrades to an
+in-memory map rather than to no bookmarks; and an unbookmarked session gets one frozen empty
+array, while a write to one session leaves every other session's array identity alone.
 
 Four `openFilesReducer` rules are the ones a naive tab strip gets wrong, and each is a bug someone
 hit. **Opening an already-open path never re-reads it** - it focuses the tab; re-reading silently
@@ -1059,7 +1205,9 @@ files) - each gated on the capability record, so one component is correct for ev
 menu, intents via `onOpenPanel`, live readings via `onVitals` (including `composerCommands`, the
 flattened `/` list a native host renders when it cannot run `mergeComposerRows` itself) (what lets external chrome
 render context/usage without a second attach - the tool bridge asks the first attached
-client). `statusSurface: 'external'` is the *separate* opt-out for the bar itself, for an
+client). `onVitals` fires only when a field of the record actually changes (a shallow compare
+against the last one sent), so a streamed token, which changes none of them, never reaches the
+host. `statusSurface: 'external'` is the *separate* opt-out for the bar itself, for an
 embedder whose chrome already has a status line (VS Code's window bar); it carries the `⋯`
 menu's only home, so combining it with `panelSurface: 'internal'` needs a **function**
 `header` to take the menu. `controlsSurface: 'external'` is the third: model and permission mode leave the composer
@@ -1109,6 +1257,16 @@ a stray required prop on either would break it silently. A registry also has no 
 sentinel to get wrong: the earlier shape returned `ReactNode | undefined`, where `null`, `false`
 and `''` all render nothing while passing `!== undefined`, so the natural
 `cond ? <Card/> : null` produced an approval nobody could answer.
+The two themes draw the same prompts from **one model each**, never two copies of the rules:
+`permissionPromptModel` (`lib/permission-prompt.ts`) owns the heading, the question line, the
+description and the three choices (a button label for the card, an option sentence for the
+terminal), and `useQuestionAnswers` (`lib/question-answers.ts`) owns selection, the answer
+string and submit readiness. The heading is the SDK's `title` first, the full prompt sentence it
+documents as the primary text, then `displayName`; the terminal's question line is therefore the
+generic `Do you want to proceed?` rather than a second copy of the title. A **single-select answer
+cannot be un-picked**: it is a radio, choosing again keeps it, and choosing `Other…` replaces the
+option rather than joining it (the terminal advances on choice, so an un-pick there would have sent
+an empty answer). iOS mirrors both rules by hand in `PermissionPromptView` and `QuestionPromptView`.
 `reveal={{ toolUseId, nonce }}` is the seam a *list* needs: sub-agent work is nested inside the
 `Task` row that spawned it, so "open that sub-agent" can only mean "take me to its row". A prop
 rather than a ref (the shape `jumpToRecapRef` uses) because the asker is outside the webview and
@@ -1228,8 +1386,8 @@ encrypted blob on the wire), so the brief row is simply not drawn there. **None 
 without
 `forwardSubagentText`** (see `packages/core`): a nested transcript built on the SDK's default
 stream is a list of tool names. `terminalBlocks` is the
-one implementation of it: the virtualized shell folds each side of the boundary through the same
-function the plain `TerminalTranscript` calls, and it is what the virtualizer counts, so a run is
+one implementation of it: the virtualized shell folds each side of the boundary through it, and it
+is what the virtualizer counts, so a run is
 one measured row rather than N. The summary string lives in `tool-run.ts` and the collapsed result
 preview in `result-preview.ts` for the same reason: `height.ts` wraps **those exact strings** to
 predict the row's height with no DOM, so two spellings would be two different heights. Expanding is the theme's one piece of state and it has three
@@ -1302,7 +1460,13 @@ strength a normal working session paints the rail red and the two errors that ac
 something stop standing out. Its predicate is `status === 'failed' || result?.isError` - the
 same disjunction the row reddens with and the recap counts by, and both spellings are needed
 (an out-of-loop execution failure sets only the status; an engine can flag `is_error` on a
-call the reducer has not settled). A mark is its row's extent at rail
+call the reducer has not settled). It marks only when the call is its **row's outcome** (`rowOutcomes`: the last
+frame-level call sharing its row), the rule above. **Both rails are one module**: the card
+`Scrubber` and `TerminalScrubber` build marks with `buildMarks` and merge them with `clusterMarks`
+(`agent/scrubber-marks.ts`) and draw the same peek (`agent/scrubber-peek.tsx`, a class-and-tone
+skin per theme); they differ only in the `Placement` handed to `clusterMarks` (item fraction for
+the card, measured row geometry for the terminal) and in `rowIndexFor`, which the card omits
+because its rows never fold, so every failed top-level call there is its own outcome. A mark is its row's extent at rail
 scale (2px floor), drawn as a solid 2px head with a 25% tail - **except an item that shares its
 row**, which is a 2px tick at `ordinal / count` of the row's measured height
 (`positionInRow`/`RowPosition`, mirrored in `TerminalRows.position(forItem:)`). A row covers a
@@ -1442,7 +1606,8 @@ dashboard hides it, the extension documents it.
 `unseen` is how a host turns catch-up mode on: pass the watermark and the panel draws the
 boundary, the faded rows above it and the "N new rows since you were last here" bar; pass
 `undefined` and there is none. The panel holds no preference of its own, so every client owns its
-own storage. `docs/GOTCHAS.md` § Catch-up mode has the rule.
+own storage. The watermark is read once per `sessionId`, when that session opens, and the
+dismissal resets with it: a later `unseen` for the same session is the host catching up, not news. `docs/GOTCHAS.md` § Catch-up mode has the rule.
 
 The working marker is
 the **classic braille spinner** (`pulse.tsx`: `⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏` at 90ms), shared by the
@@ -1561,7 +1726,7 @@ transparent, the session selected is `--row-selected` (blue), and *one of its su
 puts the blue on that step and drops the card to `--row-selected-weak` (grey). **The blue always
 marks the finest thing selected**, because opening an agent selects its session too: both claims
 are true at once, the blue can only carry one, and blue-on-blue said nothing. The grey is VS
-Code's `list.inactiveSelectionBackground`, which is the same idea one surface over. `holdsOpenAgent`
+Code's `list.inactiveSelectionBackground`, which is the same idea one surface over. `holdsOpenStep`
 matches `activeStepKey` against the card's *own* steps rather than trusting truthiness - every card
 in the list is handed the same key, and a bare check turned all of them grey at once. A filled card
 does **not** also answer hover; its steps still do, on `--row-active`, whose alpha is what lets one
@@ -1585,7 +1750,14 @@ there. `expanded`/`editing` are uncontrolled by default and `renameOn` chooses t
 `SessionBrowser` is the styled sessions list *around* the card built on protocol's view model -
 search, facets, grouping, the subset line - for a host that wants the dashboard's look without
 reimplementing the rules; its `SessionRowItem` is a thin wrapper that passes `renameOn='external'`
-and fills the `actions` slot.
+and fills the `actions` slot. The VS Code sidebar is built on it too, through five seams that are
+the only differences between the two hosts: `isActive(row)` (host **and** session, since ids are
+unique only per gateway), `rowActions(row)` (replaces the pencil / eraser / trash, and rename then
+falls back to the card's own double-click), `onSelect(row, modifiers)` (the extension's Cmd/Alt
+targets), `gatewayCount` (the extension counts configured gateways, not gateways with rows) and
+`showSubset={false}` (the extension draws its subset line above the scroller). A list filtered to
+nothing by the workspace scope alone says "Nothing in this folder" with a "Show all folders" way
+out; the dashboard never scopes, so it never sees it.
 Its hover affordances are pencil / **eraser** / trash (`RowAction`, hover-revealed, each stopping
 the click so an action cannot also select), which is the opposite of the extension's single
 always-on overflow glyph and the right call for each: there are three of them here and a sidebar
@@ -1650,8 +1822,8 @@ of the VS Code webview, which is exactly why this list had none of it: a session
 a protocol fact and how many of them a card draws is a list preference, so neither was ever
 extension-specific. There is **no per-row disclosure**: the rows are always drawn, and the `1/3`
 count that doubled as the twisty's handle is gone with `StepToggle`. How many draw is one global
-preference, `ViewConfig.subagents` (`all` / `active` / `none`, default `active` - running and
-failed, a failed record not being a completed one), applied by protocol's `visibleSubagents` and
+preference, `ViewConfig.subagents` (`all` / `active` / `none`, default `active` - running only;
+done and failed records need `all`), applied by protocol's `visibleSubagents` and
 set, with `ViewConfig.shells` and `ViewConfig.tasks` beside it, from the `SessionFilters` popover
 (`SessionFiltersButton` in a host's header; `SessionBrowser` can still draw it inline with
 `showControls`, and draws `SessionSearch` on `showSearch`). Steps are agents, then tasks
@@ -1700,7 +1872,13 @@ row's colour** - an `<img>`-embedded SVG is its own document, so `currentColor` 
 and its own `prefers-color-scheme` resolves against the *OS* rather than the host's theme
 (measured). A repo that wants a mark always matching its row declares a glyph; one that wants its
 brand declares the image and accepts that it is a picture.
-`SessionList` stays beside it for the plain fixed-set case.
+`SessionList` stays beside it for the plain fixed-set case. `ContextDialog`, `SessionInfoDialog` and
+`McpDialog` are thin wrappers over exported bodies (`ContextPanel`, `SessionInfoPanel`, and
+`McpPanel` + `McpPanelActions` over the `useMcpPanel` model, whose title, description and
+Back/Refresh the dialog puts in its header), so a host with its own chrome renders the same body:
+the extension's Context and MCP section views do. `TerminalTranscript` is `Transcript` with
+`variant="terminal"`, kept as a name for embedders that mounted it. `OptionSelect` is the
+one-of-N select every settings surface draws (the filter popover, the dashboard's settings).
 The file rail reads in the **UI font, never mono** - it is workbench chrome you scan, and the
 editors it sits beside set filenames in their UI face; mono is for content on a grid and nothing
 in a file list is on one. It had carried a hardcoded `font-mono` since it shipped, which only
@@ -1749,9 +1927,14 @@ main-thread mechanism, and TS/JSON/CSS files still colour correctly. The alias l
 config and not behind a hand-written Monaco entry because such an entry must also import two CSS
 files and monaco's exports map (`"./*": "./esm/vs/*.js"`) cannot resolve a `.css` subpath at all.
 
-Shell drill-in is three pieces here. `use-shell-frame.ts` is the sub-agent frame's twin
-(nonce-keyed entry, Escape leaves, the report deduped through a ref, leaving reveals the `$` row it
-came from), `ShellStrip` is the frame's header in both variants, and `ShellTerminal` wraps
+Shell drill-in is three pieces here. `use-shell-frame.ts` is the sub-agent frame's twin, and both
+are thin over **one machine**, `use-frame.ts` (nonce-keyed entry, a `reveal` closes the frame,
+Escape leaves, the report deduped through a ref, leaving reveals the row it came from: the `$` row
+for a shell, the `Task` for a sub-agent). They stay **two instances, not one `{ kind, id }`**,
+because the frames stack: a shell opened from inside a sub-agent frame returns to that frame, and
+each is its own round trip through the host's URL. That is also why `SessionPanel` still merges the
+two return reveals (the more recent exit wins). `ShellStrip` and `SubagentStrip` are the frames'
+headers in both variants, both drawn by `FrameStrip`, and `ShellTerminal` wraps
 `useShellTerminal` around an xterm instance. `ShellTerminal` ships from `@workerdeck/ui/workspace`
 for the `CodeEditor`/Monaco reason and on the same terms: `@xterm/xterm` and `@xterm/addon-fit` are
 **optional peers**, loaded by a memoised dynamic `import()` so one promise serves every pane and a
@@ -1825,12 +2008,11 @@ the expand button rather than a column of identical glyphs. Every `+` opens a **
 create is a decision you finish and return from, never a screen you navigate to), and
 **Settings is a dialog at the foot of the nav**, not a fifth section - it is a preference
 sheet, and a destination that spent the whole window on four rows of selects was the wrong
-trade; `/settings` survives as a redirect for bookmarks. What is left in it is only what this
+trade. What is left in it is only what this
 *browser* holds: theme and the agent-view preferences - style (Cards/Terminal), and, **only
 when the style is Cards**, font. It is inert under the terminal theme (one line
 height, monospace by construction), and a control that changes nothing is worse than an absent
-one: it invites you to keep pressing it. A stored `lines` migrates to `terminal` rather than
-falling back to `cards`, because someone who turned boxes off should keep them off. The run
+one: it invites you to keep pressing it. The run
 **defaults moved to the profile** - `ProfileInfo.defaults` already existed and the gateway
 already applies it to any field a create request omits, so a per-browser copy was a second
 answer to a question that had one. The profile editor picks the model from *that profile's*
@@ -1844,7 +2026,10 @@ transcript streams and the files browse but nothing types into a run the queue o
 Cancel stays, because abandoning a wait is a queue action rather than a turn. `useJobs` is a
 module-scope store for the same reason `useSessions` is: the sidebar, the empty pane and a
 job's page mount it at once, and three copies would be three queue sockets answering from
-three snapshots. The
+three snapshots. `useJobs`, `useSessions` and `useProfileList` are each a `createPolledStore`
+(`lib/store.ts`): concurrent refreshes share the pass in flight, the first subscriber triggers a
+load, and an `intervalMs` poll runs only while something is subscribed. The sessions poll keeps its
+own adaptive timer (5s idle / 1.2s busy) on top, and jobs detach their queue socket in `onIdle`. The
 session runner is `@workerdeck/ui`'s `SessionWorkspace` - the dashboard adds only the header, so a
 session feature belongs in `ui`/`react` and every embedder gets it too. The open shell is a URL
 round trip like the sub-agent one, `?shell=<id>&shn=<nonce>`: the nonce is what makes asking twice
@@ -1858,7 +2043,7 @@ has no folders to mean anything against). Unread rides `useUnseen` - one module-
 their own stale snapshot - and the session route both feeds it and reads it once at mount for
 the panel's catch-up row. **The mark advances off the same record the badge counts from**, the
 polled `useSessions` snapshots, and that is the whole rule: two other sources look right and
-are not. `onVitals` fires per streamed delta and stops with the last token, but the row that
+are not. `onVitals` fires as the socket's readings change and stops with the turn's last event, but the row that
 *ends* a turn reaches the registry after them, so the session you sat and watched kept a badge
 for the rows it finished with; `useSessionInfo` is one GET at mount and is never polled, so an
 effect on its `activityCount` fires once and never again. `onVitals` still carries `itemCount`
@@ -1885,8 +2070,7 @@ because a tab cannot header an upgrade and the cookie is another origin's. Cross
 additionally needs the gateway to run with `--cors-origin` (see `packages/server`'s `cors`).
 The implicit host keeps the id `'gateway'`, which is what the single-gateway build used, so
 existing watermarks keep counting instead of resetting to unread; routes carry the gateway
-(`/sessions/$hostId/$sessionId`) because a session id is unique only *within* one, with the
-old bare path kept as a redirect. Everything not yet per-gateway - jobs, profiles, the create
+(`/sessions/$hostId/$sessionId`) because a session id is unique only *within* one. Everything not yet per-gateway - jobs, profiles, the create
 form's pickers - goes through `primaryClient()` and says so; `lib/client.ts` is that accessor
 now, not a module-scope singleton.
 
@@ -1929,6 +2113,11 @@ on an approval, 20 s end grace, renewal at 7 h 45 m against the system's 8 h cei
 hash so an event that changes nothing drawable costs no push); the forwarder decides *who* (fan-out
 across devices holding a push-to-start token) and owns `apns-activities.json`. Cards are ended on
 boot - whatever the file holds belongs to a dead process - and again on a graceful close.
+`apns/json-registry.ts` is what the two registries share: `jsonRecordFile` (load as empty on any
+failure, write through the server's atomic helper) and `jsonPushRoute`, the one preamble for both
+`/apns/*` routes (claimed with or without push, 405, 401, 415, 413, 400 on bad JSON, in that order).
+`parseArgs` (`config.ts`) is two lookup tables, switches and valued flags; a new flag is one row, and
+`test/config.test.ts` pins every flag, alias and refusal message.
 
 Browser
 logins are durable (`auth-sessions.ts` → `<stateDir>/auth-sessions.json`, 0600) and the table is
@@ -1937,7 +2126,28 @@ rotation invalidate every cookie for free - see `docs/GOTCHAS.md`. Loopback
 runs keyless; off loopback the CLI *generates* a key rather than serving open (persisted at
 `<stateDir>/auth-key`, 0600), and only an explicit `--insecure` / `insecureHosts` declaration
 serves unauthenticated - `insecureHosts` entries double as accepted Host headers. The
-resolve/materialize seam has an assert that must stay: see `docs/GOTCHAS.md`. The web
+resolve/materialize seam has an assert that must stay: see `docs/GOTCHAS.md`. **A keyless
+gateway still checks where a request came from**: `createCliAuth` (`src/auth/auth.ts`, assembling
+`origin.ts` for the Origin/CSRF verdicts, `throttle.ts` for the per-IP and global failure windows,
+`secret.ts` for the digest-compared key and where a request may carry it, and `cookie-sessions.ts`
+for the HMAC-keyed cookie table) refuses a foreign or opaque
+(`null`) `Origin` on every `/v1` request and upgrade, and a cross-site (`Sec-Fetch-Site`) unsafe
+request or upgrade that carries none, while an absent Origin stays a non-browser client and is
+admitted. That is the only thing between a drive-by page and `POST /v1/sessions` with
+`bypassPermissions` on the loopback default. `pnpm dev` in `packages/web` rewrites `Origin` in its
+proxy for this reason. The **gateway key never reaches a child**: `cli.ts` reads
+`WORKERDECK_AUTH_KEY` once and deletes it from `process.env` before anything spawns, and the engine
+and shell env builders strip it (and `WORKERDECK_TOKEN`) again through core's
+`withoutGatewaySecrets`, for embedders that never went through the CLI. A wrong key on the header or
+`?key=` counts against the same per-IP window as `/auth/login` (never the global one, and never from
+loopback, so one stale local client cannot lock the operator's others out). The dashboard's
+`index.html` and the login page carry a **CSP** (`dashboardCsp` in `static.ts`): scripts from
+`'self'` plus the hash of each inline script actually served, `'wasm-unsafe-eval'` for the tab-side
+QuickJS sandbox, `img-src 'self' data: blob:` plus loopback, `connect-src` open because the
+dashboard talks to other gateways, and `frame-ancestors 'none'`. **Push routes are operator-only**:
+`/apns/devices` and `/apns/activities` run the same `authenticate` `/v1` does (the config file's own
+when it supplies one, awaited), then refuse a non-operator principal, since a registered phone hears
+about every session; they require `application/json` and cap the registry at 64 devices. The web
 dashboard is a real runtime dep on `@workerdeck/web` - `resolveWebRoot()` is just its exported
 `dashboardDir` - so there is one dashboard, versioned in lockstep, not a vendored copy.
 Also **holds the machine awake** while a session is waiting on it (`keep-awake.ts`,

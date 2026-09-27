@@ -141,6 +141,13 @@ function openInBrowser(url: string): void {
   } catch {}
 }
 
+// Read once and removed: every process this one spawns (engines, shells, the browser opener) inherits `process.env`.
+function takeGatewayEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete process.env.WORKERDECK_AUTH_KEY
+  return env
+}
+
 function line(text: string): void {
   process.stdout.write(`${text}\n`)
 }
@@ -156,6 +163,7 @@ async function main(argv: string[]): Promise<number> {
     return await runGuard(argv.slice(1))
   }
 
+  const env = takeGatewayEnv()
   const flags = parseArgs(argv)
   if (flags.help) {
     process.stdout.write(HELP)
@@ -168,14 +176,14 @@ async function main(argv: string[]): Promise<number> {
 
   if (flags.hotReload) {
     const { runHotReload } = await import('./dev/hot-reload.ts')
-    const result = await runHotReload(flags)
+    const result = await runHotReload(flags, env)
     if (result !== 'unsupported') {
       return result
     }
   }
 
   const loaded = await loadConfigFile(flags.config)
-  const config = resolveInstanceConfig(flags, loaded)
+  const config = resolveInstanceConfig(flags, loaded, env)
   const instance = await startInstance(config)
 
   if (config.open) {

@@ -11,6 +11,10 @@ const LOCAL_PREFIX = 'https://local-image.invalid/'
 
 const WEB_SOURCE = /^(?:https?:|data:image\/|blob:)/i
 
+const REMOTE_SOURCE = /^https?:/i
+
+export const REMOTE_IMAGE_NOTICE = 'remote image, not loaded'
+
 type HastNode = { type: string; tagName?: string; properties?: Record<string, unknown>; children?: HastNode[] }
 
 function shieldLocalImages() {
@@ -47,9 +51,53 @@ export function localImagePath(src: string | undefined): string | undefined {
   }
 }
 
+// A remote image loads the moment it renders, so a transcript an agent was talked into writing could beacon out
+// whatever it can read. It is shown as a link instead: opening it is the user's decision, and a navigation, not a load.
+export function remoteImageHost(src: string | undefined): string | undefined {
+  if (!src || !REMOTE_SOURCE.test(src.trim()) || localImagePath(src) !== undefined) {
+    return undefined
+  }
+  try {
+    return new URL(src.trim()).host
+  } catch {
+    return undefined
+  }
+}
+
 export function MarkdownImage({ src, alt, terminal }: { src?: unknown; alt?: unknown; terminal?: boolean }) {
-  const links = useFileLinks()
   const raw = typeof src === 'string' ? src : undefined
+  const remoteHost = remoteImageHost(raw)
+  if (remoteHost !== undefined) {
+    return <RemoteImageLink href={raw!.trim()} host={remoteHost} alt={alt} terminal={terminal} />
+  }
+  return <LoadedMarkdownImage raw={raw} alt={alt} terminal={terminal} />
+}
+
+function RemoteImageLink({ href, host, alt, terminal }: { href: string; host: string; alt?: unknown; terminal?: boolean }) {
+  const label = typeof alt === 'string' && alt ? `${alt} · ` : ''
+  const text = `${label}${host} (${REMOTE_IMAGE_NOTICE})`
+  if (terminal) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" data-tone="faint" title={href}>
+        {text}
+      </a>
+    )
+  }
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={href}
+      className="my-1 inline-block rounded-md border border-border bg-surface-hover px-2 py-1 text-label text-fg-4"
+    >
+      {text}
+    </a>
+  )
+}
+
+function LoadedMarkdownImage({ raw, alt, terminal }: { raw?: string; alt?: unknown; terminal?: boolean }) {
+  const links = useFileLinks()
   const local = localImagePath(raw)
   const path = local === undefined ? undefined : parseFileLink(local, links?.cwd)?.path
   const host = useHostImageSrc(path)

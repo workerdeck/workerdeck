@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve, sep } from 'node:path'
 
@@ -60,16 +61,45 @@ export function resolveWithinRoot(root: string, pathname: string): string | null
   return candidate
 }
 
+// Images stay on this origin (plus loopback gateways, which a page cannot exfiltrate to), so markdown in a transcript
+// cannot beacon anywhere; `connect-src` stays open because the dashboard talks to other gateways by design. Inline
+// scripts are admitted by hash, computed from the document actually served.
+export function dashboardCsp(html: string): string {
+  const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map(
+    (match) => `'sha256-${createHash('sha256').update(match[1]!, 'utf8').digest('base64')}'`,
+  )
+  return [
+    "default-src 'self'",
+    ["script-src 'self' 'wasm-unsafe-eval'", ...hashes].join(' '),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*",
+    "font-src 'self' data:",
+    "connect-src 'self' http: https: ws: wss:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ')
+}
+
+function htmlHeaders(html: string): Record<string, string> {
+  return {
+    'content-security-policy': dashboardCsp(html),
+    // The dashboard holds an ambient session cookie, so framing it elsewhere is only ever clickjacking.
+    'x-frame-options': 'DENY',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'same-origin',
+  }
+}
+
 export function sendHtml(req: IncomingMessage, res: ServerResponse, status: number, html: string, cache: string): void {
   const body = Buffer.from(html, 'utf8')
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': body.byteLength,
     'cache-control': cache,
-    // The dashboard holds an ambient session cookie, so framing it elsewhere is only ever clickjacking.
-    'x-frame-options': 'DENY',
-    'x-content-type-options': 'nosniff',
-    'referrer-policy': 'same-origin',
+    ...htmlHeaders(html),
   })
   res.end(req.method === 'HEAD' ? undefined : body)
 }
@@ -97,8 +127,17 @@ export async function serveFile(
     return 'not-found'
   }
 
+  const contentType = contentTypeFor(filePath)
+  if (contentType.startsWith('text/html')) {
+    const html = await readFile(filePath, 'utf8').catch(() => undefined)
+    if (html === undefined) {
+      return 'not-found'
+    }
+    sendHtml(req, res, 200, html, options.immutable ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate')
+    return 'served'
+  }
   res.writeHead(200, {
-    'content-type': contentTypeFor(filePath),
+    'content-type': contentType,
     'content-length': size,
     'cache-control': options.immutable ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate',
     'x-content-type-options': 'nosniff',

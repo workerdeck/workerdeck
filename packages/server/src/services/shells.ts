@@ -1,328 +1,71 @@
-import { randomBytes } from 'node:crypto'
-import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile, type FileHandle } from 'node:fs/promises'
+import { mkdtempSync } from 'node:fs'
+import { rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  SHELL_REFUSAL,
-  agentMayWrite,
-  clampShellTail,
-  encodeShellKeys,
-  shellOwnershipRefusal,
-  shellSummary,
-  shellTail,
-  TTY_REDRAW_CARRY,
-  ttyRedraws,
-  ttyText,
-  type LocalShellSource,
-  type Runner,
-  type ShellDirectory,
-  type ShellReadResult,
-  type ShellView,
-} from '@workerdeck/core'
+import { SHELL_REFUSAL, type Runner } from '@workerdeck/core'
 import {
   ENGINE_CAPABILITIES,
   SHELL_ARTIFACT_MAX_BYTES,
   SHELL_ARTIFACT_TTL_MS,
-  SHELL_ATTACH_REPLAY_BYTES,
-  SHELL_COLS,
   SHELL_INPUT_MAX,
-  SHELL_LABEL_MAX,
   SHELL_LINGER_MS,
-  SHELL_MAX_COLS,
-  SHELL_MAX_ROWS,
   SHELL_MAX_RUNNING_PER_SESSION,
   SHELL_MAX_RUNNING_TOTAL,
-  SHELL_MIN_COLS,
-  SHELL_MIN_ROWS,
-  SHELL_READ_MAX_LINES,
-  SHELL_ROWS,
   SHELL_SPILL_BYTES,
   SHELL_TAIL_FLUSH_MS,
   SHELL_TAIL_RING_BYTES,
-  SHELL_WAIT_DEFAULT_MS,
-  SHELL_WAIT_MAX_MS,
   type SessionInfo,
   type ShellEndReason,
-  type ShellInfo,
-  type ShellOwner,
 } from '@workerdeck/protocol'
-import { renderScreen, ShellScreen } from './shell-screen.ts'
-import { killProcessTrees, readProcessTable, type ProcessTable, type TreeKillDeps } from './process-tree.ts'
+import { readProcessTable, type TreeKillDeps } from './process-tree.ts'
+import { artifactPaths, LiveArtifact, type ArtifactLimits } from './shell-artifact.ts'
+import {
+  applyAgentWrite,
+  attachEntry,
+  endEntry,
+  fireListeners,
+  killTrees,
+  newShellInfo,
+  readOutput,
+  scheduleNotify,
+  sourceFor,
+  waitForChange,
+  wireChild,
+} from './shell-entry.ts'
+import { clampSize, loadPty, spawnShellChild } from './shell-env.ts'
+import { ShellScreen } from './shell-screen.ts'
+import { indexedSessions, persistIndex, readIndex, runningIn } from './shell-index.ts'
+import type {
+  KillTarget,
+  PtyChild,
+  PtyModule,
+  SessionShells,
+  ShellEntry,
+  ShellErrorReporter,
+  ShellRegistry,
+  ShellRegistryOptions,
+  ShellSpawned,
+  ShellSpawnInput,
+} from './shell-types.ts'
 
 export { SHELL_REFUSAL }
+export { createShellDirectory, startShell, type ShellDirectoryDeps } from './shell-directory.ts'
+export { clampSize, loadPty, loginShell, shellChildEnv } from './shell-env.ts'
+export type {
+  ShellAttachment,
+  ShellErrorContext,
+  ShellOutputQuery,
+  ShellRegistry,
+  ShellRegistryOptions,
+  ShellSink,
+  ShellSize,
+  ShellSpawned,
+  ShellSpawnInput,
+  StoredShellIndex,
+  StoredShellRecord,
+} from './shell-types.ts'
 
-const NOTIFY_MS = 250
 const SWEEP_INTERVAL_MS = 60 * 60_000
-const ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567'
-const ID_CHARS = 12
-const TERM = 'xterm-256color'
-const INDEX_SUFFIX = '.json'
-const INDEX_VERSION = 1
-// macOS drops a session leader's unread pty output ~600ms after it exits unless its session opened /dev/tty; the
-// login shell execs under the same pid with the command as $1, so nothing is re-quoted.
-const CTTY_WRAPPER = 'true <>/dev/tty 2>/dev/null; exec "$0" -c "$1"'
-
-export type ShellSize = { cols: number; rows: number }
-
-export type ShellSink = { write: (data: string) => void; end: (reason: string) => void }
-
-export type ShellSpawnInput = { runner: Runner; command: string; owner: ShellOwner }
-
-export type ShellSpawned = { shell: ShellInfo; source: LocalShellSource }
-
-export type ShellAttachment = { shell: ShellInfo; scrollback: string; detach: () => void }
-
-export type ShellOutputQuery = { view: 'text' | 'raw' | 'screen'; tail?: number }
-
-export type ShellErrorContext = { op: 'index' | 'artifact' | 'sweep' | 'listener' | 'kill'; sessionId?: string; shellId?: string }
-
-// The directory reaches a live runner only to start a shell for it: the record needs the session's cwd and the runner
-// draws the transcript row, exactly as a `$` from the composer does.
-export type ShellDirectoryDeps = { runnerFor?: (sessionId: string) => Runner | undefined }
-
-type ShellSettleOptions = { view?: ShellView; tail?: number; waitFor?: string[]; timeoutMs?: number; since?: number }
-
-type ShellTaken = { info: ShellInfo; read: Omit<ShellReadResult, 'shell' | 'wait'>; haystack: string }
-
-export type ShellRegistryOptions = {
-  generation: string
-  artifactDir: string | null
-  timeoutMs?: number
-  artifactMaxBytes?: number
-  artifactTtlMs?: number
-  maxRunningPerSession?: number
-  maxRunningTotal?: number
-  spillBytes?: number
-  tailRingBytes?: number
-  tailFlushMs?: number
-  sweepIntervalMs?: number
-  processTable?: ProcessTable
-  onError?: (error: unknown, context: ShellErrorContext) => void
-}
-
-export type StoredShellRecord = ShellInfo & { generation: string; output?: string; artifact?: string }
-
-export type StoredShellIndex = { version: 1; sessionId: string; nextOrdinal: number; shells: StoredShellRecord[] }
-
-export type ShellRegistry = {
-  spawn: (input: ShellSpawnInput) => Promise<ShellSpawned>
-  get: (sessionId: string, shellId: string) => ShellInfo | undefined
-  list: (sessionId: string) => ShellInfo[]
-  running: () => ShellInfo[]
-  kill: (sessionId: string, shellId: string, reason?: ShellEndReason) => ShellInfo | undefined
-  setAgentWrite: (sessionId: string, shellId: string, enabled: boolean) => ShellInfo | undefined
-  killAll: (reason: ShellEndReason) => number
-  killAllSync: () => void
-  attach: (sessionId: string, shellId: string, sink: ShellSink) => Promise<ShellAttachment>
-  write: (sessionId: string, shellId: string, data: string) => void
-  resize: (sessionId: string, shellId: string, size: ShellSize) => ShellSize
-  output: (sessionId: string, shellId: string, query: ShellOutputQuery) => Promise<string | undefined>
-  applicationCursorKeys: (sessionId: string, shellId: string) => Promise<boolean>
-  changed: (sessionId: string, shellId: string, timeoutMs: number) => Promise<void>
-  hydrate: () => Promise<void>
-  sweep: () => Promise<void>
-  flush: () => Promise<void>
-  decorate: (info: SessionInfo) => SessionInfo
-  watch: (runner: Runner) => () => void
-}
-
-type PtyChild = {
-  readonly pid: number
-  onData: (listener: (data: string) => void) => void
-  onExit: (listener: (event: { exitCode: number; signal?: number }) => void) => void
-  write: (data: string) => void
-  resize: (cols: number, rows: number) => void
-  kill: (signal?: string) => void
-}
-
-type PtyModule = {
-  spawn: (
-    file: string,
-    args: string[],
-    options: { name: string; cols: number; rows: number; cwd: string; env: Record<string, string> },
-  ) => PtyChild
-}
-
-type ArtifactLimits = { spill: number; cap: number; ring: number }
-
-type ArtifactPaths = { dir: string; raw: string; tail: string; rel: string }
-
-type StoredOutput = { output?: string; artifact?: string }
-
-type ShellArtifact = LiveArtifact | StoredArtifact
-
-type ShellEntry = {
-  info: ShellInfo
-  generation: string
-  artifact: ShellArtifact
-  child?: PtyChild
-  pid?: number
-  sinks: Set<ShellSink>
-  listeners: Set<() => void>
-  notify?: NodeJS.Timeout
-  clock?: NodeJS.Timeout
-  tailTimer?: NodeJS.Timeout
-  redrawCarry?: string
-  screen?: ShellScreen
-}
-
-type SessionShells = {
-  sessionId: string
-  nextOrdinal: number
-  entries: Map<string, ShellEntry>
-  chain: Promise<void>
-  pending: boolean
-}
-
-type KillTarget = { state: SessionShells; entry: ShellEntry }
-
-let ptyModule: PtyModule | null | undefined
-
-export async function loadPty(): Promise<PtyModule | null> {
-  if (ptyModule !== undefined) {
-    return ptyModule
-  }
-  try {
-    ptyModule = (await import('@lydell/node-pty')) as unknown as PtyModule
-  } catch {
-    ptyModule = null
-  }
-  return ptyModule
-}
-
-// The agent's side of the same registry: a session sees its own shells and nothing else, so another session's id
-// reads as missing rather than as a refusal that would name it. Writes and kills are further limited to shells the
-// agent owns (`agentMayWrite`), and that refusal names the rule because the shell does exist.
-export function createShellDirectory(registry: ShellRegistry, deps: ShellDirectoryDeps = {}): ShellDirectory {
-  // One read of the shell as it is now. With `since`, the haystack is only what the process wrote after that byte
-  // offset, so a wait that follows a keystroke cannot be satisfied by text that was already on the screen.
-  const take = async (from: string, shellId: string, options: ShellSettleOptions): Promise<ShellTaken | undefined> => {
-    const info = registry.get(from, shellId)
-    if (!info) {
-      return undefined
-    }
-    const view: ShellView = options.view ?? (info.interactive ? 'screen' : 'lines')
-    const fresh = options.since === undefined ? undefined : await freshText(from, shellId, info.bytes - options.since)
-    if (view === 'screen') {
-      const text = await registry.output(from, shellId, { view: 'screen' })
-      if (text === undefined) {
-        return undefined
-      }
-      const lines = text === '' ? 0 : text.split('\n').length
-      return { info, read: { view, text, lines, totalLines: lines, truncated: false }, haystack: fresh ?? text }
-    }
-    const text = await registry.output(from, shellId, { view: 'text' })
-    if (text === undefined) {
-      return undefined
-    }
-    return { info, read: shellTail(text, clampShellTail(options.tail)), haystack: fresh ?? shellTail(text, SHELL_READ_MAX_LINES).text }
-  }
-  const freshText = async (from: string, shellId: string, bytes: number): Promise<string> => {
-    if (bytes <= 0) {
-      return ''
-    }
-    const raw = await registry.output(from, shellId, { view: 'raw', tail: bytes })
-    return raw === undefined ? '' : ttyText(raw)
-  }
-  const settle = async (from: string, shellId: string, options: ShellSettleOptions): Promise<ShellReadResult | undefined> => {
-    const needles = options.waitFor ?? []
-    const started = Date.now()
-    const timeoutMs = Math.max(0, Math.min(options.timeoutMs ?? SHELL_WAIT_DEFAULT_MS, SHELL_WAIT_MAX_MS))
-    for (;;) {
-      const taken = await take(from, shellId, options)
-      if (!taken) {
-        return undefined
-      }
-      const result: ShellReadResult = { shell: shellSummary(taken.info), ...taken.read }
-      if (needles.length === 0) {
-        return result
-      }
-      const ms = Date.now() - started
-      const match = needles.find((needle) => taken.haystack.includes(needle))
-      if (match !== undefined) {
-        return { ...result, wait: { outcome: 'matched', match, ms } }
-      }
-      if (taken.info.status !== 'running') {
-        return { ...result, wait: { outcome: 'exited', ms } }
-      }
-      if (ms >= timeoutMs) {
-        return { ...result, wait: { outcome: 'timeout', ms } }
-      }
-      await registry.changed(from, shellId, timeoutMs - ms)
-    }
-  }
-  const writable = (from: string, shellId: string): ShellInfo | undefined => {
-    const info = registry.get(from, shellId)
-    if (!info) {
-      return undefined
-    }
-    if (!agentMayWrite(info, from)) {
-      throw new Error(shellOwnershipRefusal(shellId))
-    }
-    return info
-  }
-  return {
-    list: async (from) => registry.list(from).map(shellSummary),
-    read: (from, shellId, options) => settle(from, shellId, { ...options }),
-    run: async (from, options) => {
-      const runner = deps.runnerFor?.(from)
-      if (!runner?.queueLocalCommand) {
-        throw new Error(SHELL_REFUSAL)
-      }
-      const { shell, source } = await registry.spawn({ runner, command: options.command, owner: 'agent' })
-      try {
-        runner.queueLocalCommand(source)
-      } catch (error) {
-        registry.kill(from, shell.id)
-        throw error
-      }
-      const result = await settle(from, shell.id, { waitFor: options.waitFor, timeoutMs: options.timeoutMs })
-      if (!result) {
-        throw new Error(`shell ${shell.id} vanished as it started`)
-      }
-      return result
-    },
-    write: async (from, shellId, options) => {
-      const info = writable(from, shellId)
-      if (!info) {
-        return undefined
-      }
-      if (info.status !== 'running') {
-        throw new Error(`shell ${shellId} has already ended; there is nothing to type into`)
-      }
-      const application = await registry.applicationCursorKeys(from, shellId)
-      const data = (options.data ?? '') + encodeShellKeys(options.keys ?? [], { applicationCursorKeys: application })
-      if (data.length === 0) {
-        throw new Error('nothing to write: give data, keys or both')
-      }
-      const since = registry.get(from, shellId)?.bytes ?? info.bytes
-      registry.write(from, shellId, data)
-      return settle(from, shellId, { waitFor: options.waitFor, timeoutMs: options.timeoutMs, since })
-    },
-    kill: async (from, shellId) => {
-      const info = writable(from, shellId)
-      if (!info) {
-        return undefined
-      }
-      if (info.status !== 'running') {
-        return { shell: shellSummary(info), killed: false }
-      }
-      const killed = registry.kill(from, shellId, 'killed') ?? info
-      return { shell: shellSummary(killed), killed: true }
-    },
-    grant: async (from, shellId) => {
-      const info = registry.get(from, shellId)
-      if (!info) {
-        return undefined
-      }
-      if (info.owner === 'agent') {
-        return shellSummary(info)
-      }
-      const granted = registry.setAgentWrite(from, shellId, true)
-      return granted ? shellSummary(granted) : undefined
-    },
-  }
-}
 
 export function shellPermitted(shells: ShellRegistry | null, runner: Runner, operator: boolean): boolean {
   if (shells === null || !operator) {
@@ -333,34 +76,10 @@ export function shellPermitted(shells: ShellRegistry | null, runner: Runner, ope
   return capabilities?.hostCwd === true
 }
 
-// A spawn env replaces the inherited one wholesale, so the copy has to be complete; the gateway's own environment is
-// what the operator's terminal would have given the same command.
-export function shellChildEnv(base: Record<string, string | undefined>): Record<string, string> {
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries(base)) {
-    if (value !== undefined) {
-      env[key] = value
-    }
-  }
-  return env
-}
-
-export function clampSize(size: ShellSize): ShellSize {
-  return {
-    cols: clamp(size.cols, SHELL_MIN_COLS, SHELL_MAX_COLS),
-    rows: clamp(size.rows, SHELL_MIN_ROWS, SHELL_MAX_ROWS),
-  }
-}
-
-export function loginShell(env: Record<string, string | undefined>): string {
-  const shell = env.SHELL
-  return shell && shell.startsWith('/') ? shell : '/bin/sh'
-}
-
 export function createShellRegistry(options: ShellRegistryOptions): ShellRegistry {
   const { generation } = options
   const dir = options.artifactDir
-  const base = dir ?? join(tmpdir(), `workerdeck-shells-${process.pid}`)
+  const base = dir ?? mkdtempSync(join(tmpdir(), 'workerdeck-shells-'))
   const limits: ArtifactLimits = {
     spill: options.spillBytes ?? SHELL_SPILL_BYTES,
     cap: options.artifactMaxBytes ?? SHELL_ARTIFACT_MAX_BYTES,
@@ -376,90 +95,22 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
   let sweeper: NodeJS.Timeout | undefined
   let stopped = false
 
-  const report = (error: unknown, context: ShellErrorContext): void => options.onError?.(error, context)
-
-  const indexPath = (sessionId: string): string => join(base, `${encodeURIComponent(sessionId)}${INDEX_SUFFIX}`)
-
-  const pathsFor = (sessionId: string, shellId: string): ArtifactPaths => {
-    const encoded = encodeURIComponent(sessionId)
-    const sessionDir = join(base, encoded)
-    return {
-      dir: sessionDir,
-      raw: join(sessionDir, `${shellId}.raw`),
-      tail: join(sessionDir, `${shellId}.tail.raw`),
-      rel: `${encoded}/${shellId}.raw`,
-    }
+  const report: ShellErrorReporter = (error, context) => options.onError?.(error, context)
+  const treeDeps: TreeKillDeps = {
+    table: options.processTable ?? readProcessTable,
+    signal: (pid, name) => void process.kill(pid, name),
+    self: process.pid,
   }
 
   const find = (sessionId: string, id: string): ShellEntry | undefined => sessions.get(sessionId)?.entries.get(id)
-
+  const located = (sessionId: string, shellId: string): KillTarget | undefined => {
+    const state = sessions.get(sessionId)
+    const entry = state?.entries.get(shellId)
+    return state && entry ? { state, entry } : undefined
+  }
   const runningAll = (): ShellEntry[] => [...sessions.values()].flatMap(runningIn)
-
-  const persist = (state: SessionShells): void => {
-    if (!dir || state.pending) {
-      return
-    }
-    state.pending = true
-    state.chain = state.chain
-      .then(async () => {
-        state.pending = false
-        const payload = JSON.stringify(serialize(state))
-        await mkdir(dir, { recursive: true, mode: 0o700 })
-        const path = indexPath(state.sessionId)
-        const temp = `${path}.${process.pid}.tmp`
-        await writeFile(temp, payload, { mode: 0o600 })
-        await rename(temp, path)
-      })
-      .catch((error: unknown) => report(error, { op: 'index', sessionId: state.sessionId }))
-  }
-
-  const readIndex = async (sessionId: string): Promise<SessionShells> => {
-    const state = freshSession(sessionId)
-    if (!dir) {
-      return state
-    }
-    let raw: string
-    try {
-      raw = await readFile(indexPath(sessionId), 'utf8')
-    } catch (error) {
-      if (!isMissing(error)) {
-        report(error, { op: 'index', sessionId })
-      }
-      return state
-    }
-    let index: StoredShellIndex
-    try {
-      index = parseIndex(JSON.parse(raw))
-    } catch (error) {
-      report(error, { op: 'index', sessionId })
-      return state
-    }
-    state.nextOrdinal = index.nextOrdinal
-    const now = Date.now()
-    let dirty = false
-    for (const record of index.shells) {
-      const { generation: recordGeneration, output, artifact, ...info } = record
-      if (info.status === 'running' && recordGeneration !== generation) {
-        info.status = 'exited'
-        info.endReason = 'server_restarted'
-        info.endedAt = now
-        delete info.exitCode
-        delete info.signal
-        dirty = true
-      }
-      state.entries.set(info.id, {
-        info,
-        generation: recordGeneration,
-        artifact: new StoredArtifact(pathsFor(sessionId, info.id), info, { output, artifact }),
-        sinks: new Set(),
-        listeners: new Set(),
-      })
-    }
-    if (dirty) {
-      persist(state)
-    }
-    return state
-  }
+  const persist = (state: SessionShells): void => persistIndex(dir, state, report)
+  const fire = (entry: ShellEntry): void => fireListeners(entry, report)
 
   const load = (sessionId: string): Promise<SessionShells> => {
     const held = sessions.get(sessionId)
@@ -468,7 +119,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     }
     let inflight = loading.get(sessionId)
     if (!inflight) {
-      inflight = readIndex(sessionId).then((state) => {
+      inflight = readIndex({ dir, generation, report }, sessionId).then((state) => {
         sessions.set(sessionId, state)
         loading.delete(sessionId)
         return state
@@ -478,117 +129,33 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     return inflight
   }
 
-  const fire = (entry: ShellEntry): void => {
-    for (const listener of entry.listeners) {
-      try {
-        listener()
-      } catch (error) {
-        report(error, { op: 'listener', sessionId: entry.info.sessionId, shellId: entry.info.id })
-      }
-    }
-  }
-
-  const scheduleNotify = (entry: ShellEntry): void => {
-    if (entry.notify) {
-      return
-    }
-    entry.notify = setTimeout(() => {
-      entry.notify = undefined
-      if (entry.info.status === 'running') {
-        fire(entry)
-      }
-    }, NOTIFY_MS)
-    entry.notify.unref()
-  }
-
   const settle = (state: SessionShells, entry: ShellEntry, reason: ShellEndReason): void => {
     if (entry.info.status !== 'running') {
       return
     }
-    entry.info.status = 'exited'
-    entry.info.endedAt = Date.now()
-    entry.info.endReason = reason
-    delete entry.info.agentWrite
-    clearTimeout(entry.clock)
-    clearTimeout(entry.notify)
-    clearInterval(entry.tailTimer)
-    entry.clock = entry.notify = entry.tailTimer = undefined
-    entry.child = undefined
-    entry.pid = undefined
-    if (entry.artifact instanceof LiveArtifact) {
-      entry.artifact.close()
-    }
-    entry.screen?.close()
-    for (const sink of entry.sinks) {
-      try {
-        sink.end(reason)
-      } catch {}
-    }
-    entry.sinks.clear()
+    endEntry(entry, reason)
     persist(state)
     fire(entry)
   }
 
-  const treeDeps: TreeKillDeps = {
-    table: options.processTable ?? readProcessTable,
-    signal: (pid, name) => void process.kill(pid, name),
-    self: process.pid,
-  }
-
-  const killTrees = (entries: ShellEntry[]): void => {
-    const live = entries.flatMap((entry) => (entry.pid === undefined ? [] : [{ entry, pid: entry.pid }]))
-    if (live.length === 0) {
-      return
-    }
-    const result = killProcessTrees(
-      live.map(({ pid }) => pid),
-      treeDeps,
-    )
-    for (const { entry, pid } of live) {
-      if (result.unreached.includes(pid)) {
-        try {
-          entry.child?.kill('SIGKILL')
-        } catch {}
-      }
-      const context: ShellErrorContext = { op: 'kill', sessionId: entry.info.sessionId, shellId: entry.info.id }
-      if (!result.scanned) {
-        report(new Error('no process table (ps), only the process group was signalled'), context)
-      } else if (result.foreign.includes(pid)) {
-        report(new Error(`pid ${pid} is no longer this shell's child and was left alone`), context)
-      }
-    }
-  }
-
   const killEntries = (targets: KillTarget[], reason: ShellEndReason): number => {
     const running = targets.filter(({ entry }) => entry.info.status === 'running')
-    killTrees(running.map(({ entry }) => entry))
+    killTrees(
+      running.map(({ entry }) => entry),
+      treeDeps,
+      report,
+    )
     for (const { state, entry } of running) {
       settle(state, entry, reason)
     }
     return running.length
   }
 
-  const kill = (state: SessionShells, entry: ShellEntry, reason: ShellEndReason): void => {
-    killEntries([{ state, entry }], reason)
-  }
-
-  const killSession = (sessionId: string, reason: ShellEndReason): void => {
-    const state = sessions.get(sessionId)
-    if (!state) {
-      return
-    }
-    killEntries(
-      runningIn(state).map((entry) => ({ state, entry })),
-      reason,
-    )
-  }
-
-  const spawn = async ({ runner, command, owner }: ShellSpawnInput): Promise<ShellSpawned> => {
+  const admit = async (runner: Runner): Promise<{ state: SessionShells; cwd: string; pty: PtyModule }> => {
     if (stopped) {
       throw new Error('the gateway is shutting down')
     }
-    const sessionId = runner.id
-    const state = await load(sessionId)
+    const state = await load(runner.id)
     const pty = await loadPty()
     if (!pty) {
       throw new Error(SHELL_REFUSAL)
@@ -606,91 +173,32 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     if (overall >= total) {
       throw new Error(`the gateway already has ${overall} shells running (the limit is ${total})`)
     }
-    const id = mintShellId()
-    const info: ShellInfo = {
-      id,
-      sessionId,
-      ordinal: state.nextOrdinal++,
-      command,
-      label: shellLabel(command),
-      cwd,
-      owner,
-      status: 'running',
-      startedAt: Date.now(),
-      bytes: 0,
-      cols: SHELL_COLS,
-      rows: SHELL_ROWS,
-    }
-    const artifact = new LiveArtifact(pathsFor(sessionId, id), limits, (error) => report(error, { op: 'artifact', sessionId, shellId: id }))
+    return { state, cwd, pty }
+  }
+
+  const spawn = async ({ runner, command, owner }: ShellSpawnInput): Promise<ShellSpawned> => {
+    const { state, cwd, pty } = await admit(runner)
+    const info = newShellInfo(state, runner.id, command, cwd, owner)
+    const artifact = new LiveArtifact(artifactPaths(base, info.sessionId, info.id), limits, (error) =>
+      report(error, { op: 'artifact', sessionId: info.sessionId, shellId: info.id }),
+    )
     const entry: ShellEntry = { info, generation, artifact, sinks: new Set(), listeners: new Set() }
     entry.screen = new ShellScreen(info.cols, info.rows)
-    state.entries.set(id, entry)
-    const env = shellChildEnv(process.env)
-    env.TERM = TERM
-    env.COLORTERM = 'truecolor'
-    env.PWD = cwd
+    state.entries.set(info.id, entry)
     let child: PtyChild
     try {
-      child = pty.spawn('/bin/sh', ['-c', CTTY_WRAPPER, loginShell(process.env), command], {
-        name: TERM,
-        cols: SHELL_COLS,
-        rows: SHELL_ROWS,
-        cwd,
-        env,
-      })
+      child = spawnShellChild(pty, cwd, command)
     } catch (error) {
       settle(state, entry, 'spawn_failed')
       throw error instanceof Error ? error : new Error('failed to start the shell')
     }
-    entry.child = child
-    entry.pid = child.pid
-    child.onData((data) => {
-      if (entry.info.status !== 'running') {
-        return
-      }
-      const changed = artifact.append(data)
-      entry.info.bytes = artifact.bytes
-      entry.screen?.write(data)
-      if (!entry.info.interactive) {
-        const scanned = (entry.redrawCarry ?? '') + data
-        if (ttyRedraws(scanned)) {
-          entry.info.interactive = true
-          entry.redrawCarry = undefined
-          persist(state)
-        } else {
-          entry.redrawCarry = scanned.slice(-TTY_REDRAW_CARRY)
-        }
-      }
-      if (changed) {
-        if (artifact.capped && !entry.info.capped) {
-          entry.info.capped = true
-          entry.tailTimer = setInterval(() => artifact.writeTail(), tailFlushMs)
-          entry.tailTimer.unref()
-        }
-        persist(state)
-      }
-      for (const sink of entry.sinks) {
-        try {
-          sink.write(data)
-        } catch {
-          entry.sinks.delete(sink)
-        }
-      }
-      scheduleNotify(entry)
-    })
-    child.onExit(({ exitCode, signal }) => {
-      if (entry.info.status !== 'running') {
-        return
-      }
-      if (signal) {
-        entry.info.signal = signal
-      } else {
-        entry.info.exitCode = exitCode
-      }
-      settle(state, entry, 'exit')
+    wireChild(entry, child, artifact, tailFlushMs, {
+      persist: () => persist(state),
+      notify: () => scheduleNotify(entry, fire),
+      exit: () => settle(state, entry, 'exit'),
     })
     if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
-      entry.clock = setTimeout(() => kill(state, entry, 'timeout'), options.timeoutMs)
+      entry.clock = setTimeout(() => killEntries([{ state, entry }], 'timeout'), options.timeoutMs)
       entry.clock.unref()
     }
     persist(state)
@@ -720,6 +228,27 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     }
   }
 
+  const hydrate = async (): Promise<void> => {
+    if (dir) {
+      for (const sessionId of await indexedSessions(dir, report)) {
+        await load(sessionId)
+      }
+    }
+    await sweep()
+    if (!sweeper && !stopped) {
+      sweeper = setInterval(() => void sweep(), sweepIntervalMs)
+      sweeper.unref()
+    }
+  }
+
+  const existing = (sessionId: string, shellId: string): ShellEntry => {
+    const entry = find(sessionId, shellId)
+    if (!entry) {
+      throw new Error('unknown shell')
+    }
+    return entry
+  }
+
   return {
     spawn,
     get: (sessionId, shellId) => {
@@ -735,38 +264,23 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     },
     running: () => runningAll().map((entry) => ({ ...entry.info })),
     kill: (sessionId, shellId, reason = 'killed') => {
-      const state = sessions.get(sessionId)
-      const entry = state?.entries.get(shellId)
-      if (!state || !entry) {
+      const target = located(sessionId, shellId)
+      if (!target) {
         return undefined
       }
-      kill(state, entry, reason)
-      return { ...entry.info }
+      killEntries([target], reason)
+      return { ...target.entry.info }
     },
     setAgentWrite: (sessionId, shellId, enabled) => {
-      const state = sessions.get(sessionId)
-      const entry = state?.entries.get(shellId)
-      if (!state || !entry) {
+      const target = located(sessionId, shellId)
+      if (!target) {
         return undefined
       }
-      if (enabled) {
-        if (entry.info.owner !== 'user') {
-          throw new Error(`shell ${shellId} was started by the agent, which may already type into it`)
-        }
-        if (entry.info.status !== 'running') {
-          throw new Error(`shell ${shellId} has already ended; there is nothing to grant`)
-        }
+      if (applyAgentWrite(target.entry, shellId, enabled)) {
+        persist(target.state)
+        fire(target.entry)
       }
-      if ((entry.info.agentWrite === true) !== enabled) {
-        if (enabled) {
-          entry.info.agentWrite = true
-        } else {
-          delete entry.info.agentWrite
-        }
-        persist(state)
-        fire(entry)
-      }
-      return { ...entry.info }
+      return { ...target.entry.info }
     },
     killAll: (reason) => {
       stopped = true
@@ -780,60 +294,11 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       )
     },
     killAllSync: () => {
-      killTrees(runningAll())
+      killTrees(runningAll(), treeDeps, report)
     },
-    attach: async (sessionId, shellId, sink) => {
-      const entry = find(sessionId, shellId)
-      if (!entry) {
-        throw new Error('unknown shell')
-      }
-      const pending: string[] = []
-      let live = false
-      let ended: string | undefined
-      const proxy: ShellSink = {
-        write: (data) => {
-          if (live) {
-            sink.write(data)
-          } else {
-            pending.push(data)
-          }
-        },
-        end: (reason) => {
-          if (live) {
-            sink.end(reason)
-          } else {
-            ended = reason
-          }
-        },
-      }
-      if (entry.info.status === 'running') {
-        entry.sinks.add(proxy)
-      }
-      let replay: Buffer
-      try {
-        replay = await entry.artifact.replay(SHELL_ATTACH_REPLAY_BYTES)
-      } catch (error) {
-        entry.sinks.delete(proxy)
-        throw error
-      }
-      live = true
-      if (ended !== undefined) {
-        const reason = ended
-        queueMicrotask(() => sink.end(reason))
-      }
-      return {
-        shell: { ...entry.info },
-        scrollback: replay.toString('utf8') + pending.join(''),
-        detach: () => {
-          entry.sinks.delete(proxy)
-        },
-      }
-    },
+    attach: async (sessionId, shellId, sink) => attachEntry(existing(sessionId, shellId), sink),
     write: (sessionId, shellId, data) => {
-      const entry = find(sessionId, shellId)
-      if (!entry) {
-        throw new Error('unknown shell')
-      }
+      const entry = existing(sessionId, shellId)
       if (typeof data !== 'string' || data.length > SHELL_INPUT_MAX) {
         throw new Error(`shell input must be a string of at most ${SHELL_INPUT_MAX} characters`)
       }
@@ -843,10 +308,7 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
       entry.child.write(data)
     },
     resize: (sessionId, shellId, size) => {
-      const entry = find(sessionId, shellId)
-      if (!entry) {
-        throw new Error('unknown shell')
-      }
+      const entry = existing(sessionId, shellId)
       const next = clampSize(size)
       if (entry.child) {
         try {
@@ -860,69 +322,11 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
     },
     output: async (sessionId, shellId, query) => {
       const entry = find(sessionId, shellId)
-      if (!entry) {
-        return undefined
-      }
-      if (query.view === 'screen') {
-        if (entry.screen) {
-          return entry.screen.snapshot()
-        }
-        const replay = await entry.artifact.replay(SHELL_ATTACH_REPLAY_BYTES)
-        return renderScreen(replay.toString('utf8'), entry.info.cols, entry.info.rows)
-      }
-      if (query.tail === undefined && query.view === 'text') {
-        return entry.artifact.textView()
-      }
-      const raw = await entry.artifact.read(query.tail)
-      const text = raw.toString('utf8')
-      return query.view === 'raw' ? text : ttyText(text)
+      return entry ? readOutput(entry, query) : undefined
     },
     applicationCursorKeys: (sessionId, shellId) => find(sessionId, shellId)?.screen?.applicationCursorKeys() ?? Promise.resolve(false),
-    changed: (sessionId, shellId, timeoutMs) => {
-      const entry = find(sessionId, shellId)
-      if (!entry || entry.info.status !== 'running') {
-        return Promise.resolve()
-      }
-      return new Promise((resolve) => {
-        const done = () => {
-          clearTimeout(timer)
-          entry.listeners.delete(done)
-          resolve()
-        }
-        const timer = setTimeout(done, Math.max(0, timeoutMs))
-        timer.unref()
-        entry.listeners.add(done)
-      })
-    },
-    hydrate: async () => {
-      if (dir) {
-        let names: string[] = []
-        try {
-          names = await readdir(dir)
-        } catch (error) {
-          if (!isMissing(error)) {
-            report(error, { op: 'index' })
-          }
-        }
-        for (const name of names) {
-          if (!name.endsWith(INDEX_SUFFIX)) {
-            continue
-          }
-          let sessionId: string
-          try {
-            sessionId = decodeURIComponent(name.slice(0, -INDEX_SUFFIX.length))
-          } catch {
-            continue
-          }
-          await load(sessionId)
-        }
-      }
-      await sweep()
-      if (!sweeper && !stopped) {
-        sweeper = setInterval(() => void sweep(), sweepIntervalMs)
-        sweeper.unref()
-      }
-    },
+    changed: (sessionId, shellId, timeoutMs) => waitForChange(find(sessionId, shellId), timeoutMs),
+    hydrate,
     sweep,
     flush: async () => {
       const states = [...sessions.values()]
@@ -932,435 +336,34 @@ export function createShellRegistry(options: ShellRegistryOptions): ShellRegistr
         await rm(base, { recursive: true, force: true }).catch(() => {})
       }
     },
-    decorate: (info) => {
-      const state = sessions.get(info.id)
-      if (!state) {
-        return info
-      }
-      const now = Date.now()
-      const shells = [...state.entries.values()]
-        .filter((entry) => {
-          const { status, exitCode, endedAt } = entry.info
-          return (
-            status === 'running' ||
-            (typeof exitCode === 'number' && exitCode !== 0 && endedAt !== undefined && now - endedAt < SHELL_LINGER_MS)
-          )
-        })
-        .map((entry) => ({ ...entry.info }))
-      return shells.length > 0 ? { ...info, shells } : info
-    },
+    decorate: (info) => decorateSession(info, sessions.get(info.id)),
     watch: (runner) =>
       runner.subscribe((event) => {
         if (event.type === 'session_closed' || (event.type === 'status_changed' && event.status === 'parked')) {
-          killSession(runner.id, 'killed')
+          const state = sessions.get(runner.id)
+          if (state) {
+            killEntries(
+              runningIn(state).map((entry) => ({ state, entry })),
+              'killed',
+            )
+          }
         }
       }, runner.info().lastSeq),
   }
 }
 
-class LiveArtifact {
-  readonly #paths: ArtifactPaths
-  readonly #limits: ArtifactLimits
-  readonly #onError: (error: unknown) => void
-  readonly #ring: Buffer
-  #ringAt = 0
-  #ringLen = 0
-  #chunks: Buffer[] = []
-  #chunkBytes = 0
-  #bytes = 0
-  #spilled = false
-  #capped = false
-  #closed = false
-  #broken = false
-  #io: Promise<void> = Promise.resolve()
-  #handle: FileHandle | undefined
-  #done = ''
-  #pending = ''
-  #textCache: string | undefined
-
-  constructor(paths: ArtifactPaths, limits: ArtifactLimits, onError: (error: unknown) => void) {
-    this.#paths = paths
-    this.#limits = limits
-    this.#onError = onError
-    this.#ring = Buffer.alloc(Math.max(0, limits.ring))
+function decorateSession(info: SessionInfo, state: SessionShells | undefined): SessionInfo {
+  if (!state) {
+    return info
   }
-
-  get bytes(): number {
-    return this.#bytes
-  }
-
-  get capped(): boolean {
-    return this.#capped
-  }
-
-  append(data: string): boolean {
-    const chunk = Buffer.from(data, 'utf8')
-    const before = this.#bytes
-    this.#bytes += chunk.length
-    this.#ringPush(chunk)
-    this.#textCache = undefined
-    if (this.#capped) {
-      return false
-    }
-    const room = Math.max(0, this.#limits.cap - before)
-    const kept = chunk.length <= room ? chunk : chunk.subarray(0, room)
-    this.#textAppend(kept === chunk ? data : kept.toString('utf8'))
-    let changed = false
-    if (this.#spilled) {
-      this.#write(kept)
-    } else {
-      this.#chunks.push(kept)
-      this.#chunkBytes += kept.length
-      if (this.#chunkBytes > this.#limits.spill) {
-        this.#spill()
-        changed = true
-      }
-    }
-    if (this.#bytes > this.#limits.cap) {
-      this.#capped = true
-      changed = true
-    }
-    return changed
-  }
-
-  text(): string {
-    if (this.#textCache === undefined) {
-      let text = this.#done + ttyText(this.#pending)
-      if (this.#capped) {
-        const after = this.#bytes - this.#limits.cap
-        const kept = Math.min(after, this.#ringLen)
-        if (kept > 0) {
-          text += (after > kept ? '\n' : '') + ttyText(this.tail(kept).toString('utf8'))
-        }
-      }
-      this.#textCache = text
-    }
-    return this.#textCache
-  }
-
-  textView(): Promise<string> {
-    return Promise.resolve(this.text())
-  }
-
-  tail(n: number = this.#ringLen): Buffer {
-    const size = this.#ring.length
-    const take = Math.max(0, Math.min(n, this.#ringLen))
-    const out = Buffer.allocUnsafe(take)
-    if (take === 0) {
-      return out
-    }
-    const start = (this.#ringAt - take + size) % size
-    const first = Math.min(take, size - start)
-    this.#ring.copy(out, 0, start, start + first)
-    if (first < take) {
-      this.#ring.copy(out, first, 0, take - first)
-    }
-    return out
-  }
-
-  replay(max: number): Promise<Buffer> {
-    const want = Math.max(0, Math.floor(max))
-    if (!this.#spilled) {
-      const all = Buffer.concat(this.#chunks, this.#chunkBytes)
-      return Promise.resolve(all.subarray(Math.max(0, all.length - want)))
-    }
-    if (this.#capped || want <= this.#ringLen) {
-      return Promise.resolve(this.tail(want))
-    }
-    const end = this.#bytes
-    return this.#io.then(() => readRange(this.#paths.raw, Math.max(0, end - want), end))
-  }
-
-  async read(tail?: number): Promise<Buffer> {
-    if (tail !== undefined) {
-      return this.replay(tail)
-    }
-    if (!this.#spilled) {
-      return Buffer.concat(this.#chunks, this.#chunkBytes)
-    }
-    await this.#io
-    return readWhole(this.#paths.raw)
-  }
-
-  stored(): StoredOutput {
-    return this.#spilled ? { artifact: this.#paths.rel } : { output: Buffer.concat(this.#chunks, this.#chunkBytes).toString('utf8') }
-  }
-
-  writeTail(): void {
-    const tail = this.tail()
-    this.#queue(async () => {
-      await mkdir(this.#paths.dir, { recursive: true, mode: 0o700 })
-      const temp = `${this.#paths.tail}.${process.pid}.tmp`
-      await writeFile(temp, tail, { mode: 0o600 })
-      await rename(temp, this.#paths.tail)
+  const now = Date.now()
+  const shells = [...state.entries.values()]
+    .filter((entry) => {
+      const { status, exitCode, endedAt } = entry.info
+      return (
+        status === 'running' || (typeof exitCode === 'number' && exitCode !== 0 && endedAt !== undefined && now - endedAt < SHELL_LINGER_MS)
+      )
     })
-  }
-
-  close(): void {
-    if (this.#closed) {
-      return
-    }
-    this.#closed = true
-    if (this.#capped) {
-      this.writeTail()
-    }
-    this.#io = this.#io.then(async () => {
-      const handle = this.#handle
-      this.#handle = undefined
-      await handle?.close().catch(() => {})
-    })
-  }
-
-  idle(): Promise<void> {
-    return this.#io
-  }
-
-  async remove(): Promise<void> {
-    this.close()
-    await this.#io
-    await rm(this.#paths.raw, { force: true })
-    await rm(this.#paths.tail, { force: true })
-  }
-
-  // Only the new chunk is searched: `#pending` holds no newline by construction, and scanning it again per chunk
-  // made one long line quadratic.
-  #textAppend(data: string): void {
-    const newline = data.lastIndexOf('\n')
-    if (newline === -1) {
-      this.#pending += data
-      return
-    }
-    this.#done += ttyText(this.#pending + data.slice(0, newline + 1))
-    this.#pending = data.slice(newline + 1)
-  }
-
-  #ringPush(chunk: Buffer): void {
-    const size = this.#ring.length
-    if (size === 0 || chunk.length === 0) {
-      return
-    }
-    if (chunk.length >= size) {
-      chunk.copy(this.#ring, 0, chunk.length - size)
-      this.#ringAt = 0
-      this.#ringLen = size
-      return
-    }
-    const first = Math.min(chunk.length, size - this.#ringAt)
-    chunk.copy(this.#ring, this.#ringAt, 0, first)
-    if (first < chunk.length) {
-      chunk.copy(this.#ring, 0, first)
-    }
-    this.#ringAt = (this.#ringAt + chunk.length) % size
-    this.#ringLen = Math.min(size, this.#ringLen + chunk.length)
-  }
-
-  #spill(): void {
-    this.#spilled = true
-    const buffered = Buffer.concat(this.#chunks, this.#chunkBytes)
-    this.#chunks = []
-    this.#chunkBytes = 0
-    this.#queue(async () => {
-      await mkdir(this.#paths.dir, { recursive: true, mode: 0o700 })
-      this.#handle = await open(this.#paths.raw, 'w', 0o600)
-      await this.#handle.write(buffered)
-    })
-  }
-
-  #write(chunk: Buffer): void {
-    if (chunk.length === 0) {
-      return
-    }
-    this.#queue(async () => {
-      await this.#handle?.write(chunk)
-    })
-  }
-
-  #queue(task: () => Promise<void>): void {
-    this.#io = this.#io.then(async () => {
-      if (this.#broken) {
-        return
-      }
-      try {
-        await task()
-      } catch (error) {
-        this.#broken = true
-        this.#onError(error)
-      }
-    })
-  }
-}
-
-class StoredArtifact {
-  readonly #paths: ArtifactPaths
-  readonly #bytes: number
-  readonly #capped: boolean
-  readonly #stored: StoredOutput
-
-  constructor(paths: ArtifactPaths, info: { bytes: number; capped?: boolean }, stored: StoredOutput) {
-    this.#paths = paths
-    this.#bytes = info.bytes
-    this.#capped = info.capped === true
-    this.#stored = stored.artifact !== undefined ? { artifact: stored.artifact } : { output: stored.output ?? '' }
-  }
-
-  async read(tail?: number): Promise<Buffer> {
-    if (tail !== undefined) {
-      return this.replay(tail)
-    }
-    return this.#head()
-  }
-
-  async replay(max: number): Promise<Buffer> {
-    const want = Math.max(0, Math.floor(max))
-    if (this.#capped) {
-      const ring = await readWhole(this.#paths.tail)
-      return ring.subarray(Math.max(0, ring.length - want))
-    }
-    if (this.#stored.output !== undefined) {
-      const all = Buffer.from(this.#stored.output, 'utf8')
-      return all.subarray(Math.max(0, all.length - want))
-    }
-    const size = await stat(this.#paths.raw).then(
-      (s) => s.size,
-      () => 0,
-    )
-    return readRange(this.#paths.raw, Math.max(0, size - want), size)
-  }
-
-  async textView(): Promise<string> {
-    const head = await this.#head()
-    let text = ttyText(head.toString('utf8'))
-    if (this.#capped) {
-      const ring = await readWhole(this.#paths.tail)
-      const after = this.#bytes - head.length
-      const kept = Math.min(after, ring.length)
-      if (kept > 0) {
-        text += (after > kept ? '\n' : '') + ttyText(ring.subarray(ring.length - kept).toString('utf8'))
-      }
-    }
-    return text
-  }
-
-  stored(): StoredOutput {
-    return this.#stored
-  }
-
-  idle(): Promise<void> {
-    return Promise.resolve()
-  }
-
-  async remove(): Promise<void> {
-    await rm(this.#paths.raw, { force: true })
-    await rm(this.#paths.tail, { force: true })
-  }
-
-  #head(): Promise<Buffer> {
-    return this.#stored.output !== undefined ? Promise.resolve(Buffer.from(this.#stored.output, 'utf8')) : readWhole(this.#paths.raw)
-  }
-}
-
-function serialize(state: SessionShells): StoredShellIndex {
-  return {
-    version: INDEX_VERSION,
-    sessionId: state.sessionId,
-    nextOrdinal: state.nextOrdinal,
-    shells: [...state.entries.values()].map((entry) => ({ ...entry.info, generation: entry.generation, ...entry.artifact.stored() })),
-  }
-}
-
-function parseIndex(value: unknown): StoredShellIndex {
-  const index = value as Partial<StoredShellIndex> | null
-  if (!index || index.version !== INDEX_VERSION || typeof index.sessionId !== 'string' || !Array.isArray(index.shells)) {
-    throw new Error('unrecognised shell index')
-  }
-  const shells = index.shells.filter(
-    (record): record is StoredShellRecord =>
-      typeof record === 'object' && record !== null && typeof (record as StoredShellRecord).id === 'string',
-  )
-  const nextOrdinal = typeof index.nextOrdinal === 'number' && index.nextOrdinal > 0 ? index.nextOrdinal : 1
-  return { version: INDEX_VERSION, sessionId: index.sessionId, nextOrdinal, shells }
-}
-
-function freshSession(sessionId: string): SessionShells {
-  return { sessionId, nextOrdinal: 1, entries: new Map(), chain: Promise.resolve(), pending: false }
-}
-
-function runningIn(state: SessionShells): ShellEntry[] {
-  return [...state.entries.values()].filter((entry) => entry.info.status === 'running')
-}
-
-function sourceFor(entry: ShellEntry, artifact: LiveArtifact): LocalShellSource {
-  return {
-    info: () => entry.info,
-    text: () => artifact.text(),
-    subscribe: (listener) => {
-      entry.listeners.add(listener)
-      return () => {
-        entry.listeners.delete(listener)
-      }
-    },
-  }
-}
-
-function mintShellId(): string {
-  const bytes = randomBytes(ID_CHARS)
-  let id = 'sh_'
-  for (let i = 0; i < ID_CHARS; i++) {
-    id += ID_ALPHABET[bytes[i]! & 31]
-  }
-  return id
-}
-
-function shellLabel(command: string): string {
-  const first = command.split('\n')[0] ?? ''
-  return first.trim().slice(0, SHELL_LABEL_MAX)
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.trunc(value))) : min
-}
-
-function isMissing(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
-}
-
-async function readWhole(path: string): Promise<Buffer> {
-  try {
-    return await readFile(path)
-  } catch (error) {
-    if (isMissing(error)) {
-      return Buffer.alloc(0)
-    }
-    throw error
-  }
-}
-
-async function readRange(path: string, start: number, end: number): Promise<Buffer> {
-  const length = Math.max(0, end - start)
-  if (length === 0) {
-    return Buffer.alloc(0)
-  }
-  let handle: FileHandle
-  try {
-    handle = await open(path, 'r')
-  } catch (error) {
-    if (isMissing(error)) {
-      return Buffer.alloc(0)
-    }
-    throw error
-  }
-  try {
-    const out = Buffer.allocUnsafe(length)
-    let got = 0
-    while (got < length) {
-      const { bytesRead } = await handle.read(out, got, length - got, start + got)
-      if (bytesRead === 0) {
-        break
-      }
-      got += bytesRead
-    }
-    return got === length ? out : out.subarray(0, got)
-  } finally {
-    await handle.close()
-  }
+    .map((entry) => ({ ...entry.info }))
+  return shells.length > 0 ? { ...info, shells } : info
 }

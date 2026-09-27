@@ -67,7 +67,7 @@ public enum PromptTokens {
   /// `$PATH`, `$5.00`, `#1`, a colour literal - and neither is saved by the
   /// charset check that saves `/`. So both are gated on a list this client
   /// holds: a skill the session reported, a session the gateway listed. Unset,
-  /// nothing of that kind is styled, which is what an older gateway gets.
+  /// nothing of that kind is styled.
   public static func scan(
     _ text: String, skills: Set<String> = [], sessions: Set<String> = []
   ) -> [PromptToken] {

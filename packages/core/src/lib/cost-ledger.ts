@@ -1,6 +1,7 @@
 import {
   type ByModel,
   type CostBreakdown,
+  type PricingTable,
   type TokenUsage,
   addTokenUsage,
   byModelTotalTokens,
@@ -123,9 +124,14 @@ function covers(reading: Bucket, baseline: Bucket): boolean {
 // after a park, and a mid-session context clear, so a figure that is cumulative *for the process* has to be
 // folded into a carried baseline at every one of those boundaries or the session's total silently restarts.
 export class CostLedger {
+  readonly #pricing: PricingTable | undefined
   #carried = emptyBucket()
   #pending: Bucket | undefined
   #current = emptyBucket()
+
+  constructor(pricing?: PricingTable) {
+    this.#pricing = pricing
+  }
 
   carry(state: CostLedgerState | undefined): void {
     if (!state) {
@@ -180,7 +186,7 @@ export class CostLedger {
   }
 
   get breakdown(): CostBreakdown {
-    return costOfByModel(this.byModel ?? {})
+    return costOfByModel(this.byModel ?? {}, this.#pricing)
   }
 
   get costUsd(): number | undefined {
@@ -188,7 +194,7 @@ export class CostLedger {
     if (!byModel) {
       return undefined
     }
-    const cost = costOfByModel(byModel)
+    const cost = costOfByModel(byModel, this.#pricing)
     return cost.unpriced ? undefined : cost.total
   }
 

@@ -4,7 +4,7 @@ import {
   type QuickJSAsyncWASMModule,
   type QuickJSHandle,
 } from 'quickjs-emscripten-core'
-import type { SandboxVfs } from './vfs.ts'
+import { utf8ByteLength, type SandboxVfs } from './vfs.ts'
 
 const PRELUDE = `
 "use strict";
@@ -51,7 +51,15 @@ export type RunScriptOptions = {
   timeoutMs?: number
   maxStackSizeBytes?: number
   signal?: AbortSignal
+  // Largest single string a host function copies out of the guest. Default 8 MiB.
+  maxHostStringBytes?: number
+  // Total console output kept; the rest is dropped behind one marker line. Default 1 MiB.
+  maxLogBytes?: number
 }
+
+const DEFAULT_MAX_HOST_STRING_BYTES = 8 * 1024 * 1024
+const DEFAULT_MAX_LOG_BYTES = 1024 * 1024
+const LOG_TRUNCATED = '[console output truncated: log limit reached]'
 
 export type RunScriptResult =
   | { ok: true; value: unknown; logs: SandboxLog[] }
@@ -89,34 +97,66 @@ export async function runScript(engine: SandboxEngine, options: RunScriptOptions
     handle.dispose()
   }
 
+  const maxHostStringBytes = options.maxHostStringBytes ?? DEFAULT_MAX_HOST_STRING_BYTES
+  const maxLogBytes = options.maxLogBytes ?? DEFAULT_MAX_LOG_BYTES
+  let logBytes = 0
+  let logsTruncated = false
+
+  // The `__host_*` globals are callable directly, so the prelude's `String()` coercion is no guarantee of the type.
+  // Length is read before the copy: a UTF-16 length over the cap already means more bytes than the cap.
+  const guestString = (handle: QuickJSHandle, what: string): string => {
+    if (context.typeof(handle) !== 'string') {
+      throw new TypeError(`${what} must be a string`)
+    }
+    const lengthHandle = context.getProp(handle, 'length')
+    const length = context.getNumber(lengthHandle)
+    lengthHandle.dispose()
+    if (length > maxHostStringBytes) {
+      throw new RangeError(`${what} exceeds the ${maxHostStringBytes}-byte limit for one host call`)
+    }
+    const text = context.getString(handle)
+    if (utf8ByteLength(text) > maxHostStringBytes) {
+      throw new RangeError(`${what} exceeds the ${maxHostStringBytes}-byte limit for one host call`)
+    }
+    return text
+  }
+
   try {
     defineHostFn('__host_log', (levelHandle, textHandle) => {
-      const level = context.getString(levelHandle)
-      logs.push({
-        level: level === 'warn' || level === 'error' ? level : 'log',
-        text: context.getString(textHandle),
-      })
+      if (logsTruncated) {
+        return undefined
+      }
+      const level = guestString(levelHandle, 'log level')
+      const text = guestString(textHandle, 'console output')
+      const size = utf8ByteLength(text)
+      if (logBytes + size > maxLogBytes) {
+        logsTruncated = true
+        logs.push({ level: 'warn', text: LOG_TRUNCATED })
+        return undefined
+      }
+      logBytes += size
+      logs.push({ level: level === 'warn' || level === 'error' ? level : 'log', text })
       return undefined
     })
     defineHostFn('__host_vfs_read', (pathHandle) => {
-      const content = options.vfs?.read(context.getString(pathHandle))
+      const content = options.vfs?.read(guestString(pathHandle, 'vfs path'))
       return content === undefined ? undefined : context.newString(content)
     })
     defineHostFn('__host_vfs_write', (pathHandle, contentHandle) => {
       if (!options.vfs) {
         throw new Error('vfs is not enabled for this execution')
       }
-      options.vfs.write(context.getString(pathHandle), context.getString(contentHandle))
+      options.vfs.write(guestString(pathHandle, 'vfs path'), guestString(contentHandle, 'vfs content'))
       return undefined
     })
     defineHostFn('__host_vfs_list', (dirHandle) => {
-      const files = options.vfs?.list(context.getString(dirHandle)) ?? []
+      const files = options.vfs?.list(guestString(dirHandle, 'vfs path')) ?? []
       return context.newString(JSON.stringify(files))
     })
     {
       const fetchText = options.fetchText
       const handle = context.newAsyncifiedFunction('__host_fetch_text', async (urlHandle) => {
-        const url = context.getString(urlHandle)
+        const url = guestString(urlHandle, 'fetch url')
         if (!fetchText) {
           throw new Error('network access is not enabled for this execution')
         }

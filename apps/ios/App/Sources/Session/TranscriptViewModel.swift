@@ -148,6 +148,7 @@ final class TranscriptViewModel {
   /// shells whose output is in flight - one round trip each, however many times
   /// the row re-draws or is pressed.
   private var verifiedShells: Set<String> = []
+  private var verifyingShells: Set<String> = []
   private var fetchingShells: Set<String> = []
   /// The open drill-in, and the shell it is watching.
   ///
@@ -662,12 +663,19 @@ final class TranscriptViewModel {
   /// - and the row says so rather than drawing a kill affordance for a process
   /// nobody can reach.
   func verifyShell(_ shellId: String) {
-    guard !verifiedShells.contains(shellId) else { return }
-    verifiedShells.insert(shellId)
+    guard !verifiedShells.contains(shellId), !verifyingShells.contains(shellId) else { return }
+    verifyingShells.insert(shellId)
     Task { @MainActor [weak self] in
       guard let self else { return }
-      let shell = try? await self.client.getShell(sessionId: self.sessionId, shellId: shellId)
-      self.hydrateShell(shellId: shellId, shell: shell)
+      defer { self.verifyingShells.remove(shellId) }
+      do {
+        let shell = try await self.client.getShell(sessionId: self.sessionId, shellId: shellId)
+        self.verifiedShells.insert(shellId)
+        self.hydrateShell(shellId: shellId, shell: shell)
+      } catch let error as WorkerClientError where error.statusCode == 404 {
+        self.verifiedShells.insert(shellId)
+        self.hydrateShell(shellId: shellId, shell: nil)
+      } catch {}
     }
   }
 
@@ -682,10 +690,13 @@ final class TranscriptViewModel {
     Task { @MainActor [weak self] in
       guard let self else { return }
       defer { self.fetchingShells.remove(shellId) }
-      guard
-        let text = try? await self.client.shellOutput(sessionId: self.sessionId, shellId: shellId)
-      else {
+      let text: String
+      do {
+        text = try await self.client.shellOutput(sessionId: self.sessionId, shellId: shellId)
+      } catch let error as WorkerClientError where error.statusCode == 404 {
         self.hydrateShell(shellId: shellId, shell: nil)
+        return
+      } catch {
         return
       }
       let hydrated = hydrateShellOutput(self.state, shellId: shellId, text: text)

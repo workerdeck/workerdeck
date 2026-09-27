@@ -61,6 +61,46 @@ export type CliFlags = {
 
 export class ConfigError extends Error {}
 
+type FlagSwitch = (flags: CliFlags) => void
+type FlagValue = (flags: CliFlags, value: string, name: string) => void
+
+const SWITCHES = new Map<string, FlagSwitch>([
+  ['-h', (f) => (f.help = true)],
+  ['--help', (f) => (f.help = true)],
+  ['-v', (f) => (f.version = true)],
+  ['--version', (f) => (f.version = true)],
+  ['--no-profile-store', (f) => (f.profileStore = false)],
+  ['--fs-write', (f) => (f.fsWrite = true)],
+  ['--shell', (f) => (f.shell = true)],
+  ['--trust-proxy', (f) => (f.trustProxy = true)],
+  ['--no-parking-store', (f) => (f.parking = false)],
+  ['--insecure', (f) => (f.insecure = true)],
+  ['--no-web', (f) => (f.web = false)],
+  ['--no-keep-awake', (f) => (f.keepAwake = false)],
+  ['--open', (f) => (f.open = true)],
+  ['--hot-reload', (f) => (f.hotReload = true)],
+])
+
+const VALUED = new Map<string, FlagValue>([
+  ['-c', (f, v) => (f.config = v)],
+  ['--config', (f, v) => (f.config = v)],
+  ['-p', (f, v, name) => (f.port = parsePort(v, name))],
+  ['--port', (f, v, name) => (f.port = parsePort(v, name))],
+  ['--host', (f, v) => (f.host = v)],
+  ['--auth-key', (f, v) => (f.authKey = v)],
+  ['--profile', (f, v) => f.profiles.push(parseProfile(v))],
+  ['--profile-root', (f, v) => f.profileRoots.push(resolve(v))],
+  ['--cwd-root', (f, v) => f.cwdRoots.push(resolve(v))],
+  ['--fs-root', (f, v) => f.fsRoots.push(resolve(v))],
+  ['--shell-agent-write', (f, v, name) => (f.shellAgentWrite = parseShellAgentWrite(v, name))],
+  ['--allowed-origin', (f, v) => f.allowedOrigins.push(v)],
+  ['--allowed-host', (f, v) => f.allowedHosts.push(v)],
+  ['--insecure-host', (f, v) => f.insecureHosts.push(v)],
+  ['--approval-timeout', (f, v, name) => (f.approvalTimeoutMs = parseDuration(v, name))],
+  ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
+  ['--cors-origin', (f, v) => f.corsOrigins.push(v)],
+])
+
 // `none`, `0` and anything non-positive all mean the same thing: a prompt that never expires.
 function parseDuration(raw: string, source: string): number | null {
   if (raw === 'none' || raw === 'never') {
@@ -101,161 +141,39 @@ export function parseArgs(argv: string[]): CliFlags {
     insecureHosts: [],
     corsOrigins: [],
   }
-  const next = (i: number, name: string): string => {
-    const value = argv[i + 1]
-    if (value === undefined || value.startsWith('-')) {
-      throw new ConfigError(`${name} requires a value`)
-    }
-    return value
-  }
-
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!
-    switch (arg) {
-      case '-h':
-      case '--help': {
-        flags.help = true
-        break
-      }
-      case '-v':
-      case '--version': {
-        flags.version = true
-        break
-      }
-      case '-c':
-      case '--config': {
-        flags.config = next(i, arg)
-        i++
-        break
-      }
-      case '-p':
-      case '--port': {
-        flags.port = parsePort(next(i, arg), arg)
-        i++
-        break
-      }
-      case '--host': {
-        flags.host = next(i, arg)
-        i++
-        break
-      }
-      case '--auth-key': {
-        flags.authKey = next(i, arg)
-        i++
-        break
-      }
-      case '--profile': {
-        // A config dir is a credential store, so naming one stays deliberate and is never inferred.
-        const raw = next(i, arg)
-        i++
-        const eq = raw.indexOf('=')
-        if (eq <= 0) {
-          throw new ConfigError(`--profile expects name=dir, got: ${raw}`)
-        }
-        const name = raw.slice(0, eq)
-        const dir = raw.slice(eq + 1)
-        if (!dir) {
-          throw new ConfigError(`--profile ${name}= is missing a directory`)
-        }
-        flags.profiles.push({ name, configDir: resolve(dir) })
-        break
-      }
-      case '--profile-root': {
-        flags.profileRoots.push(resolve(next(i, arg)))
-        i++
-        break
-      }
-      case '--no-profile-store': {
-        flags.profileStore = false
-        break
-      }
-      case '--cwd-root': {
-        flags.cwdRoots.push(resolve(next(i, arg)))
-        i++
-        break
-      }
-      case '--fs-root': {
-        flags.fsRoots.push(resolve(next(i, arg)))
-        i++
-        break
-      }
-      case '--fs-write': {
-        flags.fsWrite = true
-        break
-      }
-      case '--shell': {
-        flags.shell = true
-        break
-      }
-      case '--shell-agent-write': {
-        flags.shellAgentWrite = parseShellAgentWrite(next(i, arg), arg)
-        i++
-        break
-      }
-      case '--allowed-origin': {
-        flags.allowedOrigins.push(next(i, arg))
-        i++
-        break
-      }
-      case '--allowed-host': {
-        flags.allowedHosts.push(next(i, arg))
-        i++
-        break
-      }
-      case '--insecure-host': {
-        flags.insecureHosts.push(next(i, arg))
-        i++
-        break
-      }
-      case '--trust-proxy': {
-        flags.trustProxy = true
-        break
-      }
-      case '--approval-timeout': {
-        flags.approvalTimeoutMs = parseDuration(next(i, arg), arg)
-        i++
-        break
-      }
-      case '--state-dir': {
-        flags.stateDir = resolve(next(i, arg))
-        i++
-        break
-      }
-      case '--no-parking-store': {
-        flags.parking = false
-        break
-      }
-      case '--insecure': {
-        flags.insecure = true
-        break
-      }
-      case '--no-web': {
-        flags.web = false
-        break
-      }
-      case '--no-keep-awake': {
-        flags.keepAwake = false
-        break
-      }
-      case '--cors-origin': {
-        flags.corsOrigins.push(next(i, arg))
-        i++
-        break
-      }
-      case '--open': {
-        flags.open = true
-        break
-      }
-      case '--hot-reload': {
-        flags.hotReload = true
-        break
-      }
-      default: {
-        throw new ConfigError(`unknown option: ${arg}`)
-      }
+    const toggle = SWITCHES.get(arg)
+    if (toggle) {
+      toggle(flags)
+      continue
     }
+    const take = VALUED.get(arg)
+    if (!take) {
+      throw new ConfigError(`unknown option: ${arg}`)
+    }
+    const value = argv[i + 1]
+    if (value === undefined || value.startsWith('-')) {
+      throw new ConfigError(`${arg} requires a value`)
+    }
+    take(flags, value, arg)
+    i++
   }
   return flags
+}
+
+// A config dir is a credential store, so naming one stays deliberate and is never inferred.
+function parseProfile(raw: string): ProfileInfo {
+  const eq = raw.indexOf('=')
+  if (eq <= 0) {
+    throw new ConfigError(`--profile expects name=dir, got: ${raw}`)
+  }
+  const name = raw.slice(0, eq)
+  const dir = raw.slice(eq + 1)
+  if (!dir) {
+    throw new ConfigError(`--profile ${name}= is missing a directory`)
+  }
+  return { name, configDir: resolve(dir) }
 }
 
 export type LoadedConfig = {
@@ -399,15 +317,13 @@ export function resolveInstanceConfig(
       ? null
       : (flags.stateDir ?? env.WORKERDECK_STATE_DIR ?? loaded.options.stateDir ?? defaultStateDir(loaded.path))
 
-  const envCwdRoots = env.WORKERDECK_CWD_ROOTS?.split(':')
-    .filter(Boolean)
-    .map((p) => resolve(cwd, p))
-  const cwdRoots = flags.cwdRoots.length ? flags.cwdRoots : envCwdRoots
-
-  const envFsRoots = env.WORKERDECK_FS_ROOTS?.split(':')
-    .filter(Boolean)
-    .map((p) => resolve(cwd, p))
-  const fsRoots = flags.fsRoots.length ? flags.fsRoots : envFsRoots
+  const envRoots = (name: string): string[] | undefined =>
+    env[name]
+      ?.split(':')
+      .filter(Boolean)
+      .map((p) => resolve(cwd, p))
+  const cwdRoots = flags.cwdRoots.length ? flags.cwdRoots : envRoots('WORKERDECK_CWD_ROOTS')
+  const fsRoots = flags.fsRoots.length ? flags.fsRoots : envRoots('WORKERDECK_FS_ROOTS')
 
   const auth: CliAuthOptions = {
     ...loaded.options.auth,

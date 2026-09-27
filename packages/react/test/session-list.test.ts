@@ -259,8 +259,8 @@ describe('visibleShells', () => {
     ],
   })
 
-  it('draws running and recently failed shells for active, every settled one for all, none for none', () => {
-    expect(visibleShells(inf, 'active', 10_000).map((s) => s.id)).toEqual(['run', 'bad'])
+  it('draws promoted running shells for active, every settled one for all, none for none', () => {
+    expect(visibleShells(inf, 'active', 10_000).map((s) => s.id)).toEqual(['run'])
     expect(visibleShells(inf, 'all', 10_000).map((s) => s.id)).toEqual(['run', 'clean', 'bad'])
     expect(visibleShells(inf, 'none', 10_000)).toEqual([])
   })
@@ -272,11 +272,14 @@ describe('displayedTasks', () => {
       { text: 'plan', status: 'completed' },
       { text: 'build', status: 'in_progress' },
     ],
-    subagents: [{ toolUseId: 'b', description: 'node server.js', status: 'running', startedAt: 0, toolCount: 0, stoppable: true }],
+    subagents: [
+      { toolUseId: 'b', description: 'node server.js', status: 'running', startedAt: 0, toolCount: 0, stoppable: true },
+      { toolUseId: 'f', description: 'broke', status: 'failed', startedAt: 0, toolCount: 0 },
+    ],
   })
 
-  it('hides settled tasks for active and carries the stop through', () => {
-    expect(displayedTasks(inf, 'all').map((t) => t.label)).toEqual(['plan', 'build', 'node server.js'])
+  it('hides done and failed tasks for active and carries the stop through', () => {
+    expect(displayedTasks(inf, 'all').map((t) => t.label)).toEqual(['plan', 'build', 'node server.js', 'broke'])
     expect(displayedTasks(inf, 'active').map((t) => t.label)).toEqual(['build', 'node server.js'])
     expect(displayedTasks(inf, 'none')).toEqual([])
     expect(displayedTasks(inf, 'all')[2]?.stoppable).toBe(true)

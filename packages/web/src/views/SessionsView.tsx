@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useState } from 'react'
 import type { SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
 import {
@@ -44,7 +45,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
       })
       onCreated(session.id)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create session')
+      toast.error(errorMessage(e, 'Failed to create session'))
     } finally {
       setCreating(false)
     }
@@ -66,7 +67,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
         }),
       )
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to list resumable sessions')
+      toast.error(errorMessage(e, 'Failed to list resumable sessions'))
     } finally {
       setLoadingSdk(false)
     }

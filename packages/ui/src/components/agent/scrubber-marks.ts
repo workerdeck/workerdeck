@@ -8,8 +8,11 @@ export type MarkKind = 'user' | 'subagent' | 'shell' | 'turn' | 'turnFailed' | '
 export type Mark = {
   kind: MarkKind
   itemIndex: number
+  rowIndex?: number
   turnIndex?: number
 }
+
+export type Placement = (mark: Mark) => { y: number; h: number }
 
 export type Cluster = {
   lane: Lane
@@ -106,11 +109,30 @@ export interface BuildMarksOptions {
   frameParentId?: string
   bookmarks?: readonly number[]
   recapItemIndex?: number
+  rowIndexFor?: (itemIndex: number) => number
+}
+
+export function toolCallFailed(item: TranscriptItem): boolean {
+  return item.kind === 'tool_call' && (item.status === 'failed' || item.result?.isError === true)
+}
+
+export function rowOutcomes(
+  items: readonly TranscriptItem[],
+  frameParentId: string | undefined,
+  rowIndexFor: (itemIndex: number) => number,
+): Set<number> {
+  const outcome = new Map<number, number>()
+  items.forEach((item, index) => {
+    if (item.kind === 'tool_call' && parentOf(item) === frameParentId) {
+      outcome.set(rowIndexFor(index), index)
+    }
+  })
+  return new Set(outcome.values())
 }
 
 export function buildMarks(
   items: readonly TranscriptItem[],
-  { frameParentId, bookmarks = [], recapItemIndex }: BuildMarksOptions = {},
+  { frameParentId, bookmarks = [], recapItemIndex, rowIndexFor = (index) => index }: BuildMarksOptions = {},
 ): Mark[] {
   const marks: Mark[] = []
   const subagentParents = new Set<string>()
@@ -120,6 +142,7 @@ export function buildMarks(
       subagentParents.add(parent)
     }
   }
+  const outcomes = rowOutcomes(items, frameParentId, rowIndexFor)
   let segment: Segment = {}
   const closeSegment = () => {
     const anchor = segment.response ?? segment.turn
@@ -147,11 +170,7 @@ export function buildMarks(
       marks.push({ kind: 'error', itemIndex: index })
     } else if (item.kind === 'shell') {
       marks.push({ kind: 'shell', itemIndex: index })
-    } else if (
-      item.kind === 'tool_call' &&
-      parentOf(item) === frameParentId &&
-      (item.status === 'failed' || item.result?.isError === true)
-    ) {
+    } else if (toolCallFailed(item) && outcomes.has(index)) {
       marks.push({ kind: 'toolFailed', itemIndex: index })
     } else if (item.kind === 'assistant_text' && parentOf(item) === frameParentId) {
       if (frameParentId !== undefined) {
@@ -173,22 +192,25 @@ export function buildMarks(
   return marks
 }
 
-export function clusterMarks(marks: readonly Mark[], railH: number, itemCount: number): Cluster[] {
+export function proportionalPlacement(railH: number, itemCount: number): Placement {
   const count = Math.max(1, itemCount)
   const h = Math.max(MIN_MARK, Math.round(railH / count))
-  const lanes = new Map<Lane, { mark: Mark; y: number }[]>()
+  return (mark) => ({ y: Math.min(Math.max(0, railH - h), Math.round((mark.itemIndex / count) * railH)), h })
+}
+
+export function clusterMarks(marks: readonly Mark[], place: Placement): Cluster[] {
+  const lanes = new Map<Lane, { mark: Mark; y: number; h: number }[]>()
   for (const mark of marks) {
-    const y = Math.min(Math.max(0, railH - h), Math.round((mark.itemIndex / count) * railH))
     const lane = LANE[mark.kind]
     const list = lanes.get(lane) ?? []
-    list.push({ mark, y })
+    list.push({ mark, ...place(mark) })
     lanes.set(lane, list)
   }
   const clusters: Cluster[] = []
   for (const [lane, list] of lanes) {
     list.sort((a, b) => a.y - b.y)
     let current: Cluster | null = null
-    for (const { mark, y } of list) {
+    for (const { mark, y, h } of list) {
       if (current && y <= current.y + current.h + 1) {
         current.h = Math.max(current.h, y + h - current.y)
         if (LOUDNESS[mark.kind] > LOUDNESS[current.kind]) {

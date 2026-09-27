@@ -94,4 +94,18 @@ describe('drain', () => {
     expect((await fetch(`${base}/sessions/s-1`)).status).toBe(200)
     await draining
   })
+
+  it('pauses the queue and refuses new jobs, so a drain can converge', async () => {
+    running = createWorkerServer({ allowUnauthenticated: true, allowedCwdRoots: ['/tmp'], queue: { maxConcurrency: 1 } })
+    const { base } = await listenOn(running)
+    await running.drain({ timeoutMs: 1_000, pollMs: 10 })
+    expect(running.queue?.paused).toBe(true)
+    const rejected = await fetch(`${base}/jobs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session: { cwd: '/tmp/project', prompt: 'go' } }),
+    })
+    expect(rejected.status).toBe(503)
+    expect((await fetch(`${base}/jobs`)).status).toBe(200)
+  })
 })

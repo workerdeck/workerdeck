@@ -138,5 +138,9 @@ public func visibleTasks(_ tasks: [SessionTask], showCompleted: Bool) -> [Sessio
 /// The tasks a card draws under one display setting. Mirror of protocol's
 /// `displayedTasks`.
 public func displayedTasks(_ info: SessionInfo, _ show: StepDisplay) -> [SessionTask] {
-  show == .none ? [] : visibleTasks(sessionTasks(info), showCompleted: show == .all)
+  switch show {
+  case .none: return []
+  case .all: return sessionTasks(info)
+  case .active: return sessionTasks(info).filter { $0.state == .running || $0.state == .pending }
+  }
 }

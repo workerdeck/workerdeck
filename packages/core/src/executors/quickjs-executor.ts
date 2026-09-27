@@ -1,4 +1,5 @@
 import { runScript, type SandboxEngine } from '@workerdeck/sandbox'
+import { guardedFetch, hostMatches, urlDenyReason } from '../engines/provider/web-fetch.ts'
 import type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './tool-executor.ts'
 
 export type HostFetch = (url: string, signal: AbortSignal) => Promise<string>
@@ -11,11 +12,16 @@ export type QuickJsExecutorOptions = {
   // The guest's interrupt deadline does not cover host-function time, so every granted
   // capability needs its own bound. Default 10000.
   fetchTimeoutMs?: number
+  // Applies to the default fetch only; a host `hostFetch` owns its own limits. Default 1 MiB.
+  fetchMaxBytes?: number
   defaultTimeoutMs?: number
   defaultMemoryLimitBytes?: number
 }
 
 type EvalScriptInput = { script?: unknown }
+
+const MAX_REDIRECTS = 5
+const DEFAULT_FETCH_MAX_BYTES = 1024 * 1024
 
 export class QuickJsExecutor implements ToolExecutor {
   #options: QuickJsExecutorOptions
@@ -73,8 +79,15 @@ export class QuickJsExecutor implements ToolExecutor {
     outer?.addEventListener('abort', onOuterAbort)
     const timer = setTimeout(() => controller.abort(), this.#options.fetchTimeoutMs ?? 10_000)
     try {
-      const fetchImpl = this.#options.hostFetch ?? defaultHostFetch
-      return await fetchImpl(url, controller.signal)
+      if (this.#options.hostFetch) {
+        return await this.#options.hostFetch(url, controller.signal)
+      }
+      return await defaultHostFetch(
+        url,
+        controller.signal,
+        this.#options.allowedHosts ?? [],
+        this.#options.fetchMaxBytes ?? DEFAULT_FETCH_MAX_BYTES,
+      )
     } finally {
       clearTimeout(timer)
       outer?.removeEventListener('abort', onOuterAbort)
@@ -82,12 +95,61 @@ export class QuickJsExecutor implements ToolExecutor {
   }
 }
 
-async function defaultHostFetch(url: string, signal: AbortSignal): Promise<string> {
-  const response = await fetch(url, { signal })
-  if (!response.ok) {
-    throw new Error(`request failed: ${response.status}`)
+// Every hop is vetted against the allowlist and the private-address guard, and the connection itself is pinned by
+// `guardedFetch`: following redirects blindly would let an allowlisted host bounce the guest anywhere.
+async function defaultHostFetch(url: string, signal: AbortSignal, allowedHosts: string[], maxBytes: number): Promise<string> {
+  let current = url
+  for (let hop = 0; ; hop++) {
+    const parsed = new URL(current)
+    const denied = isHostAllowed(current, allowedHosts) ? await urlDenyReason(parsed, undefined) : `host not allowed: ${parsed.hostname}`
+    if (denied) {
+      throw new Error(denied)
+    }
+    const response = await guardedFetch(current, { signal })
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel().catch(() => {})
+      const location = response.headers.get('location')
+      if (!location) {
+        throw new Error(`redirect (${response.status}) without a location`)
+      }
+      if (hop >= MAX_REDIRECTS) {
+        throw new Error('too many redirects')
+      }
+      current = new URL(location, parsed).href
+      continue
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {})
+      throw new Error(`request failed: ${response.status}`)
+    }
+    return await readTextCapped(response, maxBytes)
   }
-  return await response.text()
+}
+
+async function readTextCapped(response: Response, maxBytes: number): Promise<string> {
+  if (Number(response.headers.get('content-length') ?? '') > maxBytes) {
+    await response.body?.cancel().catch(() => {})
+    throw new Error(`response too large (> ${maxBytes} bytes)`)
+  }
+  if (!response.body) {
+    return ''
+  }
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    total += value.byteLength
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {})
+      throw new Error(`response too large (> ${maxBytes} bytes)`)
+    }
+    chunks.push(value)
+  }
+  return Buffer.concat(chunks).toString('utf8')
 }
 
 function safeHost(url: string): string | undefined {
@@ -108,15 +170,5 @@ export function isHostAllowed(url: string, allowedHosts: string[]): boolean {
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     return false
   }
-  const host = parsed.hostname.toLowerCase()
-  return allowedHosts.some((entry) => {
-    const pattern = entry.trim().toLowerCase()
-    if (!pattern) {
-      return false
-    }
-    if (pattern.startsWith('*.')) {
-      return host.endsWith(pattern.slice(1))
-    }
-    return host === pattern
-  })
+  return hostMatches(parsed.hostname.toLowerCase(), allowedHosts)
 }

@@ -8,6 +8,7 @@ export type { HistoryFn, QueryFn, SessionRunnerConfig } from './engines/claude/r
 export { checkClaudeAuth, resolveBundledClaudeExecutable } from './engines/claude/auth.ts'
 export type { ClaudeAuthProbe, ClaudeAuthStatus } from './engines/claude/auth.ts'
 export type {
+  EngineRunnerConfig,
   ParkedExecution,
   PermissionDecision,
   Runner,
@@ -30,6 +31,7 @@ export { createToolContext, withHostTools, withMcpTools } from './engines/provid
 export type { HostToolDefinition, ToolContext, ToolContextOptions, ToolDefinition, ToolTrust } from './engines/provider/tools.ts'
 export { createWebFetch, htmlToMarkdown, isPrivateAddress } from './engines/provider/web-fetch.ts'
 export type { WebFetchDigest, WebFetchFn, WebFetchOptions, WebFetchResult } from './engines/provider/web-fetch.ts'
+export { GATEWAY_SECRET_ENV_KEYS, withoutGatewaySecrets } from './lib/child-env.ts'
 export { PendingRequestRegistry } from './lib/pending-registry.ts'
 export type { PendingEntry, PendingKind, PendingOutcome, RegisterOptions, SettledBy } from './lib/pending-registry.ts'
 export { InputQueue } from './lib/input-queue.ts'
@@ -135,6 +137,7 @@ export type { EngineAdapter, EngineAvailability, EngineRunnerRequest, ModelCatal
 export { claudeAdapter } from './engines/claude/adapter.ts'
 export { CLAUDE_CATALOG } from './engines/claude/catalog.ts'
 export { codexAdapter, listCodexSessions, resolveBundledCodexExecutable } from './engines/codex/adapter.ts'
+export type { CodexAdapterConfig } from './engines/codex/adapter.ts'
 export { CODEX_CATALOG } from './engines/codex/catalog.ts'
 export { CodexRunner } from './engines/codex/runner.ts'
 export type { CodexRunnerConfig } from './engines/codex/runner.ts'

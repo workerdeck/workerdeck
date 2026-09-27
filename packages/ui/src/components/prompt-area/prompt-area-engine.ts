@@ -210,8 +210,10 @@ export function resolveChip(
 
   const newSegments: Segment[] = []
   let offset = 0
+  let insertedChip: ChipSegment | undefined
 
-  for (const seg of segments) {
+  // Merged first: the trigger range is typed text, so it then lies in exactly one text segment.
+  for (const seg of mergeAdjacentTextSegments(segments)) {
     if (seg.type === 'chip') {
       const chipText = chipPlainText(seg)
       const chipStart = offset
@@ -252,6 +254,7 @@ export function resolveChip(
           ...(chip.autoResolved ? { autoResolved: true } : {}),
         }
         newSegments.push(newChip)
+        insertedChip = newChip
 
         // Add the trailing text (a space by default) after the chip, then any remaining text
         if (afterText) {
@@ -266,23 +269,10 @@ export function resolveChip(
   }
 
   const merged = mergeAdjacentTextSegments(newSegments)
-
-  // Cursor should be placed after the chip + trailing space.
-  // Find the *last* matching chip so duplicates resolve correctly.
-  let lastChipEndOffset = -1
-  let runningOffset = 0
-  for (const seg of merged) {
-    if (seg.type === 'text') {
-      runningOffset += seg.text.length
-    } else {
-      runningOffset += chipPlainText(seg).length
-      if (seg.value === chip.value && seg.displayText === chip.displayText && seg.trigger === activeTrigger.config.char) {
-        lastChipEndOffset = runningOffset
-      }
-    }
-  }
-  // The caret lands after the chip and its trailing text
-  const cursorOffset = lastChipEndOffset === -1 ? runningOffset : lastChipEndOffset + trailingText.length
+  // Everything before the trigger is untouched, so the new chip starts exactly where the trigger did.
+  const cursorOffset = insertedChip
+    ? triggerStart + chipPlainText(insertedChip).length + trailingText.length
+    : segmentsToPlainText(merged).length
 
   return { segments: merged, cursorOffset }
 }
@@ -309,7 +299,7 @@ export function resolveText(
   let offset = 0
   let cursorOffset = triggerStart + text.length
 
-  for (const seg of segments) {
+  for (const seg of mergeAdjacentTextSegments(segments)) {
     if (seg.type === 'chip') {
       const chipEnd = offset + chipPlainText(seg).length
       // A trigger range can never overlap a chip - chips are atomic - so a chip
@@ -510,8 +500,18 @@ export function replaceTextRange(segments: Segment[], start: number, end: number
         inserted = true
       }
 
-      if (chipEnd <= start || chipStart >= end) {
+      if (start === end) {
         newSegments.push(seg)
+        // A collapsed insertion can never split an atomic chip, so one inside it lands just after.
+        if (!inserted && chipStart < start && start < chipEnd) {
+          newSegments.push({ type: 'text', text: replacement })
+          inserted = true
+        }
+      } else if (chipEnd <= start || chipStart >= end) {
+        newSegments.push(seg)
+      } else if (!inserted) {
+        newSegments.push({ type: 'text', text: replacement })
+        inserted = true
       }
       offset = chipEnd
     } else {
@@ -709,6 +709,7 @@ export function segmentsEqual(a: Segment[], b: Segment[]): boolean {
         sa.trigger !== sb.trigger ||
         sa.value !== sb.value ||
         sa.displayText !== sb.displayText ||
+        sa.sigil !== sb.sigil ||
         sa.autoResolved !== sb.autoResolved
       ) {
         return false

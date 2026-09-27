@@ -1,7 +1,8 @@
 import type { IncomingMessage } from 'node:http'
 import type { JobInfo, SessionInfo } from '@workerdeck/protocol'
 import { readScope, scopeMatches } from '../lib/scope.ts'
-import type { LateBoundRefs, WorkerServerOptions } from '../options.ts'
+import type { WorkerServerOptions } from '../options.ts'
+import type { SessionRegistry } from './registry.ts'
 
 export type AuthContext = {
   ok: boolean
@@ -16,9 +17,9 @@ export type AuthService = ReturnType<typeof createAuthService>
 
 export function createAuthService(deps: {
   options: Pick<WorkerServerOptions, 'authenticate' | 'authorizeSession'>
-  refs: Pick<LateBoundRefs, 'registry'>
+  registry: SessionRegistry
 }) {
-  const { options, refs } = deps
+  const { options, registry } = deps
 
   const authenticate = async (req: IncomingMessage): Promise<AuthContext> => {
     if (!options.authenticate) {
@@ -53,7 +54,7 @@ export function createAuthService(deps: {
   }
 
   const canSeeJob = (auth: AuthContext, job: JobInfo): boolean => {
-    const live = job.sessionId ? refs.registry!.get(job.sessionId)?.info() : undefined
+    const live = job.sessionId ? registry.get(job.sessionId)?.info() : undefined
     if (live) {
       return canSee(auth, live)
     }

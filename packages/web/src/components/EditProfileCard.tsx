@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { type PermissionMode, type ProfileInfo, type SessionCapability, type UpdateProfileRequest } from '@workerdeck/protocol'
+import { errorMessage } from '@workerdeck/protocol'
+import type { PermissionMode, ProfileInfo, SessionCapability, UpdateProfileRequest } from '@workerdeck/protocol'
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, PermissionModeSelect, Spinner, toast } from '@workerdeck/ui'
 import { Save } from 'lucide-react'
 import { client } from '@/lib/client.ts'
@@ -58,7 +59,7 @@ export function EditProfileCard({ profile, onSaved }: { profile: ProfileInfo; on
       onSaved(await client()!.updateProfile(profile.name, patch))
       toast.success('Profile saved')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to save profile')
+      toast.error(errorMessage(e, 'Failed to save profile'))
     } finally {
       setSaving(false)
     }

@@ -1,48 +1,12 @@
-import { pickCreateSessionRequest, type CreateSessionRequest } from '@workerdeck/protocol'
-import type { AiSdkRunnerConfig, CodexRunnerConfig, SessionRunnerConfig } from '@workerdeck/core'
+import { pickCreateSessionRequest, type CreateSessionRequest, type ProfileInfo } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
+import { HOST_ONLY_KEYS } from '../lib/host-only-keys.ts'
+import type { Refusal } from '../lib/http.ts'
+import { refusePermissionMode } from '../lib/permissions.ts'
+import { engineOf } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
 
-type HostOnlyKey = Exclude<keyof SessionRunnerConfig | keyof CodexRunnerConfig | keyof AiSdkRunnerConfig, keyof CreateSessionRequest>
-
-// Every runner-config key that is not on the wire type. Typed as a record over that difference so a
-// host-only field added to any engine's config without an entry here fails typecheck, as does an
-// entry that has since been promoted onto CreateSessionRequest.
-const HOST_ONLY_KEY_SET: Record<HostOnlyKey, true> = {
-  epoch: true,
-  queryFn: true,
-  env: true,
-  pathToClaudeCodeExecutable: true,
-  extraOptions: true,
-  instructions: true,
-  defaultApprovalTimeoutMs: true,
-  backfillHistory: true,
-  historyFn: true,
-  sessionInfoFn: true,
-  peers: true,
-  shells: true,
-  shellAgentWrite: true,
-  createdByOperator: true,
-  connectFn: true,
-  codexHome: true,
-  codexPathOverride: true,
-  languageModel: true,
-  tools: true,
-  maxSteps: true,
-  executor: true,
-  executableTools: true,
-  vfs: true,
-  executionLimits: true,
-  executionBackend: true,
-  toolTitles: true,
-  shouldApprove: true,
-  resolveModel: true,
-  reportMcpServers: true,
-  onClose: true,
-  restore: true,
-}
-
-export const HOST_ONLY_KEYS: ReadonlySet<string> = new Set(Object.keys(HOST_ONLY_KEY_SET))
+export { HOST_ONLY_KEYS }
 
 export type VettedCreateRequest = { ok: true; request: CreateSessionRequest } | { ok: false; status: number; error: string }
 
@@ -68,31 +32,72 @@ export function vetCreateRequest(ctx: ServerContext, body: unknown, auth: AuthCo
   }
   const req = pickCreateSessionRequest(body as Record<string, unknown>)
   const { availability, factory } = ctx
-  const refusedScope = factory.applyScope(req, auth)
-  if (refusedScope) {
-    return { ok: false, ...refusedScope }
-  }
-  const refused = factory.applyBypassPolicy(req)
-  if (refused) {
-    return { ok: false, status: 403, error: refused }
+  const early = factory.applyScope(req, auth) ?? refusal(403, factory.applyBypassPolicy(req))
+  if (early) {
+    return { ok: false, ...early }
   }
   const resolved = factory.resolveProfile(req.profile, auth.allowedProfiles)
   if (!resolved.ok) {
-    return { ok: false, status: resolved.status, error: resolved.error }
+    return resolved
   }
-  const unavailable = availability.checkAvailable(resolved.profile)
-  if (unavailable) {
-    return { ok: false, ...unavailable }
-  }
-  const refusedCwd = factory.checkCwd(req, resolved.profile)
-  if (refusedCwd) {
-    return { ok: false, ...refusedCwd }
-  }
-  const badRequest = factory.checkPermissionMode(req.permissionMode, resolved.profile) ?? factory.checkEngineGrants(req, resolved.profile)
-  if (badRequest) {
-    return { ok: false, status: 400, error: badRequest }
+  const refused =
+    refusal(403, refuseHostAuthority(ctx, req, resolved.profile, auth)) ??
+    availability.checkAvailable(resolved.profile) ??
+    factory.checkCwd(req, resolved.profile) ??
+    refusal(400, factory.checkPermissionMode(req.permissionMode, resolved.profile) ?? factory.checkEngineGrants(req, resolved.profile))
+  if (refused) {
+    return { ok: false, ...refused }
   }
   factory.stripInertFields(req, resolved.profile)
   req.profile = resolved.profile?.name
   return { ok: true, request: req }
+}
+
+function refusal(status: number, error: string | null): Refusal | null {
+  return error === null ? null : { status, error }
+}
+
+// A non-operator is an embedded end user: nothing on its request may reach past what the profile grants into the
+// gateway's own authority over the host. Operators (the tenant model's one key) are untouched.
+function refuseHostAuthority(
+  ctx: ServerContext,
+  req: CreateSessionRequest,
+  profile: ProfileInfo | undefined,
+  auth: AuthContext,
+): string | null {
+  if (ctx.auth.isOperator(auth)) {
+    return null
+  }
+  const engine = engineOf(profile)
+  const name = profile?.name ?? 'default'
+  if ((engine === 'claude' || engine === 'codex') && !auth.allowedProfiles?.includes(name)) {
+    return `profile '${name}' runs the ${engine} engine on the host; a non-operator caller needs it named in its allowedProfiles`
+  }
+  const mode = refusePermissionMode(req.permissionMode, { operator: false })
+  if (mode) {
+    return mode
+  }
+  if (req.allowDangerouslySkipPermissions) {
+    return 'allowDangerouslySkipPermissions is reserved to operators'
+  }
+  if (req.settingSources !== undefined && req.settingSources.length > 0) {
+    return 'settingSources is reserved to operators: it loads hooks and settings from the host'
+  }
+  const servers = typeof req.mcpServers === 'object' && req.mcpServers !== null ? Object.values(req.mcpServers) : []
+  if (!servers.every(isRemoteMcpServer)) {
+    return 'a stdio MCP server is reserved to operators: it runs a command on the host'
+  }
+  if (req.resume !== undefined && !ownsSdkSession(ctx, auth, req.resume)) {
+    return 'resume is limited to a live session this caller can see'
+  }
+  return null
+}
+
+function ownsSdkSession(ctx: ServerContext, auth: AuthContext, sdkSessionId: string): boolean {
+  return ctx.registry.list().some((info) => info.sdkSessionId === sdkSessionId && ctx.auth.canSee(auth, info))
+}
+
+function isRemoteMcpServer(server: unknown): boolean {
+  const type = (server as { type?: unknown } | null)?.type
+  return type === 'http' || type === 'sse'
 }

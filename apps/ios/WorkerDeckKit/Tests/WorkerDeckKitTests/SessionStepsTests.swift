@@ -108,17 +108,16 @@ struct SessionStepsTests {
     #expect(steps.map(\.state) == [.running, .failed, .done])
   }
 
-  /// A failed record is not a completed one, so `.active` keeps it: it is the
-  /// row most worth reading on a card that has gone quiet.
+  /// `.active` keeps only running records.
   @Test("the display preference decides which records draw")
   func display() {
     let session = info(subagents: [
       agent("a1", status: .running), agent("a2", status: .failed), agent("a3", status: .done),
     ])
     #expect(sessionSteps(session, .all).map(\.key) == ["a1", "a2", "a3"])
-    #expect(sessionSteps(session, .active).map(\.key) == ["a1", "a2"])
+    #expect(sessionSteps(session, .active).map(\.key) == ["a1"])
     #expect(sessionSteps(session, .none).isEmpty)
-    #expect(visibleSubagents(session, .active).map(\.toolUseId) == ["a1", "a2"])
+    #expect(visibleSubagents(session, .active).map(\.toolUseId) == ["a1"])
     #expect(visibleSubagents(info(subagents: nil), .all).isEmpty)
   }
 
@@ -177,7 +176,8 @@ struct SessionStepsTests {
 
     let failed = shell(
       "sh_2", status: .exited, startedAt: 0, endedAt: 4_000, exitCode: 1, endReason: .exit)
-    let settled = sessionSteps(info(subagents: nil, shells: [failed]), .all, now: 5_000)
+    #expect(sessionSteps(info(subagents: nil, shells: [failed]), .all, now: 5_000).isEmpty)
+    let settled = sessionSteps(info(subagents: nil, shells: [failed]), .all, now: 5_000, shells: .all)
     #expect(settled.map(\.killable) == [false])
     #expect(settled[0].state == .failed)
     #expect(settled[0].detail == "exit 1")

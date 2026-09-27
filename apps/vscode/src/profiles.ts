@@ -1,11 +1,13 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
+import { errorMessage, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import * as vscode from 'vscode'
 import { clientFor } from './gateway.ts'
 import { isLoopbackHost, type GatewayHost, type HostStore } from './hosts.ts'
 import { BACK, CANCEL, showInput, showPick } from './quick-input.ts'
+
+type ProfileAction = (host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo) => Promise<void>
 
 export type ProfileFlowDeps = {
   store: HostStore
@@ -25,34 +27,17 @@ export async function addProfile(deps: ProfileFlowDeps, hostId?: string): Promis
 }
 
 export async function editProfile(deps: ProfileFlowDeps, hostId: string, name: string): Promise<void> {
-  const host = deps.store.get(hostId)
-  if (!host) {
-    return
-  }
-  const client = await clientFor(deps.store, host)
-  if (!client) {
-    return
-  }
-  let profile: ProfileInfo
-  try {
-    profile = (await client.getProfile(name)).profile
-  } catch (err) {
-    void vscode.window.showErrorMessage(`WorkerDeck: ${describe(err)}`)
-    return
-  }
-  if (declared(profile, host)) {
-    return
-  }
-  await edit(deps, host, client, profile)
+  await withEditableProfile(deps, hostId, name, (host, client, profile) => edit(deps, host, client, profile))
 }
 
 export async function removeProfile(deps: ProfileFlowDeps, hostId: string, name: string): Promise<void> {
+  await withEditableProfile(deps, hostId, name, (host, client, profile) => confirmDelete(deps, host, client, profile))
+}
+
+async function withEditableProfile(deps: ProfileFlowDeps, hostId: string, name: string, then: ProfileAction): Promise<void> {
   const host = deps.store.get(hostId)
-  if (!host) {
-    return
-  }
-  const client = await clientFor(deps.store, host)
-  if (!client) {
+  const client = host && (await clientFor(deps.store, host))
+  if (!host || !client) {
     return
   }
   let profile: ProfileInfo
@@ -62,10 +47,9 @@ export async function removeProfile(deps: ProfileFlowDeps, hostId: string, name:
     void vscode.window.showErrorMessage(`WorkerDeck: ${describe(err)}`)
     return
   }
-  if (declared(profile, host)) {
-    return
+  if (!declared(profile, host)) {
+    await then(host, client, profile)
   }
-  await confirmDelete(deps, host, client, profile)
 }
 
 type EngineChoice = { engine: ProfileEngine; label: string; detail: string; dirPrompt: string; dirDefault: string }
@@ -355,7 +339,7 @@ function describeProfile(profile: ProfileInfo): string {
 
 function describe(err: unknown): string {
   const status = (err as { status?: number }).status
-  const message = err instanceof Error ? err.message : String(err)
+  const message = errorMessage(err)
   if (status === 404) {
     return 'this gateway does not allow profile management - start it without `--no-profile-store`'
   }

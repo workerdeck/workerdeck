@@ -55,11 +55,9 @@ struct ImageRefTests {
     #expect(refs[0].mediaType == "application/octet-stream")
   }
 
-  @Test("a gateway that never heard of image_ref decodes exactly as before")
+  @Test("a socket that did not ask for image refs decodes exactly as before")
   func toleratesAbsence() throws {
-    // The compatibility claim, asserted rather than argued: an old gateway, or
-    // a socket that did not ask, sends these - and a raw base64 image part is
-    // still dropped on arrival, never folded into state.
+    // A raw base64 image part is still dropped on arrival, never folded into state.
     let block = try decodeBlock(
       """
       {"type":"tool_result","tool_use_id":"t1","is_error":false,"content":[

@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import type { EngineCapabilities, ProfileEngine } from '@workerdeck/protocol'
@@ -108,7 +109,7 @@ export function useAttachments(
           })
           patch(key, { status: 'ready', id: uploaded.id, bytes: uploaded.bytes ?? file.size })
         } catch (e) {
-          patch(key, { status: 'failed', error: e instanceof Error ? e.message : 'Upload failed' })
+          patch(key, { status: 'failed', error: errorMessage(e, 'Upload failed') })
         }
       })()
     },

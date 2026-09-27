@@ -179,14 +179,8 @@ final class AppSettings {
     self.defaults = defaults
     // Defaults match the web dashboard's, so a reader moving between the two
     // sees the same transcript until they say otherwise.
-    // A stored "lines" predates the `terminal` renderer and migrates to it
-    // rather than falling back to the `cards` default: someone who turned
-    // boxes off should keep them off, not be silently opted back into cards.
-    switch defaults.string(forKey: Self.variantKey) {
-    case "lines": transcriptVariant = .terminal
-    case let raw?: transcriptVariant = TranscriptVariant(rawValue: raw) ?? .cards
-    case nil: transcriptVariant = .cards
-    }
+    transcriptVariant =
+      defaults.string(forKey: Self.variantKey).flatMap(TranscriptVariant.init(rawValue:)) ?? .cards
     transcriptFont =
       defaults.string(forKey: Self.fontKey).flatMap(TranscriptFont.init(rawValue:)) ?? .regular
     catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true

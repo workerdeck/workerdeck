@@ -5,8 +5,8 @@ import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
 import { cn } from '../../lib/utils.ts'
 import { toolInputPreview } from '../../lib/format.ts'
-import { planFromRequest } from '../../lib/plan-request.ts'
-import { shellRequestLines, shellRequestPayload, shellRequestTitle } from '../../lib/shell-request.ts'
+import { permissionPromptModel } from '../../lib/permission-prompt.ts'
+import { shellRequestLines } from '../../lib/shell-request.ts'
 import { toolIcon } from '../../lib/tool-icon.ts'
 import { Response } from './Response.tsx'
 
@@ -29,8 +29,9 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
     setDenying(false)
   }
 
-  const plan = planFromRequest(request)
-  const shell = plan ? undefined : shellRequestPayload(request)
+  const model = permissionPromptModel(request)
+  const { plan, shell } = model
+  const [allow, keep, stop] = model.choices
   const summary = toolInputPreview(request.input)
   const ToolIcon = toolIcon(request.toolName)
 
@@ -39,15 +40,9 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
       <div className="flex items-start gap-2.5">
         <Hand className="mt-0.5 size-4 shrink-0 text-warning" />
         <div className="min-w-0 flex-1">
-          <div className="text-body-sm font-medium text-fg-1">
-            {plan
-              ? 'Plan ready for review'
-              : shell
-                ? shellRequestTitle(shell)
-                : (request.title ?? request.displayName ?? 'Permission needed')}
-          </div>
-          {request.description ? <div className="mt-0.5 text-label text-fg-3">{request.description}</div> : null}
-          {request.decisionReason ? <div className="mt-0.5 text-label text-fg-4">{request.decisionReason}</div> : null}
+          <div className="text-body-sm font-medium text-fg-1">{model.heading}</div>
+          {model.description ? <div className="mt-0.5 text-label text-fg-3">{model.description}</div> : null}
+          {model.decisionReason ? <div className="mt-0.5 text-label text-fg-4">{model.decisionReason}</div> : null}
           {plan ? (
             <div className="mt-1.5 max-h-72 overflow-y-auto rounded-md bg-code-bg px-2.5 py-2 text-body-sm text-fg-2">
               <Response>{plan}</Response>
@@ -84,13 +79,13 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
           <Button size="sm" onClick={() => onApprove(request.id)}>
-            {plan ? 'Approve plan' : 'Allow'}
+            {allow.button}
           </Button>
           <Button size="sm" variant="outline" onClick={() => setDenying((v) => !v)}>
-            {plan ? 'Keep planning' : 'Deny'}
+            {keep.button}
           </Button>
           <Button size="sm" variant="outline" onClick={() => deny(true)}>
-            {plan ? 'Stop the turn' : 'Deny & stop'}
+            {stop.button}
           </Button>
         </div>
       </div>
@@ -108,18 +103,14 @@ export function PermissionPrompt({ request, onApprove, onDeny, className }: Perm
                 setDenying(false)
               }
             }}
-            placeholder={
-              plan
-                ? 'What should change? (optional) - the agent keeps planning and reads this'
-                : 'Reason (optional) - the agent reads this and can try something else'
-            }
+            placeholder={model.denyPlaceholder}
             className="h-7 flex-1"
           />
           <Button size="sm" variant="outline" onClick={() => setDenying(false)}>
             Cancel
           </Button>
           <Button size="sm" variant="destructive" onClick={() => deny(false)}>
-            {plan ? 'Keep planning' : 'Deny'}
+            {keep.button}
           </Button>
         </div>
       ) : null}

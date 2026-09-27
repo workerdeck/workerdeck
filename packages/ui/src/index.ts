@@ -3,7 +3,16 @@ export { Badge, badgeVariants, type BadgeProps } from './components/ui/Badge.tsx
 export { Card, CardContent, CardHeader, CardTitle } from './components/ui/Card.tsx'
 export { Input } from './components/ui/Input.tsx'
 export { Textarea } from './components/ui/Textarea.tsx'
-export { Select, SelectContent, SelectItem, SelectItemText, SelectTrigger, SelectValue } from './components/ui/Select.tsx'
+export {
+  OptionSelect,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectItemText,
+  SelectTrigger,
+  SelectValue,
+  type OptionSelectProps,
+} from './components/ui/Select.tsx'
 export {
   AlertDialog,
   AlertDialogClose,
@@ -52,9 +61,9 @@ export {
   type SessionVitals,
   type TerminalMetrics,
 } from './components/agent/SessionPanel.tsx'
-export { Transcript, type TranscriptProps } from './components/agent/Transcript.tsx'
+export { TerminalTranscript, Transcript, type TerminalTranscriptProps, type TranscriptProps } from './components/agent/Transcript.tsx'
 export { TerminalSurface, type TerminalSurfaceProps } from './components/terminal/surface.tsx'
-export { TerminalTranscript, TerminalItemView, type TerminalTranscriptProps } from './components/terminal/TerminalTranscript.tsx'
+export { TerminalItemView } from './components/terminal/TerminalTranscript.tsx'
 export { TerminalStatusLine, type TerminalStatusLineProps } from './components/terminal/StatusLine.tsx'
 export { TerminalPermissionPrompt, type TerminalPermissionPromptProps } from './components/terminal/PermissionPrompt.tsx'
 export { TerminalQuestionPrompt, type TerminalQuestionPromptProps } from './components/terminal/QuestionPrompt.tsx'
@@ -124,13 +133,26 @@ export {
   type PermissionModeSelectProps,
 } from './components/agent/PermissionModeSelect.tsx'
 export { StatusBar, type StatusBarProps } from './components/agent/StatusBar.tsx'
-export { ContextDialog, type ContextDialogProps } from './components/agent/ContextDialog.tsx'
+export { ContextDialog, ContextPanel, type ContextDialogProps, type ContextPanelProps } from './components/agent/ContextDialog.tsx'
 export { UsageDialog, type UsageDialogProps } from './components/agent/UsageDialog.tsx'
 export { TaskList, type TaskListProps } from './components/agent/TaskList.tsx'
 export { TasksDialog, type TasksDialogProps } from './components/agent/TasksDialog.tsx'
 export { UsageMeters, useMinuteClock } from './components/agent/UsageMeters.tsx'
-export { SessionInfoDialog, type SessionInfoDialogProps } from './components/agent/SessionInfoDialog.tsx'
-export { McpDialog, type McpDialogProps } from './components/agent/McpDialog.tsx'
+export {
+  SessionInfoDialog,
+  SessionInfoPanel,
+  type SessionInfoDialogProps,
+  type SessionInfoPanelProps,
+} from './components/agent/SessionInfoDialog.tsx'
+export {
+  McpDialog,
+  McpPanel,
+  McpPanelActions,
+  useMcpPanel,
+  type McpDialogProps,
+  type McpPanelModel,
+  type McpPanelProps,
+} from './components/agent/McpDialog.tsx'
 export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsDialog.tsx'
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export { SessionList, SessionListItem, type SessionListItemProps, type SessionListProps } from './components/agent/SessionList.tsx'

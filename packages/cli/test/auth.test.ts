@@ -116,6 +116,38 @@ describe('disabled mode (no secret)', () => {
   })
 })
 
+describe('disabled mode: cross-site requests', () => {
+  const auth = createCliAuth()
+
+  it('refuses a foreign or opaque Origin on every method and on the upgrade', async () => {
+    expect(
+      await auth.authenticate(fakeReq({ method: 'POST', headers: { host: '127.0.0.1:8787', origin: 'https://evil.example' } })),
+    ).toBeNull()
+    expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { host: '127.0.0.1:8787', origin: 'null' } }))).toBeNull()
+    expect(await auth.authenticate(fakeReq({ headers: { host: '127.0.0.1:8787', origin: 'https://evil.example' } }))).toBeNull()
+    expect(
+      await auth.authenticate(fakeReq({ headers: { host: '127.0.0.1:8787', origin: 'http://localhost:5173', upgrade: 'websocket' } })),
+    ).toBeNull()
+  })
+
+  it('refuses a cross-site unsafe request that carries no Origin, but not a cross-site image GET', async () => {
+    const crossSite = { host: '127.0.0.1:8787', 'sec-fetch-site': 'cross-site' }
+    expect(await auth.authenticate(fakeReq({ method: 'POST', headers: crossSite }))).toBeNull()
+    expect(await auth.authenticate(fakeReq({ method: 'GET', headers: crossSite }))).toBeTruthy()
+  })
+
+  it('admits same-origin browsers, allowed origins, and non-browser clients', async () => {
+    expect(
+      await auth.authenticate(fakeReq({ method: 'POST', headers: { host: '127.0.0.1:8787', origin: 'http://127.0.0.1:8787' } })),
+    ).toBeTruthy()
+    expect(await auth.authenticate(fakeReq({ method: 'POST', headers: { host: '127.0.0.1:8787' } }))).toBeTruthy()
+    const allowed = createCliAuth({ allowedOrigins: ['http://localhost:5191'] })
+    expect(
+      await allowed.authenticate(fakeReq({ method: 'POST', headers: { host: '127.0.0.1:8787', origin: 'http://localhost:5191' } })),
+    ).toBeTruthy()
+  })
+})
+
 describe('secret validation', () => {
   it('rejects short and empty secrets at construction', () => {
     expect(() => createCliAuth({ secret: '' })).toThrow(/at least 12/)
@@ -143,6 +175,19 @@ describe('header transport', () => {
     expect(await auth.authenticate(fakeReq({ headers: { authorization: 'Bearer wrong' } }))).toBeNull()
     expect(await auth.authenticate(fakeReq({ headers: { authorization: 'Basic abc' } }))).toBeNull()
     expect(await auth.authenticate(fakeReq({}))).toBeNull()
+  })
+
+  it('throttles wrong keys per remote IP, never loopback and never globally', async () => {
+    const throttled = createCliAuth({ secret: SECRET, throttle: { maxFailuresPerIp: 2, maxFailuresGlobal: 1 } })
+    const remote = (key: string, remoteAddress = '203.0.113.7') => fakeReq({ headers: { 'x-workerdeck-key': key }, remoteAddress })
+    expect(await throttled.authenticate(remote('wrong'))).toBeNull()
+    expect(await throttled.authenticate(remote('wrong'))).toBeNull()
+    expect(await throttled.authenticate(remote(SECRET))).toBeNull()
+    expect(await throttled.authenticate(remote(SECRET, '203.0.113.8'))).toBeTruthy()
+    for (let i = 0; i < 5; i++) {
+      expect(await throttled.authenticate(remote('wrong', '127.0.0.1'))).toBeNull()
+    }
+    expect(await throttled.authenticate(remote(SECRET, '127.0.0.1'))).toBeTruthy()
   })
 
   it('works on a WS-upgrade-shaped request', async () => {

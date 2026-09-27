@@ -1,6 +1,6 @@
 import type { SessionHandle } from '@workerdeck/client'
+import { errorMessage, type ToolCallRequestFrame } from '@workerdeck/protocol'
 import type { RunScriptResult, SandboxEngine, SandboxVfs } from '@workerdeck/sandbox'
-import type { ToolCallRequestFrame } from '@workerdeck/protocol'
 
 export type ToolHostExecution = {
   executionId: string
@@ -38,6 +38,10 @@ export type ToolCallHostOptions = {
   onExecution?: (execution: ToolHostExecution) => void
 }
 
+type Work = (signal: AbortSignal) => Promise<Outcome>
+
+type Outcome = { ok: true; value: unknown; logs?: string[] } | { ok: false; reason: string; error: string; logs?: string[] }
+
 export function createToolCallHost(handle: SessionHandle, options: ToolCallHostOptions = {}): { dispose: () => void } {
   const inFlight = new Map<string, AbortController>()
   let enginePromise: Promise<SandboxEngine> | undefined
@@ -45,84 +49,46 @@ export function createToolCallHost(handle: SessionHandle, options: ToolCallHostO
 
   const track = (execution: ToolHostExecution) => options.onExecution?.(execution)
 
-  const refuse = (frame: ToolCallRequestFrame, reason: string, error: string, startedAt: number) => {
-    handle.sendToolCallError(frame.executionId, reason, error)
-    track({
-      executionId: frame.executionId,
-      toolName: frame.toolName,
-      status: 'failed',
-      reason,
-      startedAt,
-      endedAt: Date.now(),
-    })
+  const settle = (frame: ToolCallRequestFrame, startedAt: number, outcome: Outcome) => {
+    const { executionId, toolName } = frame
+    if (outcome.ok) {
+      handle.sendToolCallResult(executionId, { type: 'json', value: outcome.value }, outcome.logs)
+      track({ executionId, toolName, status: 'settled', startedAt, endedAt: Date.now() })
+    } else {
+      handle.sendToolCallError(executionId, outcome.reason, outcome.error, outcome.logs)
+      track({ executionId, toolName, status: 'failed', reason: outcome.reason, startedAt, endedAt: Date.now() })
+    }
   }
 
-  const runClientTool = async (frame: ToolCallRequestFrame, handler: ClientToolHandler): Promise<void> => {
-    const startedAt = Date.now()
+  const execute = async (frame: ToolCallRequestFrame, startedAt: number, work: Work): Promise<void> => {
     const controller = new AbortController()
     inFlight.set(frame.executionId, controller)
     track({ executionId: frame.executionId, toolName: frame.toolName, status: 'running', startedAt })
-
+    let outcome: Outcome
     try {
-      const result = await handler(frame.input, {
-        executionId: frame.executionId,
-        signal: controller.signal,
-      })
-      if (disposed || !inFlight.has(frame.executionId)) {
-        return
-      }
-      if ('error' in result) {
-        handle.sendToolCallError(frame.executionId, result.reason ?? 'client_error', result.error)
-        track({
-          executionId: frame.executionId,
-          toolName: frame.toolName,
-          status: 'failed',
-          reason: result.reason ?? 'client_error',
-          startedAt,
-          endedAt: Date.now(),
-        })
-      } else {
-        handle.sendToolCallResult(frame.executionId, { type: 'json', value: result.value })
-        track({
-          executionId: frame.executionId,
-          toolName: frame.toolName,
-          status: 'settled',
-          startedAt,
-          endedAt: Date.now(),
-        })
-      }
+      outcome = await work(controller.signal)
     } catch (error) {
-      if (disposed || !inFlight.has(frame.executionId)) {
-        return
+      outcome = { ok: false, reason: 'host_error', error: errorMessage(error) }
+    }
+    try {
+      if (!disposed && inFlight.has(frame.executionId)) {
+        settle(frame, startedAt, outcome)
       }
-      refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
     } finally {
       inFlight.delete(frame.executionId)
     }
   }
 
-  const run = async (frame: ToolCallRequestFrame): Promise<void> => {
-    const startedAt = Date.now()
-    const clientHandler = options.clientTools?.[frame.toolName]
-    if (clientHandler) {
-      return runClientTool(frame, clientHandler)
-    }
-    const allowed = options.tools ?? ['eval_script']
-    if (!allowed.includes(frame.toolName)) {
-      refuse(frame, 'unsupported_tool', `this client does not execute '${frame.toolName}'`, startedAt)
-      return
-    }
-    const script = (frame.input as { script?: unknown } | undefined)?.script
-    if (typeof script !== 'string') {
-      refuse(frame, 'invalid_input', 'expected a string `script` input', startedAt)
-      return
-    }
+  const runClientTool = (frame: ToolCallRequestFrame, handler: ClientToolHandler, startedAt: number): Promise<void> =>
+    execute(frame, startedAt, async (signal) => {
+      const result = await handler(frame.input, { executionId: frame.executionId, signal })
+      return 'error' in result
+        ? { ok: false, reason: result.reason ?? 'client_error', error: result.error }
+        : { ok: true, value: result.value }
+    })
 
-    const controller = new AbortController()
-    inFlight.set(frame.executionId, controller)
-    track({ executionId: frame.executionId, toolName: frame.toolName, status: 'running', startedAt })
-
-    try {
+  const runScript = (frame: ToolCallRequestFrame, script: string, startedAt: number): Promise<void> =>
+    execute(frame, startedAt, async (signal) => {
       const sandbox = await import('@workerdeck/sandbox')
       const vfs = sandbox.createVfs(frame.vfsSeed)
       // Never above what the server asked for: it owns the deadline it gives up at.
@@ -131,53 +97,41 @@ export function createToolCallHost(handle: SessionHandle, options: ToolCallHostO
         frame.limits?.memoryLimitBytes ?? Number.POSITIVE_INFINITY,
         options.memoryLimitBytes ?? 64 * 1024 * 1024,
       )
-
-      const result = options.execute
-        ? await options.execute({ script, vfs, timeoutMs, memoryLimitBytes, signal: controller.signal })
-        : await (async () => {
-            enginePromise ??= (options.loadEngine ?? defaultLoadEngine)()
-            return sandbox.runScript(await enginePromise, {
-              script,
-              vfs,
-              timeoutMs,
-              memoryLimitBytes,
-              signal: controller.signal,
-              fetchText: options.fetchText,
-            })
-          })()
-
-      if (disposed || !inFlight.has(frame.executionId)) {
-        return
+      let result: RunScriptResult
+      if (options.execute) {
+        result = await options.execute({ script, vfs, timeoutMs, memoryLimitBytes, signal })
+      } else {
+        enginePromise ??= (options.loadEngine ?? defaultLoadEngine)()
+        result = await sandbox.runScript(await enginePromise, {
+          script,
+          vfs,
+          timeoutMs,
+          memoryLimitBytes,
+          signal,
+          fetchText: options.fetchText,
+        })
       }
       const logs = result.logs.map((l) => `[${l.level}] ${l.text}`)
-      if (result.ok) {
-        handle.sendToolCallResult(frame.executionId, { type: 'json', value: result.value }, logs)
-        track({
-          executionId: frame.executionId,
-          toolName: frame.toolName,
-          status: 'settled',
-          startedAt,
-          endedAt: Date.now(),
-        })
-      } else {
-        handle.sendToolCallError(frame.executionId, result.reason, result.error, logs)
-        track({
-          executionId: frame.executionId,
-          toolName: frame.toolName,
-          status: 'failed',
-          reason: result.reason,
-          startedAt,
-          endedAt: Date.now(),
-        })
-      }
-    } catch (error) {
-      if (disposed || !inFlight.has(frame.executionId)) {
-        return
-      }
-      refuse(frame, 'host_error', error instanceof Error ? error.message : String(error), startedAt)
-    } finally {
-      inFlight.delete(frame.executionId)
+      return result.ok ? { ok: true, value: result.value, logs } : { ok: false, reason: result.reason, error: result.error, logs }
+    })
+
+  const run = async (frame: ToolCallRequestFrame): Promise<void> => {
+    const startedAt = Date.now()
+    const clientHandler = options.clientTools?.[frame.toolName]
+    if (clientHandler) {
+      return runClientTool(frame, clientHandler, startedAt)
     }
+    const allowed = options.tools ?? ['eval_script']
+    if (!allowed.includes(frame.toolName)) {
+      settle(frame, startedAt, { ok: false, reason: 'unsupported_tool', error: `this client does not execute '${frame.toolName}'` })
+      return
+    }
+    const script = (frame.input as { script?: unknown } | undefined)?.script
+    if (typeof script !== 'string') {
+      settle(frame, startedAt, { ok: false, reason: 'invalid_input', error: 'expected a string `script` input' })
+      return
+    }
+    return runScript(frame, script, startedAt)
   }
 
   const offRequest = handle.on('toolCallRequest', (frame) => void run(frame))

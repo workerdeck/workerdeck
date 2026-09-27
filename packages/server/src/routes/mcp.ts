@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Runner } from '@workerdeck/core'
 import type { McpServerActionRequest } from '@workerdeck/protocol'
-import { json, readJsonBody } from '../lib/http.ts'
+import { fail, json, readJsonBody } from '../lib/http.ts'
 import type { ServerContext } from '../context.ts'
 
 export async function handleMcp(
@@ -11,32 +11,19 @@ export async function handleMcp(
   runner: Runner,
   serverName?: string,
 ): Promise<void> {
-  const listServers = async (): Promise<boolean> => {
-    const servers = await runner.mcpServers?.()
-    if (!servers) {
-      json(res, 501, { error: 'this session does not report MCP servers' })
-      return false
-    }
-    json(res, 200, { servers })
-    return true
-  }
   if (req.method === 'GET' && serverName === undefined) {
-    await listServers()
+    await listServers(res, runner)
     return
   }
   if (req.method === 'POST' && serverName !== undefined) {
     const body = (await readJsonBody(req, ctx.maxBodyBytes)) as McpServerActionRequest
     if (body?.action !== 'reconnect' && body?.action !== 'enable' && body?.action !== 'disable') {
-      json(res, 400, { error: "action must be 'reconnect', 'enable' or 'disable'" })
-      return
+      fail(400, "action must be 'reconnect', 'enable' or 'disable'")
     }
     const canAct =
       body.action === 'reconnect' ? typeof runner.reconnectMcpServer === 'function' : typeof runner.setMcpServerEnabled === 'function'
     if (!canAct) {
-      json(res, 501, {
-        error: `this session's engine cannot ${body.action} an MCP server`,
-      })
-      return
+      fail(501, `this session's engine cannot ${body.action} an MCP server`)
     }
     try {
       if (body.action === 'reconnect') {
@@ -45,11 +32,18 @@ export async function handleMcp(
         await runner.setMcpServerEnabled?.(serverName, body.action === 'enable')
       }
     } catch (error) {
-      json(res, 400, { error: error instanceof Error ? error.message : 'MCP action failed' })
-      return
+      fail(400, error instanceof Error ? error.message : 'MCP action failed')
     }
-    await listServers()
+    await listServers(res, runner)
     return
   }
   json(res, 405, { error: 'method not allowed' })
+}
+
+async function listServers(res: ServerResponse, runner: Runner): Promise<void> {
+  const servers = await runner.mcpServers?.()
+  if (!servers) {
+    fail(501, 'this session does not report MCP servers')
+  }
+  json(res, 200, { servers })
 }

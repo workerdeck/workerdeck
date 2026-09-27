@@ -1,3 +1,4 @@
+import { errorMessage } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import { randomUUID } from 'node:crypto'
 import { apiUrl, type HostStore } from './hosts.ts'
@@ -100,7 +101,7 @@ async function save(deps: GatewayFlowDeps, host: { id: string; name: string; bas
   try {
     await deps.store.save(host, authKey || undefined)
   } catch (err) {
-    void vscode.window.showErrorMessage(`WorkerDeck: could not save the gateway - ${err instanceof Error ? err.message : String(err)}`)
+    void vscode.window.showErrorMessage(`WorkerDeck: could not save the gateway - ${errorMessage(err)}`)
     return
   }
   // The probe runs on the refresh, so the view says connected/unauthorized on its own.

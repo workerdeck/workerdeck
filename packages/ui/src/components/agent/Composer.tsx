@@ -394,6 +394,26 @@ export function Composer({
     </div>
   ) : null
 
+  const stagedStrip = staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null
+
+  const field = (minHeight: number, maxHeight: number, fieldClass: string) => (
+    <PromptArea
+      {...bind}
+      triggers={triggers}
+      markdown={false}
+      normalizeBullets={false}
+      onSubmit={submit}
+      disabled={disabled}
+      placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
+      minHeight={minHeight}
+      maxHeight={maxHeight}
+      aria-label={shellMode ? 'Run a shell command' : 'Message the agent'}
+      className={fieldClass}
+      onImagePaste={(file) => attachments?.add([file])}
+      {...shellKeys}
+    />
+  )
+
   if (terminal) {
     const line = lineHeight ?? 18
     return (
@@ -408,26 +428,12 @@ export function Composer({
           className={cn('term-composer', shellMode && 'term-composer-shell', disabled && 'opacity-60')}
         >
           <div className="term-composer-body">
-            {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
+            {stagedStrip}
             <div className="term-row">
               {canAttach && !shellMode ? fileField : null}
               {gutter}
               <div className="flex min-w-0 items-start">
-                <PromptArea
-                  {...bind}
-                  triggers={triggers}
-                  markdown={false}
-                  normalizeBullets={false}
-                  onSubmit={submit}
-                  disabled={disabled}
-                  placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
-                  minHeight={line}
-                  maxHeight={line * 10}
-                  aria-label={shellMode ? 'Run a shell command' : 'Message the agent'}
-                  className="term-composer-field min-w-0 flex-1"
-                  onImagePaste={(file) => attachments?.add([file])}
-                  {...shellKeys}
-                />
+                {field(line, line * 10, 'term-composer-field min-w-0 flex-1')}
                 {submitButton}
               </div>
             </div>
@@ -470,44 +476,16 @@ export function Composer({
           disabled && 'opacity-60',
         )}
       >
-        {staged.length > 0 && attachments ? <AttachmentStrip attachments={attachments} /> : null}
+        {stagedStrip}
         {inline ? (
           <div className="flex items-end gap-1 p-1">
             {shellMode ? <ShellBadge onLeave={() => leaveShellMode(false)} /> : attach}
-            <PromptArea
-              {...bind}
-              triggers={triggers}
-              markdown={false}
-              normalizeBullets={false}
-              onSubmit={submit}
-              disabled={disabled}
-              placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
-              minHeight={20}
-              maxHeight={192}
-              aria-label={shellMode ? 'Run a shell command' : 'Message the agent'}
-              className="min-w-0 flex-1 py-1 text-body-sm text-text"
-              onImagePaste={(file) => attachments?.add([file])}
-              {...shellKeys}
-            />
+            {field(20, 192, 'min-w-0 flex-1 py-1 text-body-sm text-text')}
             {submitButton}
           </div>
         ) : (
           <>
-            <PromptArea
-              {...bind}
-              triggers={triggers}
-              markdown={false}
-              normalizeBullets={false}
-              onSubmit={submit}
-              disabled={disabled}
-              placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
-              minHeight={28}
-              maxHeight={192}
-              aria-label={shellMode ? 'Run a shell command' : 'Message the agent'}
-              className="px-3 pt-2.5 pb-0 text-body-sm text-text"
-              onImagePaste={(file) => attachments?.add([file])}
-              {...shellKeys}
-            />
+            {field(28, 192, 'px-3 pt-2.5 pb-0 text-body-sm text-text')}
             <div className="flex items-center justify-between gap-2 px-2 pb-2">
               <div className="flex min-w-0 items-center gap-1">
                 {shellMode ? <ShellBadge onLeave={() => leaveShellMode(false)} /> : attach}

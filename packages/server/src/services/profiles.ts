@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs'
 import { supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '@workerdeck/core'
+import type { Refusal } from '../lib/http.ts'
 import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
 import type { ProfileStore } from './profile-store.ts'
 
-export type Refusal = { status: number; error: string }
+export type { Refusal }
 
 export type ProfileServiceOptions = {
   declared: ProfileInfo[]

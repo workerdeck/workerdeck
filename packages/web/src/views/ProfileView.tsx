@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { orderUsageWindows, type GetProfileResponse } from '@workerdeck/protocol'
+import { errorMessage, orderUsageWindows } from '@workerdeck/protocol'
+import { useAsync } from '@workerdeck/react'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner, UsageMeters, toast } from '@workerdeck/ui'
 import { Code, Trash2 } from 'lucide-react'
 import { EditProfileCard } from '@/components/EditProfileCard.tsx'
@@ -28,34 +29,10 @@ export function ProfileView() {
   const { profileName } = useParams({ from: '/profiles/$profileName' })
   const navigate = useNavigate()
   const { refresh } = useProfileList()
-  const [detail, setDetail] = useState<GetProfileResponse | undefined>()
-  const [error, setError] = useState<string | undefined>()
-
-  useEffect(() => {
-    let alive = true
-    const load = () => {
-      client()
-        ?.getProfile(profileName)
-        .then((d) => {
-          if (alive) {
-            setDetail(d)
-          }
-        })
-        .catch((e: unknown) => {
-          if (alive) {
-            setError(e instanceof Error ? e.message : 'Failed to load profile')
-          }
-        })
-    }
-    load()
-    // The plan usage on the record is not static: it is the newest reading from any session on this account, and
-    // sessions this page knows nothing about keep spending.
-    const timer = setInterval(load, 60_000)
-    return () => {
-      alive = false
-      clearInterval(timer)
-    }
-  }, [profileName])
+  // Polled: the plan usage on the record is the newest reading from any session on this account, and those keep spending.
+  const loaded = useAsync(async () => client()?.getProfile(profileName), [profileName], { pollMs: 60_000 })
+  const detail = loaded.data
+  const error = loaded.error === undefined ? undefined : errorMessage(loaded.error, 'Failed to load profile')
 
   const profile = detail?.profile
   const config = detail?.config
@@ -68,7 +45,7 @@ export function ProfileView() {
       toast.success(`Profile '${profileName}' deleted`)
       void navigate({ to: '/profiles' })
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Delete failed')
+      toast.error(errorMessage(e, 'Delete failed'))
     }
   }
 
@@ -227,7 +204,9 @@ export function ProfileView() {
               </Card>
             )}
 
-            {profile.managed ? <EditProfileCard profile={profile} onSaved={(saved) => setDetail({ ...detail!, profile: saved })} /> : null}
+            {profile.managed ? (
+              <EditProfileCard profile={profile} onSaved={(saved) => loaded.setData({ ...detail!, profile: saved })} />
+            ) : null}
 
             <p className="text-label text-fg-4">
               {profile.managed

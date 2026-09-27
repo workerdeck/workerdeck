@@ -1,4 +1,5 @@
 import type { ModelOption } from '@workerdeck/protocol'
+import type { TranscriptFont, TranscriptVariant } from '@workerdeck/ui'
 import { readPref, writePref } from './storage.ts'
 
 // Kept in sync by hand with the Claude Code CLI's model picker, and the fallback for a profile-less server only.
@@ -12,21 +13,15 @@ export const MODEL_OPTIONS: ModelOption[] = [
 
 export type DefaultsKind = 'session' | 'job'
 
-export type TranscriptVariant = 'cards' | 'terminal'
-
 const VARIANT_KEY = 'workerdeck.transcript-variant'
 
 export function getTranscriptVariant(): TranscriptVariant {
-  const stored = readPref(VARIANT_KEY)
-  // `lines` was the retired no-boxes variant, and someone who turned boxes off keeps them off.
-  return stored === 'terminal' || stored === 'lines' ? 'terminal' : 'cards'
+  return readPref(VARIANT_KEY) === 'terminal' ? 'terminal' : 'cards'
 }
 
 export function setTranscriptVariant(variant: TranscriptVariant): void {
   writePref(VARIANT_KEY, variant)
 }
-
-export type TranscriptFont = 'sans' | 'mono'
 
 const FONT_KEY = 'workerdeck.transcript-font'
 

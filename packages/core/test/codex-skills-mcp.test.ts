@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CodexRunner, withSkillItems } from '../src/engines/codex/runner.ts'
+import { CodexRunner } from '../src/engines/codex/runner.ts'
+import { withSkillItems } from '../src/engines/codex/skills.ts'
 import type { Runner } from '../src/runner-interface.ts'
 import { collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
 

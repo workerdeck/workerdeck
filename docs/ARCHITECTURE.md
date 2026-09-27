@@ -44,8 +44,7 @@ boundary: anything a client needs must be expressible as protocol events and com
   `src/session-list.ts` and `src/watermarks.ts` are two more such rules, lifted out of the VS
   Code extension when the dashboard needed them: the sessions-list view model (state buckets,
   facets, filter/group/sort, the subset summary, workspace-scope containment) and the unread
-  model (monotonic marks behind a storage seam, plus `unseenCount`'s rows-not-turns
-  arithmetic). Every client must agree on them - the extension's unread status-bar item counts
+  model (monotonic marks behind a storage seam, plus `unseenCount`'s prose arithmetic). Every client must agree on them - the extension's unread status-bar item counts
   the same rows its list shows, so a client filtering differently would announce hidden work.
   `src/usage.ts` is a third of the same species: `mergeUsage` decides which plan-usage reading a
   client renders (the gateway's per-profile state wins every window it holds, the session's
@@ -82,10 +81,15 @@ boundary: anything a client needs must be expressible as protocol events and com
   anywhere, results untrusted) or `authoritative` (server-side with server credentials - MCP and
   secret-bearing APIs, never bridged, since bridging would let a browser forge authoritative
   results). `createEngineSession` assembles provider model + tools + executor into a session.
+  The three runners share one lifecycle by composition, `RunnerCore` (`src/lib/runner-core.ts`:
+  event log and seq, subscribers, status machine, close/fail, pending approvals), and differ only
+  through its hooks.
   **Engines ship as adapters** (`src/engines/`): one `EngineAdapter` per engine - its
   `EngineCapabilities` record (pinned by identity to protocol's `ENGINE_CAPABILITIES`), a model
   catalog versioned with the release, a credential-availability probe, and a runner factory -
-  looked up via `getEngineAdapter`. `claude/` wraps `SessionRunner` unchanged; `codex/` owns
+  looked up via `getEngineAdapter`. Engine knowledge the gateway needs is an adapter hook
+  (`sessionEnv`, the claude profile's `CLAUDE_CONFIG_DIR` pin) or a capability (`forkSession`),
+  never a branch on the engine name in `server`. `claude/` wraps `SessionRunner` unchanged; `codex/` owns
   `CodexRunner` over the codex binary's `app-server` JSON-RPC surface (`@openai/codex` as an
   optional peer carrying the binary - one child per *session*, held across turns, a hand-rolled
   newline-delimited client with zero new deps, token-level `stream_delta`s; the retired first
@@ -123,14 +127,23 @@ boundary: anything a client needs must be expressible as protocol events and com
   parks on a deferred execution goes `parked` at the same single finalize chokepoint -
   surrendering its concurrency slot, stopping its wall-clock budget, emitting `job_parked` - and
   resumes against the rebuilt runner (`onSessionParking` / `onSessionResumed`, called by whoever
-  owns the parking). Parked runs are bounded by `maxParkedDurationMs` rather than
+  owns the parking; `canParkSession` is the side-effect-free veto asked before the runner parks). Parked runs are bounded by `maxParkedDurationMs` rather than
   `maxJobDurationMs`: waiting is not being stuck.
-- **`packages/server`** - the gateway: `node:http` + `ws`. `server.ts` is assembly and dispatch
-  only; the shape is `routes/` (one module per route family, each a function over the one
+- **`packages/server`** - the gateway: `node:http` + `ws`. `server.ts` is assembly only: it builds
+  the services in dependency order (registry, bridge, parking, peers, then the session factory, which
+  receives all three directly; the registry's `onRegister` and parking's `rebuild` reach the factory
+  only when a runner registers or wakes, never during construction) and hands dispatch to
+  `routes/table.ts`, a declarative `{ match, refuse, auth: 'any' | 'operator', handler }` list where
+  `refuse` answers before authentication (the draining 503s, the unparseable-session 404) and a
+  non-operator on an `operator` route gets the same 404 as a missing one. `lifecycle.ts` owns drain
+  and close (their ordering is in `docs/GOTCHAS.md`), `routes/queue-ws.ts` the `/queue/ws` socket
+  and its broadcast, `routes/session-upgrade.ts` the session attach upgrade. The rest of the shape is
+  `routes/` (one module per route family, each a function over the one
   `ServerContext` record in `context.ts`), `services/` (the stateful pieces: registry, parking,
   bridge, the stores, plus `profiles.ts`/`availability.ts`/`session-factory.ts`/`auth.ts` -
   the create pipeline and the one `canSee` predicate), `lib/` (the pure rules: http helpers,
-  scope, the profile/env policy, the route parser), and `options.ts` for the public option
+  scope, the profile/env policy, the route parser, whose `SessionRoute` is a union tagged by `kind`),
+  and `options.ts` for the public option
   types. Functionally: a session registry
   (create/list/attach/interrupt/kill), resume from the SDK's on-disk sessions, a pluggable
   `authenticate` hook (refuses to start without one unless `allowUnauthenticated: true`), and -
@@ -305,7 +318,8 @@ boundary: anything a client needs must be expressible as protocol events and com
 4. `canUseTool` promotes a tool call into a pending approval event; the tool blocks until a
    client resolves it via `POST /v1/sessions/:id/permissions/:requestId` (deny-on-timeout, 5
    minutes by default). Allowing must echo the tool input as `updatedInput` - the SDK requires
-   it. `AskUserQuestion` rides the same path; `questionBehavior` policy-resolves it for
+   it. Closing a session denies whatever is still pending (`resolvedBy: 'policy'`) before
+   `session_closed`, in every engine. `AskUserQuestion` rides the same path; `questionBehavior` policy-resolves it for
    unattended runs.
 5. Resume: the SDK re-streams only user messages, so the runner backfills full history from the
    SDK's on-disk store as `replay: true` events; the transcript reducer dedupes doubled user
@@ -376,7 +390,20 @@ frees and budgets allow → the job runs as an ordinary registry session → web
 `job_submitted` is **not** among them: it reaches local observers and the queue WS only, since the
 submitter already holds the POST response, so webhook delivery starts at `job_started`.
 `job_retrying` marks a failed run that was re-queued (`job.nextRunAt` says when); `job_completed`
-is always terminal. Token
+is always terminal.
+
+Dispatch is one pump, and no wake-up may be lost to it. A request that arrives while the pump is
+mid-claim sets a flag the pump re-checks before it stops. Starting a job reserves its concurrency
+slot and then creates the runner without holding the loop, so one slow `createRunner` never blocks
+the others. When the pump stops for lack of work it arms one unref'd timer: at the next UTC midnight
+if the daily token budget is spent, and at the earliest future `nextRunAt` otherwise (the adapter's
+optional `nextRunAt()`, or a `list()` scan). A cancel that lands while the runner is still being
+created marks the job `canceled` at once and closes the runner the moment it resolves.
+`pause()`/`resume()` hold and release dispatch without touching running jobs; `server.drain()`
+pauses the queue and answers `POST /jobs` with 503, since a queue that keeps starting runs is a
+drain that never converges. Every fire-and-forget step (event handling, dispatch, start, finalize,
+park, resume) routes through one catch that reports to `onError(error, { jobId, phase })`, a
+console warning by default, rather than an unhandled rejection. Token
 accounting sums per-turn `usage` (input + output + cache_creation + cache_read);
 `total_cost_usd`/`num_turns` are cumulative for the engine process and rolled up last-seen, never
 summed; `CostLedger` carries the total across a rebuild or a context clear, and prices it through
@@ -389,9 +416,10 @@ human - parks the session instead of blocking it:
 
 1. The runner dispatches every deferred call, then announces `status_changed: 'parked'`. Waiting
    for the whole batch is what stops a park from stranding a call still being dispatched.
-2. `SessionParkManager` snapshots the session, evicts the runner (releasing its model client, MCP
-   connections, and memory), and persists the record. A job at this point surrenders its
-   concurrency slot and stops its wall-clock budget → `job_parked`.
+2. `SessionParkManager` asks the queue whether the run may park (`onParking`, a veto only),
+   snapshots the session, evicts the runner (releasing its model client, MCP connections, and
+   memory), and persists the record. Only once the runner has returned a snapshot does the job
+   surrender its concurrency slot and stop its wall-clock budget (`onParked`) → `job_parked`.
 3. `POST /v1/executions/:executionId/result` (or `parking.submitResult` in-process, or the
    watchdog's `timeout` failure) rebuilds the session under its own id from the snapshot,
    re-subscribes the queue past the replayed log, and hands the result to the agent loop →

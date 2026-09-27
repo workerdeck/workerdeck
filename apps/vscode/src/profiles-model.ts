@@ -1,6 +1,6 @@
 import type { ProfileInfo } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
-import { clientFor } from './gateway.ts'
+import { refreshPerHost } from './gateway.ts'
 import type { HostStore } from './hosts.ts'
 import type { WireProfile } from './bridge-protocol.ts'
 
@@ -28,28 +28,18 @@ export class ProfilesModel implements vscode.Disposable {
     }
     this.#refreshing = true
     try {
-      const hosts = this.#store.all()
-      await Promise.all(
-        hosts.map(async (host) => {
-          const client = await clientFor(this.#store, host)
-          if (!client) {
-            this.#snapshots.set(host.id, { error: 'unreachable' })
-            return
-          }
-          try {
-            const listed = await client.listProfiles()
-            this.#snapshots.set(host.id, { profiles: listed.profiles, canManage: listed.canManage === true })
-          } catch (err) {
-            const status = (err as { status?: number }).status
-            this.#snapshots.set(host.id, { error: status === 401 || status === 403 ? 'unauthorized' : 'unreachable' })
-          }
-        }),
-      )
-      for (const id of this.#snapshots.keys()) {
-        if (!hosts.some((h) => h.id === id)) {
-          this.#snapshots.delete(id)
+      await refreshPerHost(this.#store, this.#snapshots, async (_host, client): Promise<Snapshot> => {
+        if (!client) {
+          return { error: 'unreachable' }
         }
-      }
+        try {
+          const listed = await client.listProfiles()
+          return { profiles: listed.profiles, canManage: listed.canManage === true }
+        } catch (err) {
+          const status = (err as { status?: number }).status
+          return { error: status === 401 || status === 403 ? 'unauthorized' : 'unreachable' }
+        }
+      })
       this.#onDidChange.fire()
     } finally {
       this.#refreshing = false

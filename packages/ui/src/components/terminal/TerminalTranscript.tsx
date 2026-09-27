@@ -1,7 +1,6 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
-import type { TranscriptItem, TranscriptState } from '@workerdeck/react'
+import { Fragment, useMemo, useState } from 'react'
+import type { TranscriptItem } from '@workerdeck/react'
 import { cn } from '../../lib/utils.ts'
-import type { TerminalAffordances } from './affordances.tsx'
 import { ActionPlacementProvider, OpenSubagentAction, WithActions } from './affordances.tsx'
 import {
   AssistantRow,
@@ -15,25 +14,13 @@ import {
   ToolRow,
   TurnResultRow,
   UserRow,
-  WorkingRow,
 } from './items.tsx'
-import { blockNeedsBlank, taskChildItems, terminalBlocks, type TaskBlock } from './blocks.ts'
+import { blockNeedsBlank, taskChildItems, type TaskBlock } from './blocks.ts'
 import { usePulse } from '../agent/pulse.tsx'
-import { PeerNamesProvider } from './peer-names.tsx'
 import { Pressable, useRevealOnOpen } from './press.tsx'
 import { isPeerSend, taskBrief, taskBusy, taskFailed, taskSummary } from './tool-run.ts'
 import { BRIEF_LINES } from './height.ts'
 import { Blank, Row } from './row.tsx'
-import { TerminalSurface } from './surface.tsx'
-
-export interface TerminalTranscriptProps {
-  state: TranscriptState
-  fileUrl?: (path: string) => string
-  fontSize?: number
-  lineHeight?: number
-  affordances?: TerminalAffordances | boolean
-  className?: string
-}
 
 export function TerminalItemView({
   item,
@@ -148,75 +135,5 @@ export function TaskRow({
     row
   ) : (
     <WithActions actions={<OpenSubagentAction onOpen={() => onOpenSubagent(block.task.id)} />}>{row}</WithActions>
-  )
-}
-
-function useRunStart(status: TranscriptState['status']): number | undefined {
-  const running = status === 'running' || status === 'starting'
-  const [startedAt, setStartedAt] = useState<number | undefined>(undefined)
-  useEffect(() => {
-    setStartedAt((previous) => (running ? (previous ?? Date.now()) : undefined))
-  }, [running])
-  return running ? startedAt : undefined
-}
-
-function working(state: TranscriptState): boolean {
-  if (state.status !== 'running' && state.status !== 'starting') {
-    return false
-  }
-  const last = state.items.at(-1)
-  if (!last) {
-    return true
-  }
-  if (last.kind === 'assistant_text' && last.streaming) {
-    return false
-  }
-  if (last.kind === 'thinking' && last.id === 'streaming-thinking') {
-    return false
-  }
-  return true
-}
-
-export function TerminalTranscript({ state, fileUrl, fontSize, lineHeight, affordances, className }: TerminalTranscriptProps) {
-  const runStartedAt = useRunStart(state.status)
-  const blocks = useMemo(() => terminalBlocks(state.items), [state.items])
-  return (
-    <TerminalSurface
-      fontSize={fontSize}
-      lineHeight={lineHeight}
-      affordances={affordances}
-      bleed="1ch"
-      className={cn('term-transcript', className)}
-    >
-      <PeerNamesProvider items={state.items}>
-        {blocks.map((block, index) => {
-          const next = blocks[index + 1]
-          return (
-            <Fragment key={block.key}>
-              {index > 0 && blockNeedsBlank(blocks[index - 1]!, block) ? <Blank /> : null}
-              <ActionPlacementProvider value={next && !blockNeedsBlank(block, next) ? 'inline' : 'below'}>
-                {'run' in block ? (
-                  <RunRow items={block.run} />
-                ) : 'item' in block ? (
-                  <TerminalItemView item={block.item} fileUrl={fileUrl} />
-                ) : (
-                  <TaskRow block={block} fileUrl={fileUrl} />
-                )}
-              </ActionPlacementProvider>
-            </Fragment>
-          )
-        })}
-        {working(state) ? (
-          <>
-            {state.items.length > 0 ? <Blank /> : null}
-            <WorkingRow
-              label={state.status === 'starting' ? 'Starting…' : 'Working…'}
-              startedAt={runStartedAt}
-              tokens={state.contextUsage?.totalTokens}
-            />
-          </>
-        ) : null}
-      </PeerNamesProvider>
-    </TerminalSurface>
   )
 }

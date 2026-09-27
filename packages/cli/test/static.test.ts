@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { contentTypeFor, looksLikeAsset, resolveWithinRoot } from '../src/lib/static.ts'
+import { contentTypeFor, dashboardCsp, looksLikeAsset, resolveWithinRoot } from '../src/lib/static.ts'
 
 describe('resolveWithinRoot', () => {
   const root = '/srv/web'
@@ -72,5 +72,17 @@ describe('the bundled dashboard contract', () => {
     await writeFile(join(dir, 'index.html'), '<!doctype html><title>x</title>')
     expect(resolveWithinRoot(dir, '/index.html')).toBe(resolve(dir, 'index.html'))
     expect(looksLikeAsset('/sessions/abc')).toBe(false)
+  })
+})
+
+describe('dashboardCsp', () => {
+  it('admits exactly the inline scripts served, by hash, and never frames or beacons', () => {
+    const csp = dashboardCsp('<script>boot()</script><script type="module" src="/assets/a.js"></script>')
+    expect(csp).toContain("'sha256-")
+    expect(csp.match(/'sha256-/g)).toHaveLength(1)
+    expect(csp).toContain("frame-ancestors 'none'")
+    expect(csp).toMatch(/img-src 'self' data: blob:/)
+    expect(csp).not.toMatch(/img-src[^;]*https:/)
+    expect(csp).not.toContain("'unsafe-eval'")
   })
 })

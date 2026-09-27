@@ -1,8 +1,10 @@
 import type {
+  CreateSessionRequest,
   MessageOrigin,
   McpServerStatusInfo,
   PermissionMode,
   PermissionRequest,
+  PricingTable,
   ProfileEngine,
   SessionEvent,
   SessionInfo,
@@ -10,11 +12,27 @@ import type {
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
 import type { CostLedgerState } from './lib/cost-ledger.ts'
+import type { SessionInstructions } from './lib/instructions.ts'
 import type { LocalCommandResult, LocalShellSource } from './lib/local-command.ts'
-import type { PeerMention } from './lib/peers.ts'
+import type { PeerDirectory, PeerMention } from './lib/peers.ts'
+import type { ShellAgentWrite, ShellDirectory } from './lib/shells.ts'
 import type { ToolExecutionResult } from './executors/tool-executor.ts'
 
 export type SessionEventListener = (event: SessionEvent) => void
+
+export type EngineRunnerConfig = CreateSessionRequest & {
+  epoch?: number
+  pricing?: PricingTable
+  env?: Record<string, string | undefined>
+  instructions?: SessionInstructions
+  defaultApprovalTimeoutMs?: number | null
+  peers?: PeerDirectory
+  shells?: ShellDirectory
+  shellAgentWrite?: ShellAgentWrite
+  // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell
+  // write tools are offered only to a session an operator created.
+  createdByOperator?: boolean
+}
 
 export type ParkedExecution = {
   executionId: string

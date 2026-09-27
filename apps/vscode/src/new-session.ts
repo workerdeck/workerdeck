@@ -1,10 +1,11 @@
 import * as vscode from 'vscode'
+import { ENGINE_CAPABILITIES, errorMessage } from '@workerdeck/protocol'
 import type { HostFileRoot, ModelOption, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
-import { ENGINE_CAPABILITIES } from '@workerdeck/protocol'
 import { clientFor } from './gateway.ts'
 import type { HostStore } from './hosts.ts'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
 import { workspaceScope } from './workspace-scope.ts'
+import { BACK, CANCEL, showPick, type Answer } from './quick-input.ts'
 
 type AdapterChoice = {
   host: WireHost
@@ -20,26 +21,12 @@ type CreateBody = {
   permissionMode?: PermissionMode
 }
 
-type PickOptions<T extends vscode.QuickPickItem> = {
-  title: string
-  placeHolder: string
-  activeItem?: T
-  value?: string
-  step?: number
-  totalSteps?: number
-  freeText?: (value: string) => T | undefined
-}
-
 export type NewSessionDeps = {
   store: HostStore
   state: () => SidebarState
   reveal: (hostId: string, sessionId: string) => Promise<void>
   refresh: () => Promise<void>
 }
-
-const CANCEL = Symbol('cancel')
-const BACK = Symbol('back')
-type Answer<T> = T | typeof CANCEL | typeof BACK
 
 export async function createSession(deps: NewSessionDeps): Promise<void> {
   await run(deps, { resume: false })
@@ -301,7 +288,7 @@ async function browseGateway(deps: NewSessionDeps, host: WireHost, roots: readon
         client.listHostDir(dir!),
       )
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: cannot list ${dir} - ${message(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: cannot list ${dir} - ${errorMessage(err)}`)
       return undefined
     }
     const dirs = listing.entries.filter((e) => e.type === 'dir' || e.type === 'symlink')
@@ -338,8 +325,7 @@ function lastSessionOf(deps: NewSessionDeps, adapter: AdapterChoice): SessionInf
   return (
     (deps.state().sessions[adapter.host.id] ?? [])
       .filter((s) =>
-        // `SessionInfo.profile` is the RESOLVED name, present even when the create call left
-        // it implicit, so it is the precise test. Engine is the fallback for an older server.
+        // `profile` is the resolved name whenever the gateway has profiles; engine covers one that has none.
         s.profile !== undefined ? s.profile === adapter.profile.name : (s.engine ?? 'claude') === engine,
       )
       // The gateway's list order is its own business; recency is the question here.
@@ -396,7 +382,9 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
 }
 
 function resolveMode(adapter: AdapterChoice, previous: SessionInfo | undefined): PermissionMode | undefined {
-  const pinned = vscode.workspace.getConfiguration('workerdeck').get<string>('newSession.permissionMode', 'remember')
+  // User-level only, whatever the manifest's scope says: a cloned repo's settings must never start a session on bypass.
+  const setting = vscode.workspace.getConfiguration('workerdeck').inspect<string>('newSession.permissionMode')
+  const pinned = setting?.globalValue ?? setting?.defaultValue ?? 'remember'
   const wanted =
     pinned && pinned !== 'remember' ? (pinned as PermissionMode) : (previous?.permissionMode ?? adapter.profile.defaults?.permissionMode)
   if (!wanted) {
@@ -447,7 +435,7 @@ async function pickAndResume(deps: NewSessionDeps, adapter: AdapterChoice, cwd: 
       }),
     )
   } catch (err) {
-    void vscode.window.showErrorMessage(`WorkerDeck: ${message(err)}`)
+    void vscode.window.showErrorMessage(`WorkerDeck: ${errorMessage(err)}`)
     return undefined
   }
   if (stored.length === 0) {
@@ -516,67 +504,6 @@ async function create(deps: NewSessionDeps, adapter: AdapterChoice, body: Create
     await deps.refresh()
     await deps.reveal(adapter.host.id, info.id)
   } catch (err) {
-    void vscode.window.showErrorMessage(`WorkerDeck: could not create the session - ${message(err)}`)
+    void vscode.window.showErrorMessage(`WorkerDeck: could not create the session - ${errorMessage(err)}`)
   }
-}
-
-function message(err: unknown): string {
-  return err instanceof Error ? err.message : String(err)
-}
-
-function showPick<T extends vscode.QuickPickItem>(items: readonly T[], options: PickOptions<T>): Promise<Answer<T>> {
-  return new Promise((resolve) => {
-    const pick = vscode.window.createQuickPick<T>()
-    pick.title = options.title
-    pick.placeholder = options.placeHolder
-    pick.step = options.step
-    pick.totalSteps = options.totalSteps
-    pick.ignoreFocusOut = true
-    pick.items = [...items]
-    if ((options.step ?? 1) > 1) {
-      pick.buttons = [vscode.QuickInputButtons.Back]
-    }
-
-    let answered = false
-    const finish = (answer: Answer<T>) => {
-      answered = true
-      resolve(answer)
-      pick.hide()
-    }
-    if (options.freeText) {
-      const base = [...items]
-      pick.onDidChangeValue((value) => {
-        const extra = options.freeText?.(value)
-        pick.items = extra ? [extra, ...base] : base
-      })
-    }
-    pick.onDidTriggerButton((button) => {
-      if (button === vscode.QuickInputButtons.Back) {
-        finish(BACK)
-      }
-    })
-    pick.onDidAccept(() => {
-      const [selected] = pick.selectedItems
-      if (selected) {
-        finish(selected)
-      }
-    })
-    // Fires for `esc` and for a real hide alike, so it must not clobber an answer already resolved.
-    pick.onDidHide(() => {
-      if (!answered) {
-        resolve(CANCEL)
-      }
-      pick.dispose()
-    })
-    // After the change handler is registered: assigning `value` fires it, and the free-text
-    // row has to be computed against the prefill rather than an empty box.
-    if (options.value) {
-      pick.value = options.value
-    }
-    // …and the active row after *that*: reassigning `items` resets the cursor to the first.
-    if (options.activeItem) {
-      pick.activeItems = [options.activeItem]
-    }
-    pick.show()
-  })
 }

@@ -162,4 +162,40 @@ describe('toDurableRecord', () => {
     expect(durable.snapshot).toBe(source.snapshot)
     expect(source.config.env).toEqual({ SECRET: 'x' })
   })
+
+  it('keeps only the wire fields and the named host fields a rebuild reads back', () => {
+    const smuggled = { hostToken: 'secret', extraOptions: { apiKey: 'x' }, env: { KEY: 'x' } } as Partial<SessionRunnerConfig>
+    const durable = toDurableRecord(
+      record('s1', {
+        ...smuggled,
+        epoch: 3,
+        createdByOperator: true,
+        defaultApprovalTimeoutMs: null,
+        scope: { user: 'u1' },
+        meta: { title: 't' },
+      }),
+    )
+    expect(durable.config).toEqual({
+      cwd: '/tmp/project',
+      profile: 'kimi',
+      epoch: 3,
+      createdByOperator: true,
+      defaultApprovalTimeoutMs: null,
+      scope: { user: 'u1' },
+      meta: { title: 't' },
+    })
+  })
+
+  it('persists request MCP servers whole, because a wake reconnects to them', () => {
+    const mcpServers = { remote: { type: 'http', url: 'https://mcp.example', headers: { authorization: 'Bearer t' } } }
+    const durable = toDurableRecord(record('s1', { mcpServers } as Partial<SessionRunnerConfig>))
+    expect(durable.config.mcpServers).toEqual(mcpServers)
+  })
+
+  it('still loads a record written under the old denylist, extra host keys and all', async () => {
+    const legacy = record('s1', { backfillHistory: false, hostOnlyLegacy: 'kept' } as Partial<SessionRunnerConfig>)
+    await writeFile(join(dir, 's1.json'), JSON.stringify({ version: 1, record: legacy }))
+    const loaded = await createFileSessionStore({ dir }).get('s1')
+    expect(loaded?.config).toMatchObject({ cwd: '/tmp/project', backfillHistory: false, hostOnlyLegacy: 'kept' })
+  })
 })

@@ -1,6 +1,5 @@
 import type { EngineCapabilities, ModelOption, ProfileEngine, ProfileInfo, SdkSessionSummary } from '@workerdeck/protocol'
-import type { Runner, RunnerSnapshot } from '../runner-interface.ts'
-import type { SessionRunnerConfig } from './claude/runner.ts'
+import type { EngineRunnerConfig, Runner, RunnerSnapshot } from '../runner-interface.ts'
 
 export type EngineAvailability = { available: true } | { available: false; reason: string } | { available: 'unknown' }
 
@@ -9,19 +8,21 @@ export type ModelCatalog = {
   provenance: string
 }
 
-export type EngineRunnerRequest = {
-  config: SessionRunnerConfig
+export type EngineRunnerRequest<C extends EngineRunnerConfig = EngineRunnerConfig> = {
+  config: C
   profile?: ProfileInfo
   restore?: RunnerSnapshot
   id?: string
 }
 
-export interface EngineAdapter {
+export interface EngineAdapter<C extends EngineRunnerConfig = EngineRunnerConfig> {
   readonly engine: ProfileEngine
   readonly capabilities: EngineCapabilities
   readonly catalog: ModelCatalog
   checkAvailability(profile: ProfileInfo, env: Record<string, string | undefined>): Promise<EngineAvailability>
-  createRunner(request: EngineRunnerRequest): Runner | Promise<Runner>
+  createRunner(request: EngineRunnerRequest<C>): Runner | Promise<Runner>
+  // Returns `base` itself when the profile needs nothing pinned, so a caller can leave an unset env unset.
+  sessionEnv?(profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined>
   listSessions?(options: {
     profile?: ProfileInfo
     env: Record<string, string | undefined>

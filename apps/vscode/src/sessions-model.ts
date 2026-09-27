@@ -3,7 +3,7 @@ import type { SessionInfo } from '@workerdeck/protocol'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
 import { forgetLocality, isLocalHostCached, refreshLocality } from './machine.ts'
-import { clientFor, probe, type ProbeResult } from './gateway.ts'
+import { probe, refreshPerHost, type ProbeResult } from './gateway.ts'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
 import { workspaceScope } from './workspace-scope.ts'
 
@@ -146,33 +146,24 @@ export class SessionsModel implements vscode.Disposable {
     }
     this.#refreshing = true
     try {
-      const hosts = this.#store.all()
-      await Promise.all(
-        hosts.map(async (host) => {
-          const client = await clientFor(this.#store, host)
-          if (!client) {
-            this.#snapshots.set(host.id, { probe: 'unreachable' })
-            return
-          }
-          try {
-            const sessions = await client.listSessions()
-            sessions.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
-            this.#snapshots.set(host.id, { probe: 'connected', sessions })
-            // Warms the cache the sidebar reads synchronously; a reachable gateway is the only one
-            // that can answer, and a failure just leaves the previous answer standing.
-            void refreshLocality(this.#store, host)
-          } catch {
-            const result: ProbeResult = await probe(client)
-            this.#snapshots.set(host.id, result === 'connected' ? { probe: 'connected', sessions: [] } : { probe: result })
-          }
-        }),
-      )
-      // Deleting the current key during Map iteration is defined behavior.
-      for (const id of this.#snapshots.keys()) {
-        if (!hosts.some((h) => h.id === id)) {
-          this.#snapshots.delete(id)
-          forgetLocality(id)
+      const gone = await refreshPerHost(this.#store, this.#snapshots, async (host, client): Promise<HostSnapshot> => {
+        if (!client) {
+          return { probe: 'unreachable' }
         }
+        try {
+          const sessions = await client.listSessions()
+          sessions.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
+          // Warms the cache the sidebar reads synchronously; a reachable gateway is the only one
+          // that can answer, and a failure just leaves the previous answer standing.
+          void refreshLocality(this.#store, host)
+          return { probe: 'connected', sessions }
+        } catch {
+          const result: ProbeResult = await probe(client)
+          return result === 'connected' ? { probe: 'connected', sessions: [] } : { probe: result }
+        }
+      })
+      for (const id of gone) {
+        forgetLocality(id)
       }
       this.#onDidChange.fire()
       if (this.#timer) {

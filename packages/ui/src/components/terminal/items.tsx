@@ -5,15 +5,7 @@ import { compactionText, formatBytes, formatCost, formatDuration, toolInputPrevi
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { PromptTokenText } from '../agent/PromptTokenText.tsx'
-import {
-  ActionPlacementProvider,
-  AgentWriteAction,
-  BookmarkAction,
-  CopyAction,
-  KillShellAction,
-  OpenShellAction,
-  WithActions,
-} from './affordances.tsx'
+import { ActionPlacementProvider, BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { usePeerNames } from './peer-names.tsx'
@@ -26,17 +18,8 @@ import { useHostImageSrc, useToolResultImageSrc, type ToolResultImageState } fro
 import { ViewableImage, useOpenImage } from '../agent/image-viewer.tsx'
 import { isPeerSend, peerName, peerOneLine, peerSendTarget, peerSendText, planRun, runFailed, runSummary } from './tool-run.ts'
 import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todos.ts'
-import { useShellActions } from '../agent/shell-actions.tsx'
-import {
-  SHELL_GLYPH,
-  shellAgentWriteLabel,
-  shellBodyLines,
-  shellFailed,
-  shellFooterText,
-  shellGrantable,
-  shellLabel,
-  shellStatusText,
-} from './shell-row.ts'
+import { ShellItemActions, useShellActions, useVerifyRunning } from '../agent/shell-actions.tsx'
+import { SHELL_GLYPH, shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from './shell-row.ts'
 import { type ToolCallItem } from './blocks.ts'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
@@ -471,12 +454,7 @@ export function ShellRow({ item }: { item: ShellItem }) {
   const footer = shellFooterText(item, open, lines.length)
 
   const shellId = item.shell.id
-  const verify = actions.verify
-  useEffect(() => {
-    if (running) {
-      void verify(shellId)
-    }
-  }, [running, shellId, verify])
+  useVerifyRunning(item)
 
   const press = (modifiers: PressModifiers) => {
     if ((modifiers.meta || modifiers.ctrl) && actions.open) {
@@ -494,23 +472,7 @@ export function ShellRow({ item }: { item: ShellItem }) {
 
   return (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
-      <WithActions
-        actions={
-          <>
-            {actions.open ? <OpenShellAction onOpen={() => actions.open?.(shellId)} /> : null}
-            {actions.agentWrite && shellGrantable(item.shell) ? (
-              <AgentWriteAction
-                granted={item.shell.agentWrite === true}
-                label={shellAgentWriteLabel(item.shell)}
-                onToggle={() => void actions.agentWrite?.(shellId, item.shell.agentWrite !== true)}
-              />
-            ) : null}
-            {running ? <KillShellAction onKill={() => void actions.kill(shellId)} /> : null}
-            <BookmarkAction id={item.id} />
-            <CopyAction text={item.shell.command} label="Copy command" />
-          </>
-        }
-      >
+      <WithActions actions={<ShellItemActions item={item} />}>
         <Pressable onPress={press} expanded={open}>
           <Row glyph={SHELL_GLYPH} glyphTone={tone} tone="fg">
             <Ink bold tone="bright">

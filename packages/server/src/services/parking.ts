@@ -1,5 +1,6 @@
 import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
+import { engineOf } from '../lib/profile-env.ts'
 import type { SessionRegistry } from './registry.ts'
 import {
   isDormant,
@@ -11,7 +12,9 @@ import {
 } from './session-store.ts'
 
 // The context handed to parking's onError: which session, and which lifecycle step failed.
-export type ParkErrorContext = { sessionId: string; phase: 'park' | 'remember' | 'resume' }
+export type ParkErrorContext = { sessionId: string; phase: 'park' | 'remember' | 'resume' | 'discard' }
+
+const SETTLED_MAX = 4096
 
 export type SessionParkOptions = {
   registry: SessionRegistry
@@ -22,6 +25,7 @@ export type SessionParkOptions = {
   persistLive?: boolean
   expiredGraceMs?: number
   onParking?: (sessionId: string, executionId: string) => boolean
+  onParked?: (sessionId: string, executionId: string) => void
   onResumed?: (sessionId: string, runner: Runner) => void
   onError?: (error: unknown, context: ParkErrorContext) => void
 }
@@ -88,22 +92,19 @@ export class SessionParkManager {
           this.#forget(event.executionId)
           // One call of a multi-call park settling leaves the session parked on the rest, and no new status_changed will say so.
           if (runner.info().status === 'parked') {
-            void this.#park(runner)
+            this.#parkQuietly(runner)
           }
           return
         }
         case 'status_changed': {
           if (event.status === 'parked') {
-            void this.#park(runner)
+            this.#parkQuietly(runner)
           } else {
             void this.#rememberDormant(runner)
           }
           return
         }
-        case 'turn_result': {
-          void this.#persistLive(runner)
-          return
-        }
+        case 'turn_result':
         case 'permission_mode_changed':
         case 'model_changed': {
           void this.#persistLive(runner)
@@ -122,7 +123,7 @@ export class SessionParkManager {
           if (this.#closed) {
             return
           }
-          void this.discard(runner.id)
+          this.discard(runner.id).catch((error: unknown) => this.#options.onError?.(error, { sessionId: runner.id, phase: 'discard' }))
           return
         }
         default: {
@@ -146,12 +147,8 @@ export class SessionParkManager {
   // the store. Deliberately leaves the store alone: the record is the point of the handover, not a casualty of it.
   release(sessionId: string): SessionRunnerConfig | undefined {
     this.#watches.get(sessionId)?.()
-    this.#watches.delete(sessionId)
-    clearTimeout(this.#detachTimers.get(sessionId))
-    this.#detachTimers.delete(sessionId)
     const config = this.#configs.get(sessionId)
-    this.#configs.delete(sessionId)
-    this.#remembered.delete(sessionId)
+    this.#forgetSession(sessionId)
     return config
   }
 
@@ -189,7 +186,7 @@ export class SessionParkManager {
     clearTimeout(this.#detachTimers.get(sessionId))
     const timer = setTimeout(() => {
       this.#detachTimers.delete(sessionId)
-      void this.#park(runner)
+      this.#parkQuietly(runner)
     }, this.#options.parkDelayMs ?? 2000)
     timer.unref?.()
     this.#detachTimers.set(sessionId, timer)
@@ -240,11 +237,7 @@ export class SessionParkManager {
   async discard(sessionId: string): Promise<void> {
     // Dropped rather than run: `discard` is reached from the `session_closed` arm of the very subscription this
     // handle unsubscribes, and the runner drops its subscribers on close anyway.
-    this.#watches.delete(sessionId)
-    clearTimeout(this.#detachTimers.get(sessionId))
-    this.#detachTimers.delete(sessionId)
-    this.#configs.delete(sessionId)
-    this.#remembered.delete(sessionId)
+    this.#forgetSession(sessionId)
     for (const [executionId, owner] of this.#owners) {
       if (owner === sessionId) {
         this.#forget(executionId)
@@ -270,20 +263,26 @@ export class SessionParkManager {
     this.#detachTimers.clear()
   }
 
+  #forgetSession(sessionId: string): void {
+    this.#watches.delete(sessionId)
+    clearTimeout(this.#detachTimers.get(sessionId))
+    this.#detachTimers.delete(sessionId)
+    this.#configs.delete(sessionId)
+    this.#remembered.delete(sessionId)
+  }
+
+  // The config of a runner this manager may still write for: open, remembered, and the registry's current object.
+  #ownedConfig(runner: Runner): SessionRunnerConfig | undefined {
+    if (this.#closed || this.#options.registry.get(runner.id) !== runner) {
+      return undefined
+    }
+    return this.#configs.get(runner.id)
+  }
+
   async #rememberDormant(runner: Runner): Promise<void> {
-    if (this.#closed) {
-      return
-    }
+    const config = this.#ownedConfig(runner)
     const info = runner.info()
-    const capabilities = info.capabilities ?? ENGINE_CAPABILITIES[info.engine ?? 'claude']
-    if (!capabilities.resume) {
-      return
-    }
-    const config = this.#configs.get(runner.id)
-    if (!config) {
-      return
-    }
-    if (this.#options.registry.get(runner.id) !== runner) {
+    if (!config || !(info.capabilities ?? ENGINE_CAPABILITIES[engineOf(info)]).resume) {
       return
     }
     const sdkSessionId = info.sdkSessionId
@@ -294,16 +293,7 @@ export class SessionParkManager {
       }
       return
     }
-    const record: DormantSessionRecord = {
-      kind: 'dormant',
-      id: runner.id,
-      info: { ...info, status: 'idle' },
-      profile: info.profile,
-      config: { ...config, meta: info.meta },
-      sdkSessionId,
-      cost: runner.costState?.(),
-      savedAt: Date.now(),
-    }
+    const record: DormantSessionRecord = { kind: 'dormant', ...idleRecordBase(runner, config), sdkSessionId, savedAt: Date.now() }
     try {
       // Marked before the write: a queued save already means a record may exist, and a reset arriving mid-write must not skip the forget.
       this.#remembered.add(runner.id)
@@ -323,14 +313,8 @@ export class SessionParkManager {
   }
 
   async #persistLive(runner: Runner): Promise<void> {
-    if (this.#closed || !this.#options.persistLive || !runner.snapshot) {
-      return
-    }
-    const config = this.#configs.get(runner.id)
-    if (!config) {
-      return
-    }
-    if (this.#options.registry.get(runner.id) !== runner) {
+    const config = this.#ownedConfig(runner)
+    if (!config || !this.#options.persistLive || !runner.snapshot) {
       return
     }
     try {
@@ -343,15 +327,10 @@ export class SessionParkManager {
         if (!snapshot) {
           return
         }
-        const info = runner.info()
         const record: ParkedSessionRecord = {
           kind: 'live',
-          id: runner.id,
-          info: { ...info, status: 'idle' },
-          profile: info.profile,
-          config: { ...config, meta: info.meta },
+          ...idleRecordBase(runner, config),
           snapshot,
-          cost: runner.costState?.(),
           executions: snapshot.parked,
           parkedAt: Date.now(),
         }
@@ -362,26 +341,18 @@ export class SessionParkManager {
     }
   }
 
+  #parkQuietly(runner: Runner): void {
+    this.#park(runner).catch((error: unknown) => this.#options.onError?.(error, { sessionId: runner.id, phase: 'park' }))
+  }
+
   async #park(runner: Runner): Promise<void> {
-    if (this.#closed || !runner.park) {
-      return
-    }
+    const config = this.#ownedConfig(runner)
     const id = runner.id
-    if (this.#options.registry.get(id) !== runner) {
-      return
-    }
-    if (runner.info().status !== 'parked') {
-      return
-    }
-    if (this.#options.attachedCount(id) > 0) {
+    if (!config || !runner.park || runner.info().status !== 'parked' || this.#options.attachedCount(id) > 0) {
       return
     }
     const executions = [...this.#owners].filter(([, owner]) => owner === id).map(([e]) => e)
     if (executions.length === 0) {
-      return
-    }
-    const config = this.#configs.get(id)
-    if (!config) {
       return
     }
     if (this.#options.onParking && !this.#options.onParking(id, executions[0]!)) {
@@ -392,6 +363,7 @@ export class SessionParkManager {
     if (!snapshot) {
       return
     }
+    this.#options.onParked?.(id, executions[0]!)
     const info = { ...runner.info(), status: 'parked' as const }
     this.#options.registry.evict(id)
     const record: ParkedSessionRecord = {
@@ -510,6 +482,9 @@ export class SessionParkManager {
     const owner = this.#owners.get(executionId)
     if (owner !== undefined) {
       this.#settled.set(executionId, owner)
+      if (this.#settled.size > SETTLED_MAX) {
+        this.#settled.delete(this.#settled.keys().next().value!)
+      }
     }
     this.#owners.delete(executionId)
   }
@@ -521,5 +496,21 @@ export class SessionParkManager {
     }
     clearTimeout(timer)
     this.#timers.delete(executionId)
+  }
+}
+
+// What a dormant and a live record share: the session as it would list while nothing runs it, and the config it was
+// built with plus the metadata it has gathered since.
+function idleRecordBase(
+  runner: Runner,
+  config: SessionRunnerConfig,
+): Pick<ParkedSessionRecord, 'id' | 'info' | 'profile' | 'config' | 'cost'> {
+  const info = runner.info()
+  return {
+    id: runner.id,
+    info: { ...info, status: 'idle' },
+    profile: info.profile,
+    config: { ...config, meta: info.meta },
+    cost: runner.costState?.(),
   }
 }

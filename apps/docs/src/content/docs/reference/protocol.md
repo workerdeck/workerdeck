@@ -108,7 +108,8 @@ must decide it before the attach, not after.
   `cwd` is **optional**, not required: an engine whose capability record clears `hostCwd` (the
   provider engine) has no host directory to name, and for it `allowedCwdRoots` is not the
   boundary. The gateway rejects fields the chosen engine's capability record forswears rather
-  than accepting them into a silent no-op.
+  than accepting them into a silent no-op; `forkSession` is honoured only where
+  `EngineCapabilities.forkSession` is true (the claude engine).
 - `SessionInfo` - server id (≠ `sdkSessionId`), status, cwd, `profile`, `engine` and its
   `capabilities` record, model, permission mode, `canBypassPermissions` (fixed at creation: the
   CLI refuses to *switch into* bypass unless the process was spawned for it, so a picker can
@@ -177,8 +178,8 @@ because a remote gateway's identical-looking path is another machine's directory
 
 **`watermarks.ts`** is the unread model: monotonic marks behind a `WatermarkStore` seam (so a
 host supplies `localStorage`, VS Code's `globalState`, or `UserDefaults`), and `unseenCount`'s
-arithmetic in **rows, not turns** - five tool calls in one turn is one turn but many rows, and
-`lastSeq` counts every stream delta. Monotonic matters: without it a context compaction
+arithmetic in **prose** (`SessionInfo.proseCount`): a session that runs forty tools and says
+nothing badges zero. Monotonic matters: without it a context compaction
 resurrects rows the reader already read.
 
 The dashboard, the VS Code extension and the iOS app all render from these; the Swift mirrors are

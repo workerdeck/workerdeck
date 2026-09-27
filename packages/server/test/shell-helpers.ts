@@ -4,8 +4,10 @@ import { join } from 'node:path'
 import { expect, vi } from 'vitest'
 import { WebSocket } from 'ws'
 import type { ServerFrame, SessionInfo, ShellInfo } from '@workerdeck/protocol'
+import type { Runner } from '@workerdeck/core'
 import { createWorkerServer, type WorkerServer, type WorkerServerOptions } from '../src/index.ts'
-import { frameCollector, listenOn, type fakeHarness } from './helpers.ts'
+import { createShellRegistry, type ShellRegistry, type ShellRegistryOptions } from '../src/services/shells.ts'
+import { fakeRunner, frameCollector, listenOn, type fakeHarness } from './helpers.ts'
 
 type Harness = ReturnType<typeof fakeHarness>
 
@@ -15,7 +17,8 @@ export type DetachedFrame = Extract<ServerFrame, { type: 'shell_detached' }>
 
 const PRINCIPALS: Record<string, unknown> = {
   operator: {},
-  'alice-a': { scope: { space: 'a', user: 'alice' } },
+  // A non-operator reaches a host (claude) profile only by name, which is what these shell-gating tests need.
+  'alice-a': { scope: { space: 'a', user: 'alice' }, allowedProfiles: ['default'] },
 }
 
 // One gateway per test, torn down by `cleanup`. `server()` reaches the live instance so a test can read the shell
@@ -51,6 +54,34 @@ export function shellFixture(prefix: string) {
     }
   }
   return { tempDir, startServer, startShellServer, cleanup, server: () => running! }
+}
+
+// Registries and temp dirs for the suites that drive a `ShellRegistry` directly, without a gateway around it.
+export function registryFixture(prefix: string) {
+  const dirs: string[] = []
+  const registries: ShellRegistry[] = []
+  const tempDir = (): string => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
+    dirs.push(dir)
+    return dir
+  }
+  const track = (registry: ShellRegistry): ShellRegistry => {
+    registries.push(registry)
+    return registry
+  }
+  const makeRegistry = (overrides: Partial<ShellRegistryOptions> = {}): ShellRegistry =>
+    track(createShellRegistry({ generation: 'gen-a', artifactDir: tempDir(), ...overrides }))
+  const runner = (id: string, cwd = tempDir()): Runner => fakeRunner(id, { cwd })
+  const cleanup = async (): Promise<void> => {
+    for (const registry of registries.splice(0)) {
+      registry.killAll('server_stopped')
+      await registry.flush()
+    }
+    while (dirs.length) {
+      rmSync(dirs.pop()!, { recursive: true, force: true })
+    }
+  }
+  return { tempDir, track, makeRegistry, runner, cleanup }
 }
 
 export async function createSession(base: string, token: string, body: Record<string, unknown>): Promise<string> {

@@ -3,6 +3,16 @@ import { dirname, join, resolve, sep } from 'node:path'
 
 const BARE_KEY = /[A-Za-z0-9_-]/
 
+const BASIC_ESCAPES: ReadonlyMap<string, string> = new Map([
+  ['b', '\b'],
+  ['t', '\t'],
+  ['n', '\n'],
+  ['f', '\f'],
+  ['r', '\r'],
+  ['"', '"'],
+  ['\\', '\\'],
+])
+
 function skipWs(text: string, pos: number): number {
   let i = pos
   while (i < text.length && (text[i] === ' ' || text[i] === '\t')) {
@@ -22,21 +32,10 @@ function parseBasicString(text: string, pos: number): Parsed<string> {
       return { value: out, end: i + 1 }
     }
     if (ch === '\\') {
-      const esc = text[i + 1]
-      if (esc === 'b') {
-        out += '\b'
-      } else if (esc === 't') {
-        out += '\t'
-      } else if (esc === 'n') {
-        out += '\n'
-      } else if (esc === 'f') {
-        out += '\f'
-      } else if (esc === 'r') {
-        out += '\r'
-      } else if (esc === '"') {
-        out += '"'
-      } else if (esc === '\\') {
-        out += '\\'
+      const esc = text[i + 1] ?? ''
+      const simple = BASIC_ESCAPES.get(esc)
+      if (simple !== undefined) {
+        out += simple
       } else if (esc === 'u' || esc === 'U') {
         const width = esc === 'u' ? 4 : 8
         const hex = text.slice(i + 2, i + 2 + width)

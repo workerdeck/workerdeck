@@ -104,7 +104,12 @@ export type WorkerServerOptions = {
   }
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
   engines?: Partial<Record<ProfileEngine, EngineAdapter>>
+  // Errors the gateway swallows because nobody is waiting on them (a usage refresh, a queue stats frame, a webhook
+  // that never answered). Silent by default; `where` names the site.
+  onDiagnostic?: DiagnosticSink
 }
+
+export type DiagnosticSink = (error: unknown, where: string) => void
 
 // The mutual-recursion seam: server.ts builds the services in dependency order, so the ones
 // constructed first receive this record and read the later-built services through it lazily.

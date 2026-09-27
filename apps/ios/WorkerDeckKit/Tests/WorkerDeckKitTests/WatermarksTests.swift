@@ -78,46 +78,30 @@ struct WatermarksTests {
 
   // MARK: - unseenCount
 
-  private let mark = Watermark(itemCount: 40, activity: 40, turns: 5, seenAt: 0)
-
-  @Test func countsRowsNotTurnsWhenTheGatewayReportsThem() {
-    // Five tool calls in one turn is one turn and eight rows; the badge that
-    // says "1" for it is the one nobody believes.
-    #expect(unseenCount(mark: mark, activityCount: 48, turns: 6) == 8)
-  }
-
-  @Test func fallsBackToTurnsForAGatewayTooOldToReportRows() {
-    #expect(unseenCount(mark: mark, activityCount: nil, turns: 7) == 2)
-  }
+  private let read = Watermark(itemCount: 40, activity: 40, prose: 4, turns: 5, seenAt: 0)
 
   @Test func isZeroForASessionNeverVisited() {
-    // "Never opened" is not "unread" - a badge counting every session's whole
-    // history on first launch is noise on the one day it should be quiet.
-    #expect(unseenCount(mark: nil, activityCount: 900, turns: nil) == 0)
+    #expect(unseenCount(mark: nil, proseCount: 900) == 0)
   }
 
   @Test func neverGoesNegativeWhenTheRollupLagsTheMark() {
-    #expect(unseenCount(mark: mark, activityCount: 12, turns: nil) == 0)
+    #expect(unseenCount(mark: read, proseCount: 2) == 0)
   }
 
-  // MARK: - unseenCount, prose
-
-  @Test func prefersProseOverRowsSoAToolLoopingSessionBadgesNothing() {
-    let read = Watermark(itemCount: 40, activity: 40, prose: 4, turns: 5, seenAt: 0)
-    // Eight new rows, none of them anything a person is waiting to read.
-    #expect(unseenCount(mark: read, proseCount: 4, activityCount: 48, turns: 6) == 0)
-    #expect(unseenCount(mark: read, proseCount: 5, activityCount: 48, turns: 6) == 1)
+  @Test func countsProseNotRowsSoAToolLoopingSessionBadgesNothing() {
+    #expect(unseenCount(mark: read, proseCount: 4) == 0)
+    #expect(unseenCount(mark: read, proseCount: 5) == 1)
   }
 
   @Test func readsAPreProseMarkAsCaughtUpRatherThanAWholeUnreadHistory() {
-    #expect(unseenCount(mark: mark, proseCount: 12, activityCount: 40, turns: nil) == 0)
+    let mark = Watermark(itemCount: 40, activity: 40, turns: 5, seenAt: 0)
+    #expect(unseenCount(mark: mark, proseCount: 12) == 0)
   }
 
   @Test func leavesAStoredProseMarkAloneWhenTheCallerHasNothingToSayAboutProse() {
     let box = StoreBox()
     let marks = Watermarks(store: box.seam)
     marks.mark(hostId: "mac", sessionId: "a", activity: 10, prose: 3, now: 1_000)
-    // An older gateway drops out of the rollup: `prose` nil must not read as 0.
     marks.mark(hostId: "mac", sessionId: "a", activity: 12, now: 200_000)
     #expect(marks.get(hostId: "mac", sessionId: "a")?.prose == 3)
   }

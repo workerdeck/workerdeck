@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { withoutGatewaySecrets } from '../../lib/child-env.ts'
 
 export type ClaudeAuthStatus = 'logged_in' | 'logged_out' | 'unknown'
 
@@ -39,7 +40,7 @@ export function checkClaudeAuth(
     execFile(
       executable,
       ['auth', 'status'],
-      { env: env as NodeJS.ProcessEnv, timeout: options.timeoutMs ?? 10_000 },
+      { env: withoutGatewaySecrets(env) as NodeJS.ProcessEnv, timeout: options.timeoutMs ?? 10_000 },
       // The exit code is ignored on purpose: 2.1.217 exits 1 on a logged-out verdict where
       // other versions exit 0, so only the parsed `loggedIn` boolean is a verdict.
       (_error, stdout) => {

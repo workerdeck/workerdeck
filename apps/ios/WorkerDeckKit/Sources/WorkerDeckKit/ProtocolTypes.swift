@@ -154,8 +154,8 @@ public struct ToolResultPart: Codable, Sendable, Equatable {
   /// heterogeneous array and a Swift enum per part kind would turn every fold
   /// below into a switch.
   ///
-  /// All optional, and that is the compatibility story: an old gateway - or a
-  /// socket that never asked (`WorkerClient.attach(imageRefs:)`) - sends parts
+  /// All optional, and that is the compatibility story: a socket that never
+  /// asked (`WorkerClient.attach(imageRefs:)`) is sent parts
   /// that carry none of them, and a part with no `text` and no ref contributes
   /// nothing to ``ToolResultContent/joinedText`` exactly as the CLI's own
   /// `tool_reference` part already does. That is this rule family's safe
@@ -493,14 +493,14 @@ public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
   public let value: String
   /// Wire id this row resolves to ('sonnet' → 'claude-sonnet-5'). A session
   /// reports the *resolved* model, so this is how the running model is matched
-  /// back to the row that names it. Absent on an older server.
+  /// back to the row that names it.
   public let resolvedModel: String?
   public let displayName: String
   public let description: String?
   /// Whether this belongs in a picker's main list rather than behind "more
   /// models" - the newest model of each family. Grouped server-side so every
-  /// client splits the list identically; absent (an older server) reads as
-  /// primary, which shows everything rather than hiding it.
+  /// client splits the list identically; absent reads as primary, which shows
+  /// everything rather than hiding it.
   public let primary: Bool?
   /// Reasoning efforts this model supports at create time (codex catalogs carry
   /// them). Absent = the engine's default set applies. Open strings.

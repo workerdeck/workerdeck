@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import type { PermissionMode } from '@workerdeck/protocol'
+import { resolvePosix } from '@workerdeck/protocol'
 import type { SessionVitals, SessionSurfacePanel } from '@workerdeck/ui'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
@@ -352,7 +353,7 @@ async function openTranscriptPath(
   if (!session) {
     return
   }
-  const path = resolveAgainstCwd(clicked, session.cwd)
+  const path = resolvePosix(clicked, session.cwd)
   if (!path) {
     return
   }
@@ -370,29 +371,4 @@ async function openTranscriptPath(
   } catch {
     void vscode.window.showWarningMessage(`WorkerDeck: could not open ${path}`)
   }
-}
-
-function resolveAgainstCwd(clicked: string, cwd: string | undefined): string | undefined {
-  if (clicked.startsWith('/')) {
-    return normalizePosix(clicked)
-  }
-  if (!cwd) {
-    return undefined
-  }
-  return normalizePosix(`${cwd.replace(/\/+$/, '')}/${clicked}`)
-}
-
-function normalizePosix(path: string): string {
-  const out: string[] = []
-  for (const part of path.split('/')) {
-    if (part === '' || part === '.') {
-      continue
-    }
-    if (part === '..') {
-      out.pop()
-    } else {
-      out.push(part)
-    }
-  }
-  return `/${out.join('/')}`
 }
