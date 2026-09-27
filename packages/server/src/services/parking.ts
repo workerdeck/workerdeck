@@ -200,6 +200,22 @@ export class SessionParkManager {
     return this.#queue(id, () => this.#options.store.get(id))
   }
 
+  // Renamed in place: waking an engine child to change a label is the wrong trade. Undefined once the session is live.
+  retitle(id: string, title: string | undefined): Promise<SessionInfo | undefined> {
+    return this.#queue(id, async () => {
+      const record = await this.#options.store.get(id)
+      if (!record || this.#options.registry.get(id)) {
+        return undefined
+      }
+      const { title: previous, ...meta } = record.config.meta ?? {}
+      const shown = title ?? (record.info.title === previous ? undefined : record.info.title)
+      const info: SessionInfo = { ...record.info, title: shown, meta: title ? { ...record.info.meta, title } : meta }
+      const config: SessionRunnerConfig = { ...record.config, meta: title ? { ...meta, title } : meta }
+      await this.#options.store.save({ ...record, info, config })
+      return info
+    })
+  }
+
   async listInfo(): Promise<SessionInfo[]> {
     await Promise.all(this.#storeOps.values())
     const records = await this.#options.store.list()

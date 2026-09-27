@@ -900,8 +900,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     claude and codex rehydrate by `resume`, which unlike `restore` is a public request field
     (`createSession({ resume, prompt })` legitimately means "continue, and here is the next thing").
     So the suppression lives at the wake site in `rebuild:`, never in a runner. `sessionTitle()`
-    derives from `prompt` when `meta.title` is unset, so the wake must also freeze
-    `record.info.title` into `meta`, or the session comes back nameless.
+    derives from `prompt` when `meta.title` is unset, so the wake passes `record.info.title` as
+    `fallbackTitle`, or the session comes back nameless. **Never into `meta.title`**: that is the
+    host-rename slot, and a record saved before the CLI's title arrived would freeze the truncated
+    prompt as a rename and stop the engine-title poll for good. A promptless claude resume polls
+    the engine title at start (off `config.resume`), since it names no session until a turn.
   - **A rename must re-save the record, and the record must carry the runner's live `meta`.**
     `setTitle()` writes the runner's `#config`, which `SessionParkManager.#configs` never sees, and
     the wake rebuilds from `record.config` while discarding `record.info`, so a rename used to

@@ -741,6 +741,21 @@ describe('SessionRunner', () => {
       await tick()
       expect(runner.info().title).toBe('Generated')
     })
+
+    it('shows a woken session under its last title until the engine names it, before any turn', async () => {
+      const sessionInfoFn = sessionInfo({ summary: 'Fixing the scrubber lane' })
+      const { runner } = makeRunner({
+        resume: 'sdk-session-1',
+        backfillHistory: false,
+        fallbackTitle: 'the right lane mark never grows…',
+        sessionInfoFn,
+      })
+      expect(runner.info().title).toBe('the right lane mark never grows…')
+      void runner.start()
+      await tick()
+      expect(sessionInfoFn).toHaveBeenCalledWith('sdk-session-1', { dir: '/tmp/project' })
+      expect(runner.info().title).toBe('Fixing the scrubber lane')
+    })
   })
 
   it('backfills resumed-session history as replay events before live events', async () => {

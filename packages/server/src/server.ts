@@ -431,12 +431,12 @@ function rebuildRunner(factory: SessionFactory, record: StoredSessionRecord): Pr
       ...factory.buildRunnerConfig({
         ...record.config,
         prompt: undefined,
-        meta: record.info.title ? { ...record.config.meta, title: record.info.title } : record.config.meta,
         resume: record.sdkSessionId,
       }),
       // Applied after the host's hook, which is free to rebuild the config from the
       // request and would drop a field it has never heard of.
       epoch: (record.info.epoch ?? 0) + 1,
+      fallbackTitle: record.info.title,
     },
     undefined,
     record.id,

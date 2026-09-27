@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ResolvePermissionRequest, UpdateSessionRequest } from '@workerdeck/protocol'
+import type { ResolvePermissionRequest, SessionInfo, UpdateSessionRequest } from '@workerdeck/protocol'
 import { contentTypeFor, fail, json, readJsonBody, requireMethod, sendUntrusted } from '../lib/http.ts'
 import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
 import { permissionDecision } from '../lib/permissions.ts'
@@ -93,14 +93,19 @@ async function handleSession({ ctx, req, res, route, runner, parked, info }: Ses
     return
   }
   if (req.method === 'PATCH') {
-    const live = requireLive(runner, 'wake it before renaming')
     const body = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateSessionRequest
+    if (body?.title !== undefined && body.title !== null && typeof body.title !== 'string') {
+      fail(400, 'title must be a string or null')
+    }
+    const title = typeof body?.title === 'string' ? body.title.trim() || undefined : undefined
+    if (!runner && parked) {
+      const renamed = body?.title === undefined ? parked.info : await parking.retitle(route.id, title)
+      json(res, 200, { session: projects.withProject(requireRenamed(renamed)) })
+      return
+    }
+    const live = requireLive(runner, 'wake it before renaming')
     if (body?.title !== undefined) {
-      if (body.title !== null && typeof body.title !== 'string') {
-        fail(400, 'title must be a string or null')
-      }
-      const title = typeof body.title === 'string' ? body.title.trim() : ''
-      live.setTitle(title || undefined)
+      live.setTitle(title)
       parking.touch(live)
     }
     json(res, 200, { session: projects.withProject(live.info()) })
@@ -163,4 +168,11 @@ async function handlePermission({ ctx, req, res, route, runner }: SessionCall<'p
     fail(404, 'permission request not found (already resolved or expired)')
   }
   json(res, 200, { resolved: true })
+}
+
+function requireRenamed(info: SessionInfo | undefined): SessionInfo {
+  if (!info) {
+    fail(409, 'session woke while renaming; retry')
+  }
+  return info
 }

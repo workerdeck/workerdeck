@@ -67,7 +67,7 @@ class ResumableRunner implements Runner {
       lastSeq: this.#seq,
       pendingPermissionCount: 0,
       meta: this.#meta,
-      title: typeof this.#meta?.title === 'string' ? this.#meta.title : this.config.prompt || undefined,
+      title: typeof this.#meta?.title === 'string' ? this.#meta.title : this.config.prompt || this.config.fallbackTitle || undefined,
     }
   }
 
@@ -306,6 +306,44 @@ describe('sessions that survive a restart', () => {
 
     expect(second.built[0]!.config.meta?.title).toBe('The one I named')
     expect(second.built[0]!.info().title).toBe('The one I named')
+  })
+
+  it('renames a stored session in place, without waking it', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(createFileSessionStore({ dir }))
+    const session = await create(first.base)
+    await vi.waitFor(async () => {
+      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+    })
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(createFileSessionStore({ dir }))
+    const renamed = await rename(second.base, session.id, 'Renamed while asleep')
+    expect(renamed.title).toBe('Renamed while asleep')
+    expect(second.built).toHaveLength(0)
+    expect((await list(second.base))[0]!.title).toBe('Renamed while asleep')
+
+    await attachOnce(second, session.id)
+    expect(second.built[0]!.config.meta?.title).toBe('Renamed while asleep')
+  })
+
+  it('wakes an unrenamed session with its last title as a fallback, never as a rename', async () => {
+    const dir = await stateDir()
+    const first = await startGateway(createFileSessionStore({ dir }))
+    const session = await create(first.base, 'resumable', 'Fix the flaky queue test')
+    await vi.waitFor(async () => {
+      expect(await createFileSessionStore({ dir }).get(session.id)).not.toBeNull()
+    })
+    await first.server.close()
+    servers.splice(servers.indexOf(first.server), 1)
+
+    const second = await startGateway(createFileSessionStore({ dir }))
+    await attachOnce(second, session.id)
+    const config = second.built[0]!.config
+    expect(config.meta?.title).toBeUndefined()
+    expect(session.title).toBe('Fix the flaky queue test')
+    expect(config.fallbackTitle).toBe('Fix the flaky queue test')
   })
 
   it('does not re-run the opening prompt on a wake, and keeps the name it derived from it', async () => {

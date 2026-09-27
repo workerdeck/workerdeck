@@ -248,6 +248,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       if (this.core.closed) {
         return
       }
+      if (this.config.resume && !this.config.prompt) {
+        void this.#fetchEngineTitle()
+      }
       this.#query = queryFn({ prompt: this.#input, options: this.#buildOptions() })
       if (!this.config.prompt) {
         this.core.setStatus('idle')
@@ -529,7 +532,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     if (hostTitle(this.config.meta)) {
       return
     }
-    const sdkSessionId = this.#sdkSessionId
+    const sdkSessionId = this.#sdkSessionId ?? this.config.resume
     if (!sdkSessionId) {
       return
     }

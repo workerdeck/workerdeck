@@ -1,6 +1,6 @@
 import type { CreateSessionRequest } from '@workerdeck/protocol'
 
-type TitleSource = Pick<CreateSessionRequest, 'meta' | 'prompt'>
+type TitleSource = Pick<CreateSessionRequest, 'meta' | 'prompt'> & { fallbackTitle?: string }
 
 export function hostTitle(meta: CreateSessionRequest['meta']): string | undefined {
   const title = meta?.title
@@ -17,7 +17,7 @@ export function sessionTitle(config: TitleSource, engineTitle?: string): string 
   }
   const prompt = config.prompt
   if (!prompt) {
-    return undefined
+    return config.fallbackTitle || undefined
   }
   return prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt
 }

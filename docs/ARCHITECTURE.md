@@ -328,8 +328,9 @@ boundary: anything a client needs must be expressible as protocol events and com
    the runner stamps harness-injected rows synthetic by text (`isSyntheticUserText` in
    `core/normalize.ts`, applied on the live path too - in the runner, not the reducer, so
    `transcriptActivity` never counts an unread row for work nobody typed). Session titles rank
-   three-deep in `SessionRunner#title()`: host rename > the CLI's own generated title (polled
-   off `getSessionInfo`, never while a rename stands) > the first prompt truncated.
+   four-deep in `sessionTitle()`: host rename > the CLI's own generated title (polled
+   off `getSessionInfo`, never while a rename stands) > the first prompt truncated > the
+   `fallbackTitle` a woken session carries from its record.
 
 ## Embedding: sandboxed sessions and session scope
 

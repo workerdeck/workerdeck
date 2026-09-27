@@ -32,6 +32,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell
   // write tools are offered only to a session an operator created.
   createdByOperator?: boolean
+  // The title a woken session last showed, ranked below the host's and the engine's, so it never freezes as a rename.
+  fallbackTitle?: string
 }
 
 export type ParkedExecution = {
