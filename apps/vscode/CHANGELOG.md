@@ -5,6 +5,26 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.1.0] - unreleased
+
+### Changed
+
+- **`workerdeck.newSession.permissionMode` is read from user settings only.** A workspace's
+  `.vscode/settings.json` can no longer pick a mode such as `bypassPermissions` for you.
+- **The Sessions sidebar is the same list as the dashboard's**, built on the shared session
+  browser: selection, cmd/alt-click, rename, grouping and empty states now behave identically in
+  both.
+- **Remote markdown images are click-to-load**, and the webview's image sources are narrowed to
+  the extension itself and gateways on loopback.
+- **Agents and shells no longer see `WORKERDECK_AUTH_KEY`**: the gateway strips its own key from
+  every engine child and shell it starts.
+
+### Fixed
+
+- **A sleeping session can be renamed** without waking it; renaming one used to fail.
+- **A woken session keeps its generated title.** A session saved before its title arrived could
+  come back named after its truncated first prompt, for good.
+
 ## [3.0.1] - 2026-09-25
 
 ### Added
