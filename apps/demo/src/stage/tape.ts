@@ -22,10 +22,10 @@ export type SayOptions = { stream?: boolean; parent?: string | null; tools?: Con
 
 type TurnOptions = { durationMs?: number; numTurns?: number; totalCostUsd?: number }
 
-const STREAM_GAP_MS = 120
-const FIRST_TOKEN_MS = 1600
-const TOOL_LATENCY_MS = 900
-const TURN_SETTLE_MS = 600
+const STREAM_GAP_MS = 160
+const FIRST_TOKEN_MS = 3600
+const TOOL_LATENCY_MS = 3000
+const TURN_SETTLE_MS = 3000
 const STREAM_WORDS = 1
 
 let uid = 0
@@ -85,7 +85,7 @@ export function say(text: string, options: SayOptions = {}): Beat {
     }
   }
   cues.push({
-    gap: options.stream ? STREAM_GAP_MS : 0,
+    gap: options.stream ? STREAM_GAP_MS : FIRST_TOKEN_MS,
     event: {
       type: 'assistant_message',
       message: { role: 'assistant', content: [{ type: 'text', text }, ...(options.tools ?? [])] },
