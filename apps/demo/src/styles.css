@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+@import '@workerdeck/ui/theme.css';
+@import './theme/vscode-dark-modern.css';
+@import './theme/webview.css';
+
+@source '../../../packages/ui/src';
+@source '../../../packages/ui/node_modules/streamdown/dist';
+@source './';
+
+@theme {
+  --color-hint: #8b93ff;
+  --color-hint-strong: #a5abff;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0d0d0f;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes wd-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

@@ -1,0 +1,49 @@
+.wd-webview {
+  --cw-font-sans: var(--vscode-font-family);
+  --cw-font-mono: var(--vscode-editor-font-family);
+  --bg: var(--vscode-panel-background);
+  --bg-surface: var(--vscode-editorWidget-background);
+  --bg-surface-hover: var(--vscode-list-hoverBackground);
+  --bg-code: var(--vscode-textCodeBlock-background);
+  --bg-elevated: var(--vscode-editorWidget-background);
+  --border: var(--vscode-panel-border);
+  --border-light: var(--vscode-widget-border);
+  --fg-1: var(--vscode-foreground);
+  --fg-2: var(--vscode-foreground);
+  --fg-3: var(--vscode-descriptionForeground);
+  --fg-4: var(--vscode-descriptionForeground);
+  --accent: var(--vscode-textLink-foreground);
+  --accent-hover: var(--vscode-textLink-activeForeground);
+  --accent-fg: var(--vscode-button-foreground);
+  --accent-bg: var(--vscode-list-activeSelectionBackground);
+  --row-hover: var(--vscode-list-hoverBackground);
+  --row-selected: var(--vscode-list-activeSelectionBackground);
+  --row-selected-weak: var(--vscode-list-inactiveSelectionBackground);
+  --badge: var(--vscode-badge-background);
+  --badge-fg: var(--vscode-badge-foreground);
+  --ring: var(--vscode-focusBorder);
+  --wd-transcript-max-width: 100%;
+  font-family: var(--cw-font-sans);
+  font-size: var(--text-body);
+  line-height: 1.5rem;
+  color: var(--fg-1);
+  background: var(--bg);
+}
+
+.wd-webview [data-slot='composer-hint'] {
+  display: none;
+}
+
+.wd-webview [data-slot='status-bar'] {
+  padding-block: 2px;
+}
+
+.wd-webview [data-terminal].term-composer,
+.wd-webview [data-terminal].term-composer:focus-within,
+.wd-webview [data-terminal].term-composer[data-dragging] {
+  border-bottom-color: transparent;
+}
+
+.wd-webview [data-terminal] {
+  --term-mark: var(--term-blue);
+}

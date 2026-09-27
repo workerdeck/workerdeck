@@ -136,6 +136,9 @@ yet; **ui: the pure modules only, and deliberately so** - the terminal theme's
 test in `packages/ui/test` that wanted a DOM belongs in the playground audit. `buildClusters` and
 `railScale` are exported *for the test alone* (not from `index.ts`) - both have shipped pure-logic
 bugs, which is the whole argument.
+`apps/demo` tests the scripted gateway (attach replay, beat timing, command routing, unread) and
+the tour controller (the step count dry run, hints, Back as fast-forward) with no DOM; the
+overlay and the journeys themselves are checked by running them in a browser.
 Peer messaging is pinned in three places: `core/test/peers.test.ts` (the dispatcher, envelope
 and digest), `claude-peers` / `codex-peers` (each engine's declaration and delivery, through the
 fake harness and the scripted peer) and `server/test/peers.test.ts` (scope, wake, the three

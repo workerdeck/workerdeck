@@ -1,7 +1,7 @@
 # Clients
 
-The three first-party clients beyond the dashboard: the VS Code extension, the reference
-embedding, and the iOS app. Dispatched from `CLAUDE.md`.
+The first-party clients beyond the dashboard: the VS Code extension, the reference embedding,
+the iOS app, and the interactive demo. Dispatched from `CLAUDE.md`.
 
 ## `apps/vscode`
 
@@ -1210,4 +1210,53 @@ Dependency direction: `protocol ← core ← queue ← server ← cli`, `protoco
 `sandbox` a leaf either side may use. The browser side (client/react/ui/apps) must never import
 core/server, the Agent SDK, or any model SDK; `client` must never devDep on `react` - that edge is
 the build-graph cycle turbo refuses.
+
+## `apps/demo`
+
+**The interactive tour**: a VS Code window drawn in React (from the WorkerDeck Figma file,
+`Layout` 28:675) with the **real** `@workerdeck/ui` panels inside it, driven by scripted agents.
+No model, no server, no network: it builds to a static bundle (`base: './'`) so the docs site can
+host it later. Private, never published, dev server on **5195**.
+
+Three layers, each replaceable without touching the others:
+
+- **`src/shell/`** is chrome only, sized from a live VS Code measured over CDP (Dark Modern,
+  modern UI, CSS px): title bar 35, status bar 28 with 24px items, activity bar 36 joined to a 300px
+  sidebar, secondary sidebar 292, panes 8px radius on 4px gaps, 32px tab strips. `window.zoomLevel`
+  never changes these; it only raises the device pixel ratio, so compare CSS px, not screenshots. Every area carries `data-demo-region` (`title-bar`,
+  `activity-bar`, `explorer`, `editor`, `agent-panel`, `secondary-sidebar`, `secondary-tabs`,
+  `status-bar`, `section:<id>`), and every slot that hosts WorkerDeck UI carries `wd-webview`,
+  which is `src/theme/webview.css`: the same `--vscode-*` to ui-token mapping the extension's
+  webview makes, over a hand-kept Dark Modern subset in `vscode-dark-modern.css`.
+- **`src/stage/`** is the scripted gateway. `DemoGateway` hands out a real `WorkerDeckClient`
+  whose `WebSocketImpl`/`fetchImpl` are in-memory, so `SessionHandle`, the reducer and every panel
+  run unmodified, exactly as `SessionPanel` does in the extension. It holds several sessions, folds
+  each event into `SessionInfo` the way the server would (status, cost, context, checklist,
+  pending approvals, prose/activity counts), and publishes `SessionRow`s for the sidebar. What the
+  server derives and the fold does not (sub-agents, shells, titles) arrives as a `patch` cue.
+  `tape.ts` is the authoring DSL: `beat(...)` flattens cues, and a bare number is a pause before
+  the next one. Model latency is built in (first streamed token, a tool call, a turn's end each
+  carry their own delay), so a script only adds pauses for pacing the story. **`turn_result.totalCostUsd` is cumulative**, as on the wire; a per-turn value
+  makes the card's cost go backwards. Client commands (a typed message, an approval, a model
+  switch) reach `onCommand` listeners newest-first, so a journey waiting on one pre-empts the
+  controller's default replies.
+- **`src/tour/`** is the runtime. A `Journey` is a scene (seeds + selection) and an async
+  `run(director)`. `explain`, `hint` (the periwinkle prompt drawn over the composer; clicking it
+  sends the prompt as a user message) and `until` (wait for a real client command, e.g. the
+  approval prompt) are **checkpoints**. Back and Restart do not rewind anything: they rebuild the
+  scene on a fresh gateway and re-run the script with every checkpoint before the target skipped
+  and every beat before it applied synchronously, so any script gets Back for free as long as it
+  is deterministic. The step total comes from one such dry run. A journey therefore must not read
+  the clock or randomness to decide what to play, and must drive the gateway through the
+  director (`d.play`), never `d.gateway.play`, or fast-forward cannot skip it.
+
+The Agent panel runs with `statusSurface`/`controlsSurface` `external`, as in the extension, so
+the window status bar carries the session readings: `panels/StatusItems.tsx` redraws the
+extension's `SessionStatusBar` items from the panel's `onVitals`, through the same
+`@workerdeck/ui/format` helpers, each item a `status:<name>` region.
+
+Regions are how a card or spotlight points at the UI. `card:<sessionId>` resolves to that
+session's card through a hidden marker injected via `SessionBrowser`'s `rowActions`, so the ui
+package needs no demo hooks; `css:<selector>` reaches anything else (`css:.term-scrubber`). Adding a journey is a file in `src/journeys/` plus an entry in
+`JOURNEYS`; the regions it lists are where the idle shell offers it on hover.
 

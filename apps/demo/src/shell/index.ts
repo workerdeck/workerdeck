@@ -1,0 +1,5 @@
+export { Workbench } from './Workbench.tsx'
+export type { WorkbenchProps } from './Workbench.tsx'
+export type { ShellSection } from './SecondarySideBar.tsx'
+export { ShellIcon, ShellIconButton, shellIcons } from './icons.tsx'
+export type { ShellIconName } from './icons.tsx'

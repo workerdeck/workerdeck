@@ -12,8 +12,8 @@ doc for whatever you are about to touch:
   to touch: engine, permission, parking, bridge, packaging.
 - `docs/PACKAGES.md` - **per-package rules you cannot infer from the types.** One `##` section
   per package. Read the section for the package you're changing before you change it.
-- `docs/CLIENTS.md` - the VS Code extension, `apps/embedded` (the reference embedding) and the
-  iOS app; same shape, one `##` section each.
+- `docs/CLIENTS.md` - the VS Code extension, `apps/embedded` (the reference embedding), the
+  iOS app and `apps/demo` (the interactive tour); same shape, one `##` section each.
 - `docs/ARCHITECTURE.md` - package map, dependency rule, session/job/parking lifecycles.
 - `docs/DEVELOPMENT.md` - tooling (pnpm/turbo/tsgo/oxlint/oxfmt, the `@workerdeck/source`
   condition), and what each package's tests actually cover.
@@ -47,6 +47,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | `packages/cli` | Published unscoped as **`workerdeck`**. Gateway + dashboard on one port. Hosts the only push credential (APNs). |
 | `apps/vscode` | The VS Code extension. No webview draws its own header; no view has screens. |
 | `apps/embedded` | The reference embedding - read it before designing another one. |
+| `apps/demo` | Interactive tour: a VS Code shell with the real `ui` panels over a scripted in-browser gateway. Private, static. |
 | `apps/ios` | Native iOS remote control (iOS 18+). `WorkerDeckKit/` hand-mirrors protocol + the reducer; `WorkerDeckActivity` + `Widgets/` are the Live Activity. |
 | `apps/docs` | Astro site → Pages. Keep in sync with README. |
 
