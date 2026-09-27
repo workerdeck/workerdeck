@@ -1354,7 +1354,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `retry: 2` so the node-pty race stops blocking the gate. That retry keeps the gate usable and is
   not a fix: the race is still open.
 
-  **3.1.0** - **prepared, not yet released** (bumped and committed 2026-09-27; no tag). The
+  **3.1.0** - **released 2026-09-27** (tag `v3.1.0`). The
   security and lifecycle sweep `188b030` plus three follow-ups found by smoking it. A **minor**,
   protocol stays **1** (`EngineCapabilities.forkSession` is additive). Release notes must call out
   what can change a working setup: non-operator principals are refused the host-authority create
@@ -1369,7 +1369,11 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   a woken session carries its stored title as `fallbackTitle` rather than as a host rename; the
   dashboard's profile pages load on a deep link. Verified before the bump: every free and paid
   smoke except `smoke:push` (no APNs key in the session) and the dashboard and playground checks,
-  driven headless. **Not verified**: the VS Code and iOS manual checks, and `smoke:push`.
+  driven headless; the VS Code and iOS manual checks were run by hand against rebuilt clients.
+  **Shipped knowingly unverified**: `smoke:push` (no APNs key in the session), so the reworked APNs
+  routes (operator-only, JSON-only, capped) have not been exercised over the wire. It is a
+  **minor** despite the breaking items above, by choice: there are no outside consumers yet, and
+  the version should not race ahead before the public launch.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
