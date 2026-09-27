@@ -87,7 +87,7 @@ async function startGateway(): Promise<void> {
       stateDir,
       '--no-web',
     ],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
+    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, WORKERDECK_AUTH_KEY: undefined } },
   )
   child.stderr?.on('data', (d) => {
     const line = String(d).trim()
@@ -284,13 +284,14 @@ async function main(): Promise<void> {
 
   // Order matters: `clear` needs a real, current dormant record and both destructive variants below leave it
   // otherwise, and a swept store leaves the session unusable, so `noprofile` has to precede `swept`.
-  if (wants('clear')) {
-    await clearNoChild(id)
+  const rowKept = wants('clear') ? await clearNoChild(id) : true
+  if (!rowKept && (wants('noprofile') || wants('swept'))) {
+    note('noprofile and swept skipped: the clear removed the row they would check; run them without clear')
   }
-  if (wants('noprofile')) {
+  if (rowKept && wants('noprofile')) {
     await deletedProfile(id)
   }
-  if (wants('swept')) {
+  if (rowKept && wants('swept')) {
     await sweptStore(id)
   }
 
@@ -350,11 +351,11 @@ async function sweptStore(id: string): Promise<void> {
 // The one clear path with no eager `thread/start` to save it: with the child dead the engine session id is simply
 // dropped, so the record still naming the cleared conversation has to be deleted. Asserts on the record and the
 // restart, not a turn, and costs no model tokens.
-async function clearNoChild(id: string): Promise<void> {
+async function clearNoChild(id: string): Promise<boolean> {
   step('5. A clear with no live child, across a restart')
   if (engine !== 'codex') {
     note("skipped: only codex can be cleared with its child dead (claude's reset comes back from the CLI, which needs one)")
-    return
+    return true
   }
   const recordPath = () => {
     const dir = join(stateDir, 'parked')
@@ -364,7 +365,7 @@ async function clearNoChild(id: string): Promise<void> {
   }
   if (!recordPath()) {
     fail('a dormant record to invalidate', 'none on disk - nothing for the clear to get wrong')
-    return
+    return true
   }
   ok('a dormant record exists, naming the conversation about to be cleared')
 
@@ -411,7 +412,7 @@ async function clearNoChild(id: string): Promise<void> {
   const row = listed.sessions.find((s) => s.id === id)
   if (!row) {
     ok('the cleared session is NOT resurrected', 'the row is gone - for codex the dormant record is the way back, and the clear removed it')
-    return
+    return false
   }
   note(`the row came back (status ${row.status}); checking it came back empty`)
   const after = await attach(id, undefined, 8_000)
@@ -421,6 +422,7 @@ async function clearNoChild(id: string): Promise<void> {
   } else {
     ok('the cleared session is NOT resurrected', 'it came back with none of the cleared history')
   }
+  return true
 }
 
 // Not `attach()`: a clear produces no `turn_result`, so that helper would sit on its timeout. The typed `/clear`

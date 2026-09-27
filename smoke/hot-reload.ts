@@ -79,7 +79,7 @@ async function startGateway(): Promise<void> {
       '--no-web',
       '--hot-reload',
     ],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
+    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, WORKERDECK_AUTH_KEY: undefined } },
   )
   const collect = (data: unknown) => {
     log += String(data)
