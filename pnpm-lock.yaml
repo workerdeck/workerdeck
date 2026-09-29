@@ -58,6 +58,9 @@ importers:
       '@workerdeck/react':
         specifier: workspace:*
         version: link:packages/react
+      '@workerdeck/relay':
+        specifier: workspace:*
+        version: link:packages/relay
       '@workerdeck/sandbox':
         specifier: workspace:*
         version: link:packages/sandbox
@@ -362,6 +365,9 @@ importers:
       '@openai/codex':
         specifier: ~0.158.0
         version: 0.158.0
+      '@workerdeck/relay':
+        specifier: workspace:*
+        version: link:../relay
       '@workerdeck/server':
         specifier: workspace:*
         version: link:../server
@@ -557,6 +563,56 @@ importers:
         specifier: ^8.21.3
         version: 8.21.3
 
+  packages/relay:
+    dependencies:
+      '@workerdeck/relay-client':
+        specifier: workspace:*
+        version: link:../relay-client
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.1
+        version: 26.6.1
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      rimraf:
+        specifier: ^6.1.3
+        version: 6.1.3
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(typescript@6.0.3)(unrun@0.2.39)
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.6.1)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0))
+
+  packages/relay-client:
+    dependencies:
+      '@workerdeck/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.1
+        version: 26.6.1
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      rimraf:
+        specifier: ^6.1.3
+        version: 6.1.3
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(typescript@6.0.3)(unrun@0.2.39)
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.6.1)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0))
+
   packages/sandbox:
     dependencies:
       quickjs-emscripten-core:
@@ -590,6 +646,9 @@ importers:
       '@workerdeck/queue':
         specifier: workspace:*
         version: link:../queue
+      '@workerdeck/relay-client':
+        specifier: workspace:*
+        version: link:../relay-client
       '@xterm/headless':
         specifier: ^6.0.0
         version: 6.0.0
@@ -612,6 +671,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      '@workerdeck/relay':
+        specifier: workspace:*
+        version: link:../relay
       '@workerdeck/sandbox':
         specifier: workspace:*
         version: link:../sandbox

@@ -960,6 +960,14 @@ public func peerDeliveredPrefix(sessionId: String, name: String? = nil) -> Strin
   "Delivered to \(name.map { "\($0) (\(sessionId))" } ?? sessionId)"
 }
 
+// A remote peer's id is `gateway:session`; the short form keeps the gateway whole and clips the session.
+public func peerShortId(_ sessionId: String) -> String {
+  guard let colon = sessionId.firstIndex(of: ":"), colon != sessionId.startIndex else {
+    return String(sessionId.prefix(8))
+  }
+  return "\(sessionId[..<colon]):\(sessionId[sessionId.index(after: colon)...].prefix(8))"
+}
+
 public func peerDeliveredTo(_ text: String) -> PeerDelivery? {
   let range = NSRange(text.startIndex..., in: text)
   if let named = peerDeliveredNamed.firstMatch(in: text, range: range),

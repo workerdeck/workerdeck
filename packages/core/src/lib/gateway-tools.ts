@@ -88,7 +88,8 @@ export function lateBoundDirectory<T extends object>(
   for (const method of methods) {
     handle[method] = async (...args) => {
       const directory = resolve()
-      return (directory[method] as (...args: unknown[]) => unknown).apply(directory, args)
+      const fn = directory[method]
+      return typeof fn === 'function' ? (fn as (...args: unknown[]) => unknown).apply(directory, args) : undefined
     }
   }
   return handle as T

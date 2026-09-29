@@ -43,3 +43,4 @@ export type {
   StoredShellRecord,
 } from './services/shells.ts'
 export type { ProcessRow, ProcessTable } from './services/process-tree.ts'
+export type { RelayLinkOptions } from './services/peer-relay.ts'

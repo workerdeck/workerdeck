@@ -673,6 +673,32 @@ optional `nextRunAt()` so an idle pump need not `list()` to find its next wake-u
 projects the stored `session` block through protocol's `pickCreateSessionRequest` before
 `buildRunnerConfig` sees it: the HTTP door stores a projected block, but a durable adapter can
 hold one written before it did, and the record is the second place a smuggled key can live.
+## `packages/relay-client`
+
+The gateway half of the cross-gateway relay, and the one place its wire format lives: frames and
+codec (`frames.ts`), the diffing publisher and the digest (`registry.ts`), and `connectRelay`
+(`connection.ts`: dial, `hello`, heartbeat by WS ping, jittered reconnect, request correlation,
+inbound `peer.peek`/`peer.send` checked against the ceiling ops and handed to a `RelayHost`).
+**Depends on `protocol` and `ws` only, never on `core` or `server`**: the server implements
+`RelayHost` and composes the result into its `PeerDirectory` (`services/peer-relay.ts`). The wire
+types stay out of `@workerdeck/protocol` on purpose, because relay traffic is server-to-server and
+`protocol` is the client contract; bumping `RELAY_WIRE_VERSION` never touches `PROTOCOL_VERSION`.
+`RelaySessionEntry` carries the full session picture (cwd, project name and root, model, context
+usage, checklist progress, status): exposure is decided by the gateway ceiling, not by trimming
+rows. Invariants in `docs/GOTCHAS.md` §Relay.
+
+## `packages/relay`
+
+The relay server, published with its own `workerdeck-relay` bin and lazily imported by the CLI as
+`workerdeck relay` (same argv). `startRelay` is one `http`/`https` server with a `ws` endpoint and a
+loopback-only `GET /status`; `enrollment.ts` keeps `gateways.json` (name to SHA-256 of the key,
+0600, written atomically), `rules.ts` parses `rules.json` and computes `allowedOps`. Both files
+are **watched and reloaded** (`watchFile`, 2 s), so `enroll` and `revoke` take effect on a running
+relay; a revoked gateway is disconnected, an invalid rules file keeps the previous rules and logs.
+The relay enforces its own copy of the guards (16k chars, 12 hops, 10 per minute per session
+pair) in front of the gateways' own. State lives in `~/.workerdeck/relay` unless `--state-dir` or
+`WORKERDECK_RELAY_STATE_DIR` says otherwise.
+
 ## `packages/server`
 
 HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,

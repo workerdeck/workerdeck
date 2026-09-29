@@ -39,6 +39,8 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | `packages/core` | The engines, shipped as adapters: `SessionRunner` (Claude SDK), `CodexRunner` (codex app-server), `AiSdkRunner` (provider). No transport. |
 | `packages/sandbox` | Untrusted-code boundary: QuickJS-NG WASM guest, map VFS, by-value host bridge. Leaf. |
 | `packages/queue` | `JobQueue` + `QueueAdapter`. `claimNext` must stay atomic. |
+| `packages/relay-client` | Gateway side of the cross-gateway relay: wire frames, `connectRelay`, the registry publisher. Server-to-server; not in `protocol`. |
+| `packages/relay` | The relay itself (`workerdeck-relay`, also `workerdeck relay`): enrollment, rules, registry, routing. |
 | `packages/server` | HTTP + WS gateway, session registry, profiles, parking/dormancy, scope enforcement, host-filesystem routes. |
 | `packages/client` | REST + WS client on platform `fetch`/`WebSocket`. Zero runtime deps. |
 | `packages/react` | Headless: `useClaudeSession`, the pure transcript reducer, the replay hold, the companion hooks. |
@@ -51,7 +53,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | `apps/ios` | Native iOS remote control (iOS 18+). `WorkerDeckKit/` hand-mirrors protocol + the reducer; `WorkerDeckActivity` + `Widgets/` are the Live Activity. |
 | `apps/docs` | Astro site → Pages. Keep in sync with README. |
 
-**Dependency direction:** `protocol ← core ← queue ← server ← cli`,
+**Dependency direction:** `protocol ← core ← queue ← server ← cli`, `protocol ← relay-client ← {server, relay ← cli}`,
 `protocol ← client ← react ← ui ← web`, `sandbox` a leaf either side may use. The browser side
 (client/react/ui/apps) must never import core/server, the Agent SDK, or any model SDK;
 `client` must never devDep on `react` - that edge is the build-graph cycle turbo refuses.

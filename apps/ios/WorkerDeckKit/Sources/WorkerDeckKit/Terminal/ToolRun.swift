@@ -39,7 +39,9 @@ public func foldsTogether(_ a: ToolCallItem, _ b: ToolCallItem) -> Bool {
 
 /// Who a peer message is from, as the row names them.
 public func peerName(_ origin: MessageOrigin) -> String {
-  origin.name ?? String(origin.sessionId.prefix(8))
+  guard let name = origin.name else { return peerShortId(origin.sessionId) }
+  if let hostId = origin.hostId { return "\(name)@\(hostId)" }
+  return name
 }
 
 /// Who a `peers_send` went to, read back out of the tool's own reply. Until the
@@ -47,9 +49,9 @@ public func peerName(_ origin: MessageOrigin) -> String {
 /// model addressed.
 public func peerSendTarget(_ call: ToolCallItem) -> String {
   if let result = call.result, !result.isError, let delivered = peerDeliveredTo(result.text) {
-    return delivered.name ?? String(delivered.sessionId.prefix(8))
+    return delivered.name ?? peerShortId(delivered.sessionId)
   }
-  if let sessionId = call.input["sessionId"]?.stringValue { return String(sessionId.prefix(8)) }
+  if let sessionId = call.input["sessionId"]?.stringValue { return peerShortId(sessionId) }
   return "peer"
 }
 

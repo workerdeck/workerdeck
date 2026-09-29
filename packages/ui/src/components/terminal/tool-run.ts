@@ -1,4 +1,4 @@
-import { isPeerSendTool, peerDeliveredTo, type MessageOrigin } from '@workerdeck/protocol'
+import { isPeerSendTool, peerDeliveredTo, peerShortId, type MessageOrigin } from '@workerdeck/protocol'
 import type { TranscriptItem } from '@workerdeck/react'
 import { toolInputPreview } from '../../lib/format.ts'
 import { isShellTool } from '../../lib/tool-icon.ts'
@@ -12,7 +12,10 @@ export function isPeerSend(item: TranscriptItem): boolean {
 }
 
 export function peerName(origin: MessageOrigin): string {
-  return origin.name ?? origin.sessionId.slice(0, 8)
+  if (!origin.name) {
+    return peerShortId(origin.sessionId)
+  }
+  return origin.hostId ? `${origin.name}@${origin.hostId}` : origin.name
 }
 
 // Every peer this transcript has named, by session id. A conversation names its peers twice over: an
@@ -48,7 +51,7 @@ export function peerSendTarget(item: ToolCallItem, names?: ReadonlyMap<string, s
   if (sessionId === undefined) {
     return 'peer'
   }
-  return delivered?.name ?? names?.get(sessionId) ?? sessionId.slice(0, 8)
+  return delivered?.name ?? names?.get(sessionId) ?? peerShortId(sessionId)
 }
 
 export function peerSendText(item: ToolCallItem): string {

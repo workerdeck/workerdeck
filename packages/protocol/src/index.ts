@@ -783,6 +783,12 @@ export function peerDeliveredPrefix(sessionId: string, name?: string): string {
   return `Delivered to ${name ? `${name} (${sessionId})` : sessionId}`
 }
 
+// A remote peer's id is `gateway:session`; the short form keeps the gateway whole and clips the session.
+export function peerShortId(sessionId: string): string {
+  const at = sessionId.indexOf(':')
+  return at > 0 ? `${sessionId.slice(0, at)}:${sessionId.slice(at + 1, at + 9)}` : sessionId.slice(0, 8)
+}
+
 export function peerDeliveredTo(text: string): { sessionId: string; name?: string } | undefined {
   const named = /^Delivered to (.+) \(([^()]+)\);/.exec(text)
   if (named) {

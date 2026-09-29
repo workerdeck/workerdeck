@@ -397,6 +397,13 @@ export function resolveInstanceConfig(
       ...(flags.shellAgentWrite !== undefined ? { agentWrite: flags.shellAgentWrite } : {}),
     }
   }
+  if (loaded.options.relay) {
+    options.relay = {
+      ...loaded.options.relay,
+      key: env.WORKERDECK_RELAY_KEY || loaded.options.relay.key || undefined,
+      log: loaded.options.relay.log ?? ((message) => process.stderr.write(`[workerdeck] ${message}\n`)),
+    }
+  }
   // Flags replace rather than merge: a half-declared profile set is a credential mix-up.
   if (flags.profiles.length) {
     options.profiles = flags.profiles

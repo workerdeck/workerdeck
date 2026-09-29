@@ -1150,6 +1150,56 @@ has the shape; these are the ways to get it wrong.
   `perMinute` (10) per sender-target pair, `maxMessageChars` (16k) with "write a file, send the
   path" as the refusal.
 
+## Relay (cross-gateway peers)
+
+`docs/ARCHITECTURE.md` §Across gateways has the shape. These are the invariants.
+
+- **The gateway is authoritative; the relay only caches.** The relay never edits a gateway's
+  rows. It replaces them on `registry.snapshot`, applies `registry.delta` only when `seq` is
+  exactly one more than the last, and otherwise sends `registry.resync`. A digest mismatch at the
+  same `seq` resyncs too; a digest at a different `seq` is in flight and ignored. A dropped socket
+  clears that gateway's rows at once, so there is no stale window to reason about.
+- **Deletes are found by diffing, never by events.** The publisher compares `host.snapshot()` with
+  what it last sent, every tick. Do not add "notify the relay on delete" hooks as the mechanism;
+  `nudge()` exists for latency only. The digest hashes each entry's canonical JSON (sorted keys,
+  `undefined` dropped), which is why both sides must go through `canonicalJson`: a field order
+  difference would otherwise resync forever.
+- **The sender half of every routed request comes from the connection.** `origin.gateway` is the
+  authenticated socket's name, and `origin.sessionId`, `name` and `engine` come from **the relay's
+  copy of that gateway's registry**, so a `from` the gateway never published is refused (an empty
+  list, "no such session"). A session outside the ceiling can therefore neither be reached nor
+  reach out.
+- **The ceiling is enforced twice, the rules once.** The gateway announces `expose.allow` in
+  `hello` and the relay intersects every rule with it, but the gateway re-checks the op on every
+  inbound frame and re-checks `expose.scope` on the target (`relayPeek` / `relaySend` resolve
+  through `exposedInfo`). A misconfigured or compromised relay cannot widen either.
+- **Every miss reads the same.** Unknown gateway, unknown session, a rule that denies, a ceiling
+  that denies: `peek` answers nothing and `send` answers `no such session: gateway:id`. Never
+  word them differently; that is how a peer learns what exists behind a rule.
+- **A scoped session stays on its own gateway.** Nothing on the wire carries scope tags, so the
+  composed directory lists no remote rows for a sender with any `scope` and refuses its remote
+  sends. An embedding that scopes sessions and wants federation needs a new design, not a flag.
+- **Remote ids are `gateway:session`, split on the first colon.** Local ids are UUIDs and never
+  contain one; `parseRelayPeerId` also refuses a prefix that is not a valid gateway name, so a
+  stray colon in a bare id still routes locally. The hop chain carries qualified ids across the
+  wire (the relay qualifies bare ones with the sender's gateway), and a delivered message's
+  `origin.sessionId` is the qualified id with `hostId` set, so the recipient's reply routes back
+  through the same composed directory with no special case.
+- **The relay key never reaches a child.** `WORKERDECK_RELAY_KEY` is read once by the CLI and
+  deleted from `process.env`, and `GATEWAY_SECRET_ENV_KEYS` strips it from every engine and shell
+  env. The relay stores only a SHA-256 of each key; `hello` compares digests in constant time, and
+  a wrong key and an unknown gateway close with the same code.
+- **Hot reload hands the socket over; it does not reconnect.** `server.releaseRelay()` parks the
+  live connection in a `Symbol.for` slot before `close()`, and the next generation's
+  `createRelayLink` adopts it when the config identity matches and calls `setHost`, so the relay
+  never sees the gateway drop. A mismatched identity closes the old one and dials fresh.
+- **Terminal close codes slow the retry, they do not stop it.** A bad key, a revoked enrollment or
+  a wire version mismatch is logged once and retried at the backoff ceiling (60 s), so fixing the
+  relay side heals the gateway without a restart and a misconfiguration does not spam the log.
+- **Plain `ws://` is allowed.** TLS is optional (`--tls-cert` / `--tls-key`); the relay warns once
+  when it binds off loopback without it. Use a tailnet or a TLS proxy: the gateway key is in the
+  `hello` frame. For a self-signed certificate the gateway sets `relay.caFile`.
+
 ## Server, profiles & auth
 
 - **`watchAuthSource` rides the registry's `onRegister`, so every door gets it.** It used to be

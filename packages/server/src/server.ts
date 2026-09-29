@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
 import { getEngineAdapter, installPeerDirectory, installShellDirectory, peerDirectoryHandle, shellDirectoryHandle } from '@workerdeck/core'
-import type { EngineAdapter, Runner, SessionRunnerConfig } from '@workerdeck/core'
+import type { EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
 import { mergePricing, type CreateSessionRequest, type ProfileEngine } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
@@ -26,6 +26,7 @@ import { ProducedFileStore } from './services/produced-files.ts'
 import { ProfileService } from './services/profiles.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
 import { SpendLedger } from './services/spend-ledger.ts'
+import { createRelayLink } from './services/peer-relay.ts'
 import { createPeerService } from './services/peers.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
@@ -177,10 +178,14 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const shellDirectory = shells ? createShellDirectory(shells, { runnerFor: (id) => registry.get(id) }) : undefined
   // Each runner resolves its own server's directory first and the process-wide slot only once that server has
   // closed, which is the hot-reload handover: a carried runner then reaches whichever generation installed last.
-  let ownPeers = peers
+  const relay =
+    peers && options.relay
+      ? createRelayLink(options.relay, peers, options.relay.log ?? ((message) => diagnose(new Error(message), 'relay')))
+      : undefined
+  let ownPeers: PeerDirectory | undefined = relay?.directory ?? peers
   let ownShells = shellDirectory
-  if (peers) {
-    installPeerDirectory(peers)
+  if (ownPeers) {
+    installPeerDirectory(ownPeers)
   }
   installShellDirectory(shellDirectory)
   const factory = createSessionFactory({
@@ -305,6 +310,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     closeQueueSockets: queueSockets.clear,
     diagnose,
     releaseDirectories: () => {
+      relay?.close()
       ownPeers = undefined
       ownShells = undefined
     },
@@ -353,6 +359,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       parking.adopt(runner, config)
       return true
     },
+    releaseRelay: () => relay?.release(),
     drain: lifecycle.drain,
     close: lifecycle.close,
   }

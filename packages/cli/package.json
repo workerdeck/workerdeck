@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@openai/codex": "~0.158.0",
+    "@workerdeck/relay": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/web": "workspace:*"
   },

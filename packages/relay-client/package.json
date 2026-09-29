@@ -1,0 +1,55 @@
+{
+  "name": "@workerdeck/relay-client",
+  "version": "3.2.0",
+  "type": "module",
+  "description": "Gateway side of the WorkerDeck relay: the relay wire frames, the dial-out connection with auth, heartbeat and reconnect, the session registry publisher, and the remote peer directory. Lets agents on separate gateways list, peek at and message each other.",
+  "license": "MIT",
+  "main": "./build/index.mjs",
+  "types": "./build/index.d.mts",
+  "files": [
+    "build"
+  ],
+  "exports": {
+    ".": {
+      "@workerdeck/source": "./src/index.ts",
+      "types": "./build/index.d.mts",
+      "default": "./build/index.mjs"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf build",
+    "build": "tsdown",
+    "prepack": "pnpm clean && pnpm build",
+    "typecheck": "tsgo -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@workerdeck/protocol": "workspace:*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "rimraf": "^6.1.3",
+    "tsdown": "^0.22.14",
+    "vitest": "^4.1.11",
+    "@types/ws": "^8.18.1"
+  },
+  "author": "Tobias Strebitzer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/workerdeck/workerdeck.git",
+    "directory": "packages/relay-client"
+  },
+  "homepage": "https://workerdeck.github.io/workerdeck/",
+  "bugs": "https://github.com/workerdeck/workerdeck/issues",
+  "keywords": [
+    "workerdeck",
+    "relay",
+    "agent",
+    "peers",
+    "gateway"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

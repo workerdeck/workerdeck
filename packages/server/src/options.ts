@@ -13,6 +13,7 @@ import type {
 import type { BridgeHub, BridgeHubOptions } from './services/bridge.ts'
 import type { SessionNotificationOptions } from './services/notifications.ts'
 import type { ParkErrorContext, SessionParkManager } from './services/parking.ts'
+import type { RelayLinkOptions } from './services/peer-relay.ts'
 import type { PeerServiceOptions } from './services/peers.ts'
 import type { ProfileStore } from './services/profile-store.ts'
 import type { SessionRegistry } from './services/registry.ts'
@@ -80,6 +81,8 @@ export type WorkerServerOptions = {
   // Session-to-session messaging (`peers_list` / `peers_peek` / `peers_send` on every engine). On by default; an
   // operator who wants sessions unable to see each other turns it off here.
   peers?: PeerServiceOptions
+  // Dial out to a `workerdeck relay` so sessions can reach peers on other gateways. Needs `peers` on.
+  relay?: RelayLinkOptions
   notifications?: SessionNotificationOptions
   bridge?: BridgeHubOptions
   parking?: {
@@ -185,5 +188,7 @@ export type WorkerServer = {
   // The other half, and it must run BEFORE `listen()`: between the port opening and the adoption, an attach reads
   // the session's dormant record and resumes a second engine child on the same transcript.
   adoptSession: (carried: CarriedSession) => boolean
+  // Keep the relay connection open across `close()` for the next module generation to adopt (hot reload).
+  releaseRelay: () => void
   close: () => Promise<void>
 }

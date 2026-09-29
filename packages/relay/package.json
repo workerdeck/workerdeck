@@ -1,0 +1,58 @@
+{
+  "name": "@workerdeck/relay",
+  "version": "3.2.0",
+  "type": "module",
+  "description": "The WorkerDeck relay: one always-on process every gateway dials out to. Holds the cross-gateway session registry, authenticates enrolled gateways, enforces the visibility rules and routes peer requests between them.",
+  "license": "MIT",
+  "main": "./build/index.mjs",
+  "types": "./build/index.d.mts",
+  "bin": {
+    "workerdeck-relay": "./build/cli.mjs"
+  },
+  "files": [
+    "build"
+  ],
+  "exports": {
+    ".": {
+      "@workerdeck/source": "./src/index.ts",
+      "types": "./build/index.d.mts",
+      "default": "./build/index.mjs"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf build",
+    "build": "tsdown",
+    "prepack": "pnpm clean && pnpm build",
+    "typecheck": "tsgo -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@workerdeck/relay-client": "workspace:*",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "rimraf": "^6.1.3",
+    "tsdown": "^0.22.14",
+    "vitest": "^4.1.11",
+    "@types/ws": "^8.18.1"
+  },
+  "author": "Tobias Strebitzer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/workerdeck/workerdeck.git",
+    "directory": "packages/relay"
+  },
+  "homepage": "https://workerdeck.github.io/workerdeck/",
+  "bugs": "https://github.com/workerdeck/workerdeck/issues",
+  "keywords": [
+    "workerdeck",
+    "relay",
+    "agent",
+    "peers",
+    "gateway"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

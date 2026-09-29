@@ -13,6 +13,7 @@ Usage
   workerdeck [options]
   workerdeck guard [options]     check whether it is safe to restart an instance
   workerdeck reload [options]    hot-reload a gateway started with --hot-reload
+  workerdeck relay <command>     run or manage a cross-gateway peer relay (relay --help)
 
 Options
   -p, --port <n>            port to listen on (default 8787, WORKERDECK_PORT)
@@ -145,6 +146,7 @@ function openInBrowser(url: string): void {
 function takeGatewayEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env }
   delete process.env.WORKERDECK_AUTH_KEY
+  delete process.env.WORKERDECK_RELAY_KEY
   return env
 }
 
@@ -156,6 +158,11 @@ async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'reload') {
     const { runReload } = await import('./dev/reload-command.ts')
     return await runReload(argv.slice(1))
+  }
+
+  if (argv[0] === 'relay') {
+    const { runRelayCli } = await import('@workerdeck/relay')
+    return await runRelayCli(argv.slice(1))
   }
 
   if (argv[0] === 'guard') {

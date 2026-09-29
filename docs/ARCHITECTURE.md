@@ -480,6 +480,27 @@ an unattended exchange: a per-pair rate limit, a size cap that points at a file 
 chain that a human turn resets (`docs/GOTCHAS.md` §Peer messaging). Delegation with an
 accept/reject/fulfil contract is the next layer, not this one.
 
+### Across gateways: the relay
+
+Several gateways (one operator, several machines) reach each other's sessions through one
+**relay** every gateway dials out to (`packages/relay`, run as `workerdeck relay serve`). The relay
+holds a registry of every published session, authenticates each gateway by an enrolled key,
+applies its rules file, and routes `peek` and `send` to the owning gateway. Gateways never talk to
+each other and never accept inbound connections for this.
+
+On the gateway, `createRelayLink` (`server/src/services/peer-relay.ts`) wraps the local peer
+service in a composed `PeerDirectory`: bare ids stay local, `gateway:session` ids go over the
+relay, `list` appends the relay's rows. `relay-client` publishes by **diffing a full snapshot every
+2 s** rather than listening for session events, so a session gone by any path (close, park expiry,
+delete) disappears on the next tick; `seq` gaps and a 30 s digest trigger a resync. A dropped
+connection clears that gateway's rows at the relay at once, and every reconnect opens with a
+snapshot.
+
+Two policy layers, the narrower wins: the gateway's own ceiling (`relay.expose`: which sessions are
+published at all, which operations it accepts) and the relay's rules (default deny; a rule without
+`allow` grants `send` and `peek`; optional `scope.projects`). The relay stamps the sender half of
+every request from the authenticated connection, so a gateway cannot speak for another.
+
 ## Tooling conventions
 
 pnpm workspace + turbo; TS 7 native preview (`tsgo`) for typecheck; oxlint; tsdown builds

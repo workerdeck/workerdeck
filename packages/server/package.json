@@ -27,6 +27,7 @@
     "@workerdeck/core": "workspace:*",
     "@workerdeck/protocol": "workspace:*",
     "@workerdeck/queue": "workspace:*",
+    "@workerdeck/relay-client": "workspace:*",
     "@xterm/headless": "^6.0.0",
     "ws": "^8.21.3"
   },
@@ -36,6 +37,7 @@
     "@swc/core": "^1.16.2",
     "@types/node": "^26.6.1",
     "@types/ws": "^8.18.1",
+    "@workerdeck/relay": "workspace:*",
     "@workerdeck/sandbox": "workspace:*",
     "rimraf": "^6.1.3",
     "tsdown": "^0.22.14",

@@ -162,9 +162,12 @@ drives tools by hand and configures no executor, so it never reaches `#dispatchS
 what `smoke:live-approval` is for. It edits the first tool call at approval and proves the edit
 ran from a **VFS entry** rather than from anything the model says, so it does not rest on a model
 behaving; it fails on both assertions against a runner without the amend.
-Three more the list above omits. `smoke:mcp --probe` is **free** - it connects to the real
+Four more the list above omits. `smoke:mcp --probe` is **free** - it connects to the real
 DeepWiki server, asserts the tools come back namespaced, and exits before touching a model;
-without `--probe` it grants those tools to a real session and costs tokens. `smoke:restart` spawns
+without `--probe` it grants those tools to a real session and costs tokens. `smoke:relay` runs one
+relay and two in-process gateways, a claude session on one and a codex session on the other, and
+proves a real model on each engine finds, addresses and answers a `gateway:session` peer; any change to
+the relay wire, `peer-relay.ts` or the peer tool copy needs it. `smoke:restart` spawns
 its **own** gateway on its own port and state dir (never the one you are running) and is the only
 thing that shows a real `claude`/`codex` resume works - `server/test/dormant.test.ts` drives a fake
 engine, so it proves the record and the routes, not the feature. `smoke:attach` costs nothing and

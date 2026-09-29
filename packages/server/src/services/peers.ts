@@ -21,6 +21,7 @@ import {
   type SessionEvent,
   type SessionInfo,
 } from '@workerdeck/protocol'
+import type { RelayOrigin, RelayPeek, RelaySendResult, RelaySessionEntry } from '@workerdeck/relay-client'
 import { scopeMatches } from '../lib/scope.ts'
 import type { LateBoundRefs } from '../options.ts'
 import type { ProjectInfoService } from './project-info.ts'
@@ -51,6 +52,35 @@ export type PeerService = PeerDirectory & {
   watch(runner: Runner): () => void
   // The `#Name` tokens in a message a person typed, resolved to the peers that session can see.
   mentions(from: string, text: string): Promise<PeerMention[]>
+  // The relay half. `exposed` is the gateway ceiling's scope: a session outside it is never published and never
+  // answers an inbound request, whatever the relay asks.
+  relaySender(from: string): Promise<SessionInfo>
+  relayChain(from: string): string[]
+  relayEntries(exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]>
+  relayPeek(sessionId: string, recent: number | undefined, exposed: Record<string, string> | undefined): Promise<RelayPeek | undefined>
+  relaySend(origin: RelayOrigin, sessionId: string, text: string, exposed: Record<string, string> | undefined): Promise<RelaySendResult>
+}
+
+export function relayEntry(info: SessionInfo, live: boolean): RelaySessionEntry {
+  const items = info.checklist
+  return {
+    id: info.id,
+    engine: info.engine,
+    status: info.status,
+    title: info.title,
+    project: info.project ? { name: info.project.name, root: info.project.root } : undefined,
+    cwd: info.cwd,
+    profile: info.profile,
+    model: info.model,
+    permissionMode: info.permissionMode,
+    contextUsage: info.contextUsage,
+    checklist: items?.length ? { done: items.filter((item) => item.status === 'completed').length, total: items.length } : undefined,
+    numTurns: info.numTurns,
+    createdAt: info.createdAt,
+    lastActivityAt: info.lastActivityAt,
+    pendingPermissionCount: info.pendingPermissionCount,
+    live,
+  }
 }
 
 // Session-to-session messaging inside one gateway. Visibility is the session-scope rule the HTTP routes enforce,
@@ -95,6 +125,16 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     return info
   }
 
+  const recentOf = (sessionId: string, recent: number | undefined): { runner: Runner | undefined; lines: string[] } => {
+    const limit = Math.min(Math.max(recent ?? PEER_RECENT_DEFAULT, 0), PEER_RECENT_MAX)
+    const runner = registry().get(sessionId)
+    const events: SessionEvent[] = []
+    if (runner && limit > 0) {
+      runner.subscribe((event) => events.push(event), 0, { truncateResults: true, imageRefs: true })()
+    }
+    return { runner, lines: recentLines(events, limit) }
+  }
+
   const underRateLimit = (from: string, to: string): boolean => {
     const key = `${from}->${to}`
     const now = Date.now()
@@ -122,18 +162,13 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     if (!info || !visible(me, info)) {
       return undefined
     }
-    const limit = Math.min(Math.max(options?.recent ?? PEER_RECENT_DEFAULT, 0), PEER_RECENT_MAX)
-    const runner = registry().get(sessionId)
-    const events: SessionEvent[] = []
-    if (runner && limit > 0) {
-      runner.subscribe((event) => events.push(event), 0, { truncateResults: true, imageRefs: true })()
-    }
+    const { runner, lines } = recentOf(sessionId, options?.recent)
     return {
       ...peerSummary(info),
       live: runner !== undefined,
       checklist: info.checklist,
       pendingApprovals: runner ? runner.pendingApprovals.map((request) => request.title ?? request.toolName) : [],
-      recent: recentLines(events, limit),
+      recent: lines,
     }
   }
 
@@ -152,17 +187,23 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     if (!target || !visible(me, target)) {
       return { delivered: false, reason: `no such session: ${sessionId}` }
     }
+    const hops = [...(options?.hops ?? inbound.get(from) ?? []), from]
+    return deliver(target, text, { kind: 'peer', sessionId: from, name: me.title, engine: me.engine, hops }, from)
+  }
+
+  const deliver = async (target: SessionInfo, text: string, origin: MessageOrigin, rateKey: string): Promise<PeerSendResult> => {
+    const sessionId = target.id
     if (target.status === 'closed' || target.status === 'failed') {
       return { delivered: false, reason: `session ${sessionId} is ${target.status}` }
     }
-    const hops = [...(options?.hops ?? inbound.get(from) ?? []), from]
+    const hops = origin.hops ?? []
     if (hops.length > maxHops) {
       return {
         delivered: false,
         reason: `${hops.length} messages have passed between sessions without a person speaking; stop and ask your user before continuing.`,
       }
     }
-    if (!underRateLimit(from, sessionId)) {
+    if (!underRateLimit(rateKey, sessionId)) {
       return { delivered: false, reason: `rate limit: at most ${perMinute} messages a minute to one session. Batch what you have to say.` }
     }
     const runner = (await deps.refs.parking?.ensureLive(sessionId)) ?? registry().get(sessionId)
@@ -170,7 +211,6 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       return { delivered: false, reason: `session ${sessionId} could not be woken` }
     }
     const before = runner.info().status
-    const origin: MessageOrigin = { kind: 'peer', sessionId: from, name: me.title, engine: me.engine, hops }
     try {
       runner.sendMessage(text, undefined, { origin })
     } catch (error) {
@@ -178,6 +218,65 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     }
     inbound.set(sessionId, hops)
     return { delivered: true, sessionId, name: target.title, queued: before === 'running' || before === 'awaiting_approval' }
+  }
+
+  const exposedInfo = async (sessionId: string, exposed: Record<string, string> | undefined): Promise<SessionInfo | undefined> => {
+    const info = await infoOf(sessionId)
+    return info && info.status !== 'closed' && scopeMatches(exposed, info.scope) ? info : undefined
+  }
+
+  const relayEntries = async (exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]> => {
+    const live = new Set(
+      registry()
+        .list()
+        .map((info) => info.id),
+    )
+    return (await allSessions())
+      .filter((info) => info.status !== 'closed' && scopeMatches(exposed, info.scope))
+      .map((info) => relayEntry(info, live.has(info.id)))
+  }
+
+  const relayPeek = async (
+    sessionId: string,
+    recent: number | undefined,
+    exposed: Record<string, string> | undefined,
+  ): Promise<RelayPeek | undefined> => {
+    const info = await exposedInfo(sessionId, exposed)
+    if (!info) {
+      return undefined
+    }
+    const { runner, lines } = recentOf(sessionId, recent)
+    return {
+      ...relayEntry(info, runner !== undefined),
+      checklistItems: info.checklist,
+      pendingApprovals: runner ? runner.pendingApprovals.map((request) => request.title ?? request.toolName) : [],
+      recent: lines,
+    }
+  }
+
+  const relaySend = async (
+    origin: RelayOrigin,
+    sessionId: string,
+    text: string,
+    exposed: Record<string, string> | undefined,
+  ): Promise<RelaySendResult> => {
+    if (text.length === 0 || text.length > maxChars) {
+      return {
+        delivered: false,
+        reason: `message is ${text.length} characters; the limit is ${maxChars}. Write it to a file and send the path.`,
+      }
+    }
+    const target = await exposedInfo(sessionId, exposed)
+    if (!target) {
+      return { delivered: false, reason: `no such session: ${sessionId}` }
+    }
+    const from = `${origin.gateway}:${origin.sessionId}`
+    return deliver(
+      target,
+      text,
+      { kind: 'peer', sessionId: from, hostId: origin.gateway, name: origin.name, engine: origin.engine, hops: origin.hops },
+      from,
+    )
   }
 
   // A session id is a handle a person may paste, so a full id and an unambiguous prefix resolve too.
@@ -240,5 +339,16 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       }
     }, runner.info().lastSeq)
 
-  return { list, peek, send, mentions, watch }
+  return {
+    list,
+    peek,
+    send,
+    mentions,
+    watch,
+    relaySender: sender,
+    relayChain: (from) => [...(inbound.get(from) ?? []), from],
+    relayEntries,
+    relayPeek,
+    relaySend,
+  }
 }

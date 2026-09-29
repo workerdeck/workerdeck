@@ -141,7 +141,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   `peers_list`, `peers_peek` (status, checklist, the last few lines, without interrupting) and
   `peers_send`. A message lands as a peer-stamped message that never cuts into a running turn, so a
   Claude session in one repo can ask a Codex session in another to do something and read how far
-  it got. Scope-bounded, rate-limited, and loop-guarded by a hop chain a human turn resets. In the
+  it got. Scope-bounded, rate-limited, and loop-guarded by a hop chain a human turn resets. With a
+  `workerdeck relay` running on one always-on machine, sessions on your other gateways show up too,
+  as `gateway:session`, behind rules the relay and each gateway enforce. In the
   composer, `#` names one of them: it completes from the sessions this gateway shows and sends a
   hint, not an order - "commit what #Astra left unstaged" tells the agent which session to go and
   read, and the transcript keeps the bare text you typed.

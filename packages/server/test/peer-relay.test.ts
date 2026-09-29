@@ -1,0 +1,138 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { runPeerTool } from '@workerdeck/core'
+import { enrollGateway, startRelay, type Relay } from '@workerdeck/relay'
+import { createRelayLink, type RelayLink, type RelayLinkOptions } from '../src/services/peer-relay.ts'
+import { createPeerService } from '../src/services/peers.ts'
+import { ProjectInfoService } from '../src/services/project-info.ts'
+import { SessionRegistry } from '../src/services/registry.ts'
+import { PeerRunner } from './peer-runner.ts'
+
+const cleanups: Array<() => unknown> = []
+
+afterEach(async () => {
+  for (let cleanup = cleanups.pop(); cleanup; cleanup = cleanups.pop()) {
+    await cleanup()
+  }
+})
+
+async function until(check: () => boolean | Promise<boolean>, what: string): Promise<void> {
+  const deadline = Date.now() + 5_000
+  while (!(await check())) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${what}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+}
+
+async function relayRig(): Promise<{ relay: Relay; stateDir: string }> {
+  const stateDir = await mkdtemp(join(tmpdir(), 'wd-peer-relay-'))
+  cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
+  await writeFile(join(stateDir, 'rules.json'), JSON.stringify({ rules: [{ from: '*', to: '*' }] }))
+  const relay = await startRelay({ stateDir, port: 0, log: () => {} })
+  cleanups.push(() => relay.close())
+  return { relay, stateDir }
+}
+
+async function gateway(relay: Relay, stateDir: string, name: string, runners: PeerRunner[], expose?: RelayLinkOptions['expose']) {
+  const key = await enrollGateway(stateDir, name)
+  await relay.reload()
+  const registry = new SessionRegistry()
+  const service = createPeerService({ refs: { registry }, projects: new ProjectInfoService() })
+  registry.observe((runner) => service.watch(runner))
+  for (const runner of runners) {
+    registry.register(runner)
+  }
+  const link: RelayLink = createRelayLink({ url: relay.url, gateway: name, key, expose }, service, () => {})
+  cleanups.push(() => link.close())
+  const published = runners.filter((runner) => !expose?.scope || runner.scope?.team === expose.scope.team).length
+  await until(() => relay.status().gateways.find((row) => row.name === name)?.sessions === published, `${name} published`)
+  return link
+}
+
+describe('peer relay link', () => {
+  it('lists remote rows, delivers with a gateway-qualified origin, and carries the hop chain back', async () => {
+    const { relay, stateDir } = await relayRig()
+    const a1 = new PeerRunner('a1', { title: 'Astra' })
+    const b1 = new PeerRunner('b1', { title: 'Bolt' })
+    const mac = await gateway(relay, stateDir, 'mac', [a1, new PeerRunner('a2')])
+    const pi = await gateway(relay, stateDir, 'pi', [b1])
+
+    const rows = await mac.directory.list('a1')
+    expect(rows.map((row) => row.id)).toEqual(['a2', 'pi:b1'])
+    expect(rows[1]).toMatchObject({ gateway: 'pi', title: 'Bolt', cwd: '/work/b1', allow: ['send', 'peek'] })
+
+    const sent = await runPeerTool(mac.directory, 'a1', 'peers_send', { sessionId: 'pi:b1', text: 'please review' })
+    expect(sent.isError).toBe(false)
+    expect(sent.text).toContain('pi:b1')
+    expect(b1.sent).toEqual([
+      {
+        text: 'please review',
+        options: { origin: { kind: 'peer', sessionId: 'mac:a1', hostId: 'mac', name: 'Astra', engine: 'claude', hops: ['mac:a1'] } },
+      },
+    ])
+
+    expect((await pi.directory.send('b1', 'mac:a1', 'done')).delivered).toBe(true)
+    expect(a1.sent[0]!.options?.origin).toMatchObject({ sessionId: 'pi:b1', hostId: 'pi', hops: ['mac:a1', 'pi:b1'] })
+
+    const peek = await mac.directory.peek('a1', 'pi:b1')
+    expect(peek).toMatchObject({ id: 'pi:b1', gateway: 'pi', live: true })
+  })
+
+  it('never publishes a session outside the ceiling and refuses ops the ceiling does not accept', async () => {
+    const { relay, stateDir } = await relayRig()
+    const mac = await gateway(relay, stateDir, 'mac', [new PeerRunner('a1')])
+    const hidden = new PeerRunner('b2', { scope: { team: 'x' } })
+    const open = new PeerRunner('b1', { scope: { team: 'ops' } })
+    await gateway(relay, stateDir, 'pi', [open, hidden], { scope: { team: 'ops' }, allow: ['send'] })
+    const rows = await mac.directory.list('a1')
+    expect(rows.map((row) => [row.id, row.allow])).toEqual([['pi:b1', ['send']]])
+    expect(await mac.directory.peek('a1', 'pi:b1')).toBeUndefined()
+    expect(await mac.directory.send('a1', 'pi:b2', 'hi')).toEqual({ delivered: false, reason: 'no such session: pi:b2' })
+    expect(hidden.sent).toEqual([])
+  })
+
+  it('keeps a scoped session on its own gateway', async () => {
+    const { relay, stateDir } = await relayRig()
+    const mac = await gateway(relay, stateDir, 'mac', [new PeerRunner('a1', { scope: { tenant: 't1' } })])
+    await gateway(relay, stateDir, 'pi', [new PeerRunner('b1')])
+    expect(await mac.directory.list('a1')).toEqual([])
+    expect(await mac.directory.send('a1', 'pi:b1', 'hi')).toEqual({ delivered: false, reason: 'no such session: pi:b1' })
+  })
+
+  it('says remote gateways are unavailable instead of failing when the relay is gone', async () => {
+    const { relay, stateDir } = await relayRig()
+    const mac = await gateway(relay, stateDir, 'mac', [new PeerRunner('a1'), new PeerRunner('a2')])
+    await relay.close()
+    await until(async () => (await mac.directory.notice?.('a1')) !== undefined, 'offline notice')
+    const listed = await runPeerTool(mac.directory, 'a1', 'peers_list', {})
+    expect(listed.text).toContain('"a2"')
+    expect(listed.text).toContain('Remote gateways are unavailable')
+    expect((await mac.directory.send('a1', 'pi:b1', 'hi')).delivered).toBe(false)
+  })
+
+  it('hands the open connection to the next generation on release instead of reconnecting', async () => {
+    const { relay, stateDir } = await relayRig()
+    const key = await enrollGateway(stateDir, 'mac')
+    await relay.reload()
+    const service = (runners: PeerRunner[]) => {
+      const registry = new SessionRegistry()
+      runners.forEach((runner) => registry.register(runner))
+      return createPeerService({ refs: { registry }, projects: new ProjectInfoService() })
+    }
+    const options = { url: relay.url, gateway: 'mac', key }
+    const first = createRelayLink(options, service([new PeerRunner('a1')]), () => {})
+    await until(() => relay.status().gateways.find((row) => row.name === 'mac')?.sessions === 1, 'first generation')
+    const connectedAt = relay.status().gateways.find((row) => row.name === 'mac')!.connectedAt
+    first.release()
+    first.close()
+    const second = createRelayLink(options, service([new PeerRunner('a1'), new PeerRunner('a2')]), () => {})
+    cleanups.push(() => second.close())
+    second.nudge()
+    await until(() => relay.status().gateways.find((row) => row.name === 'mac')?.sessions === 2, 'second generation publishes')
+    expect(relay.status().gateways.find((row) => row.name === 'mac')!.connectedAt).toBe(connectedAt)
+  })
+})

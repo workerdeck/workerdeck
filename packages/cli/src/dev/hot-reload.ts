@@ -169,6 +169,7 @@ export async function runHotReload(flags: CliFlags, env: NodeJS.ProcessEnv = pro
         }
       }
       const endedShells = instance.server.shells?.running().length ?? 0
+      instance.server.releaseRelay()
       await instance.close()
       generation += 1
       instance = await start(orphans)

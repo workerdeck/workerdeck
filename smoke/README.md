@@ -12,6 +12,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Codex engine | `pnpm smoke:codex --canary` / `--clear` / `--steer` / `pnpm smoke:codex [model]` | Canary: no. Clear: **two tiny turns**. Steer: **one short turn**. Full: **yes, plan/API usage** |
 | Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |
 | APNs push | `pnpm smoke:push <host> [sessionId]` | No, but it rings a real phone |
+| Cross-gateway peers (relay) | `pnpm smoke:relay` (models via `WD_SMOKE_CLAUDE_MODEL` / `WD_SMOKE_CODEX_MODEL`, default `haiku` / `gpt-5.6-luna`) | **Yes, a few short turns on each engine** |
 | Restart, end to end | `pnpm smoke:restart [claude\|codex] [clear] [noprofile] [swept] [all]` | **Yes, two short turns** |
 
 `smoke:sandbox`, `smoke:codex` and `smoke:restart` report through `smoke/lib/report.ts`: a bold

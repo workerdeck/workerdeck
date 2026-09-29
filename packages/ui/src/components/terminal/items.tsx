@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
-import type { MessageOrigin } from '@workerdeck/protocol'
+import { peerShortId, type MessageOrigin } from '@workerdeck/protocol'
 import type { ShellItem, TranscriptItem } from '@workerdeck/react'
 import { compactionText, formatBytes, formatCost, formatDuration, toolInputPreview } from '../../lib/format.ts'
 import { isMutatingTool } from '../../lib/tool-icon.ts'
@@ -41,7 +41,7 @@ function clipToChars(lines: string[], maxChars: number): string[] {
 }
 
 export function peerLabel(origin: MessageOrigin): string {
-  const who = origin.name ? `${origin.name} (${origin.sessionId.slice(0, 8)})` : origin.sessionId.slice(0, 8)
+  const who = origin.name ? `${origin.name} (${peerShortId(origin.sessionId)})` : peerShortId(origin.sessionId)
   return `message from ${origin.engine ? `${origin.engine} session ` : 'session '}${who}`
 }
 

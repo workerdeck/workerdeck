@@ -84,6 +84,15 @@ struct PeerMessagingTests {
     #expect(peerName(MessageOrigin(sessionId: "sess-abcdefgh")) == "sess-abc")
   }
 
+  @Test("a peer on another gateway keeps its gateway in the name and the short id")
+  func namesARemotePeer() {
+    #expect(peerShortId("mac-mini:abcdefghijk") == "mac-mini:abcdefgh")
+    #expect(peerName(MessageOrigin(sessionId: "mac:abcdefghijk", name: "Astra", hostId: "mac")) == "Astra@mac")
+    #expect(peerName(MessageOrigin(sessionId: "mac:abcdefghijk")) == "mac:abcdefgh")
+    let addressed: JSONValue = ["sessionId": "pi:abcdefghijk", "text": "ping"]
+    #expect(peerSendTarget(send("r1", addressed, status: .running)) == "pi:abcdefgh")
+  }
+
   @Test("the sent message flattens to one line for the closed row")
   func flattensToOneLine() {
     #expect(peerOneLine(peerSendText(send("s1", ["text": " a\n\n  b "]))) == "a b")
