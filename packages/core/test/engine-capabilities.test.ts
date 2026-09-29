@@ -94,55 +94,102 @@ describe('model catalogs', () => {
     }
   })
 
-  // The raw `supportedModels()` extraction the claude catalog was authored from (2026-09-23,
-  // SDK 0.3.280), replayed through the live shaping rules.
+  // The raw `supportedModels()` extraction the claude catalog was generated from (2026-09-29,
+  // SDK 0.3.284), replayed through the live shaping rules.
   const RAW_CLAUDE: SdkModelInfo[] = [
     {
       value: 'default',
-      resolvedModel: 'claude-opus-5-5[1m]',
+      resolvedModel: 'claude-opus-5-5',
       displayName: 'Default (recommended)',
-      description: 'Opus 5.5 with 1M context · Best for everyday, complex tasks',
+      description: 'Opus 5.5 · Best for everyday, complex tasks',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
-      value: 'opus[1m]',
-      resolvedModel: 'claude-opus-5-5[1m]',
-      displayName: 'Opus (1M context)',
-      description: 'Opus 5.5 with 1M context · Best for everyday, complex tasks',
+      value: 'opus',
+      resolvedModel: 'claude-opus-5-5',
+      displayName: 'Opus 5.5',
+      description: 'For complex work and everyday tasks',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
-      value: 'claude-fable-5-1[1m]',
+      value: 'claude-fable-5-1',
       resolvedModel: 'claude-fable-5-1',
-      displayName: 'Fable',
-      description: 'Fable 5.1 · Most capable for your hardest and longest-running tasks',
+      displayName: 'Fable 5.1',
+      description: 'For your toughest challenges',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
       value: 'sonnet',
-      resolvedModel: 'claude-sonnet-5',
-      displayName: 'Sonnet',
-      description: 'Sonnet 5 · Efficient for routine tasks',
+      resolvedModel: 'claude-sonnet-5-5',
+      displayName: 'Sonnet 5.5',
+      description: 'Most efficient for simpler tasks',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
       value: 'haiku',
       resolvedModel: 'claude-haiku-4-5-20251001',
-      displayName: 'Haiku',
-      description: 'Haiku 4.5 · Fastest for quick answers',
-      supportsEffort: false,
+      displayName: 'Haiku 4.5',
+      description: 'Fastest for quick answers',
+    },
+    {
+      value: 'claude-sonnet-5',
+      resolvedModel: 'claude-sonnet-5',
+      displayName: 'Sonnet 5',
+      description: 'Efficient for routine tasks',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-opus-5',
+      resolvedModel: 'claude-opus-5',
+      displayName: 'Opus 5',
+      description: 'Best for everyday, complex tasks',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-fable-5',
+      resolvedModel: 'claude-fable-5',
+      displayName: 'Fable 5',
+      description: 'Most capable for your hardest and longest-running tasks',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-opus-4-8',
+      resolvedModel: 'claude-opus-4-8',
+      displayName: 'Opus 4.8',
+      description: 'Best for everyday, complex tasks',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-opus-4-7',
+      resolvedModel: 'claude-opus-4-7',
+      displayName: 'Opus 4.7',
+      description: 'Best for everyday, complex tasks',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-opus-4-6',
+      resolvedModel: 'claude-opus-4-6',
+      displayName: 'Opus 4.6',
+      description: 'Best for everyday, complex tasks',
+      supportedEffortLevels: ['low', 'medium', 'high', 'max'],
+    },
+    {
+      value: 'claude-sonnet-4-6',
+      resolvedModel: 'claude-sonnet-4-6',
+      displayName: 'Sonnet 4.6',
+      description: 'Efficient for routine tasks',
+      supportedEffortLevels: ['low', 'medium', 'high', 'max'],
     },
   ]
 
-  it('claude catalog current rows match the live shaping of their extraction', () => {
+  it('claude catalog matches the live shaping of its extraction', () => {
     const shaped = modelOptionsFromSdk(RAW_CLAUDE)
-    const currentRows = CLAUDE_CATALOG.models.filter((m) => RAW_CLAUDE.some((raw) => raw.value === m.value))
-    expect(currentRows).toEqual(shaped)
+    expect(CLAUDE_CATALOG.models).toEqual(shaped.map(({ primary, ...row }) => (primary ? { ...row, primary } : row)))
   })
 
   it('claude catalog marks exactly one primary row per family', () => {
     const primaries = CLAUDE_CATALOG.models.filter((m) => m.primary)
-    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5.5', 'Sonnet 5', 'Haiku 4.5'])
+    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5.5', 'Sonnet 5.5', 'Haiku 4.5'])
   })
 
   it('codex catalog drops the internal auto-review row and keeps efforts open', () => {
@@ -155,7 +202,7 @@ describe('model catalogs', () => {
 
   it('codex catalog primary split mirrors the binary’s own picker visibility', () => {
     const primary = CODEX_CATALOG.models.filter((m) => m.primary).map((m) => m.value)
-    expect(primary).toEqual(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2'])
+    expect(primary).toEqual(['gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'])
   })
 
   it('provider pseudo-adapter ships an empty catalog and a hook-refusing factory', () => {

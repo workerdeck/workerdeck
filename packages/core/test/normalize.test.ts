@@ -54,6 +54,14 @@ describe('modelOptionsFromSdk', () => {
     })
   })
 
+  it('reads an absent effort report as none, and keeps an explicit capability open', () => {
+    const options = modelOptionsFromSdk([
+      { value: 'haiku', resolvedModel: 'claude-haiku-4-5-20251001', displayName: 'Haiku' },
+      { value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus', supportsEffort: true },
+    ])
+    expect(options.map((m) => m.reasoningEfforts)).toEqual([undefined, []])
+  })
+
   it('leaves an unrecognised id alone, and visible', () => {
     const options = modelOptionsFromSdk([{ value: 'internal-preview', displayName: 'Preview' }])
     expect(options).toEqual([
@@ -63,6 +71,7 @@ describe('modelOptionsFromSdk', () => {
         displayName: 'Preview',
         description: undefined,
         primary: true,
+        reasoningEfforts: [],
       },
     ])
   })

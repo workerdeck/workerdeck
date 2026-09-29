@@ -230,7 +230,10 @@ struct PricingSubscriptionTests {
 struct PricingTableTests {
   @Test("prices every model the codex catalog can select")
   func codexModels() {
-    for model in ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.2"]
+    for model in [
+      "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
+      "gpt-5.5", "gpt-5.2",
+    ]
     {
       #expect(Pricing.defaultTable[model] != nil, "\(model)")
     }

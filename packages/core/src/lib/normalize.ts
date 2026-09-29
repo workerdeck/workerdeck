@@ -186,7 +186,7 @@ export function modelOptionsFromSdk(models: readonly SdkModelInfo[]): ModelOptio
       displayName: derived && derivedCounts.get(derived) === 1 ? derived : model.displayName,
       description: model.description,
       primary,
-      reasoningEfforts: model.supportedEffortLevels ?? (model.supportsEffort === false ? [] : undefined),
+      reasoningEfforts: model.supportedEffortLevels ?? (model.supportsEffort === true ? undefined : []),
     }
   })
 

@@ -58,11 +58,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   reports no grouping, then re-sorted into `FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']`
   (unknown family sorts last). A derived name is used only when unambiguous: two rows of one family
   need the CLI's own names to tell apart.
-- Model availability is purely a function of the pinned SDK version: older versions the CLI's own
-  picker files under "more models" are in neither `supportedModels()` nor `initializationResult()`
-  (confirmed: `claude-fable-5-1[1m]` and `claude-fable-5[1m]` both exist as catalog rows,
-  `core/src/engines/claude/catalog.ts`). Taking a new SDK release is the only way a new model
-  reaches us. `pnpm-workspace.yaml` sets `minimumReleaseAge: 0` (confirmed) since pnpm's exclude
+- Model availability is purely a function of the pinned SDK version. Since 0.3.284
+  `supportedModels()` also lists the older versions (back to Opus 4.6 and Sonnet 4.6), so
+  `core/src/engines/claude/catalog.ts` is its shaped output, whole, with no hand-kept rows; the
+  catalog test replays the raw extraction to hold that. Taking a new SDK release is the only way a
+  new model reaches us. An absent `supportsEffort` with no levels means no effort (0.3.284 reports
+  Haiku that way), not the engine default. `pnpm-workspace.yaml` sets `minimumReleaseAge: 0` (confirmed) since pnpm's exclude
   list can't express codex's platform binaries.
 - **Two model-list truths coexist; keep both.** The live `capabilities` event is the in-session
   truth for the model switcher (also the only carrier of slash commands and the profile default's
@@ -279,9 +280,9 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   store (file vs OS keyring) is chosen by config inside the home, not by whether `CODEX_HOME` is
   set, so pinning the default home stays harmless. No analogue of `claudeSessionEnv`'s skip exists.
   Whether a keyring login is scoped per-home or per-user is unverified.
-- `@openai/codex` is pinned to an exact minor (`~0.155.1`; pre-1.0, JSON-RPC schema regenerates per
-  release). It's an optional peer of core (`>=0.149.0 <0.156.0`: 0.149.0 is the oldest binary the runner
-  was verified against and the ceiling admits the `~0.155.1` the CLI ships and core develops
+- `@openai/codex` is pinned to an exact minor (`~0.158.0`; pre-1.0, JSON-RPC schema regenerates per
+  release). It's an optional peer of core (`>=0.149.0 <0.159.0`: 0.149.0 is the oldest binary the runner
+  was verified against and the ceiling admits the `~0.158.0` the CLI ships and core develops
   against; a `~` range there once excluded exactly that version; absent -> profiles report unavailable,
   creates throw the install message) and a real dependency of the CLI. The runner drives the binary
   directly with no SDK in between (`@openai/codex-sdk` is exec-only, no app-server client), resolved
@@ -572,7 +573,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `list()` time; running records are never capped.
 - **An agent settles on its `subAgentActivity {kind: 'completed'}` item, not only on its thread's
   `turn/completed`.** The kind enum is `started`/`interacted`/`interrupted`/`completed`
-  (schema-verified against 0.153.4 and 0.155.1). `turn/completed` on a thread we never subscribed to
+  (schema-verified against 0.153.4, 0.155.1 and 0.158.0). `turn/completed` on a thread we never subscribed to
   is not guaranteed to arrive, which used to leave the record `running` forever. Both paths now
   settle and `settle()` is first-wins: the thread's `turn/completed` supplies the richer report when
   it arrives first, the item-only path closes the row with an empty result (the item carries no
@@ -619,8 +620,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   one `SessionPanel` be correct for all three engines. Gating the model picker on the `capabilities`
   event alone breaks codex (which never sends one); the catalog on `ProfileInfo.models` is the
   fallback that fixes it.
-- **A catalog row's `value` is an alias; a session reports a resolved id.** Rows read `opus[1m]`,
-  `sonnet`, `claude-fable-5-1[1m]`; a running session reports `claude-opus-5-5[1m]`. Match through
+- **A catalog row's `value` is an alias; a session reports a resolved id.** Rows read `opus`,
+  `sonnet`, `haiku`; a running session reports `claude-opus-5-5`. Match through
   `ModelOption.resolvedModel` (authoritative when present, including when it disagrees: two rows of
   one family can differ only there, e.g. `claude-fable-5-1` beside `claude-fable-5`), falling back
   to the family token for a server too old to send it. The match rule is written once per client
@@ -688,11 +689,11 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `buildRunner` throws when a config carries instructions and the engine's record says `false`,
   because an engine that silently dropped them would be indistinguishable from one that delivered
   them.
-- **codex declares `developerInstructions` for real, verified at 0.155.1.** Acceptance alone proves
+- **codex declares `developerInstructions` for real, verified at 0.155.1 and 0.158.0.** Acceptance alone proves
   nothing on this app-server, which ignores unknown `thread/start` fields rather than refusing them
   (the same trap as `dynamicTools`), so `pnpm smoke:codex --canary` sends a numeric value as well:
   the refusal is what proves the field is in the schema. The peer range still
-  admits 0.149.0 (`>=0.149.0 <0.156.0`), and a binary predating the field would drop it silently.
+  admits 0.149.0 (`>=0.149.0 <0.159.0`), and a binary predating the field would drop it silently.
 
 ## Tool trust & the sandbox
 

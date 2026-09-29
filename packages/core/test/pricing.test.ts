@@ -23,6 +23,8 @@ import {
   totalTokens,
   unpricedModels,
 } from '@workerdeck/protocol'
+import { CLAUDE_CATALOG } from '../src/engines/claude/catalog.ts'
+import { CODEX_CATALOG } from '../src/engines/codex/catalog.ts'
 
 describe('canonicalModel', () => {
   it('strips a context marker, a date snapshot and a provider prefix', () => {
@@ -192,9 +194,10 @@ describe('subscriptionComparison', () => {
 })
 
 describe('the bundled table', () => {
-  it('prices every model the codex catalog can select', () => {
-    for (const model of ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.2']) {
-      expect(DEFAULT_PRICING[model], model).toBeDefined()
+  it('prices every model the claude and codex catalogs can select', () => {
+    for (const option of [...CLAUDE_CATALOG.models, ...CODEX_CATALOG.models]) {
+      const model = option.resolvedModel ?? option.value
+      expect(rateFor(model, DEFAULT_PRICING), model).toBeDefined()
     }
   })
 

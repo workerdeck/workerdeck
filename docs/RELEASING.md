@@ -1375,6 +1375,28 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   **minor** despite the breaking items above, by choice: there are no outside consumers yet, and
   the version should not race ahead before the public launch.
 
+  **3.2.0** - **new models, released 2026-09-29** (tag `v3.2.0`). A **minor**, protocol stays
+  **1**. `@anthropic-ai/claude-agent-sdk` 0.3.280 to **0.3.284**, `@openai/codex` 0.155.1 to
+  **0.158.0** (core's optional peer ceiling to `<0.159.0`). The claude catalog is now
+  `supportedModels()`'s shaped output **whole**: 0.3.284 lists the older versions itself, so the
+  hand-kept rows are gone, `RAW_CLAUDE` covers every row, and the values follow the CLI's aliases
+  (`opus`, `claude-fable-5-1`, no `[1m]`). `sonnet` resolves to **Sonnet 5.5**. One shaping fix
+  rode with it: 0.3.284 reports Haiku with neither `supportsEffort` nor levels, which the old rule
+  read as "the engine's default set", so a row with no levels now means no effort unless it says
+  `supportsEffort: true`. The codex catalog is re-extracted from the 0.158.0 binary (the debt the
+  1.x ledger left open): **GPT-6 Sol and GPT-6 Luna** added, GPT-5.2 dropped (its price row stays,
+  for old sessions), descriptions reworded by OpenAI, the binary and `~/.codex/models_cache.json`
+  in agreement on every listed row. Pricing adds Sonnet 5.5 ($2/$10, cache read $0.20), GPT-6 Sol
+  ($2/$10/$0.20) and GPT-6 Luna ($0.10/$0.50/$0.01) from the vendors' pages, on both platforms,
+  and `pricing.test.ts` now walks both catalogs so a model the table cannot price fails a test.
+  The codex protocol delta was diffed from `generate-ts` of both binaries: not purely additive
+  (`thread/rollback` removed, `personality` deprecated, new `account/gatewayOAuth/*` RPCs we must
+  never call), none of it on a surface the runner uses. **Verified**: paid `smoke:codex` 34/34,
+  `--steer` 13/13, `--clear` 17/17 on 0.158.0; WorkerDeckKit 684. Also shipping: the `apps/demo`
+  tour (private, not published). The full `pnpm test` under a load average of ~60 failed
+  PTY/socket timing cases in `server` and a sandbox memory-cap case, each green when re-run alone;
+  the CI gate re-runs them.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
@@ -1533,9 +1555,10 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   file: run `supportedModels()` on a throwaway SDK query (no tokens spent) and re-apply
   `modelOptionsFromSdk`'s shaping from `core/src/lib/normalize.ts`. `engine-capabilities.test.ts`
   keeps a verbatim copy of the extraction it was authored from (`RAW_CLAUDE`) and asserts the
-  current-model rows still equal the live shaping of it, so a drift fails a unit test rather than
-  producing a wrong picker. Hand-maintained older rows (the CLI's "more models") sit outside that
-  comparison and carry no `reasoningEfforts`, and `defaultModel` is deliberately absent - a claude
+  whole catalog equals the live shaping of it, so a drift fails a unit test rather than producing
+  a wrong picker. Since SDK 0.3.284 the extraction includes the older versions too, so there are no
+  hand-maintained rows left: regenerate the file, never edit a row. `pricing.test.ts` then fails
+  on any catalog model the bundled table cannot price. `defaultModel` is deliberately absent - a claude
   profile's default is the operator's own CLI config. Restate `provenance` with the SDK version and
   the extraction date.
 - docs: root CLAUDE.md + README.md + docs/ + apps/docs (keep site content in sync with README)

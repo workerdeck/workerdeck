@@ -877,24 +877,23 @@ struct UIPreviewHarness: View {
 
   static let models = [
     ModelOption(
-      value: "opus[1m]", resolvedModel: "claude-opus-5[1m]", displayName: "Opus (1M context)",
-      description: "Opus 5 with 1M context · Best for everyday, complex tasks", primary: true),
+      value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5",
+      description: "For complex work and everyday tasks", primary: true),
     ModelOption(
-      value: "claude-fable-5-1[1m]", resolvedModel: "claude-fable-5-1", displayName: "Fable",
-      description: "Fable 5.1 · Most capable for your hardest and longest-running tasks",
-      primary: true),
+      value: "claude-fable-5-1", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1",
+      description: "For your toughest challenges", primary: true),
     ModelOption(
-      value: "sonnet", resolvedModel: "claude-sonnet-5", displayName: "Sonnet",
-      description: "Sonnet 5 · Efficient for routine tasks", primary: true),
+      value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet 5.5",
+      description: "Most efficient for simpler tasks", primary: true),
     ModelOption(
-      value: "haiku", resolvedModel: "claude-haiku-4-5-20251001", displayName: "Haiku",
-      description: "Haiku 4.5 · Fastest for quick answers", primary: true),
+      value: "haiku", resolvedModel: "claude-haiku-4-5-20251001", displayName: "Haiku 4.5",
+      description: "Fastest for quick answers", primary: true),
     ModelOption(
       value: "claude-opus-4-8", resolvedModel: "claude-opus-4-8", displayName: "Opus 4.8",
-      description: "The previous Opus", primary: false),
+      description: "Best for everyday, complex tasks", primary: false),
     ModelOption(
-      value: "claude-fable-5[1m]", resolvedModel: "claude-fable-5", displayName: "Fable 5",
-      description: "The previous Fable", primary: false),
+      value: "claude-fable-5", resolvedModel: "claude-fable-5", displayName: "Fable 5",
+      description: "Most capable for your hardest and longest-running tasks", primary: false),
   ]
 
   static let mcpServers: [McpServerStatusInfo] = [
@@ -981,7 +980,7 @@ struct UIPreviewHarness: View {
           ],
           totalCostUsd: 1.23,
           costUsd: nil,
-          model: "claude-opus-5[1m]",
+          model: "claude-opus-5-5",
           models: Self.models,
           permissionMode: .acceptEdits,
           onOpenModel: {},
@@ -994,7 +993,7 @@ struct UIPreviewHarness: View {
       }
     case .modelPicker:
       ModelPickerSheet(
-        models: Self.models, current: "claude-opus-5[1m]", defaultModel: "claude-sonnet-5",
+        models: Self.models, current: "claude-opus-5-5", defaultModel: "claude-sonnet-5-5",
         onSelect: { _ in })
     case .modePicker:
       ModePickerSheet(

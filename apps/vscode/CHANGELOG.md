@@ -5,6 +5,26 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.2.0] - 2026-09-29
+
+### Added
+
+- **Sonnet 5.5** is the model behind `sonnet`, and Sonnet 5 stays selectable beside it.
+- **GPT-6 Sol and GPT-6 Luna** for codex sessions. GPT-5.2, which codex no longer offers, is gone
+  from the picker.
+- **Every older Claude model the CLI offers** (down to Opus 4.6 and Sonnet 4.6) is in the model
+  picker before a session starts, not only after.
+
+### Changed
+
+- **The Claude model picker reads the CLI's own names and descriptions**, and its values follow
+  the CLI's current aliases (`opus` rather than `opus[1m]`).
+- **Cost estimates price Sonnet 5.5, GPT-6 Sol and GPT-6 Luna** at their list rates.
+
+### Fixed
+
+- **Haiku no longer offers an effort setting** it does not support.
+
 ## [3.1.0] - 2026-09-27
 
 ### Changed

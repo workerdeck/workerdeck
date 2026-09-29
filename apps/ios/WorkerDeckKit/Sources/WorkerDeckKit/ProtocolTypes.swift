@@ -534,8 +534,8 @@ public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
   /// Whether this row is the one naming `model`.
   ///
   /// Three passes, narrowest first, because the CLI's rows and the id a session
-  /// *reports* are written differently: the rows are aliases ('opus[1m]',
-  /// 'sonnet', 'claude-fable-5-1[1m]') and the session reports a resolved wire id
+  /// *reports* are written differently: the rows are aliases ('opus',
+  /// 'sonnet', 'haiku') and the session reports a resolved wire id
   /// ('claude-opus-4-8[1m]'). `resolvedModel` is the server's own answer to this
   /// and wins when present; the family fallback covers a CLI that doesn't send
   /// it, which is the difference between the chip reading "Opus" and reading

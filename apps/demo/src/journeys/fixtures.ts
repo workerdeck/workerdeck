@@ -17,7 +17,7 @@ export const CWD = '/Users/you/projects/acme-web'
 export const PROJECT: ProjectInfo = { name: 'acme-web', root: CWD, icon: { type: 'glyph', name: 'layers' } } as ProjectInfo
 
 export const OPUS = 'claude-opus-5-20260101'
-export const SONNET = 'claude-sonnet-5-20260101'
+export const SONNET = 'claude-sonnet-5-5'
 export const CODEX = 'gpt-5.6-sol'
 
 const MINUTE = 60_000
@@ -32,8 +32,8 @@ const CLAUDE_MODELS: ModelOption[] = [
   },
   {
     value: SONNET,
-    displayName: 'Sonnet 5',
-    description: 'Sonnet 5 · Efficient for routine tasks',
+    displayName: 'Sonnet 5.5',
+    description: 'Sonnet 5.5 · Most efficient for simpler tasks',
     primary: true,
     reasoningEfforts: ['low', 'medium', 'high'],
   },
