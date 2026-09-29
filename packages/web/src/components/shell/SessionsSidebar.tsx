@@ -1,11 +1,22 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import { filterRows, sessionLabel, type SessionRow, type SessionTask, errorMessage } from '@workerdeck/protocol'
-import { Button, Empty, EmptyKey, EngineIcon, SessionBrowser, SessionFiltersButton, SessionStatusIcon, cn, toast } from '@workerdeck/ui'
+import {
+  Button,
+  Empty,
+  EmptyKey,
+  EngineIcon,
+  SessionBrowser,
+  SessionFiltersButton,
+  SessionStatusIcon,
+  cn,
+  toast,
+  type GroupTarget,
+} from '@workerdeck/ui'
 import { Layers, Plus, RefreshCw, Search } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { SidebarBody, SidebarFrame } from './SidebarFrame.tsx'
-import { clientFor, primaryHost } from '@/lib/hosts.ts'
+import { clientFor, hostById, primaryHost } from '@/lib/hosts.ts'
 import { getSearchShown, setSearchShown } from '@/lib/sidebar.ts'
 import { useProjectIcons } from '@workerdeck/react'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
@@ -25,19 +36,26 @@ export function SessionsSidebar() {
   const projectIcons = useProjectIcons(rows, clientFor)
   const failures = snapshots.filter((s) => s.error !== undefined)
   const primary = primaryHost()
-  const primarySessions = snapshots.find((snap) => snap.host.id === primary?.id)?.sessions ?? []
+  const [config, setConfig] = useViewConfig()
+  const [creating, setCreating] = useState(false)
+  // Kept after close so the dialog does not re-render against another gateway while it fades out.
+  const [target, setTarget] = useState<Partial<GroupTarget>>({})
+  const startCreate = (next: Partial<GroupTarget>) => {
+    setTarget(next)
+    setCreating(true)
+  }
+  const createHostId = target.hostId ?? primary?.id
+  const createSessions = snapshots.find((snap) => snap.host.id === createHostId)?.sessions ?? []
   const openCreated = (id: string) => {
-    if (!primary) {
+    if (!createHostId) {
       return
     }
     void navigate({
       to: '/sessions/$hostId/$sessionId',
-      params: { hostId: primary.id, sessionId: id },
+      params: { hostId: createHostId, sessionId: id },
       search: {},
     })
   }
-  const [config, setConfig] = useViewConfig()
-  const [creating, setCreating] = useState(false)
   const [searchOpen, setSearchOpen] = useState(getSearchShown)
   // The rail renders rows itself, so it has to apply the filter `SessionBrowser` would: collapsing must not widen the list.
   const visible = useMemo(() => filterRows(rows, config), [rows, config])
@@ -112,7 +130,7 @@ export function SessionsSidebar() {
     })
 
   const create = (
-    <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={() => setCreating(true)}>
+    <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={() => startCreate({})}>
       <Plus className="size-4" />
     </Button>
   )
@@ -183,6 +201,7 @@ export function SessionsSidebar() {
             onSelectShell={openShell}
             onKillShell={killShell}
             onShellAgentWrite={shellAgentWrite}
+            onCreateInGroup={startCreate}
             onRename={rename}
             onClearContext={(row) => {
               const client = clientFor(row.hostId)
@@ -231,7 +250,9 @@ export function SessionsSidebar() {
       <CreateSessionDialog
         open={creating}
         onOpenChange={setCreating}
-        sessions={primarySessions}
+        sessions={createSessions}
+        target={target}
+        gatewayName={target.hostId && snapshots.length > 1 ? hostById(target.hostId)?.name : undefined}
         onCreated={(id) => {
           setCreating(false)
           openCreated(id)

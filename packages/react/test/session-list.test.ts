@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_VIEW_CONFIG,
+  UNGROUPED_KEY,
+  addCustomGroup,
   adaptersOf,
   clearFilters,
   displayCustomized,
@@ -10,13 +12,18 @@ import {
   groupRows,
   hasFacetFilter,
   inScope,
+  moveCustomGroup,
+  moveToCustomGroup,
+  normalizeViewConfig,
   projectKey,
   projectLabel,
   projectName,
   projectSubpath,
   projectsOf,
   promotedShells,
+  removeCustomGroup,
   scopeActive,
+  sessionKey,
   sessionLabel,
   sessionState,
   subsetSummary,
@@ -204,10 +211,10 @@ describe('subsetSummary', () => {
 
 describe('clearFilters', () => {
   it('turns off every filter including scope, and keeps the layout choices', () => {
-    const next = clearFilters(config({ search: 'x', states: ['idle'], groupBy: 'gateway', sortBy: 'name' }))
+    const next = clearFilters(config({ search: 'x', states: ['idle'], groupBy: 'custom', sortBy: 'name' }))
     expect(hasFacetFilter(next)).toBe(false)
     expect(next.scoped).toBe(false)
-    expect(next.groupBy).toBe('gateway')
+    expect(next.groupBy).toBe('custom')
     expect(next.sortBy).toBe('name')
   })
 
@@ -364,6 +371,20 @@ describe('project facet', () => {
     expect(groups[1]?.rows.map((r) => r.info.id)).toEqual(['p1', 'p2'])
   })
 
+  it('names the gateway on project groups once there is more than one', () => {
+    const both = groupRows([declaredUi, remoteTwin], config({ groupBy: 'project' }))
+    expect(both.map((g) => g.label)).toEqual(['Mac mini WorkerDeck', 'Pi WorkerDeck'])
+    expect(groupRows([declaredUi], config({ groupBy: 'project' }))[0]?.label).toBe('WorkerDeck')
+    expect(groupRows([declaredUi], config({ groupBy: 'project' }), { gatewayCount: 2 })[0]?.label).toBe('Mac mini WorkerDeck')
+  })
+
+  it('carries where a session started from a project heading runs', () => {
+    const [group] = groupRows([declaredUi], config({ groupBy: 'project' }))
+    expect(group).toMatchObject({ hostId: 'mac', cwd: '/work/deck' })
+    expect(groupRows([undeclared], config({ groupBy: 'project' }))[0]).toMatchObject({ hostId: 'mac', cwd: '/work/alpha' })
+    expect(groupRows([nowhere], config({ groupBy: 'project' }))[0]?.cwd).toBeUndefined()
+  })
+
   it('filters by project key, and a config predating the field filters nothing', () => {
     const rows = [declaredUi, undeclared]
     const filtered = filterRows(rows, config({ scoped: false, projects: [projectKey(declaredUi)] }))
@@ -436,5 +457,62 @@ describe('promotedShells', () => {
   it('does not linger a shell reconciled from a gateway restart', () => {
     const stale = shell({ status: 'exited', startedAt: 0, endedAt: 3000, endReason: 'server_restarted' })
     expect(promotedShells(info({ shells: [stale] }), 3000)).toEqual([])
+  })
+})
+
+describe('normalizeViewConfig', () => {
+  it('reads a stored gateway grouping as project, and an unknown one as the default', () => {
+    expect(normalizeViewConfig({ groupBy: 'gateway' as never }).groupBy).toBe('project')
+    expect(normalizeViewConfig({ groupBy: 'bogus' as never }).groupBy).toBe(DEFAULT_VIEW_CONFIG.groupBy)
+    expect(normalizeViewConfig(undefined)).toEqual(DEFAULT_VIEW_CONFIG)
+  })
+})
+
+describe('custom groups', () => {
+  const a = row({ info: info({ id: 'a', lastActivityAt: 3 }) })
+  const b = row({ info: info({ id: 'b', lastActivityAt: 2 }) })
+  const c = row({ hostId: 'pi', hostName: 'Pi', info: info({ id: 'a', lastActivityAt: 1 }) })
+  const groups = [
+    { id: 'g1', name: 'Review', members: [sessionKey(b), sessionKey(c)] },
+    { id: 'g2', name: 'Empty', members: [] },
+  ]
+
+  it('draws groups in stored order, members in member order, the rest ungrouped by the sort', () => {
+    const out = groupRows([a, b, c], config({ groupBy: 'custom', customGroups: groups }))
+    expect(out.map((g) => g.key)).toEqual(['custom:g1', 'custom:g2', UNGROUPED_KEY])
+    expect(out[0]?.rows).toEqual([b, c])
+    expect(out[1]?.rows).toEqual([])
+    expect(out[2]?.rows).toEqual([a])
+  })
+
+  it('keys members per gateway, since session ids are unique only per gateway', () => {
+    expect(sessionKey(a)).not.toBe(sessionKey(c))
+  })
+
+  it('omits the ungrouped bucket when every session is placed, and ignores members that are gone', () => {
+    const out = groupRows([b], config({ groupBy: 'custom', customGroups: groups }))
+    expect(out.map((g) => g.key)).toEqual(['custom:g1', 'custom:g2'])
+    expect(out[0]?.rows).toEqual([b])
+  })
+
+  it('moves a session between groups, above a member or at the end, and out to ungrouped', () => {
+    const into = moveToCustomGroup(groups, sessionKey(a), 'g1', sessionKey(c))
+    expect(into[0]?.members).toEqual([sessionKey(b), sessionKey(a), sessionKey(c)])
+    const across = moveToCustomGroup(into, sessionKey(a), 'g2')
+    expect(across[0]?.members).toEqual([sessionKey(b), sessionKey(c)])
+    expect(across[1]?.members).toEqual([sessionKey(a)])
+    expect(moveToCustomGroup(across, sessionKey(a), undefined).every((g) => !g.members.includes(sessionKey(a)))).toBe(true)
+  })
+
+  it('adds, reorders and removes groups', () => {
+    const added = addCustomGroup(groups, 'Later', 'g3')
+    expect(added.map((g) => g.id)).toEqual(['g1', 'g2', 'g3'])
+    expect(moveCustomGroup(added, 'g3', 'g1').map((g) => g.id)).toEqual(['g3', 'g1', 'g2'])
+    expect(moveCustomGroup(added, 'g1', undefined).map((g) => g.id)).toEqual(['g2', 'g3', 'g1'])
+    expect(removeCustomGroup(added, 'g2').map((g) => g.id)).toEqual(['g1', 'g3'])
+  })
+
+  it('survives clearFilters', () => {
+    expect(clearFilters(config({ groupBy: 'custom', customGroups: groups, search: 'x' })).customGroups).toBe(groups)
   })
 })

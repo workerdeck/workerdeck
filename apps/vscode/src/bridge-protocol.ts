@@ -195,6 +195,11 @@ export type SidebarToHost =
       kind: 'wd-view-config'
       config: ViewConfig
     }
+  | {
+      kind: 'wd-new-session'
+      hostId: string
+      cwd?: string
+    }
 
 export type HostToSidebar =
   | TransportToWebview

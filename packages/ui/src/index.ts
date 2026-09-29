@@ -156,7 +156,13 @@ export {
 export { SkillsDialog, type SkillsDialogProps } from './components/agent/SkillsDialog.tsx'
 export { HostFilesDialog, type HostFilesDialogProps } from './components/agent/HostFilesDialog.tsx'
 export { SessionList, SessionListItem, type SessionListItemProps, type SessionListProps } from './components/agent/SessionList.tsx'
-export { SessionBrowser, SessionSearch, rowShapeClass, type SessionBrowserProps } from './components/agent/SessionBrowser.tsx'
+export {
+  SessionBrowser,
+  SessionSearch,
+  rowShapeClass,
+  type GroupTarget,
+  type SessionBrowserProps,
+} from './components/agent/SessionBrowser.tsx'
 export {
   STEP_DISPLAY_OPTIONS,
   SessionFilters,

@@ -54,8 +54,13 @@ export function subagentLabel(sub: SubagentInfo): string {
 }
 
 export type Facet = 'gateway' | 'adapter' | 'state' | 'project'
-export type GroupBy = 'none' | Facet
+export type GroupBy = 'none' | 'state' | 'adapter' | 'project' | 'custom'
 export type SortBy = 'recent' | 'name' | Facet
+
+export const GROUP_BY: readonly GroupBy[] = ['none', 'state', 'adapter', 'project', 'custom']
+
+// `members` are `sessionKey` values, in the order the group draws them.
+export type CustomGroup = { id: string; name: string; members: string[] }
 
 // How much of one of a card's child lists it draws. A layout preference, not a facet filter.
 export type StepDisplay = 'all' | 'active' | 'none'
@@ -74,6 +79,7 @@ export type ViewConfig = {
   subagents: SubagentDisplay
   shells?: StepDisplay
   tasks?: StepDisplay
+  customGroups?: CustomGroup[]
 }
 
 export const DEFAULT_VIEW_CONFIG: ViewConfig = {
@@ -108,7 +114,33 @@ export type SessionRow = {
   unseen: number
 }
 
-export type SessionGroup = { key: string; label?: string; rows: SessionRow[] }
+export type SessionGroup = {
+  key: string
+  label?: string
+  rows: SessionRow[]
+  // Set on a project group: where a session started from its header runs.
+  hostId?: string
+  cwd?: string
+  // Set on a custom group; the ungrouped bucket has neither this nor a place in `customGroups`.
+  custom?: string
+}
+
+export type GroupOptions = { gatewayCount?: number }
+
+export const UNGROUPED_KEY = 'custom:ungrouped'
+
+export function sessionKey(row: Pick<SessionRow, 'hostId' | 'info'>): string {
+  return `${row.hostId}:${row.info.id}`
+}
+
+// A stored `groupBy: 'gateway'` predates the merge into project groups, which name their gateway once there is more than one.
+export function normalizeViewConfig(stored: Partial<ViewConfig> | undefined): ViewConfig {
+  const config = { ...DEFAULT_VIEW_CONFIG, ...stored }
+  const groupBy = config.groupBy as string
+  return GROUP_BY.includes(groupBy as GroupBy)
+    ? config
+    : { ...config, groupBy: groupBy === 'gateway' ? 'project' : DEFAULT_VIEW_CONFIG.groupBy }
+}
 
 export function adaptersOf(rows: readonly SessionRow[]): string[] {
   return [...new Set(rows.map((r) => r.adapter))].sort()
@@ -240,19 +272,19 @@ function facetKey(row: SessionRow, facet: Facet): string {
   return facet === 'gateway' ? row.hostId : facet === 'adapter' ? row.adapter : facet === 'project' ? projectKey(row) : row.state
 }
 
-function facetLabel(row: SessionRow, facet: Facet): string {
-  return facet === 'gateway'
-    ? row.hostName
-    : facet === 'adapter'
-      ? row.adapter
-      : facet === 'project'
-        ? projectLabel(row)
-        : STATE_LABELS[row.state]
+function facetLabel(row: SessionRow, facet: Facet, multiGateway = false): string {
+  if (facet === 'project') {
+    return multiGateway ? `${row.hostName} ${projectLabel(row)}` : projectLabel(row)
+  }
+  return facet === 'gateway' ? row.hostName : facet === 'adapter' ? row.adapter : STATE_LABELS[row.state]
 }
 
-function facetRank(row: SessionRow, facet: Facet): string {
+function facetRank(row: SessionRow, facet: Facet, multiGateway = false): string {
   if (facet === 'state') {
     return String(STATE_ORDER.indexOf(row.state))
+  }
+  if (facet === 'project' && multiGateway) {
+    return `${row.hostName.toLowerCase()}\u0000${projectLabel(row).toLowerCase()}`
   }
   return facetLabel(row, facet).toLowerCase()
 }
@@ -275,28 +307,98 @@ function compare(a: SessionRow, b: SessionRow, sortBy: SortBy): number {
   return facetRank(a, sortBy).localeCompare(facetRank(b, sortBy)) || byRecency(a, b)
 }
 
-export function groupRows(rows: readonly SessionRow[], config: ViewConfig): SessionGroup[] {
+// `gatewayCount` defaults to the gateways among `rows`; a host passing filtered rows passes the unfiltered count, so a
+// filter never renames a project heading.
+export function groupRows(rows: readonly SessionRow[], config: ViewConfig, options: GroupOptions = {}): SessionGroup[] {
   const sorted = [...rows].sort((a, b) => compare(a, b, config.sortBy))
   if (config.groupBy === 'none') {
     return sorted.length ? [{ key: 'all', rows: sorted }] : []
   }
+  if (config.groupBy === 'custom') {
+    return customGroupRows(sorted, config.customGroups ?? [])
+  }
   const facet = config.groupBy
-  const groups = new Map<string, SessionGroup & { rank: string }>()
+  const multiGateway = (options.gatewayCount ?? new Set(rows.map((row) => row.hostId)).size) > 1
+  const groups = new Map<string, SessionGroup>()
+  const ranks = new Map<string, string>()
   for (const row of sorted) {
     const key = facetKey(row, facet)
     const group = groups.get(key)
     if (group) {
       group.rows.push(row)
     } else {
+      ranks.set(key, facetRank(row, facet, multiGateway))
       groups.set(key, {
         key,
-        label: facetLabel(row, facet),
-        rank: facetRank(row, facet),
+        label: facetLabel(row, facet, multiGateway),
         rows: [row],
+        ...(facet === 'project' ? projectTarget(row) : {}),
       })
     }
   }
-  return [...groups.values()].sort((a, b) => a.rank.localeCompare(b.rank))
+  return [...groups.values()].sort((a, b) => ranks.get(a.key)!.localeCompare(ranks.get(b.key)!))
+}
+
+function projectTarget(row: SessionRow): { hostId: string; cwd?: string } {
+  const cwd = row.info.project?.root ?? row.info.cwd
+  return cwd ? { hostId: row.hostId, cwd } : { hostId: row.hostId }
+}
+
+// Custom groups keep their stored order, rows in member order; a session belongs to the first group listing it.
+function customGroupRows(sorted: readonly SessionRow[], custom: readonly CustomGroup[]): SessionGroup[] {
+  const byKey = new Map(sorted.map((row) => [sessionKey(row), row]))
+  const placed = new Set<string>()
+  const groups: SessionGroup[] = custom.map((group) => {
+    const rows: SessionRow[] = []
+    for (const member of group.members) {
+      const row = byKey.get(member)
+      if (row && !placed.has(member)) {
+        placed.add(member)
+        rows.push(row)
+      }
+    }
+    return { key: `custom:${group.id}`, label: group.name, rows, custom: group.id }
+  })
+  const rest = sorted.filter((row) => !placed.has(sessionKey(row)))
+  return rest.length ? [...groups, { key: UNGROUPED_KEY, label: 'Ungrouped', rows: rest }] : groups
+}
+
+export function newCustomGroupId(): string {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function addCustomGroup(groups: readonly CustomGroup[], name: string, id = newCustomGroupId()): CustomGroup[] {
+  return [...groups, { id, name, members: [] }]
+}
+
+export function renameCustomGroup(groups: readonly CustomGroup[], id: string, name: string): CustomGroup[] {
+  return groups.map((group) => (group.id === id ? { ...group, name } : group))
+}
+
+export function removeCustomGroup(groups: readonly CustomGroup[], id: string): CustomGroup[] {
+  return groups.filter((group) => group.id !== id)
+}
+
+// `target` undefined moves the session to the ungrouped bucket; `before` is the member it lands above, else it appends.
+export function moveToCustomGroup(groups: readonly CustomGroup[], key: string, target: string | undefined, before?: string): CustomGroup[] {
+  return groups.map((group) => {
+    const members = group.members.filter((member) => member !== key)
+    if (group.id !== target) {
+      return members.length === group.members.length ? group : { ...group, members }
+    }
+    const at = before === undefined ? -1 : members.indexOf(before)
+    return { ...group, members: at < 0 ? [...members, key] : [...members.slice(0, at), key, ...members.slice(at)] }
+  })
+}
+
+export function moveCustomGroup(groups: readonly CustomGroup[], id: string, before: string | undefined): CustomGroup[] {
+  const moving = groups.find((group) => group.id === id)
+  if (!moving || id === before) {
+    return [...groups]
+  }
+  const rest = groups.filter((group) => group.id !== id)
+  const at = before === undefined ? -1 : rest.findIndex((group) => group.id === before)
+  return at < 0 ? [...rest, moving] : [...rest.slice(0, at), moving, ...rest.slice(at)]
 }
 
 export type SubsetSummary = { shown: number; total: number; causes: string[] }
@@ -356,5 +458,6 @@ export function clearFilters(config: ViewConfig): ViewConfig {
     subagents: config.subagents,
     shells: config.shells,
     tasks: config.tasks,
+    customGroups: config.customGroups,
   }
 }

@@ -73,7 +73,6 @@ struct FilterMenu: View, Equatable {
         Menu("Group by") {
           Picker("Group by", selection: $config.groupBy) {
             Text("None").tag(GroupBy.none)
-            Text("Gateway").tag(GroupBy.gateway)
             Text("Engine").tag(GroupBy.adapter)
             Text("State").tag(GroupBy.state)
             Text("Project").tag(GroupBy.project)

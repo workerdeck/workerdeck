@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
-import { Eraser, FolderOpen, Layers, Pencil, Search, SearchX, Trash2, X } from 'lucide-react'
-import { clearFilters, filterRows, groupRows, hasFacetFilter, scopeActive, subsetSummary } from '@workerdeck/protocol'
-import type { SessionRow, SessionTask, StepDisplay, SubagentDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
+import type { HTMLAttributes, ReactNode } from 'react'
+import { Eraser, FolderOpen, Layers, Pencil, Plus, Search, SearchX, Trash2, X } from 'lucide-react'
+import { clearFilters, filterRows, groupRows, hasFacetFilter, scopeActive, sessionKey, subsetSummary } from '@workerdeck/protocol'
+import type { SessionGroup, SessionRow, SessionTask, StepDisplay, SubagentDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
+import { CustomGroupHeader, GroupHeading, HeadingAction, NewGroupButton, useGroupDrag } from './SessionGroups.tsx'
 import { cn } from '../../lib/utils.ts'
 
 export { SessionStatusIcon } from './SessionStatusIcon.tsx'
@@ -39,6 +40,8 @@ export interface SessionBrowserProps {
   onSelectShell?: (row: SessionRow, shellId: string) => void
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
+  // Draws a `+` on each project heading: start a session on that gateway, in that project's root.
+  onCreateInGroup?: (target: GroupTarget) => void
   emptyState?: ReactNode
   // The facet controls, drawn inline. A host with a header puts `SessionFiltersButton` there instead.
   showControls?: boolean
@@ -47,6 +50,8 @@ export interface SessionBrowserProps {
   projectIcons?: Record<string, string>
   className?: string
 }
+
+export type GroupTarget = { hostId: string; cwd?: string }
 
 export function rowShapeClass(active: boolean): string {
   return cn('px-2 py-1.5 hover:bg-row-hover', active ? 'mr-1 ml-0 rounded-r-md border-l-4 border-l-accent' : 'mx-1 rounded-md')
@@ -75,6 +80,7 @@ export function SessionBrowser({
   onSelectShell,
   onKillShell,
   onShellAgentWrite,
+  onCreateInGroup,
   emptyState,
   showControls = true,
   showSearch = showControls,
@@ -82,12 +88,55 @@ export function SessionBrowser({
   projectIcons,
   className,
 }: SessionBrowserProps) {
-  const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
-  const groups = useMemo(() => groupRows(visible, config), [visible, config])
-  const subset = subsetSummary(config, scope, visible.length, rows.length)
   const rowGateways = useMemo(() => new Set(rows.map((row) => row.hostId)).size, [rows])
+  const gateways = gatewayCount ?? rowGateways
+  const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
+  const groups = useMemo(() => groupRows(visible, config, { gatewayCount: gateways }), [visible, config, gateways])
+  const subset = subsetSummary(config, scope, visible.length, rows.length)
+  const custom = config.groupBy === 'custom'
+  const [editingGroup, setEditingGroup] = useState<string>()
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
+  const drag = useGroupDrag(config.customGroups ?? [], (customGroups) => set({ customGroups }))
+
+  const heading = (group: SessionGroup) => {
+    if (custom) {
+      return (
+        <CustomGroupHeader
+          group={group}
+          editing={group.custom !== undefined && editingGroup === group.custom}
+          onEditingChange={(editing) => setEditingGroup(editing ? group.custom : undefined)}
+          onRename={(name) => group.custom && drag.rename(group.custom, name)}
+          onRemove={() => group.custom && drag.remove(group.custom)}
+          dragProps={drag.header(group)}
+        />
+      )
+    }
+    if (config.groupBy === 'none' || !group.label) {
+      return null
+    }
+    const project = config.groupBy === 'project'
+    const target = project && group.hostId ? { hostId: group.hostId, cwd: group.cwd } : undefined
+    return (
+      <GroupHeading
+        label={group.label}
+        count={group.rows.length}
+        title={project && group.cwd ? group.cwd : undefined}
+        leading={
+          project ? (
+            <ProjectIcon icon={group.rows[0]?.info.project?.icon} src={iconSrcOf(group.rows[0], projectIcons)} name={group.label} />
+          ) : undefined
+        }
+        actions={
+          target && onCreateInGroup ? (
+            <HeadingAction label={`New session in ${group.label}`} onClick={() => onCreateInGroup(target)}>
+              <Plus className="size-3" />
+            </HeadingAction>
+          ) : undefined
+        }
+      />
+    )
+  }
 
   return (
     <div data-slot="session-browser" className={cn('flex flex-col gap-3', className)}>
@@ -137,26 +186,29 @@ export function SessionBrowser({
       ) : (
         <div className="flex flex-col gap-4 px-1">
           {groups.map((group) => (
-            <div key={group.key} className="flex flex-col gap-1">
-              {config.groupBy !== 'none' && group.label ? (
-                <div className="flex items-center gap-2 px-2 text-label font-medium text-fg-4">
-                  {config.groupBy === 'project' ? (
-                    <ProjectIcon icon={group.rows[0]?.info.project?.icon} src={iconSrcOf(group.rows[0], projectIcons)} name={group.label} />
-                  ) : null}
-                  <span className="uppercase tracking-wide">{group.label}</span>
-                  <span className="text-fg-4/70">{group.rows.length}</span>
+            <div
+              key={group.key}
+              {...(custom ? drag.container(group) : {})}
+              className={cn('flex flex-col gap-1 rounded-md', custom && drag.isOver(`group:${group.key}`) && 'bg-row-hover/50')}
+            >
+              {heading(group)}
+              {custom && group.custom !== undefined && group.rows.length === 0 ? (
+                <div className="mx-1 rounded-md border border-dashed border-border px-2 py-2 text-center text-label text-fg-4">
+                  Drag sessions here
                 </div>
               ) : null}
               {group.rows.map((row) => (
                 <SessionRowItem
-                  key={`${row.hostId}:${row.info.id}`}
+                  key={sessionKey(row)}
+                  dragProps={custom ? drag.session(sessionKey(row), group) : undefined}
+                  dropTarget={custom && drag.isOver(`row:${sessionKey(row)}`)}
                   row={row}
                   active={isActive(row)}
                   activeSubagentId={activeSubagentId}
                   activeShellId={activeShellId}
                   actions={rowActions?.(row)}
                   now={now}
-                  showGateway={(gatewayCount ?? rowGateways) > 1 && config.groupBy !== 'gateway'}
+                  showGateway={gateways > 1 && config.groupBy !== 'project'}
                   showProject={config.groupBy !== 'project'}
                   subagents={config.subagents}
                   shells={config.shells}
@@ -176,6 +228,7 @@ export function SessionBrowser({
               ))}
             </div>
           ))}
+          {custom ? <NewGroupButton onClick={() => setEditingGroup(drag.create())} /> : null}
         </div>
       )}
     </div>
@@ -189,6 +242,8 @@ function iconSrcOf(row: SessionRow | undefined, icons: Record<string, string> | 
 
 interface SessionRowItemProps {
   row: SessionRow
+  dragProps?: HTMLAttributes<HTMLDivElement>
+  dropTarget?: boolean
   active?: boolean
   actions?: ReactNode
   activeSubagentId?: string
@@ -214,6 +269,8 @@ interface SessionRowItemProps {
 
 function SessionRowItem({
   row,
+  dragProps,
+  dropTarget,
   active,
   actions,
   activeSubagentId,
@@ -239,7 +296,7 @@ function SessionRowItem({
   const { info } = row
   const [editing, setEditing] = useState(false)
 
-  return (
+  const item = (
     <SessionItem
       row={row}
       active={active === true}
@@ -288,6 +345,14 @@ function SessionRowItem({
         )
       }
     />
+  )
+  if (!dragProps) {
+    return item
+  }
+  return (
+    <div {...dragProps} className={cn('rounded-md', dropTarget && 'shadow-[inset_0_2px_0_0_var(--color-accent)]')}>
+      {item}
+    </div>
   )
 }
 

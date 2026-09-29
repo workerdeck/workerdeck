@@ -434,6 +434,10 @@ was only ever a proxy for the question the project name answers (`projectLabel` 
 exactly that basename, so an undeclared project is byte-identical to what shipped) - and it closes
 with the **age**, the one part of that identity run that keeps changing while you read it. Line
 one's own tail is the pair that changes while you *look*: the unread badge and the context ring.
+A project heading's `+` posts `wd-new-session {hostId, cwd}`, and the host runs the ordinary
+new-session flow with that preset (`createSession(deps, preset)`): adapters narrowed to that
+gateway and the folder step skipped, so a gateway with one profile goes straight to the model pick.
+Custom groups ride the view config, so they persist in `globalState` beside the rest of it.
 Grouping by project **suppresses it on the row** and
 hands the slot back to the basename - `ui`, `server`, `web` under one WorkerDeck heading, which
 is the one thing the header cannot say - exactly the rule `hostName` already followed one facet

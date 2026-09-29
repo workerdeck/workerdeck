@@ -377,6 +377,29 @@ here that would cost a `PROTOCOL_VERSION` bump. Lifecycle, and why a codex wake 
 a session in `packages/ui` joins its repo's group the moment the file exists. Sessions with no cwd
 at all (a filesystem-less provider session) share one per-gateway bucket and read "No project".
 
+**There is no gateway grouping.** It merged into project grouping: `projectKey` was already
+gateway-qualified, so the project groups were always per gateway, and once a list spans more than
+one gateway a project heading reads `{gateway} {project}` and ranks by gateway first. The count is
+`GroupOptions.gatewayCount`, which a host passes from its *unfiltered* rows (or its configured
+gateways, the extension's rule) so a filter never renames a heading. Each project group carries
+`hostId` and `cwd` (the project root, else the session's cwd, else nothing for a filesystem-less
+session): that is the `+` on the heading, `SessionBrowser`'s `onCreateInGroup` seam, which starts a
+session on that gateway in that folder. `normalizeViewConfig` reads a stored `groupBy: 'gateway'` as
+`project`; every host loads its persisted config through it.
+
+**Custom groups** (`groupBy: 'custom'`) are the operator's own: `ViewConfig.customGroups`, an
+ordered list of `{id, name, members}` where members are `sessionKey` output (`hostId:sessionId`,
+since session ids are unique only per gateway) in the order the group draws them. They live in the
+view config and therefore **per client** (web localStorage, the extension's globalState), never on a
+gateway: a group spans gateways, and no single gateway could own it. A session sits in the first
+group listing it; every unplaced session falls into a trailing "Ungrouped" bucket sorted by
+`sortBy`, which is absent when empty. Members of sessions that are gone are ignored rather than
+pruned, because a gateway that is merely unreachable must not empty a group. `clearFilters` keeps
+them. The pure edits (`addCustomGroup`, `renameCustomGroup`, `removeCustomGroup`,
+`moveToCustomGroup`, `moveCustomGroup`) are here; the drag and drop is `packages/ui`'s
+`SessionGroups.tsx`, HTML5 drag with the payload held in React state because `dataTransfer` is
+unreadable during `dragover`. iOS mirrors the gateway merge only, and does not draw custom groups yet.
+
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
 name drawing the no-project fallback - or an image **address, never bytes**, fetched from
 `GET {basePath}/sessions/:id/project/icon`. Its `hash` is the cache key, and the route serves that

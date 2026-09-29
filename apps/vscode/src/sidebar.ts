@@ -7,11 +7,11 @@ import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost, SurfaceTarget } from './bridge-protocol.ts'
 import {
-  DEFAULT_VIEW_CONFIG,
   buildRows,
   displayCustomized,
   facetFilterCount,
   filterRows,
+  normalizeViewConfig,
   runningSubagents,
   type SubagentDisplay,
   type ViewConfig,
@@ -34,6 +34,7 @@ export type SidebarDelegate = {
   surfaceOf: (hostId: string, sessionId: string) => 'panel' | 'editor' | undefined
   moveToPanel: (hostId: string, sessionId: string) => Promise<void>
   revealGateways: (options: { add?: boolean }) => Promise<void>
+  newSession: (preset: { hostId: string; cwd?: string }) => Promise<void>
   unread: (rows: number, waiting: number) => void
   subagents: (running: number, sessions: number) => void
 }
@@ -66,10 +67,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.#model = model
     this.#delegate = delegate
     this.#icons = new ProjectIconCache(store, () => this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() }))
-    this.#viewConfig = {
-      ...DEFAULT_VIEW_CONFIG,
-      ...context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY),
-    }
+    this.#viewConfig = normalizeViewConfig(context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY))
     // Seeds the context keys, so the title bar shows the right toggle icons before the view opens.
     this.setSearchOpen(context.globalState.get<boolean>(SEARCH_OPEN_KEY) ?? false)
     this.#syncFiltered()
@@ -184,6 +182,10 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         void this.#context.globalState.update(VIEW_CONFIG_KEY, msg.config)
         this.#syncFiltered()
         this.#pushState()
+        return
+      }
+      case 'wd-new-session': {
+        await this.#delegate.newSession({ hostId: msg.hostId, cwd: msg.cwd })
         return
       }
       case 'wd-select-session': {

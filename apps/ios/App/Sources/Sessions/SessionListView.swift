@@ -267,8 +267,8 @@ struct SessionListView: View {
               SessionCardView(
                 row: row,
                 onOpen: { path.append(route) },
-                // Grouped by gateway, the section header already names it.
-                hostName: showsHostNames(model) && model.config.groupBy != .gateway
+                // Grouped by project, the section header already names the gateway.
+                hostName: showsHostNames(model) && model.config.groupBy != .project
                   ? row.hostName : nil,
                 projectImage: projectImage(for: row, model: model),
                 // Grouped by project, the section header already names it.

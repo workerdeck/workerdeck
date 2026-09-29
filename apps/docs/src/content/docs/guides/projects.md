@@ -128,3 +128,12 @@ The clients agree on the rules and differ where the surface genuinely differs.
 
 When a list is **grouped by project**, the row's slot hands back to the folder basename: inside
 a WorkerDeck group, `ui` / `server` / `web` is the one thing the group header cannot tell you.
+
+Project groups are per gateway. With more than one gateway configured, a heading names both,
+`mac-mini WorkerDeck`, and there is no separate grouping by gateway. Hover a heading for its `+`,
+which starts a new session on that gateway, in that project's folder.
+
+The **Custom** grouping is yours to curate: add groups with *New group*, drag sessions between
+them (or onto another session to place it above), drag a heading to reorder groups, and
+double-click a heading to rename it. Custom groups are stored by each client, so the dashboard and
+VS Code each keep their own.

@@ -15,6 +15,7 @@ import {
 import { ModelPicker } from '@/components/ModelPicker.tsx'
 import { ProfileSelect } from '@/components/ProfileSelect.tsx'
 import { client } from '@/lib/client.ts'
+import { clientFor } from '@/lib/hosts.ts'
 import { engineFormOptions } from '@/lib/engine.ts'
 import { readPref, writePref } from '@/lib/storage.ts'
 import { type DefaultsKind } from '@/lib/settings.ts'
@@ -22,15 +23,15 @@ import { useProfileChoice } from '@/hooks/useProfiles.ts'
 
 const CWD_KEY = 'workerdeck.last-cwd'
 
-function useCwdCandidates(sessions: SessionInfo[]): string[] {
+function useCwdCandidates(sessions: SessionInfo[], hostId: string | undefined): string[] {
   const [roots, setRoots] = useState<string[]>([])
   useEffect(() => {
-    client()
+    ;(hostId === undefined ? client() : clientFor(hostId))
       ?.listHostRoots()
       .then((r) => setRoots(r.roots.map((root) => root.path)))
       // A gateway serving no host files is the normal case, and the field still takes a typed path.
       .catch(() => setRoots([]))
-  }, [])
+  }, [hostId])
   return useMemo(() => {
     const last = readPref(CWD_KEY)
     const ordered = [
@@ -56,15 +57,17 @@ const QUESTIONS_FALLBACK: Record<DefaultsKind, QuestionBehavior> = {
 
 export type RunForm = ReturnType<typeof useRunForm>
 
-export function useRunForm(kind: DefaultsKind) {
-  const [cwd, setCwd] = useState(() => readPref(CWD_KEY) ?? '')
+export type RunTarget = { hostId?: string; cwd?: string }
+
+export function useRunForm(kind: DefaultsKind, target: RunTarget = {}) {
+  const [cwd, setCwd] = useState(() => target.cwd ?? readPref(CWD_KEY) ?? '')
   const [prompt, setPrompt] = useState('')
   // Empty means "whatever the profile says": the gateway fills any omitted field from `ProfileInfo.defaults`.
   const [model, setModel] = useState('')
   const [modeChoice, setModeChoice] = useState<PermissionMode | undefined>(undefined)
   const [effort, setEffort] = useState('')
   const [questions, setQuestions] = useState<QuestionBehavior>(QUESTIONS_FALLBACK[kind])
-  const { profiles, profile, selected, select: selectProfile } = useProfileChoice()
+  const { profiles, profile, selected, select: selectProfile } = useProfileChoice(target.hostId)
   const mode = modeChoice ?? selected?.defaults?.permissionMode ?? MODE_FALLBACK[kind]
   const engine = engineFormOptions(selected, mode, model)
 
@@ -92,6 +95,7 @@ export function useRunForm(kind: DefaultsKind) {
   const rememberCwd = (used: string) => writePref(CWD_KEY, cwd.trim() || used)
 
   return {
+    hostId: target.hostId,
     cwd,
     setCwd,
     prompt,
@@ -159,7 +163,7 @@ export function RunFormFields({
   actions,
   onProfileChange,
 }: RunFormFieldsProps) {
-  const candidates = useCwdCandidates(sessions)
+  const candidates = useCwdCandidates(sessions, form.hostId)
   const listId = useId()
   const { engine } = form
 

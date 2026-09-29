@@ -220,7 +220,9 @@ final class SessionListModel {
 
   var filtered: [SessionRow] { filterRows(rows, config: config, scope: nil) }
 
-  var groups: [SessionGroup] { groupRows(filtered, config: config) }
+  var groups: [SessionGroup] {
+    groupRows(filtered, config: config, gatewayCount: Set(rows.map(\.hostId)).count)
+  }
 
   /// The one "you are seeing a subset" signal - nil when nothing is hidden.
   var subset: SubsetSummary? {

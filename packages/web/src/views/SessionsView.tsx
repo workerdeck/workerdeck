@@ -14,12 +14,22 @@ import {
   toast,
 } from '@workerdeck/ui'
 import { History, Plus } from 'lucide-react'
-import { QuestionsField, RunFormFields, useRunForm } from '@/components/RunForm.tsx'
+import { QuestionsField, RunFormFields, useRunForm, type RunTarget } from '@/components/RunForm.tsx'
 import { BrandMark } from '@/components/shell/BrandMark.tsx'
 import { client } from '@/lib/client.ts'
+import { clientFor } from '@/lib/hosts.ts'
 
-function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; onCreated: (id: string) => void }) {
-  const form = useRunForm('session')
+function CreateSessionForm({
+  sessions,
+  target,
+  onCreated,
+}: {
+  sessions: SessionInfo[]
+  target: RunTarget
+  onCreated: (id: string) => void
+}) {
+  const form = useRunForm('session', target)
+  const gateway = () => (target.hostId === undefined ? client() : clientFor(target.hostId))
   const [creating, setCreating] = useState(false)
   const [sdkSessions, setSdkSessions] = useState<SdkSessionSummary[] | undefined>()
   const [loadingSdk, setLoadingSdk] = useState(false)
@@ -34,7 +44,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
     setCreating(true)
     try {
       form.rememberCwd(dir)
-      const session = await client()!.createSession({
+      const session = await gateway()!.createSession({
         ...form.sessionFields({
           prompt: resume ? undefined : form.prompt.trim() || undefined,
           resume: resume?.sessionId,
@@ -60,7 +70,7 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
     try {
       // Named, so the server lists the chosen profile's engine store rather than claude's.
       setSdkSessions(
-        await client()!.listSdkSessions({
+        await gateway()!.listSdkSessions({
           dir: form.cwd.trim(),
           limit: 20,
           profile: form.profile || undefined,
@@ -127,23 +137,28 @@ function CreateSessionForm({ sessions, onCreated }: { sessions: SessionInfo[]; o
   )
 }
 
+// `target` pins the gateway (and prefills the directory) when a session is started from a project heading.
 export function CreateSessionDialog({
   open,
   onOpenChange,
   sessions,
+  target = {},
+  gatewayName,
   onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   sessions: SessionInfo[]
+  target?: RunTarget
+  gatewayName?: string
   onCreated: (id: string) => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
-        <DialogHeader title="New session" description="Pick a directory and an engine." />
+        <DialogHeader title={gatewayName ? `New session on ${gatewayName}` : 'New session'} description="Pick a directory and an engine." />
         <DialogBody>
-          <CreateSessionForm sessions={sessions} onCreated={onCreated} />
+          <CreateSessionForm key={`${target.hostId ?? ''}:${target.cwd ?? ''}`} sessions={sessions} target={target} onCreated={onCreated} />
         </DialogBody>
       </DialogContent>
     </Dialog>

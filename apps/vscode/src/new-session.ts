@@ -28,27 +28,34 @@ export type NewSessionDeps = {
   refresh: () => Promise<void>
 }
 
-export async function createSession(deps: NewSessionDeps): Promise<void> {
-  await run(deps, { resume: false })
+// A preset (a project heading's `+`) pins the gateway and, when it has one, the folder, so those steps are skipped.
+export type NewSessionPreset = { hostId: string; cwd?: string }
+
+export async function createSession(deps: NewSessionDeps, preset?: NewSessionPreset): Promise<void> {
+  await run(deps, { resume: false, preset })
 }
 
 export async function resumeSession(deps: NewSessionDeps): Promise<void> {
   await run(deps, { resume: true })
 }
 
-async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<void> {
-  const adapters = await loadAdapters(deps)
-  if (adapters === undefined) {
+async function run(deps: NewSessionDeps, options: { resume: boolean; preset?: NewSessionPreset }): Promise<void> {
+  const { preset } = options
+  const loaded = await loadAdapters(deps)
+  if (loaded === undefined) {
     return
   }
+  const adapters = preset ? loaded.filter((a) => a.host.id === preset.hostId) : loaded
   if (adapters.length === 0) {
-    void vscode.window.showInformationMessage('WorkerDeck: no gateway is reachable. Add one in the Gateways view.')
+    void vscode.window.showInformationMessage(
+      preset ? 'WorkerDeck: that gateway is not reachable.' : 'WorkerDeck: no gateway is reachable. Add one in the Gateways view.',
+    )
     return
   }
 
   let step = 0
   let adapter: AdapterChoice | undefined
-  let cwd: string | undefined
+  let cwd: string | undefined = preset?.cwd
 
   while (step < 3) {
     if (step === 0) {
@@ -67,6 +74,10 @@ async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<
       adapter = picked
       step = 1
     } else if (step === 1) {
+      if (preset?.cwd) {
+        step = 2
+        continue
+      }
       const picked = await pickFolder(deps, adapter!, cwd)
       if (picked === CANCEL) {
         return
@@ -83,6 +94,13 @@ async function run(deps: NewSessionDeps, options: { resume: boolean }): Promise<
     } else {
       const done = options.resume ? await pickAndResume(deps, adapter!, cwd!) : await pickModelAndCreate(deps, adapter!, cwd!)
       if (done === BACK) {
+        if (preset?.cwd) {
+          if (adapters.length === 1) {
+            return
+          }
+          step = 0
+          continue
+        }
         step = 1
         continue
       }

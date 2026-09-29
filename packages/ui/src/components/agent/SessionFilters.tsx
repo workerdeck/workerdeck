@@ -106,8 +106,8 @@ export function SessionFilters({ config, onConfigChange, rows, scope, gateways: 
               { value: 'none', label: 'No grouping' },
               { value: 'state', label: 'By state' },
               { value: 'adapter', label: 'By engine' },
-              ...(projects.length > 1 ? [{ value: 'project' as const, label: 'By project' }] : []),
-              ...(gateways.length > 1 ? [{ value: 'gateway' as const, label: 'By gateway' }] : []),
+              { value: 'project', label: gateways.length > 1 ? 'By gateway & project' : 'By project' },
+              { value: 'custom', label: 'Custom' },
             ]}
             onChange={(groupBy) => set({ groupBy: groupBy as GroupBy })}
           />

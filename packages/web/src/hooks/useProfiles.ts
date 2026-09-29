@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ListProfilesResponse, ProfileInfo } from '@workerdeck/protocol'
 import { client } from '../lib/client.ts'
-import { onHostsChange } from '../lib/hosts.ts'
+import { clientFor, onHostsChange, primaryHost } from '../lib/hosts.ts'
 import { readPref, writePref } from '../lib/storage.ts'
 import { createPolledStore } from '../lib/store.ts'
 
@@ -28,8 +28,29 @@ export function useProfiles(): ProfileInfo[] {
 
 const CHOICE_KEY = 'workerdeck.last-profile'
 
-export function useProfileChoice() {
-  const profiles = useProfiles()
+// Another gateway's profiles are read once per mount: only a form aimed at that gateway asks, and it lives for one dialog.
+function useHostProfiles(hostId: string | undefined): ProfileInfo[] | undefined {
+  const remote = hostId !== undefined && hostId !== primaryHost()?.id ? hostId : undefined
+  const [profiles, setProfiles] = useState<ProfileInfo[]>()
+  useEffect(() => {
+    if (remote === undefined) {
+      return
+    }
+    let live = true
+    void clientFor(remote)
+      ?.listProfiles()
+      .then((listed) => live && setProfiles(listed.profiles))
+      .catch(() => live && setProfiles([]))
+    return () => {
+      live = false
+    }
+  }, [remote])
+  return remote === undefined ? undefined : (profiles ?? [])
+}
+
+export function useProfileChoice(hostId?: string) {
+  const primary = useProfiles()
+  const profiles = useHostProfiles(hostId) ?? primary
   const [choice, setChoice] = useState(() => readPref(CHOICE_KEY) ?? '')
   const profile = profiles.some((p) => p.name === choice) ? choice : (profiles[0]?.name ?? '')
   const selected = profiles.find((p) => p.name === profile)

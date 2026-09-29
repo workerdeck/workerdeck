@@ -320,6 +320,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     },
     revealGateways: (options) => (options.add ? addGateway(gatewayFlow) : gateways.reveal()),
+    newSession: (preset) => createSession(sessionFlow, preset),
     unread: (rows, waiting) => unread.update(rows, waiting),
     subagents: (running, sessions) => subagents.update(running, sessions),
   })

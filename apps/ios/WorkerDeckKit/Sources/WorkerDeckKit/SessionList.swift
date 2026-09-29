@@ -165,9 +165,11 @@ public enum Facet: String, Codable, Sendable, Hashable {
   case project
 }
 
-/// TS `GroupBy` is `'none' | Facet`; the extra case folds in here.
+/// Mirror of TS `GroupBy`, less `custom`, which this client does not draw yet.
+/// There is no gateway grouping: project groups name their gateway once there
+/// is more than one.
 public enum GroupBy: String, Codable, Sendable, Hashable, CaseIterable {
-  case none, gateway, adapter, state, project
+  case none, adapter, state, project
 
   public var facet: Facet? { Facet(rawValue: rawValue) }
 }
@@ -240,8 +242,11 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     // - or filtering - here would empty the list for everyone who upgraded.
     projects = try c.decodeIfPresent([String].self, forKey: .projects) ?? []
     scoped = try c.decodeIfPresent(Bool.self, forKey: .scoped) ?? true
+    // A stored "gateway" predates the merge into project groups.
     groupBy =
-      (try c.decodeIfPresent(String.self, forKey: .groupBy)).flatMap { GroupBy(rawValue: $0) }
+      (try c.decodeIfPresent(String.self, forKey: .groupBy)).flatMap {
+        $0 == "gateway" ? .project : GroupBy(rawValue: $0)
+      }
       ?? .state
     sortBy =
       (try c.decodeIfPresent(String.self, forKey: .sortBy)).flatMap { SortBy(rawValue: $0) }
@@ -558,19 +563,23 @@ private func facetKey(_ row: SessionRow, _ facet: Facet) -> String {
   }
 }
 
-private func facetLabel(_ row: SessionRow, _ facet: Facet) -> String {
+private func facetLabel(_ row: SessionRow, _ facet: Facet, multiGateway: Bool = false) -> String {
   switch facet {
   case .gateway: return row.hostName
   case .adapter: return row.adapter
   case .state: return row.state.label
-  case .project: return projectLabel(row.info)
+  case .project:
+    return multiGateway ? "\(row.hostName) \(projectLabel(row.info))" : projectLabel(row.info)
   }
 }
 
 /// Comparable rank for a facet: states run worst-first (attention before ended),
-/// the rest alphabetically by their visible label.
-private func facetRank(_ row: SessionRow, _ facet: Facet) -> String {
+/// project groups by gateway then project, the rest alphabetically by label.
+private func facetRank(_ row: SessionRow, _ facet: Facet, multiGateway: Bool = false) -> String {
   if facet == .state { return String(SessionState.order.firstIndex(of: row.state) ?? 0) }
+  if facet == .project && multiGateway {
+    return "\(row.hostName.lowercased())\u{0}\(projectLabel(row.info).lowercased())"
+  }
   return facetLabel(row, facet).lowercased()
 }
 
@@ -619,18 +628,26 @@ private func stableSorted(_ rows: [SessionRow], sortBy: SortBy) -> [SessionRow] 
 /// themselves come out in the sort's own order - grouping by state and sorting
 /// by name should still put "Needs attention" first, so groups are ordered by
 /// their facet rank, never by the row sort.
-public func groupRows(_ rows: [SessionRow], config: ViewConfig) -> [SessionGroup] {
+/// `gatewayCount` defaults to the gateways among `rows`; pass the unfiltered
+/// count so a filter never renames a project heading.
+public func groupRows(_ rows: [SessionRow], config: ViewConfig, gatewayCount: Int? = nil)
+  -> [SessionGroup]
+{
   let sorted = stableSorted(rows, sortBy: config.sortBy)
   guard let facet = config.groupBy.facet else {
     return sorted.isEmpty ? [] : [SessionGroup(key: "all", rows: sorted)]
   }
+  let multiGateway = (gatewayCount ?? Set(rows.map(\.hostId)).count) > 1
   var order: [String] = []
   var built: [String: (label: String, rank: String, rows: [SessionRow])] = [:]
   for row in sorted {
     let key = facetKey(row, facet)
     if built[key] == nil {
       order.append(key)
-      built[key] = (facetLabel(row, facet), facetRank(row, facet), [row])
+      built[key] = (
+        facetLabel(row, facet, multiGateway: multiGateway),
+        facetRank(row, facet, multiGateway: multiGateway), [row]
+      )
     } else {
       built[key]?.rows.append(row)
     }

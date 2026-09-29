@@ -270,12 +270,12 @@ struct SessionListTests {
     var config = ViewConfig.default
     config.search = "x"
     config.states = [.idle]
-    config.groupBy = .gateway
+    config.groupBy = .project
     config.sortBy = .name
     let next = clearFilters(config)
     #expect(!hasFacetFilter(next))
     #expect(!next.scoped)
-    #expect(next.groupBy == .gateway)
+    #expect(next.groupBy == .project)
     #expect(next.sortBy == .name)
   }
 
@@ -386,6 +386,25 @@ struct SessionListTests {
     let groups = groupRows([undeclared, declaredUi, declaredWeb], config: config)
     #expect(groups.map(\.label) == ["alpha", "WorkerDeck"])
     #expect(groups.last?.rows.map(\.info.id) == ["p1", "p2"])
+  }
+
+  @Test func namesTheGatewayOnProjectGroupsOnlyWhenThereIsMoreThanOne() {
+    var config = ViewConfig.default
+    config.groupBy = .project
+    let both = groupRows([declaredUi, remoteTwin], config: config)
+    #expect(both.count == 2)
+    #expect(both.allSatisfy { $0.label?.hasSuffix(" WorkerDeck") == true })
+    #expect(Set(both.compactMap(\.label)).count == 2)
+    let one = groupRows([declaredUi], config: config)
+    #expect(one.map(\.label) == ["WorkerDeck"])
+    let filtered = groupRows([declaredUi], config: config, gatewayCount: 2)
+    #expect(filtered.first?.label == "\(declaredUi.hostName) WorkerDeck")
+  }
+
+  @Test func readsAStoredGatewayGroupingAsProject() throws {
+    let legacy = try JSONDecoder().decode(
+      ViewConfig.self, from: Data(#"{"groupBy":"gateway"}"#.utf8))
+    #expect(legacy.groupBy == .project)
   }
 
   @Test func filtersByProjectKeyAndAConfigPredatingTheFieldFiltersNothing() throws {

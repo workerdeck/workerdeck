@@ -7,7 +7,7 @@ import { SessionBrowser, SessionFilters, SessionSearch, type SelectModifiers } f
 import { Empty, Key } from '../ui/Empty.tsx'
 import { CardActions } from './CardActions.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
-import { DEFAULT_VIEW_CONFIG, buildRows, clearFilters, filterRows, subsetSummary, type ViewConfig } from '../../src/view-config.ts'
+import { buildRows, clearFilters, filterRows, normalizeViewConfig, subsetSummary, type ViewConfig } from '../../src/view-config.ts'
 
 type Persisted = { config?: ViewConfig }
 
@@ -35,11 +35,8 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const persisted = bridge.getState<Persisted>()
-  // Spread over the defaults: a config persisted by an older build is missing newer fields.
-  const [config, setConfig] = useState<ViewConfig>({
-    ...DEFAULT_VIEW_CONFIG,
-    ...persisted?.config,
-  })
+  // Normalized: a config persisted by an older build is missing newer fields, or groups by the retired gateway facet.
+  const [config, setConfig] = useState<ViewConfig>(() => normalizeViewConfig(persisted?.config))
 
   // The view config outlives a reload - VS Code tears webviews down freely.
   useEffect(() => {
@@ -166,6 +163,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             onKillShell={(row, shellId) => postRow('wd-kill-shell', row, { shellId })}
             onShellAgentWrite={(row, shellId, enabled) => postRow('wd-shell-agent-write', row, { shellId, enabled })}
             onRename={(row, title) => postRow('wd-rename-session', row, { title })}
+            onCreateInGroup={(target) => bridge.post({ kind: 'wd-new-session', hostId: target.hostId, cwd: target.cwd })}
             emptyState={
               <Empty
                 icon={<Layers />}
