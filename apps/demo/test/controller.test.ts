@@ -28,6 +28,13 @@ async function settle(): Promise<void> {
   }
 }
 
+async function until(check: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2_000
+  while (!check() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
+
 describe('TourController', () => {
   it('counts checkpoints with a dry run', async () => {
     const controller = new TourController({ home: scene })
@@ -56,11 +63,11 @@ describe('TourController', () => {
     controller.next()
     await settle()
     controller.next()
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await until(() => controller.state.card?.title === 'two')
     expect(controller.state.card?.title).toBe('two')
     const before = controller.gateway
     controller.back()
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await until(() => controller.gateway !== before && controller.state.hint?.prompt === 'do it')
     expect(controller.gateway).not.toBe(before)
     expect(controller.state.checkpoint).toBe(1)
     expect(controller.state.hint?.prompt).toBe('do it')
