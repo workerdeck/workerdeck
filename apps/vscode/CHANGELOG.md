@@ -5,6 +5,25 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.3.0] - 2026-09-29
+
+### Added
+
+- **Custom session groups.** Group the sidebar by *Custom*, add groups with *New group*, drag
+  sessions between them, drag a heading to reorder, double-click to rename. They are kept per
+  client, in the extension's own storage.
+- **A `+` on every project heading** starts a new session on that gateway, in that project's
+  folder, skipping the folder step.
+- **Agents on your other gateways.** With a `workerdeck relay` running, sessions on other gateways
+  appear to your agents' peer tools as `gateway:session`, and a message from one shows its sender
+  as `Name@gateway`.
+
+### Changed
+
+- **Grouping by gateway merged into grouping by project.** Project groups were always per gateway;
+  with more than one gateway a heading now reads `mac-mini WorkerDeck`. A stored gateway grouping
+  opens as project grouping.
+
 ## [3.2.0] - 2026-09-29
 
 ### Added

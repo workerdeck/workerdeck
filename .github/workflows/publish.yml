@@ -1,10 +1,10 @@
 name: Publish
 
-# Two jobs. `publish` sends all 10 packages to npm; `vscode` then sends the
+# Two jobs. `publish` sends all 12 packages to npm; `vscode` then sends the
 # extension to the VS Code Marketplace (see the comment on that job - it is the
 # one credential in this repo that is not OIDC).
 #
-# Publishes all 10 packages (the @workerdeck/* libraries plus the unscoped
+# Publishes all 12 packages (the @workerdeck/* libraries plus the unscoped
 # `workerdeck` CLI) to npm via **trusted publishing**: pnpm
 # trades this workflow's GitHub OIDC token for a short-lived publish credential,
 # so there is no NPM_TOKEN in this repo and provenance attestations are generated
@@ -16,7 +16,8 @@ name: Publish
 # --access public` from its directory, which is also what rewrites `workspace:*`),
 # and only then does it join this workflow.
 #
-# All 10 names were bootstrapped this way at 0.6.0, the first release under the
+# The first 10 names were bootstrapped this way at 0.6.0, and `@workerdeck/relay-client` +
+# `@workerdeck/relay` by hand at 3.3.0 (relay-client first: relay and the CLI depend on it), the first release under the
 # workerdeck name; trusted publishing is configured on every one of them. The old
 # `claude-worker` / `@claude-worker/*` packages stay published (deprecated, not
 # unpublished) and are no longer released from here.

@@ -13,7 +13,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
 - push: yes - branch `master`, repo is public, and every push deploys the docs site.
 - version_bump: yes - `pnpm version:set <x.y.z> && pnpm install --lockfile-only && pnpm fix:dashes`
   (the last step is not optional: `npm version` rewrites each `package.json` and expands any
-  `\u2014` escape back into a literal em dash, so the ratchet fires on the bump itself) (the 10 packages
+  `\u2014` escape back into a literal em dash, so the ratchet fires on the bump itself) (the 12 packages
   plus `apps/vscode`; `workspace:*` needs no bumping, so the lockfile step is a no-op). 0.9.0 is published
   (protocol **7** + the codex engine + the session-runner parity work; it absorbed the
   never-published 0.8.0). 0.10.0 added codex skills and generated images, the codex MCP panel and
@@ -1396,6 +1396,26 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   tour (private, not published). The full `pnpm test` under a load average of ~60 failed
   PTY/socket timing cases in `server` and a sandbox memory-cap case, each green when re-run alone;
   the CI gate re-runs them.
+
+  **3.3.0** - **cross-gateway peers and custom session groups, released 2026-09-29** (tag
+  `v3.3.0`). A **minor**, protocol stays **1** (`MessageOrigin.hostId` already existed; the relay
+  wire is its own `RELAY_WIRE_VERSION` in `relay-client`, never the client protocol). Two new
+  packages, **`@workerdeck/relay-client`** and **`@workerdeck/relay`**, which is why this is the
+  first release since 0.6.0 that CI could not publish on its own: a trusted publisher can only be
+  configured on a package that exists, so both were **published by hand first** (relay-client
+  before relay, from Tobias's own terminal), trusted publishing was set on them, and only then was
+  the tag pushed, the workflow skipping the two versions already on the registry. The relay work:
+  `workerdeck relay serve|enroll|revoke|list|status`, the server's `relay` option and
+  `createRelayLink`, `PeerDirectory.notice`, `peers_list` rows gaining model, context usage,
+  project root, `gateway` and `allow`, and `peerShortId` on both platforms. Also shipping, from a
+  parallel session: **custom session groups** (`ViewConfig.customGroups`, `SessionGroups.tsx`,
+  web and VS Code; iOS mirrors only the merge) and **gateway grouping merged into project
+  grouping** with a `+` on each project heading. That merge narrows protocol's exported `GroupBy`
+  (no `'gateway'`), a breaking type change taken as a minor by the same choice 3.1.0 made;
+  `normalizeViewConfig` migrates a stored `'gateway'`. **Verified**: paid `smoke:relay` 14/14
+  (claude haiku on one gateway, codex gpt-5.6-luna on the other, list/peek/send both ways, the
+  relay-stamped origin and a two-gateway hop chain), full `pnpm test`, WorkerDeckKit 687.
+  Not verified: a relay across two real machines, and the relay over TLS.
 
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
