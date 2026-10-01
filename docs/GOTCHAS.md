@@ -1199,6 +1199,24 @@ has the shape; these are the ways to get it wrong.
 - **Plain `ws://` is allowed.** TLS is optional (`--tls-cert` / `--tls-key`); the relay warns once
   when it binds off loopback without it. Use a tailnet or a TLS proxy: the gateway key is in the
   `hello` frame. For a self-signed certificate the gateway sets `relay.caFile`.
+- **`/status` is gated on loopback, so a same-host reverse proxy opens it to the world.**
+  `serveStatus` admits only `isLoopback(req.socket.remoteAddress)`, and behind a proxy on the
+  relay's machine every request arrives from loopback. The proxy must refuse `/status` itself
+  (Caddy: `respond /status 404` ahead of `reverse_proxy`, as the docs-site guide shows). Do not
+  start trusting `X-Forwarded-For` here; any change to the gate has to stay safe behind a proxy.
+- **`workerdeck-relay status` always dials `127.0.0.1`.** With `--tls-cert` it fetches
+  `https://127.0.0.1:<port>/status`, and a certificate issued for a hostname does not cover that
+  address, so Node's fetch refuses it. Behind a TLS proxy (the relay itself on plain `ws://`
+  loopback) it works. Unverified against a real certificate.
+- **The relay's request timeout must stay below the requester's** (8 s at the relay, 10 s in
+  `connectRelay`), so a slow target gateway produces the relay's clean `timeout` answer rather than
+  a requester-side abort racing it. Heartbeat is a WS ping every 15 s with the drop at two missed
+  intervals, which is the "half-open socket clears within about 45 s" figure.
+- **A hot reload reads a new config file, but probably not an edited one.** `loadConfigFile`
+  imports the operator's `workerdeck.config.mjs` by plain file URL, and the hot-reload resolve hook
+  only versions URLs under `packages/`, so Node's ESM cache likely serves the first-loaded copy for
+  the life of the process. Adding a config file (none at startup) and reloading did connect the
+  relay (2026-10-01); editing `relay` in an already-loaded file and reloading is unverified.
 
 ## Server, profiles & auth
 
@@ -1526,6 +1544,8 @@ has the shape; these are the ways to get it wrong.
   descendant closure (next bullet), since a bare kill leaves grandchildren (`sleep 9999 &`) running
   past the session. `session_closed` and a park kill the session's shells through the registry's
   `watch(runner)`, installed once in `onRegister` - a socket closing must only detach, never kill.
+  Those kills settle as `endReason: 'killed'`, the same as an operator's: `ShellEndReason` has no
+  `session_closed` member and the union is locked, so adding one is a protocol bump.
 - **A kill is the closure under the PTY child, found at kill time by `ps`, not only its group.**
   The group kill alone reached only what stayed in the leader's group: a supervisor that calls
   `setsid`/`setpgid` per child escaped it (observed with `$ box dev`, where `process.kill(-P)`
@@ -1552,9 +1572,8 @@ has the shape; these are the ways to get it wrong.
 - **A `/clear` wipes the transcript row, so the session card is the surviving handle.**
   `conversation_reset` both clears the transcript and makes the queue unsubscribe, so a running
   shell's transcript row never redraws. The process keeps running and the record stays right. The
-  card rows (`sessionSteps`) are the handle that outlives a clear, in the web sidebar and the VS
-  Code sidebar; iOS has no card rows yet, so on the phone the REST routes and
-  `<stateDir>/shells/<sessionId>.json` are still the only way to find what is running.
+  card rows (`sessionSteps`) are the handle that outlives a clear, in the web sidebar, the VS
+  Code sidebar and the iOS session list (the kit's `SessionSteps.swift`, with the kill glyph).
 - **A shell reaches the session card only after `SHELL_PROMOTE_MS`, and the debounce is the
   client's clock, not the server's.** `decorate` puts every tracked shell on `SessionInfo.shells`;
   `visibleShells(info, show, now)` is what decides which of them draw, and it is called with the
@@ -1606,9 +1625,10 @@ has the shape; these are the ways to get it wrong.
   and a session a scoped principal made is never offered the write tools. A **job's** session has
   no principal on its record, so it is read-only too; giving jobs the write tools needs a slot on
   `JobInfo` and is not part of 4a. Both keys are in `HOST_ONLY_KEYS` (a body carrying them is a
-  400) and none of the three is on the durable-config allowlist: the `shells` handle used to
-  serialise as `{}` into a durable record, and a rebuild on a gateway with shells off would have
-  kept it. `runShellTool` refuses a write tool unless the runner passed `{ write: true }`, so a
+  400). `createdByOperator` is `durable` in `host-only-keys.ts`, because the rebuild reads it
+  back; `shells` and `shellAgentWrite` are `transient` and rederived on every build: the `shells`
+  handle used to serialise as `{}` into a durable record, and a rebuild on a gateway with shells
+  off would have kept it. `runShellTool` refuses a write tool unless the runner passed `{ write: true }`, so a
   call for a tool that was never declared is refused at the tool, not by absence.
 - **The agent may drive only shells it started, and the refusal says so.** `agentMayWrite` is
   `sessionId === from && (owner === 'agent' || agentWrite === true)`; the `agentWrite` leg is
@@ -1801,7 +1821,11 @@ has the shape; these are the ways to get it wrong.
 - **`shell_attached.cols/rows` are the record's after clamping**, not what the client asked for
   (`clampSize`, `SHELL_MIN/MAX_COLS/ROWS`). Last attach wins and the record follows it, so two
   clients on one shell share one size and the second one to attach sets it. For an exited shell they
-  are the size it ran at, which is what the scrollback was laid out against.
+  are the size it ran at, which is what the scrollback was laid out against, so `resize` updates the
+  record only while a child is alive (`services/shells.ts`); that is deliberate, not a missed
+  assignment. A shell spawns at `SHELL_COLS` x `SHELL_ROWS`, never at the invoking view's width: an
+  agent's or a job's shell has no view, a view's width would leak client geometry into the artifact
+  and the model's text, and a resize cannot reflow scrollback already emitted.
 - **The web URL round trip must carry `subagent`/`sn` through unchanged.** The sub-agent branch
   withdraws with `search: {}`, and copying that for the shell branch drops them, which flips
   `openSubagent.nonce` to `undefined`; `useSubagentFrame` keys on the nonce alone, so that fires

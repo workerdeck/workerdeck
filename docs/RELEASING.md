@@ -1415,7 +1415,10 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   `normalizeViewConfig` migrates a stored `'gateway'`. **Verified**: paid `smoke:relay` 14/14
   (claude haiku on one gateway, codex gpt-5.6-luna on the other, list/peek/send both ways, the
   relay-stamped origin and a two-gateway hop chain), full `pnpm test`, WorkerDeckKit 687.
-  Not verified: a relay across two real machines, and the relay over TLS. The first CI run failed its test
+  Not verified at release: a relay across two real machines, and the relay over TLS. **Retired
+  2026-10-01** on the Mac mini: relay under launchd behind Caddy (wss, public cert), a MacBook
+  gateway and the mini's gateway list, peek and send both ways, relay kill and KeepAlive reconnect.
+  Still unexercised: the relay's own `--tls-cert` server. The first CI run failed its test
   gate on `apps/demo`'s controller test (a fixed 10 ms sleep that a loaded runner missed), after
   the two hand-published packages were already live; the job was re-run (safe: nothing from the
   tag had published) and went green, all 12 packages live within 210 s and the Marketplace job

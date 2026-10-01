@@ -90,3 +90,109 @@ receiving gateway. If the relay is unreachable, `peers_list` still returns the l
 says remote gateways are unavailable.
 
 A session with a `scope` never reaches past its own gateway.
+
+## Running the relay as a service
+
+The relay belongs on a machine that stays up, under a service manager that restarts it. The
+setup below is the recommended one: the relay listens on loopback only, and a TLS reverse proxy on
+the same machine is what the other gateways reach.
+
+### State
+
+Give the relay a state dir of its own and pass the same `--state-dir` to every `serve`, `enroll`,
+`revoke` and `list` (or set `WORKERDECK_RELAY_STATE_DIR`); a command run without it reads
+`~/.workerdeck/relay` instead. `rules.json` goes in that directory.
+
+```bash
+mkdir -p /srv/relay && chmod 700 /srv/relay
+```
+
+### launchd (macOS)
+
+`~/Library/LaunchAgents/dev.workerdeck.relay.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.workerdeck.relay</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/opt/homebrew/bin/workerdeck</string>
+    <string>relay</string>
+    <string>serve</string>
+    <string>--state-dir</string><string>/srv/relay</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>7777</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/srv/relay/relay.log</string>
+  <key>StandardErrorPath</key><string>/srv/relay/relay.log</string>
+</dict>
+</plist>
+```
+
+launchd does not read your shell profile, so nothing is on `PATH`: name `node` and the
+`workerdeck` script by absolute path (`which node workerdeck`). A Homebrew `node` keeps its path
+across upgrades; an nvm or fnm path changes with every Node version and breaks the plist on the
+next upgrade. Load it with `launchctl bootstrap gui/$(id -u) <plist>`, and after an edit run
+`launchctl kickstart -k gui/$(id -u)/dev.workerdeck.relay`. A LaunchAgent runs as you and only
+while you are logged in; a machine that must serve with nobody logged in needs a LaunchDaemon
+with `UserName`. On Linux the same shape is a systemd unit with `Restart=always`.
+
+### TLS: a reverse proxy, or `--tls-cert`
+
+A proxy that already holds a certificate it renews is the simpler option. It terminates TLS and
+forwards to the loopback relay; the WebSocket upgrade passes through untouched, and the relay
+accepts it on any path. With Caddy:
+
+```text
+relay.example.com {
+	respond /status 404
+	reverse_proxy 127.0.0.1:7777
+}
+```
+
+**Keep the `/status` line.** The relay answers `/status` only to loopback callers, and behind a
+proxy on the same machine every request arrives from loopback, so without it anyone who can reach
+the proxy can read your gateway list. Any other proxy needs the same refusal.
+
+Remote gateways then dial `wss://relay.example.com`; a publicly trusted certificate needs no
+`caFile`. A gateway on the relay's own machine dials `ws://127.0.0.1:7777` and skips the proxy.
+
+`--tls-cert` and `--tls-key` work too, but renewal and restart become your job, and `workerdeck
+relay status` then fetches `https://127.0.0.1:<port>/status`, which a certificate issued for a
+hostname does not cover. Check it with
+`curl --resolve relay.example.com:7777:127.0.0.1 https://relay.example.com:7777/status` instead.
+
+### Keys
+
+`enroll` prints the key once. Send it straight to the gateway that needs it, without it landing
+on a screen or in a chat:
+
+```bash
+workerdeck relay enroll laptop --state-dir /srv/relay | sed -n 's/^  //p' \
+  | ssh laptop 'mkdir -p ~/.workerdeck && umask 077 && cat > ~/.workerdeck/relay.key'
+```
+
+A lost key is `enroll <name> --rotate`, never a second name: the name is the routing prefix.
+
+### Verify
+
+- On the relay's machine, `workerdeck relay status --port 7777` lists every enrolled gateway with
+  `online` and a session count.
+- In a session on one gateway, ask the agent to call `peers_list`: the other gateway's sessions
+  appear as `gateway:session`. `peers_peek` one and `peers_send` it a line; the reply comes back
+  the same way. A parked session on the other gateway peeks as `live: false` with no recent lines
+  until something wakes it.
+
+A gateway started with `--hot-reload` picks up a newly created config file with a `relay` block on
+`workerdeck reload`, without dropping its sessions. Without `--hot-reload`, restart the gateway
+when nothing is running.
+
+Restarting the relay is harmless. Every gateway logs `connection lost (1001 relay shutting down);
+reconnecting`, comes back within seconds and republishes its sessions; `KeepAlive` does the
+restart for you.

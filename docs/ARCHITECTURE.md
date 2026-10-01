@@ -501,6 +501,14 @@ published at all, which operations it accepts) and the relay's rules (default de
 `allow` grants `send` and `peek`; optional `scope.projects`). The relay stamps the sender half of
 every request from the authenticated connection, so a gateway cannot speak for another.
 
+Design choices that stand until real use argues otherwise. The transport is WebSocket with JSON
+frames, not gRPC: the repo speaks WS everywhere, it passes through tailnets and reverse proxies,
+and the volume is tiny. A flapping gateway gets no grace window; clearing and re-snapshotting a
+few dozen rows costs nothing, so a grace period is added only if list churn shows up in practice.
+The relay is server-to-server only: dashboards and the phone never talk to it, push does not go
+through it, `#Name` mentions do not reach across gateways, and it serves one operator, never
+several tenants.
+
 ## Tooling conventions
 
 pnpm workspace + turbo; TS 7 native preview (`tsgo`) for typecheck; oxlint; tsdown builds
