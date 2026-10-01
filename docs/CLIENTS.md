@@ -229,7 +229,8 @@ be launching a **checkout**: `workerdeck.host.binaryPath` points at `scripts/wor
 that (a single executable is all that setting can carry, and a source run needs node flags), never
 at `packages/cli/build/cli.mjs`, which is the bundle this feature cannot swap.
 
-The managed instance registers itself as a gateway (`workerdeck-managed`, "This machine") - the
+The managed instance registers itself as a gateway (`workerdeck-managed`, named by
+`workerdeck.host.name`, default "This machine"; a rename re-registers it live through `sync`) - the
 one exception to **there is no implicit localhost gateway**, and marked `managed` so the Gateways
 view offers a gear to Host Mode's settings instead of the edit/remove pair; removing it means
 turning Host Mode off. Two security rules are not negotiable. Every `workerdeck.host.*` key is
@@ -283,7 +284,7 @@ follows live and works for an adopted server as well as one this window started.
 The window status badge (`workerdeck.host.statusBar`) is **not** a Host Mode badge, despite the
 setting's name and the slot's history: it reads `X/Y` - gateways answering their probe over
 gateways that exist - and Host Mode's own counts in both halves *while it serves*, since the
-supervisor registers `This machine` on start and unregisters it on stop. A stopped host is
+supervisor registers its own gateway on start and unregisters it on stop. A stopped host is
 therefore absent from the denominator rather than sitting in it as a permanent miss. A transient
 Host Mode state (`starting`, `stopping`, the error `$(warning)`) still outranks the count and
 takes the badge whole: those are short-lived, they are what the click acts on, and a count cannot

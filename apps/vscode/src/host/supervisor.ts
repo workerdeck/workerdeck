@@ -215,7 +215,7 @@ export class HostSupervisor implements vscode.Disposable {
       this.#set({ kind: 'error', message })
       return true
     }
-    await this.#register(url)
+    await this.#register(url, settings.name)
     void this.#log.follow(logPath(settings.stateDir))
     const lock = await ownedLock(settings.stateDir)
     const owned = lock?.port === settings.port
@@ -305,7 +305,7 @@ export class HostSupervisor implements vscode.Disposable {
             startedAt: Date.now(),
           })
         }
-        await this.#register(url)
+        await this.#register(url, settings.name)
         this.#set({ kind: 'running', url, owned: this.#child === child, pid: child.pid })
         void this.#deps.refresh()
         this.#announce(settings, keyed)
@@ -435,13 +435,13 @@ export class HostSupervisor implements vscode.Disposable {
     return generated
   }
 
-  async #register(url: string): Promise<void> {
+  async #register(url: string, name: string): Promise<void> {
     const existing = this.#store.get(MANAGED_HOST_ID)
     const key = await this.#context.secrets.get(AUTH_KEY_SECRET)
-    if (existing?.baseUrl === url && existing.managed && (await this.#store.authKey(MANAGED_HOST_ID)) === key) {
+    if (existing?.baseUrl === url && existing.name === name && existing.managed && (await this.#store.authKey(MANAGED_HOST_ID)) === key) {
       return
     }
-    await this.#store.save({ id: MANAGED_HOST_ID, name: 'This machine', baseUrl: url, managed: true }, key)
+    await this.#store.save({ id: MANAGED_HOST_ID, name, baseUrl: url, managed: true }, key)
   }
 
   async #unregister(): Promise<void> {

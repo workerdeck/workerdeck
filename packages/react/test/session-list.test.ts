@@ -374,6 +374,8 @@ describe('project facet', () => {
   it('names the gateway on project groups once there is more than one', () => {
     const both = groupRows([declaredUi, remoteTwin], config({ groupBy: 'project' }))
     expect(both.map((g) => g.label)).toEqual(['Mac mini WorkerDeck', 'Pi WorkerDeck'])
+    expect(both[0]).toMatchObject({ gateway: 'Mac mini', project: 'WorkerDeck' })
+    expect(groupRows([declaredUi], config({ groupBy: 'project' }))[0]?.gateway).toBeUndefined()
     expect(groupRows([declaredUi], config({ groupBy: 'project' }))[0]?.label).toBe('WorkerDeck')
     expect(groupRows([declaredUi], config({ groupBy: 'project' }), { gatewayCount: 2 })[0]?.label).toBe('Mac mini WorkerDeck')
   })

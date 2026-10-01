@@ -117,6 +117,9 @@ export type SessionRow = {
 export type SessionGroup = {
   key: string
   label?: string
+  // Set on a project group once there is more than one gateway: `label` split into its two parts.
+  gateway?: string
+  project?: string
   rows: SessionRow[]
   // Set on a project group: where a session started from its header runs.
   hostId?: string
@@ -333,6 +336,7 @@ export function groupRows(rows: readonly SessionRow[], config: ViewConfig, optio
         label: facetLabel(row, facet, multiGateway),
         rows: [row],
         ...(facet === 'project' ? projectTarget(row) : {}),
+        ...(facet === 'project' && multiGateway ? { gateway: row.hostName, project: projectLabel(row) } : {}),
       })
     }
   }

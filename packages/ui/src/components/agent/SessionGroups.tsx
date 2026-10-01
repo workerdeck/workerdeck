@@ -191,7 +191,7 @@ export function GroupHeading({
   className,
   ...rest
 }: {
-  label: string
+  label: ReactNode
   count: number
   leading?: ReactNode
   actions?: ReactNode

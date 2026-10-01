@@ -119,7 +119,17 @@ export function SessionBrowser({
     const target = project && group.hostId ? { hostId: group.hostId, cwd: group.cwd } : undefined
     return (
       <GroupHeading
-        label={group.label}
+        label={
+          group.gateway && group.project ? (
+            <>
+              {group.gateway}
+              <span aria-hidden> · </span>
+              <span className="text-fg-1">{group.project}</span>
+            </>
+          ) : (
+            group.label
+          )
+        }
         count={group.rows.length}
         title={project && group.cwd ? group.cwd : undefined}
         leading={

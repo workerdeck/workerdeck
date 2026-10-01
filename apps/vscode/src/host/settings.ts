@@ -19,9 +19,12 @@ export type HostSettings = {
   hotReload: boolean
   cwdRoots: string[]
   statusBar: boolean
+  name: string
 }
 
 export const HOST_SECTION = 'workerdeck.host'
+
+export const DEFAULT_HOST_NAME = 'This machine'
 
 export type ShellAgentWrite = 'read-only' | 'gated' | 'allow'
 
@@ -65,6 +68,7 @@ export function readHostSettings(): HostSettings {
     hotReload: config.get<boolean>('hotReload', false),
     cwdRoots: config.get<string[]>('cwdRoots', []).map(expandHome).filter(Boolean),
     statusBar: config.get<boolean>('statusBar', true),
+    name: config.get<string>('name', DEFAULT_HOST_NAME).trim() || DEFAULT_HOST_NAME,
   }
 }
 
