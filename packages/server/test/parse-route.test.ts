@@ -28,6 +28,8 @@ describe('parseSessionRoute', () => {
     expect(parseSessionRoute('/v1', '/v1/sessions/a/shells/s/nope')).toBeNull()
     expect(parseSessionRoute('/v1', '/v1/sessions/a/events/7/result')).toEqual({ kind: 'tool-result', id: 'a', resultSeq: 7 })
     expect(parseSessionRoute('/v1', '/v1/sessions/a/mcp/plugin%3Agtm')).toEqual({ kind: 'mcp', id: 'a', mcpServer: 'plugin:gtm' })
+    expect(parseSessionRoute('/v1', '/v1/sessions/a/peers')).toEqual({ kind: 'peers', id: 'a' })
+    expect(parseSessionRoute('/v1', '/v1/sessions/a/peers/x')).toBeNull()
     expect(parseSessionRoute('/v1', '/v1/sessions/a/files/x/y.md')).toEqual({ kind: 'files', id: 'a', filePath: '/x/y.md' })
   })
 

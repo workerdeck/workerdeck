@@ -506,8 +506,10 @@ frames, not gRPC: the repo speaks WS everywhere, it passes through tailnets and 
 and the volume is tiny. A flapping gateway gets no grace window; clearing and re-snapshotting a
 few dozen rows costs nothing, so a grace period is added only if list churn shows up in practice.
 The relay is server-to-server only: dashboards and the phone never talk to it, push does not go
-through it, `#Name` mentions do not reach across gateways, and it serves one operator, never
-several tenants.
+through it, and it serves one operator, never several tenants. A `#Name` mention does reach
+across gateways, because the picker and the resolver both read the composed directory
+(`GET /v1/sessions/:id/peers`, the same rows `peers_list` answers), but the resolution happens on
+the sender's gateway and only a remote session's id and title travel into the envelope.
 
 ## Tooling conventions
 

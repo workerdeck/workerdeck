@@ -4,30 +4,15 @@ import {
   peerDeliveredPrefix,
   transcriptProse,
   type MessageOrigin,
-  type ContextReading,
   type ProfileEngine,
   type SessionEvent,
   type SessionInfo,
+  type PeerSessionSummary,
   type SessionStatus,
 } from '@workerdeck/protocol'
 import { defineToolFamily, globalSlot, lateBoundDirectory, type GatewayToolOutput, type GatewayToolSpec } from './gateway-tools.ts'
 
-export type PeerSessionSummary = {
-  id: string
-  gateway?: string
-  engine?: ProfileEngine
-  status: SessionStatus
-  title?: string
-  project?: string
-  projectRoot?: string
-  cwd: string
-  profile?: string
-  model?: string
-  contextUsage?: ContextReading
-  lastActivityAt?: number
-  pendingPermissionCount: number
-  allow?: Array<'send' | 'peek'>
-}
+export type { PeerSessionSummary }
 
 export type PeerPeek = PeerSessionSummary & {
   live: boolean

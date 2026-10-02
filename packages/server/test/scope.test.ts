@@ -73,6 +73,20 @@ async function sessionIdOf(res: Response): Promise<string> {
 }
 
 describe('session scope', () => {
+  it('lists a session its peers within its own scope, and 404s a viewer who cannot see it', async () => {
+    const base = await startServer()
+    const mine = await sessionIdOf(await createSession(base, 'alice-a'))
+    const sibling = await sessionIdOf(await createSession(base, 'alice-a'))
+    const foreign = await sessionIdOf(await createSession(base, 'carol-b'))
+    const res = await fetch(`${base}/sessions/${mine}/peers`, as('alice-a'))
+    expect(res.status).toBe(200)
+    const ids = ((await res.json()) as { peers: Array<{ id: string }> }).peers.map((row) => row.id)
+    expect(ids).toContain(sibling)
+    expect(ids).not.toContain(mine)
+    expect(ids).not.toContain(foreign)
+    expect((await fetch(`${base}/sessions/${mine}/peers`, as('carol-b'))).status).toBe(404)
+  })
+
   it('stamps the principal scope at create and echoes it on SessionInfo', async () => {
     const base = await startServer()
     const res = await createSession(base, 'alice-a')

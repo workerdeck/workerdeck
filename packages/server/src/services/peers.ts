@@ -51,7 +51,6 @@ function visible(from: SessionInfo, to: SessionInfo): boolean {
 export type PeerService = PeerDirectory & {
   watch(runner: Runner): () => void
   // The `#Name` tokens in a message a person typed, resolved to the peers that session can see.
-  mentions(from: string, text: string): Promise<PeerMention[]>
   // The relay half. `exposed` is the gateway ceiling's scope: a session outside it is never published and never
   // answers an inbound request, whatever the relay asks.
   relaySender(from: string): Promise<SessionInfo>
@@ -279,59 +278,6 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     )
   }
 
-  // A session id is a handle a person may paste, so a full id and an unambiguous prefix resolve too.
-  const mentions = async (from: string, text: string): Promise<PeerMention[]> => {
-    const tokens = scanPeerMentions(text)
-    if (tokens.length === 0) {
-      return []
-    }
-    const rows = await list(from)
-    const byKey = new Map<string, PeerSessionSummary[]>()
-    const add = (key: string, row: PeerSessionSummary) => {
-      const held = byKey.get(key)
-      if (held) {
-        held.push(row)
-      } else {
-        byKey.set(key, [row])
-      }
-    }
-    for (const row of rows) {
-      add(peerMentionKey(peerMentionSlug(row.title, row.id)), row)
-      add(peerMentionKey(row.id), row)
-    }
-    const resolved: PeerMention[] = []
-    const seen = new Set<string>()
-    for (const token of tokens) {
-      const key = peerMentionKey(token.body)
-      const exact = byKey.get(key)
-      // `list` is newest-first, so a shared title resolves to the session that moved last and the
-      // envelope names the others rather than choosing silently.
-      const matches = exact ?? (key.length >= 4 ? rows.filter((row) => row.id.startsWith(key)) : [])
-      const target = matches[0]
-      if (!target || (matches.length > 1 && !exact)) {
-        continue
-      }
-      if (seen.has(target.id)) {
-        continue
-      }
-      seen.add(target.id)
-      const others = matches.slice(1, 4).map((row) => row.id)
-      resolved.push({
-        typed: token.body,
-        id: target.id,
-        name: target.title,
-        engine: target.engine,
-        status: target.status,
-        cwd: target.cwd,
-        ...(others.length ? { ambiguousWith: others } : {}),
-      })
-      if (resolved.length >= PEER_MENTION_MAX) {
-        break
-      }
-    }
-    return resolved
-  }
-
   const watch = (runner: Runner): (() => void) =>
     runner.subscribe((event) => {
       if (event.type === 'user_message' && !event.origin && !event.synthetic && event.parentToolUseId == null && !event.replay) {
@@ -343,7 +289,6 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     list,
     peek,
     send,
-    mentions,
     watch,
     relaySender: sender,
     relayChain: (from) => [...(inbound.get(from) ?? []), from],
@@ -351,4 +296,62 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     relayPeek,
     relaySend,
   }
+}
+
+// A session id is a handle a person may paste, so a full id and an unambiguous prefix resolve too. `rows` is the
+// sender's whole directory, remote sessions included, newest-first.
+export function resolvePeerMentions(rows: readonly PeerSessionSummary[], text: string): PeerMention[] {
+  const tokens = scanPeerMentions(text)
+  if (tokens.length === 0) {
+    return []
+  }
+  const byKey = new Map<string, PeerSessionSummary[]>()
+  const add = (key: string, row: PeerSessionSummary) => {
+    const held = byKey.get(key)
+    if (held) {
+      held.push(row)
+    } else {
+      byKey.set(key, [row])
+    }
+  }
+  for (const row of rows) {
+    add(peerMentionKey(peerMentionSlug(row.title, row.id)), row)
+    add(peerMentionKey(row.id), row)
+  }
+  const resolved: PeerMention[] = []
+  const seen = new Set<string>()
+  for (const token of tokens) {
+    const key = peerMentionKey(token.body)
+    const exact = byKey.get(key)
+    // Local rows come first, newest-first, so a shared title resolves to the closest session that
+    // moved last and the envelope names the others rather than choosing silently.
+    const matches = exact ?? (key.length >= 4 ? rows.filter((row) => row.id.startsWith(key)) : [])
+    const target = matches[0]
+    if (!target || (matches.length > 1 && !exact)) {
+      continue
+    }
+    if (seen.has(target.id)) {
+      continue
+    }
+    seen.add(target.id)
+    const others = matches.slice(1, 4).map((row) => row.id)
+    resolved.push({
+      typed: token.body,
+      id: target.id,
+      name: target.title,
+      engine: target.engine,
+      status: target.status,
+      cwd: target.cwd,
+      ...(others.length ? { ambiguousWith: others } : {}),
+    })
+    if (resolved.length >= PEER_MENTION_MAX) {
+      break
+    }
+  }
+  return resolved
+}
+
+// Asks the directory only when the text holds a `#` token, so an ordinary message costs no listing.
+export async function mentionsFor(directory: PeerDirectory, from: string, text: string): Promise<PeerMention[]> {
+  return scanPeerMentions(text).length === 0 ? [] : resolvePeerMentions(await directory.list(from), text)
 }

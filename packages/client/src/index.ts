@@ -13,6 +13,8 @@ import type {
   McpServerActionRequest,
   McpServersResponse,
   McpServerStatusInfo,
+  PeerSessionSummary,
+  PeerSessionsResponse,
   MessageAttachment,
   ReadHostFileResponse,
   UploadAttachmentResponse,
@@ -132,6 +134,11 @@ export class WorkerDeckClient {
 
   async projectIcon(sessionId: string): Promise<Blob> {
     return await this.#blob(this.projectIconUrl(sessionId), 'project icon request failed')
+  }
+
+  // The sessions this one may address, relay included: what its `peers_list` tool answers.
+  async listPeers(sessionId: string): Promise<PeerSessionSummary[]> {
+    return await this.#pick<PeerSessionsResponse['peers']>('GET', this.#sess(sessionId, '/peers'), 'peers')
   }
 
   async listMcpServers(sessionId: string): Promise<McpServerStatusInfo[]> {

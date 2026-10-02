@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
-import { peerMentionKey, peerMentionSlug, sessionLabel, type SessionInfo } from '@workerdeck/protocol'
+import { peerMentionKey, peerMentionSlug, type PeerSessionSummary, type SessionInfo } from '@workerdeck/protocol'
 import { isRouteUnsupported, useAliveRef } from '../lib/async-guards.ts'
 
 export type PeerSessionOption = {
@@ -8,6 +8,8 @@ export type PeerSessionOption = {
   // What the composer writes after the `#`, and what the gateway folds to resolve it.
   slug: string
   label: string
+  // Set for a session on another gateway, reached through the relay.
+  gateway?: string
   engine?: SessionInfo['engine']
   status: SessionInfo['status']
   cwd: string
@@ -26,28 +28,28 @@ const EMPTY: UsePeerSessionsResult = { available: false, peers: [], names: [] }
 
 const IDLE_MS = 20_000
 
-// The other sessions this gateway will show, for the composer's `#` picker. Polled slowly on
-// purpose: a name is not a reading, and this list only has to be right when a menu opens. The
-// gateway resolves what was typed against the sender's own scope, so a stale row costs nothing
+// The sessions this one may address, relay included, for the composer's `#` picker: the same
+// directory the gateway resolves a typed name against. Polled slowly on purpose: a name is not a
+// reading, and this list only has to be right when a menu opens, so a stale row costs nothing
 // worse than a mention that stays plain text.
 export function usePeerSessions(client: WorkerDeckClient, sessionId: string | undefined, enabled = true): UsePeerSessionsResult {
-  const [sessions, setSessions] = useState<SessionInfo[] | undefined>(undefined)
+  const [rows, setRows] = useState<PeerSessionSummary[] | undefined>(undefined)
   const [unsupported, setUnsupported] = useState(false)
   const alive = useAliveRef()
 
   useEffect(() => {
-    if (!enabled || unsupported) {
+    setRows(undefined)
+    if (!enabled || unsupported || !sessionId) {
       return
     }
     let timer: ReturnType<typeof setTimeout> | undefined
     const tick = () => {
       client
-        .listSessions()
-        .then((rows) => {
-          if (!alive.current) {
-            return
+        .listPeers(sessionId)
+        .then((peers) => {
+          if (alive.current) {
+            setRows(peers)
           }
-          setSessions(rows)
         })
         .catch((e: unknown) => {
           if (alive.current && isRouteUnsupported(e)) {
@@ -66,25 +68,23 @@ export function usePeerSessions(client: WorkerDeckClient, sessionId: string | un
         clearTimeout(timer)
       }
     }
-  }, [client, enabled, unsupported])
+  }, [client, enabled, sessionId, unsupported])
 
   return useMemo(() => {
-    if (!enabled || unsupported || !sessions) {
+    if (!enabled || unsupported || !rows) {
       return EMPTY
     }
-    const peers = sessions
-      .filter((info) => info.id !== sessionId)
-      .sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
-      .map((info) => ({
-        id: info.id,
-        slug: peerMentionSlug(info.title, info.id),
-        label: sessionLabel(info),
-        engine: info.engine,
-        status: info.status,
-        cwd: info.cwd,
-        project: info.project?.name,
-        lastActivityAt: info.lastActivityAt,
-      }))
+    const peers = rows.map((row) => ({
+      id: row.id,
+      slug: peerMentionSlug(row.title, row.id),
+      label: row.title ?? peerMentionSlug(undefined, row.id),
+      gateway: row.gateway,
+      engine: row.engine,
+      status: row.status,
+      cwd: row.cwd,
+      project: row.project,
+      lastActivityAt: row.lastActivityAt,
+    }))
     return { available: peers.length > 0, peers, names: peers.map((peer) => peerMentionKey(peer.slug)) }
-  }, [enabled, sessionId, sessions, unsupported])
+  }, [enabled, rows, unsupported])
 }

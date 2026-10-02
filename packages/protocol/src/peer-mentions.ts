@@ -1,3 +1,5 @@
+import type { ContextReading, ProfileEngine, SessionStatus } from './index.ts'
+
 // `#Name` in a composer names another session on the gateway. The client writes the token, the
 // gateway resolves it, and the two must fold a title the same way or a picked name would not match
 // itself. Everything here is pure, so the same rule runs in a browser, in a webview and on a server.
@@ -15,6 +17,27 @@ export const PEER_MENTION_SCAN_MAX = 32
 
 export type PeerMentionToken = { start: number; end: number; body: string }
 
+// A session another session may address. `gateway` is set, and `id` is `gateway:session`, for a
+// session reached through a relay; `allow` says what that relay permits.
+export type PeerSessionSummary = {
+  id: string
+  gateway?: string
+  engine?: ProfileEngine
+  status: SessionStatus
+  title?: string
+  project?: string
+  projectRoot?: string
+  cwd: string
+  profile?: string
+  model?: string
+  contextUsage?: ContextReading
+  lastActivityAt?: number
+  pendingPermissionCount: number
+  allow?: Array<'send' | 'peek'>
+}
+
+export type PeerSessionsResponse = { peers: PeerSessionSummary[] }
+
 // Trailing punctuation belongs to the sentence, not to the name. Shared with `scanPromptTokens`,
 // which scans the same text for `@file` and `/command`, so one boundary answers for all of them.
 export const PROMPT_SENTENCE_TAIL: ReadonlySet<string> = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '}', '"', "'"])
@@ -30,7 +53,7 @@ export function peerMentionSlug(title: string | undefined, id: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, PEER_MENTION_BODY_MAX)
     .replace(/^-+|-+$/g, '')
-  return slug || id.slice(0, 8)
+  return slug || id.slice(id.indexOf(':') + 1, id.indexOf(':') + 9)
 }
 
 // The comparison key. Both sides fold; neither compares raw, so `#astra` finds `Astra` and

@@ -30,7 +30,8 @@ public enum PeerMentions {
         pendingDash = true
       }
     }
-    return out.isEmpty ? String(id.prefix(8)) : out
+    let session = id.firstIndex(of: ":").map { id[id.index(after: $0)...] } ?? id[...]
+    return out.isEmpty ? String(session.prefix(8)) : out
   }
 
   /// The comparison key. Both sides fold; neither compares raw, so `#astra` finds

@@ -10,6 +10,7 @@ import {
 import type {
   ClientFrame,
   McpServerStatusInfo,
+  PeerSessionSummary,
   ProfileInfo,
   ServerFrame,
   SessionEvent,
@@ -338,6 +339,10 @@ export class DemoGateway {
       if (track && rest === '') {
         return respond(200, { session: this.#snapshot(track) })
       }
+      if (track && rest === '/peers') {
+        const peers = this.#order.filter((sid) => sid !== id).map((sid) => peerRow(this.#snapshot(this.#track(sid))))
+        return respond(200, { peers })
+      }
       if (track && rest === '/mcp') {
         return respond(200, { servers: track.seed.mcpServers ?? [] })
       }
@@ -491,4 +496,19 @@ function requestUrl(input: Parameters<typeof fetch>[0]): string {
 
 function respond(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+}
+
+function peerRow(info: SessionInfo): PeerSessionSummary {
+  return {
+    id: info.id,
+    engine: info.engine,
+    status: info.status,
+    title: info.title,
+    project: info.project?.name,
+    projectRoot: info.project?.root,
+    cwd: info.cwd,
+    model: info.model,
+    lastActivityAt: info.lastActivityAt,
+    pendingPermissionCount: info.pendingPermissionCount,
+  }
 }

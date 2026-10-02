@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ResolvePermissionRequest, SessionInfo, UpdateSessionRequest } from '@workerdeck/protocol'
+import type { PeerSessionsResponse, ResolvePermissionRequest, SessionInfo, UpdateSessionRequest } from '@workerdeck/protocol'
 import { contentTypeFor, fail, json, readJsonBody, requireMethod, sendUntrusted } from '../lib/http.ts'
 import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
 import { permissionDecision } from '../lib/permissions.ts'
@@ -49,6 +49,7 @@ const ITEM_HANDLERS: ItemHandlers = {
     )
   },
   permission: handlePermission,
+  peers: handlePeers,
 }
 
 export async function handleSessions(
@@ -119,6 +120,15 @@ async function handleSession({ ctx, req, res, route, runner, parked, info }: Ses
   json(res, 200, {
     session: projects.withProject(runner?.info() ?? { ...parked!.info, status: 'closed' as const }),
   })
+}
+
+async function handlePeers({ ctx, req, res, route }: SessionCall<'peers'>): Promise<void> {
+  requireMethod(req, 'GET')
+  if (!ctx.peers) {
+    fail(404, 'peer messaging is off on this gateway')
+  }
+  const peers: PeerSessionsResponse['peers'] = await ctx.peers.list(route.id)
+  json(res, 200, { peers })
 }
 
 function handleFiles({ req, res, route, runner, parked }: SessionCall<'files'>): void {

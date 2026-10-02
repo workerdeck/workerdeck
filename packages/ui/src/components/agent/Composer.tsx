@@ -184,7 +184,7 @@ export function Composer({
             rankPeerSessions(query, peers).map((peer) => ({
               value: peer.slug,
               label: peer.label,
-              description: [peer.engine, peer.project, peer.status].filter(Boolean).join(' · '),
+              description: [peer.gateway, peer.engine, peer.project, peer.status].filter(Boolean).join(' · '),
               icon: <Users className="size-3.5 text-fg-3" />,
             })),
           onSelect: (suggestion) => suggestion.value,

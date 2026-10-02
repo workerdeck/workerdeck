@@ -1,6 +1,6 @@
 # Packages
 
-The per-package rules that don't follow from the types. Dispatched from `CLAUDE.md`;
+The per-package rules that don't follow from the types. Dispatched from `AGENTS.md`;
 the package map and the dependency rule live there.
 
 ## `packages/protocol`
@@ -690,8 +690,9 @@ rows. Invariants in `docs/GOTCHAS.md` §Relay.
 ## `packages/relay`
 
 The relay server, published with its own `workerdeck-relay` bin and lazily imported by the CLI as
-`workerdeck relay` (same argv). `startRelay` is one `http`/`https` server with a `ws` endpoint and a
-loopback-only `GET /status`; `enrollment.ts` keeps `gateways.json` (name to SHA-256 of the key,
+`workerdeck relay` (same argv). `startRelay` is one `http`/`https` server with a `ws` endpoint (every plain HTTP request
+404s), plus `GET /status` on a unix socket, `<state-dir>/relay.sock` (0600, `status.ts`), which is
+also what refuses a second relay on the same state dir and what `status` reads; `enrollment.ts` keeps `gateways.json` (name to SHA-256 of the key,
 0600, written atomically), `rules.ts` parses `rules.json` and computes `allowedOps`. Both files
 are **watched and reloaded** (`watchFile`, 2 s), so `enroll` and `revoke` take effect on a running
 relay; a revoked gateway is disconnected, an invalid rules file keeps the previous rules and logs.
@@ -1243,8 +1244,9 @@ whole session surface - transcript, composer (attachments; `/` for commands, cli
 skills, a skill resolving to a `$name` chip whose serialisation sigil differs from the `/` that
 opened the menu, via the prompt-area's per-suggestion `chipOptions` and `ChipSegment.sigil`, with
 the default prompt's remainder as editable text after it; `skillPrompt`'s fallback is the bare
-`$name`; `@` for files; **`#` for another session on this gateway** - a pill whose text is
-`peerMentionSlug(title, id)`, drawn from `usePeerSessions` which the panel reads itself the way it
+`$name`; `@` for files; **`#` for another session it may address**, relay rows included - a pill
+whose text is `peerMentionSlug(title, id)` (an untitled remote one falls back to the session half
+of its `gateway:session` id), drawn from `usePeerSessions` (`client.listPeers`), which the panel reads itself the way it
 reads host-file search, so no host has to wire it, and which the gateway resolves at send into a
 `<peer-mentions>` block on the model input alone (`docs/GOTCHAS.md` §Peer messaging); `$` for
 shell; `?` for the shortcut list on an empty composer), and the

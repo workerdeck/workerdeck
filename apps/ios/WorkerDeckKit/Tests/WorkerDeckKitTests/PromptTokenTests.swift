@@ -91,6 +91,7 @@ struct PromptTokenTests {
     #expect(PeerMentions.slug(title: "Astra", id: "b7c1d9e2-aaaa") == "Astra")
     #expect(PeerMentions.slug(title: "Fix login bug", id: "b7c1d9e2-aaaa") == "Fix-login-bug")
     #expect(PeerMentions.slug(title: nil, id: "b7c1d9e2-aaaa") == "b7c1d9e2")
+    #expect(PeerMentions.slug(title: nil, id: "mini:77aa0011-2233") == "77aa0011")
     #expect(PeerMentions.slug(title: "///", id: "b7c1d9e2-aaaa") == "b7c1d9e2")
     #expect(PeerMentions.key("Fix_Login  bug") == "fix-login-bug")
     #expect(PeerMentions.key("ASTRA") == "astra")

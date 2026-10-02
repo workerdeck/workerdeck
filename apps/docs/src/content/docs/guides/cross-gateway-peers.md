@@ -151,22 +151,18 @@ accepts it on any path. With Caddy:
 
 ```text
 relay.example.com {
-	respond /status 404
 	reverse_proxy 127.0.0.1:7777
 }
 ```
 
-**Keep the `/status` line.** The relay answers `/status` only to loopback callers, and behind a
-proxy on the same machine every request arrives from loopback, so without it anyone who can reach
-the proxy can read your gateway list. Any other proxy needs the same refusal.
-
 Remote gateways then dial `wss://relay.example.com`; a publicly trusted certificate needs no
 `caFile`. A gateway on the relay's own machine dials `ws://127.0.0.1:7777` and skips the proxy.
 
-`--tls-cert` and `--tls-key` work too, but renewal and restart become your job, and `workerdeck
-relay status` then fetches `https://127.0.0.1:<port>/status`, which a certificate issued for a
-hostname does not cover. Check it with
-`curl --resolve relay.example.com:7777:127.0.0.1 https://relay.example.com:7777/status` instead.
+`--tls-cert` and `--tls-key` work too, but renewal and restart become your job.
+
+The relay's port carries nothing but the WebSocket. `workerdeck relay status` reads a unix socket
+in the state dir (`relay.sock`, mode 0600), so it works the same behind a proxy or under
+`--tls-cert`, and only a user who can read the state dir can ask.
 
 ### Keys
 
@@ -182,7 +178,7 @@ A lost key is `enroll <name> --rotate`, never a second name: the name is the rou
 
 ### Verify
 
-- On the relay's machine, `workerdeck relay status --port 7777` lists every enrolled gateway with
+- On the relay's machine, `workerdeck relay status` (with the same `--state-dir` as `serve`) lists every enrolled gateway with
   `online` and a session count.
 - In a session on one gateway, ask the agent to call `peers_list`: the other gateway's sessions
   appear as `gateway:session`. `peers_peek` one and `peers_send` it a line; the reply comes back

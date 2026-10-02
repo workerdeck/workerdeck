@@ -556,7 +556,7 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
     session start; its parser refuses anything it can't read with certainty (multi-line strings,
     inline-table `projects`, array-of-tables, conflicting duplicates) because a false notice is
     worse than a missed one. WorkerDeck never writes the trust entry itself - doing so on the
-    operator's behalf sits against the codex auth red lines in `CLAUDE.md`.
+    operator's behalf sits against the codex auth red lines in `AGENTS.md`.
 - **`SubagentInfo.toolUseId` keeps its documented meaning on codex.** The spawn signal is the
   `subAgentActivity` item, whose own `id` is the model's `spawn_agent` call id (a genuine tool-use
   id); the runner authors the anchor `tool_use` itself and keys every event of the agent's thread to
@@ -1119,9 +1119,11 @@ has the shape; these are the ways to get it wrong.
   title yet) draws as a name the moment that peer speaks. A name never comes from a live sessions
   list: the transcript has to read the same on replay as it did live.
 - **`#Name` is a hint the gateway resolves, and only for a human.** The composer writes
-  `peerMentionSlug(title, id)` after the `#`; `PeerService.mentions` folds it with
-  `peerMentionKey` against `list(from)` - so scope, self-exclusion and newest-first ordering are
-  the *same* rules `peers_list` answers with - and `withPeerContext` appends
+  `peerMentionSlug(title, id)` after the `#`; `mentionsFor` folds it with `peerMentionKey`
+  against the **composed** directory's `list(from)`, relay rows included (local rows first) - so
+  scope, self-exclusion, ordering and the scoped-sender-stays-local rule are the *same* rules
+  `peers_list` answers with, and the picker reads that same list over `GET /sessions/:id/peers`.
+  Resolving against `PeerService.list` alone is how remote names once went unresolved - and `withPeerContext` appends
   `peerMentionsEnvelope` to the **model input only**. The transcript keeps the bare typed text,
   exactly as it does for `peerMessageEnvelope`. `routes/ws.ts`'s `user_message` is the only place
   `SendMessageOptions.mentions` is ever set, which makes the invariant structural: **`origin` and
@@ -1130,7 +1132,7 @@ has the shape; these are the ways to get it wrong.
   gateway hand a third session an authoritative block about it. A slash command is skipped whole
   (`isSlashCommand`), since the CLI matches a command on the entire message and codex's `/clear`
   guard compares it exactly; resolution failures are swallowed, because a hint must never cost
-  the message it was a hint about; and an empty scan returns before the registry is touched, so
+  the message it was a hint about; and an empty scan returns before the directory is asked, so
   an ordinary message pays one regex pass. Unknown names, the sender's own name and out-of-scope
   peers all resolve to *nothing at all* - silence, the same posture `peers_send` takes. A shared
   title resolves to the most recently active and names the others in `also-matched`.
@@ -1199,24 +1201,20 @@ has the shape; these are the ways to get it wrong.
 - **Plain `ws://` is allowed.** TLS is optional (`--tls-cert` / `--tls-key`); the relay warns once
   when it binds off loopback without it. Use a tailnet or a TLS proxy: the gateway key is in the
   `hello` frame. For a self-signed certificate the gateway sets `relay.caFile`.
-- **`/status` is gated on loopback, so a same-host reverse proxy opens it to the world.**
-  `serveStatus` admits only `isLoopback(req.socket.remoteAddress)`, and behind a proxy on the
-  relay's machine every request arrives from loopback. The proxy must refuse `/status` itself
-  (Caddy: `respond /status 404` ahead of `reverse_proxy`, as the docs-site guide shows). Do not
-  start trusting `X-Forwarded-For` here; any change to the gate has to stay safe behind a proxy.
-- **`workerdeck-relay status` always dials `127.0.0.1`.** With `--tls-cert` it fetches
-  `https://127.0.0.1:<port>/status`, and a certificate issued for a hostname does not cover that
-  address, so Node's fetch refuses it. Behind a TLS proxy (the relay itself on plain `ws://`
-  loopback) it works. Unverified against a real certificate.
+- **Status has no network path.** `GET /status` answers only on `<state-dir>/relay.sock` (0600),
+  never on the relay's port, so a same-host reverse proxy cannot expose it and `--tls-cert` has no
+  bearing on `status`. Do not move it back onto the port behind a loopback check: behind a proxy
+  on the relay's machine every request arrives from loopback. A socket that answers at startup
+  means another relay owns the state dir, and the second refuses to start; one that does not
+  answer is stale from a crash and is replaced.
 - **The relay's request timeout must stay below the requester's** (8 s at the relay, 10 s in
   `connectRelay`), so a slow target gateway produces the relay's clean `timeout` answer rather than
   a requester-side abort racing it. Heartbeat is a WS ping every 15 s with the drop at two missed
   intervals, which is the "half-open socket clears within about 45 s" figure.
-- **A hot reload reads a new config file, but probably not an edited one.** `loadConfigFile`
-  imports the operator's `workerdeck.config.mjs` by plain file URL, and the hot-reload resolve hook
-  only versions URLs under `packages/`, so Node's ESM cache likely serves the first-loaded copy for
-  the life of the process. Adding a config file (none at startup) and reloading did connect the
-  relay (2026-10-01); editing `relay` in an already-loaded file and reloading is unverified.
+- **A hot reload re-reads an edited config file, but not what it imports.** `loadConfigFile`
+  imports `workerdeck.config.mjs` with a `?mtime=` query, so an edit lands on the next reload
+  (verified live 2026-10-01). A module the config itself imports is still cached for the life of
+  the process: the hot-reload resolve hook only versions URLs under `packages/`.
 
 ## Server, profiles & auth
 

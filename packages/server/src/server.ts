@@ -250,7 +250,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     factory,
     registry,
     parking,
-    peers,
+    peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     bridge,
     projects,
     queue,
