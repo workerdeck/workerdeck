@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -198,8 +198,8 @@ export async function loadConfigFile(explicit?: string, cwd = process.cwd()): Pr
 
   let mod: { default?: unknown }
   try {
-    // Deliberately non-literal so no bundler resolves it: this is the operator's code, not part of our module graph.
-    mod = (await import(pathToFileURL(path).href)) as { default?: unknown }
+    // Non-literal so no bundler resolves it. The mtime query makes a hot reload see an edited file past the ESM cache.
+    mod = (await import(`${pathToFileURL(path).href}?mtime=${statSync(path).mtimeMs}`)) as { default?: unknown }
   } catch (error) {
     throw new ConfigError(`failed to load ${path}: ${error instanceof Error ? error.message : String(error)}`)
   }

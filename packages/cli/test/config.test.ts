@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -372,6 +372,16 @@ describe('loadConfigFile', () => {
     await writeFile(join(dir, 'workerdeck.config.mjs'), 'export default async () => ({ basePath: "/late" })\n')
     const loaded = await loadConfigFile(undefined, dir)
     expect(loaded.options.basePath).toBe('/late')
+  })
+
+  it('sees an edited file on the next load', async () => {
+    const dir = await tempConfigDir()
+    const path = join(dir, 'workerdeck.config.mjs')
+    await writeFile(path, 'export default { basePath: "/one" }\n')
+    expect((await loadConfigFile(undefined, dir)).options.basePath).toBe('/one')
+    await writeFile(path, 'export default { basePath: "/two" }\n')
+    await utimes(path, new Date(), new Date(Date.now() + 5000))
+    expect((await loadConfigFile(undefined, dir)).options.basePath).toBe('/two')
   })
 
   it('fails loudly on an explicit path that does not exist', async () => {
