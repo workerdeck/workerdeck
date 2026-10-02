@@ -7,7 +7,7 @@ attach/replay; `AiSdkRunner` does the same for any provider the AI SDK supports.
 transport.
 
 Part of [WorkerDeck](https://github.com/workerdeck/workerdeck). A `SessionRunner`
-behaves like Claude Code launched in the session's directory - same skills, same `CLAUDE.md`, same
+behaves like Claude Code launched in the session's directory - same skills, same `CLAUDE.md` or `AGENTS.md`, same
 permission system - and both runners emit
 [`@workerdeck/protocol`](https://www.npmjs.com/package/@workerdeck/protocol) events.
 [`@workerdeck/server`](https://www.npmjs.com/package/@workerdeck/server) bridges runners to
@@ -39,7 +39,7 @@ import { SessionRunner } from '@workerdeck/core'
 const runner = new SessionRunner({
   cwd: '/srv/checkouts/my-repo',
   prompt: 'Summarize the failing tests', // or a skill invocation like '/verify-content 42'
-  settingSources: ['user', 'project'],   // pick up the repo's skills + CLAUDE.md
+  settingSources: ['user', 'project'],   // pick up the repo's skills + CLAUDE.md or AGENTS.md
   permissionMode: 'default',
 })
 

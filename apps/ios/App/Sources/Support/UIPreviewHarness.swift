@@ -55,7 +55,7 @@ private struct ShellGridPreview: View {
     "\u{1b}[1;32m$\u{1b}[0m ls -la\r\n",
     "\u{1b}[34mdrwxr-xr-x\u{1b}[0m  6 tobias  staff   192 Sep 22 packages\r\n",
     "\u{1b}[34mdrwxr-xr-x\u{1b}[0m 12 tobias  staff   384 Sep 22 apps\r\n",
-    "-rw-r--r--  1 tobias  staff  1052 Sep 22 CLAUDE.md\r\n",
+    "-rw-r--r--  1 tobias  staff  1052 Sep 22 AGENTS.md\r\n",
     "\r\n\u{1b}[38;5;208m256-colour\u{1b}[0m and \u{1b}[38;2;120;190;255mtrue colour\u{1b}[0m\r\n",
     "\u{1b}[7m INVERSE BAR \u{1b}[0m \u{1b}[4munderline\u{1b}[0m \u{1b}[1mbold\u{1b}[0m\r\n\r\n",
     // The same line, redrawn in place. A renderer that appended would show four.

@@ -1,6 +1,6 @@
 # Releasing
 
-The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
+The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
 
 ## Wrapup Config
 
@@ -1117,7 +1117,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   Three things had rotted in a document that size: a list-rendering entry describing CSS the
   terminal theme no longer uses, a `#backfillHistory` that exists nowhere (the logic is
   `buildMarks`), and a drifted `DormantSessionRecord` field list. Everything else still held, which
-  is its own result. Headings are unchanged character for character, since `CLAUDE.md` and the
+  is its own result. Headings are unchanged character for character, since `AGENTS.md` and the
   other docs point at them by name. The file is still the largest in `docs/` and a split into
   `docs/gotchas/<topic>.md` behind an index is the obvious next step.
 
@@ -1588,7 +1588,7 @@ The wrapup checklist and the release ledger. Dispatched from `CLAUDE.md`.
   on any catalog model the bundled table cannot price. `defaultModel` is deliberately absent - a claude
   profile's default is the operator's own CLI config. Restate `provenance` with the SDK version and
   the extraction date.
-- docs: root CLAUDE.md + README.md + docs/ + apps/docs (keep site content in sync with README)
+- docs: root AGENTS.md + README.md + docs/ + apps/docs (keep site content in sync with README)
 - frontend_smoke: no (manual via `pnpm dev:server` + `pnpm dev:web`, which bind `$WD_DEV_HOST`
   and default to loopback - set it in your shell to reach them from a phone or tailnet, never in
   the committed script; `apps/embedded` has its own `pnpm dev`)

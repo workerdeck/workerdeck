@@ -90,7 +90,7 @@ The supporting rules:
   explaining a variable is a bug report about its name.
 - **Prefer `//` over `/**`**, including for multi-line comments. JSDoc blocks invite prose.
 - **No file-header blocks, no `// ---- Section ----` banners, no per-symbol `docs/` pointers.**
-  `CLAUDE.md`'s dispatcher table is how `docs/` is found; a pointer on every symbol is the same
+  `AGENTS.md`'s dispatcher table is how `docs/` is found; a pointer on every symbol is the same
   duplication in a smaller font.
 - **Deleting a comment is not the end of the job.** If it carried critical information that is
   hard to derive from the code, or anything system-relevant (a status flow, a state machine, a

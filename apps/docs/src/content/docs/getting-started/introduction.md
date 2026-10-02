@@ -37,7 +37,7 @@ A session created here behaves like the agent's own CLI launched in the same dir
 - the same permission system.
 
 For a Claude session, passing `settingSources: ['user', 'project']` at create time is what picks
-up the target repo's skills and `CLAUDE.md` - a prompt can then be plain text or a skill
+up the target repo's skills and `CLAUDE.md` or `AGENTS.md` - a prompt can then be plain text or a skill
 invocation like `/verify-content 42`.
 
 ## Three engines, one protocol

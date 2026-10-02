@@ -1,7 +1,7 @@
 # Clients
 
 The first-party clients beyond the dashboard: the VS Code extension, the reference embedding,
-the iOS app, and the interactive demo. Dispatched from `CLAUDE.md`.
+the iOS app, and the interactive demo. Dispatched from `AGENTS.md`.
 
 ## `apps/vscode`
 

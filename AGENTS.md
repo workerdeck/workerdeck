@@ -97,9 +97,9 @@ Full checklist and the release ledger in `docs/RELEASING.md`. The short form:
   never re-run the workflow on that evidence, and clear `~/.npm` last. `docs/RELEASING.md` has both
   incidents.
 - co_authored_by: no. frontend_smoke: no (manual).
-- **`CLAUDE.md` must stay under 200 lines.** If a change wants to add narrative here, it belongs
+- **`AGENTS.md` must stay under 200 lines.** If a change wants to add narrative here, it belongs
   in the matching `docs/` file and gets at most a pointer here.
-- docs: keep root `CLAUDE.md` + `README.md` + `docs/` + `apps/docs` in sync.
+- docs: keep root `AGENTS.md` + `README.md` + `docs/` + `apps/docs` in sync.
 
 ## Auth red lines (non-negotiable)
 

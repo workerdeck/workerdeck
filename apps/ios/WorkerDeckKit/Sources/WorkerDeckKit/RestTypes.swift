@@ -716,7 +716,7 @@ public struct CreateSessionRequest: Encodable, Sendable {
   /// Passed through as raw config (stdio/http/sse shapes; see McpServerConfigWire
   /// in packages/protocol). Modeled as JSON for now - the app doesn't author these.
   public var mcpServers: [String: JSONValue]?
-  /// Include 'project' to pick up the target repo's skills and CLAUDE.md.
+  /// Include 'project' to pick up the target repo's skills and CLAUDE.md or AGENTS.md.
   public var settingSources: [SettingSource]?
   public var model: String?
   public var maxTurns: Int?

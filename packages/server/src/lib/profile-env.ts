@@ -1,7 +1,7 @@
+import type { ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve as resolvePath, sep } from 'node:path'
-import type { ProfileConfigSnapshot, ProfileEngine, ProfileInfo } from '@workerdeck/protocol'
 
 export function isProviderProfile(profile: ProfileInfo): boolean {
   return profile.engine === 'provider'
@@ -46,34 +46,40 @@ export function cwdAllowed(cwd: string, roots: string[] | undefined): boolean {
   })
 }
 
+function listDirs(path: string): string[] {
+  try {
+    return readdirSync(path, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+  } catch {
+    return []
+  }
+}
+
+function listMd(path: string): string[] {
+  try {
+    return readdirSync(path)
+      .filter((file) => file.endsWith('.md'))
+      .map((file) => file.slice(0, -3))
+      .sort()
+  } catch {
+    return []
+  }
+}
+
+function count(rules: unknown): number {
+  return Array.isArray(rules) ? rules.length : 0
+}
+
 // Env var VALUES are never read into this snapshot - names only.
 export function readProfileConfig(profile: ProfileInfo): ProfileConfigSnapshot {
   const dir = profile.configDir
   if (!dir) {
     return { hasUserMemory: false, skills: [], agents: [], commands: [] }
   }
-  const listDirs = (path: string): string[] => {
-    try {
-      return readdirSync(path, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-        .sort()
-    } catch {
-      return []
-    }
-  }
-  const listMd = (path: string): string[] => {
-    try {
-      return readdirSync(path)
-        .filter((file) => file.endsWith('.md'))
-        .map((file) => file.slice(0, -3))
-        .sort()
-    } catch {
-      return []
-    }
-  }
   const snapshot: ProfileConfigSnapshot = {
-    hasUserMemory: existsSync(join(dir, 'CLAUDE.md')),
+    hasUserMemory: ['CLAUDE.md', 'AGENTS.md'].some((name) => existsSync(join(dir, name))),
     skills: listDirs(join(dir, 'skills')),
     agents: listMd(join(dir, 'agents')),
     commands: listMd(join(dir, 'commands')),
@@ -81,7 +87,6 @@ export function readProfileConfig(profile: ProfileInfo): ProfileConfigSnapshot {
   try {
     const raw = JSON.parse(readFileSync(join(dir, 'settings.json'), 'utf8')) as Record<string, unknown>
     const permissions = (raw.permissions ?? {}) as Record<string, unknown>
-    const count = (rules: unknown): number => (Array.isArray(rules) ? rules.length : 0)
     snapshot.settings = {
       model: typeof raw.model === 'string' ? raw.model : undefined,
       defaultPermissionMode: typeof permissions.defaultMode === 'string' ? permissions.defaultMode : undefined,

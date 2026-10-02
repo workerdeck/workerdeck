@@ -1,3 +1,5 @@
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, SessionInfo } from '@workerdeck/protocol'
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
@@ -6,8 +8,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { JobEvent, JobInfo, ProfileInfo, QueueServerFrame, QueueStats, SessionInfo } from '@workerdeck/protocol'
 import { createWorkerServer, MemorySessionStore, type WorkerServer } from '../src/index.ts'
 import { fakeHarness, frameCollector, listenOn } from './helpers.ts'
 
@@ -836,7 +836,7 @@ describe('createWorkerServer', () => {
           hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'true' }] }] },
         }),
       )
-      writeFileSync(join(dir, 'CLAUDE.md'), '# memory')
+      writeFileSync(join(dir, 'AGENTS.md'), '# memory')
       mkdirSync(join(dir, 'skills', 'review'), { recursive: true })
       mkdirSync(join(dir, 'agents'), { recursive: true })
       writeFileSync(join(dir, 'agents', 'helper.md'), '---\n---')

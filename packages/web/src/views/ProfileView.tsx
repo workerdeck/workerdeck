@@ -1,14 +1,14 @@
-import { useMemo } from 'react'
+import { EditProfileCard } from '@/components/EditProfileCard.tsx'
+import { DetailBar, DetailBody, DetailRow } from '@/components/shell/DetailBar.tsx'
+import { useProfileList } from '@/hooks/useProfiles.ts'
+import { client } from '@/lib/client.ts'
+import { useHosts } from '@/lib/hosts.ts'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { errorMessage, orderUsageWindows } from '@workerdeck/protocol'
 import { useAsync } from '@workerdeck/react'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner, UsageMeters, toast } from '@workerdeck/ui'
 import { Code, Trash2 } from 'lucide-react'
-import { EditProfileCard } from '@/components/EditProfileCard.tsx'
-import { DetailBar, DetailBody, DetailRow } from '@/components/shell/DetailBar.tsx'
-import { client } from '@/lib/client.ts'
-import { useHosts } from '@/lib/hosts.ts'
-import { useProfileList } from '@/hooks/useProfiles.ts'
+import { useMemo } from 'react'
 import { openInVsCode } from './ProfilesView.tsx'
 
 function Chips({ items, empty }: { items: string[]; empty: string }) {
@@ -190,7 +190,7 @@ export function ProfileView() {
                       <span className="text-fg-4">not found</span>
                     </DetailRow>
                   )}
-                  <DetailRow label="User memory (CLAUDE.md)">
+                  <DetailRow label="User memory (CLAUDE.md / AGENTS.md)">
                     {config.hasUserMemory ? 'present' : <span className="text-fg-4">none</span>}
                   </DetailRow>
                   <DetailRow label="Skills">

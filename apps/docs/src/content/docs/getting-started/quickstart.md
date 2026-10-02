@@ -74,7 +74,7 @@ const client = new WorkerDeckClient({ baseUrl: 'https://my-app/worker/v1', heade
 const session = await client.createSession({
   cwd: '/srv/checkouts/my-repo',
   prompt: '/verify-content 42',
-  settingSources: ['user', 'project'], // pick up the repo's skills + CLAUDE.md
+  settingSources: ['user', 'project'], // pick up the repo's skills + CLAUDE.md or AGENTS.md
 })
 // then render:
 <SessionPanel client={client} sessionId={session.id} />

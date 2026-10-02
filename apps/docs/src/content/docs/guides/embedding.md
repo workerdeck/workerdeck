@@ -53,7 +53,7 @@ const client = new WorkerDeckClient({
 const session = await client.createSession({
   cwd: '/srv/checkouts/my-repo',
   prompt: '/verify-content 42',
-  settingSources: ['user', 'project'], // pick up the repo's skills + CLAUDE.md
+  settingSources: ['user', 'project'], // pick up the repo's skills + CLAUDE.md or AGENTS.md
 })
 
 const handle = client.attach(session.id) // auto-reconnects, replays from last seen seq
