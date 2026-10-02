@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { enrollGateway, readEnrollments, revokeGateway } from './enrollment.ts'
 import { startRelay, type RelayStatus } from './relay.ts'
+import { fetchRelayStatus, statusSocketPath } from './status.ts'
 import { readRules, rulesPath } from './rules.ts'
 
 export const RELAY_HELP = `workerdeck-relay - the cross-gateway peer relay. Also runs as \`workerdeck relay\`.
@@ -12,10 +13,10 @@ Usage
   workerdeck-relay enroll <name> [--rotate] enroll a gateway and print its key once
   workerdeck-relay revoke <name>            revoke a gateway; a running relay drops it within seconds
   workerdeck-relay list                     list enrolled gateways
-  workerdeck-relay status [options]         ask a running relay on this machine who is online
+  workerdeck-relay status                   ask the relay serving this state dir who is online
 
 Options
-  --state-dir <path>   enrollments (gateways.json) and rules (rules.json); default ~/.workerdeck/relay
+  --state-dir <path>   enrollments, rules and the status socket (relay.sock); default ~/.workerdeck/relay
   --host <addr>        listen address (default 127.0.0.1)
   --port <n>           listen port (default 7777)
   --tls-cert <file>    serve wss:// with this certificate (optional, plain ws:// otherwise)
@@ -163,17 +164,12 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       return 0
     }
     case 'status': {
-      const scheme = flags.tlsCert ? 'https' : 'http'
-      const url = `${scheme}://127.0.0.1:${flags.port ?? 7777}/status`
       let status: RelayStatus
       try {
-        const res = await fetch(url)
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`)
-        }
-        status = (await res.json()) as RelayStatus
+        status = await fetchRelayStatus(flags.stateDir)
       } catch (error) {
-        console.error(`workerdeck-relay: no relay answered at ${url} (${error instanceof Error ? error.message : String(error)})`)
+        const socket = statusSocketPath(flags.stateDir)
+        console.error(`workerdeck-relay: no relay answered on ${socket} (${error instanceof Error ? error.message : String(error)})`)
         return 2
       }
       for (const gateway of status.gateways) {

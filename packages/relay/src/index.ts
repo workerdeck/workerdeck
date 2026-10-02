@@ -1,4 +1,5 @@
 export * from './enrollment.ts'
 export * from './rules.ts'
 export * from './relay.ts'
+export * from './status.ts'
 export * from './command.ts'

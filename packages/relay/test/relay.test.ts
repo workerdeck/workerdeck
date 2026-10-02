@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -15,6 +15,7 @@ import {
 } from '@workerdeck/relay-client'
 import { enrollGateway, revokeGateway } from '../src/enrollment.ts'
 import { startRelay, type Relay } from '../src/relay.ts'
+import { fetchRelayStatus, statusSocketPath } from '../src/status.ts'
 
 type FakeGateway = {
   entries: RelaySessionEntry[]
@@ -225,6 +226,26 @@ describe('relay', () => {
     expect(relay.status().gateways.find((row) => row.name === 'raw')?.sessions).toBe(1)
     ws.send(JSON.stringify({ t: 'registry.digest', seq: 1, count: 1, hash: 'bogus' }))
     await until(() => frames.filter((frame) => frame.t === 'registry.resync').length === 2, 'digest resync')
+  })
+
+  it('answers status on the state dir socket only, and once per state dir', async () => {
+    const { stateDir, relay } = await setup()
+    await connectGateway(relay, 'mac', await enrollGateway(stateDir, 'mac'), fakeGateway([entry('a1')]))
+    expect((await fetchRelayStatus(stateDir)).gateways).toEqual([expect.objectContaining({ name: 'mac', online: true, sessions: 1 })])
+    expect((await fetch(`http://127.0.0.1:${relay.port}/status`)).status).toBe(404)
+    await expect(startRelay({ stateDir, port: 0, log: () => {} })).rejects.toThrow(/already serving/)
+    await relay.close()
+    await expect(stat(statusSocketPath(stateDir))).rejects.toThrow(/ENOENT/)
+    await expect(fetchRelayStatus(stateDir)).rejects.toThrow()
+  })
+
+  it('replaces a stale status socket left by a crashed relay', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-'))
+    cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
+    await writeFile(statusSocketPath(stateDir), '')
+    const relay = await startRelay({ stateDir, port: 0, log: () => {} })
+    cleanups.push(() => relay.close())
+    expect((await fetchRelayStatus(stateDir)).gateways).toEqual([])
   })
 
   it('reconnects and republishes after the relay restarts', async () => {

@@ -2,6 +2,7 @@ import { createServer as createHttpServer, type IncomingMessage, type Server, ty
 import { createServer as createHttpsServer } from 'node:https'
 import type { AddressInfo } from 'node:net'
 import { unwatchFile, watchFile } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 import {
   RELAY_CLOSE,
@@ -27,6 +28,7 @@ import {
 } from '@workerdeck/relay-client'
 import { enrollmentPath, keyMatches, readEnrollments, type EnrollmentFile } from './enrollment.ts'
 import { allowedOps, readRules, rulesPath, type RelayRule } from './rules.ts'
+import { serveStatusSocket, statusSocketPath } from './status.ts'
 
 export type RelayOptions = {
   stateDir: string
@@ -71,6 +73,10 @@ type Routed = { gateway: string; timer: NodeJS.Timeout; settle: (frame: { ok: bo
 type Frame = { t: string; [key: string]: unknown }
 
 const WINDOW_MS = 60_000
+
+function notFound(_req: IncomingMessage, res: ServerResponse): void {
+  res.writeHead(404).end()
+}
 
 function isLoopback(address: string | undefined): boolean {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
@@ -375,14 +381,6 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     })
   }
 
-  const serveStatus = (req: IncomingMessage, res: ServerResponse): void => {
-    if (req.url !== '/status' || req.method !== 'GET' || !isLoopback(req.socket.remoteAddress)) {
-      res.writeHead(404).end()
-      return
-    }
-    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(status()))
-  }
-
   const status = (): RelayStatus => {
     const names = new Set([...Object.keys(enrollments.gateways), ...gateways.keys()])
     return {
@@ -397,8 +395,8 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
   }
 
   const server: Server = options.tls
-    ? createHttpsServer({ cert: options.tls.cert, key: options.tls.key }, serveStatus)
-    : createHttpServer(serveStatus)
+    ? createHttpsServer({ cert: options.tls.cert, key: options.tls.key }, notFound)
+    : createHttpServer(notFound)
   const wss = new WebSocketServer({ server, maxPayload: RELAY_FRAME_MAX_BYTES })
   wss.on('connection', onConnection)
 
@@ -421,13 +419,23 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
   }
 
   const host = options.host ?? '127.0.0.1'
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(options.port ?? 7777, host, () => {
-      server.off('error', reject)
-      resolve()
+  const statusServer = await serveStatusSocket(options.stateDir, status)
+  const closeStatus = async (): Promise<void> => {
+    await new Promise<void>((resolve) => statusServer.close(() => resolve()))
+    await rm(statusSocketPath(options.stateDir), { force: true })
+  }
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(options.port ?? 7777, host, () => {
+        server.off('error', reject)
+        resolve()
+      })
     })
-  })
+  } catch (error) {
+    await closeStatus()
+    throw error
+  }
   const port = (server.address() as AddressInfo).port
   const scheme = options.tls ? 'wss' : 'ws'
   const url = `${scheme}://${host.includes(':') ? `[${host}]` : host}:${port}`
@@ -453,6 +461,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       }
       await new Promise<void>((resolve) => wss.close(() => resolve()))
       await new Promise<void>((resolve) => server.close(() => resolve()))
+      await closeStatus()
     },
   }
 }
