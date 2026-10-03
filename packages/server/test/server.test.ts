@@ -309,8 +309,11 @@ describe('createWorkerServer', () => {
       buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn, backfillHistory: false }),
     })
     await running.listen(0, '127.0.0.1')
+    expect((await running.parking.listInfo()).find((info) => info.id === 'woken')?.engineAsleep).toBe(true)
     const runner = await running.parking.ensureLive('woken')
     expect(runner?.id).toBe('woken')
+    expect(runner?.info().engineAsleep).toBe(true)
+    runner?.sendMessage('wake')
 
     harness.emit({ ...(initMessage as object), apiKeySource: 'oauth' } as typeof initMessage)
     await vi.waitFor(() => expect(runner?.info().status).toBe('failed'))

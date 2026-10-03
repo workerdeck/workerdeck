@@ -107,6 +107,8 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     }
     this.#cwd = config.cwd
     this.#permissionMode = config.permissionMode
+    // A fork mints its own id at the first turn; a plain resume continues the conversation it names.
+    this.#sdkSessionId = config.forkSession ? undefined : config.resume
     this.#instructions = resolveInstructions(config.instructions, { sessionId: id, cwd: config.cwd, profile: config.profile })
     if (this.#instructions !== undefined && config.extraOptions?.systemPrompt !== undefined) {
       throw new Error('instructions and extraOptions.systemPrompt both set - the host must pick one')
@@ -334,6 +336,12 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       if (this.config.resume && !this.config.prompt) {
         void this.#fetchEngineTitle()
       }
+      if (this.#startsAsleep()) {
+        this.#asleep = true
+        this.core.emit({ type: 'engine_sleep', asleep: true })
+        this.core.setStatus('idle')
+        return
+      }
       const query = this.#openQuery()
       if (!this.config.prompt) {
         this.core.setStatus('idle')
@@ -345,6 +353,10 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     } catch (error) {
       this.fail(errorMessage(error))
     }
+  }
+
+  #startsAsleep(): boolean {
+    return this.config.startAsleep === true && !this.config.prompt && this.#sdkSessionId !== undefined && this.#input.pending === 0
   }
 
   #openQuery(overrides: Partial<Options> = {}): Query {

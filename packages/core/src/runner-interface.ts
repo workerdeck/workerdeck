@@ -34,6 +34,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   createdByOperator?: boolean
   // The title a woken session last showed, ranked below the host's and the engine's, so it never freezes as a rename.
   fallbackTitle?: string
+  // Set by the gateway on a dormant wake: the runner backfills, then waits for the first message to start its engine.
+  startAsleep?: boolean
 }
 
 export type ParkedExecution = {

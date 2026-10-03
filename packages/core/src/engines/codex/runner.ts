@@ -334,6 +334,11 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     } else {
       this.core.setStatus('idle')
     }
+    if (this.config.startAsleep && !this.config.prompt) {
+      this.#turnChain = this.#turnChain.then(async () => {
+        await this.sleep()
+      })
+    }
     if (this.config.prompt) {
       this.sendMessage(this.config.prompt)
     }

@@ -23,6 +23,7 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   shellAgentWrite: 'transient',
   createdByOperator: 'durable',
   fallbackTitle: 'transient',
+  startAsleep: 'transient',
   connectFn: 'transient',
   codexHome: 'durable',
   codexPathOverride: 'durable',

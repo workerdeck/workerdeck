@@ -219,7 +219,9 @@ export class SessionParkManager {
   async listInfo(): Promise<SessionInfo[]> {
     await Promise.all(this.#storeOps.values())
     const records = await this.#options.store.list()
-    return records.filter((record) => this.#options.registry.get(record.id) === undefined).map((record) => record.info)
+    return records
+      .filter((record) => this.#options.registry.get(record.id) === undefined)
+      .map((record) => (isDormant(record) ? { ...record.info, engineAsleep: true } : record.info))
   }
 
   async ensureLive(id: string): Promise<Runner | undefined> {

@@ -453,6 +453,7 @@ function rebuildRunner(factory: SessionFactory, record: StoredSessionRecord): Pr
       // request and would drop a field it has never heard of.
       epoch: (record.info.epoch ?? 0) + 1,
       fallbackTitle: record.info.title,
+      startAsleep: true,
     },
     undefined,
     record.id,

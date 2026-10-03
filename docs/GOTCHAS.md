@@ -1039,7 +1039,18 @@ dormant wake starts a fresh log.
 - **`engine_sleep` is not activity.** `EventLog` does not move `lastActivityAt` for it, or an idle
   timeout would reorder every session list hours after the work stopped. Its replay coalesce key is
   `engine_sleep`, so an attach replays the latest value only. Dormant and live records strip
-  `engineAsleep`: a stored session has no child either way.
+  `engineAsleep` when written; the listing adds it back to every dormant record, which has no child.
+- **A dormant wake comes back asleep.** `rebuildRunner` sets `startAsleep` on the config (after the host's
+  hook, like `epoch`), so attaching after a restart backfills the transcript and stops there: claude
+  opens no query, codex closes the app-server it read the history through. The first message spawns
+  the engine. Until then a claude session has emitted no `capabilities`, so a client that attached
+  to it has no slash commands or model list for it yet. A fork (`forkSession`) and a session with
+  a prompt or a buffered message start awake.
+- **A resumed claude session knows its conversation before the CLI says so.** `system_init`, which
+  names `sdkSessionId`, only arrives with the first turn, so the runner seeds it from
+  `config.resume` (unless it forks). Without that, a session woken from dormancy reported no
+  `sdkSessionId` until its first turn: sleep refused it, and the parking service (which reads `info()`)
+  had no conversation to persist for it, the same rule codex follows with `#resumableThreadId`.
 - **The idle timer only puts unwatched sessions to sleep.** `EngineSleepTimers` arms on every
   `status_changed` and on every socket detach, and fires only when the session is still `idle`, not
   already asleep, and `bridge.attachedCount` is 0. A refusal is silent and re-arms on the next

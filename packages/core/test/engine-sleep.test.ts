@@ -138,6 +138,59 @@ describe('claude engine sleep', () => {
     expect(await runner.sleep()).toEqual({ ok: false, reason: 'session is closed' })
   })
 
+  it('sleeps a resumed session that has not run a turn yet, and wakes it into the same conversation', async () => {
+    const engine = processes()
+    const runner = new SessionRunner({ cwd: '/tmp/project', queryFn: engine.queryFn, resume: 'sdk-prior', backfillHistory: false })
+    void runner.start()
+    await tick()
+    expect(runner.info().sdkSessionId).toBe('sdk-prior')
+    expect(await runner.sleep()).toEqual({ ok: true })
+    runner.sendMessage('hello')
+    await tick()
+    expect(engine.options[1]).toMatchObject({ resume: 'sdk-prior', forkSession: false })
+  })
+
+  it('starts asleep when asked, opening no query until the first message', async () => {
+    const engine = processes()
+    const runner = new SessionRunner({
+      cwd: '/tmp/project',
+      queryFn: engine.queryFn,
+      resume: 'sdk-prior',
+      backfillHistory: false,
+      startAsleep: true,
+    })
+    const events: SessionEvent[] = []
+    runner.subscribe((event) => events.push(event))
+    void runner.start()
+    await tick()
+    expect(engine.harnesses).toHaveLength(0)
+    expect(runner.info().engineAsleep).toBe(true)
+    expect(runner.status).toBe('idle')
+
+    runner.sendMessage('hello')
+    await tick()
+    expect(engine.harnesses).toHaveLength(1)
+    expect(engine.options[0]).toMatchObject({ resume: 'sdk-prior', forkSession: false })
+    expect(engine.harnesses[0]!.captured.inputs.map(textOf)).toEqual(['hello'])
+    expect(ofType(events, 'engine_sleep').map((e) => e.asleep)).toEqual([true, false])
+  })
+
+  it('does not start a fork asleep, since the fork has no conversation of its own yet', async () => {
+    const engine = processes()
+    const runner = new SessionRunner({
+      cwd: '/tmp/project',
+      queryFn: engine.queryFn,
+      resume: 'sdk-prior',
+      forkSession: true,
+      backfillHistory: false,
+      startAsleep: true,
+    })
+    void runner.start()
+    await tick()
+    expect(engine.harnesses).toHaveLength(1)
+    expect(runner.info().engineAsleep).toBeUndefined()
+  })
+
   it('treats the end of a query that was not put to sleep as the session ending', async () => {
     const { engine, runner, events } = await idleClaude()
     engine.harnesses[0]!.end()
@@ -203,6 +256,23 @@ describe('codex engine sleep', () => {
     expect(runner.info().engineAsleep).toBeUndefined()
     expect(ofType(events, 'engine_sleep').map((e) => e.asleep)).toEqual([true, false])
     expect(events.some((e) => e.type === 'session_error')).toBe(false)
+  })
+
+  it('starts asleep after the resume backfill, closing the app-server it read history from', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp', resume: 'thread-1', connectFn: peer.connectFn, startAsleep: true })
+    await runner.start()
+    expect(runner.info().engineAsleep).toBe(true)
+    expect(peer.closed()).toBe(peer.connections())
+
+    runner.sendMessage('hello')
+    await tick()
+    await tick()
+    expect(runner.info().engineAsleep).toBeUndefined()
+    expect(peer.connections()).toBe(2)
   })
 
   it('refuses mid-turn', async () => {

@@ -89,6 +89,9 @@ describe('host-supplied instructions', () => {
       ws.once('error', reject)
     })
     ws.close()
+    const woken = await second.server.parking.ensureLive(session.id)
+    expect(woken?.info().engineAsleep).toBe(true)
+    woken?.sendMessage('wake')
 
     await vi.waitFor(() => expect(appended(second.harness)).toBe(expected))
   })
