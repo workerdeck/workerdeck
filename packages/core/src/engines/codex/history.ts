@@ -1,7 +1,8 @@
-import { errorMessage } from '@workerdeck/protocol'
+import { errorMessage, type MessageOrigin } from '@workerdeck/protocol'
 import { randomUUID } from 'node:crypto'
+import { withoutPeerContext } from '../../lib/peers.ts'
 import { historyUserText, itemCompleted, type ItemSink } from './items.ts'
-import type { AppServerConnection, AppServerHistoryTurn } from './types.ts'
+import type { AppServerConnection, AppServerHistoryTurn, AppServerUserMessageItem } from './types.ts'
 
 export type ResumedHistory = { turns: AppServerHistoryTurn[]; partial: boolean }
 
@@ -53,12 +54,14 @@ export function replayTurns(sink: HistorySink, turns: readonly AppServerHistoryT
           itemCompleted(sink, item, scope)
           continue
         }
-        const text = historyUserText(item)
+        const { item: bare, origin } = withoutPeerContextItem(item)
+        const text = historyUserText(bare)
         if (text) {
           sink.emit({
             type: 'user_message',
             message: { role: 'user', content: text },
             parentToolUseId: null,
+            ...(origin ? { origin } : {}),
             uuid: `${scope.nonce}:${item.id}`,
           })
         }
@@ -67,4 +70,21 @@ export function replayTurns(sink: HistorySink, turns: readonly AppServerHistoryT
       sink.setReplaying(false)
     }
   }
+}
+
+function withoutPeerContextItem(item: AppServerUserMessageItem): { item: AppServerUserMessageItem; origin?: MessageOrigin } {
+  if (!Array.isArray(item.content)) {
+    return { item }
+  }
+  let origin: MessageOrigin | undefined
+  const content = item.content.map((part) => {
+    const candidate = part as { type?: string; text?: unknown } | null
+    if (candidate?.type !== 'text' || typeof candidate.text !== 'string') {
+      return part
+    }
+    const restored = withoutPeerContext(candidate.text)
+    origin ??= restored.origin
+    return { ...candidate, text: restored.text }
+  })
+  return { item: { ...item, content }, origin }
 }

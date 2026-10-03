@@ -46,7 +46,7 @@ import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.t
 import { QUESTIONS_DISABLED_MESSAGE, approvalResolution, type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
 import { hostTitle } from '../../lib/title.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
-import { PEER_MCP_SERVER, withPeerContext } from '../../lib/peers.ts'
+import { PEER_MCP_SERVER, withPeerContext, withoutPeerContextMessage } from '../../lib/peers.ts'
 import { liveContextFromReading, withDeadline, type LiveContext } from '../../lib/session-report.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
@@ -404,13 +404,15 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         return
       }
       if (m.type === 'user') {
-        const message = toApiMessage(m.message)
+        const raw = toApiMessage(m.message)
+        const { message, origin } = m.parent_tool_use_id == null ? withoutPeerContextMessage(raw) : { message: raw }
         this.core.emit({
           type: 'user_message',
           message,
           parentToolUseId: m.parent_tool_use_id,
           replay: true,
           synthetic: isSyntheticUserText(message) ? true : undefined,
+          ...(origin ? { origin } : {}),
           uuid: m.uuid,
         })
       } else if (m.type === 'assistant') {

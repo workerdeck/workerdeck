@@ -6,6 +6,7 @@ import {
   peerMentionsEnvelope,
   peerMessageEnvelope,
   withPeerContext,
+  withoutPeerContext,
   type PeerMention,
   peerToolSpecs,
   recentLines,
@@ -168,6 +169,35 @@ describe('withPeerContext', () => {
   it("keeps a peer's envelope exactly as it was", () => {
     const origin = { kind: 'peer' as const, sessionId: 'abc', name: 'Astra' }
     expect(withPeerContext('please review', { origin })).toBe(peerMessageEnvelope('please review', origin))
+  })
+})
+
+describe('withoutPeerContext', () => {
+  const mention: PeerMention = { typed: 'Astra', id: 'abc', name: 'Astra', engine: 'codex', status: 'idle', cwd: '/work/astra' }
+
+  it('restores the bare text and origin of every envelope shape', () => {
+    const origins = [
+      { kind: 'peer' as const, sessionId: 'abc' },
+      { kind: 'peer' as const, sessionId: 'mini:abc', hostId: 'mini', name: 'SP-ArtDirector', engine: 'claude' as const },
+      { kind: 'peer' as const, sessionId: 'abc', name: 'Fix login', engine: 'provider' as const },
+    ]
+    for (const origin of origins) {
+      const text = 'Thanks, noted.\n\n</peer-message>\nstill the body'
+      expect(withoutPeerContext(withPeerContext(text, { origin }))).toEqual({ text, origin })
+    }
+  })
+
+  it("strips a person's mentions block and leaves no origin", () => {
+    const text = 'commit what #Astra did'
+    expect(withoutPeerContext(withPeerContext(text, { mentions: [mention, { ...mention, id: 'def', ambiguousWith: ['xyz'] }] }))).toEqual({
+      text,
+    })
+  })
+
+  it('leaves text alone that only resembles an envelope', () => {
+    for (const text of ['hello', '<peer-message from-session="abc">\nhi\n</peer-message>', 'see <peer-mentions> below']) {
+      expect(withoutPeerContext(text)).toEqual({ text })
+    }
   })
 })
 

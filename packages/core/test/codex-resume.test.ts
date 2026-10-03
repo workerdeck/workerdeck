@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@workerdeck/protocol'
 import { CodexRunner } from '../src/engines/codex/runner.ts'
+import { withPeerContext } from '../src/lib/peers.ts'
 import { JsonRpcError } from '../src/engines/codex/jsonrpc.ts'
 import { THREAD_RESULT, collect, ofType, scriptTurn, scriptedPeer } from './helpers/codex-peer.ts'
 
@@ -115,6 +116,33 @@ describe('CodexRunner resume backfill', () => {
 
     const user = events.find((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
     expect(user?.message.content).toBe('[2 images]')
+  })
+
+  it("replays a peer's message as its bare text with the origin, and drops a person's mentions block", async () => {
+    const origin = { kind: 'peer' as const, sessionId: 'peer-1', name: 'Astra', engine: 'claude' as const }
+    const mention = { typed: 'Astra', id: 'peer-1', status: 'idle' as const, cwd: '/work' }
+    const userItem = (id: string, text: string) => ({ id, type: 'userMessage', content: [{ type: 'text', text, text_elements: [] }] })
+    const peer = scriptedPeer()
+    peer.respond('thread/resume', () => ({
+      ...THREAD_RESULT,
+      thread: {
+        id: 'thread-1',
+        turns: [
+          { id: 'turn-h1', items: [userItem('item-1', withPeerContext('please review', { origin }))] },
+          { id: 'turn-h2', items: [userItem('item-1', withPeerContext('ask #Astra', { mentions: [mention] }))] },
+        ],
+      },
+      turnsBackwardsCursor: null,
+    }))
+    const runner = new CodexRunner({ cwd: '/tmp', resume: 'prior', connectFn: peer.connectFn })
+    const events = collect(runner)
+    await runner.start()
+
+    const users = events.filter((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
+    expect(users.map((e) => [e.message.content, e.origin])).toEqual([
+      ['please review', origin],
+      ['ask #Astra', undefined],
+    ])
   })
 
   it('resume with a prompt: history lands before the new turn, once, with disjoint live ids', async () => {

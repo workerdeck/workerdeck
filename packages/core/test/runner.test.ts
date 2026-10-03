@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { SessionEvent } from '@workerdeck/protocol'
-import { SessionRunner, type SessionRunnerConfig } from '../src/index.ts'
+import { SessionRunner, withPeerContext, type SessionRunnerConfig } from '../src/index.ts'
 import { fakeHarness, tick, type HarnessCapabilities } from './helpers/claude-harness.ts'
 
 const initMessage = {
@@ -841,6 +841,37 @@ describe('SessionRunner', () => {
     expect(byUuid.get('h-command')).toBeUndefined()
     expect(byUuid.get('h-stdout')).toBeUndefined()
     expect(byUuid.get('h-typed')).toBeUndefined()
+  })
+
+  it("restores a peer's origin on backfill and drops a person's mentions block", async () => {
+    const origin = { kind: 'peer' as const, sessionId: 'peer-1', hostId: 'mini', name: 'Astra', engine: 'codex' as const }
+    const mention = { typed: 'Astra', id: 'peer-1', status: 'idle' as const, cwd: '/work' }
+    const entry = (uuid: string, content: unknown) => ({
+      type: 'user' as const,
+      uuid,
+      session_id: 'sdk-session-1',
+      message: { role: 'user', content },
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+    })
+    const history = [
+      entry('h-peer', withPeerContext('please review', { origin })),
+      entry('h-mention', [
+        { type: 'text', text: withPeerContext('ask #Astra', { mentions: [mention] }) },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AA==' } },
+      ]),
+    ]
+    const { harness, runner, events } = makeRunner({ resume: 'sdk-session-1', historyFn: vi.fn(async () => history) })
+    void runner.start()
+    await tick()
+    harness.emit(initMessage)
+    await tick()
+
+    const users = events.filter((e): e is Extract<SessionEvent, { type: 'user_message' }> => e.type === 'user_message')
+    expect(users[0]!.message.content).toBe('please review')
+    expect(users[0]!.origin).toEqual(origin)
+    expect((users[1]!.message.content as Array<{ type: string; text?: string }>)[0]).toEqual({ type: 'text', text: 'ask #Astra' })
+    expect(users[1]!.origin).toBeUndefined()
   })
 
   it('resume without history and historyFn failures are non-fatal', async () => {

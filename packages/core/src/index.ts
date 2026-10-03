@@ -52,6 +52,7 @@ export {
   recentLines,
   runPeerTool,
   withPeerContext,
+  withoutPeerContext,
 } from './lib/peers.ts'
 export type {
   PeerDirectory,
