@@ -333,6 +333,15 @@ struct SessionListView: View {
     } label: {
       Label("Rename", systemImage: "pencil")
     }
+    if row.info.resolvedCapabilities.engineSleep, row.info.status == .idle,
+      row.info.engineAsleep != true
+    {
+      Button {
+        Task { await model.sleep(row) }
+      } label: {
+        Label("Sleep", systemImage: "moon.zzz")
+      }
+    }
     if row.info.status == .closed {
       Button(role: .destructive) {
         Task { await model.close(row) }

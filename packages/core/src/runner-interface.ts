@@ -60,6 +60,8 @@ export type SendMessageOptions = {
   mentions?: readonly PeerMention[]
 }
 
+export type SleepResult = { ok: true } | { ok: false; reason: string }
+
 export type PermissionDecision =
   | { behavior: 'allow'; updatedInput?: Record<string, unknown> }
   | { behavior: 'deny'; message?: string; interrupt?: boolean }
@@ -91,6 +93,8 @@ export interface Runner {
   // Resolves false when the record has no stoppable background task (unknown, settled, or not the engine's to stop).
   stopTask?(toolUseId: string): Promise<boolean>
   clearContext?(): Promise<void>
+  // Stops the engine child while the session stays registered; the next message wakes it. Refused, never queued.
+  sleep?(): Promise<SleepResult>
   setPermissionMode(mode: PermissionMode): Promise<void>
   setModel(model?: string): Promise<void>
   settleExecution?(executionId: string, result: ToolExecutionResult): boolean

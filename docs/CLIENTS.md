@@ -499,6 +499,17 @@ The colours are not this file's business either: `styles.css` repoints `--row-ho
 `--badge`/`--badge-fg` at VS Code's own badge pair, so the shared card wears the user's theme
 without a `--vscode-*` variable being named in the component.
 
+**Sleep** sits in the same QuickPick, offered only for a session whose
+`capabilities.engineSleep` is true, whose status is `idle`, and which is not already
+`engineAsleep`. It calls `POST /v1/sessions/:id/sleep` through `client.sleepSession`, so a 409
+refusal (a pending approval, a running sub-agent) arrives as the error toast with the gateway's own
+reason, then refreshes the model. The palette's **WorkerDeck: Sleep Session** does the same for the
+focused session. A sleeping session stays listed and the next message wakes it, which is what the
+status bar's tooltip says for the focused one. Automatic sleep is a Host Mode setting,
+`workerdeck.host.engineSleepAfterMinutes` (0, the default, means never): above zero it reaches the
+child as `--engine-sleep-after <n>m` and joins the restart-offer keys, and the gateway only puts to
+sleep sessions that no client is attached to, so a session open in a view never sleeps on its own.
+
 ### Dev harness & CSP
 
 The webview build has **no dev server**: `localResourceRoots` means every asset must be a real

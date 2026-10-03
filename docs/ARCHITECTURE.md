@@ -332,6 +332,13 @@ boundary: anything a client needs must be expressible as protocol events and com
    four-deep in `sessionTitle()`: host rename > the CLI's own generated title (polled
    off `getSessionInfo`, never while a rename stands) > the first prompt truncated > the
    `fallbackTitle` a woken session carries from its record.
+6. Engine sleep: an `idle` session's engine child can be stopped while the runner stays registered
+   (`POST /v1/sessions/:id/sleep`, the WS `sleep` command, or `engineSleepAfterMs` for unwatched
+   sessions). `SessionInfo.engineAsleep` and the `engine_sleep` event say so; the status stays
+   `idle`. The next message resumes the engine's conversation in a new child and the session goes
+   `starting` → `running` as usual. Unlike parking (runner evicted, snapshot persisted, woken by a
+   result) and dormancy (runner gone after a restart, woken by an attach into a fresh log), the log
+   and its seqs continue unbroken. Invariants in `docs/GOTCHAS.md` §Engine sleep.
 
 ## Embedding: sandboxed sessions and session scope
 

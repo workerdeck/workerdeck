@@ -15,6 +15,7 @@ import { handleProjectIcon } from './project-icon.ts'
 import { requireLive, resolveSession, type ResolvedSession } from './session-lookup.ts'
 import { handleShells } from './shells.ts'
 import { handleToolResult } from './tool-results.ts'
+import { sleepRunner } from './sleep.ts'
 
 type ItemKind = SessionItemRoute['kind']
 
@@ -50,6 +51,7 @@ const ITEM_HANDLERS: ItemHandlers = {
   },
   permission: handlePermission,
   peers: handlePeers,
+  sleep: handleSleep,
 }
 
 export async function handleSessions(
@@ -165,6 +167,15 @@ async function handleStopTask({ req, res, route, runner }: SessionCall<'stop-tas
     fail(404, 'no running task to stop')
   }
   json(res, 200, { ok: true })
+}
+
+// A session that is not live has no engine child to stop, so asking it to sleep is already true.
+async function handleSleep({ ctx, req, res, runner, info }: SessionCall<'sleep'>): Promise<void> {
+  requireMethod(req, 'POST')
+  if (runner) {
+    await sleepRunner(runner)
+  }
+  json(res, 200, { session: ctx.projects.withProject(runner?.info() ?? info) })
 }
 
 async function handlePermission({ ctx, req, res, route, runner }: SessionCall<'permission'>): Promise<void> {

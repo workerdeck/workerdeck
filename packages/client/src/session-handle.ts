@@ -80,6 +80,10 @@ export class SessionHandle {
     this.#sendFrame({ type: 'interrupt' })
   }
 
+  sleep(): void {
+    this.#sendFrame({ type: 'sleep' })
+  }
+
   runShell(command: string): void {
     this.#sendFrame({ type: 'shell_command', command })
   }

@@ -6,6 +6,7 @@ import type { ServerContext } from '../context.ts'
 import { permissionDecision, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { mentionsFor } from '../services/peers.ts'
+import { sleepRunner } from './sleep.ts'
 import { takesLocalCommands } from '../services/shell-directory.ts'
 import { shellPermitted, SHELL_REFUSAL, startShell, type ShellRegistry, type ShellSink, type ShellSize } from '../services/shells.ts'
 
@@ -85,6 +86,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     unsubscribe()
     detachBridge()
     parking.onDetach(runner.id)
+    ctx.engineSleep.onDetach(runner.id)
   })
 }
 
@@ -114,6 +116,10 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
     }
     case 'interrupt': {
       await runner.interrupt()
+      return
+    }
+    case 'sleep': {
+      await sleepRunner(runner)
       return
     }
     case 'clear_context': {

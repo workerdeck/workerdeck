@@ -454,6 +454,10 @@ as a future additive field), are in `docs/GOTCHAS.md` §Server, profiles & auth.
 
 ## `packages/core`
 
+`Runner.sleep?()` is implemented by `SessionRunner` and `CodexRunner` only, matching
+`EngineCapabilities.engineSleep`; the provider engine has no child to stop. Both expose
+`engineAsleep` on `info()` and emit `engine_sleep` on each edge. See `docs/GOTCHAS.md` §Engine sleep.
+
 the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
 per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
 catalog versioned with the release, a credential-availability probe, a runner factory), looked
@@ -701,6 +705,12 @@ pair) in front of the gateways' own. State lives in `~/.workerdeck/relay` unless
 `WORKERDECK_RELAY_STATE_DIR` says otherwise.
 
 ## `packages/server`
+
+**Engine sleep** lives in `services/engine-sleep.ts` (`EngineSleepTimers`, the idle timer behind
+`engineSleepAfterMs`) and `routes/sleep.ts` (`sleepRunner`, shared by `POST /sessions/:id/sleep`
+and the WS `sleep` command: 501 without `runner.sleep`, 409 with the runner's own reason). The timer
+is one more `onRegister` watcher, so a hot reload's evict detaches it; `ws.ts` re-arms it on every
+socket close beside `parking.onDetach`. Rules in `docs/GOTCHAS.md` §Engine sleep.
 
 HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
 profiles served with their engine's **capability record, static model catalog, and
@@ -1818,6 +1828,11 @@ gates rather than one: the host must pass `onClearContext` *and* the row's own
 not a REST call - a list holding only REST clients has to borrow a handle for one frame (see
 `packages/web`'s sidebar, and the VS Code card's menu, which do exactly the same thing). Its copy
 never says "deleted": the engine keeps the old conversation and it stays resumable.
+The **bed** (`onSleep`) is gated three ways: the host passes it, the row's
+`capabilities.engineSleep` is true, and the session is `idle` and not already asleep. It is a REST
+call (`sleepSession`), so unlike the eraser it needs no borrowed socket. An asleep card
+(`info.engineAsleep`) dims its two lines to 60% and carries the tooltip "Asleep, wakes on your next
+message"; the status glyph is untouched, because the session's state is still `idle`.
 
 A session row's sub-agent, pressed, hands the **panel body over to that agent**:
 `SessionPanel.openSubagent` (a nonce-keyed *request*, same shape and same reason as `reveal`) puts

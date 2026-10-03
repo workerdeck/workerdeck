@@ -14,7 +14,7 @@ import {
   errorMessage,
 } from '@workerdeck/protocol'
 import { attachmentKind, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
-import type { EngineRunnerConfig, Runner, SendMessageOptions } from '../../runner-interface.ts'
+import type { EngineRunnerConfig, Runner, SendMessageOptions, SleepResult } from '../../runner-interface.ts'
 import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
 import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
 import { type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
@@ -178,6 +178,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #connection: AppServerConnection | undefined
   #workspaceWrite: CodexWorkspaceWrite | undefined
   #threadLoaded = false
+  #asleep = false
   #threadMaterialized: boolean
   #numTurns = 0
   #started = false
@@ -265,7 +266,60 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       totalCostUsd: this.core.cost.reportedCostUsd,
       numTurns: this.#numTurns || undefined,
       subagents: this.#agents.list(),
+      ...(this.#asleep ? { engineAsleep: true as const } : {}),
     }
+  }
+
+  get engineAsleep(): boolean {
+    return this.#asleep
+  }
+
+  // The next turn reconnects and `thread/resume`s through `#ensureThread`, the same path a crashed child takes.
+  async sleep(): Promise<SleepResult> {
+    const refused = this.#sleepRefusal()
+    if (refused) {
+      return { ok: false, reason: refused }
+    }
+    if (this.#asleep) {
+      return { ok: true }
+    }
+    const connection = this.#connection
+    this.#asleep = true
+    this.#connection = undefined
+    this.#threadLoaded = false
+    connection?.close()
+    this.core.emit({ type: 'engine_sleep', asleep: true })
+    return { ok: true }
+  }
+
+  #sleepRefusal(): string | undefined {
+    if (this.core.closed) {
+      return 'session is closed'
+    }
+    if (this.#asleep) {
+      return undefined
+    }
+    if (this.core.status !== 'idle') {
+      return `session is ${this.core.status}`
+    }
+    if (this.core.pendingCount > 0) {
+      return 'a permission request is pending'
+    }
+    if (this.#activeTurn || this.#queue.length > 0 || this.#clearsPending > 0 || this.#backfillPending) {
+      return 'a turn is on its way'
+    }
+    if (this.#agents.list()?.some((agent) => agent.status === 'running')) {
+      return 'a subagent is still running'
+    }
+    return undefined
+  }
+
+  #wake(): void {
+    if (!this.#asleep) {
+      return
+    }
+    this.#asleep = false
+    this.core.emit({ type: 'engine_sleep', asleep: false })
   }
 
   start(): Promise<void> {
@@ -345,6 +399,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       return
     }
     const input = this.#buildInput(withPeerContext(text, options), attachments ?? [])
+    this.#wake()
     const echo = (): void => this.echoUser(text, attachments, options)
     if (this.#backfillPending) {
       this.#turnChain = this.#turnChain.then(echo)

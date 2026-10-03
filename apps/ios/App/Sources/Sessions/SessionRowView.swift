@@ -137,6 +137,7 @@ struct SessionRowView: View {
       }
     }
     .padding(.vertical, Self.verticalPadding)
+    .opacity(session.engineAsleep == true ? 0.55 : 1)
   }
 
   private var title: String {

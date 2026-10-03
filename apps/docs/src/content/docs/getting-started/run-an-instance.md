@@ -163,6 +163,7 @@ by a scoped principal is never offered the write tools, whatever the flag says.
 | `--allowed-origin <o>` / `--allowed-host <name>` (repeatable) | - | loopback names only |
 | `--insecure-host <name>` (repeatable) | - | none (config: `insecureHosts`) |
 | `--approval-timeout <d>` | - | `none` - prompts and questions never expire (config: `approvalTimeoutMs`) |
+| `--engine-sleep-after <d>` | - | `never` - an idle, unwatched session keeps its engine process (config: `engineSleepAfterMs`) |
 | `--no-parking-store` | - | durable parking on |
 | `--no-keep-awake` | - | machine held awake while a session waits (config: `keepAwake`) |
 | `--no-web` | - | dashboard served (config: `web`) |

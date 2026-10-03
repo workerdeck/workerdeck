@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { Eraser, FolderOpen, Layers, Pencil, Plus, Search, SearchX, Trash2, X } from 'lucide-react'
+import { BedDouble, Eraser, FolderOpen, Layers, Pencil, Plus, Search, SearchX, Trash2, X } from 'lucide-react'
 import { clearFilters, filterRows, groupRows, hasFacetFilter, scopeActive, sessionKey, subsetSummary } from '@workerdeck/protocol'
 import type { SessionGroup, SessionRow, SessionTask, StepDisplay, SubagentDisplay, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
 import { Button } from '../ui/Button.tsx'
@@ -34,6 +34,7 @@ export interface SessionBrowserProps {
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
+  onSleep?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   onSelectTask?: (row: SessionRow, task: SessionTask) => void
   onStopTask?: (row: SessionRow, toolUseId: string) => void
@@ -74,6 +75,7 @@ export function SessionBrowser({
   onDelete,
   onRename,
   onClearContext,
+  onSleep,
   onSelectSubagent,
   onSelectTask,
   onStopTask,
@@ -228,6 +230,7 @@ export function SessionBrowser({
                   onDelete={onDelete}
                   onRename={onRename}
                   onClearContext={onClearContext}
+                  onSleep={onSleep}
                   onSelectSubagent={onSelectSubagent}
                   onSelectTask={onSelectTask}
                   onStopTask={onStopTask}
@@ -269,6 +272,7 @@ interface SessionRowItemProps {
   onDelete?: (row: SessionRow) => void
   onRename?: (row: SessionRow, title: string) => void
   onClearContext?: (row: SessionRow) => void
+  onSleep?: (row: SessionRow) => void
   onSelectSubagent?: (row: SessionRow, toolUseId: string) => void
   onSelectTask?: (row: SessionRow, task: SessionTask) => void
   onStopTask?: (row: SessionRow, toolUseId: string) => void
@@ -296,6 +300,7 @@ function SessionRowItem({
   onDelete,
   onRename,
   onClearContext,
+  onSleep,
   onSelectSubagent,
   onSelectTask,
   onStopTask,
@@ -344,6 +349,15 @@ function SessionRowItem({
                 onClick={() => onClearContext(row)}
               >
                 <Eraser className="size-3 text-fg-3" />
+              </RowAction>
+            ) : null}
+            {onSleep && info.capabilities?.engineSleep && info.status === 'idle' && !info.engineAsleep ? (
+              <RowAction
+                label="Sleep session"
+                title="Stop the engine process to free its memory - the session stays here and wakes on your next message"
+                onClick={() => onSleep(row)}
+              >
+                <BedDouble className="size-3 text-fg-3" />
               </RowAction>
             ) : null}
             {onDelete ? (

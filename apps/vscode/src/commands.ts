@@ -32,6 +32,7 @@ export type SessionCommandDeps = {
   registry: SurfaceRegistry
   selectSession: (hostId: string, sessionId: string, options?: SelectOptions) => Promise<void>
   moveToPanel: (tab: SessionEditorTab) => Promise<void>
+  sleepSession: (hostId: string, sessionId: string) => Promise<void>
 }
 
 export function registerCommands(...tables: CommandTable[]): vscode.Disposable[] {
@@ -68,7 +69,7 @@ export function viewCommands({ sidebar }: ViewCommandDeps): CommandTable {
   }
 }
 
-export function sessionCommands({ store, panel, registry, selectSession, moveToPanel }: SessionCommandDeps): CommandTable {
+export function sessionCommands({ store, panel, registry, selectSession, moveToPanel, sleepSession }: SessionCommandDeps): CommandTable {
   return {
     'workerdeck.openSessionInEditor': async () => {
       const session = panel.session
@@ -91,7 +92,17 @@ export function sessionCommands({ store, panel, registry, selectSession, moveToP
     'workerdeck.selectPermissionMode': () => selectPermissionMode(registry.focused),
     'workerdeck.useSkill': () => pickCommand(registry.focused),
     'workerdeck.openProjectFolder': () => openProjectFolder(store, registry.focused),
+    'workerdeck.sleepSession': () => sleepFocused(registry.focused, sleepSession),
   }
+}
+
+async function sleepFocused(surface: AnySurface, sleep: SessionCommandDeps['sleepSession']): Promise<void> {
+  const session = surface.session
+  if (!session) {
+    void vscode.window.showInformationMessage('WorkerDeck: open a session first.')
+    return
+  }
+  await sleep(session.host.id, session.sessionId)
 }
 
 // The panel runs `panelSurface: 'external'`, so the in-panel skills dialog never mounts - this QuickPick is its

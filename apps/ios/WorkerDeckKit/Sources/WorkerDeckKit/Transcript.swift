@@ -291,6 +291,9 @@ public enum TranscriptItem: Sendable, Equatable, Identifiable {
 public struct TranscriptState: Sendable, Equatable {
   public var status: SessionStatus
   public var statusDetail: String?
+  /// The engine child is stopped while the session stays live; the next message
+  /// resumes it. Seeded from the snapshot like `status`, then set by `engine_sleep`.
+  public var engineAsleep: Bool?
   public var model: String?
   public var cwd: String?
   public var sdkSessionId: String?
@@ -349,7 +352,8 @@ public struct TranscriptState: Sendable, Equatable {
   public var lastSeq: Int
 
   public init(
-    status: SessionStatus = .starting, statusDetail: String? = nil, model: String? = nil,
+    status: SessionStatus = .starting, statusDetail: String? = nil, engineAsleep: Bool? = nil,
+    model: String? = nil,
     cwd: String? = nil, sdkSessionId: String? = nil, engine: ProfileEngine? = nil,
     models: [ModelOption]? = nil, commands: [SlashCommandInfo]? = nil,
     skills: [SkillInfo]? = nil, checklist: [ChecklistItem]? = nil,
@@ -365,6 +369,7 @@ public struct TranscriptState: Sendable, Equatable {
   ) {
     self.status = status
     self.statusDetail = statusDetail
+    self.engineAsleep = engineAsleep
     self.model = model
     self.cwd = cwd
     self.sdkSessionId = sdkSessionId
@@ -595,7 +600,10 @@ private func jsonQuote(_ text: String) -> String {
 public func seedFromSessionInfo(_ state: TranscriptState, _ info: SessionInfo) -> TranscriptState {
   var next = state
   // Before any event has arrived, the snapshot status is fresher than 'starting'.
-  if state.lastSeq == 0 { next.status = info.status }
+  if state.lastSeq == 0 {
+    next.status = info.status
+    next.engineAsleep = info.engineAsleep
+  }
   next.model = state.model ?? info.model
   next.permissionMode = state.permissionMode ?? info.permissionMode
   next.cwd = state.cwd ?? info.cwd
@@ -713,6 +721,9 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   case .statusChanged(let status, let detail):
     next.status = status
     next.statusDetail = detail
+
+  case .engineSleep(let asleep):
+    next.engineAsleep = asleep ? true : nil
 
   case .capabilities(let models, let commands, let defaultModel):
     next.models = models

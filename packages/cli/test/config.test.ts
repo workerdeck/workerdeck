@@ -63,6 +63,14 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--approval-timeout', 'soon'])).toThrow(ConfigError)
   })
 
+  it('parses --engine-sleep-after as a duration, with never as 0', () => {
+    expect(parseArgs(['--engine-sleep-after', '30m']).engineSleepAfterMs).toBe(1_800_000)
+    expect(parseArgs(['--engine-sleep-after', '2h']).engineSleepAfterMs).toBe(7_200_000)
+    expect(parseArgs(['--engine-sleep-after', 'never']).engineSleepAfterMs).toBe(0)
+    expect(parseArgs(['--engine-sleep-after', '0']).engineSleepAfterMs).toBe(0)
+    expect(() => parseArgs(['--engine-sleep-after', 'later'])).toThrow(ConfigError)
+  })
+
   it('treats a missing value as an error, not as the next flag', () => {
     expect(() => parseArgs(['--auth-key', '--port', '9000'])).toThrow(/requires a value/)
   })

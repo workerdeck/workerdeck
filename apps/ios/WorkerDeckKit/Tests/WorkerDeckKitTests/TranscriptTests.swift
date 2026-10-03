@@ -656,6 +656,24 @@ struct TranscriptTests {
     #expect(seeded.engine == .provider)
   }
 
+  @Test func engineSleepSetsAndClearsTheFlag() {
+    let asleep = reduce([event(1, .engineSleep(asleep: true))])
+    #expect(asleep.engineAsleep == true)
+    #expect(asleep.items.isEmpty)
+    let awake = reduce([event(2, .engineSleep(asleep: false))], from: asleep)
+    #expect(awake.engineAsleep == nil)
+  }
+
+  @Test func seedTakesEngineAsleepOnlyBeforeAnyEvent() {
+    let info = SessionInfo(
+      id: "s1", status: .idle, cwd: "/repo", createdAt: 0, lastSeq: 3,
+      pendingPermissionCount: 0, engineAsleep: true)
+    #expect(seedFromSessionInfo(.initial, info).engineAsleep == true)
+
+    let live = reduce([event(1, .engineSleep(asleep: false))])
+    #expect(seedFromSessionInfo(live, info).engineAsleep == nil)
+  }
+
   // A dormant wake starts a fresh log, so nothing replays the spend and the
   // snapshot is the only thing that still knows it.
   @Test func seedCarriesCostAcrossALogThatStartsEmpty() {

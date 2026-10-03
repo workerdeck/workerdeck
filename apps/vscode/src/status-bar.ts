@@ -168,6 +168,7 @@ export type StatusBarSubject = {
   title: string | undefined
   hostName: string
   cost: number | undefined
+  asleep: boolean
 }
 
 export class SessionStatusBar implements vscode.Disposable {
@@ -232,6 +233,9 @@ export class SessionStatusBar implements vscode.Disposable {
       const tip = new vscode.MarkdownString()
       tip.appendMarkdown(`**${name}** on ${subject.hostName}\n\n`)
       tip.appendMarkdown(`Status: ${presentation.label}\n\n`)
+      if (subject.asleep) {
+        tip.appendMarkdown('Asleep, wakes on your next message\n\n')
+      }
       if (vitals?.model) {
         tip.appendMarkdown(`Model: \`${vitals.model}\`\n\n`)
       }

@@ -226,6 +226,12 @@ export function SessionsSidebar() {
                 }, 150)
               })
             }}
+            onSleep={(row) => {
+              void clientFor(row.hostId)
+                ?.sleepSession(row.info.id)
+                .then(() => refresh())
+                .catch((e: unknown) => toast.error(errorMessage(e, 'Sleep failed')))
+            }}
             onDelete={(row) => {
               void clientFor(row.hostId)
                 ?.deleteSession(row.info.id)

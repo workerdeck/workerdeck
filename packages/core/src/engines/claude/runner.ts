@@ -41,7 +41,7 @@ import {
   rateLimitEventsFromUsage,
   toApiMessage,
 } from '../../lib/normalize.ts'
-import type { EngineRunnerConfig, PermissionDecision, Runner, SendMessageOptions } from '../../runner-interface.ts'
+import type { EngineRunnerConfig, PermissionDecision, Runner, SendMessageOptions, SleepResult } from '../../runner-interface.ts'
 import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
 import { QUESTIONS_DISABLED_MESSAGE, approvalResolution, type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
 import { hostTitle } from '../../lib/title.ts'
@@ -90,6 +90,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #compactionTurns = 0
   #idleWhileCompacting = false
   #query: Query | undefined
+  #asleep = false
   #capabilitiesEmitted = false
   #models: ModelOption[] | undefined
   #defaultModel: string | undefined
@@ -142,6 +143,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       subagents: this.#subagents.list(),
       totalCostUsd: this.core.cost.reportedCostUsd,
       numTurns: this.#numTurns,
+      ...(this.#asleep ? { engineAsleep: true as const } : {}),
     }
   }
 
@@ -176,7 +178,79 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       parent_tool_use_id: null,
       session_id: this.#sdkSessionId,
     })
+    if (this.#asleep) {
+      this.#wake()
+    }
     this.echoUser(text, attachments, options)
+  }
+
+  async sleep(): Promise<SleepResult> {
+    const refused = this.#sleepRefusal()
+    if (refused) {
+      return { ok: false, reason: refused }
+    }
+    if (this.#asleep) {
+      return { ok: true }
+    }
+    const query = this.#query
+    const input = this.#input
+    this.#asleep = true
+    this.#query = undefined
+    this.#input = new InputQueue()
+    input.end()
+    query?.close()
+    this.core.cost.restartProcess()
+    this.core.emit({ type: 'engine_sleep', asleep: true })
+    return { ok: true }
+  }
+
+  #sleepRefusal(): string | undefined {
+    if (this.core.closed) {
+      return 'session is closed'
+    }
+    if (this.#asleep) {
+      return undefined
+    }
+    if (this.core.status !== 'idle') {
+      return `session is ${this.core.status}`
+    }
+    if (this.core.pendingCount > 0) {
+      return 'a permission request is pending'
+    }
+    if (this.#compactionId !== undefined) {
+      return 'the context is being compacted'
+    }
+    if (this.#subagents.list()?.some((sub) => sub.status === 'running')) {
+      return 'a subagent or background task is still running'
+    }
+    if (this.#input.pending > 0) {
+      return 'a message is waiting for the engine'
+    }
+    if (!this.#query || !this.#sdkSessionId) {
+      return 'the engine has not started a conversation yet'
+    }
+    return undefined
+  }
+
+  #wake(): void {
+    this.#asleep = false
+    this.core.emit({ type: 'engine_sleep', asleep: false })
+    this.core.setStatus('starting')
+    void this.#runAwake()
+  }
+
+  async #runAwake(): Promise<void> {
+    try {
+      await this.#pump(
+        this.#openQuery({ resume: this.#sdkSessionId, forkSession: false, model: this.#model, permissionMode: this.#permissionMode }),
+      )
+    } catch (error) {
+      this.fail(errorMessage(error))
+    }
+  }
+
+  get engineAsleep(): boolean {
+    return this.#asleep
   }
 
   async mcpServers(): Promise<McpServerStatusInfo[] | undefined> {
@@ -188,7 +262,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   }
 
   async reconnectMcpServer(name: string): Promise<void> {
-    const query = this.#query
+    const query = this.#awakeQuery()
     if (typeof query?.reconnectMcpServer !== 'function') {
       throw new Error('this session cannot reconnect MCP servers')
     }
@@ -196,11 +270,18 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   }
 
   async setMcpServerEnabled(name: string, enabled: boolean): Promise<void> {
-    const query = this.#query
+    const query = this.#awakeQuery()
     if (typeof query?.toggleMcpServer !== 'function') {
       throw new Error('this session cannot enable or disable MCP servers')
     }
     await query.toggleMcpServer(name, enabled)
+  }
+
+  #awakeQuery(): Query | undefined {
+    if (this.#asleep) {
+      throw new Error('the session is asleep: its MCP servers start again with the next message')
+    }
+    return this.#query
   }
 
   async interrupt(): Promise<void> {
@@ -245,7 +326,6 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   }
 
   async #run(): Promise<void> {
-    const queryFn = this.config.queryFn ?? (sdkQuery as QueryFn)
     try {
       await this.#backfillHistory()
       if (this.core.closed) {
@@ -254,20 +334,45 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       if (this.config.resume && !this.config.prompt) {
         void this.#fetchEngineTitle()
       }
-      this.#query = queryFn({ prompt: this.#input, options: this.#buildOptions() })
+      const query = this.#openQuery()
       if (!this.config.prompt) {
         this.core.setStatus('idle')
         void this.#fetchCapabilities()
         void this.#fetchContextUsage()
         void this.#fetchRateLimits()
       }
-      for await (const message of this.#query) {
-        this.#handleMessage(message)
-      }
-      this.core.close('server', () => this.#input.end(), { settleApprovals: false })
+      await this.#pump(query)
     } catch (error) {
       this.fail(errorMessage(error))
     }
+  }
+
+  #openQuery(overrides: Partial<Options> = {}): Query {
+    const queryFn = this.config.queryFn ?? (sdkQuery as QueryFn)
+    const query = queryFn({ prompt: this.#input, options: { ...this.#buildOptions(), ...overrides } })
+    this.#query = query
+    return query
+  }
+
+  // A query that is no longer `#query` was put to sleep: its end, and anything it throws on the way out, is not the session's.
+  async #pump(query: Query): Promise<void> {
+    try {
+      for await (const message of query) {
+        if (query !== this.#query) {
+          return
+        }
+        this.#handleMessage(message)
+      }
+    } catch (error) {
+      if (query !== this.#query) {
+        return
+      }
+      throw error
+    }
+    if (query !== this.#query) {
+      return
+    }
+    this.core.close('server', () => this.#input.end(), { settleApprovals: false })
   }
 
   async #backfillHistory(): Promise<void> {

@@ -116,6 +116,10 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **Work that outlives the turn.** A session can park on something nothing here is doing - a batch
   job, a human approving on Monday - and wake days later, mid-turn, as itself. A parked run frees
   its concurrency slot and stops its wall-clock budget.
+- **Idle sessions that cost no memory.** An engine process and its MCP servers are almost all of a
+  gateway's footprint. Put an idle session to sleep, or let `--engine-sleep-after 30m` do it for the
+  ones nobody is watching: the process goes, the session stays listed with its transcript, and the
+  next message resumes the conversation.
 - **Reaching a person who isn't watching.** Server-wide webhooks for the four moments a human acts
   on (permission requested, turn finished, error, closed). The permission payload carries the
   whole request, so a consumer can answer it over REST - which is what makes an Approve button in

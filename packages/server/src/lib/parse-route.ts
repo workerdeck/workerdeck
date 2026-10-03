@@ -15,6 +15,7 @@ export type SessionItemRoute =
   | { kind: 'mcp'; id: string; mcpServer?: string }
   | { kind: 'files'; id: string; filePath?: string }
   | { kind: 'peers'; id: string }
+  | { kind: 'sleep'; id: string }
 
 export type SessionRoute = { kind: 'collection' } | SessionItemRoute
 
@@ -73,6 +74,9 @@ function itemRoute(rawId: string, parts: string[]): SessionItemRoute | null {
   if (length === 4 && section === 'events' && fourth === 'result') {
     const seq = Number(third)
     return Number.isInteger(seq) && seq >= 0 ? { kind: 'tool-result', id: decode(rawId), resultSeq: seq } : null
+  }
+  if (length === 2 && section === 'sleep') {
+    return { kind: 'sleep', id: decode(rawId) }
   }
   if (length === 2 && section === 'peers') {
     return { kind: 'peers', id: decode(rawId) }

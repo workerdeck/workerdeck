@@ -1168,6 +1168,9 @@ public enum SessionEventBody: Sendable, Equatable {
   /// Which claude.ai plan the rate-limit windows belong to ('pro', 'max', ...).
   /// Never sent for an API-key session, which has no plan.
   case planInfo(subscriptionType: String)
+  /// The engine child stopped (or resumed) while the session stays live and
+  /// listed. Only the latest survives an attach replay.
+  case engineSleep(asleep: Bool)
   /// The engine started a fresh conversation inside the same session (`/clear`,
   /// plan-mode exit). The transcript empties; session-scoped state survives.
   /// `sdkSessionId` is the fresh conversation's engine session id, when the
@@ -1226,6 +1229,7 @@ extension SessionEvent: Decodable {
     case skills, titles, items, fileId, mediaType, toolUseId
     case sdkSessionId, uuid, parentToolUseId
     case pending, trigger, preTokens, postTokens
+    case asleep
   }
 
   public init(from decoder: Decoder) throws {
@@ -1271,6 +1275,8 @@ extension SessionEvent: Decodable {
       case "plan_info":
         body = .planInfo(
           subscriptionType: try container.decode(String.self, forKey: .subscriptionType))
+      case "engine_sleep":
+        body = .engineSleep(asleep: try container.decode(Bool.self, forKey: .asleep))
       case "conversation_reset":
         body = .conversationReset(
           sdkSessionId: try container.decodeIfPresent(String.self, forKey: .sdkSessionId))
@@ -1354,6 +1360,9 @@ public enum SessionCommand: Sendable, Equatable {
   /// Start a fresh conversation in the same session - the old one stays
   /// resumable. The server answers with a `conversation_reset` event.
   case clearContext
+  /// Stop the engine child while the session stays live. The server answers
+  /// with an `engine_sleep` event, or an error when it refuses.
+  case sleep
   case setPermissionMode(PermissionMode)
   /// nil model = back to the server default.
   case setModel(String?)
@@ -1404,6 +1413,8 @@ extension SessionCommand: Encodable {
       try container.encode("interrupt", forKey: .type)
     case .clearContext:
       try container.encode("clear_context", forKey: .type)
+    case .sleep:
+      try container.encode("sleep", forKey: .type)
     case .setPermissionMode(let mode):
       try container.encode("set_permission_mode", forKey: .type)
       try container.encode(mode, forKey: .mode)

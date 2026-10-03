@@ -155,6 +155,13 @@ export class CostLedger {
     this.#pending = addBuckets(this.#pending ?? emptyBucket(), lifetime)
   }
 
+  // The same engine process boundary a rebuild crosses, inside one runner: what this process reported becomes the
+  // restorable share the next process's first reading is judged against.
+  restartProcess(): void {
+    this.#pending = this.#lifetime()
+    this.#current = emptyBucket()
+  }
+
   observeCumulative(byModel: ByModel | undefined, reportedCostUsd: number | undefined): void {
     const reading: Bucket = { byModel: byModel ?? {}, reportedUsd: reportedCostUsd }
     if (this.#pending && !isEmpty(reading)) {

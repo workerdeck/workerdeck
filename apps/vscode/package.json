@@ -255,6 +255,12 @@
         "icon": "$(layout-panel)"
       },
       {
+        "command": "workerdeck.sleepSession",
+        "title": "Sleep Session",
+        "category": "WorkerDeck",
+        "icon": "$(debug-pause)"
+      },
+      {
         "command": "workerdeck.host.start",
         "title": "Start Server",
         "category": "WorkerDeck Host",
@@ -395,6 +401,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "workerdeck.sleepSession",
+          "when": "workerdeck.hasSession"
+        },
         {
           "command": "workerdeck.showFilter",
           "when": "false"
@@ -702,6 +712,15 @@
             "scope": "machine",
             "order": 11,
             "markdownDescription": "The name Host Mode's own gateway goes by in the Sessions and Gateways views, such as `MacBook`. Empty means `This machine`. Changing it takes effect at once, without a restart."
+          },
+          "workerdeck.host.engineSleepAfterMinutes": {
+            "type": "number",
+            "default": 0,
+            "minimum": 0,
+            "scope": "machine",
+            "order": 12,
+            "description": "Minutes an idle session with no open view waits before its engine process is released. 0 means never.",
+            "markdownDescription": "Idle sessions with no open view release their engine process after this many minutes and wake on the next message. The session stays listed, and its conversation is resumed when it wakes. `0` means never. Passed to the server as `--engine-sleep-after`."
           }
         }
       },

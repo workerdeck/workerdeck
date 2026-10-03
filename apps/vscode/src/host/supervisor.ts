@@ -417,6 +417,9 @@ export class HostSupervisor implements vscode.Disposable {
     for (const root of settings.cwdRoots) {
       args.push('--cwd-root', root)
     }
+    if (settings.engineSleepAfterMinutes > 0) {
+      args.push('--engine-sleep-after', `${settings.engineSleepAfterMinutes}m`)
+    }
     return args
   }
 

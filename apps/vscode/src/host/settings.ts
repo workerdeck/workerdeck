@@ -20,6 +20,7 @@ export type HostSettings = {
   cwdRoots: string[]
   statusBar: boolean
   name: string
+  engineSleepAfterMinutes: number
 }
 
 export const HOST_SECTION = 'workerdeck.host'
@@ -69,6 +70,7 @@ export function readHostSettings(): HostSettings {
     cwdRoots: config.get<string[]>('cwdRoots', []).map(expandHome).filter(Boolean),
     statusBar: config.get<boolean>('statusBar', true),
     name: config.get<string>('name', DEFAULT_HOST_NAME).trim() || DEFAULT_HOST_NAME,
+    engineSleepAfterMinutes: minutes(config.get<number>('engineSleepAfterMinutes', 0)),
   }
 }
 
@@ -86,10 +88,15 @@ const RESTART_KEYS = [
   'binaryPath',
   'useNpx',
   'npxSpec',
+  'engineSleepAfterMinutes',
 ]
 
 export function needsRestart(event: vscode.ConfigurationChangeEvent): boolean {
   return RESTART_KEYS.some((key) => event.affectsConfiguration(`${HOST_SECTION}.${key}`))
+}
+
+function minutes(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0
 }
 
 function shellAgentWrite(value: string): ShellAgentWrite {

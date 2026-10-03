@@ -54,7 +54,10 @@ export class EventLog {
 
   append(body: SessionEventBody): SessionEvent {
     const event: SessionEvent = { ...body, seq: ++this.#seq, ts: Date.now() }
-    this.#lastActivityAt = event.ts
+    // An idle timeout putting the engine to sleep is the gateway acting, not the session, and must not reorder lists.
+    if (event.type !== 'engine_sleep') {
+      this.#lastActivityAt = event.ts
+    }
     this.#fold(event)
     this.#retain(event)
     return event

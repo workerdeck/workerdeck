@@ -223,6 +223,7 @@ struct ProtocolDecodingTests {
     let record = try JSONDecoder().decode(EngineCapabilities.self, from: Data(json.utf8))
     #expect(record.clearContext == false)
     #expect(record.hostCwd == nil)
+    #expect(record.engineSleep == false)
     #expect(record.slashCommands == true)
   }
 
@@ -315,6 +316,44 @@ struct ProtocolDecodingTests {
       return
     }
     #expect(subscriptionType == "max")
+  }
+
+  @Test func decodesEngineSleep() throws {
+    let asleep = try decodeEvent(#"{"type":"engine_sleep","asleep":true,"seq":4,"ts":1}"#)
+    #expect(asleep.body == .engineSleep(asleep: true))
+    let awake = try decodeEvent(#"{"type":"engine_sleep","asleep":false,"seq":5,"ts":2}"#)
+    #expect(awake.body == .engineSleep(asleep: false))
+  }
+
+  @Test func anEngineSleepWithoutItsFlagDegradesToUnknown() throws {
+    let event = try decodeEvent(#"{"type":"engine_sleep","seq":4,"ts":1}"#)
+    guard case .unknown(let type, _) = event.body else {
+      Issue.record("expected unknown, got \(event.body)")
+      return
+    }
+    #expect(type == "engine_sleep")
+  }
+
+  @Test func decodesEngineAsleepOnSessionInfo() throws {
+    let base = #"{"id":"s1","status":"idle","cwd":"/work","createdAt":1,"lastSeq":2,"pendingPermissionCount":0"#
+    let asleep = try JSONDecoder().decode(
+      SessionInfo.self, from: Data((base + #","engineAsleep":true}"#).utf8))
+    #expect(asleep.engineAsleep == true)
+    let awake = try JSONDecoder().decode(SessionInfo.self, from: Data((base + "}").utf8))
+    #expect(awake.engineAsleep == nil)
+  }
+
+  @Test func engineSleepCapabilityMirrorsTheStaticRecords() {
+    #expect(ProfileEngine.claude.defaultCapabilities.engineSleep == true)
+    #expect(ProfileEngine.codex.defaultCapabilities.engineSleep == true)
+    #expect(ProfileEngine.provider.defaultCapabilities.engineSleep == false)
+  }
+
+  @Test func encodesSleepCommand() throws {
+    let data = try JSONEncoder().encode(SessionCommand.sleep)
+    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    #expect(object["type"] as? String == "sleep")
+    #expect(object.count == 1)
   }
 
   @Test func decodesContextCompacted() throws {

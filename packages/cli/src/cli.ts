@@ -76,6 +76,11 @@ Options
                             config: approvalTimeoutMs). Default 'none' - a prompt
                             waits as long as the session lives. A session may
                             override it per request.
+      --engine-sleep-after <d>
+                            stop an idle session's engine process once no client
+                            has watched it for this long (30m, 2h; config:
+                            engineSleepAfterMs). The session stays listed and
+                            wakes on its next message. Default 'never'.
       --state-dir <path>    where parked sessions are persisted
                             (default: beside the config file, else ~/.workerdeck)
       --no-parking-store    keep parked sessions in memory only; a restart drops them

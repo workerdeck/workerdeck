@@ -5,6 +5,10 @@ export class InputQueue implements AsyncIterable<SDKUserMessage> {
   #waiter: ((result: IteratorResult<SDKUserMessage>) => void) | null = null
   #done = false
 
+  get pending(): number {
+    return this.#buffer.length
+  }
+
   push(message: SDKUserMessage): void {
     if (this.#done) {
       return

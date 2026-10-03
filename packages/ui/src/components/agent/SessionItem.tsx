@@ -130,6 +130,8 @@ export function SessionItem({
     <div
       data-slot="session-item"
       data-active={active || undefined}
+      data-asleep={info.engineAsleep || undefined}
+      title={info.engineAsleep ? 'Asleep, wakes on your next message' : undefined}
       role="button"
       tabIndex={0}
       onClick={(e) => {
@@ -154,7 +156,7 @@ export function SessionItem({
         className,
       )}
     >
-      <div className="flex flex-col gap-1 py-0.5 pr-0.5 pl-1.5">
+      <div className={cn('flex flex-col gap-1 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
         <div className="flex h-5 items-center gap-1.5 overflow-hidden">
           <Gutter>
             <SessionStatusIcon row={row} />

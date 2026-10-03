@@ -84,6 +84,8 @@ export type WorkerServerOptions = {
   // Dial out to a `workerdeck relay` so sessions can reach peers on other gateways. Needs `peers` on.
   relay?: RelayLinkOptions
   notifications?: SessionNotificationOptions
+  // Stop a live session's engine child after it has sat idle with no client attached this long; 0 or omitted: never.
+  engineSleepAfterMs?: number
   bridge?: BridgeHubOptions
   parking?: {
     store?: SessionStore

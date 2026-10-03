@@ -110,6 +110,7 @@ export type ProducedFileRef = {
 export type TranscriptState = {
   status: SessionStatus
   statusDetail?: string
+  engineAsleep?: boolean
   model?: string
   cwd?: string
   sdkSessionId?: string
@@ -311,6 +312,7 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
     ...state,
     // With held state (reconnect, warm cache seed) the held status stands: any change since is a `status_changed` in the replay span - events stay the one authority.
     status: state.lastSeq === 0 ? info.status : state.status,
+    engineAsleep: state.lastSeq === 0 ? info.engineAsleep : state.engineAsleep,
     model: state.model ?? info.model,
     permissionMode: state.permissionMode ?? info.permissionMode,
     cwd: state.cwd ?? info.cwd,
@@ -387,6 +389,10 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
 
     case 'status_changed': {
       return { ...base, status: event.status, statusDetail: event.detail }
+    }
+
+    case 'engine_sleep': {
+      return { ...base, engineAsleep: event.asleep || undefined }
     }
 
     case 'capabilities': {

@@ -6,6 +6,7 @@ import type { AttachmentStore } from './services/attachments.ts'
 import type { AuthService } from './services/auth.ts'
 import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
+import type { EngineSleepTimers } from './services/engine-sleep.ts'
 import type { HostFileRoots } from './services/host-files.ts'
 import type { SessionParkManager } from './services/parking.ts'
 import type { ProducedFileStore } from './services/produced-files.ts'
@@ -29,6 +30,7 @@ export type ServerContext = {
 
   registry: SessionRegistry
   parking: SessionParkManager
+  engineSleep: EngineSleepTimers
   // Undefined when peer messaging is off; the send path then resolves no `#` mentions.
   // The composed directory, relay included: what a session's `peers_list` answers.
   peers: PeerDirectory | undefined

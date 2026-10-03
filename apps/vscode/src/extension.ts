@@ -254,6 +254,7 @@ export function activate(context: vscode.ExtensionContext): void {
         title: info?.title ?? session.sessionId.slice(0, 8),
         hostName: session.host.name,
         cost: info?.costUsd ?? info?.totalCostUsd,
+        asleep: info?.engineAsleep === true,
       },
       surface.vitals,
     )
@@ -476,7 +477,14 @@ export function activate(context: vscode.ExtensionContext): void {
     ...registerCommands(
       hostCommands({ extensionId: context.extension.id, supervisor: hostSupervisor, require: requireHost }),
       viewCommands({ sidebar }),
-      sessionCommands({ store, panel, registry, selectSession, moveToPanel }),
+      sessionCommands({
+        store,
+        panel,
+        registry,
+        selectSession,
+        moveToPanel,
+        sleepSession: (hostId, sessionId) => sidebar.sleepSession(hostId, sessionId),
+      }),
       {
         'workerdeck.manageProfiles': () => manageProfiles(profileFlow),
         'workerdeck.showProfiles': () => profiles.reveal(),

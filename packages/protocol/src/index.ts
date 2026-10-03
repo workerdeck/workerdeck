@@ -236,6 +236,7 @@ export type SessionEventBody =
   | { type: 'context_usage'; usage: ContextUsage }
   | { type: 'rate_limit'; info: RateLimitInfo }
   | { type: 'plan_info'; subscriptionType: string }
+  | { type: 'engine_sleep'; asleep: boolean }
   | {
       type: 'conversation_reset'
       sdkSessionId?: string
@@ -375,6 +376,7 @@ export type SessionCommand =
     }
   | { type: 'interrupt' }
   | { type: 'clear_context' }
+  | { type: 'sleep' }
   | { type: 'set_permission_mode'; mode: PermissionMode }
   | { type: 'set_model'; model?: string }
   | {
@@ -496,6 +498,7 @@ export type EngineCapabilities = {
   vfs: boolean
   hostCwd?: boolean
   systemInstructions?: boolean
+  engineSleep?: boolean
   streaming: 'token' | 'item' | 'none'
 }
 
@@ -523,6 +526,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     vfs: false,
     hostCwd: true,
     systemInstructions: true,
+    engineSleep: true,
     streaming: 'token',
   },
   codex: {
@@ -548,6 +552,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     vfs: false,
     hostCwd: true,
     systemInstructions: true,
+    engineSleep: true,
     streaming: 'token',
   },
   provider: {
@@ -572,6 +577,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     vfs: true,
     hostCwd: false,
     systemInstructions: true,
+    engineSleep: false,
     streaming: 'token',
   },
 }
@@ -841,6 +847,8 @@ export type SessionInfo = {
   shells?: ShellInfo[]
   // Present when the agent holds the shell write tools, so a client offers the operator's grant only where it can bite.
   shellAgentWrite?: 'gated' | 'allow'
+  // The engine child is stopped while the session stays live and listed; the next message resumes it.
+  engineAsleep?: true
 }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
@@ -951,6 +959,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     }
     case 'checklist': {
       return 'checklist'
+    }
+    case 'engine_sleep': {
+      return 'engine_sleep'
     }
     case 'sdk_event': {
       return body.payload.type === 'system' && body.payload.subtype === 'status' ? 'sdk_event:system:status' : undefined

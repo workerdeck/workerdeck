@@ -18,6 +18,7 @@ import { dispatchRoute, httpRoutes } from './routes/table.ts'
 import { AttachmentStore } from './services/attachments.ts'
 import { createAuthService } from './services/auth.ts'
 import { AvailabilityTracker } from './services/availability.ts'
+import { EngineSleepTimers } from './services/engine-sleep.ts'
 import { BridgeHub } from './services/bridge.ts'
 import { createHostFileRoots } from './services/host-files.ts'
 import { SessionNotifier } from './services/notifications.ts'
@@ -117,6 +118,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     onError: options.notifications?.onError ?? ((error, context) => diagnose(error, `notification-${context.op}`)),
   })
   const producedFiles = new ProducedFileStore()
+  const engineSleep = new EngineSleepTimers({
+    afterMs: options.engineSleepAfterMs ?? 0,
+    attachedCount: (sessionId) => bridge.attachedCount(sessionId),
+    onError: (error) => diagnose(error, 'engine-sleep'),
+  })
   // Built first because everything else holds it. The watchers it attaches read the later-built services only when
   // a runner registers, which no code path does before this function returns.
   const registry = new SessionRegistry({
@@ -132,6 +138,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         shells?.watch(runner),
         peers?.watch(runner),
         factory.watchAuthSource(runner),
+        engineSleep.watch(runner),
       ]
       const profile = runner.info().profile
       if (profile) {
@@ -250,6 +257,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     factory,
     registry,
     parking,
+    engineSleep,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     bridge,
     projects,
@@ -307,6 +315,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     parking,
     shells,
     queue,
+    engineSleep,
     closeQueueSockets: queueSockets.clear,
     diagnose,
     releaseDirectories: () => {

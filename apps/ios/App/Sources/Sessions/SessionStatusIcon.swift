@@ -79,6 +79,9 @@ struct SessionStatusIcon: View {
     if state == .working, status != .running, status != .starting, running > 0 {
       return "Working - \(running) sub-agent\(running == 1 ? "" : "s")"
     }
+    if session.engineAsleep == true, state != .working {
+      return "Asleep, wakes on your next message"
+    }
     return status.label
   }
 }

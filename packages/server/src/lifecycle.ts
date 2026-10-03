@@ -3,6 +3,7 @@ import type { WebSocketServer } from 'ws'
 import type { JobQueue } from '@workerdeck/queue'
 import { sessionState } from '@workerdeck/protocol'
 import type { DiagnosticSink, DrainOptions, DrainReport } from './options.ts'
+import type { EngineSleepTimers } from './services/engine-sleep.ts'
 import type { SessionParkManager } from './services/parking.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { ShellRegistry } from './services/shells.ts'
@@ -20,6 +21,7 @@ export type ServerLifecycleDeps = {
   parking: SessionParkManager
   shells: ShellRegistry | null
   queue: JobQueue | undefined
+  engineSleep: EngineSleepTimers
   closeQueueSockets: () => void
   releaseDirectories: () => void
   diagnose: DiagnosticSink
@@ -105,6 +107,7 @@ function closeServer(deps: ServerLifecycleDeps): Promise<void> {
     // Ordering is load-bearing: parking's `#closed` guard must be set before the registry closes runners with
     // reason 'server', or shutdown discards every dormant record. See docs/GOTCHAS.md.
     parking.close()
+    deps.engineSleep.close()
     registry.closeAll()
     // `wss` is `noServer`, so `wss.close()` only waits for `clients` to empty, and `server.closeAllConnections()`
     // never reaches an upgraded socket: close every client ourselves, then terminate what has not acknowledged.

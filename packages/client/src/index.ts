@@ -93,6 +93,10 @@ export class WorkerDeckClient {
     return await this.#pick('PATCH', this.#sess(id), 'session', patch)
   }
 
+  async sleepSession(id: string): Promise<SessionInfo> {
+    return await this.#pick('POST', this.#sess(id, '/sleep'), 'session')
+  }
+
   async deleteSession(id: string): Promise<SessionInfo> {
     return await this.#pick('DELETE', this.#sess(id), 'session')
   }

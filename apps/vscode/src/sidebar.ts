@@ -1,4 +1,4 @@
-import { errorMessage } from '@workerdeck/protocol'
+import { errorMessage, type SessionInfo } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
 import type { SessionHandle } from '@workerdeck/client'
@@ -37,6 +37,10 @@ export type SidebarDelegate = {
   newSession: (preset: { hostId: string; cwd?: string }) => Promise<void>
   unread: (rows: number, waiting: number) => void
   subagents: (running: number, sessions: number) => void
+}
+
+export function canSleep(info: SessionInfo): boolean {
+  return info.capabilities?.engineSleep === true && info.status === 'idle' && !info.engineAsleep
 }
 
 export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSidebar> implements vscode.Disposable {
@@ -256,6 +260,13 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         run: () => this.#clearSession(hostId, sessionId),
       })
     }
+    if (canSleep(info)) {
+      items.push({
+        label: '$(debug-pause) Sleep',
+        detail: 'Release the engine process; the next message wakes it',
+        run: () => this.sleepSession(hostId, sessionId),
+      })
+    }
     items.push({
       label: '$(trash) Delete',
       detail: 'Remove the session from the gateway',
@@ -266,6 +277,25 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       placeHolder: 'Session actions',
     })
     await picked?.run()
+  }
+
+  async sleepSession(hostId: string, sessionId: string): Promise<void> {
+    const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
+    if (!info || !canSleep(info)) {
+      void vscode.window.showInformationMessage('WorkerDeck: only an idle, awake session whose engine supports it can sleep.')
+      return
+    }
+    const host = this.#store.get(hostId)
+    const client = host && (await clientFor(this.#store, host))
+    if (!client) {
+      return
+    }
+    try {
+      await client.sleepSession(sessionId)
+    } catch (err) {
+      void vscode.window.showErrorMessage(`WorkerDeck: sleep failed - ${errorMessage(err)}`)
+    }
+    await this.#model.refresh()
   }
 
   async #stopSession(hostId: string, sessionId: string): Promise<void> {

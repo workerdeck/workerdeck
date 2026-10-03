@@ -327,6 +327,29 @@ struct WorkerClientTests {
     #expect(request.url?.path == "/v1/sessions/sess_1")
   }
 
+  @Test func sleepPostsTheSessionSleepRoute() async throws {
+    StubStore.shared.install { _ in StubResponse(body: Data(sessionJSON.utf8)) }
+    let client = makeStubClient()
+
+    let session = try await client.sleepSession(id: "sess_1")
+
+    #expect(session.id == "sess_1")
+    let request = try #require(StubStore.shared.requests.first)
+    #expect(request.httpMethod == "POST")
+    #expect(request.url?.path == "/v1/sessions/sess_1/sleep")
+  }
+
+  @Test func surfacesARefusedSleep() async throws {
+    StubStore.shared.install { _ in
+      StubResponse(status: 409, body: Data(#"{"error":"session is running"}"#.utf8))
+    }
+    let client = makeStubClient()
+
+    await #expect(throws: WorkerClientError(message: "session is running", statusCode: 409)) {
+      _ = try await client.sleepSession(id: "sess_1")
+    }
+  }
+
   @Test func derivesTheWebSocketURLFromTheRestBase() throws {
     let insecure = WorkerClient(baseURL: URL(string: "http://host:8787/v1")!)
     #expect(

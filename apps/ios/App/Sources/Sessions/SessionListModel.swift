@@ -323,6 +323,10 @@ final class SessionListModel {
     await act(on: row) { try await $0.stopTask(sessionId: row.info.id, toolUseId: toolUseId) }
   }
 
+  func sleep(_ row: SessionRow) async {
+    await act(on: row) { _ = try await $0.sleepSession(id: row.info.id) }
+  }
+
   func killShell(_ row: SessionRow, shellId: String) async {
     await act(on: row) { _ = try await $0.killShell(sessionId: row.info.id, shellId: shellId) }
   }

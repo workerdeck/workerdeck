@@ -58,6 +58,9 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   /// The engine runs against a host directory, so a create must name a `cwd`.
   /// Absent = true, which is the always-required behaviour.
   public let hostCwd: Bool?
+  /// The engine child can be stopped while the session stays live
+  /// (`POST /sessions/:id/sleep`). Absent reads as false.
+  public let engineSleep: Bool
   /// 'token' | 'item' | 'none' - anything ≠ 'token' renders without a typing cursor.
   public let streaming: String
 
@@ -70,7 +73,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     skillsList: Bool = false,
     settingSources: Bool, budgets: Bool,
     attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool,
-    hostCwd: Bool? = nil, streaming: String
+    hostCwd: Bool? = nil, engineSleep: Bool = false, streaming: String
   ) {
     self.interactiveApprovals = interactiveApprovals
     self.permissionModes = permissionModes
@@ -92,6 +95,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     self.reasoningEfforts = reasoningEfforts
     self.vfs = vfs
     self.hostCwd = hostCwd
+    self.engineSleep = engineSleep
     self.streaming = streaming
   }
 
@@ -122,6 +126,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     reasoningEfforts = try c.decodeIfPresent([String].self, forKey: .reasoningEfforts)
     vfs = try c.decode(Bool.self, forKey: .vfs)
     hostCwd = try c.decodeIfPresent(Bool.self, forKey: .hostCwd)
+    engineSleep = try c.decodeIfPresent(Bool.self, forKey: .engineSleep) ?? false
     streaming = try c.decode(String.self, forKey: .streaming)
   }
 }
@@ -141,7 +146,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     budgets: true,
     attachments: ["image", "pdf", "text"],
     reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-    vfs: false, streaming: "token"
+    vfs: false, engineSleep: true, streaming: "token"
   ),
   .codex: EngineCapabilities(
     // The app-server ask channels are wired to the permission surface. NOTE
@@ -173,7 +178,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     budgets: false,
     attachments: ["image", "text"],
     reasoningEfforts: ["minimal", "low", "medium", "high", "xhigh"],
-    vfs: false, streaming: "token"
+    vfs: false, engineSleep: true, streaming: "token"
   ),
   .provider: EngineCapabilities(
     interactiveApprovals: false,
@@ -636,6 +641,9 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// same thing. `promotedShells` is what a list row draws from it - never the
   /// raw array, which carries shells too young to be worth a line.
   public let shells: [ShellInfo]?
+  /// The engine child is stopped while the session stays live and listed; the
+  /// next message resumes it. Absent = awake.
+  public let engineAsleep: Bool?
 
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
   /// The record to render from: the runner-reported copy when present, else the
@@ -658,7 +666,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
     scope: [String: String]? = nil,
     project: ProjectInfo? = nil, contextUsage: ContextReading? = nil,
-    shells: [ShellInfo]? = nil
+    shells: [ShellInfo]? = nil, engineAsleep: Bool? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -690,6 +698,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.project = project
     self.contextUsage = contextUsage
     self.shells = shells
+    self.engineAsleep = engineAsleep
   }
 }
 

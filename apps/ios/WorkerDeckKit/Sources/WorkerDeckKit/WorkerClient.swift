@@ -88,6 +88,14 @@ public struct WorkerClient: Sendable {
     return try decode(SessionResponse.self, from: data).session
   }
 
+  /// Stop the session's engine child while the session stays listed; the next
+  /// message resumes it. A 409 carries the gateway's reason for refusing.
+  @discardableResult
+  public func sleepSession(id: String) async throws -> SessionInfo {
+    let data = try await call("POST", "/sessions/\(Self.encodeComponent(id))/sleep")
+    return try decode(SessionResponse.self, from: data).session
+  }
+
   /// Terminate a session. Returns its final snapshot.
   @discardableResult
   public func deleteSession(id: String) async throws -> SessionInfo {

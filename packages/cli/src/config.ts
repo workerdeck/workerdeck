@@ -47,6 +47,7 @@ export type CliFlags = {
   insecureHosts: string[]
   trustProxy?: boolean
   approvalTimeoutMs?: number | null
+  engineSleepAfterMs?: number
   stateDir?: string
   parking?: boolean
   insecure?: boolean
@@ -97,6 +98,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--allowed-host', (f, v) => f.allowedHosts.push(v)],
   ['--insecure-host', (f, v) => f.insecureHosts.push(v)],
   ['--approval-timeout', (f, v, name) => (f.approvalTimeoutMs = parseDuration(v, name))],
+  ['--engine-sleep-after', (f, v, name) => (f.engineSleepAfterMs = parseDuration(v, name) ?? 0)],
   ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
   ['--cors-origin', (f, v) => f.corsOrigins.push(v)],
 ])
@@ -410,6 +412,9 @@ export function resolveInstanceConfig(
   }
   if (flags.approvalTimeoutMs !== undefined) {
     options.approvalTimeoutMs = flags.approvalTimeoutMs
+  }
+  if (flags.engineSleepAfterMs !== undefined) {
+    options.engineSleepAfterMs = flags.engineSleepAfterMs
   }
   // --no-profile-store wins over a config file's own store: a flag that says "off" must not leave one wired up.
   if (flags.profileStore === false) {

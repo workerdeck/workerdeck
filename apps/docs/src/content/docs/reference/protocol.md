@@ -54,6 +54,7 @@ ws.onmessage = ({ data }) => {
 | `context_usage` | Context-window snapshot (`ContextUsage`), polled after each turn. |
 | `rate_limit` | Subscription rate-limit window update (`RateLimitInfo`). API-key sessions may never emit one - render nothing, not 0%, and treat an absent `utilization` as unknown. |
 | `plan_info` | Which claude.ai plan those windows belong to (`subscriptionType`: 'pro', 'max', …). Emitted from the same poll as `rate_limit`, once per change, and never for an API-key session. |
+| `engine_sleep` | `asleep: boolean` - the engine process was stopped (`true`) or started again for a message (`false`), while the session stayed live. Mirrors `SessionInfo.engineAsleep`. Coalesced to the latest on replay; not transcript activity. Offered where `EngineCapabilities.engineSleep` is true. |
 | `assistant_message` / `user_message` | An `ApiMessage` (plain Anthropic content blocks) plus `parentToolUseId`, `replay` (resumed-history backfill), and for user messages `synthetic` (tool results), `attachments`, and `origin` (absent for the human; `{ kind: 'peer', sessionId, name?, engine?, hops? }` when another session sent it through `peers_send`). The last is deliberately a list of **references** (`MessageAttachment`: id, name, media type, size) and never the bytes: this log is replayed to every attaching client and captured into parking snapshots, so an inlined photo would be paid for on every attach, forever. Fetch `GET /v1/sessions/:id/attachments/:id` to render one. |
 | `stream_delta` | Raw Anthropic streaming event; emitted only with `includePartialMessages`. |
 | `turn_result` | End of a turn: subtype, `isError`, `durationMs`, `numTurns`, `totalCostUsd` (both session-cumulative), `result` text, per-turn `usage`. |
@@ -73,7 +74,8 @@ ws.onmessage = ({ data }) => {
 uploaded ahead of it), `permission_decision` (`requestId`,
 `behavior: 'allow' | 'deny'`, allow-only `updatedInput`, deny-only `message`/`interrupt`),
 `interrupt`, `set_permission_mode`, `set_model` (omit `model` for the default),
-`clear_context`, `close`, and the two answers to a bridged tool call - `tool_call_result` /
+`clear_context`, `sleep` (stop the engine process, keep the session; refused with a
+`protocol_error` unless it is idle, see `POST /v1/sessions/:id/sleep`), `close`, and the two answers to a bridged tool call - `tool_call_result` /
 `tool_call_error`, each carrying the `executionId` it is answering.
 
 `clear_context` resets the conversation in place and is answered with a `conversation_reset`

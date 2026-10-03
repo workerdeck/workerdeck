@@ -267,3 +267,20 @@ function shellRow(over: { status: 'running' | 'exited'; bytes: number }): Sessio
     shell,
   }
 }
+
+describe('engine_sleep through a coalesced replay', () => {
+  it('keeps only the latest flag and lands the reducer on it, without counting as activity', () => {
+    const events = seqd([
+      { type: 'engine_sleep', asleep: true },
+      { type: 'engine_sleep', asleep: false },
+      { type: 'engine_sleep', asleep: true },
+    ])
+    const replayed = coalesce(events)
+    expect(replayed.map((e) => e.seq)).toEqual([3])
+    expect(fold(replayed).engineAsleep).toBe(true)
+    expect(fold(events.slice(0, 2)).engineAsleep).toBeUndefined()
+    expect(logCoalesceKey(events[0]!)).toBeUndefined()
+    expect(transcriptActivity(events[0]!)).toBe(0)
+    expect(transcriptProse(events[0]!)).toBe(0)
+  })
+})

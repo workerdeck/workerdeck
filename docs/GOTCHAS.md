@@ -1005,6 +1005,50 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   on disk until the next turn ends. Either omission means a restart in that window wakes the session
   straight back into the transcript the user threw away.
 
+## Engine sleep (`Runner.sleep`, `engine_sleep`, `engineSleepAfterMs`)
+
+Sleep stops a live session's engine child (and the child's stdio MCP servers) while the runner stays
+in the registry, attached and listed. It is **not** parking and **not** dormancy: the log, its seqs
+and its epoch carry on untouched, so unread counts, bookmarks and scroll anchors survive it, where a
+dormant wake starts a fresh log.
+
+- **Attaching never wakes; only something that must reach the engine does.** A message (and so
+  `/clear` on claude) wakes it. MCP status answers from nothing while asleep, the MCP actions refuse
+  with a reason, `interrupt` and `stopTask` are no-ops, `setModel` and `setPermissionMode` are
+  stored and applied as query options at the wake. Waking on attach was the rejected design: merely
+  opening the session in VS Code would have spawned the child again.
+- **Refused, never queued.** `sleep()` answers `{ ok: false, reason }` unless the session is `idle`
+  with no pending approval, no compaction in flight, no running subagent or CLI-owned background
+  task (`task_started` records, which include background Bash: they die with the process), no
+  message buffered in the `InputQueue`, and, on claude, a conversation to resume (`sdkSessionId`).
+  Held local commands (`$` output) live on the runner, not the query, and are carried to the next
+  message as before.
+- **Claude: a query that is no longer `#query` has been put to sleep.** `#pump` drops its messages,
+  swallows what it throws on the way out and does not treat its end as `session_closed`. Any other
+  end of the stream is still the session closing. The wake opens a new query with `resume:
+  sdkSessionId`, `forkSession: false` (a fork would mint a new id every wake), the current model and
+  permission mode, and no backfill: the log already has the transcript.
+- **The cost boundary is the rebuild boundary, inside one runner.** `CostLedger.restartProcess()`
+  turns what the sleeping process reported into the pending share that the woken process's first
+  cumulative reading is judged against, the same `carryUnlessRestored` rule as a rebuilt claude
+  process (see §Claude engine). Codex reports deltas and needs nothing.
+- **Codex** closes its app-server connection after clearing `#connection`, so `onClose` finds
+  nothing to fail; the next turn reconnects and `thread/resume`s with `dynamicTools` re-declared,
+  the path a crashed child already took. A codex session with no child at all may still be put to
+  sleep: there is simply nothing to stop.
+- **`engine_sleep` is not activity.** `EventLog` does not move `lastActivityAt` for it, or an idle
+  timeout would reorder every session list hours after the work stopped. Its replay coalesce key is
+  `engine_sleep`, so an attach replays the latest value only. Dormant and live records strip
+  `engineAsleep`: a stored session has no child either way.
+- **The idle timer only puts unwatched sessions to sleep.** `EngineSleepTimers` arms on every
+  `status_changed` and on every socket detach, and fires only when the session is still `idle`, not
+  already asleep, and `bridge.attachedCount` is 0. A refusal is silent and re-arms on the next
+  idle. Off (`0`) by default. One instance per generation: a hot reload's `registry.evict` runs its
+  detacher and the next generation's `onRegister` re-watches the carried runner.
+- **What dies with the child:** "allow for this session" grants the CLI held, MCP server state (an
+  open browser page, a logged-in session), and the prompt cache. The wake pays a CLI start, a
+  resume and every MCP server starting again.
+
 ## Hot reload (`--hot-reload`)
 
 Dev only, and only from a checkout. It re-evaluates every module under `packages/` in place and
