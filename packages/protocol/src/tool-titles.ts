@@ -23,6 +23,8 @@ export const BUILTIN_TOOL_TITLES: Record<string, string> = {
   mcp__workerdeck__peers_list: 'Listing peer sessions',
   mcp__workerdeck__peers_peek: 'Peeking at a peer session',
   mcp__workerdeck__peers_send: 'Messaging a peer session',
+  session_info: 'Checking session info',
+  mcp__workerdeck__session_info: 'Checking session info',
 }
 
 export function toolTitle(name: string, titles?: Record<string, string>): string | undefined {

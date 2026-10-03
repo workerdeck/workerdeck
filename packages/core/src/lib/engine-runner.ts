@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import type { PermissionRequest, SessionEvent, SessionStatus } from '@workerdeck/protocol'
+import type { PermissionRequest, SessionEvent, SessionInfo, SessionStatus } from '@workerdeck/protocol'
 import type { EngineRunnerConfig, PermissionDecision, SendMessageOptions, SessionEventListener } from '../runner-interface.ts'
 import { resolveApprovalTimeoutMs } from './approval-timeout.ts'
 import { attachmentRef, type AttachmentInput } from './attachments.ts'
 import type { CostLedgerState } from './cost-ledger.ts'
 import { LocalCommandQueue, localCommandEvent, type LocalCommandResult, type LocalShellSource } from './local-command.ts'
 import { RunnerCore, type CloseReason, type RunnerCoreHooks, type RunnerCoreOptions } from './runner-core.ts'
+import { buildSessionReport, type LiveContext, type SessionReport } from './session-report.ts'
 import type { SessionToolSources } from './session-tools.ts'
 import type { SubscribeOptions } from './subscribers.ts'
 import { sessionTitle, withTitle } from './title.ts'
@@ -13,6 +14,8 @@ import { sessionTitle, withTitle } from './title.ts'
 export type EngineRunnerCoreOptions = Pick<RunnerCoreOptions, 'cost'>
 
 export type ApprovalDeadline = { timeoutMs: number | undefined; expiresAt: number | undefined }
+
+export type SessionReportFacts = { vendor: string | undefined; context: LiveContext | undefined; rateLimits: boolean; contextNote?: string }
 
 export abstract class EngineRunner<C extends EngineRunnerConfig> {
   readonly id: string
@@ -30,6 +33,22 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
   }
 
   abstract close(reason?: CloseReason): void
+
+  abstract info(): SessionInfo
+
+  protected abstract reportFacts(): Promise<SessionReportFacts>
+
+  async sessionReport(): Promise<SessionReport> {
+    const facts = await this.reportFacts()
+    return buildSessionReport({
+      info: this.info(),
+      vendor: facts.vendor,
+      context: facts.context,
+      contextNote: facts.contextNote,
+      rateLimitsSupported: facts.rateLimits,
+      events: this.core.log.events,
+    })
+  }
 
   // Called from the base constructor, before the subclass's own fields exist: the hooks may only close over them.
   protected coreHooks(): RunnerCoreHooks {
@@ -104,7 +123,12 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
   }
 
   protected get toolSources(): SessionToolSources {
-    return { peers: this.config.peers, shells: this.config.shells, write: this.config.shellAgentWrite !== undefined }
+    return {
+      report: () => this.sessionReport(),
+      peers: this.config.peers,
+      shells: this.config.shells,
+      write: this.config.shellAgentWrite !== undefined,
+    }
   }
 
   protected baseInfo(engineTitle?: string) {

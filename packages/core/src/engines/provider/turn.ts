@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { LanguageModelUsage, ModelMessage, TextStreamPart, ToolSet } from 'ai'
-import { errorMessage, type ContentBlock, type SessionEventBody } from '@workerdeck/protocol'
+import { errorMessage, type ContentBlock, type ProviderContextWindow, type SessionEventBody } from '@workerdeck/protocol'
 
 export type TurnUsage = { startedAt: number; input: number; output: number; cacheWrite: number; cacheRead: number }
 
@@ -26,6 +26,30 @@ export function addUsage(accum: TurnUsage, usage: LanguageModelUsage): void {
   accum.output += usage.outputTokens ?? 0
   accum.cacheWrite += usage.inputTokenDetails?.cacheWriteTokens ?? 0
   accum.cacheRead += usage.inputTokenDetails?.cacheReadTokens ?? 0
+}
+
+// `inputTokens` is the whole prompt, cached reads included, so the last step's prompt plus its output is what the next call carries.
+export function stepContextTokens(usage: LanguageModelUsage | undefined): number | undefined {
+  if (usage?.inputTokens === undefined) {
+    return undefined
+  }
+  return usage.inputTokens + (usage.outputTokens ?? 0)
+}
+
+export function resolveContextWindow(
+  window: ProviderContextWindow | undefined,
+  ...models: readonly (string | undefined)[]
+): number | undefined {
+  if (typeof window === 'number') {
+    return window > 0 ? window : undefined
+  }
+  for (const model of models) {
+    const size = model === undefined ? undefined : window?.[model]
+    if (size !== undefined && size > 0) {
+      return size
+    }
+  }
+  return undefined
 }
 
 export function wireUsage(accum: Omit<TurnUsage, 'startedAt'>): WireUsage {

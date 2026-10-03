@@ -369,7 +369,7 @@ describe('the gateway stamps the directory only where a shell of that session co
     const { base } = await fixture.startShellServer(harness)
     await createSession(base, 'operator', { cwd: tempDir(), prompt: 'hi' })
     await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
-    expect(toolNames(harness)).toEqual(['peers_list', 'peers_peek', 'peers_send', 'shell_list', 'shell_read'])
+    expect(toolNames(harness)).toEqual(['session_info', 'peers_list', 'peers_peek', 'peers_send', 'shell_list', 'shell_read'])
   })
 
   it('offers the write tools under agentWrite to a session an operator created, and never to a scoped principal', async () => {
@@ -380,6 +380,7 @@ describe('the gateway stamps the directory only where a shell of that session co
     await createSession(base, 'operator', { cwd: tempDir(), prompt: 'hi' })
     await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
     expect(toolNames(harness)).toEqual([
+      'session_info',
       'peers_list',
       'peers_peek',
       'peers_send',
@@ -397,7 +398,7 @@ describe('the gateway stamps the directory only where a shell of that session co
     })
     await createSession(scopedBase, 'alice-a', { cwd: tempDir(), prompt: 'hi' })
     await vi.waitFor(() => expect(scoped.captured.options).toBeDefined())
-    expect(toolNames(scoped)).toEqual(['peers_list', 'peers_peek', 'peers_send', 'shell_list', 'shell_read'])
+    expect(toolNames(scoped)).toEqual(['session_info', 'peers_list', 'peers_peek', 'peers_send', 'shell_list', 'shell_read'])
   })
 
   it('keeps the operator flag on the dormant record and re-derives the grant from the gateway on every rebuild', async () => {

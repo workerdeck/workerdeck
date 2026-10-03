@@ -17,12 +17,7 @@ function directory(): PeerDirectory & { sent: Array<{ from: string; to: string; 
 }
 
 describe('SessionRunner: peer tools', () => {
-  it('declares an in-process MCP server named workerdeck only when a directory is configured', async () => {
-    const without = fakeHarness()
-    void new SessionRunner({ cwd: '/tmp/p', queryFn: without.queryFn }).start()
-    await vi.waitFor(() => expect(without.captured.options).toBeDefined())
-    expect(without.captured.options?.mcpServers).toBeUndefined()
-
+  it('declares the in-process workerdeck MCP server beside the declared ones', async () => {
     const harness = fakeHarness()
     const runner = new SessionRunner({
       cwd: '/tmp/p',
@@ -46,7 +41,7 @@ describe('SessionRunner: peer tools', () => {
     const server = (harness.captured.options!.mcpServers as Record<string, { instance: unknown }>).workerdeck
     const instance = server.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>
     const tools = instance['_registeredTools'] ?? {}
-    expect(Object.keys(tools).sort()).toEqual(['peers_list', 'peers_peek', 'peers_send'])
+    expect(Object.keys(tools).sort()).toEqual(['peers_list', 'peers_peek', 'peers_send', 'session_info'])
     const result = await tools.peers_send!.handler({ sessionId: 'b', text: 'hi' }, {})
     expect(result).toMatchObject({ isError: false, content: [{ type: 'text', text: expect.stringContaining('Delivered to b') }] })
     expect(peers.sent).toEqual([{ from: runner.id, to: 'b', text: 'hi' }])

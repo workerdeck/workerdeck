@@ -580,12 +580,15 @@ export function supportsPermissionMode(engine: ProfileEngine | undefined, mode: 
   return ENGINE_CAPABILITIES[engine ?? 'claude'].permissionModes.includes(mode)
 }
 
+export type ProviderContextWindow = number | Record<string, number>
+
 export type ProviderConfig = {
   id: string
   model?: string
   models?: string[]
   baseUrl?: string
   apiKeyEnv?: string
+  contextWindow?: ProviderContextWindow
 }
 
 export type SessionCapability = 'web_search' | 'download' | 'web_fetch' | 'deliver_file'

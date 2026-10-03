@@ -34,6 +34,8 @@ public enum ToolTitles {
     "mcp__workerdeck__peers_list": "Listing peer sessions",
     "mcp__workerdeck__peers_peek": "Peeking at a peer session",
     "mcp__workerdeck__peers_send": "Messaging a peer session",
+    "session_info": "Checking session info",
+    "mcp__workerdeck__session_info": "Checking session info",
   ]
 
   /// The peer tools both engines expose, under the bare name and the

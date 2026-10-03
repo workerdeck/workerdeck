@@ -22,13 +22,13 @@ function threadStart(peer: ReturnType<typeof scriptedPeer>) {
 }
 
 describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
-  it('declares the three tools when a directory is configured, and nothing otherwise', async () => {
+  it('declares the three tools when a directory is configured, and session_info alone otherwise', async () => {
     const bare = scriptedPeer()
     scriptTurn(bare, () => {})
     const plain = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: bare.connectFn })
     void plain.start()
     await vi.waitFor(() => expect(threadStart(bare)).toBeDefined())
-    expect(threadStart(bare).dynamicTools).toBeUndefined()
+    expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info'])
 
     const peer = scriptedPeer()
     scriptTurn(peer, () => {})
@@ -37,11 +37,12 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     await vi.waitFor(() => expect(threadStart(peer)).toBeDefined())
     const tools = threadStart(peer).dynamicTools!
     expect(tools.map((t) => [t.type, t.name])).toEqual([
+      ['function', 'session_info'],
       ['function', 'peers_list'],
       ['function', 'peers_peek'],
       ['function', 'peers_send'],
     ])
-    expect(tools[2]!.inputSchema).toMatchObject({ type: 'object', required: ['sessionId', 'text'] })
+    expect(tools.find((t) => t.name === 'peers_send')!.inputSchema).toMatchObject({ type: 'object', required: ['sessionId', 'text'] })
   })
 
   it('answers item/tool/call from the directory, as the calling session, with the result as input text', async () => {

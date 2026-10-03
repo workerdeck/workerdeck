@@ -62,6 +62,8 @@ export type {
   PeerToolName,
   PeerToolSpec,
 } from './lib/peers.ts'
+export { SESSION_INFO_TOOL, buildSessionReport } from './lib/session-report.ts'
+export type { SessionContextReport, SessionRateLimitReport, SessionReport } from './lib/session-report.ts'
 export {
   SHELL_KEY_NAMES,
   SHELL_KEYS_MAX,

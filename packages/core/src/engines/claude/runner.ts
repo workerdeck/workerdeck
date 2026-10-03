@@ -17,6 +17,7 @@ import {
 import {
   ENGINE_CAPABILITIES,
   errorMessage,
+  type ContextUsage,
   type McpServerStatusInfo,
   type ModelOption,
   type PermissionMode,
@@ -41,17 +42,19 @@ import {
   toApiMessage,
 } from '../../lib/normalize.ts'
 import type { EngineRunnerConfig, PermissionDecision, Runner, SendMessageOptions } from '../../runner-interface.ts'
-import { EngineRunner } from '../../lib/engine-runner.ts'
+import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
 import { QUESTIONS_DISABLED_MESSAGE, approvalResolution, type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
 import { hostTitle } from '../../lib/title.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
 import { PEER_MCP_SERVER, withPeerContext } from '../../lib/peers.ts'
+import { liveContextFromReading, withDeadline, type LiveContext } from '../../lib/session-report.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { SubagentTracker } from './subagents.ts'
 
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
 const USAGE_REFRESH_MIN_MS = 60_000
+const REPORT_PROBE_TIMEOUT_MS = 5_000
 
 export type QueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?: Options }) => Query
 
@@ -336,9 +339,6 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   #mcpServersOption(): Options['mcpServers'] {
     const declared = this.config.mcpServers as Options['mcpServers']
-    if (!this.config.peers && !this.config.shells) {
-      return declared
-    }
     const tools = sessionTools(this.toolSources, () => this.id).map((gatewayTool) =>
       sdkTool(gatewayTool.name, gatewayTool.description, gatewayTool.shape, async (args) => {
         const output = await gatewayTool.run(args)
@@ -550,31 +550,46 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     } catch {}
   }
 
-  async #fetchContextUsage(): Promise<void> {
+  async #fetchContextUsage(): Promise<ContextUsage | undefined> {
     const query = this.#query
     if (typeof query?.getContextUsage !== 'function') {
-      return
+      return undefined
     }
     try {
-      const usage = await query.getContextUsage()
+      const raw = await query.getContextUsage()
       if (this.core.closed) {
-        return
+        return undefined
       }
-      this.core.emit({
-        type: 'context_usage',
-        usage: {
-          categories: usage.categories.map((c) => ({
-            name: c.name,
-            tokens: c.tokens,
-            color: c.color,
-          })),
-          totalTokens: usage.totalTokens,
-          maxTokens: usage.maxTokens,
-          percentage: usage.percentage,
-          model: usage.model,
-        },
-      })
-    } catch {}
+      const usage: ContextUsage = {
+        categories: raw.categories.map((c) => ({
+          name: c.name,
+          tokens: c.tokens,
+          color: c.color,
+        })),
+        totalTokens: raw.totalTokens,
+        maxTokens: raw.maxTokens,
+        percentage: raw.percentage,
+        model: raw.model,
+      }
+      this.core.emit({ type: 'context_usage', usage })
+      return usage
+    } catch {
+      return undefined
+    }
+  }
+
+  protected async reportFacts(): Promise<SessionReportFacts> {
+    const [live] = await Promise.all([
+      withDeadline(this.#fetchContextUsage(), REPORT_PROBE_TIMEOUT_MS),
+      withDeadline(
+        this.refreshUsage().catch(() => undefined),
+        REPORT_PROBE_TIMEOUT_MS,
+      ),
+    ])
+    const context: LiveContext | undefined = live
+      ? { totalTokens: live.totalTokens, maxTokens: live.maxTokens, categories: live.categories, measured: 'live' }
+      : liveContextFromReading(this.core.log.contextUsage)
+    return { vendor: 'anthropic', context, rateLimits: true }
   }
 
   // The account-level reading only ever moved at a turn boundary before this, so a gateway whose sessions were all

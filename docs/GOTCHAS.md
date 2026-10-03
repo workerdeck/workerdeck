@@ -1064,6 +1064,31 @@ handover wrong.
   would break every embedder whose hook is a one-expression arrow. Safe for `#park`, which clears
   the runner's subscribers first, so the cleanups are no-ops there.
 
+## Session self-report (`session_info`)
+
+- **The `workerdeck` tool carrier is now always on.** Before `session_info`, a claude session with
+  peers and shells both off declared no `workerdeck` MCP server and a codex thread no
+  `dynamicTools`; now both always carry at least `session_info`. A test asserting "no server" or
+  "no dynamic tools" is asserting the old rule.
+- **Claude reads context live, mid-tool-call.** The handler calls `getContextUsage()` (a CLI control
+  request) while the CLI is waiting on the tool's own answer, and refreshes the rate-limit poll
+  through `refreshUsage` (60s floor). Each probe races a 5s deadline and falls back to the log's
+  last reading (`measured: 'last_turn'`), so a CLI that cannot answer mid-call costs five seconds,
+  never the tool. The live read also emits `context_usage`, so asking moves every client's meter.
+  **Unverified against the real CLI**: it needs a paid run that calls the tool mid-turn, and no
+  existing smoke does yet.
+- **Codex reads the active turn** (`contextTokens`/`contextWindow` from the latest
+  `thread/tokenUsage/updated`) before falling back to the log. Rate limits on both engines come from
+  the session's own `rate_limit` events, latest per window; `logCoalesceKey` already keeps only
+  that one, and a window whose `resetsAt` has passed reports `usedPercent: 0`.
+- **The provider engine measures context per step, not per turn.** `totalUsage` sums every step of
+  a turn, which is not a context size; the runner keeps the last `finish-step`'s
+  `inputTokens + outputTokens` (`stepContextTokens`), persists it in the parked snapshot, and
+  clears it on `/clear`. The window comes only from `ProviderConfig.contextWindow` (a number, or a
+  map keyed by model id, then alias); unset, the report keeps the used tokens, nulls the rest and
+  says so in `context.note`. No model table is shipped on purpose: it would go stale silently.
+  Provider rate limits are `null`: they exist only as vendor-specific response headers.
+
 ## Peer messaging (`peers_list` / `peers_peek` / `peers_send`)
 
 Session-to-session messaging on one gateway: every engine gets the three tools, backed by one

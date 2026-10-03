@@ -7,6 +7,7 @@ import {
   type McpServerStatusInfo,
   type PermissionMode,
   type PermissionRequest,
+  type ProviderContextWindow,
   type SessionInfo,
   type ToolExecutionBackend,
   type ByModel,
@@ -24,11 +25,21 @@ import type {
   SendMessageOptions,
 } from '../../runner-interface.ts'
 import type { ToolExecutionCall, ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
-import { EngineRunner } from '../../lib/engine-runner.ts'
+import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
+import { providerVendor } from '../../lib/session-report.ts'
 import { approvalResolution, type ApprovalResolution, type CloseReason } from '../../lib/runner-core.ts'
 import { withPeerContext } from '../../lib/peers.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
-import { TurnStream, addUsage, newTurnUsage, settledToolCallIds, wireUsage, type TurnUsage } from './turn.ts'
+import {
+  TurnStream,
+  addUsage,
+  newTurnUsage,
+  resolveContextWindow,
+  settledToolCallIds,
+  stepContextTokens,
+  wireUsage,
+  type TurnUsage,
+} from './turn.ts'
 
 export type AiSdkRunnerConfig = EngineRunnerConfig & {
   languageModel: LanguageModel
@@ -42,6 +53,7 @@ export type AiSdkRunnerConfig = EngineRunnerConfig & {
   toolTitles?: Record<string, string>
   shouldApprove?: (call: { toolName: string; input: unknown }) => boolean
   resolveModel?: (modelId: string | undefined) => LanguageModel
+  contextWindow?: ProviderContextWindow
   reportMcpServers?: () => Promise<McpServerStatusInfo[] | undefined>
   onClose?: () => void | Promise<void>
   restore?: RunnerSnapshot
@@ -60,6 +72,7 @@ export type AiSdkSessionState = {
   pendingToolCalls: PendingToolCall[]
   dispatched: string[]
   numTurns: number
+  contextTokens?: number
   turnAccum?: TurnUsage
   permissionMode: PermissionMode
   model?: string
@@ -81,6 +94,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
   #abort: AbortController | undefined
   #turnAccum: TurnUsage | undefined
   #numTurns = 0
+  #contextTokens: number | undefined
   #started = false
   #parked = false
   #modelAlias: string | undefined
@@ -115,6 +129,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     }
     this.#dispatched = new Set(state.dispatched)
     this.#numTurns = state.numTurns
+    this.#contextTokens = state.contextTokens
     this.#turnAccum = state.turnAccum ? { ...state.turnAccum } : undefined
     if (this.#turnAccum && state.parkedAt !== undefined) {
       this.#turnAccum.startedAt += Date.now() - state.parkedAt
@@ -213,6 +228,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
       pendingToolCalls: [...this.#pendingToolCalls.values()],
       dispatched: [...this.#dispatched],
       numTurns: this.#numTurns,
+      ...(this.#contextTokens === undefined ? {} : { contextTokens: this.#contextTokens }),
       turnAccum: this.#turnAccum ? { ...this.#turnAccum } : undefined,
       permissionMode: this.#permissionMode,
       model: this.#modelAlias,
@@ -357,6 +373,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
         throw new Error('cannot clear context while tool calls are outstanding')
       }
       this.#messages = []
+      this.#contextTokens = undefined
       this.localCommands.clear()
       this.core.emit({ type: 'conversation_reset' })
     })
@@ -645,6 +662,9 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
         if (this.core.closed) {
           break
         }
+        if (part.type === 'finish-step') {
+          this.#contextTokens = stepContextTokens(part.usage) ?? this.#contextTokens
+        }
         stream.accept(part)
       }
       stream.flush()
@@ -725,6 +745,24 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     })
     this.#turnAccum = undefined
     this.core.setStatus('idle')
+  }
+
+  protected async reportFacts(): Promise<SessionReportFacts> {
+    const model = this.#model
+    const vendor = providerVendor(typeof model === 'string' ? undefined : (model as { provider?: string }).provider)
+    const maxTokens = resolveContextWindow(this.config.contextWindow, this.#modelId(), this.#modelAlias)
+    if (this.#contextTokens === undefined) {
+      return { vendor, context: undefined, rateLimits: false }
+    }
+    return {
+      vendor,
+      context: { totalTokens: this.#contextTokens, maxTokens, measured: this.core.status === 'running' ? 'live' : 'last_turn' },
+      contextNote:
+        maxTokens === undefined
+          ? 'The context window size of this model is unknown to the gateway; the operator can set provider.contextWindow on the profile.'
+          : undefined,
+      rateLimits: false,
+    }
   }
 
   #modelId(): string | undefined {

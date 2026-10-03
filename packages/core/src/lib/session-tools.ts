@@ -1,15 +1,23 @@
 import { gatewayToolSpec, type GatewayToolOutput, type GatewayToolShape, type GatewayToolSpec } from './gateway-tools.ts'
+import {
+  SESSION_INFO_TOOL,
+  SESSION_INFO_TOOL_SHAPE,
+  isSessionInfoToolName,
+  runSessionInfoTool,
+  type SessionReportSource,
+} from './session-report.ts'
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, isPeerToolName, runPeerTool, type PeerDirectory } from './peers.ts'
 import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory } from './shells.ts'
 
-export type SessionToolSources = { peers?: PeerDirectory; shells?: ShellDirectory; write: boolean }
+export type SessionToolSources = { report?: SessionReportSource; peers?: PeerDirectory; shells?: ShellDirectory; write: boolean }
 
 export type SessionTool = GatewayToolShape & { name: string; run(args: unknown): Promise<GatewayToolOutput> }
 
-// The gateway's own tools a session is offered, peers before shells, in the order every engine registers them.
+// The gateway's own tools a session is offered, session_info then peers then shells, in the order every engine registers them.
 export function sessionTools(sources: SessionToolSources, from: () => string): SessionTool[] {
-  const { peers, shells, write } = sources
+  const { report, peers, shells, write } = sources
   return [
+    ...(report ? [{ name: SESSION_INFO_TOOL, ...SESSION_INFO_TOOL_SHAPE, run: () => runSessionInfoTool(report, from()) }] : []),
     ...(peers
       ? PEER_TOOL_NAMES.map((name) => ({ name, ...PEER_TOOL_SHAPES[name], run: (args: unknown) => runPeerTool(peers, from(), name, args) }))
       : []),
@@ -34,6 +42,9 @@ export function runSessionTool(
   name: string,
   args: unknown,
 ): Promise<GatewayToolOutput> | undefined {
+  if (sources.report && isSessionInfoToolName(name)) {
+    return runSessionInfoTool(sources.report, from)
+  }
   if (sources.peers && isPeerToolName(name)) {
     return runPeerTool(sources.peers, from, name, args)
   }

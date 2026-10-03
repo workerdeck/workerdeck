@@ -5,6 +5,7 @@ import type { ToolExecutionResult, ToolExecutor } from '../../executors/tool-exe
 import type { WebFetchFn } from './web-fetch.ts'
 import type { PeerDirectory } from '../../lib/peers.ts'
 import type { ShellDirectory } from '../../lib/shells.ts'
+import type { SessionReportSource } from '../../lib/session-report.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 
 export type ToolTrust = 'sandboxed' | 'authoritative'
@@ -32,6 +33,7 @@ export type ToolContextOptions = {
   shellWrite?: boolean
   // The runner does not exist while its tools are built, so the caller's own id is read at call time.
   selfId?: () => string
+  report?: SessionReportSource
 }
 
 export type ToolContext = {
@@ -110,7 +112,7 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
   }
 
   const gatewayTools = sessionTools(
-    { peers: options.peers, shells: options.shells, write: options.shellWrite === true },
+    { report: options.report, peers: options.peers, shells: options.shells, write: options.shellWrite === true },
     options.selfId ?? (() => options.sessionId),
   )
   for (const gatewayTool of gatewayTools) {

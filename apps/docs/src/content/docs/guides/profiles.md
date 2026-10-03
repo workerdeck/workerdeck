@@ -47,6 +47,10 @@ profiles: [
 ]
 ```
 
+A provider profile may also set `contextWindow` (tokens, or a map keyed by model id) so the
+agent's `session_info` tool can report how full its context is. The AI SDK does not expose a
+model's window, so without it the tool reports the tokens used and leaves the percentage empty.
+
 The engines answer to different vocabularies, and the server holds that line rather than
 quietly coercing. Each engine declares an **`EngineCapabilities` record** - served on
 `ProfileInfo.capabilities` and `SessionInfo.capabilities`, with the protocol's

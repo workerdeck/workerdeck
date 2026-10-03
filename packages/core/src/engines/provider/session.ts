@@ -100,6 +100,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     shells: options.config.shells,
     shellWrite: options.config.shellAgentWrite !== undefined,
     selfId: () => runner?.id ?? 'pending',
+    report: () => (runner ? runner.sessionReport() : Promise.reject(new Error('session is still starting'))),
   })
   const declaredServers = options.profile?.session?.mcpServers
   const connected = options.mcp?.tools ?? options.mcpTools
@@ -112,6 +113,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     {
       ...options.config,
       languageModel: options.resolveModel(options.profile, options.config),
+      contextWindow: options.config.contextWindow ?? options.profile?.provider?.contextWindow,
       instructions: composeInstructions(options.profile?.session?.instructions, options.instructions, options.config.instructions),
       tools: context.tools,
       vfs,

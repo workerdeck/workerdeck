@@ -16,10 +16,11 @@ import {
 import { attachmentKind, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
 import type { EngineRunnerConfig, Runner, SendMessageOptions } from '../../runner-interface.ts'
 import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
-import { EngineRunner } from '../../lib/engine-runner.ts'
+import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
 import { type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
 import { withPeerContext } from '../../lib/peers.ts'
+import { liveContextFromReading, type LiveContext } from '../../lib/session-report.ts'
 import { runSessionTool, sessionToolSpecs } from '../../lib/session-tools.ts'
 import { isShellToolName, shellToolNeedsCard, shellWriteDeniedText } from '../../lib/shells.ts'
 import {
@@ -1160,6 +1161,15 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       this.#planType = limits.planType
       this.core.emit({ type: 'plan_info', subscriptionType: limits.planType })
     }
+  }
+
+  protected async reportFacts(): Promise<SessionReportFacts> {
+    const active = this.#activeTurn
+    const context: LiveContext | undefined =
+      active?.contextTokens !== undefined && active.contextWindow
+        ? { totalTokens: active.contextTokens, maxTokens: active.contextWindow, measured: 'live' }
+        : liveContextFromReading(this.core.log.contextUsage)
+    return { vendor: 'openai', context, rateLimits: true }
   }
 
   #emitContextUsage(active: ActiveTurn): void {

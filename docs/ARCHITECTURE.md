@@ -443,6 +443,19 @@ cover is a turn in flight at the moment of the restart; `workerdeck guard` (`pac
 the other half, refusing the restart while any session is mid-turn, awaiting an approval, or
 (unless `--allow-parked`) parked without a durable store behind it.
 
+## Session self-report (`session_info`)
+
+Every session on every engine gets one read-only tool, `session_info`, whatever the peer and shell
+settings: it rides the same carrier as the peer tools (the `workerdeck` SDK MCP server on claude,
+`dynamicTools` on codex, a `ToolDefinition` on the provider engine), listed first. It answers a JSON
+report built by `buildSessionReport` (`packages/core/src/lib/session-report.ts`) from the runner's
+own `info()`, its event log and one engine hook, `EngineRunner.reportFacts`: identity, engine,
+vendor, model, permission mode, context usage (used, window, percent, remaining, and whether the
+reading is `live` or from the `last_turn`), turn count, cost with its basis, and the account
+rate-limit windows. The purpose is self-regulation: an agent can see its context filling up and
+wrap up, summarise or suggest compaction, and see a rate-limit window close to its cap and work
+more cheaply. Nothing is pushed to the model; it only learns any of this by asking.
+
 ## Peer messaging
 
 A session can list, read and message the other sessions on its gateway, whatever engine either
