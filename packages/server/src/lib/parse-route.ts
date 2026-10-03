@@ -10,6 +10,7 @@ export type SessionItemRoute =
   | { kind: 'produced'; id: string; producedFileId?: string }
   | { kind: 'shells'; id: string; shellId?: string; shellAction?: ShellRouteAction }
   | { kind: 'stop-task'; id: string; stopTaskId: string }
+  | { kind: 'background-task'; id: string; backgroundTaskId?: string }
   | { kind: 'project-icon'; id: string }
   | { kind: 'tool-result'; id: string; resultSeq: number }
   | { kind: 'mcp'; id: string; mcpServer?: string }
@@ -67,6 +68,12 @@ function itemRoute(rawId: string, parts: string[]): SessionItemRoute | null {
   }
   if (length === 4 && section === 'tasks' && fourth === 'stop') {
     return { kind: 'stop-task', id: decode(rawId), stopTaskId: decode(third!) }
+  }
+  if (length === 3 && section === 'tasks' && third === 'background') {
+    return { kind: 'background-task', id: decode(rawId) }
+  }
+  if (length === 4 && section === 'tasks' && fourth === 'background') {
+    return { kind: 'background-task', id: decode(rawId), backgroundTaskId: decode(third!) }
   }
   if (length === 3 && section === 'project' && third === 'icon') {
     return { kind: 'project-icon', id: decode(rawId) }

@@ -203,6 +203,7 @@ struct SessionView: View {
             // view and the rail draws the mark the same pass the menu set it.
             bookmarks: bookmarks.bookmarks(host: hostId, sessionId: vm.sessionId),
             onToggleBookmark: { bookmarks.toggle(host: hostId, sessionId: vm.sessionId, itemId: $0) },
+            onBackgroundTask: backgroundTaskAction,
             onOpenSubagent: { openSubagent($0) })
         } else {
           TranscriptListView(
@@ -751,7 +752,8 @@ struct SessionView: View {
         onSend: send,
         onStop: { vm.interrupt() },
         onAddMedia: { sheet = .addMedia },
-        onExitShell: exitShellMode)
+        onExitShell: exitShellMode,
+        onSendNow: sendNowAction)
     }
     .padding(.horizontal, docked ? 0 : gutter)
     .padding(.top, 8)
@@ -924,6 +926,24 @@ struct SessionView: View {
     selection = NSRange(location: 0, length: 0)
     // Keep the keyboard up: a remote control is used in bursts.
     isComposerFocused = true
+  }
+
+  private var backgroundTaskAction: ((String) -> Void)? {
+    guard vm.capabilities.backgroundTasks else { return nil }
+    let vm = vm
+    return { vm.backgroundTask($0) }
+  }
+
+  private var sendNowAction: (() -> Void)? {
+    guard vm.capabilities.backgroundTasks, LiveTool.hasBackgroundable(vm.state.items) else {
+      return nil
+    }
+    return sendNow
+  }
+
+  private func sendNow() {
+    send()
+    vm.backgroundTask()
   }
 
   // MARK: - Add Media

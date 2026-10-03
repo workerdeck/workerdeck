@@ -71,6 +71,8 @@ struct TerminalTranscriptView: View {
   /// the preview harness - the menu offers no bookmark action at all, the
   /// web's missing-`BookmarkProvider` contract.
   var onToggleBookmark: ((String) -> Void)? = nil
+  // Moves a running call to the background by its tool_use id. Absent, the menu offers no such action.
+  var onBackgroundTask: ((String) -> Void)? = nil
   /// Raise the sub-agent takeover from a `Task` row's press. Absent, the press
   /// falls back to the inline toggle (see `TerminalTranscriptModel.press`) -
   /// and it is deliberately absent inside a frame, as on the web: no takeover
@@ -174,8 +176,11 @@ struct TerminalTranscriptView: View {
                 }
               }
               let copyText = row.copyText
-              guard bookmark != nil || copyText != nil else { return nil }
-              return TerminalRowMenu(bookmark: bookmark, copyText: copyText)
+              let background: (() -> Void)? = onBackgroundTask.flatMap { move in
+                row.backgroundableCallId.map { id in { move(id) } }
+              }
+              guard bookmark != nil || copyText != nil || background != nil else { return nil }
+              return TerminalRowMenu(bookmark: bookmark, copyText: copyText, background: background)
             }
           )
           // The prompt of the turn being read, held at the top. An overlay for

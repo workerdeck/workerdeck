@@ -4,6 +4,7 @@ import { compactionText, formatBytes, formatCost, formatDuration, toolInputPrevi
 import { taskChildItems, type TerminalBlock, type ToolCallItem } from './blocks.ts'
 import { IMAGE_BOX_LINES, hostImagePathOf } from './image-box.ts'
 import { collapsedResult } from './result-preview.ts'
+import { ELAPSED_WIDEST, liveTailLines, runStartedAt, runTailLines, toolBusy } from './live-tool.ts'
 import { shellBodyLines, shellFooterText, shellHeaderText } from './shell-row.ts'
 import { todoLine, todoPreview } from './todos.ts'
 import { isPeerSend, peerName, planRun, runSummary, taskSummary } from './tool-run.ts'
@@ -565,7 +566,11 @@ function toolRowHeight(item: ToolCallItem, m: CellMetrics, extraPx: number): Acc
   const todos = todoPreview(item.name, item.input)
   const preview = todos ? todos.summary : toolInputPreview(item.input)
   const backend = item.backend && item.backend !== 'server' ? ` · ${item.backend}` : ''
-  let acc = rowH(`${item.name}(${preview})${backend}`, m, { gutterCells: 2, extraPx })
+  const elapsed = toolBusy(item) && item.ts !== undefined ? ELAPSED_WIDEST : ''
+  let acc = rowH(`${item.name}(${preview})${backend}${elapsed}`, m, { gutterCells: 2, extraPx })
+  for (const line of liveTailLines(item)) {
+    acc = add(acc, rowH(line || ' ', m, { indentCells: 3, gutterCells: 3, extraPx }))
+  }
 
   const boxes = (item.result?.images?.length ?? 0) + (hostImagePathOf(item) === undefined ? 0 : 1)
   if (boxes > 0) {
@@ -680,7 +685,12 @@ export function blockHeight(block: TerminalBlock, m: CellMetrics): ComputedHeigh
       return itemHeight(plan.item, m)
     }
     const busy = plan.items.some((item) => item.status === 'running' || item.status === 'pending')
-    return rowH(runSummary(plan.items, busy), m)
+    const elapsed = runStartedAt(plan.items) === undefined ? '' : ELAPSED_WIDEST
+    let acc = rowH(runSummary(plan.items, busy) + elapsed, m)
+    for (const line of runTailLines(plan.items)) {
+      acc = add(acc, rowH(line || ' ', m, { indentCells: 3, gutterCells: 3 }))
+    }
+    return acc
   }
   return itemHeight(block.item, m)
 }

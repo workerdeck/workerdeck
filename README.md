@@ -116,6 +116,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
 - **Work that outlives the turn.** A session can park on something nothing here is doing - a batch
   job, a human approving on Monday - and wake days later, mid-turn, as itself. A parked run frees
   its concurrency slot and stops its wall-clock budget.
+- **Long commands you can see and step around.** A running tool row shows how long it has run and
+  the tail of its output, so "still going or stuck?" needs no agent. On claude, move it to the
+  background (or send a message with ⌥↵) and the agent answers while the command keeps running.
 - **Idle sessions that cost no memory.** An engine process and its MCP servers are almost all of a
   gateway's footprint. Put an idle session to sleep, or let `--engine-sleep-after 30m` do it for the
   ones nobody is watching: the process goes, the session stays listed with its transcript, and the

@@ -595,6 +595,9 @@ final class TranscriptViewModel {
   /// cleared locally.
   func clearContext() { handle?.clearContext() }
 
+  // Claude's Ctrl+B: nil moves every running foreground Bash or subagent call to the background.
+  func backgroundTask(_ toolUseId: String? = nil) { handle?.backgroundTask(toolUseId) }
+
   func approve(_ requestId: String, updatedInput: [String: JSONValue]? = nil) {
     handle?.approve(requestId: requestId, updatedInput: updatedInput)
   }

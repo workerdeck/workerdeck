@@ -30,6 +30,7 @@ import { type AttachmentInput, attachmentContentBlocks } from '../../lib/attachm
 import { withoutGatewaySecrets } from '../../lib/child-env.ts'
 import { TaskChecklist, checklistFromBody, sameChecklist } from '../../lib/checklist.ts'
 import { InputQueue } from '../../lib/input-queue.ts'
+import { ToolOutputTails } from '../../lib/tool-output.ts'
 import { isSlashCommand } from '../../lib/local-command.ts'
 import {
   type UsageRateLimits,
@@ -51,6 +52,7 @@ import { liveContextFromReading, withDeadline, type LiveContext } from '../../li
 import { sessionTools } from '../../lib/session-tools.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { SubagentTracker } from './subagents.ts'
+import { tailTaskOutput, taskOutputRoots } from './task-output.ts'
 
 // An attach is a client arriving to look at the number, not a reason to ask the CLI a second time within the minute.
 const USAGE_REFRESH_MIN_MS = 60_000
@@ -81,6 +83,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #permissionMode: PermissionMode | undefined
   #turnOverWhileBlocked = false
   #subagents = new SubagentTracker()
+  #outputTails = new ToolOutputTails((body) => this.core.emit(body))
   #numTurns: number | undefined
   #input = new InputQueue()
   // The row a compaction is drawing on, from the first 'compacting' status to the boundary that
@@ -117,7 +120,10 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   protected override coreHooks(): RunnerCoreHooks {
     return {
-      observe: (body, event) => this.#subagents.observe(body, event.ts),
+      observe: (body, event) => {
+        this.#subagents.observe(body, event.ts)
+        this.#outputTails.observe(body)
+      },
       settled: (body) => this.#followChecklist(body),
       holdStatus: (status) => this.#holdIdleWhileCompacting(status),
     }
@@ -201,6 +207,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     this.#input = new InputQueue()
     input.end()
     query?.close()
+    this.#outputTails.clear()
     this.core.cost.restartProcess()
     this.core.emit({ type: 'engine_sleep', asleep: true })
     return { ok: true }
@@ -299,6 +306,13 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     return true
   }
 
+  async backgroundTask(toolUseId?: string): Promise<boolean> {
+    if (!this.#query) {
+      return false
+    }
+    return await this.#query.backgroundTasks(toolUseId)
+  }
+
   async clearContext(): Promise<void> {
     if (this.core.terminal) {
       throw new Error('session is closed')
@@ -322,6 +336,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   close(reason: CloseReason = 'client'): void {
     this.core.close(reason, () => {
       this.localCommands.clear()
+      this.#outputTails.clear()
       this.#input.end()
       this.#query?.close()
     })
@@ -467,6 +482,22 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     return { ...declared, [PEER_MCP_SERVER]: createSdkMcpServer({ name: PEER_MCP_SERVER, tools }) }
   }
 
+  #tailForegroundBash(msg: { task_id: string; tool_use_id?: string; task_type?: string; is_backgrounded?: boolean }): void {
+    const sessionId = this.#sdkSessionId
+    if (msg.task_type !== 'local_bash' || msg.is_backgrounded !== false || !msg.tool_use_id || !sessionId) {
+      return
+    }
+    if (this.#outputTails.has(msg.tool_use_id)) {
+      return
+    }
+    tailTaskOutput(this.#outputTails, {
+      toolUseId: msg.tool_use_id,
+      taskId: msg.task_id,
+      sessionId,
+      roots: taskOutputRoots(this.config.env ?? process.env),
+    })
+  }
+
   #handleMessage(msg: SDKMessage): void {
     if (msg.type === 'system' && msg.subtype === 'init') {
       this.#sdkSessionId = msg.session_id
@@ -521,6 +552,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     }
     if (msg.type === 'system' && msg.subtype === 'status') {
       this.#handleCompactionStatus(msg)
+    }
+    if (msg.type === 'system' && msg.subtype === 'task_started') {
+      this.#tailForegroundBash(msg)
     }
     if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
       const meta = msg.compact_metadata

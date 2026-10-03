@@ -67,6 +67,9 @@ const run: TranscriptItem[] = [
     },
     parentToolUseId: null,
     status: 'running',
+    ts: Date.now() - 375_000,
+    liveTail:
+      'Resolved 212 packages in 1.84s\nDownloading torch (846.2MiB)\nDownloading nvidia-cudnn-cu12 (634.0MiB)\n Downloaded nvidia-cudnn-cu12\nDownloading torch: 61% 517.1MiB/846.2MiB',
   }),
   item({
     kind: 'assistant_text',

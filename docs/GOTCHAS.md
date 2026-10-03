@@ -1060,6 +1060,37 @@ dormant wake starts a fresh log.
   open browser page, a logged-in session), and the prompt cache. The wake pays a CLI start, a
   resume and every MCP server starting again.
 
+## Live tool output & backgrounding (`tool_output`, `backgroundTask`)
+
+A running tool row shows its elapsed time (from the item's own `ts`, ui-only) and the tail of its
+output; on claude it can be moved to the background. Plan and spike notes: gitignored
+`_docs/plans/BACKGROUND-AND-LIVE-TOOLS.md`. Proven by the paid `pnpm smoke:background`.
+
+- **`tool_output` is a whole tail, never a delta.** `ToolOutputTails` (core `lib/tool-output.ts`)
+  keeps the raw tail, flushes at most every 400 ms per tool, and the event is coalesced per tool id
+  in replay *and* in the log (`logCoalesceKey`), so a late attach needs one event and a long command
+  leaves one 2 KB event behind, not thousands. Not in snapshots. Tails end at the tool's
+  `tool_result`, at turn end, on sleep and on close.
+- **Claude has no output stream in the SDK.** A foreground Bash call becomes a `local_bash` task
+  (`task_started` with `is_backgrounded: false`, about 3 s in) and the CLI writes its output live to
+  `<CLAUDE_CODE_TMPDIR or /tmp>/claude-<uid>/<cwd-slug>/<session>/tasks/<task_id>.output`, but only
+  *names* that path once the call is backgrounded or settled (`output_file` is `""` for a foreground
+  task). `engines/claude/task-output.ts` finds the file by listing the slug directories, never by
+  re-deriving the CLI's slug, and gives up quietly after 3 s. A CLI that moves the file loses the
+  tail, not the turn.
+- **Backgrounding is `Query.backgroundTasks(toolUseId?)`**, the control request behind Ctrl+B. The
+  blocked call returns at once ("Command was manually backgrounded by user…"), the turn carries on,
+  a message queued behind it is answered, and on completion the CLI emits `task_notification` and
+  **starts a new turn by itself**. Without an id it backgrounds every foreground task (the composer's
+  "send now" sends first, then backgrounds, so the message is waiting at the boundary it creates).
+- **Codex has no per-item background.** `turn/steer` is accepted mid-command but reaches the model
+  only when the command ends; `turn/interrupt` kills the turn. `item/commandExecution/outputDelta`
+  is what feeds codex's tail. `unified_exec` is stable and on by default in 0.158.0, and the running
+  command is listed by the experimental `thread/backgroundTerminals/list` with a `processId`, so
+  `thread/backgroundTerminals/terminate` could stop one command without the turn (not wired yet).
+- **The action is gated by `EngineCapabilities.backgroundTasks`** (claude only) and offered on a
+  running top-level Bash/Task/Agent row; a subagent's own Bash is not a foreground task of ours.
+
 ## Hot reload (`--hot-reload`)
 
 Dev only, and only from a checkout. It re-evaluates every module under `packages/` in place and

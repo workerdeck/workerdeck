@@ -200,13 +200,15 @@ final class TerminalRowCell: UICollectionViewCell {
   /// Only a row that is actually working pays for a timer, and it is one timer
   /// for the whole row however many of its lines pulse.
   private func syncPulse() {
-    let wanted =
-      window != nil && !UIAccessibility.isReduceMotionEnabled
-      && lines.contains(where: \.pulsing)
-    guard wanted else { return stopPulse() }
-    guard pulseTimer == nil else { return }
+    let pulsing = !UIAccessibility.isReduceMotionEnabled && lines.contains(where: \.pulsing)
+    let ticking = lines.contains { $0.elapsedSince != nil }
+    let interval: TimeInterval? =
+      window == nil ? nil : pulsing ? TermGlyph.pulseInterval : ticking ? 1 : nil
+    guard let interval else { return stopPulse() }
+    if pulseTimer?.timeInterval == interval { return }
+    stopPulse()
     pulseTimer = Timer.scheduledTimer(
-      withTimeInterval: TermGlyph.pulseInterval, repeats: true
+      withTimeInterval: interval, repeats: true
     ) { [weak self] _ in
       self?.gutter.setNeedsDisplay()
     }
@@ -559,6 +561,17 @@ extension TerminalRowCell {
       for (index, line) in lines.enumerated() {
         let box = geometry.lineRect(index, width: bounds.width)
         guard box.intersects(rect) else { continue }
+        if let elapsed = LiveTool.elapsedText(line, now: Date().timeIntervalSince1970 * 1000) {
+          (elapsed as NSString).draw(
+            in: CGRect(
+              x: geometry.bodyX(line) + CGFloat(LiveTool.elapsedColumn(line)) * geometry.metrics.cell,
+              y: box.minY, width: bounds.width, height: box.height),
+            withAttributes: [
+              .font: typography.uiFont,
+              .foregroundColor: TerminalPalette.uiColor(.faint),
+              .paragraphStyle: style,
+            ])
+        }
         let glyph = line.pulsing ? Self.pulseFrame() : line.gutter
         guard !glyph.isEmpty else { continue }
         let tone = line.pulsing ? TermTone.mark : line.gutterTone

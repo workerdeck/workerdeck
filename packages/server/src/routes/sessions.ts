@@ -39,6 +39,7 @@ const ITEM_HANDLERS: ItemHandlers = {
   produced: ({ ctx, req, res, route }) => handleProducedFiles(ctx, req, res, route.id, route.producedFileId),
   shells: ({ ctx, req, res, route, runner, auth }) => handleShells(ctx, req, res, route, runner ?? null, ctx.auth.isOperator(auth)),
   'stop-task': handleStopTask,
+  'background-task': handleBackgroundTask,
   'project-icon': ({ ctx, req, res, info }) => handleProjectIcon(ctx.projects, req, res, info.cwd),
   'tool-result': ({ req, res, route, runner, parked }) => {
     const snapshot = parked && !isDormant(parked) ? parked.snapshot.events : undefined
@@ -165,6 +166,18 @@ async function handleStopTask({ req, res, route, runner }: SessionCall<'stop-tas
   }
   if (!(await live.stopTask(route.stopTaskId))) {
     fail(404, 'no running task to stop')
+  }
+  json(res, 200, { ok: true })
+}
+
+async function handleBackgroundTask({ req, res, route, runner }: SessionCall<'background-task'>): Promise<void> {
+  requireMethod(req, 'POST')
+  const live = requireLive(runner, 'it has no running tasks')
+  if (!live.backgroundTask) {
+    fail(501, `the ${engineOf(live.info())} engine cannot move a task to the background`)
+  }
+  if (!(await live.backgroundTask(route.backgroundTaskId))) {
+    fail(404, 'no foreground task to move to the background')
   }
   json(res, 200, { ok: true })
 }

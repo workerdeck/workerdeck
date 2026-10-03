@@ -125,12 +125,19 @@ public enum TerminalPlanner {
     let open = expansion.isOpen(key)
     let wash = inOpen || open
 
-    var lines = wrapBody(
-      runSummary(run, busy: busy), metrics: metrics,
-      gutter: busy ? TermGlyph.pulseRest : "", gutterTone: .mark,
-      tone: failed ? .red : .dim, nested: nested, pulsing: busy,
-      press: .toggle(key), inOpen: wash)
-    guard open else { return lines }
+    var lines = reserveElapsed(
+      wrapBody(
+        runSummary(run, busy: busy), metrics: metrics,
+        gutter: busy ? TermGlyph.pulseRest : "", gutterTone: .mark,
+        tone: failed ? .red : .dim, nested: nested, pulsing: busy,
+        press: .toggle(key), inOpen: wash),
+      since: LiveTool.runStartedAt(run), metrics: metrics)
+    guard open else {
+      return lines
+        + planLiveTail(
+          LiveTool.runTailLines(run), metrics: metrics, nested: nested, press: .toggle(key),
+          inOpen: wash)
+    }
     // No blank between them: `needsBlank` says two tool calls sit flush, and
     // that is exactly what the run is made of.
     for call in run {
@@ -446,10 +453,14 @@ public enum TerminalPlanner {
     if call.title != nil, open { header += " · \(call.name)" }
     if let backend = call.backend, backend != "server" { header += " · \(backend)" }
 
-    var lines = wrapBody(
-      header, metrics: metrics, gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
-      gutterTone: tone, tone: .fg, bold: true, nested: nested, pulsing: busy, press: press,
-      inOpen: wash)
+    var lines = reserveElapsed(
+      wrapBody(
+        header, metrics: metrics, gutter: busy ? TermGlyph.pulseRest : TermGlyph.bullet,
+        gutterTone: tone, tone: .fg, bold: true, nested: nested, pulsing: busy, press: press,
+        inOpen: wash),
+      since: busy ? call.ts : nil, metrics: metrics)
+    lines += planLiveTail(
+      LiveTool.tailLines(call), metrics: metrics, nested: nested, press: press, inOpen: wash)
 
     // The pictures first, under the header and above whatever the call said in
     // words - the web client's order, and the one that reads right: a
@@ -842,6 +853,37 @@ public enum TerminalPlanner {
   }
 
   // MARK: - Wrapping
+
+  // The label's width is reserved whatever the clock says, so a row never grows when it starts drawing.
+  static func reserveElapsed(_ lines: [TermLine], since: Double?, metrics: TerminalMetrics)
+    -> [TermLine]
+  {
+    guard let since, var last = lines.last else { return lines }
+    let extra = last.nested ? nestedIndentCells * metrics.cell : 0
+    let cols = metrics.columns(gutter: last.columns, indent: last.indent, extra: extra)
+    var out = lines
+    if LiveTool.elapsedColumn(last) + LiveTool.elapsedWidest.count <= cols {
+      last.elapsedSince = since
+      out[out.count - 1] = last
+    } else {
+      out.append(
+        TermLine(
+          text: "", tone: last.tone, columns: last.columns, indent: last.indent, band: last.band,
+          nested: last.nested, press: last.press, inOpen: last.inOpen, elapsedSince: since))
+    }
+    return out
+  }
+
+  static func planLiveTail(
+    _ tail: [String], metrics: TerminalMetrics, nested: Bool, press: TermPress?, inOpen: Bool
+  ) -> [TermLine] {
+    tail.enumerated().flatMap { offset, line in
+      wrapBody(
+        line.isEmpty ? " " : line, metrics: metrics,
+        gutter: offset == 0 ? TermGlyph.output : "", gutterTone: .faint, tone: .faint,
+        columns: 3, indent: 1, nested: nested, press: press, inOpen: inOpen)
+    }
+  }
 
   /// Wrap a plain string into lines, marker on the first only.
   static func wrapBody(

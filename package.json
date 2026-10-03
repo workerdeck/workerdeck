@@ -35,6 +35,7 @@
     "smoke:restart": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/restart.ts",
     "smoke:shell-write": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/shell-write.ts",
     "smoke:sleep": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/sleep.ts",
+    "smoke:background": "node --env-file-if-exists=.env --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/background.ts",
     "smoke:attach": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/attach.ts",
     "smoke:push": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/push.ts",
     "smoke:activity": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register smoke/live-activity.ts",

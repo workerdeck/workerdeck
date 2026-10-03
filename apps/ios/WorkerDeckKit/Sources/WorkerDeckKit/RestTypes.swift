@@ -61,6 +61,8 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   /// The engine child can be stopped while the session stays live
   /// (`POST /sessions/:id/sleep`). Absent reads as false.
   public let engineSleep: Bool
+  // A running foreground Bash or subagent call can be moved to the background. Absent reads as false.
+  public let backgroundTasks: Bool
   /// 'token' | 'item' | 'none' - anything ≠ 'token' renders without a typing cursor.
   public let streaming: String
 
@@ -73,7 +75,8 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     skillsList: Bool = false,
     settingSources: Bool, budgets: Bool,
     attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool,
-    hostCwd: Bool? = nil, engineSleep: Bool = false, streaming: String
+    hostCwd: Bool? = nil, engineSleep: Bool = false, backgroundTasks: Bool = false,
+    streaming: String
   ) {
     self.interactiveApprovals = interactiveApprovals
     self.permissionModes = permissionModes
@@ -96,6 +99,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     self.vfs = vfs
     self.hostCwd = hostCwd
     self.engineSleep = engineSleep
+    self.backgroundTasks = backgroundTasks
     self.streaming = streaming
   }
 
@@ -127,6 +131,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     vfs = try c.decode(Bool.self, forKey: .vfs)
     hostCwd = try c.decodeIfPresent(Bool.self, forKey: .hostCwd)
     engineSleep = try c.decodeIfPresent(Bool.self, forKey: .engineSleep) ?? false
+    backgroundTasks = try c.decodeIfPresent(Bool.self, forKey: .backgroundTasks) ?? false
     streaming = try c.decode(String.self, forKey: .streaming)
   }
 }
@@ -146,7 +151,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     budgets: true,
     attachments: ["image", "pdf", "text"],
     reasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
-    vfs: false, engineSleep: true, streaming: "token"
+    vfs: false, engineSleep: true, backgroundTasks: true, streaming: "token"
   ),
   .codex: EngineCapabilities(
     // The app-server ask channels are wired to the permission surface. NOTE

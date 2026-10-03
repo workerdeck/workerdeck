@@ -19,6 +19,7 @@ export function fakeHarness(models?: Array<Record<string, unknown>>) {
   const captured: { options?: Options; inputs: SDKUserMessage[] } = { inputs: [] }
   const interrupt = vi.fn(async () => {})
   const stopTask = vi.fn(async (_taskId: string) => {})
+  const backgroundTasks = vi.fn(async (toolUseId?: string) => toolUseId !== 'unknown')
   const setModel = vi.fn(async () => {})
 
   const emit = (msg: SDKMessage) => {
@@ -56,6 +57,7 @@ export function fakeHarness(models?: Array<Record<string, unknown>>) {
     },
     interrupt,
     stopTask,
+    backgroundTasks,
     setModel,
     close: end,
     ...(models
@@ -75,7 +77,7 @@ export function fakeHarness(models?: Array<Record<string, unknown>>) {
     })()
     return query
   }
-  return { emit, end, captured, interrupt, stopTask, setModel, queryFn }
+  return { emit, end, captured, interrupt, stopTask, backgroundTasks, setModel, queryFn }
 }
 
 // A query that never yields - for suites where the claude sessions are only ever built.

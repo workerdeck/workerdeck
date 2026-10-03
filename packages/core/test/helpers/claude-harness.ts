@@ -19,6 +19,7 @@ export function fakeHarness(capabilities?: HarnessCapabilities) {
   const captured: { options?: Options; inputs: SDKUserMessage[] } = { inputs: [] }
   const interrupt = vi.fn(async () => {})
   const stopTask = vi.fn(async (_taskId: string) => {})
+  const backgroundTasks = vi.fn(async (toolUseId?: string) => toolUseId !== 'unknown')
   const setPermissionMode = vi.fn(async () => {})
   const setModel = vi.fn(async () => {})
 
@@ -58,6 +59,7 @@ export function fakeHarness(capabilities?: HarnessCapabilities) {
     },
     interrupt,
     stopTask,
+    backgroundTasks,
     setPermissionMode,
     setModel,
     close: end,
@@ -85,7 +87,7 @@ export function fakeHarness(capabilities?: HarnessCapabilities) {
     return query
   }
 
-  return { emit, end, captured, interrupt, stopTask, setPermissionMode, setModel, queryFn }
+  return { emit, end, captured, interrupt, stopTask, backgroundTasks, setPermissionMode, setModel, queryFn }
 }
 
 // Let the runner's queued microtasks and its message pump drain.

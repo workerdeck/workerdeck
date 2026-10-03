@@ -263,6 +263,13 @@ public struct WorkerClient: Sendable {
       "/sessions/\(Self.encodeComponent(sessionId))/tasks/\(Self.encodeComponent(toolUseId))/stop")
   }
 
+  // Moves a running foreground Bash or subagent call to the background; nil moves every one.
+  // 404 when nothing matched, 501 when the engine cannot.
+  public func backgroundTask(sessionId: String, toolUseId: String? = nil) async throws {
+    let task = toolUseId.map { "/tasks/\(Self.encodeComponent($0))/background" } ?? "/tasks/background"
+    _ = try await call("POST", "/sessions/\(Self.encodeComponent(sessionId))\(task)")
+  }
+
   // MARK: - Profiles
 
   /// The profiles this caller may use, plus whether it may create new ones.

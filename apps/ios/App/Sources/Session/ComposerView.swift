@@ -54,6 +54,8 @@ struct ComposerView: View {
   /// out - the same glyph that says which mode you are in undoes it, and leaves the
   /// literal `$` in the field the way Escape does on the desktop.
   let onExitShell: () -> Void
+  // Present while a running call the engine can background is in the foreground: sends, then backgrounds it.
+  var onSendNow: (() -> Void)? = nil
 
   @ViewBuilder
   var body: some View {
@@ -72,6 +74,9 @@ struct ComposerView: View {
       field
       if isShellMode {
         shellHint
+      }
+      if showsSendNow {
+        sendNowLink
       }
       if isExpanded {
         actionRow
@@ -124,6 +129,10 @@ struct ComposerView: View {
         shellHint
           .padding(.leading, TermGlyphButton.side + TermComposerMetrics.gap)
       }
+      if showsSendNow {
+        sendNowLink
+          .padding(.leading, TermGlyphButton.side + TermComposerMetrics.gap)
+      }
     }
     .padding(.horizontal, TermComposerMetrics.sidePadding)
     .padding(.top, TermComposerMetrics.topPadding)
@@ -150,6 +159,20 @@ struct ComposerView: View {
       .foregroundStyle(TerminalPalette.color(.dim))
       .frame(maxWidth: .infinity, alignment: .leading)
       .accessibilityHidden(true)
+  }
+
+  private var showsSendNow: Bool { onSendNow != nil && canSend && !isShellMode }
+
+  private var sendNowLink: some View {
+    Button {
+      onSendNow?()
+    } label: {
+      Text("send now - moves the running command to the background")
+        .font(.system(size: style.base.pointSize * 0.85, design: .monospaced))
+        .foregroundStyle(TerminalPalette.color(.blue))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .buttonStyle(.plain)
   }
 
   /// The composer's **gutter cell** - the column every transcript row's marker

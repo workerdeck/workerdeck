@@ -60,8 +60,15 @@ import { useSubagentFrame } from './use-subagent-frame.ts'
 import { ShellStrip } from './ShellStrip.tsx'
 import { ShellTerminal } from './ShellTerminal.tsx'
 import { useShellFrame } from './use-shell-frame.ts'
-import { BookmarkProvider, type BookmarkHandle, type TerminalAffordances } from '../terminal/affordances.tsx'
+import {
+  BookmarkProvider,
+  TaskControlProvider,
+  type BookmarkHandle,
+  type TaskControlHandle,
+  type TerminalAffordances,
+} from '../terminal/affordances.tsx'
 import type { FileLinkOpener } from '../terminal/file-link.tsx'
+import { hasBackgroundable } from '../terminal/live-tool.ts'
 import { ApprovalPrompts, type ApprovalPromptProps } from './ApprovalPrompts.tsx'
 import { SessionPanelProviders } from './session-panel-providers.tsx'
 import { useCatchUp } from './use-catch-up.ts'
@@ -252,6 +259,7 @@ export function SessionPanel({
     approve,
     deny,
     interrupt,
+    backgroundTask,
     clearContext,
     setModel,
     setPermissionMode,
@@ -426,6 +434,12 @@ export function SessionPanel({
     [bookmarkSet, onToggleBookmark],
   )
 
+  const canBackgroundTasks = !readOnly && capabilities.backgroundTasks === true
+  const taskControl = useMemo<TaskControlHandle | undefined>(
+    () => (canBackgroundTasks ? { background: backgroundTask } : undefined),
+    [canBackgroundTasks, backgroundTask],
+  )
+
   const busy = state.status === 'running' || state.status === 'awaiting_approval'
   const ended = state.status === 'failed' || state.status === 'closed'
   const attachments = useAttachments(client, sessionId, {
@@ -461,6 +475,12 @@ export function SessionPanel({
     dismissCatchUp()
     repinTranscript.current?.()
     send(text, attachmentIds)
+  }
+
+  const runningForeground = canBackgroundTasks && hasBackgroundable(state.items)
+  const handleSendNow = (text: string, attachmentIds: string[]) => {
+    handleSend(text, attachmentIds)
+    backgroundTask()
   }
 
   const menuShows: Record<MenuPanel, boolean> = {
@@ -630,29 +650,31 @@ export function SessionPanel({
             <ShellTerminal key={framedShellId} handle={handle} shellId={framedShellId} fontSize={cell.fontSize} />
           ) : (
             <BookmarkProvider value={bookmarkHandle}>
-              <Transcript
-                key={subagentId ?? 'session'}
-                state={state}
-                fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
-                attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
-                canBrowseFiles={hostFiles.available}
-                sessionNames={peers.names}
-                hostImage={hostImage}
-                variant={transcriptVariant}
-                {...cell}
-                affordances={affordances}
-                stickyPrompt={stickyPrompt}
-                scrubber={scrubber}
-                bookmarks={bookmarks}
-                replaying={replaying}
-                catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
-                reveal={frameReturnReveal ?? reveal}
-                frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
-                onOpenSubagent={enterSubagent}
-                emptyState={emptyState}
-                jumpToRecapRef={jumpToRecap}
-                repinRef={repinTranscript}
-              />
+              <TaskControlProvider value={taskControl}>
+                <Transcript
+                  key={subagentId ?? 'session'}
+                  state={state}
+                  fileUrl={sessionId ? (path) => client.sessionFileUrl(sessionId, path) : undefined}
+                  attachmentUrl={sessionId ? (id) => client.attachmentUrl(sessionId, id) : undefined}
+                  canBrowseFiles={hostFiles.available}
+                  sessionNames={peers.names}
+                  hostImage={hostImage}
+                  variant={transcriptVariant}
+                  {...cell}
+                  affordances={affordances}
+                  stickyPrompt={stickyPrompt}
+                  scrubber={scrubber}
+                  bookmarks={bookmarks}
+                  replaying={replaying}
+                  catchUp={catchUp && newCount > 0 ? { from: catchUp.itemCount, since: catchUp.since } : undefined}
+                  reveal={frameReturnReveal ?? reveal}
+                  frame={subagentId === undefined ? undefined : { parentToolUseId: subagentId }}
+                  onOpenSubagent={enterSubagent}
+                  emptyState={emptyState}
+                  jumpToRecapRef={jumpToRecap}
+                  repinRef={repinTranscript}
+                />
+              </TaskControlProvider>
             </BookmarkProvider>
           )}
           {catchUp && newCount > 0 && !replaying && subagentId === undefined && framedShellId === undefined ? (
@@ -680,6 +702,7 @@ export function SessionPanel({
               <Composer
                 ref={composerRef}
                 onSend={handleSend}
+                onSendNow={runningForeground ? handleSendNow : undefined}
                 onInterrupt={interrupt}
                 busy={busy}
                 disabled={ended || !sessionId}

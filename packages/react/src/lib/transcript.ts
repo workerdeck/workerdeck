@@ -67,6 +67,7 @@ export type TranscriptItem =
       executionId?: string
       backend?: ToolExecutionBackend
       logs?: string[]
+      liveTail?: string
     }
   | {
       kind: 'turn_result'
@@ -495,6 +496,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
             item.kind === 'tool_call' && item.id === toolResult.tool_use_id
               ? {
                   ...item,
+                  liveTail: undefined,
                   status: isError ? 'failed' : 'settled',
                   result: {
                     text: blockText(toolResult.content),
@@ -687,6 +689,17 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
         ...base,
         pendingApprovals: base.pendingApprovals.filter((r) => r.id !== event.requestId),
       }
+    }
+
+    case 'tool_output': {
+      const at = base.items.findIndex((item) => item.kind === 'tool_call' && item.id === event.toolUseId)
+      const target = base.items[at]
+      if (target?.kind !== 'tool_call' || (target.status !== 'running' && target.status !== 'pending') || target.liveTail === event.tail) {
+        return base
+      }
+      const items = base.items.slice()
+      items[at] = { ...target, liveTail: event.tail }
+      return { ...base, items }
     }
 
     case 'execution_dispatched': {

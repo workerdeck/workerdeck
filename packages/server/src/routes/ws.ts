@@ -122,6 +122,13 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       await sleepRunner(runner)
       return
     }
+    case 'background_task': {
+      if (!runner.backgroundTask) {
+        throw new Error(`the ${engineOf(runner.info())} engine cannot move a task to the background`)
+      }
+      await runner.backgroundTask(frame.toolUseId)
+      return
+    }
     case 'clear_context': {
       if (!runner.clearContext) {
         throw new Error(`the ${engineOf(runner.info())} engine cannot clear a conversation`)

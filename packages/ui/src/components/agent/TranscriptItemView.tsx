@@ -12,9 +12,10 @@ import { ToolCallCard } from './ToolCallCard.tsx'
 import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { ViewableImage } from './image-viewer.tsx'
-import { peerLabel } from '../terminal/items.tsx'
+import { peerLabel, useTicker } from '../terminal/items.tsx'
+import { canBackground, elapsedLabel, liveTailLines, toolBusy } from '../terminal/live-tool.ts'
 import { ShellItemActions, useShellActions, useVerifyRunning } from './shell-actions.tsx'
-import { BookmarkAction, CopyAction, WithActions } from '../terminal/affordances.tsx'
+import { BackgroundAction, BookmarkAction, CopyAction, WithActions } from '../terminal/affordances.tsx'
 import { shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from '../terminal/shell-row.ts'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
@@ -145,13 +146,30 @@ function ToolCard({
     <WithActions
       actions={
         <>
+          {canBackground(item) ? <BackgroundAction toolUseId={item.id} /> : null}
           <BookmarkAction id={item.id} />
           {copyable ? <CopyAction text={copyable} label="Copy" /> : null}
         </>
       }
     >
       <ToolCallCard item={item} hostImage={hostImage} />
+      {toolBusy(item) ? <LiveToolStrip item={item} /> : null}
     </WithActions>
+  )
+}
+
+function LiveToolStrip({ item }: { item: Extract<TranscriptItem, { kind: 'tool_call' }> }) {
+  const now = useTicker(item.ts !== undefined)
+  const elapsed = elapsedLabel(item.ts, now)
+  const tail = liveTailLines(item)
+  if (!elapsed && tail.length === 0) {
+    return null
+  }
+  return (
+    <div data-slot="tool-live" className="mt-1 text-label text-fg-4">
+      {elapsed ? <div>running {elapsed}</div> : null}
+      {tail.length > 0 ? <pre className="overflow-x-auto font-mono whitespace-pre-wrap text-fg-3">{tail.join('\n')}</pre> : null}
+    </div>
   )
 }
 

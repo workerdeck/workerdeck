@@ -1171,6 +1171,8 @@ public enum SessionEventBody: Sendable, Equatable {
   /// The engine child stopped (or resumed) while the session stays live and
   /// listed. Only the latest survives an attach replay.
   case engineSleep(asleep: Bool)
+  // The whole current tail of a running tool call's output, never a delta.
+  case toolOutput(toolUseId: String, tail: String)
   /// The engine started a fresh conversation inside the same session (`/clear`,
   /// plan-mode exit). The transcript empties; session-scoped state survives.
   /// `sdkSessionId` is the fresh conversation's engine session id, when the
@@ -1229,7 +1231,7 @@ extension SessionEvent: Decodable {
     case skills, titles, items, fileId, mediaType, toolUseId
     case sdkSessionId, uuid, parentToolUseId
     case pending, trigger, preTokens, postTokens
-    case asleep
+    case asleep, tail
   }
 
   public init(from decoder: Decoder) throws {
@@ -1277,6 +1279,10 @@ extension SessionEvent: Decodable {
           subscriptionType: try container.decode(String.self, forKey: .subscriptionType))
       case "engine_sleep":
         body = .engineSleep(asleep: try container.decode(Bool.self, forKey: .asleep))
+      case "tool_output":
+        body = .toolOutput(
+          toolUseId: try container.decode(String.self, forKey: .toolUseId),
+          tail: try container.decode(String.self, forKey: .tail))
       case "conversation_reset":
         body = .conversationReset(
           sdkSessionId: try container.decodeIfPresent(String.self, forKey: .sdkSessionId))
@@ -1363,6 +1369,8 @@ public enum SessionCommand: Sendable, Equatable {
   /// Stop the engine child while the session stays live. The server answers
   /// with an `engine_sleep` event, or an error when it refuses.
   case sleep
+  // Move a running foreground Bash or subagent call to the background; nil moves every one.
+  case backgroundTask(toolUseId: String? = nil)
   case setPermissionMode(PermissionMode)
   /// nil model = back to the server default.
   case setModel(String?)
@@ -1392,7 +1400,7 @@ extension SessionCommand: Encodable {
   private enum CodingKeys: String, CodingKey {
     case type, text, requestId, behavior, updatedInput, message, interrupt, mode, model
     case executionId, output, logs, reason, error, attachmentIds, command
-    case shellId, cols, rows, data
+    case shellId, cols, rows, data, toolUseId
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -1415,6 +1423,9 @@ extension SessionCommand: Encodable {
       try container.encode("clear_context", forKey: .type)
     case .sleep:
       try container.encode("sleep", forKey: .type)
+    case .backgroundTask(let toolUseId):
+      try container.encode("background_task", forKey: .type)
+      try container.encodeIfPresent(toolUseId, forKey: .toolUseId)
     case .setPermissionMode(let mode):
       try container.encode("set_permission_mode", forKey: .type)
       try container.encode(mode, forKey: .mode)

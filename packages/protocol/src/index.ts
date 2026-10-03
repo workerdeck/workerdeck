@@ -325,6 +325,7 @@ export type SessionEventBody =
       durationMs?: number
     }
   | { type: 'file_delivered'; path: string; bytes: number; description?: string }
+  | { type: 'tool_output'; toolUseId: string; tail: string }
   | { type: 'sdk_event'; payload: { type: string; [key: string]: unknown } }
   | { type: 'session_error'; message: string }
   | { type: 'session_closed'; reason: 'client' | 'server' | 'error' }
@@ -377,6 +378,7 @@ export type SessionCommand =
   | { type: 'interrupt' }
   | { type: 'clear_context' }
   | { type: 'sleep' }
+  | { type: 'background_task'; toolUseId?: string }
   | { type: 'set_permission_mode'; mode: PermissionMode }
   | { type: 'set_model'; model?: string }
   | {
@@ -499,6 +501,7 @@ export type EngineCapabilities = {
   hostCwd?: boolean
   systemInstructions?: boolean
   engineSleep?: boolean
+  backgroundTasks?: boolean
   streaming: 'token' | 'item' | 'none'
 }
 
@@ -527,6 +530,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     hostCwd: true,
     systemInstructions: true,
     engineSleep: true,
+    backgroundTasks: true,
     streaming: 'token',
   },
   codex: {
@@ -963,6 +967,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     case 'engine_sleep': {
       return 'engine_sleep'
     }
+    case 'tool_output': {
+      return `tool_output:${body.toolUseId}`
+    }
     case 'sdk_event': {
       return body.payload.type === 'system' && body.payload.subtype === 'status' ? 'sdk_event:system:status' : undefined
     }
@@ -973,7 +980,7 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
 }
 
 export function logCoalesceKey(body: SessionEventBody): string | undefined {
-  return body.type === 'user_message' && body.shell ? replayCoalesceKey(body) : undefined
+  return (body.type === 'user_message' && body.shell) || body.type === 'tool_output' ? replayCoalesceKey(body) : undefined
 }
 
 export function replayRetains(body: SessionEventBody): boolean {
@@ -988,7 +995,7 @@ export function replayRetains(body: SessionEventBody): boolean {
 }
 
 export function snapshotRetains(body: SessionEventBody): boolean {
-  return body.type !== 'stream_delta'
+  return body.type !== 'stream_delta' && body.type !== 'tool_output'
 }
 
 export type SdkSessionSummary = {

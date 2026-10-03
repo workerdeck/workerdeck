@@ -82,6 +82,8 @@ export type UseClaudeSessionResult = {
   approve: (requestId: string, updatedInput?: Record<string, unknown>) => void
   deny: (requestId: string, message?: string, interrupt?: boolean) => void
   interrupt: () => void
+  // Ctrl+B: the running tool call returns at once and its task keeps going. No id moves every foreground task.
+  backgroundTask: (toolUseId?: string) => void
   clearContext: () => void
   runShell: (command: string) => void
   setPermissionMode: (mode: PermissionMode) => void
@@ -321,6 +323,7 @@ export function useClaudeSession(
       approve: (requestId: string, updatedInput?: Record<string, unknown>) => handleRef.current?.approve(requestId, updatedInput),
       deny: (requestId: string, message?: string, interrupt?: boolean) => handleRef.current?.deny(requestId, message, interrupt),
       interrupt: () => handleRef.current?.interrupt(),
+      backgroundTask: (toolUseId?: string) => handleRef.current?.backgroundTask(toolUseId),
       clearContext: () => handleRef.current?.clearContext(),
       runShell: (command: string) => handleRef.current?.runShell(command),
       setPermissionMode: (mode: PermissionMode) => handleRef.current?.setPermissionMode(mode),

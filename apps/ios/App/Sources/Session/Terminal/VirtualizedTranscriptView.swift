@@ -161,6 +161,8 @@ struct TerminalRowMenu {
   /// Nil when the row has no source worth copying; the menu then omits Copy
   /// rather than copying an invention - see `TranscriptRow.copyText`.
   var copyText: String?
+  // Nil unless the row is a running top-level Bash or subagent call the engine can background.
+  var background: (() -> Void)? = nil
 }
 
 // MARK: - Representable
@@ -727,10 +729,16 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
         cell.hasStandingSelection
       { return nil }
       guard let menu = menuForRow?(indexPath.item),
-        menu.bookmark != nil || menu.copyText != nil
+        menu.bookmark != nil || menu.copyText != nil || menu.background != nil
       else { return nil }
       return UIContextMenuConfiguration(actionProvider: { _ in
         var actions: [UIAction] = []
+        if let background = menu.background {
+          actions.append(
+            UIAction(
+              title: "Move to background", image: UIImage(systemName: "arrow.down.to.line")
+            ) { _ in background() })
+        }
         if let bookmark = menu.bookmark {
           // The web's labels verbatim, so the affordance reads the same across
           // clients; the star is its `☆`/`★` in the platform's vocabulary.

@@ -253,6 +253,11 @@ public final class SessionHandle {
     enqueue(.clearContext)
   }
 
+  // Claude's Ctrl+B over the socket: nil moves every foreground Bash or subagent call.
+  public func backgroundTask(_ toolUseId: String? = nil) {
+    enqueue(.backgroundTask(toolUseId: toolUseId))
+  }
+
   /// Run a `$` shell command on the host, as a tracked PTY, in the session's cwd. It does not start a
   /// turn: the output appears in the transcript at once and reaches the model with the
   /// next message. Send only when the `attached` frame set `shell`.

@@ -39,6 +39,8 @@ export type ComposerHandle = {
 
 export interface ComposerProps {
   onSend: (text: string, attachmentIds: string[]) => void
+  // Present while a foreground command the engine can background is running: ⌥↵ sends and moves it to the background.
+  onSendNow?: (text: string, attachmentIds: string[]) => void
   onInterrupt: () => void
   busy: boolean
   disabled?: boolean
@@ -70,6 +72,7 @@ export interface ComposerProps {
 
 export function Composer({
   onSend,
+  onSendNow,
   onInterrupt,
   busy,
   disabled,
@@ -214,7 +217,7 @@ export function Composer({
   const staged = attachments?.items ?? []
   const canSend = !disabled && (!isEmpty || staged.length > 0) && !attachments?.uploading && !attachments?.hasFailure
 
-  const submit = () => {
+  const submit = (now = false) => {
     if (!canSend) {
       return
     }
@@ -230,7 +233,8 @@ export function Composer({
       focus()
       return
     }
-    onSend(plainText.trim(), attachments?.readyIds ?? [])
+    const deliver = now && onSendNow ? onSendNow : onSend
+    deliver(plainText.trim(), attachments?.readyIds ?? [])
     attachments?.clear()
     draft?.clear()
     clear()
@@ -273,6 +277,11 @@ export function Composer({
           if (e.key === '?' && isEmpty && !e.metaKey && !e.ctrlKey) {
             e.preventDefault()
             setHelpOpen(true)
+            return
+          }
+          if (e.key === 'Enter' && e.altKey && onSendNow && canSend) {
+            e.preventDefault()
+            submit(true)
             return
           }
           if (helpOpen) {
@@ -351,9 +360,16 @@ export function Composer({
     </span>
   )
 
+  const sendNow =
+    onSendNow && canSend && !shellMode ? (
+      <button type="button" className="term-press term-link text-label" onClick={() => submit(true)}>
+        ⌥↵ send now - moves the running command to the background
+      </button>
+    ) : null
+
   const interrupting = busy && !canSend
   const submitButton = terminal ? (
-    <GlyphButton label="Send" disabled={!canSend} onClick={submit} tone={canSend ? 'blue' : undefined}>
+    <GlyphButton label="Send" disabled={!canSend} onClick={() => submit()} tone={canSend ? 'blue' : undefined}>
       ↵
     </GlyphButton>
   ) : interrupting ? (
@@ -361,7 +377,7 @@ export function Composer({
       <Square className="size-3" />
     </Button>
   ) : (
-    <Button size="icon-sm" aria-label="Send" className="rounded-full" disabled={!canSend} onClick={submit}>
+    <Button size="icon-sm" aria-label="Send" className="rounded-full" disabled={!canSend} onClick={() => submit()}>
       <ArrowUp className="size-4" />
     </Button>
   )
@@ -402,7 +418,7 @@ export function Composer({
       triggers={triggers}
       markdown={false}
       normalizeBullets={false}
-      onSubmit={submit}
+      onSubmit={() => submit()}
       disabled={disabled}
       placeholder={disabled ? 'Session ended' : shellMode ? SHELL_PLACEHOLDER : placeholder}
       minHeight={minHeight}
@@ -437,6 +453,12 @@ export function Composer({
                 {submitButton}
               </div>
             </div>
+            {sendNow ? (
+              <div className="term-row">
+                <span aria-hidden className="term-gutter" />
+                {sendNow}
+              </div>
+            ) : null}
             {helpOpen ? (
               <div role="note" aria-label="Composer shortcuts" className="term-row">
                 <span aria-hidden className="term-gutter" />
@@ -496,6 +518,7 @@ export function Composer({
           </>
         )}
       </div>
+      {sendNow ? <div className="mx-auto mt-1 w-full max-w-[var(--wd-transcript-max-width)] text-text-muted">{sendNow}</div> : null}
       {errorRow}
     </div>
   )

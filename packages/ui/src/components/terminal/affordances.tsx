@@ -1,4 +1,4 @@
-import { Bot, BotOff, Check, Copy, Maximize2, SquareTerminal, Star, X, type LucideIcon } from 'lucide-react'
+import { ArrowDownToLine, Bot, BotOff, Check, Copy, Maximize2, SquareTerminal, Star, X, type LucideIcon } from 'lucide-react'
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { copyText } from '../../lib/clipboard.ts'
 import { cn } from '../../lib/utils.ts'
@@ -130,6 +130,34 @@ export function BookmarkAction({ id }: { id: string }) {
       tone={active ? 'yellow' : undefined}
       pressed={active}
       onPress={() => handle.toggle(id)}
+    />
+  )
+}
+
+// Present only where the engine can move a running tool call to the background (Claude's Ctrl+B).
+export type TaskControlHandle = { background: (toolUseId?: string) => void }
+
+const TaskControlContext = createContext<TaskControlHandle | undefined>(undefined)
+
+export function TaskControlProvider({ value, children }: { value: TaskControlHandle | undefined; children: ReactNode }) {
+  return <TaskControlContext.Provider value={value}>{children}</TaskControlContext.Provider>
+}
+
+export function useTaskControl(): TaskControlHandle | undefined {
+  return useContext(TaskControlContext)
+}
+
+export function BackgroundAction({ toolUseId }: { toolUseId: string }) {
+  const handle = useContext(TaskControlContext)
+  if (!handle) {
+    return null
+  }
+  return (
+    <ActionButton
+      icon={ArrowDownToLine}
+      word="background"
+      label="Move to background (the command keeps running, the agent continues)"
+      onPress={() => handle.background(toolUseId)}
     />
   )
 }

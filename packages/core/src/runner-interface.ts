@@ -94,6 +94,8 @@ export interface Runner {
   interrupt(): Promise<void>
   // Resolves false when the record has no stoppable background task (unknown, settled, or not the engine's to stop).
   stopTask?(toolUseId: string): Promise<boolean>
+  // Ctrl+B: the blocking tool call returns at once and the task keeps running. No id backgrounds every foreground task.
+  backgroundTask?(toolUseId?: string): Promise<boolean>
   clearContext?(): Promise<void>
   // Stops the engine child while the session stays registered; the next message wakes it. Refused, never queued.
   sleep?(): Promise<SleepResult>

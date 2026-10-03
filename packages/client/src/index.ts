@@ -262,6 +262,11 @@ export class WorkerDeckClient {
     await this.#call('POST', this.#sess(sessionId, `/tasks/${encodeURIComponent(toolUseId)}/stop`))
   }
 
+  async backgroundTask(sessionId: string, toolUseId?: string): Promise<void> {
+    const path = toolUseId === undefined ? '/tasks/background' : `/tasks/${encodeURIComponent(toolUseId)}/background`
+    await this.#call('POST', this.#sess(sessionId, path))
+  }
+
   async setShellAgentWrite(sessionId: string, shellId: string, enabled: boolean): Promise<ShellInfo> {
     return await this.#pick('POST', this.#shell(sessionId, shellId, '/agent-write'), 'shell', { enabled })
   }

@@ -452,6 +452,8 @@ reason: the queue needs the same projection over a stored job record and may not
 Why it exists, and the two-tier unknown-key policy (host-only names 400, anything else is dropped
 as a future additive field), are in `docs/GOTCHAS.md` §Server, profiles & auth.
 
+`tool_output` (a running tool's whole output tail) is coalesced per tool id by both `replayCoalesceKey` and `logCoalesceKey` and never snapshotted; `EngineCapabilities.backgroundTasks` gates the `background_task` command. Invariants in `docs/GOTCHAS.md` §Live tool output & backgrounding.
+
 ## `packages/core`
 
 `Runner.sleep?()` is implemented by `SessionRunner` and `CodexRunner` only, matching
@@ -633,6 +635,8 @@ depends on no model provider package: `@ai-sdk/anthropic`, `@ai-sdk/openai` and
 `@ai-sdk/moonshotai` were never imported by it and are declared by the host that uses them
 (`apps/embedded`, the root `examples/`). `@ai-sdk/mcp` stays a dependency, loaded lazily by
 `connectMcpTools`.
+
+`lib/tool-output.ts` (`ToolOutputTails`) is the one tail emitter both engines share: claude feeds it from the CLI's task output file (`engines/claude/task-output.ts`), codex from `item/commandExecution/outputDelta`. `Runner.backgroundTask?` is claude's `Query.backgroundTasks`. §Live tool output & backgrounding in GOTCHAS.
 
 ## `packages/sandbox`
 
@@ -1005,6 +1009,8 @@ supplies the `shouldApprove` default (`shellToolNeedsCard`). `registry.setAgentW
 running user shells only, persisted, listeners fired so the row redraws; `settle` clears it.
 `POST /sessions/:id/shells/:shellId/agent-write { enabled }` is the operator's grant and revoke. Invariants in
 `docs/GOTCHAS.md` §Shell sessions.
+
+`POST /sessions/:id/tasks[/:toolUseId]/background` and the WS `background_task` frame route to `Runner.backgroundTask` (501 when the engine has none, 404 when nothing matched), beside stop-task.
 
 ## `packages/client`
 
@@ -2007,6 +2013,8 @@ for the `CodeEditor`/Monaco reason and on the same terms: `@xterm/xterm` and `@x
 `SessionPanel`-only host installs neither. It fits on attach only - a mid-stream refit reflows a
 cursor-addressed screen under the writer - and resets the screen before writing each
 `shell_attached` scrollback.
+
+`terminal/live-tool.ts` holds the pure rules for running rows (elapsed after 5 s with non-breaking spaces, the last five tail lines, which rows may be backgrounded) and `height.ts` budgets for them, so the estimate counts the widest elapsed label and the tail. The background action needs `TaskControlProvider`, which `SessionPanel` mounts only when `capabilities.backgroundTasks` and not read-only; the composer's `onSendNow` (⌥↵) appears only while such a call runs.
 
 ## `packages/web`
 

@@ -1227,6 +1227,8 @@ Dependency direction: `protocol ← core ← queue ← server ← cli`, `protoco
 core/server, the Agent SDK, or any model SDK; `client` must never devDep on `react` - that edge is
 the build-graph cycle turbo refuses.
 
+Live tool rows mirror the web (`Terminal/LiveTool.swift`): `tool_output` sets `liveTail` on a running call, elapsed is drawn at render time on a 1 s timer with room reserved by the planner so the row never changes height, and "Move to background" lives in the row's long-press menu (WS `background_task`), gated on `capabilities.backgroundTasks` alone (the app has no read-only mode). The composer's "send now" line sends, then backgrounds every foreground task. Unverified on a device.
+
 ## `apps/demo`
 
 **The interactive tour**: a VS Code window drawn in React (from the WorkerDeck Figma file,

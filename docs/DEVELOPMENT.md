@@ -162,6 +162,7 @@ drives tools by hand and configures no executor, so it never reaches `#dispatchS
 what `smoke:live-approval` is for. It edits the first tool call at approval and proves the edit
 ran from a **VFS entry** rather than from anything the model says, so it does not rest on a model
 behaving; it fails on both assertions against a runner without the amend.
+`smoke:background [claude|codex|all]` (paid) proves live `tool_output` on both engines and claude's move to the background: the blocked call returns, a queued message is answered while the command still runs, the completion arrives; any change to `tool-output.ts`, `task-output.ts` or the codex delta mapping needs it.
 Four more the list above omits. `smoke:mcp --probe` is **free** - it connects to the real
 DeepWiki server, asserts the tools come back namespaced, and exits before touching a model;
 without `--probe` it grants those tools to a real session and costs tokens. `smoke:relay` runs one

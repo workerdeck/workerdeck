@@ -136,13 +136,15 @@ public struct TermLine: Equatable, Sendable {
   /// web client's `.term-open` - so eighty lines that appeared at once read as
   /// one block rather than as the transcript having grown.
   public var inOpen: Bool
+  // A running call's start (epoch ms): the view draws its elapsed label after the text, in cells the planner reserved.
+  public var elapsedSince: Double?
 
   public init(
     gutter: String = "", gutterTone: TermTone = .dim, text: String,
     attributed: AttributedString? = nil, tone: TermTone = .fg, columns: Int = 2, indent: Int = 0,
     band: TermBand = .none, bold: Bool = false, italic: Bool = false, nested: Bool = false,
     pulsing: Bool = false, press: TermPress? = nil, image: TermImageBox? = nil,
-    inOpen: Bool = false
+    inOpen: Bool = false, elapsedSince: Double? = nil
   ) {
     self.gutter = gutter
     self.gutterTone = gutterTone
@@ -159,6 +161,7 @@ public struct TermLine: Equatable, Sendable {
     self.press = press
     self.image = image
     self.inOpen = inOpen
+    self.elapsedSince = elapsedSince
   }
 }
 

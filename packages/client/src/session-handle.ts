@@ -84,6 +84,10 @@ export class SessionHandle {
     this.#sendFrame({ type: 'sleep' })
   }
 
+  backgroundTask(toolUseId?: string): void {
+    this.#sendFrame({ type: 'background_task', toolUseId })
+  }
+
   runShell(command: string): void {
     this.#sendFrame({ type: 'shell_command', command })
   }

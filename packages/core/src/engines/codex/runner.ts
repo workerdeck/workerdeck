@@ -23,6 +23,7 @@ import { withPeerContext } from '../../lib/peers.ts'
 import { liveContextFromReading, type LiveContext } from '../../lib/session-report.ts'
 import { runSessionTool, sessionToolSpecs } from '../../lib/session-tools.ts'
 import { isShellToolName, shellToolNeedsCard, shellWriteDeniedText } from '../../lib/shells.ts'
+import { ToolOutputTails } from '../../lib/tool-output.ts'
 import {
   APPROVAL_CHANNELS,
   SHELL_WRITE_CHANNEL,
@@ -192,6 +193,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #producedPaths = new Set<string>()
   #mcpStatus = new Map<string, McpStartupStatus>()
   #agents = new CodexAgentTracker()
+  #outputTails = new ToolOutputTails((body) => this.core.emit(body))
   #idleScope: ItemScope = { nonce: 'codex', toolUseEmitted: new Set(), sectionIndex: new Map() }
   #clearedThreads = new Set<string>()
   #cannotSteer = new WeakSet<AppServerConnection>()
@@ -241,7 +243,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   }
 
   protected override coreHooks(): RunnerCoreHooks {
-    return { prepare: (body) => this.#markReplay(body) }
+    return { prepare: (body) => this.#markReplay(body), observe: (body) => this.#outputTails.observe(body) }
   }
 
   get sdkSessionId(): string | undefined {
@@ -604,6 +606,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       this.#connection?.close()
       this.#connection = undefined
       this.#agents.sweep()
+      this.#outputTails.clear()
       this.#activeTurn?.reject(new Error('session closed'))
       if (this.#imageDir) {
         try {
@@ -1016,6 +1019,13 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       const delta = (params as { delta?: string })?.delta
       if (typeof delta === 'string' && delta) {
         emitDelta(this.#sink, { type: 'text_delta', text: delta }, context.agent?.toolUseId ?? null)
+      }
+    },
+    'item/commandExecution/outputDelta': (params) => {
+      const context = this.#itemContext(params)
+      const { itemId, delta } = (params ?? {}) as { itemId?: unknown; delta?: unknown }
+      if (context && typeof itemId === 'string' && typeof delta === 'string') {
+        this.#outputTails.append(`${context.scope.nonce}:${itemId}`, delta)
       }
     },
     'item/reasoning/textDelta': this.#reasoningDelta('item/reasoning/textDelta'),

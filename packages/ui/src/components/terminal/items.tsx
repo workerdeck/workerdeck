@@ -5,7 +5,8 @@ import { compactionText, formatBytes, formatCost, formatDuration, toolInputPrevi
 import { isMutatingTool } from '../../lib/tool-icon.ts'
 import { usePulse } from '../agent/pulse.tsx'
 import { PromptTokenText } from '../agent/PromptTokenText.tsx'
-import { ActionPlacementProvider, BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
+import { ActionPlacementProvider, BackgroundAction, BookmarkAction, CopyAction, WithActions } from './affordances.tsx'
+import { canBackground, elapsedLabel, liveTailLines, runStartedAt, runTailLines } from './live-tool.ts'
 import { TerminalDiff } from './diff.tsx'
 import { TerminalMarkdown } from './markdown.tsx'
 import { usePeerNames } from './peer-names.tsx'
@@ -191,6 +192,9 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
   const busy = status === 'running' || status === 'pending'
   const isError = status === 'failed' || item.result?.isError === true
   const pulse = usePulse(busy)
+  const now = useTicker(busy && item.ts !== undefined)
+  const elapsed = busy ? elapsedLabel(item.ts, now) : undefined
+  const tail = liveTailLines(item)
 
   const text = item.result?.text ?? ''
   const lines = text.trimEnd().split('\n')
@@ -214,6 +218,7 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
       <WithActions
         actions={
           <>
+            {canBackground(item) ? <BackgroundAction toolUseId={item.id} /> : null}
             <BookmarkAction id={item.id} />
             {copyable ? <CopyAction text={copyable} label="Copy" /> : null}
           </>
@@ -225,10 +230,18 @@ export function ToolRow({ item }: { item: ToolCallItem }) {
               {title ?? item.name}
             </Ink>
             <Ink tone="dim">({todos ? todos.summary : toolInputPreview(item.input)})</Ink>
+            {elapsed ? (
+              <Ink tone="faint">
+                {' '}
+                ·{'\u00a0'}
+                {elapsed}
+              </Ink>
+            ) : null}
             {title && open ? <Ink tone="faint"> · {item.name}</Ink> : null}
             {item.backend && item.backend !== 'server' ? <Ink tone="faint"> · {item.backend}</Ink> : null}
           </Row>
         </Pressable>
+        <LiveTail lines={tail} />
         {hostPath !== undefined ? <TerminalHostImage path={hostPath} /> : null}
         {item.result?.images?.map((image) => (
           <TerminalImage key={image.partIndex} toolUseId={item.id} name={resultImageName(item.name, image)} image={image} />
@@ -373,14 +386,25 @@ export function ToolRunRow({ items }: { items: ToolCallItem[] }) {
   })
   const failed = runFailed(items)
   const pulse = usePulse(busy)
+  const startedAt = runStartedAt(items)
+  const now = useTicker(startedAt !== undefined)
+  const elapsed = elapsedLabel(startedAt, now)
 
   return (
     <div ref={reveal} className={open ? 'term-open' : undefined}>
       <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
         <Row glyph={busy ? pulse : undefined} glyphTone={busy ? 'mark' : undefined} tone={failed ? 'red' : 'dim'}>
           {busy ? <span className="term-shimmer">{runSummary(items, busy)}</span> : runSummary(items, busy)}
+          {elapsed ? (
+            <Ink tone="faint">
+              {' '}
+              ·{'\u00a0'}
+              {elapsed}
+            </Ink>
+          ) : null}
         </Row>
       </Pressable>
+      {open ? null : <LiveTail lines={runTailLines(items)} />}
       {open ? (
         <div>
           {items.map((item, index) => (
@@ -509,6 +533,14 @@ export function FileRow({ item, href }: { item: Extract<TranscriptItem, { kind: 
       {item.description ? <Ink tone="faint"> · {item.description}</Ink> : null}
     </Row>
   )
+}
+
+function LiveTail({ lines }: { lines: string[] }) {
+  return lines.map((line, index) => (
+    <Row key={index} indent={1} columns={3} glyph={index === 0 ? '⎿' : undefined} tone="faint">
+      {line || ' '}
+    </Row>
+  ))
 }
 
 export function useTicker(on: boolean): number {

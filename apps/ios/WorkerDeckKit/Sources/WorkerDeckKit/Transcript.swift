@@ -201,12 +201,17 @@ public struct ToolCallItem: Sendable, Equatable, Identifiable {
   /// What this call changed, when it was a file edit and the engine said so.
   /// The line numbers are the engine's; a client has never read the file.
   public var patch: FilePatch?
+  // The creating event's own `ts` (epoch ms), never a receive time, so a replayed row keeps its real age.
+  public var ts: Double?
+  // The whole current output tail of a running call (`tool_output`), dropped when the result lands.
+  public var liveTail: String?
 
   public init(
     id: String, name: String, title: String? = nil, input: JSONValue,
     parentToolUseId: String? = nil,
     status: ToolCallStatus, result: ToolCallResult? = nil, executionId: String? = nil,
-    backend: ToolExecutionBackend? = nil, logs: [String]? = nil, patch: FilePatch? = nil
+    backend: ToolExecutionBackend? = nil, logs: [String]? = nil, patch: FilePatch? = nil,
+    ts: Double? = nil, liveTail: String? = nil
   ) {
     self.id = id
     self.name = name
@@ -219,6 +224,8 @@ public struct ToolCallItem: Sendable, Equatable, Identifiable {
     self.backend = backend
     self.logs = logs
     self.patch = patch
+    self.ts = ts
+    self.liveTail = liveTail
   }
 }
 
@@ -725,6 +732,15 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   case .engineSleep(let asleep):
     next.engineAsleep = asleep ? true : nil
 
+  case .toolOutput(let toolUseId, let tail):
+    guard
+      let at = next.items.firstIndex(where: { $0.id == toolUseId && $0.kind == .toolCall }),
+      case .toolCall(var call) = next.items[at],
+      call.status == .running || call.status == .pending, call.liveTail != tail
+    else { break }
+    call.liveTail = tail
+    next.items[at] = .toolCall(call)
+
   case .capabilities(let models, let commands, let defaultModel):
     next.models = models
     next.commands = commands
@@ -805,6 +821,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
         items = mapToolCall(items, id: toolResult.toolUseId) { call in
           var updated = call
           updated.status = isError ? .failed : .settled
+          updated.liveTail = nil
           let truncated = toolResult.truncated == true
           updated.result = ToolCallResult(
             text: toolResult.content?.joinedText ?? "", isError: isError,
@@ -903,7 +920,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
             ToolCallItem(
               id: toolUseId, name: name,
               title: ToolTitles.title(for: name, titles: next.toolTitles), input: input,
-              parentToolUseId: payload.parentToolUseId, status: .running)))
+              parentToolUseId: payload.parentToolUseId, status: .running, ts: event.ts)))
       default:
         break
       }

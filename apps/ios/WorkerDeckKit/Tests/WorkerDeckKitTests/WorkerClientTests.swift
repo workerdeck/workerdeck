@@ -350,6 +350,34 @@ struct WorkerClientTests {
     }
   }
 
+  @Test func backgroundTaskPostsTheTaskRouteOrTheBareOne() async throws {
+    StubStore.shared.install { _ in StubResponse(body: Data(#"{"ok":true}"#.utf8)) }
+    let client = makeStubClient()
+
+    try await client.backgroundTask(sessionId: "sess_1", toolUseId: "tu_1")
+    try await client.backgroundTask(sessionId: "sess_1")
+
+    let paths = StubStore.shared.requests.map { "\($0.httpMethod ?? "") \($0.url?.path ?? "")" }
+    #expect(
+      paths == [
+        "POST /v1/sessions/sess_1/tasks/tu_1/background", "POST /v1/sessions/sess_1/tasks/background",
+      ])
+  }
+
+  @Test func surfacesANothingToBackground() async throws {
+    StubStore.shared.install { _ in
+      StubResponse(status: 404, body: Data(#"{"error":"no foreground task to move to the background"}"#.utf8))
+    }
+    let client = makeStubClient()
+
+    await #expect(
+      throws: WorkerClientError(
+        message: "no foreground task to move to the background", statusCode: 404)
+    ) {
+      try await client.backgroundTask(sessionId: "sess_1")
+    }
+  }
+
   @Test func derivesTheWebSocketURLFromTheRestBase() throws {
     let insecure = WorkerClient(baseURL: URL(string: "http://host:8787/v1")!)
     #expect(
