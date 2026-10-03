@@ -743,8 +743,10 @@
  * row's first line, so it has no in-flow y to match, and the 1st prompt (no
  * gap) and every later one (pt-4/pt-2) share these rules unchanged. */
 [data-slot='transcript-rows'] > [data-sticky-lane='cards'] {
-  z-index: 3;
   pointer-events: none;
+}
+[data-slot='transcript-rows'] > [data-sticky-lane='cards']:has(> [data-sticky-headlane] > [data-stuck]) {
+  z-index: 3;
 }
 
 /* The head's own strip: the full lane, out of flow - see terminal.css for why

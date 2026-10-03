@@ -483,8 +483,12 @@
 :is([data-terminal], [data-cards]) [data-slot='transcript-rows'] [data-index]:not(.absolute) {
   position: relative;
 }
-:is([data-terminal], [data-cards]) [data-slot='transcript-rows'] [data-index]:is(:hover, :focus-within) {
+:is([data-terminal], [data-cards]) [data-slot='transcript-rows'] [data-index]:focus-within {
   z-index: 1;
+}
+/* Above a focused row too: the row just clicked open keeps focus and would cover the bar beneath the hovered one. */
+:is([data-terminal], [data-cards]) [data-slot='transcript-rows'] [data-index]:hover {
+  z-index: 2;
 }
 @media (hover: none) {
   :is([data-terminal], [data-cards]) .term-actions {
@@ -785,8 +789,11 @@ button.term-link {
  * it is the same `--bg`, and the row it covers is its own content.
  */
 [data-terminal] [data-slot='transcript-rows'] > [data-sticky-lane] {
-  z-index: 3;
   pointer-events: none;
+}
+/* Raised only while pinned: a raised idle lane covered the hover bar of the row above its prompt. */
+[data-terminal] [data-slot='transcript-rows'] > [data-sticky-lane]:has(> [data-sticky-headlane] > [data-stuck]) {
+  z-index: 3;
 }
 
 /* The prompt itself is *inside* the lane, not beneath it, so the lane's `none`
