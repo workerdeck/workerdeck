@@ -57,6 +57,10 @@ export class ProfileService {
     if (disableBypassPermissions && p.defaults?.permissionMode === 'bypassPermissions') {
       return `profile '${p.name}' defaults to bypassPermissions but disableBypassPermissions is set`
     }
+    const efforts = p.defaults?.efforts
+    if (efforts !== undefined && !isEffortMap(efforts)) {
+      return `profile '${p.name}' defaults.efforts must map model names to effort levels`
+    }
     const fallbackMode = p.defaults?.permissionMode
     if (fallbackMode && !supportsPermissionMode(p.engine, fallbackMode)) {
       return (
@@ -196,4 +200,13 @@ export class ProfileService {
     await this.refreshStored()
     return { ok: true, profile: this.withManagedFlag(profile) }
   }
+}
+
+export function isEffortMap(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.entries(value).every(([model, effort]) => model !== '' && typeof effort === 'string' && effort !== '')
+  )
 }

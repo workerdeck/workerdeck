@@ -56,3 +56,15 @@ describe('buildClientCommands', () => {
     expect(input.openPanel).toHaveBeenCalledWith('info')
   })
 })
+
+describe('/effort', () => {
+  it('is offered only with levels to pick, takes a listed level or default, and refuses the rest', () => {
+    expect(buildClientCommands(sources()).some((command) => command.name === 'effort')).toBe(false)
+    const setEffort = vi.fn()
+    const effort = named(buildClientCommands(sources({ efforts: ['low', 'high'], setEffort })), 'effort')
+    expect(effort.run('high')).toBe(true)
+    expect(effort.run('default')).toBe(true)
+    expect(effort.run('max')).toBe(false)
+    expect(setEffort.mock.calls).toEqual([['high'], [undefined]])
+  })
+})

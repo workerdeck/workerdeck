@@ -176,7 +176,9 @@ export type ClientCommandPanel = 'info' | 'context' | 'usage' | 'mcp' | 'skills'
 export type ClientCommandSources = {
   capabilities: Pick<EngineCapabilities, 'permissionModes' | 'clearContext' | 'mcpStatus' | 'contextUsage' | 'rateLimits' | 'skillsList'>
   hasModels: boolean
+  efforts?: readonly string[]
   setModel: (model: string) => void
+  setEffort?: (effort?: string) => void
   setPermissionMode: (mode: PermissionMode) => void
   clearContext: () => void
   openPanel: (panel: ClientCommandPanel) => void
@@ -185,7 +187,9 @@ export type ClientCommandSources = {
 export function buildClientCommands({
   capabilities,
   hasModels,
+  efforts = [],
   setModel,
+  setEffort,
   setPermissionMode,
   clearContext,
   openPanel,
@@ -204,6 +208,26 @@ export function buildClientCommands({
           return false
         }
         setModel(wanted)
+        return true
+      },
+    })
+  }
+  if (efforts.length && setEffort) {
+    built.push({
+      name: 'effort',
+      description: `Set the reasoning effort (${efforts.join(', ')}, default)`,
+      argumentHint: '<level>',
+      requiresArgs: true,
+      run: (args) => {
+        const wanted = args.split(/\s+/)[0]
+        if (wanted === 'default') {
+          setEffort(undefined)
+          return true
+        }
+        if (!wanted || !efforts.includes(wanted)) {
+          return false
+        }
+        setEffort(wanted)
         return true
       },
     })

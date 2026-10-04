@@ -232,6 +232,7 @@ export type SessionEventBody =
       toolUseId?: string
     }
   | { type: 'model_changed'; model?: string }
+  | { type: 'effort_changed'; effort: string | null }
   | { type: 'permission_mode_changed'; mode: PermissionMode }
   | { type: 'context_usage'; usage: ContextUsage }
   | { type: 'rate_limit'; info: RateLimitInfo }
@@ -381,6 +382,7 @@ export type SessionCommand =
   | { type: 'background_task'; toolUseId?: string }
   | { type: 'set_permission_mode'; mode: PermissionMode }
   | { type: 'set_model'; model?: string }
+  | { type: 'set_effort'; effort?: string }
   | {
       type: 'tool_call_result'
       executionId: string
@@ -473,6 +475,7 @@ export type ClientFrame = SessionCommand
 export type ProfileDefaults = {
   model?: string
   permissionMode?: PermissionMode
+  efforts?: Record<string, string>
 }
 
 export type ProfileEngine = 'claude' | 'codex' | 'provider'
@@ -820,6 +823,7 @@ export type SessionInfo = {
   engine?: ProfileEngine
   capabilities?: EngineCapabilities
   model?: string
+  effort?: string | null
   permissionMode?: PermissionMode
   canBypassPermissions?: boolean
   apiKeySource?: string
@@ -966,6 +970,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     }
     case 'engine_sleep': {
       return 'engine_sleep'
+    }
+    case 'effort_changed': {
+      return 'effort_changed'
     }
     case 'tool_output': {
       return `tool_output:${body.toolUseId}`

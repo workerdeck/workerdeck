@@ -37,6 +37,7 @@ export type SessionReport = {
   engine: ProfileEngine
   vendor: string | null
   model: string | null
+  effort: string | null
   permissionMode?: string
   context: SessionContextReport | null
   turns: number
@@ -67,7 +68,7 @@ export const SESSION_INFO_TOOL = 'session_info'
 const SESSION_INFO_TOOL_SHAPES = {
   [SESSION_INFO_TOOL]: {
     description:
-      'Report facts about your own session: engine, vendor and model, context window usage (tokens used, window size, percent, ' +
+      'Report facts about your own session: engine, vendor, model and reasoning effort, context window usage (tokens used, window size, percent, ' +
       'remaining), turn count, cost so far and the account-level rate-limit windows. Use it to pace your work: when the context ' +
       'is filling up, finish the current step, summarise, or suggest compaction or a fresh session before quality degrades; when a ' +
       'rate-limit window is close to its limit, prefer cheaper approaches.',
@@ -111,6 +112,7 @@ export function buildSessionReport(input: SessionReportInput): SessionReport {
     engine: info.engine ?? 'claude',
     vendor: input.vendor ?? null,
     model: info.model ?? null,
+    effort: info.effort ?? null,
     ...(info.permissionMode ? { permissionMode: info.permissionMode } : {}),
     context: contextReport(input.context, input.contextNote),
     turns: info.numTurns ?? 0,

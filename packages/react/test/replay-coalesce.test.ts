@@ -284,3 +284,18 @@ describe('engine_sleep through a coalesced replay', () => {
     expect(transcriptProse(events[0]!)).toBe(0)
   })
 })
+
+describe('effort_changed through a coalesced replay', () => {
+  it('keeps only the latest level, including the null of a model without effort', () => {
+    const events = seqd([
+      { type: 'effort_changed', effort: 'medium' },
+      { type: 'effort_changed', effort: 'max' },
+      { type: 'effort_changed', effort: null },
+    ])
+    const replayed = coalesce(events)
+    expect(replayed.map((e) => e.seq)).toEqual([3])
+    expect(fold(replayed).effort).toBeNull()
+    expect(fold(events.slice(0, 2)).effort).toBe('max')
+    expect(transcriptActivity(events[0]!)).toBe(0)
+  })
+})

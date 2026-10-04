@@ -123,6 +123,7 @@ export {
   type ComposerRow,
 } from './components/agent/composer-commands.ts'
 export { ModelSelect, type ModelSelectProps } from './components/agent/ModelSelect.tsx'
+export { EffortSelect, effortChoices, type EffortSelectProps } from './components/agent/EffortSelect.tsx'
 export {
   PERMISSION_MODES,
   PermissionModeSelect,

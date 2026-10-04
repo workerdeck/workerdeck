@@ -120,6 +120,10 @@ export class SessionHandle {
     this.#sendFrame({ type: 'set_model', model })
   }
 
+  setEffort(effort?: string): void {
+    this.#sendFrame({ type: 'set_effort', effort })
+  }
+
   sendToolCallResult(executionId: string, output: ToolExecutionOutput, logs?: string[]): void {
     this.#sendFrame({ type: 'tool_call_result', executionId, output, logs })
   }

@@ -148,6 +148,16 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       await runner.setModel(frame.model)
       return
     }
+    case 'set_effort': {
+      if (!runner.setEffort) {
+        throw new Error(`the ${engineOf(runner.info())} engine cannot change its reasoning effort`)
+      }
+      if (frame.effort !== undefined && typeof frame.effort !== 'string') {
+        throw new Error('effort must be a string')
+      }
+      await runner.setEffort(frame.effort)
+      return
+    }
     case 'tool_call_result': {
       bridge.resolve(runner.id, frame.executionId, { output: frame.output, logs: frame.logs })
       return

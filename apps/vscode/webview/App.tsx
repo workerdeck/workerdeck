@@ -72,6 +72,8 @@ export function App({
           )
         } else if (msg.kind === 'wd-set-model') {
           controls.current?.setModel(msg.model)
+        } else if (msg.kind === 'wd-set-effort') {
+          controls.current?.setEffort(msg.effort)
         } else if (msg.kind === 'wd-set-permission-mode') {
           controls.current?.setPermissionMode(msg.mode)
         } else if (msg.kind === 'wd-insert-composer-text') {

@@ -123,6 +123,10 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   gateway's footprint. Put an idle session to sleep, or let `--engine-sleep-after 30m` do it for the
   ones nobody is watching: the process goes, the session stays listed with its transcript, and the
   next message resumes the conversation.
+- **Reasoning effort you can see and steer.** Every session reports the effort its engine will
+  actually send (after the engine's own defaults and clamping), the VS Code status bar shows it
+  beside the model, one click switches it live, and `--effort-default opus=high` sets a level per
+  model. The agent can read its own effort through the `session_info` tool.
 - **Reaching a person who isn't watching.** Server-wide webhooks for the four moments a human acts
   on (permission requested, turn finished, error, closed). The permission payload carries the
   whole request, so a consumer can answer it over REST - which is what makes an Approve button in

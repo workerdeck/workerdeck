@@ -24,7 +24,7 @@ import { createHostFileRoots } from './services/host-files.ts'
 import { SessionNotifier } from './services/notifications.ts'
 import { SessionParkManager } from './services/parking.ts'
 import { ProducedFileStore } from './services/produced-files.ts'
-import { ProfileService } from './services/profiles.ts'
+import { ProfileService, isEffortMap } from './services/profiles.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
 import { SpendLedger } from './services/spend-ledger.ts'
 import { createRelayLink } from './services/peer-relay.ts'
@@ -195,6 +195,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     installPeerDirectory(ownPeers)
   }
   installShellDirectory(shellDirectory)
+  if (options.effortDefaults !== undefined && !isEffortMap(options.effortDefaults)) {
+    throw new Error('createWorkerServer: `effortDefaults` must map model names to effort levels')
+  }
   const factory = createSessionFactory({
     adapterFor,
     profiles,
@@ -203,6 +206,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     allowedCwdRoots: options.allowedCwdRoots,
     disableBypassPermissions: options.disableBypassPermissions,
     approvalTimeoutMs: options.approvalTimeoutMs,
+    effortDefaults: options.effortDefaults,
     requireApiKey: options.requireApiKey,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     shells: shellDirectory ? shellDirectoryHandle(() => ownShells) : undefined,

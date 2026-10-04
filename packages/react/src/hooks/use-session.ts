@@ -88,6 +88,7 @@ export type UseClaudeSessionResult = {
   runShell: (command: string) => void
   setPermissionMode: (mode: PermissionMode) => void
   setModel: (model?: string) => void
+  setEffort: (effort?: string) => void
   closeSession: () => void
   reconnectNow: () => void
   loadFullResult: (toolUseId: string) => Promise<boolean>
@@ -328,6 +329,7 @@ export function useClaudeSession(
       runShell: (command: string) => handleRef.current?.runShell(command),
       setPermissionMode: (mode: PermissionMode) => handleRef.current?.setPermissionMode(mode),
       setModel: (model?: string) => handleRef.current?.setModel(model),
+      setEffort: (effort?: string) => handleRef.current?.setEffort(effort),
       closeSession: () => handleRef.current?.closeSession(),
     }),
     [],

@@ -1005,6 +1005,33 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   on disk until the next turn ends. Either omission means a restart in that window wakes the session
   straight back into the transcript the user threw away.
 
+## Reasoning effort (`effort_changed`, `set_effort`, `effortDefaults`)
+
+- **Claude: the CLI is the only truth about effort.** The SDK's `init` message carries no `effort` in
+  SDK mode (it is a Remote Control field), so the runner asks `getSettings()` (in the SDK runtime,
+  absent from its `.d.ts`, hence `SettingsQuery`) for `applied.effort` after the query opens, at
+  every `init`, after `set_model`/`set_effort`, and inside `session_info`. That value already
+  reflects org caps, `maxEffortLevel`, a level the model lacks (`max` runs as `high`) and the
+  model's own default (`medium` on opus/sonnet/fable 5.x, `null` on haiku), none of which the
+  gateway could compute. It needs no API call, so it works before the first turn.
+- **A live change is `applyFlagSettings({ effortLevel })`; `null` goes back to the model's
+  default.** It does not survive the child, so the runner keeps `#effortRequest` and passes it as
+  the `effort` option on a wake from engine sleep. A dormant wake rebuilds from the stored create
+  config and so starts on the model's default, exactly as it already does for a runtime model change.
+- **Codex knows its effort only once the thread opens.** `thread/start`/`thread/resume` return the
+  resolved `reasoningEffort` (from `config.toml`); before that `info().effort` is absent, which the
+  VS Code badge shows as `default`. A level is sent per `turn/start`, so `set_effort` is allowed
+  mid-turn and applies from the next turn; a model switch drops an explicit level the new model's
+  catalog row does not list rather than letting the binary refuse the turn.
+- **Default resolution order:** an explicit `reasoningEffort` on the create, else the configured
+  default for the model, else the engine's own. The map is keyed by catalog value or resolved id,
+  and an alias key (`opus`) also matches a session that started with no model and resolved to that
+  row's `resolvedModel`. On a model switch, a configured default for the new model always applies;
+  without one, an explicit choice (`set_effort` or the create field) carries over, while a level
+  that came from the old model's default is dropped back to the engine's.
+- `SessionInfo.effort`: a string is the level, `null` means the model takes none (hide the
+  control), absent means not known yet. Clients must keep the three apart.
+
 ## Engine sleep (`Runner.sleep`, `engine_sleep`, `engineSleepAfterMs`)
 
 Sleep stops a live session's engine child (and the child's stdio MCP servers) while the runner stays

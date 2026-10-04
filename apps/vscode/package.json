@@ -228,6 +228,11 @@
         "category": "WorkerDeck"
       },
       {
+        "command": "workerdeck.selectEffort",
+        "title": "Select Reasoning Effort",
+        "category": "WorkerDeck"
+      },
+      {
         "command": "workerdeck.selectPermissionMode",
         "title": "Select Permission Mode",
         "category": "WorkerDeck"
@@ -617,11 +622,17 @@
             "description": "Show the model picker in the window status bar. Clicking it opens a Quick Pick.",
             "order": 8
           },
+          "workerdeck.statusBar.effort": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show the reasoning-effort picker in the window status bar, right of the model. Clicking it opens a Quick Pick. Hidden when the model takes no effort.",
+            "order": 9
+          },
           "workerdeck.statusBar.mode": {
             "type": "boolean",
             "default": true,
             "description": "Show the permission-mode picker in the window status bar. Clicking it opens a Quick Pick.",
-            "order": 9
+            "order": 10
           }
         }
       },
@@ -721,6 +732,18 @@
             "order": 12,
             "description": "Minutes an idle session with no open view waits before its engine process is released. 0 means never.",
             "markdownDescription": "Idle sessions with no open view release their engine process after this many minutes and wake on the next message. The session stays listed, and its conversation is resumed when it wakes. `0` means never. Passed to the server as `--engine-sleep-after`."
+          },
+          "workerdeck.host.effortDefaults": {
+            "type": "object",
+            "default": {},
+            "scope": "machine",
+            "order": 13,
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+            },
+            "description": "Reasoning effort per model, applied when a session starts on that model or switches to it.",
+            "markdownDescription": "Reasoning effort per model, applied when a session starts on that model or switches to it, for example `{ \"opus\": \"high\", \"gpt-6-sol\": \"xhigh\" }`. Keys are model names as the model picker lists them, or resolved ids. A model with no entry keeps its engine's own default. Passed to the server as `--effort-default`."
           }
         }
       },

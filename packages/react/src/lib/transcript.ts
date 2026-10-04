@@ -113,6 +113,7 @@ export type TranscriptState = {
   statusDetail?: string
   engineAsleep?: boolean
   model?: string
+  effort?: string | null
   cwd?: string
   sdkSessionId?: string
   engine?: ProfileEngine
@@ -315,6 +316,7 @@ export function seedFromSessionInfo(state: TranscriptState, info: SessionInfo): 
     status: state.lastSeq === 0 ? info.status : state.status,
     engineAsleep: state.lastSeq === 0 ? info.engineAsleep : state.engineAsleep,
     model: state.model ?? info.model,
+    effort: state.effort !== undefined ? state.effort : info.effort,
     permissionMode: state.permissionMode ?? info.permissionMode,
     cwd: state.cwd ?? info.cwd,
     sdkSessionId: state.sdkSessionId ?? info.sdkSessionId,
@@ -433,6 +435,10 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
 
     case 'model_changed': {
       return event.model === undefined ? base : { ...base, model: event.model }
+    }
+
+    case 'effort_changed': {
+      return { ...base, effort: event.effort }
     }
 
     case 'permission_mode_changed': {

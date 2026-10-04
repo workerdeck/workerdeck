@@ -54,6 +54,7 @@ import { HostFilesDialog } from './HostFilesDialog.tsx'
 import { McpDialog } from './McpDialog.tsx'
 import { SkillsDialog } from './SkillsDialog.tsx'
 import { ModelSelect } from './ModelSelect.tsx'
+import { EffortSelect, effortChoices } from './EffortSelect.tsx'
 import { PermissionModeSelect, permissionModeChoices, type PermissionModeChoice } from './PermissionModeSelect.tsx'
 import { SubagentStrip } from './SubagentStrip.tsx'
 import { useSubagentFrame } from './use-subagent-frame.ts'
@@ -134,6 +135,7 @@ export interface SessionPanelProps {
 
 export type SessionControls = {
   setModel: (model?: string) => void
+  setEffort: (effort?: string) => void
   setPermissionMode: (mode: PermissionMode) => void
   interrupt: () => void
   focusComposer: () => void
@@ -176,6 +178,8 @@ export type SessionVitals = {
   capabilities: TranscriptState['capabilities']
   model: string | undefined
   models: ModelOption[]
+  effort: TranscriptState['effort']
+  efforts: readonly string[]
   permissionMode: TranscriptState['permissionMode']
   permissionModes: PermissionModeChoice[]
   skills: SkillInfo[] | undefined
@@ -262,6 +266,7 @@ export function SessionPanel({
     backgroundTask,
     clearContext,
     setModel,
+    setEffort,
     setPermissionMode,
     reconnectNow,
     loadFullResult,
@@ -359,9 +364,13 @@ export function SessionPanel({
   )
 
   const hasModels = models.length > 0
+  const efforts = useMemo(
+    () => effortChoices(models, effectiveModel ?? state.model, capabilities),
+    [models, effectiveModel, state.model, capabilities],
+  )
   const clientCommands = useMemo(
-    () => buildClientCommands({ capabilities, hasModels, setModel, setPermissionMode, clearContext, openPanel }),
-    [capabilities, hasModels, openPanel, clearContext, setModel, setPermissionMode],
+    () => buildClientCommands({ capabilities, hasModels, efforts, setModel, setEffort, setPermissionMode, clearContext, openPanel }),
+    [capabilities, hasModels, efforts, openPanel, clearContext, setModel, setEffort, setPermissionMode],
   )
 
   const composerCommands = useMemo(
@@ -390,6 +399,8 @@ export function SessionPanel({
     capabilities: state.capabilities,
     model: vitalsModel,
     models,
+    effort: state.effort,
+    efforts,
     permissionMode: state.permissionMode,
     permissionModes,
     skills: state.skills,
@@ -414,10 +425,11 @@ export function SessionPanel({
 
   const onControlsRef = useRef(onControls)
   onControlsRef.current = onControls
-  const setters = useRef({ setModel, setPermissionMode, interrupt })
-  setters.current = { setModel, setPermissionMode, interrupt }
+  const setters = useRef({ setModel, setEffort, setPermissionMode, interrupt })
+  setters.current = { setModel, setEffort, setPermissionMode, interrupt }
   const controls = useRef<SessionControls>({
     setModel: (model) => setters.current.setModel(model),
+    setEffort: (effort) => setters.current.setEffort(effort),
     setPermissionMode: (mode) => setters.current.setPermissionMode(mode),
     interrupt: () => setters.current.interrupt(),
     focusComposer: () => composerRef.current?.focus(),
@@ -521,6 +533,15 @@ export function SessionPanel({
           models={models}
           model={effectiveModel}
           onModelChange={setModel}
+          disabled={ended}
+          className={controlsInStatus ? 'h-5' : undefined}
+        />
+      ) : null}
+      {efforts.length && state.effort !== null ? (
+        <EffortSelect
+          efforts={efforts}
+          effort={state.effort}
+          onEffortChange={setEffort}
           disabled={ended}
           className={controlsInStatus ? 'h-5' : undefined}
         />

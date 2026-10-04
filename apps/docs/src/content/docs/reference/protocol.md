@@ -50,6 +50,7 @@ ws.onmessage = ({ data }) => {
 | `status_changed` | `SessionStatus` transition (`starting`, `running`, `awaiting_approval`, `idle`, `parked`, `failed`, `closed`) with optional detail. `parked` means the session is waiting on a deferred execution - non-terminal, and the host's cue to snapshot it. |
 | `capabilities` | Models (`ModelOption[]`) and slash commands (`SlashCommandInfo[]`) available to the session, fetched from the CLI after init, plus `defaultModel` - the wire id this session's default resolves to, which is how a client can name the running model before the first turn. The model list is shaped server-side: the CLI's own `default` row is dropped (it is a choice, not a model), each row is named from its resolved id, and `primary` marks the newest of each family so a picker can file the rest under "more models". |
 | `model_changed` | Model switched via `set_model`; `model` undefined = back to default. |
+| `effort_changed` | `effort: string \| null` - the reasoning effort the engine sends on its next request, after the engine's own clamping and defaults; `null` means the current model takes none. Mirrors `SessionInfo.effort` (absent there = not known yet). Emitted at start, on `set_effort`, and when a model switch moves it. Coalesced to the latest on replay. |
 | `permission_mode_changed` | Mode switched via `set_permission_mode`. |
 | `context_usage` | Context-window snapshot (`ContextUsage`), polled after each turn. |
 | `rate_limit` | Subscription rate-limit window update (`RateLimitInfo`). API-key sessions may never emit one - render nothing, not 0%, and treat an absent `utilization` as unknown. |
@@ -74,6 +75,8 @@ ws.onmessage = ({ data }) => {
 uploaded ahead of it), `permission_decision` (`requestId`,
 `behavior: 'allow' | 'deny'`, allow-only `updatedInput`, deny-only `message`/`interrupt`),
 `interrupt`, `set_permission_mode`, `set_model` (omit `model` for the default),
+`set_effort` (omit `effort` for the model's default; a level the model does not offer is a
+`protocol_error`; claude and codex only, from the next request on),
 `clear_context`, `sleep` (stop the engine process, keep the session; refused with a
 `protocol_error` unless it is idle, see `POST /v1/sessions/:id/sleep`), `close`, and the two answers to a bridged tool call - `tool_call_result` /
 `tool_call_error`, each carrying the `executionId` it is answering.

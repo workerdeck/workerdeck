@@ -19,7 +19,17 @@ import type { StatusSeverity, UsageLane } from '@workerdeck/ui/format'
 export { currentModel, meterSeverity, modelLabel, statusPresentation, tightestWindow }
 export type { StatusPresentation } from '@workerdeck/ui/format'
 
-export type StatusBadge = 'unread' | 'subagents' | 'status' | 'context' | 'sessionUsage' | 'weeklyUsage' | 'modelUsage' | 'model' | 'mode'
+export type StatusBadge =
+  | 'unread'
+  | 'subagents'
+  | 'status'
+  | 'context'
+  | 'sessionUsage'
+  | 'weeklyUsage'
+  | 'modelUsage'
+  | 'model'
+  | 'effort'
+  | 'mode'
 
 const TICK_MS = 30_000
 
@@ -176,6 +186,7 @@ export class SessionStatusBar implements vscode.Disposable {
   readonly #context: vscode.StatusBarItem
   readonly #usage: readonly vscode.StatusBarItem[]
   readonly #model: vscode.StatusBarItem
+  readonly #effort: vscode.StatusBarItem
   readonly #mode: vscode.StatusBarItem
   #subject: StatusBarSubject | undefined
   #vitals: SessionVitals | undefined
@@ -187,18 +198,20 @@ export class SessionStatusBar implements vscode.Disposable {
     this.#context = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49)
     this.#usage = USAGE_BADGES.map((_, index) => vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 48 - index))
     this.#model = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 45)
-    this.#mode = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 44)
+    this.#effort = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 44)
+    this.#mode = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 43)
     this.#status.command = 'workerdeck.sessionInfo.focus'
     this.#context.command = 'workerdeck.context.focus'
     for (const item of this.#usage) {
       item.command = 'workerdeck.usage.focus'
     }
     this.#model.command = 'workerdeck.selectModel'
+    this.#effort.command = 'workerdeck.selectEffort'
     this.#mode.command = 'workerdeck.selectPermissionMode'
   }
 
   get #items(): vscode.StatusBarItem[] {
-    return [this.#status, this.#context, ...this.#usage, this.#model, this.#mode]
+    return [this.#status, this.#context, ...this.#usage, this.#model, this.#effort, this.#mode]
   }
 
   update(subject: StatusBarSubject | undefined, vitals: SessionVitals | undefined): void {
@@ -238,6 +251,9 @@ export class SessionStatusBar implements vscode.Disposable {
       }
       if (vitals?.model) {
         tip.appendMarkdown(`Model: \`${vitals.model}\`\n\n`)
+      }
+      if (vitals?.effort) {
+        tip.appendMarkdown(`Effort: ${vitals.effort}\n\n`)
       }
       if (subject.cost !== undefined) {
         tip.appendMarkdown(`Cost: ${formatCost(subject.cost)}`)
@@ -288,6 +304,14 @@ export class SessionStatusBar implements vscode.Disposable {
       this.#model.show()
     } else {
       this.#model.hide()
+    }
+
+    if (badgeEnabled('effort') && vitals?.efforts.length && vitals.effort !== null) {
+      this.#effort.text = `$(lightbulb) ${vitals.effort ?? 'default'}`
+      this.#effort.tooltip = 'WorkerDeck: switch reasoning effort'
+      this.#effort.show()
+    } else {
+      this.#effort.hide()
     }
 
     const mode = vitals?.permissionMode

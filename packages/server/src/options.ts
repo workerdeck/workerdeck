@@ -86,6 +86,8 @@ export type WorkerServerOptions = {
   notifications?: SessionNotificationOptions
   // Stop a live session's engine child after it has sat idle with no client attached this long; 0 or omitted: never.
   engineSleepAfterMs?: number
+  // Reasoning effort per model, keyed by catalog value or resolved id; a profile's `defaults.efforts` wins per key.
+  effortDefaults?: Record<string, string>
   bridge?: BridgeHubOptions
   parking?: {
     store?: SessionStore

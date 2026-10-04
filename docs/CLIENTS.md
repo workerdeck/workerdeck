@@ -510,6 +510,16 @@ status bar's tooltip says for the focused one. Automatic sleep is a Host Mode se
 child as `--engine-sleep-after <n>m` and joins the restart-offer keys, and the gateway only puts to
 sleep sessions that no client is attached to, so a session open in a view never sleeps on its own.
 
+**Reasoning effort** is a status bar item right of the model (`$(lightbulb) high`, priority 44,
+the mode moved to 43), shown when `vitals.efforts` is non-empty and `vitals.effort` is not `null`
+(a model that takes none, such as Haiku). It reads `default` while the engine has not reported a
+level yet (codex before its first thread). Clicking runs **WorkerDeck: Select Reasoning Effort**, a
+QuickPick of `Default` plus the current model's levels, posted to the webview as `wd-set-effort`
+and sent as `set_effort`. Badge toggle `workerdeck.statusBar.effort`. Per-model defaults are the
+Host Mode setting `workerdeck.host.effortDefaults` (an object, model to level), passed to the child
+as repeated `--effort-default <model>=<level>` and one of the restart-offer keys. A gateway the
+extension only connects to takes its defaults from its own config.
+
 ### Dev harness & CSP
 
 The webview build has **no dev server**: `localResourceRoots` means every asset must be a real
@@ -1228,6 +1238,12 @@ core/server, the Agent SDK, or any model SDK; `client` must never devDep on `rea
 the build-graph cycle turbo refuses.
 
 Live tool rows mirror the web (`Terminal/LiveTool.swift`): `tool_output` sets `liveTail` on a running call, elapsed is drawn at render time on a 1 s timer with room reserved by the planner so the row never changes height, and "Move to background" lives in the row's long-press menu (WS `background_task`), gated on `capabilities.backgroundTasks` alone (the app has no read-only mode). The composer's "send now" line sends, then backgrounds every foreground task. Unverified on a device.
+
+**Reasoning effort**: the kit decodes `SessionInfo.effort` and `effort_changed` into
+`SessionEffort?` (`nil` = not known yet, `.unsupported` = the wire `null`, `.level`), which a plain
+`String?` would collapse. The model chip reads `Opus · high`, and the model sheet carries an Effort
+group (`Default` plus the running model's levels) that sends `set_effort`. The group is hidden while
+the effort is unknown, so a gateway too old to know `set_effort` is never sent one.
 
 ## `apps/demo`
 

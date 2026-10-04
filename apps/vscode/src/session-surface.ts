@@ -327,6 +327,10 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
     this.post({ kind: 'wd-set-model', model })
   }
 
+  setEffort(effort?: string): void {
+    this.post({ kind: 'wd-set-effort', effort })
+  }
+
   setPermissionMode(mode: PermissionMode): void {
     this.post({ kind: 'wd-set-permission-mode', mode })
   }

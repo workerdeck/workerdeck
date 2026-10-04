@@ -118,6 +118,7 @@ export type HostToPanel =
       kind: 'wd-set-model'
       model?: string
     }
+  | { kind: 'wd-set-effort'; effort?: string }
   | { kind: 'wd-set-permission-mode'; mode: PermissionMode }
   | { kind: 'wd-insert-composer-text'; text: string }
   | {

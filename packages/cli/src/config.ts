@@ -48,6 +48,7 @@ export type CliFlags = {
   trustProxy?: boolean
   approvalTimeoutMs?: number | null
   engineSleepAfterMs?: number
+  effortDefaults?: Record<string, string>
   stateDir?: string
   parking?: boolean
   insecure?: boolean
@@ -99,6 +100,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--insecure-host', (f, v) => f.insecureHosts.push(v)],
   ['--approval-timeout', (f, v, name) => (f.approvalTimeoutMs = parseDuration(v, name))],
   ['--engine-sleep-after', (f, v, name) => (f.engineSleepAfterMs = parseDuration(v, name) ?? 0)],
+  ['--effort-default', (f, v, name) => (f.effortDefaults = { ...f.effortDefaults, ...parseEffortDefault(v, name) })],
   ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
   ['--cors-origin', (f, v) => f.corsOrigins.push(v)],
 ])
@@ -115,6 +117,14 @@ function parseDuration(raw: string, source: string): number | null {
   const scale = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[match[2] ?? 'ms']!
   const ms = Number(match[1]) * scale
   return ms > 0 ? ms : null
+}
+
+function parseEffortDefault(raw: string, source: string): Record<string, string> {
+  const match = /^([^=\s]+)=([^=\s]+)$/.exec(raw)
+  if (!match) {
+    throw new ConfigError(`${source}: expected <model>=<effort>, like opus=high; got: ${raw}`)
+  }
+  return { [match[1]!]: match[2]! }
 }
 
 function parseShellAgentWrite(value: string, name: string): ShellAgentWriteOption {
@@ -415,6 +425,9 @@ export function resolveInstanceConfig(
   }
   if (flags.engineSleepAfterMs !== undefined) {
     options.engineSleepAfterMs = flags.engineSleepAfterMs
+  }
+  if (flags.effortDefaults) {
+    options.effortDefaults = { ...loaded.options.effortDefaults, ...flags.effortDefaults }
   }
   // --no-profile-store wins over a config file's own store: a flag that says "off" must not leave one wired up.
   if (flags.profileStore === false) {

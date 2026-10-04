@@ -21,6 +21,7 @@ export type HostSettings = {
   statusBar: boolean
   name: string
   engineSleepAfterMinutes: number
+  effortDefaults: Record<string, string>
 }
 
 export const HOST_SECTION = 'workerdeck.host'
@@ -71,6 +72,7 @@ export function readHostSettings(): HostSettings {
     statusBar: config.get<boolean>('statusBar', true),
     name: config.get<string>('name', DEFAULT_HOST_NAME).trim() || DEFAULT_HOST_NAME,
     engineSleepAfterMinutes: minutes(config.get<number>('engineSleepAfterMinutes', 0)),
+    effortDefaults: effortDefaults(config.get<Record<string, unknown>>('effortDefaults', {})),
   }
 }
 
@@ -89,10 +91,20 @@ const RESTART_KEYS = [
   'useNpx',
   'npxSpec',
   'engineSleepAfterMinutes',
+  'effortDefaults',
 ]
 
 export function needsRestart(event: vscode.ConfigurationChangeEvent): boolean {
   return RESTART_KEYS.some((key) => event.affectsConfiguration(`${HOST_SECTION}.${key}`))
+}
+
+function effortDefaults(value: Record<string, unknown>): Record<string, string> {
+  const valid = /^[^=\s]+$/
+  return Object.fromEntries(
+    Object.entries(value ?? {}).filter(
+      (entry): entry is [string, string] => valid.test(entry[0]) && typeof entry[1] === 'string' && valid.test(entry[1]),
+    ),
+  )
 }
 
 function minutes(value: number): number {

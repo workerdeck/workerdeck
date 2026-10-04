@@ -19,6 +19,7 @@ import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
 import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
 import { type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
+import { assertEffort, effortDefaultFor, modelEfforts } from '../../lib/effort.ts'
 import { withPeerContext } from '../../lib/peers.ts'
 import { liveContextFromReading, type LiveContext } from '../../lib/session-report.ts'
 import { runSessionTool, sessionToolSpecs } from '../../lib/session-tools.ts'
@@ -33,6 +34,7 @@ import {
   type ApprovalChannel,
   type ShellWriteVerdict,
 } from './approvals.ts'
+import { CODEX_CATALOG } from './catalog.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { incompleteHistoryNotice, loadHistory, replayTurns, type HistorySink, type ResumedHistory } from './history.ts'
 import {
@@ -170,6 +172,8 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
   #model: string | undefined
   #permissionMode: PermissionMode
   #reasoningEffort: string | undefined
+  #effortExplicit: boolean
+  #effort: string | undefined
   #resolvedModel: string | undefined
   #planType: string | undefined
   #resolvedEffort: string | undefined
@@ -232,7 +236,8 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     this.#cwd = config.cwd
     this.#permissionMode = mode
     this.#model = config.model
-    this.#reasoningEffort = config.reasoningEffort
+    this.#effortExplicit = config.reasoningEffort !== undefined
+    this.#reasoningEffort = config.reasoningEffort ?? effortDefaultFor(config.effortDefaults, CODEX_CATALOG.models, config.model)
     this.#sdkSessionId = config.resume
     this.#threadMaterialized = config.resume !== undefined
     this.#instructions = resolveInstructions(config.instructions, { sessionId: id, cwd: config.cwd, profile: config.profile })
@@ -263,6 +268,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
       engine: 'codex',
       capabilities: ENGINE_CAPABILITIES.codex,
       model: this.#model ?? this.#resolvedModel,
+      ...(this.#currentEffort() !== undefined ? { effort: this.#currentEffort() } : {}),
       permissionMode: this.#permissionMode,
       canBypassPermissions: true,
       totalCostUsd: this.core.cost.reportedCostUsd,
@@ -597,6 +603,38 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     }
     this.#model = model
     this.core.emit({ type: 'model_changed', model })
+    const fallback = effortDefaultFor(this.config.effortDefaults, CODEX_CATALOG.models, model)
+    if (fallback !== undefined) {
+      this.#effortExplicit = false
+      this.#reasoningEffort = fallback
+    } else if (!this.#effortExplicit) {
+      this.#reasoningEffort = undefined
+    }
+    const supported = modelEfforts(CODEX_CATALOG.models, model ?? this.#resolvedModel)
+    if (this.#reasoningEffort !== undefined && supported && !supported.includes(this.#reasoningEffort)) {
+      this.#reasoningEffort = undefined
+    }
+    this.#reportEffort()
+  }
+
+  async setEffort(effort?: string): Promise<void> {
+    assertEffort(effort, modelEfforts(CODEX_CATALOG.models, this.#model ?? this.#resolvedModel))
+    this.#effortExplicit = effort !== undefined
+    this.#reasoningEffort = effort ?? effortDefaultFor(this.config.effortDefaults, CODEX_CATALOG.models, this.#model ?? this.#resolvedModel)
+    this.#reportEffort()
+  }
+
+  #currentEffort(): string | undefined {
+    return this.#reasoningEffort ?? this.#resolvedEffort
+  }
+
+  #reportEffort(): void {
+    const effort = this.#currentEffort()
+    if (effort === this.#effort || effort === undefined) {
+      return
+    }
+    this.#effort = effort
+    this.core.emit({ type: 'effort_changed', effort })
   }
 
   close(reason: CloseReason = 'client'): void {
@@ -704,6 +742,10 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     if (typeof result?.reasoningEffort === 'string') {
       this.#resolvedEffort = result.reasoningEffort
     }
+    if (!this.#effortExplicit && this.#reasoningEffort === undefined) {
+      this.#reasoningEffort = effortDefaultFor(this.config.effortDefaults, CODEX_CATALOG.models, this.#resolvedModel)
+    }
+    this.#reportEffort()
     if (resuming !== undefined && lostThread === undefined && this.#backfillPending && !this.#resumedHistory) {
       this.#resumedHistory = {
         turns: Array.isArray(result?.thread?.turns) ? result.thread.turns : [],

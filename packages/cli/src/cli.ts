@@ -81,6 +81,11 @@ Options
                             has watched it for this long (30m, 2h; config:
                             engineSleepAfterMs). The session stays listed and
                             wakes on its next message. Default 'never'.
+      --effort-default <model>=<effort>
+                            reasoning effort a session starts at, or switches to,
+                            on this model (opus=high, gpt-6-sol=xhigh; repeatable;
+                            config: effortDefaults). A profile's defaults.efforts
+                            wins per model. Default: the engine's own.
       --state-dir <path>    where parked sessions are persisted
                             (default: beside the config file, else ~/.workerdeck)
       --no-parking-store    keep parked sessions in memory only; a restart drops them

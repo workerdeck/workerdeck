@@ -456,6 +456,11 @@ as a future additive field), are in `docs/GOTCHAS.md` §Server, profiles & auth.
 
 ## `packages/core`
 
+**Reasoning effort**: `Runner.setEffort?()` on `SessionRunner` and `CodexRunner`; both report the
+effective level as `info().effort` and `effort_changed`, and resolve per-model defaults from
+`EngineRunnerConfig.effortDefaults` through `lib/effort.ts` (`effortDefaultFor`). The provider
+engine has none. Rules in `docs/GOTCHAS.md` §Reasoning effort.
+
 `Runner.sleep?()` is implemented by `SessionRunner` and `CodexRunner` only, matching
 `EngineCapabilities.engineSleep`; the provider engine has no child to stop. Both expose
 `engineAsleep` on `info()` and emit `engine_sleep` on each edge. See `docs/GOTCHAS.md` §Engine sleep.
@@ -709,6 +714,11 @@ pair) in front of the gateways' own. State lives in `~/.workerdeck/relay` unless
 `WORKERDECK_RELAY_STATE_DIR` says otherwise.
 
 ## `packages/server`
+
+**Effort defaults**: `effortDefaults` (server option) merged under a profile's `defaults.efforts`
+in `session-factory.ts`'s `buildRunner`, fresh on every build like `pricing`, so a stored record
+never pins a stale map (`effortDefaults` is a transient host-only key). The WS `set_effort` command
+calls `runner.setEffort`, a `protocol_error` where the engine has none. `isEffortMap` validates both.
 
 **Engine sleep** lives in `services/engine-sleep.ts` (`EngineSleepTimers`, the idle timer behind
 `engineSleepAfterMs`) and `routes/sleep.ts` (`sleepRunner`, shared by `POST /sessions/:id/sleep`

@@ -89,6 +89,7 @@ export function sessionCommands({ store, panel, registry, selectSession, moveToP
       await moveToPanel(tab)
     },
     'workerdeck.selectModel': () => selectModel(registry.focused),
+    'workerdeck.selectEffort': () => selectEffort(registry.focused),
     'workerdeck.selectPermissionMode': () => selectPermissionMode(registry.focused),
     'workerdeck.useSkill': () => pickCommand(registry.focused),
     'workerdeck.openProjectFolder': () => openProjectFolder(store, registry.focused),
@@ -146,6 +147,22 @@ async function selectModel(surface: AnySurface): Promise<void> {
   })
   if (picked) {
     surface.setModel(picked.value)
+  }
+}
+
+async function selectEffort(surface: AnySurface): Promise<void> {
+  const vitals = surface.vitals
+  const current = vitals?.effort
+  const items = [
+    { label: 'Default', description: current ? undefined : 'current', detail: "The model's configured default", effort: undefined },
+    ...(vitals?.efforts ?? []).map((effort) => ({ label: effort, description: effort === current ? 'current' : undefined, effort })),
+  ]
+  const picked = await pickFromVitals(vitals?.efforts.length ? items : [], 'WorkerDeck: this model takes no reasoning effort.', {
+    title: 'WorkerDeck: reasoning effort',
+    placeHolder: current ?? 'default',
+  })
+  if (picked) {
+    surface.setEffort(picked.effort)
   }
 }
 

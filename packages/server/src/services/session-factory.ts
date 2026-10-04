@@ -26,6 +26,7 @@ export type SessionFactoryDeps = {
   allowedCwdRoots?: string[]
   disableBypassPermissions?: boolean
   approvalTimeoutMs?: number | null
+  effortDefaults?: Record<string, string>
   requireApiKey?: boolean
   peers?: PeerDirectory
   shells?: ShellDirectory
@@ -227,6 +228,11 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
     delete config.shells
     delete config.shellAgentWrite
+    delete config.effortDefaults
+    const efforts = { ...deps.effortDefaults, ...profile?.defaults?.efforts }
+    if (Object.keys(efforts).length > 0) {
+      config.effortDefaults = efforts
+    }
     if (deps.shells && capabilities.hostCwd === true) {
       config.shells = deps.shells
       const write = deps.shellAgentWrite ?? 'read-only'

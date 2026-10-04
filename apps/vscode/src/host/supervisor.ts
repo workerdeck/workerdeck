@@ -420,6 +420,9 @@ export class HostSupervisor implements vscode.Disposable {
     if (settings.engineSleepAfterMinutes > 0) {
       args.push('--engine-sleep-after', `${settings.engineSleepAfterMinutes}m`)
     }
+    for (const [model, effort] of Object.entries(settings.effortDefaults)) {
+      args.push('--effort-default', `${model}=${effort}`)
+    }
     return args
   }
 

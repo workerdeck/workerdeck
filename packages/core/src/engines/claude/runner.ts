@@ -49,8 +49,10 @@ import { hostTitle } from '../../lib/title.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
 import { PEER_MCP_SERVER, withPeerContext, withoutPeerContextMessage } from '../../lib/peers.ts'
 import { liveContextFromReading, withDeadline, type LiveContext } from '../../lib/session-report.ts'
+import { assertEffort, effortDefaultFor } from '../../lib/effort.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
+import { CLAUDE_CATALOG } from './catalog.ts'
 import { SubagentTracker } from './subagents.ts'
 import { tailTaskOutput, taskOutputRoots } from './task-output.ts'
 
@@ -63,6 +65,10 @@ export type QueryFn = (params: { prompt: AsyncIterable<SDKUserMessage>; options?
 export type HistoryFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SessionMessage[]>
 
 export type SessionInfoFn = (sdkSessionId: string, options: { dir?: string }) => Promise<SDKSessionInfo | undefined>
+
+type EffortLevel = NonNullable<Options['effort']>
+
+type SettingsQuery = Query & { getSettings?: () => Promise<{ applied?: { model?: string; effort?: string | null } }> }
 
 export type SessionRunnerConfig = EngineRunnerConfig & {
   queryFn?: QueryFn
@@ -81,6 +87,9 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #model: string | undefined
   #apiKeySource: string | undefined
   #permissionMode: PermissionMode | undefined
+  #effortRequest: string | undefined
+  #effortExplicit: boolean
+  #effort: string | null | undefined
   #turnOverWhileBlocked = false
   #subagents = new SubagentTracker()
   #outputTails = new ToolOutputTails((body) => this.core.emit(body))
@@ -110,6 +119,8 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     }
     this.#cwd = config.cwd
     this.#permissionMode = config.permissionMode
+    this.#effortExplicit = config.reasoningEffort !== undefined
+    this.#effortRequest = config.reasoningEffort ?? effortDefaultFor(config.effortDefaults, CLAUDE_CATALOG.models, config.model)
     // A fork mints its own id at the first turn; a plain resume continues the conversation it names.
     this.#sdkSessionId = config.forkSession ? undefined : config.resume
     this.#instructions = resolveInstructions(config.instructions, { sessionId: id, cwd: config.cwd, profile: config.profile })
@@ -145,6 +156,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       engine: 'claude',
       capabilities: ENGINE_CAPABILITIES.claude,
       model: this.#model ?? this.config.model,
+      ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
       permissionMode: this.#permissionMode,
       canBypassPermissions: this.config.permissionMode === 'bypassPermissions' || this.config.allowDangerouslySkipPermissions === true,
       apiKeySource: this.#apiKeySource,
@@ -250,9 +262,14 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
 
   async #runAwake(): Promise<void> {
     try {
-      await this.#pump(
-        this.#openQuery({ resume: this.#sdkSessionId, forkSession: false, model: this.#model, permissionMode: this.#permissionMode }),
-      )
+      const query = this.#openQuery({
+        resume: this.#sdkSessionId,
+        forkSession: false,
+        model: this.#model,
+        permissionMode: this.#permissionMode,
+      })
+      void this.#syncEffort()
+      await this.#pump(query)
     } catch (error) {
       this.fail(errorMessage(error))
     }
@@ -331,6 +348,68 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     await this.#query?.setModel(model)
     this.#model = model
     this.core.emit({ type: 'model_changed', model })
+    const fallback = effortDefaultFor(this.config.effortDefaults, this.#catalog(), model)
+    if (fallback !== undefined) {
+      this.#effortExplicit = false
+      await this.#requestEffort(fallback)
+    } else if (!this.#effortExplicit && this.#effortRequest !== undefined) {
+      await this.#requestEffort(undefined)
+    } else {
+      await this.#syncEffort()
+    }
+  }
+
+  async setEffort(effort?: string): Promise<void> {
+    assertEffort(effort, ENGINE_CAPABILITIES.claude.reasoningEfforts)
+    this.#effortExplicit = effort !== undefined
+    await this.#requestEffort(effort ?? effortDefaultFor(this.config.effortDefaults, this.#catalog(), this.#model))
+  }
+
+  async #requestEffort(effort: string | undefined): Promise<void> {
+    this.#effortRequest = effort
+    const query = this.#query
+    if (!query) {
+      if (effort !== undefined) {
+        this.#reportEffort(effort)
+      }
+      return
+    }
+    await query.applyFlagSettings({ effortLevel: (effort ?? null) as EffortLevel | null })
+    await this.#syncEffort()
+  }
+
+  async #syncEffort(): Promise<void> {
+    const query = this.#query as SettingsQuery | undefined
+    if (typeof query?.getSettings !== 'function') {
+      return
+    }
+    try {
+      let applied = (await query.getSettings()).applied
+      if (!this.#effortExplicit && this.#effortRequest === undefined) {
+        const fallback = effortDefaultFor(this.config.effortDefaults, this.#catalog(), this.#model, applied?.model)
+        if (fallback !== undefined) {
+          this.#effortRequest = fallback
+          await query.applyFlagSettings({ effortLevel: fallback as EffortLevel })
+          applied = (await query.getSettings()).applied
+        }
+      }
+      if (this.core.closed || query !== this.#query || !applied || !('effort' in applied)) {
+        return
+      }
+      this.#reportEffort(applied.effort ?? null)
+    } catch {}
+  }
+
+  #reportEffort(effort: string | null): void {
+    if (effort === this.#effort) {
+      return
+    }
+    this.#effort = effort
+    this.core.emit({ type: 'effort_changed', effort })
+  }
+
+  #catalog(): readonly ModelOption[] {
+    return this.#models ?? CLAUDE_CATALOG.models
   }
 
   close(reason: CloseReason = 'client'): void {
@@ -358,6 +437,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         return
       }
       const query = this.#openQuery()
+      void this.#syncEffort()
       if (!this.config.prompt) {
         this.core.setStatus('idle')
         void this.#fetchCapabilities()
@@ -456,7 +536,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       maxBudgetUsd: c.maxBudgetUsd,
       resume: c.resume,
       forkSession: c.forkSession,
-      effort: c.reasoningEffort as Options['effort'],
+      effort: this.#effortRequest as EffortLevel | undefined,
       includePartialMessages: c.includePartialMessages ?? true,
       forwardSubagentText: true,
       canUseTool: this.#canUseTool,
@@ -524,6 +604,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       void this.#fetchContextUsage()
       void this.#fetchRateLimits()
       void this.#fetchEngineTitle()
+      void this.#syncEffort()
       return
     }
     if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
@@ -734,6 +815,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   protected async reportFacts(): Promise<SessionReportFacts> {
     const [live] = await Promise.all([
       withDeadline(this.#fetchContextUsage(), REPORT_PROBE_TIMEOUT_MS),
+      withDeadline(this.#syncEffort(), REPORT_PROBE_TIMEOUT_MS),
       withDeadline(
         this.refreshUsage().catch(() => undefined),
         REPORT_PROBE_TIMEOUT_MS,

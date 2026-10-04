@@ -36,6 +36,7 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   fallbackTitle?: string
   // Set by the gateway on a dormant wake: the runner backfills, then waits for the first message to start its engine.
   startAsleep?: boolean
+  effortDefaults?: Record<string, string>
 }
 
 export type ParkedExecution = {
@@ -101,6 +102,7 @@ export interface Runner {
   sleep?(): Promise<SleepResult>
   setPermissionMode(mode: PermissionMode): Promise<void>
   setModel(model?: string): Promise<void>
+  setEffort?(effort?: string): Promise<void>
   settleExecution?(executionId: string, result: ToolExecutionResult): boolean
   park?(): RunnerSnapshot | undefined
   snapshot?(): RunnerSnapshot | undefined

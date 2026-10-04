@@ -39,7 +39,7 @@ function optionMatches(option: ModelOption, model: string): boolean {
   return token !== '' && token === family(dropVariant(option.value))
 }
 
-function matchModel(models: ModelOption[], model?: string): ModelOption | undefined {
+export function matchModel(models: readonly ModelOption[], model?: string): ModelOption | undefined {
   if (!model) {
     return undefined
   }

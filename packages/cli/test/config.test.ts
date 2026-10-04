@@ -71,6 +71,16 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--engine-sleep-after', 'later'])).toThrow(ConfigError)
   })
 
+  it('collects repeated --effort-default pairs and lays them over the config file', () => {
+    const flags = parseArgs(['--effort-default', 'opus=high', '--effort-default', 'gpt-6-sol=xhigh'])
+    expect(flags.effortDefaults).toEqual({ opus: 'high', 'gpt-6-sol': 'xhigh' })
+    expect(() => parseArgs(['--effort-default', 'opus'])).toThrow(ConfigError)
+    expect(() => parseArgs(['--effort-default', 'opus=high=max'])).toThrow(ConfigError)
+    const fromFile = { path: null, options: { effortDefaults: { opus: 'low', sonnet: 'medium' } } }
+    const config = resolveInstanceConfig(parseArgs(['--effort-default', 'opus=max']), fromFile, {})
+    expect(config.options.effortDefaults).toEqual({ opus: 'max', sonnet: 'medium' })
+  })
+
   it('treats a missing value as an error, not as the next flag', () => {
     expect(() => parseArgs(['--auth-key', '--port', '9000'])).toThrow(/requires a value/)
   })
