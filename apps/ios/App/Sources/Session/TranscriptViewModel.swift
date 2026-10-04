@@ -608,6 +608,21 @@ final class TranscriptViewModel {
 
   func setModel(_ model: String?) { handle?.setModel(model) }
 
+  func setEffort(_ effort: String?) { handle?.setEffort(effort) }
+
+  // The efforts the running model accepts: its catalog row's list, else the engine-wide set.
+  // Empty unless the session has reported a concrete effort, so a model that takes none, or a
+  // gateway that never says, offers no control.
+  var effortOptions: [String] {
+    guard state.effort?.level != nil else { return [] }
+    if let model = effectiveModel,
+      let efforts = availableModels.first(where: { $0.matches(model) })?.reasoningEfforts
+    {
+      return efforts
+    }
+    return capabilities.reasoningEfforts ?? []
+  }
+
   func setPermissionMode(_ mode: PermissionMode) { handle?.setPermissionMode(mode) }
 
   func closeSession() { handle?.closeSession() }

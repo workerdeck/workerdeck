@@ -289,6 +289,22 @@ struct SessionHandleTests {
     #expect(try decodeJSON(socket.sent[0]) == ["type": "user_message", "text": "hello"])
   }
 
+  @Test func encodesSetEffortOnTheWire() async throws {
+    let socket = FakeWebSocket()
+    let handle = makeHandle(socket)
+    defer { handle.detach() }
+
+    handle.setEffort("xhigh")
+    handle.setEffort(nil)
+
+    try await waitUntil("sent") { socket.sent.count == 2 }
+    #expect(
+      try socket.sent.map(decodeJSON) == [
+        ["type": "set_effort", "effort": "xhigh"],
+        ["type": "set_effort"],
+      ])
+  }
+
   @Test func answersBridgedToolCallsItCannotRun() async throws {
     let socket = FakeWebSocket()
     let handle = makeHandle(socket)

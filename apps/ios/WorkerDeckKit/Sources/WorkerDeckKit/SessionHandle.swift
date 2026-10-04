@@ -326,6 +326,11 @@ public final class SessionHandle {
     enqueue(.setModel(model))
   }
 
+  // Switch the reasoning effort for subsequent requests; nil restores the model's default.
+  public func setEffort(_ effort: String?) {
+    enqueue(.setEffort(effort))
+  }
+
   /// Ask the server to terminate the session, then detach. When the socket is
   /// open the `close` command is flushed first; when it isn't, the handle simply
   /// detaches (a queued command dies with the handle, as in the reference client).

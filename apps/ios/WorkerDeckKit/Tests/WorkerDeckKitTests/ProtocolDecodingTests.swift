@@ -356,6 +356,54 @@ struct ProtocolDecodingTests {
     #expect(object.count == 1)
   }
 
+  @Test func decodesEffortChanged() throws {
+    let level = try decodeEvent(#"{"type":"effort_changed","effort":"high","seq":4,"ts":1}"#)
+    #expect(level.body == .effortChanged(.level("high")))
+    let none = try decodeEvent(#"{"type":"effort_changed","effort":null,"seq":5,"ts":2}"#)
+    #expect(none.body == .effortChanged(.unsupported))
+  }
+
+  @Test func anEffortChangedWithoutItsFieldDegradesToUnknown() throws {
+    let event = try decodeEvent(#"{"type":"effort_changed","seq":4,"ts":1}"#)
+    guard case .unknown(let type, _) = event.body else {
+      Issue.record("expected unknown, got \(event.body)")
+      return
+    }
+    #expect(type == "effort_changed")
+  }
+
+  @Test func decodesEffortOnSessionInfo() throws {
+    let base = #"{"id":"s1","status":"idle","cwd":"/work","createdAt":1,"lastSeq":2,"pendingPermissionCount":0"#
+    func decode(_ tail: String) throws -> SessionInfo {
+      try JSONDecoder().decode(SessionInfo.self, from: Data((base + tail).utf8))
+    }
+    #expect(try decode(#","effort":"medium"}"#).effort == .level("medium"))
+    #expect(try decode(#","effort":null}"#).effort == .unsupported)
+    #expect(try decode("}").effort == nil)
+    #expect(try decode(#","effort":3}"#).effort == nil)
+  }
+
+  @Test func decodesPerModelEffortDefaults() throws {
+    let json = #"{"model":"gpt-6","efforts":{"gpt-6":"high"}}"#
+    let defaults = try JSONDecoder().decode(ProfileDefaults.self, from: Data(json.utf8))
+    #expect(defaults.efforts == ["gpt-6": "high"])
+    let bare = try JSONDecoder().decode(ProfileDefaults.self, from: Data("{}".utf8))
+    #expect(bare.efforts == nil)
+  }
+
+  @Test func encodesSetEffortCommand() throws {
+    func object(_ command: SessionCommand) throws -> [String: Any] {
+      let data = try JSONEncoder().encode(command)
+      return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+    let set = try object(.setEffort("low"))
+    #expect(set["type"] as? String == "set_effort")
+    #expect(set["effort"] as? String == "low")
+    let reset = try object(.setEffort(nil))
+    #expect(reset["type"] as? String == "set_effort")
+    #expect(reset.count == 1)
+  }
+
   @Test func decodesContextCompacted() throws {
     let event = try decodeEvent(
       #"{"type":"context_compacted","uuid":"c1","seq":13,"ts":1}"#)

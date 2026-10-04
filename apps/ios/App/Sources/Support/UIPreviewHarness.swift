@@ -982,6 +982,7 @@ struct UIPreviewHarness: View {
           costUsd: nil,
           model: "claude-opus-5-5",
           models: Self.models,
+          effort: "high",
           permissionMode: .acceptEdits,
           onOpenModel: {},
           onOpenMode: {},
@@ -994,7 +995,8 @@ struct UIPreviewHarness: View {
     case .modelPicker:
       ModelPickerSheet(
         models: Self.models, current: "claude-opus-5-5", defaultModel: "claude-sonnet-5-5",
-        onSelect: { _ in })
+        onSelect: { _ in }, efforts: ["low", "medium", "high", "xhigh", "max"],
+        currentEffort: "high")
     case .modePicker:
       ModePickerSheet(
         modes: [.default, .acceptEdits, .plan, .auto, .bypassPermissions, .dontAsk],

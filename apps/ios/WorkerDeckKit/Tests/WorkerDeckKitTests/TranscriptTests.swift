@@ -656,6 +656,35 @@ struct TranscriptTests {
     #expect(seeded.engine == .provider)
   }
 
+  @Test func effortChangedSetsTheEffort() {
+    let high = reduce([event(1, .effortChanged(.level("high")))])
+    #expect(high.effort == .level("high"))
+    #expect(high.items.isEmpty)
+    let none = reduce([event(2, .effortChanged(.unsupported))], from: high)
+    #expect(none.effort == .unsupported)
+  }
+
+  @Test func seedTakesEffortOnlyWhenNoEventHasSetIt() {
+    let info = SessionInfo(
+      id: "s1", status: .idle, cwd: "/repo", effort: .unsupported, createdAt: 0, lastSeq: 3,
+      pendingPermissionCount: 0)
+    #expect(seedFromSessionInfo(.initial, info).effort == .unsupported)
+
+    let live = reduce([event(1, .effortChanged(.level("low")))])
+    #expect(seedFromSessionInfo(live, info).effort == .level("low"))
+
+    let unknown = SessionInfo(
+      id: "s1", status: .idle, cwd: "/repo", createdAt: 0, lastSeq: 3, pendingPermissionCount: 0)
+    #expect(seedFromSessionInfo(.initial, unknown).effort == nil)
+  }
+
+  @Test func effortSurvivesAConversationReset() {
+    let state = reduce([
+      event(1, .effortChanged(.level("max"))), event(2, .conversationReset(sdkSessionId: nil)),
+    ])
+    #expect(state.effort == .level("max"))
+  }
+
   @Test func engineSleepSetsAndClearsTheFlag() {
     let asleep = reduce([event(1, .engineSleep(asleep: true))])
     #expect(asleep.engineAsleep == true)

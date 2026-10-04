@@ -375,7 +375,10 @@ struct SessionView: View {
             models: vm.availableModels,
             current: vm.effectiveModel,
             defaultModel: vm.defaultModel,
-            onSelect: { vm.setModel($0) })
+            onSelect: { vm.setModel($0) },
+            efforts: vm.effortOptions,
+            currentEffort: vm.state.effort?.level,
+            onSelectEffort: { vm.setEffort($0) })
         case .addMedia:
           AddMediaSheet(acceptsImages: acceptedKinds.contains("image"), onChoose: choose)
         case .skills:
@@ -1031,6 +1034,7 @@ struct SessionView: View {
       costUsd: vm.state.costUsd,
       model: vm.effectiveModel,
       models: vm.availableModels,
+      effort: vm.effortOptions.isEmpty ? nil : vm.state.effort?.level,
       permissionMode: vm.state.permissionMode,
       onOpenModel: { sheet = .model },
       onOpenMode: { sheet = .mode },

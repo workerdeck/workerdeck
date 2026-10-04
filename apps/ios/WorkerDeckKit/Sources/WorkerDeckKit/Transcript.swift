@@ -302,6 +302,8 @@ public struct TranscriptState: Sendable, Equatable {
   /// resumes it. Seeded from the snapshot like `status`, then set by `engine_sleep`.
   public var engineAsleep: Bool?
   public var model: String?
+  // nil = not known yet. Seeded from the snapshot, then set by `effort_changed`.
+  public var effort: SessionEffort?
   public var cwd: String?
   public var sdkSessionId: String?
   /// Engine running the session, from the attach snapshot. Gates CLI-only
@@ -360,7 +362,7 @@ public struct TranscriptState: Sendable, Equatable {
 
   public init(
     status: SessionStatus = .starting, statusDetail: String? = nil, engineAsleep: Bool? = nil,
-    model: String? = nil,
+    model: String? = nil, effort: SessionEffort? = nil,
     cwd: String? = nil, sdkSessionId: String? = nil, engine: ProfileEngine? = nil,
     models: [ModelOption]? = nil, commands: [SlashCommandInfo]? = nil,
     skills: [SkillInfo]? = nil, checklist: [ChecklistItem]? = nil,
@@ -378,6 +380,7 @@ public struct TranscriptState: Sendable, Equatable {
     self.statusDetail = statusDetail
     self.engineAsleep = engineAsleep
     self.model = model
+    self.effort = effort
     self.cwd = cwd
     self.sdkSessionId = sdkSessionId
     self.engine = engine
@@ -612,6 +615,7 @@ public func seedFromSessionInfo(_ state: TranscriptState, _ info: SessionInfo) -
     next.engineAsleep = info.engineAsleep
   }
   next.model = state.model ?? info.model
+  next.effort = state.effort ?? info.effort
   next.permissionMode = state.permissionMode ?? info.permissionMode
   next.cwd = state.cwd ?? info.cwd
   next.sdkSessionId = state.sdkSessionId ?? info.sdkSessionId
@@ -775,6 +779,9 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
   case .modelChanged(let model):
     // nil = reset to the server default; keep showing the last known model.
     if let model { next.model = model }
+
+  case .effortChanged(let effort):
+    next.effort = effort
 
   case .permissionModeChanged(let mode):
     next.permissionMode = mode

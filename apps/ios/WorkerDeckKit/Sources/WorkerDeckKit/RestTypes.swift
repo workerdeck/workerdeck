@@ -226,10 +226,15 @@ public enum SessionCapability: String, Codable, Sendable {
 public struct ProfileDefaults: Codable, Sendable, Equatable {
   public let model: String?
   public let permissionMode: PermissionMode?
+  // Per-model effort defaults, keyed by model id.
+  public let efforts: [String: String]?
 
-  public init(model: String? = nil, permissionMode: PermissionMode? = nil) {
+  public init(
+    model: String? = nil, permissionMode: PermissionMode? = nil, efforts: [String: String]? = nil
+  ) {
     self.model = model
     self.permissionMode = permissionMode
+    self.efforts = efforts
   }
 }
 
@@ -566,6 +571,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// attach snapshot is the session-level source - no event carries it.
   public let capabilities: EngineCapabilities?
   public let model: String?
+  // The effort the engine will send on its next request. nil = not known yet.
+  public let effort: SessionEffort?
   public let permissionMode: PermissionMode?
   /// Whether this session may be switched into `bypassPermissions` - decided when
   /// it was created and fixed for its lifetime. Absent reads as unknown, and the
@@ -660,7 +667,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   public init(
     id: String, sdkSessionId: String? = nil, status: SessionStatus, cwd: String,
     profile: String? = nil, engine: ProfileEngine? = nil,
-    capabilities: EngineCapabilities? = nil, model: String? = nil,
+    capabilities: EngineCapabilities? = nil, model: String? = nil, effort: SessionEffort? = nil,
     permissionMode: PermissionMode? = nil, canBypassPermissions: Bool? = nil,
     apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, epoch: Int? = nil, pendingPermissionCount: Int,
@@ -681,6 +688,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.engine = engine
     self.capabilities = capabilities
     self.model = model
+    self.effort = effort
     self.permissionMode = permissionMode
     self.canBypassPermissions = canBypassPermissions
     self.apiKeySource = apiKeySource

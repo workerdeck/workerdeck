@@ -1143,6 +1143,33 @@ public struct TurnResultEvent: Decodable, Sendable, Equatable {
   }
 }
 
+// The wire's `effort: string | null`. `unsupported` is the null: the model takes no effort
+// parameter. Absent on the wire is the Swift nil around it.
+public enum SessionEffort: Decodable, Sendable, Equatable {
+  case unsupported
+  case level(String)
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    self = container.decodeNil() ? .unsupported : .level(try container.decode(String.self))
+  }
+
+  public var level: String? {
+    if case .level(let value) = self { return value }
+    return nil
+  }
+}
+
+extension KeyedDecodingContainer {
+  // Picked over the generic overload by synthesized decoders, so a null survives as
+  // `unsupported` rather than collapsing into absent. A malformed value reads as absent.
+  public func decodeIfPresent(_ type: SessionEffort.Type, forKey key: Key) throws -> SessionEffort? {
+    guard contains(key) else { return nil }
+    if try decodeNil(forKey: key) { return .unsupported }
+    return (try? decode(String.self, forKey: key)).map(SessionEffort.level)
+  }
+}
+
 public enum SessionEventBody: Sendable, Equatable {
   case systemInit(SystemInitEvent)
   case statusChanged(status: SessionStatus, detail: String?)
@@ -1162,6 +1189,8 @@ public enum SessionEventBody: Sendable, Equatable {
   case fileProduced(ProducedFile)
   /// `model` nil = back to the server default.
   case modelChanged(model: String?)
+  // The effort the engine will send on its next request.
+  case effortChanged(SessionEffort)
   case permissionModeChanged(mode: PermissionMode)
   case contextUsage(ContextUsage)
   case rateLimit(RateLimitInfo)
@@ -1231,7 +1260,7 @@ extension SessionEvent: Decodable {
     case skills, titles, items, fileId, mediaType, toolUseId
     case sdkSessionId, uuid, parentToolUseId
     case pending, trigger, preTokens, postTokens
-    case asleep, tail
+    case asleep, tail, effort
   }
 
   public init(from decoder: Decoder) throws {
@@ -1268,6 +1297,10 @@ extension SessionEvent: Decodable {
             toolUseId: try container.decodeIfPresent(String.self, forKey: .toolUseId)))
       case "model_changed":
         body = .modelChanged(model: try container.decodeIfPresent(String.self, forKey: .model))
+      case "effort_changed":
+        body = .effortChanged(
+          try container.decodeNil(forKey: .effort)
+            ? .unsupported : .level(try container.decode(String.self, forKey: .effort)))
       case "permission_mode_changed":
         body = .permissionModeChanged(mode: try container.decode(PermissionMode.self, forKey: .mode))
       case "context_usage":
@@ -1374,6 +1407,8 @@ public enum SessionCommand: Sendable, Equatable {
   case setPermissionMode(PermissionMode)
   /// nil model = back to the server default.
   case setModel(String?)
+  // nil effort = back to the model's default.
+  case setEffort(String?)
   case toolCallResult(executionId: String, output: ToolExecutionOutput, logs: [String]? = nil)
   case toolCallError(executionId: String, reason: String, error: String, logs: [String]? = nil)
   /// Run a `$` shell command on the host, as a tracked PTY, in the session's cwd. Offered only when
@@ -1398,7 +1433,7 @@ public enum SessionCommand: Sendable, Equatable {
 
 extension SessionCommand: Encodable {
   private enum CodingKeys: String, CodingKey {
-    case type, text, requestId, behavior, updatedInput, message, interrupt, mode, model
+    case type, text, requestId, behavior, updatedInput, message, interrupt, mode, model, effort
     case executionId, output, logs, reason, error, attachmentIds, command
     case shellId, cols, rows, data, toolUseId
   }
@@ -1432,6 +1467,9 @@ extension SessionCommand: Encodable {
     case .setModel(let model):
       try container.encode("set_model", forKey: .type)
       try container.encodeIfPresent(model, forKey: .model)
+    case .setEffort(let effort):
+      try container.encode("set_effort", forKey: .type)
+      try container.encodeIfPresent(effort, forKey: .effort)
     case .toolCallResult(let executionId, let output, let logs):
       try container.encode("tool_call_result", forKey: .type)
       try container.encode(executionId, forKey: .executionId)

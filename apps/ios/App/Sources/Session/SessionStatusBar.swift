@@ -70,6 +70,8 @@ struct SessionStatusBar: View {
   let costUsd: Double?
   let model: String?
   let models: [ModelOption]
+  // Shown beside the model when the session offers a choice of effort.
+  var effort: String?
   /// Nil until the engine reports it, which is one event later than this view's
   /// first draw.
   let permissionMode: PermissionMode?
@@ -149,7 +151,7 @@ struct SessionStatusBar: View {
     // the least costly to clip.
     .layoutPriority(-1)
     .accessibilityLabel("Model \(modelLabel)")
-    .accessibilityHint("Opens the model picker")
+    .accessibilityHint(effort == nil ? "Opens the model picker" : "Opens the model and effort picker")
   }
 
   private var permissionChip: some View {
@@ -173,7 +175,9 @@ struct SessionStatusBar: View {
   /// landed to name it, which on a live session is a second or two at most.
   private var modelLabel: String {
     guard let model else { return "Model" }
-    return models.first { $0.matches(model) }?.shortDisplayName ?? model
+    let name = models.first { $0.matches(model) }?.shortDisplayName ?? model
+    guard let effort else { return name }
+    return "\(name) \u{00B7} \(effort)"
   }
 
   // MARK: - Usage

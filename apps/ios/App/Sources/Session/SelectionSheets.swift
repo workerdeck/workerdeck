@@ -153,6 +153,11 @@ struct ModelPickerSheet: View {
   /// What the default resolved to at `system_init`, for the tag.
   let defaultModel: String?
   let onSelect: (String?) -> Void
+  // Empty hides the effort group.
+  var efforts: [String] = []
+  var currentEffort: String?
+  // nil = back to the model's default.
+  var onSelectEffort: (String?) -> Void = { _ in }
 
   @Environment(\.dismiss) private var dismiss
   @HotReloaded private var hot
@@ -161,7 +166,7 @@ struct ModelPickerSheet: View {
   private var secondary: [ModelOption] { models.filter { !($0.primary ?? true) } }
 
   var body: some View {
-    SelectionSheet(title: "Select model") {
+    SelectionSheet(title: efforts.isEmpty ? "Select model" : "Select model and effort") {
       if models.isEmpty {
         // Before `capabilities` lands there is nothing to list - and nothing to
         // pick either, since every id here comes from the CLI.
@@ -174,15 +179,49 @@ struct ModelPickerSheet: View {
       rows(primary)
     } trailing: {
       if !secondary.isEmpty {
-        Text("More models")
-          .font(.footnote.weight(.medium))
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.top, 22)
-          .padding(.bottom, 8)
-          .padding(.horizontal, 4)
+        groupHeading("More models")
         VStack(spacing: 0) { rows(secondary) }
           .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
+      }
+      if !efforts.isEmpty {
+        groupHeading("Effort")
+        VStack(spacing: 0) { effortRows }
+          .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
+      }
+    }
+  }
+
+  private func groupHeading(_ text: String) -> some View {
+    Text(text)
+      .font(.footnote.weight(.medium))
+      .foregroundStyle(.secondary)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.top, 22)
+      .padding(.bottom, 8)
+      .padding(.horizontal, 4)
+  }
+
+  // "Default" is never checked: the session reports the effort it resolved to, not that it
+  // came from the default.
+  @ViewBuilder
+  private var effortRows: some View {
+    SelectionRow(
+      title: "Default", summary: "Whatever this model uses by default",
+      isSelected: false, isDefault: false, showsDivider: true
+    ) {
+      onSelectEffort(nil)
+      dismiss()
+    }
+    ForEach(Array(efforts.enumerated()), id: \.element) { index, effort in
+      SelectionRow(
+        title: effort.prefix(1).uppercased() + effort.dropFirst(),
+        summary: nil,
+        isSelected: effort == currentEffort,
+        isDefault: false,
+        showsDivider: index < efforts.count - 1
+      ) {
+        onSelectEffort(effort)
+        dismiss()
       }
     }
   }
