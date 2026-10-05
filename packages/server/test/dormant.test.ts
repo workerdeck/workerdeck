@@ -96,7 +96,10 @@ class ResumableRunner implements Runner {
     return false
   }
   async interrupt(): Promise<void> {}
-  async clearContext(adopt?: string): Promise<void> {
+  async clearContext(): Promise<void> {
+    this.adoptReset(undefined)
+  }
+  adoptReset(adopt: string | undefined): void {
     this.#sdkSessionId = adopt
     this.#emit({ type: 'conversation_reset', sdkSessionId: adopt })
   }
@@ -450,7 +453,7 @@ describe('sessions that survive a restart', () => {
       expect((await store.get(session.id))?.kind).toBe('dormant')
     })
 
-    await gateway.built[0]!.clearContext('engine-session-2')
+    gateway.built[0]!.adoptReset('engine-session-2')
 
     await vi.waitFor(async () => {
       const record = await store.get(session.id)

@@ -97,6 +97,7 @@ export function createEngineSession(options: EngineSessionOptions): AiSdkRunner 
     onFileDelivered:
       options.capabilities?.deliverFiles === false || !isGranted('deliverFiles') ? undefined : (file) => runner?.emitFileDelivered(file),
     peers: options.config.peers,
+    contextReset: options.config.contextReset,
     shells: options.config.shells,
     shellWrite: options.config.shellAgentWrite !== undefined,
     selfId: () => runner?.id ?? 'pending',

@@ -468,7 +468,10 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
     case 'conversation_reset': {
       return {
         ...base,
-        items: [],
+        items:
+          event.agentReason === undefined
+            ? []
+            : [{ kind: 'notice', id: `reset-${event.seq}`, level: 'info', text: agentResetNotice(event.agentReason) }],
         contextUsage: undefined,
         checklist: undefined,
         sdkSessionId: event.sdkSessionId ?? base.sdkSessionId,
@@ -801,4 +804,8 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
       return base
     }
   }
+}
+
+function agentResetNotice(reason: string): string {
+  return `The agent cleared its context: ${reason}`
 }

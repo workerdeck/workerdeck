@@ -520,6 +520,11 @@ Host Mode setting `workerdeck.host.effortDefaults` (an object, model to level), 
 as repeated `--effort-default <model>=<level>` and one of the restart-offer keys. A gateway the
 extension only connects to takes its defaults from its own config.
 
+`workerdeck.host.agentContextReset` (`off`, the default, `on` or `never`) reaches the child as
+`--agent-context-reset <value>` when it is not `off`, and is a restart-offer key. An agent-requested
+reset draws as one info notice (`The agent cleared its context: <reason>`) in the emptied
+transcript. The react reducer and the iOS kit both seed it from `conversation_reset.agentReason`.
+
 ### Dev harness & CSP
 
 The webview build has **no dev server**: `localResourceRoots` means every asset must be a real

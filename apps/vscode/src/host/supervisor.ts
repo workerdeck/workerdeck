@@ -423,6 +423,9 @@ export class HostSupervisor implements vscode.Disposable {
     for (const [model, effort] of Object.entries(settings.effortDefaults)) {
       args.push('--effort-default', `${model}=${effort}`)
     }
+    if (settings.agentContextReset !== 'off') {
+      args.push('--agent-context-reset', settings.agentContextReset)
+    }
     return args
   }
 

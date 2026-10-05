@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createVfs, type SandboxVfs } from '@workerdeck/sandbox'
 import type { ToolExecutionResult, ToolExecutor } from '../../executors/tool-executor.ts'
 import type { WebFetchFn } from './web-fetch.ts'
+import type { ContextResetDirectory } from '../../lib/context-reset.ts'
 import type { PeerDirectory } from '../../lib/peers.ts'
 import type { ShellDirectory } from '../../lib/shells.ts'
 import type { SessionReportSource } from '../../lib/session-report.ts'
@@ -29,6 +30,7 @@ export type ToolContextOptions = {
   onDispatch?: (executionId: string, toolName: string) => void
   onSettle?: (executionId: string, result: ToolExecutionResult) => void
   peers?: PeerDirectory
+  contextReset?: ContextResetDirectory
   shells?: ShellDirectory
   shellWrite?: boolean
   // The runner does not exist while its tools are built, so the caller's own id is read at call time.
@@ -112,7 +114,13 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
   }
 
   const gatewayTools = sessionTools(
-    { report: options.report, peers: options.peers, shells: options.shells, write: options.shellWrite === true },
+    {
+      report: options.report,
+      reset: options.contextReset,
+      peers: options.peers,
+      shells: options.shells,
+      write: options.shellWrite === true,
+    },
     options.selfId ?? (() => options.sessionId),
   )
   for (const gatewayTool of gatewayTools) {

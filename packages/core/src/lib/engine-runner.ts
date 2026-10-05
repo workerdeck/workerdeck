@@ -125,6 +125,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
   protected get toolSources(): SessionToolSources {
     return {
       report: () => this.sessionReport(),
+      reset: this.config.contextReset,
       peers: this.config.peers,
       shells: this.config.shells,
       write: this.config.shellAgentWrite !== undefined,
@@ -148,6 +149,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       pendingPermissionCount: this.core.pendingCount,
       meta: this.config.meta,
       scope: this.config.scope,
+      agentContextReset: this.config.contextReset ? (true as const) : undefined,
       title: sessionTitle(this.config, engineTitle),
       costUsd: this.core.cost.costUsd,
       usageByModel: this.core.cost.byModel,

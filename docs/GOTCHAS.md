@@ -1202,6 +1202,37 @@ handover wrong.
   says so in `context.note`. No model table is shipped on purpose: it would go stale silently.
   Provider rate limits are `null`: they exist only as vendor-specific response headers.
 
+## Agent context reset (`context_reset`, `agentContextReset`)
+
+- **The tool schedules; the gateway runs it.** `context_reset` can only ever be called mid-turn, so
+  the handler just records `{ prompt, reason }` in the server's `ContextResetService` and answers
+  "scheduled, end your turn". The reset runs on the next `status_changed: idle`: `clearContext({
+  agentReason })`, wait for the `conversation_reset` (60s deadline), then `sendMessage(prompt)`.
+  Waiting for the event matters on claude, whose `clearContext` only queues `/clear` and returns.
+- **A turn that ends in an error cancels it.** A `turn_result` with `isError` between the request
+  and the idle drops the pending reset, which covers an interrupt. The tool's answer already tells
+  the agent so. A session that closes or leaves the registry drops it too.
+- **Rate limits are in-memory, per gateway generation.** `minIntervalMs` (10 min) and `maxPerHour`
+  (3) are counted from completed resets only; a hot reload or restart forgets them. That is
+  deliberate: the limits stop a confused loop, not a determined operator.
+- **The grant is decided at build, like the shell tools.** `buildRunner` stamps
+  `config.contextReset` (transient, never persisted) from request `agentContextReset` ??
+  profile `defaults.agentContextReset` ?? the gateway `default`. The engines register tools once
+  (claude MCP server at query start, codex `dynamicTools` at thread start), so there is no live
+  toggle; flipping it needs a new session. The request field is durable, so a dormant wake
+  re-derives the same answer.
+- **Claude stamps the reason on the CLI's own reset.** `clearContext` remembers `agentReason` and
+  `#takeAgentReset` merges it into the next normalized `conversation_reset`. A human `/clear`
+  typed between the request and that event would carry the agent's reason; it is rare enough to
+  leave.
+- **Self only.** There is no way to reset another session. Peer names are labels, not authority,
+  and wiping a teammate's context would need its own access model.
+- **Verified on both engines** by `pnpm smoke:context-reset` (2026-10-05, claude haiku and codex
+  gpt-5.6-luna, 14/14 each): `turn_result` precedes the idle that triggers the reset on both, claude
+  takes `/clear` then the prompt in order, and codex's fresh thread keeps its `dynamicTools`. Haiku
+  spends a `ToolSearch` before the deferred `mcp__workerdeck__*` tools, so a post-reset turn can
+  take minutes; the smoke waits 240s.
+
 ## Peer messaging (`peers_list` / `peers_peek` / `peers_send`)
 
 Session-to-session messaging on one gateway: every engine gets the three tools, backed by one

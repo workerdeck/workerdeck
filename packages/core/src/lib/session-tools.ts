@@ -1,3 +1,10 @@
+import {
+  CONTEXT_RESET_TOOL,
+  CONTEXT_RESET_TOOL_SHAPE,
+  isContextResetToolName,
+  runContextResetTool,
+  type ContextResetDirectory,
+} from './context-reset.ts'
 import { gatewayToolSpec, type GatewayToolOutput, type GatewayToolShape, type GatewayToolSpec } from './gateway-tools.ts'
 import {
   SESSION_INFO_TOOL,
@@ -9,15 +16,24 @@ import {
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, isPeerToolName, runPeerTool, type PeerDirectory } from './peers.ts'
 import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory } from './shells.ts'
 
-export type SessionToolSources = { report?: SessionReportSource; peers?: PeerDirectory; shells?: ShellDirectory; write: boolean }
+export type SessionToolSources = {
+  report?: SessionReportSource
+  reset?: ContextResetDirectory
+  peers?: PeerDirectory
+  shells?: ShellDirectory
+  write: boolean
+}
 
 export type SessionTool = GatewayToolShape & { name: string; run(args: unknown): Promise<GatewayToolOutput> }
 
-// The gateway's own tools a session is offered, session_info then peers then shells, in the order every engine registers them.
+// The gateway's own tools a session is offered, session_info, context_reset, peers, shells: the order every engine registers them in.
 export function sessionTools(sources: SessionToolSources, from: () => string): SessionTool[] {
-  const { report, peers, shells, write } = sources
+  const { report, reset, peers, shells, write } = sources
   return [
     ...(report ? [{ name: SESSION_INFO_TOOL, ...SESSION_INFO_TOOL_SHAPE, run: () => runSessionInfoTool(report, from()) }] : []),
+    ...(reset
+      ? [{ name: CONTEXT_RESET_TOOL, ...CONTEXT_RESET_TOOL_SHAPE, run: (args: unknown) => runContextResetTool(reset, from(), args) }]
+      : []),
     ...(peers
       ? PEER_TOOL_NAMES.map((name) => ({ name, ...PEER_TOOL_SHAPES[name], run: (args: unknown) => runPeerTool(peers, from(), name, args) }))
       : []),
@@ -44,6 +60,9 @@ export function runSessionTool(
 ): Promise<GatewayToolOutput> | undefined {
   if (sources.report && isSessionInfoToolName(name)) {
     return runSessionInfoTool(sources.report, from)
+  }
+  if (sources.reset && isContextResetToolName(name)) {
+    return runContextResetTool(sources.reset, from, args)
   }
   if (sources.peers && isPeerToolName(name)) {
     return runPeerTool(sources.peers, from, name, args)

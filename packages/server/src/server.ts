@@ -2,7 +2,15 @@ import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
-import { getEngineAdapter, installPeerDirectory, installShellDirectory, peerDirectoryHandle, shellDirectoryHandle } from '@workerdeck/core'
+import {
+  contextResetDirectoryHandle,
+  getEngineAdapter,
+  installContextResetDirectory,
+  installPeerDirectory,
+  installShellDirectory,
+  peerDirectoryHandle,
+  shellDirectoryHandle,
+} from '@workerdeck/core'
 import type { EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
 import { mergePricing, type CreateSessionRequest, type ProfileEngine } from '@workerdeck/protocol'
@@ -19,6 +27,7 @@ import { AttachmentStore } from './services/attachments.ts'
 import { createAuthService } from './services/auth.ts'
 import { AvailabilityTracker } from './services/availability.ts'
 import { EngineSleepTimers } from './services/engine-sleep.ts'
+import { ContextResetService } from './services/context-resets.ts'
 import { BridgeHub } from './services/bridge.ts'
 import { createHostFileRoots } from './services/host-files.ts'
 import { SessionNotifier } from './services/notifications.ts'
@@ -123,6 +132,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     attachedCount: (sessionId) => bridge.attachedCount(sessionId),
     onError: (error) => diagnose(error, 'engine-sleep'),
   })
+  const contextResets =
+    options.agentContextReset === false
+      ? undefined
+      : new ContextResetService({ ...options.agentContextReset, onError: (error) => diagnose(error, 'context-reset') })
+  let ownContextResets = contextResets
+  installContextResetDirectory(contextResets)
   // Built first because everything else holds it. The watchers it attaches read the later-built services only when
   // a runner registers, which no code path does before this function returns.
   const registry = new SessionRegistry({
@@ -139,6 +154,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         peers?.watch(runner),
         factory.watchAuthSource(runner),
         engineSleep.watch(runner),
+        contextResets?.watch(runner),
       ]
       const profile = runner.info().profile
       if (profile) {
@@ -209,6 +225,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     effortDefaults: options.effortDefaults,
     requireApiKey: options.requireApiKey,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
+    contextReset: contextResets
+      ? { directory: contextResetDirectoryHandle(() => ownContextResets), defaultEnabled: contextResets.defaultEnabled }
+      : undefined,
     shells: shellDirectory ? shellDirectoryHandle(() => ownShells) : undefined,
     shellAgentWrite: options.shell?.agentWrite,
     pricing: pricing.pricing,
@@ -326,6 +345,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       relay?.close()
       ownPeers = undefined
       ownShells = undefined
+      contextResets?.close()
+      ownContextResets = undefined
     },
   })
 

@@ -11,6 +11,7 @@ import type {
   SessionInfo,
 } from '@workerdeck/protocol'
 import type { BridgeHub, BridgeHubOptions } from './services/bridge.ts'
+import type { AgentContextResetOptions } from './services/context-resets.ts'
 import type { SessionNotificationOptions } from './services/notifications.ts'
 import type { ParkErrorContext, SessionParkManager } from './services/parking.ts'
 import type { RelayLinkOptions } from './services/peer-relay.ts'
@@ -86,6 +87,9 @@ export type WorkerServerOptions = {
   notifications?: SessionNotificationOptions
   // Stop a live session's engine child after it has sat idle with no client attached this long; 0 or omitted: never.
   engineSleepAfterMs?: number
+  // The `context_reset` tool: an agent clears its own conversation between turns and continues from a prompt it wrote.
+  // Available unless `false`; a session gets it from its request, then its profile's `defaults`, then `default` here.
+  agentContextReset?: false | AgentContextResetOptions
   // Reasoning effort per model, keyed by catalog value or resolved id; a profile's `defaults.efforts` wins per key.
   effortDefaults?: Record<string, string>
   bridge?: BridgeHubOptions

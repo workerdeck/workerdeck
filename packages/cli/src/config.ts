@@ -49,6 +49,7 @@ export type CliFlags = {
   approvalTimeoutMs?: number | null
   engineSleepAfterMs?: number
   effortDefaults?: Record<string, string>
+  agentContextReset?: 'on' | 'off' | 'never'
   stateDir?: string
   parking?: boolean
   insecure?: boolean
@@ -101,6 +102,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--approval-timeout', (f, v, name) => (f.approvalTimeoutMs = parseDuration(v, name))],
   ['--engine-sleep-after', (f, v, name) => (f.engineSleepAfterMs = parseDuration(v, name) ?? 0)],
   ['--effort-default', (f, v, name) => (f.effortDefaults = { ...f.effortDefaults, ...parseEffortDefault(v, name) })],
+  ['--agent-context-reset', (f, v, name) => (f.agentContextReset = parseAgentContextReset(v, name))],
   ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
   ['--cors-origin', (f, v) => f.corsOrigins.push(v)],
 ])
@@ -125,6 +127,13 @@ function parseEffortDefault(raw: string, source: string): Record<string, string>
     throw new ConfigError(`${source}: expected <model>=<effort>, like opus=high; got: ${raw}`)
   }
   return { [match[1]!]: match[2]! }
+}
+
+function parseAgentContextReset(raw: string, source: string): 'on' | 'off' | 'never' {
+  if (raw === 'on' || raw === 'off' || raw === 'never') {
+    return raw
+  }
+  throw new ConfigError(`${source}: expected on, off or never; got: ${raw}`)
 }
 
 function parseShellAgentWrite(value: string, name: string): ShellAgentWriteOption {
@@ -425,6 +434,11 @@ export function resolveInstanceConfig(
   }
   if (flags.engineSleepAfterMs !== undefined) {
     options.engineSleepAfterMs = flags.engineSleepAfterMs
+  }
+  if (flags.agentContextReset === 'never') {
+    options.agentContextReset = false
+  } else if (flags.agentContextReset !== undefined) {
+    options.agentContextReset = { ...loaded.options.agentContextReset, default: flags.agentContextReset === 'on' }
   }
   if (flags.effortDefaults) {
     options.effortDefaults = { ...loaded.options.effortDefaults, ...flags.effortDefaults }

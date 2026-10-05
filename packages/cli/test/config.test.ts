@@ -71,6 +71,18 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--engine-sleep-after', 'later'])).toThrow(ConfigError)
   })
 
+  it('maps --agent-context-reset onto the gateway option, keeping the config file rate limits', () => {
+    expect(() => parseArgs(['--agent-context-reset', 'yes'])).toThrow(ConfigError)
+    const fromFile = { path: null, options: { agentContextReset: { maxPerHour: 1 } } }
+    const on = resolveInstanceConfig(parseArgs(['--agent-context-reset', 'on']), fromFile, {})
+    expect(on.options.agentContextReset).toEqual({ maxPerHour: 1, default: true })
+    const off = resolveInstanceConfig(parseArgs(['--agent-context-reset', 'off']), fromFile, {})
+    expect(off.options.agentContextReset).toEqual({ maxPerHour: 1, default: false })
+    const never = resolveInstanceConfig(parseArgs(['--agent-context-reset', 'never']), fromFile, {})
+    expect(never.options.agentContextReset).toBe(false)
+    expect(resolveInstanceConfig(parseArgs([]), fromFile, {}).options.agentContextReset).toEqual({ maxPerHour: 1 })
+  })
+
   it('collects repeated --effort-default pairs and lays them over the config file', () => {
     const flags = parseArgs(['--effort-default', 'opus=high', '--effort-default', 'gpt-6-sol=xhigh'])
     expect(flags.effortDefaults).toEqual({ opus: 'high', 'gpt-6-sol': 'xhigh' })
