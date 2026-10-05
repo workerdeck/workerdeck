@@ -465,6 +465,12 @@ engine has none. Rules in `docs/GOTCHAS.md` §Reasoning effort.
 `EngineCapabilities.engineSleep`; the provider engine has no child to stop. Both expose
 `engineAsleep` on `info()` and emit `engine_sleep` on each edge. See `docs/GOTCHAS.md` §Engine sleep.
 
+**Context reset**: `lib/context-reset.ts` defines the `context_reset` tool and its
+`ContextResetDirectory` (a late-bound handle plus a `Symbol.for` slot, like peers). The tool is
+offered right after `session_info` whenever `EngineRunnerConfig.contextReset` is set; core never
+decides the grant or the timing. `Runner.clearContext({ agentReason })` stamps the reason on the
+`conversation_reset` it emits, on all three engines. See `docs/GOTCHAS.md` §Agent context reset.
+
 the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
 per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model
 catalog versioned with the release, a credential-availability probe, a runner factory), looked
@@ -725,6 +731,12 @@ calls `runner.setEffort`, a `protocol_error` where the engine has none. `isEffor
 and the WS `sleep` command: 501 without `runner.sleep`, 409 with the runner's own reason). The timer
 is one more `onRegister` watcher, so a hot reload's evict detaches it; `ws.ts` re-arms it on every
 socket close beside `parking.onDetach`. Rules in `docs/GOTCHAS.md` §Engine sleep.
+
+**Agent context reset** lives in `services/context-resets.ts` (`ContextResetService`, the
+directory behind `context_reset`: one `onRegister` watcher per runner, the pending request, the rate
+limits, and the clear-then-prompt run at the next idle). `buildRunner` stamps `config.contextReset`
+(a transient host-only key) from request, profile default, then the `agentContextReset` option;
+`false` builds no service at all. Rules in `docs/GOTCHAS.md` §Agent context reset.
 
 HTTP + WS gateway (`node:http` + `ws`): session registry, auth hook,
 profiles served with their engine's **capability record, static model catalog, and

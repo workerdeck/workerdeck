@@ -42,7 +42,14 @@ import {
   rateLimitEventsFromUsage,
   toApiMessage,
 } from '../../lib/normalize.ts'
-import type { EngineRunnerConfig, PermissionDecision, Runner, SendMessageOptions, SleepResult } from '../../runner-interface.ts'
+import type {
+  ClearContextOptions,
+  EngineRunnerConfig,
+  PermissionDecision,
+  Runner,
+  SendMessageOptions,
+  SleepResult,
+} from '../../runner-interface.ts'
 import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
 import { QUESTIONS_DISABLED_MESSAGE, approvalResolution, type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
 import { hostTitle } from '../../lib/title.ts'
@@ -51,6 +58,7 @@ import { PEER_MCP_SERVER, withPeerContext, withoutPeerContextMessage } from '../
 import { liveContextFromReading, withDeadline, type LiveContext } from '../../lib/session-report.ts'
 import { assertEffort, effortDefaultFor } from '../../lib/effort.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
+import { agentResetFields } from '../../lib/context-reset.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
 import { SubagentTracker } from './subagents.ts'
@@ -100,6 +108,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   // correlating here is what lets one row settle rather than two rows appear.
   #compactionId: string | undefined
   #compactionTurns = 0
+  #agentResetReason: string | undefined
   #idleWhileCompacting = false
   #query: Query | undefined
   #asleep = false
@@ -330,11 +339,12 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
     return await this.#query.backgroundTasks(toolUseId)
   }
 
-  async clearContext(): Promise<void> {
+  async clearContext(options?: ClearContextOptions): Promise<void> {
     if (this.core.terminal) {
       throw new Error('session is closed')
     }
     this.localCommands.clear()
+    this.#agentResetReason = options?.agentReason
     this.sendMessage('/clear')
   }
 
@@ -643,7 +653,8 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       void this.#fetchContextUsage()
       return
     }
-    const body = normalizeSdkMessage(msg)
+    const normalized = normalizeSdkMessage(msg)
+    const body = normalized?.type === 'conversation_reset' ? { ...normalized, ...this.#takeAgentReset() } : normalized
     if (body) {
       this.core.emit(body)
       if (body.type === 'conversation_reset') {
@@ -677,6 +688,12 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
         void this.#fetchEngineTitle()
       }
     }
+  }
+
+  #takeAgentReset(): { agentReason?: string } {
+    const reason = this.#agentResetReason
+    this.#agentResetReason = undefined
+    return agentResetFields({ agentReason: reason })
   }
 
   #handleCompactionStatus(msg: { status?: string | null; compact_result?: 'success' | 'failed'; compact_error?: string }): void {

@@ -7,7 +7,15 @@ import {
   type ProfileEngine,
   type ProfileInfo,
 } from '@workerdeck/protocol'
-import type { EngineAdapter, PeerDirectory, Runner, RunnerSnapshot, SessionRunnerConfig, ShellDirectory } from '@workerdeck/core'
+import type {
+  ContextResetDirectory,
+  EngineAdapter,
+  PeerDirectory,
+  Runner,
+  RunnerSnapshot,
+  SessionRunnerConfig,
+  ShellDirectory,
+} from '@workerdeck/core'
 import type { Refusal } from '../lib/http.ts'
 import { refusePermissionMode } from '../lib/permissions.ts'
 import { checkScope, sameScope } from '../lib/scope.ts'
@@ -29,6 +37,7 @@ export type SessionFactoryDeps = {
   effortDefaults?: Record<string, string>
   requireApiKey?: boolean
   peers?: PeerDirectory
+  contextReset?: { directory: ContextResetDirectory; defaultEnabled: boolean }
   shells?: ShellDirectory
   shellAgentWrite?: ShellAgentWriteOption
   pricing?: PricingTable
@@ -226,12 +235,16 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       ...(deps.peers ? { peers: deps.peers } : {}),
       ...(deps.pricing ? { pricing: deps.pricing } : {}),
     }
+    delete config.contextReset
     delete config.shells
     delete config.shellAgentWrite
     delete config.effortDefaults
     const efforts = { ...deps.effortDefaults, ...profile?.defaults?.efforts }
     if (Object.keys(efforts).length > 0) {
       config.effortDefaults = efforts
+    }
+    if (deps.contextReset && (built.agentContextReset ?? profile?.defaults?.agentContextReset ?? deps.contextReset.defaultEnabled)) {
+      config.contextReset = deps.contextReset.directory
     }
     if (deps.shells && capabilities.hostCwd === true) {
       config.shells = deps.shells

@@ -22,6 +22,7 @@ export type HostSettings = {
   name: string
   engineSleepAfterMinutes: number
   effortDefaults: Record<string, string>
+  agentContextReset: AgentContextReset
 }
 
 export const HOST_SECTION = 'workerdeck.host'
@@ -31,6 +32,10 @@ export const DEFAULT_HOST_NAME = 'This machine'
 export type ShellAgentWrite = 'read-only' | 'gated' | 'allow'
 
 const SHELL_AGENT_WRITE: readonly ShellAgentWrite[] = ['read-only', 'gated', 'allow']
+
+export type AgentContextReset = 'off' | 'on' | 'never'
+
+const AGENT_CONTEXT_RESET: readonly AgentContextReset[] = ['off', 'on', 'never']
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '0.0.0.0', '::'])
 
@@ -73,6 +78,7 @@ export function readHostSettings(): HostSettings {
     name: config.get<string>('name', DEFAULT_HOST_NAME).trim() || DEFAULT_HOST_NAME,
     engineSleepAfterMinutes: minutes(config.get<number>('engineSleepAfterMinutes', 0)),
     effortDefaults: effortDefaults(config.get<Record<string, unknown>>('effortDefaults', {})),
+    agentContextReset: agentContextReset(config.get<string>('agentContextReset', 'off')),
   }
 }
 
@@ -92,6 +98,7 @@ const RESTART_KEYS = [
   'npxSpec',
   'engineSleepAfterMinutes',
   'effortDefaults',
+  'agentContextReset',
 ]
 
 export function needsRestart(event: vscode.ConfigurationChangeEvent): boolean {
@@ -109,6 +116,10 @@ function effortDefaults(value: Record<string, unknown>): Record<string, string> 
 
 function minutes(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function agentContextReset(value: string): AgentContextReset {
+  return AGENT_CONTEXT_RESET.find((mode) => mode === value) ?? 'off'
 }
 
 function shellAgentWrite(value: string): ShellAgentWrite {

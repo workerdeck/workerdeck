@@ -86,6 +86,12 @@ Options
                             on this model (opus=high, gpt-6-sol=xhigh; repeatable;
                             config: effortDefaults). A profile's defaults.efforts
                             wins per model. Default: the engine's own.
+      --agent-context-reset <on|off|never>
+                            whether sessions get the context_reset tool, which
+                            lets an agent clear its own conversation between turns
+                            and continue from a prompt it wrote (config:
+                            agentContextReset). A request or profile may turn it
+                            on per session; 'never' forbids it. Default 'off'.
       --state-dir <path>    where parked sessions are persisted
                             (default: beside the config file, else ~/.workerdeck)
       --no-parking-store    keep parked sessions in memory only; a restart drops them

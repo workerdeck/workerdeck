@@ -241,6 +241,8 @@ export type SessionEventBody =
   | {
       type: 'conversation_reset'
       sdkSessionId?: string
+      // Present when the session's own agent asked for the reset through `context_reset`.
+      agentReason?: string
     }
   | {
       type: 'context_compacted'
@@ -476,6 +478,7 @@ export type ProfileDefaults = {
   model?: string
   permissionMode?: PermissionMode
   efforts?: Record<string, string>
+  agentContextReset?: boolean
 }
 
 export type ProfileEngine = 'claude' | 'codex' | 'provider'
@@ -708,6 +711,7 @@ export type CreateSessionRequest = {
   capabilities?: SessionCapability[]
   meta?: Record<string, unknown>
   scope?: Record<string, string>
+  agentContextReset?: boolean
 }
 
 // Typed as a record over the request's keys so a field added above without an entry here, or an entry left behind
@@ -734,6 +738,7 @@ const CREATE_SESSION_REQUEST_KEY_SET: Record<keyof CreateSessionRequest, true> =
   capabilities: true,
   meta: true,
   scope: true,
+  agentContextReset: true,
 }
 
 export const CREATE_SESSION_REQUEST_KEYS = Object.keys(CREATE_SESSION_REQUEST_KEY_SET) as ReadonlyArray<keyof CreateSessionRequest>
@@ -857,6 +862,8 @@ export type SessionInfo = {
   shellAgentWrite?: 'gated' | 'allow'
   // The engine child is stopped while the session stays live and listed; the next message resumes it.
   engineAsleep?: true
+  // The agent holds `context_reset` and may clear its own conversation between turns.
+  agentContextReset?: true
 }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {

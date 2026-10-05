@@ -17,6 +17,7 @@ import {
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import { type AttachmentInput, normalizeMediaType } from '../../lib/attachments.ts'
 import type {
+  ClearContextOptions,
   EngineRunnerConfig,
   ParkedExecution,
   PermissionDecision,
@@ -29,6 +30,7 @@ import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.t
 import { providerVendor } from '../../lib/session-report.ts'
 import { approvalResolution, type ApprovalResolution, type CloseReason } from '../../lib/runner-core.ts'
 import { withPeerContext } from '../../lib/peers.ts'
+import { agentResetFields } from '../../lib/context-reset.ts'
 import { resolveInstructions } from '../../lib/instructions.ts'
 import {
   TurnStream,
@@ -359,7 +361,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
     return result.text
   }
 
-  async clearContext(): Promise<void> {
+  async clearContext(options?: ClearContextOptions): Promise<void> {
     if (this.core.terminal) {
       throw new Error('session is closed')
     }
@@ -375,7 +377,7 @@ export class AiSdkRunner extends EngineRunner<AiSdkRunnerConfig> implements Runn
       this.#messages = []
       this.#contextTokens = undefined
       this.localCommands.clear()
-      this.core.emit({ type: 'conversation_reset' })
+      this.core.emit({ type: 'conversation_reset', ...agentResetFields(options) })
     })
     this.#turnChain = run.then(
       () => undefined,

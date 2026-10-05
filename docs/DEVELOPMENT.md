@@ -162,6 +162,7 @@ drives tools by hand and configures no executor, so it never reaches `#dispatchS
 what `smoke:live-approval` is for. It edits the first tool call at approval and proves the edit
 ran from a **VFS entry** rather than from anything the model says, so it does not rest on a model
 behaving; it fails on both assertions against a runner without the amend.
+`smoke:context-reset [claude|codex|all]` (paid) drives a real engine through the real `ContextResetService`: the agent calls `context_reset`, the reset lands with its reason after the turn, the prompt opens the fresh conversation, the old context is gone, the gateway tools still answer, and an immediate second reset is refused; any change to `context-resets.ts` or a runner's `clearContext` needs it.
 `smoke:background [claude|codex|all]` (paid) proves live `tool_output` on both engines and claude's move to the background: the blocked call returns, a queued message is answered while the command still runs, the completion arrives; any change to `tool-output.ts`, `task-output.ts` or the codex delta mapping needs it.
 Four more the list above omits. `smoke:mcp --probe` is **free** - it connects to the real
 DeepWiki server, asserts the tools come back namespaced, and exits before touching a model;

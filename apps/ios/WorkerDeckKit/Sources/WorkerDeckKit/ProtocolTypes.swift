@@ -1206,7 +1206,7 @@ public enum SessionEventBody: Sendable, Equatable {
   /// plan-mode exit). The transcript empties; session-scoped state survives.
   /// `sdkSessionId` is the fresh conversation's engine session id, when the
   /// engine reported one - the follow-up `system_init` stays authoritative.
-  case conversationReset(sdkSessionId: String?)
+  case conversationReset(sdkSessionId: String?, agentReason: String? = nil)
   /// The engine summarised earlier turns to fit the context window. Not a
   /// reset: the transcript keeps everything, and the engine reports the
   /// post-compaction occupancy itself.
@@ -1258,7 +1258,7 @@ extension SessionEvent: Decodable {
     case executionId, toolName, backend, deferred, expiresAt, output, logs, durationMs
     case reason, error, path, bytes, description, payload
     case skills, titles, items, fileId, mediaType, toolUseId
-    case sdkSessionId, uuid, parentToolUseId
+    case sdkSessionId, agentReason, uuid, parentToolUseId
     case pending, trigger, preTokens, postTokens
     case asleep, tail, effort
   }
@@ -1318,7 +1318,8 @@ extension SessionEvent: Decodable {
           tail: try container.decode(String.self, forKey: .tail))
       case "conversation_reset":
         body = .conversationReset(
-          sdkSessionId: try container.decodeIfPresent(String.self, forKey: .sdkSessionId))
+          sdkSessionId: try container.decodeIfPresent(String.self, forKey: .sdkSessionId),
+          agentReason: try container.decodeIfPresent(String.self, forKey: .agentReason))
       case "context_compacted":
         body = .contextCompacted(
           CompactionItem(

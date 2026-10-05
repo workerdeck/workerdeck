@@ -16,6 +16,7 @@ export type {
   SendMessageOptions,
   SessionEventListener,
   SleepResult,
+  ClearContextOptions,
 } from './runner-interface.ts'
 export { CostLedger, type CostFigures, type CostLedgerState } from './lib/cost-ledger.ts'
 export type { ToolExecutionCall, ToolExecutionDispatch, ToolExecutionResult, ToolExecutor } from './executors/tool-executor.ts'
@@ -64,6 +65,14 @@ export type {
   PeerToolName,
   PeerToolSpec,
 } from './lib/peers.ts'
+export {
+  CONTEXT_RESET_PROMPT_MAX,
+  CONTEXT_RESET_REASON_MAX,
+  CONTEXT_RESET_TOOL,
+  contextResetDirectoryHandle,
+  installContextResetDirectory,
+} from './lib/context-reset.ts'
+export type { ContextResetDirectory, ContextResetRequest } from './lib/context-reset.ts'
 export { SESSION_INFO_TOOL, buildSessionReport } from './lib/session-report.ts'
 export type { SessionContextReport, SessionRateLimitReport, SessionReport } from './lib/session-report.ts'
 export {

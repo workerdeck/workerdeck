@@ -744,6 +744,20 @@
             },
             "description": "Reasoning effort per model, applied when a session starts on that model or switches to it.",
             "markdownDescription": "Reasoning effort per model, applied when a session starts on that model or switches to it, for example `{ \"opus\": \"high\", \"gpt-6-sol\": \"xhigh\" }`. Keys are model names as the model picker lists them, or resolved ids. A model with no entry keeps its engine's own default. Passed to the server as `--effort-default`."
+          },
+          "workerdeck.host.agentContextReset": {
+            "type": "string",
+            "enum": ["off", "on", "never"],
+            "enumDescriptions": [
+              "Sessions do not get the tool unless their profile or request turns it on.",
+              "Every session gets the tool unless its profile or request turns it off.",
+              "No session gets the tool, whatever its profile or request says."
+            ],
+            "default": "off",
+            "scope": "machine",
+            "order": 14,
+            "description": "Whether agents get the context_reset tool, which clears their own conversation between turns and continues from a prompt they wrote.",
+            "markdownDescription": "Whether agents get the `context_reset` tool: an agent clears its own conversation once its turn ends and continues from a prompt it wrote, for long unattended work. Rate-limited by the server. Passed to the server as `--agent-context-reset`."
           }
         }
       },

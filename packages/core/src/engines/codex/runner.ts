@@ -14,7 +14,8 @@ import {
   errorMessage,
 } from '@workerdeck/protocol'
 import { attachmentKind, normalizeMediaType, type AttachmentInput } from '../../lib/attachments.ts'
-import type { EngineRunnerConfig, Runner, SendMessageOptions, SleepResult } from '../../runner-interface.ts'
+import type { ClearContextOptions, EngineRunnerConfig, Runner, SendMessageOptions, SleepResult } from '../../runner-interface.ts'
+import { agentResetFields } from '../../lib/context-reset.ts'
 import { checklistFromPlan, sameChecklist } from '../../lib/checklist.ts'
 import { EngineRunner, type SessionReportFacts } from '../../lib/engine-runner.ts'
 import { type CloseReason, type RunnerCoreHooks } from '../../lib/runner-core.ts'
@@ -519,13 +520,13 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     await this.#turnChain
   }
 
-  async clearContext(): Promise<void> {
+  async clearContext(options?: ClearContextOptions): Promise<void> {
     if (this.core.closed) {
       throw new Error('session is closed')
     }
     this.#clearsPending += 1
     const run = this.#turnChain
-      .then(() => this.#clearNow())
+      .then(() => this.#clearNow(options))
       .finally(() => {
         this.#clearsPending -= 1
       })
@@ -536,7 +537,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     await run
   }
 
-  async #clearNow(): Promise<void> {
+  async #clearNow(options?: ClearContextOptions): Promise<void> {
     if (this.core.closed) {
       throw new Error('session is closed')
     }
@@ -562,7 +563,7 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     this.core.settleAllApprovals({ behavior: 'deny', message: 'the conversation was cleared' }, 'policy')
     this.#resumedHistory = undefined
     this.localCommands.clear()
-    this.core.emit({ type: 'conversation_reset', sdkSessionId: this.#resumableThreadId() })
+    this.core.emit({ type: 'conversation_reset', sdkSessionId: this.#resumableThreadId(), ...agentResetFields(options) })
   }
 
   async #interruptTurn(): Promise<void> {

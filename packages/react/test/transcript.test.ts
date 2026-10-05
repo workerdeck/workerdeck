@@ -703,6 +703,15 @@ describe('transcript reducer', () => {
     expect(state.totalCostUsd).toBe(0.5)
   })
 
+  it('an agent-requested reset leaves one notice naming the reason in the emptied transcript', () => {
+    seq = 0
+    const before = run(initialTranscriptState, [
+      { type: 'user_message', message: { role: 'user', content: 'hi' }, parentToolUseId: null, uuid: 'u1' },
+    ])
+    const state = run(before, [{ type: 'conversation_reset', agentReason: 'context at 80%' }])
+    expect(state.items).toEqual([{ kind: 'notice', id: 'reset-2', level: 'info', text: 'The agent cleared its context: context at 80%' }])
+  })
+
   it('holds the checklist the engine last wrote, and drops it on a reset', () => {
     seq = 0
     const state = run(initialTranscriptState, [

@@ -11,6 +11,7 @@ import type {
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
+import type { ContextResetDirectory } from './lib/context-reset.ts'
 import type { CostLedgerState } from './lib/cost-ledger.ts'
 import type { SessionInstructions } from './lib/instructions.ts'
 import type { LocalCommandResult, LocalShellSource } from './lib/local-command.ts'
@@ -27,6 +28,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   instructions?: SessionInstructions
   defaultApprovalTimeoutMs?: number | null
   peers?: PeerDirectory
+  // Set by the gateway only where the agent may reset its own context; its presence is what offers `context_reset`.
+  contextReset?: ContextResetDirectory
   shells?: ShellDirectory
   shellAgentWrite?: ShellAgentWrite
   // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell
@@ -63,6 +66,8 @@ export type SendMessageOptions = {
   mentions?: readonly PeerMention[]
 }
 
+export type ClearContextOptions = { agentReason?: string }
+
 export type SleepResult = { ok: true } | { ok: false; reason: string }
 
 export type PermissionDecision =
@@ -97,7 +102,7 @@ export interface Runner {
   stopTask?(toolUseId: string): Promise<boolean>
   // Ctrl+B: the blocking tool call returns at once and the task keeps running. No id backgrounds every foreground task.
   backgroundTask?(toolUseId?: string): Promise<boolean>
-  clearContext?(): Promise<void>
+  clearContext?(options?: ClearContextOptions): Promise<void>
   // Stops the engine child while the session stays registered; the next message wakes it. Refused, never queued.
   sleep?(): Promise<SleepResult>
   setPermissionMode(mode: PermissionMode): Promise<void>

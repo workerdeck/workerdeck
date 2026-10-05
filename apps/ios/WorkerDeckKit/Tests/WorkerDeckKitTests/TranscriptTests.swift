@@ -535,6 +535,16 @@ struct TranscriptTests {
     ])
   }
 
+  @Test func agentResetLeavesOneNoticeNamingTheReason() {
+    let seeded = reduce([user(1, uuid: "u1", [.text("hi")])])
+    let state = reduce(
+      [event(2, .conversationReset(sdkSessionId: nil, agentReason: "context at 80%"))], from: seeded)
+    #expect(
+      state.items == [
+        .notice(id: "reset-2", level: .info, text: "The agent cleared its context: context at 80%")
+      ])
+  }
+
   @Test func conversationResetEmptiesItemsAndKeepsSessionScopedState() {
     var seeded = reduce([
       event(1, .capabilities(models: [], commands: [], defaultModel: "claude-opus-5")),
