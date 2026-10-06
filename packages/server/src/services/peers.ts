@@ -318,8 +318,13 @@ export function resolvePeerMentions(rows: readonly PeerSessionSummary[], text: s
     }
   }
   for (const row of rows) {
-    add(peerMentionKey(peerMentionSlug(row.title, row.id)), row)
-    add(peerMentionKey(row.id), row)
+    const keys = new Set([peerMentionKey(peerMentionSlug(row.title, row.id)), peerMentionKey(row.id)])
+    if (row.agent) {
+      keys.add(peerMentionKey(peerMentionSlug(row.agent, row.id)))
+    }
+    for (const key of keys) {
+      add(key, row)
+    }
   }
   const resolved: PeerMention[] = []
   const seen = new Set<string>()
@@ -341,7 +346,7 @@ export function resolvePeerMentions(rows: readonly PeerSessionSummary[], text: s
     resolved.push({
       typed: token.body,
       id: target.id,
-      name: target.title,
+      name: target.agent ?? target.title,
       engine: target.engine,
       status: target.status,
       cwd: target.cwd,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runPeerTool } from '@workerdeck/core'
-import { peerDeliveredTo, type AgentRef, type SessionInfo } from '@workerdeck/protocol'
+import { peerDeliveredTo, type AgentRef, type PeerSessionSummary, type SessionInfo } from '@workerdeck/protocol'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import { createPeerService, mentionsFor, resolvePeerMentions } from '../src/services/peers.ts'
@@ -166,6 +166,24 @@ describe('peer service: `#` mentions', () => {
     const mentions = resolvePeerMentions(await service.list('a'), 'commit what #astra did, then ask #Fix-login-bug')
     expect(mentions.map((m) => m.id)).toEqual(['b', 'c'])
     expect(mentions[0]).toMatchObject({ typed: 'astra', id: 'b', name: 'Astra', engine: 'claude', status: 'idle', cwd: '/work/b' })
+  })
+
+  it('resolves an agent by its name and still by its title, naming it by the agent', () => {
+    const row = (id: string, extra: Partial<PeerSessionSummary>): PeerSessionSummary => ({
+      id,
+      status: 'idle',
+      cwd: `/work/${id}`,
+      pendingPermissionCount: 0,
+      ...extra,
+    })
+    const rows = [
+      row('e569f467-a88b', { agent: 'WD-Lead' }),
+      row('c', { agent: 'Astra', title: 'Fix login bug' }),
+      row('d', { agent: 'Same', title: 'Same' }),
+    ]
+    expect(resolvePeerMentions(rows, 'ask #wd-lead')).toMatchObject([{ typed: 'wd-lead', id: 'e569f467-a88b', name: 'WD-Lead' }])
+    expect(resolvePeerMentions(rows, 'ask #Astra and #fix-login-bug').map((m) => [m.id, m.name])).toEqual([['c', 'Astra']])
+    expect(resolvePeerMentions(rows, 'ask #Same')).toEqual([expect.not.objectContaining({ ambiguousWith: expect.anything() })])
   })
 
   it('resolves a session id, whole or as an unambiguous prefix', async () => {

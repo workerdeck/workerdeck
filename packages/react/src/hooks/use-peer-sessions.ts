@@ -24,6 +24,21 @@ export type UsePeerSessionsResult = {
   names: string[]
 }
 
+export function peerSessionOption(row: PeerSessionSummary): PeerSessionOption {
+  const name = row.agent ?? row.title
+  return {
+    id: row.id,
+    slug: peerMentionSlug(name, row.id),
+    label: name ?? peerMentionSlug(undefined, row.id),
+    gateway: row.gateway,
+    engine: row.engine,
+    status: row.status,
+    cwd: row.cwd,
+    project: row.project,
+    lastActivityAt: row.lastActivityAt,
+  }
+}
+
 const EMPTY: UsePeerSessionsResult = { available: false, peers: [], names: [] }
 
 const IDLE_MS = 20_000
@@ -74,17 +89,7 @@ export function usePeerSessions(client: WorkerDeckClient, sessionId: string | un
     if (!enabled || unsupported || !rows) {
       return EMPTY
     }
-    const peers = rows.map((row) => ({
-      id: row.id,
-      slug: peerMentionSlug(row.title, row.id),
-      label: row.title ?? peerMentionSlug(undefined, row.id),
-      gateway: row.gateway,
-      engine: row.engine,
-      status: row.status,
-      cwd: row.cwd,
-      project: row.project,
-      lastActivityAt: row.lastActivityAt,
-    }))
+    const peers = rows.map(peerSessionOption)
     return { available: peers.length > 0, peers, names: peers.map((peer) => peerMentionKey(peer.slug)) }
   }, [enabled, rows, unsupported])
 }
