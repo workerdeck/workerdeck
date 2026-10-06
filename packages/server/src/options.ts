@@ -17,6 +17,7 @@ import type { ParkErrorContext, SessionParkManager } from './services/parking.ts
 import type { RelayLinkOptions } from './services/peer-relay.ts'
 import type { PeerServiceOptions } from './services/peers.ts'
 import type { ProfileStore } from './services/profile-store.ts'
+import type { AgentStore } from './services/agent-store.ts'
 import type { SessionRegistry } from './services/registry.ts'
 import type { SessionStore } from './services/session-store.ts'
 import type { ShellRegistry } from './services/shells.ts'
@@ -63,6 +64,7 @@ export type WorkerServerOptions = {
   }
   profiles?: ProfileInfo[]
   profileStore?: ProfileStore
+  agentStore?: AgentStore
   allowedConfigDirRoots?: string[]
   buildRunnerConfig?: (req: CreateSessionRequest) => SessionRunnerConfig
   basePath?: string

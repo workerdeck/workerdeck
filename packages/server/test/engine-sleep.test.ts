@@ -168,6 +168,20 @@ describe('EngineSleepTimers', () => {
     timers.close()
   })
 
+  it("takes a per-session timeout over the gateway's, so an agent sleeps on a gateway that has sleep off", async () => {
+    vi.useFakeTimers()
+    const timers = new EngineSleepTimers({ afterMs: 0, afterMsFor: (id) => (id === 'agent' ? 500 : undefined), attachedCount: () => 0 })
+    const agent = new SleepyRunner('agent')
+    const plain = new SleepyRunner('plain')
+    timers.watch(agent.runner)
+    timers.watch(plain.runner)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(agent.sleep).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(plain.sleep).not.toHaveBeenCalled()
+    timers.close()
+  })
+
   it('does nothing at 0 and stops when closed', async () => {
     vi.useFakeTimers()
     const off = new EngineSleepTimers({ afterMs: 0, attachedCount: () => 0 })

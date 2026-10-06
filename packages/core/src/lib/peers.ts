@@ -3,6 +3,7 @@ import {
   PEER_MENTION_MAX,
   type ApiMessage,
   peerDeliveredPrefix,
+  teamRole,
   transcriptProse,
   type MessageOrigin,
   type ProfileEngine,
@@ -291,7 +292,17 @@ export function peerSummary(info: SessionInfo): PeerSessionSummary {
     contextUsage: info.contextUsage,
     lastActivityAt: info.lastActivityAt,
     pendingPermissionCount: info.pendingPermissionCount,
+    ...teamFields(info),
   }
+}
+
+function teamFields(info: SessionInfo): Pick<PeerSessionSummary, 'role' | 'team'> {
+  const role = teamRole(info.agent)
+  if (role === undefined) {
+    return {}
+  }
+  const team = role === 'member' ? info.agent?.team : info.agent?.name
+  return team === undefined ? { role } : { role, team }
 }
 
 // The lines a person would skim to answer "how far along is it": the peer's own prose plus the prompts that drove it,

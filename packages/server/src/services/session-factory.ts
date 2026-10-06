@@ -7,6 +7,7 @@ import {
   type ProfileEngine,
   type ProfileInfo,
 } from '@workerdeck/protocol'
+import { composeInstructions } from '@workerdeck/core'
 import type {
   ContextResetDirectory,
   EngineAdapter,
@@ -44,7 +45,10 @@ export type SessionFactoryDeps = {
   registry: SessionRegistry
   parking: SessionParkManager
   bridge: BridgeHub
+  agentBrief?: (sessionId: string | undefined) => string | undefined
 }
+
+export type BuildOptions = { brief?: string }
 
 // A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
 // door passes it beside the request instead, because the host's hook and a job record see only the wire type.
@@ -219,7 +223,12 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
   }
 
-  const buildRunner = async (built: SessionRunnerConfig, restore?: RunnerSnapshot, id?: string): Promise<Runner> => {
+  const buildRunner = async (
+    built: SessionRunnerConfig,
+    restore?: RunnerSnapshot,
+    id?: string,
+    options?: BuildOptions,
+  ): Promise<Runner> => {
     const name = built.profile
     const profile = name !== undefined ? profiles.get(name) : undefined
     if (name !== undefined && !profile) {
@@ -253,6 +262,10 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
         config.shellAgentWrite = write
       }
     }
+    const brief = options?.brief ?? deps.agentBrief?.(id ?? restore?.id)
+    if (brief) {
+      config.instructions = composeInstructions(config.instructions, brief)
+    }
     if (config.instructions !== undefined && capabilities.systemInstructions === false) {
       throw new Error(`the ${engineOf(profile)} engine cannot deliver system instructions`)
     }
@@ -272,8 +285,8 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     return runner
   }
 
-  const createRunner = async (config: SessionRunnerConfig): Promise<Runner> => {
-    const runner = registry.register(await buildRunner(config))
+  const createRunner = async (config: SessionRunnerConfig, options?: BuildOptions): Promise<Runner> => {
+    const runner = registry.register(await buildRunner(config, undefined, undefined, options))
     // Watchers first, then start: a session must not emit anything before the things that persist and account for it are listening.
     parking.remember(runner.id, config)
     parking.watch(runner)

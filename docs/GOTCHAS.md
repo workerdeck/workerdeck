@@ -1324,6 +1324,39 @@ has the shape; these are the ways to get it wrong.
   `perMinute` (10) per sender-target pair, `maxMessageChars` (16k) with "write a file, send the
   path" as the refusal.
 
+## Agents and teams (`/agents`, `SessionInfo.agent`)
+
+An agent is a gateway record (`AgentService`, `services/agents.ts`, persisted by an `AgentStore`)
+that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has the shape.
+
+- **The store is the source of truth; `SessionInfo.agent` is decoration.** `AgentService.decorate`
+  rides `ProjectInfoService`'s `decorate` chain, so every `withProject` funnel (list, get, WS hello,
+  notifications, peers) carries it, and parked or dormant records never embed it. An agent whose
+  session was deleted stays bound to that dead id; clients draw it from `GET /agents`.
+- **The brief never rides the wire.** It is an agent field that becomes `instructions` (host
+  authority, §Host instructions) inside `buildRunner`, looked up by session id, so a dormant wake or
+  a parked rebuild re-derives it. A create passes it explicitly (`createRunner(config, { brief })`)
+  because the agent is bound only after the runner exists. `CreateSessionRequest` gained nothing.
+- **`/agents` is operator-only** (route auth `operator`, the same 404 as a missing route): the brief
+  is model-visible text.
+- **Teams are one level deep, enforced in one place.** `leadRefusal` refuses a lead joining a team,
+  anything joining a member, and self-leading, as 409s whose `error` is drawn as the drop tooltip,
+  so the strings are UI copy. A team is only "some agent has `lead` = me"; there is no team record.
+- **The peers rule is `teamReaches(from.agent, to.agent)` after the scope rule**, a pure function in
+  `protocol`. Members are also never published to the relay (`relayable`) and never reach it
+  (`reachesRemote`). Refusals read as "no such session", the scope rule's posture.
+- **No team-change notice.** Telling a member it joined would be a message, and a message starts a
+  paid turn on an idle session; members learn their team from `peers_list` (`role`, `team`).
+- **Sleep defaults on for agents.** `EngineSleepTimers` takes `afterMsFor` (the agent's
+  `sleepAfterMs`, default 15 min) over the gateway's `afterMs`, and so watches every sleepable runner
+  even when the gateway default is 0.
+- **The avatar is rolled once and persisted** (`avatarRecipe` on the stored agent, never in
+  `AgentInfo`), at bind time or at the first avatar request. Rendering goes through
+  `resolveRecipe`, so a rebuilt pack draws the stored sprite as-is (never a silent re-roll). The
+  route sends an `ETag` over pack checksum + recipe and answers `If-None-Match` with 304; the busy
+  strip (`avatar-busy.png`, `x-frame-durations`) is 404 while the pack has no busy animation. The
+  art is CC BY 4.0 (`@monkeyart/packs` carries `LICENSE-ART`): credit it wherever it is shown.
+
 ## Relay (cross-gateway peers)
 
 `docs/ARCHITECTURE.md` §Across gateways has the shape. These are the invariants.

@@ -8,6 +8,7 @@ import { createRelayLink, type RelayLink, type RelayLinkOptions } from '../src/s
 import { createPeerService } from '../src/services/peers.ts'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
+import type { AgentRef } from '@workerdeck/protocol'
 import { PeerRunner } from './peer-runner.ts'
 
 const cleanups: Array<() => unknown> = []
@@ -37,18 +38,28 @@ async function relayRig(): Promise<{ relay: Relay; stateDir: string }> {
   return { relay, stateDir }
 }
 
-async function gateway(relay: Relay, stateDir: string, name: string, runners: PeerRunner[], expose?: RelayLinkOptions['expose']) {
+async function gateway(
+  relay: Relay,
+  stateDir: string,
+  name: string,
+  runners: PeerRunner[],
+  expose?: RelayLinkOptions['expose'],
+  agents: Record<string, AgentRef> = {},
+) {
   const key = await enrollGateway(stateDir, name)
   await relay.reload()
   const registry = new SessionRegistry()
-  const service = createPeerService({ refs: { registry }, projects: new ProjectInfoService() })
+  const projects = new ProjectInfoService({ decorate: (info) => (agents[info.id] ? { ...info, agent: agents[info.id] } : info) })
+  const service = createPeerService({ refs: { registry }, projects })
   registry.observe((runner) => service.watch(runner))
   for (const runner of runners) {
     registry.register(runner)
   }
   const link: RelayLink = createRelayLink({ url: relay.url, gateway: name, key, expose }, service, () => {})
   cleanups.push(() => link.close())
-  const published = runners.filter((runner) => !expose?.scope || runner.scope?.team === expose.scope.team).length
+  const published = runners.filter(
+    (runner) => (!expose?.scope || runner.scope?.team === expose.scope.team) && agents[runner.id]?.lead === undefined,
+  ).length
   await until(() => relay.status().gateways.find((row) => row.name === name)?.sessions === published, `${name} published`)
   return link
 }
@@ -101,6 +112,20 @@ describe('peer relay link', () => {
     await gateway(relay, stateDir, 'pi', [new PeerRunner('b1')])
     expect(await mac.directory.list('a1')).toEqual([])
     expect(await mac.directory.send('a1', 'pi:b1', 'hi')).toEqual({ delivered: false, reason: 'no such session: pi:b1' })
+  })
+
+  it('keeps team members on their own gateway, in both directions', async () => {
+    const { relay, stateDir } = await relayRig()
+    const team = {
+      lead: { id: 'A', name: 'Atlas', avatar: '', leads: true as const },
+      member: { id: 'P', name: 'Pip', avatar: '', lead: 'A', team: 'Atlas' },
+    }
+    const mac = await gateway(relay, stateDir, 'mac', [new PeerRunner('lead'), new PeerRunner('member')], undefined, team)
+    const pi = await gateway(relay, stateDir, 'pi', [new PeerRunner('b1')])
+    expect((await mac.directory.list('member')).map((row) => row.id)).toEqual(['lead'])
+    expect(await mac.directory.send('member', 'pi:b1', 'hi')).toEqual({ delivered: false, reason: 'no such session: pi:b1' })
+    expect((await mac.directory.list('lead')).map((row) => row.id)).toEqual(['member', 'pi:b1'])
+    expect((await pi.directory.list('b1')).map((row) => row.id)).toEqual(['mac:lead'])
   })
 
   it('says remote gateways are unavailable instead of failing when the relay is gone', async () => {

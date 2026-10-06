@@ -23,7 +23,10 @@ import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './option
 import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
+import { createMemoryAgentStore } from './services/agent-store.ts'
+import { AgentService } from './services/agents.ts'
 import { AttachmentStore } from './services/attachments.ts'
+import { AvatarService } from './services/avatars.ts'
 import { createAuthService } from './services/auth.ts'
 import { AvailabilityTracker } from './services/availability.ts'
 import { EngineSleepTimers } from './services/engine-sleep.ts'
@@ -119,7 +122,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const generation = randomUUID()
   const shells = options.shell?.enabled === true ? shellRegistryFor(options.shell, generation) : null
-  const projects = new ProjectInfoService({ decorate: (info) => (shells ? shells.decorate(info) : info) })
+  const agents = new AgentService({ store: options.agentStore ?? createMemoryAgentStore(), basePath })
+  const projects = new ProjectInfoService({ decorate: (info) => agents.decorate(shells ? shells.decorate(info) : info) })
 
   const notifier = new SessionNotifier({
     ...options.notifications,
@@ -129,6 +133,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const producedFiles = new ProducedFileStore()
   const engineSleep = new EngineSleepTimers({
     afterMs: options.engineSleepAfterMs ?? 0,
+    afterMsFor: (sessionId) => agents.sleepAfterFor(sessionId),
     attachedCount: (sessionId) => bridge.attachedCount(sessionId),
     onError: (error) => diagnose(error, 'engine-sleep'),
   })
@@ -234,6 +239,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     registry,
     parking,
     bridge,
+    agentBrief: (sessionId) => agents.briefFor(sessionId),
   })
 
   const availability = new AvailabilityTracker({
@@ -278,6 +284,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     availability,
     auth,
     factory,
+    agents,
+    avatars: new AvatarService(),
     registry,
     parking,
     engineSleep,
@@ -360,6 +368,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     listen: async (port, host) => {
       await profiles.refreshStored()
       await profiles.seedStore()
+      await agents.hydrate()
       await parking.hydrate()
       await shells?.hydrate()
       return new Promise((resolve, reject) => {

@@ -5,6 +5,7 @@ import { json, type Refusal } from '../lib/http.ts'
 import { machineId } from '../lib/machine-id.ts'
 import { parseSessionRoute } from '../lib/parse-route.ts'
 import type { AuthContext } from '../services/auth.ts'
+import { handleAgents } from './agents.ts'
 import { handleExecutionResult } from './executions.ts'
 import { handleHostFiles } from './fs.ts'
 import { handleJobs } from './jobs.ts'
@@ -65,6 +66,11 @@ export function httpRoutes(ctx: ServerContext): HttpRoute[] {
       match: pathWhere(under('/profiles')),
       auth: 'any',
       handler: (req, res, pathname, auth) => handleProfiles(ctx, req, res, pathname, auth),
+    }),
+    route({
+      match: pathWhere(under('/agents')),
+      auth: 'operator',
+      handler: (req, res, pathname, auth) => handleAgents(ctx, req, res, pathname, auth),
     }),
     route({
       match: pathWhere((pathname) => pathname.startsWith(base + '/executions/')),

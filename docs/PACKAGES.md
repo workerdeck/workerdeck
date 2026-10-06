@@ -410,6 +410,13 @@ gate as every other `/sessions/:id/*` route, and a scoped principal's miss is th
 project-keyed route would need the project root in the URL, and a route addressed by host paths is
 an existence oracle for the gateway's filesystem.
 
+### Agents (`agents.ts`)
+
+`AgentInfo`/`AgentRef` (`SessionInfo.agent`, optional, so protocol stays 1) and the two rules both
+sides share: `teamReaches(from, to)` is the peers rule for teams (the gateway enforces it; a client
+may use it to section a `#` picker), and `projectAccent(key)` is the stable per-project colour the
+gateway bakes into avatar backdrops and a client should reuse for group dots.
+
 ### Pricing
 
 `pricing.ts` is the whole of what the repo knows about money. It holds a bundled, dated rate table
@@ -731,6 +738,14 @@ calls `runner.setEffort`, a `protocol_error` where the engine has none. `isEffor
 and the WS `sleep` command: 501 without `runner.sleep`, 409 with the runner's own reason). The timer
 is one more `onRegister` watcher, so a hot reload's evict detaches it; `ws.ts` re-arms it on every
 socket close beside `parking.onDetach`. Rules in `docs/GOTCHAS.md` §Engine sleep.
+
+**Agents** live in `services/agents.ts` (`AgentService`: the in-memory index over an `AgentStore`,
+the decorator, the one-level team rule, name suggestions), `services/agent-store.ts` (memory and
+JSON-file stores, `agentStore` option; the CLI wires `<state-dir>/agents.json`),
+`services/avatars.ts` (`AvatarService`: loads `@monkeyart/packs`' default pack once, rolls and
+renders recipes through `@monkeyart/composer`, caches PNGs) and `routes/agents.ts` (operator-only
+`/agents`). Session creation goes through `vetCreateRequest` and `factory.createRunner` like
+`POST /sessions`. Rules in `docs/GOTCHAS.md` §Agents and teams.
 
 **Agent context reset** lives in `services/context-resets.ts` (`ContextResetService`, the
 directory behind `context_reset`: one `onRegister` watcher per runner, the pending request, the rate

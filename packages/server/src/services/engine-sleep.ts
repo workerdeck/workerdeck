@@ -2,6 +2,7 @@ import type { Runner } from '@workerdeck/core'
 
 export type EngineSleepOptions = {
   afterMs: number
+  afterMsFor?: (sessionId: string) => number | undefined
   attachedCount: (sessionId: string) => number
   onError?: (error: unknown, sessionId: string) => void
 }
@@ -22,7 +23,7 @@ export class EngineSleepTimers {
   }
 
   watch(runner: Runner): (() => void) | undefined {
-    if (!this.enabled || !runner.sleep) {
+    if (this.#closed || !runner.sleep || (!this.enabled && !this.#options.afterMsFor)) {
       return undefined
     }
     this.#runners.set(runner.id, runner)
@@ -57,19 +58,24 @@ export class EngineSleepTimers {
     this.#runners.clear()
   }
 
+  #afterMs(sessionId: string): number {
+    return this.#closed ? 0 : (this.#options.afterMsFor?.(sessionId) ?? this.#options.afterMs)
+  }
+
   #rearm(runner: Runner): void {
     this.#disarm(runner.id)
-    if (!this.enabled || !this.#sleepable(runner)) {
+    const afterMs = this.#afterMs(runner.id)
+    if (afterMs <= 0 || !this.#sleepable(runner)) {
       return
     }
     const timer = setTimeout(() => {
       this.#timers.delete(runner.id)
-      if (!this.enabled || !this.#sleepable(runner)) {
+      if (this.#afterMs(runner.id) <= 0 || !this.#sleepable(runner)) {
         return
       }
       // A refusal is silent: the next idle, or the next client leaving, arms the timer again.
       runner.sleep?.().catch((error: unknown) => this.#options.onError?.(error, runner.id))
-    }, this.#options.afterMs)
+    }, afterMs)
     timer.unref?.()
     this.#timers.set(runner.id, timer)
   }

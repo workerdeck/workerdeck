@@ -1,3 +1,4 @@
+import type { AgentRef } from './agents.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
 export const PROTOCOL_VERSION = 1
@@ -864,6 +865,7 @@ export type SessionInfo = {
   engineAsleep?: true
   // The agent holds `context_reset` and may clear its own conversation between turns.
   agentContextReset?: true
+  agent?: AgentRef
 }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
@@ -1238,6 +1240,7 @@ export type GetJobResponse = { job: JobInfo }
 export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
 
+export * from './agents.ts'
 export * from './checklist.ts'
 export * from './errors.ts'
 export * from './paths.ts'

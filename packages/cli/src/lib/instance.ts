@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import {
+  createFileAgentStore,
   createFileProfileStore,
   createFileSessionStore,
   createFileSpendStore,
@@ -330,7 +331,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
   }
 }
 
-type StateDirDefaults = Pick<WorkerServerOptions, 'parking' | 'profileStore' | 'shell' | 'spend'>
+type StateDirDefaults = Pick<WorkerServerOptions, 'agentStore' | 'parking' | 'profileStore' | 'shell' | 'spend'>
 
 // Everything the state dir backs by default. A config file's own store wins; with no state dir everything stays in memory,
 // and profile management stays refused rather than silently forgetting every profile on restart.
@@ -358,7 +359,8 @@ export function stateDirDefaults(config: ResolvedConfig): StateDirDefaults {
     process.stderr.write(`[workerdeck] spend ledger write failed: ${error instanceof Error ? error.message : String(error)}\n`)
   })
   const profileStore = config.profileStore ? createFileProfileStore(join(stateDir, 'profiles.json')) : undefined
-  return { parking, shell, spend, ...(profileStore ? { profileStore } : {}) }
+  const agentStore = config.options.agentStore ?? createFileAgentStore(join(stateDir, 'agents.json'))
+  return { parking, shell, spend, agentStore, ...(profileStore ? { profileStore } : {}) }
 }
 
 export type BannerInput = {

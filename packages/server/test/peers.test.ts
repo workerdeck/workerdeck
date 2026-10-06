@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { runPeerTool } from '@workerdeck/core'
-import { peerDeliveredTo, type SessionInfo } from '@workerdeck/protocol'
+import { peerDeliveredTo, type AgentRef, type SessionInfo } from '@workerdeck/protocol'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import { createPeerService, mentionsFor, resolvePeerMentions } from '../src/services/peers.ts'
@@ -172,8 +172,8 @@ describe('peer service: `#` mentions', () => {
     const { service, add } = rig()
     add(new PeerRunner('a'))
     add(new PeerRunner('b7c1d9e2', { title: 'Astra' }))
-    expect((resolvePeerMentions(await service.list('a'), 'see #b7c1d9e2')).map((m) => m.id)).toEqual(['b7c1d9e2'])
-    expect((resolvePeerMentions(await service.list('a'), 'see #b7c1')).map((m) => m.id)).toEqual(['b7c1d9e2'])
+    expect(resolvePeerMentions(await service.list('a'), 'see #b7c1d9e2').map((m) => m.id)).toEqual(['b7c1d9e2'])
+    expect(resolvePeerMentions(await service.list('a'), 'see #b7c1').map((m) => m.id)).toEqual(['b7c1d9e2'])
     expect(resolvePeerMentions(await service.list('a'), 'see #b7')).toEqual([])
   })
 
@@ -210,7 +210,14 @@ describe('peer service: `#` mentions', () => {
   })
 
   it('resolves a session on another gateway by title, and an untitled one by its short id', () => {
-    const remote = (id: string, title?: string) => ({ id: `mini:${id}`, gateway: 'mini', title, status: 'idle' as const, cwd: '/box', pendingPermissionCount: 0 })
+    const remote = (id: string, title?: string) => ({
+      id: `mini:${id}`,
+      gateway: 'mini',
+      title,
+      status: 'idle' as const,
+      cwd: '/box',
+      pendingPermissionCount: 0,
+    })
     const rows = [remote('d652f104-06cd', 'TB-Mini'), remote('77aa0011-2233')]
     expect(resolvePeerMentions(rows, 'ask #TB-Mini then #77aa0011').map((m) => m.id)).toEqual(['mini:d652f104-06cd', 'mini:77aa0011-2233'])
   })
@@ -228,5 +235,61 @@ describe('peer service: `#` mentions', () => {
     await service.send('a', 'b', 'please look at #Astra and #Luna')
     expect(target.sent[0]?.options?.mentions).toBeUndefined()
     expect(target.sent[0]?.options?.origin).toMatchObject({ kind: 'peer', sessionId: 'a' })
+  })
+})
+
+describe('peer service: teams', () => {
+  const refs: Record<string, AgentRef> = {
+    lead: { id: 'A', name: 'Atlas', avatar: '', leads: true },
+    m1: { id: 'P', name: 'Pip', avatar: '', lead: 'A', team: 'Atlas' },
+    m2: { id: 'J', name: 'Juno', avatar: '', lead: 'A', team: 'Atlas' },
+    solo: { id: 'M', name: 'Marlow', avatar: '' },
+    otherLead: { id: 'O', name: 'Orbit', avatar: '', leads: true },
+    otherMember: { id: 'F', name: 'Fern', avatar: '', lead: 'O', team: 'Orbit' },
+  }
+
+  function teamRig() {
+    const registry = new SessionRegistry()
+    const service = createPeerService({
+      refs: { registry },
+      projects: new ProjectInfoService({ decorate: (info) => (refs[info.id] ? { ...info, agent: refs[info.id] } : info) }),
+    })
+    for (const id of [...Object.keys(refs), 'plain']) {
+      registry.register(new PeerRunner(id))
+    }
+    return service
+  }
+
+  const reach = async (service: ReturnType<typeof teamRig>, from: string) => (await service.list(from)).map((row) => row.id).sort()
+
+  it('lets a member reach only its lead and teammates', async () => {
+    expect(await reach(teamRig(), 'm1')).toEqual(['lead', 'm2'])
+  })
+
+  it("lets a lead reach its members and every top-level session, but no other team's members", async () => {
+    expect(await reach(teamRig(), 'lead')).toEqual(['m1', 'm2', 'otherLead', 'plain', 'solo'])
+  })
+
+  it('keeps members out of reach of solo and agentless sessions', async () => {
+    const service = teamRig()
+    expect(await reach(service, 'solo')).toEqual(['lead', 'otherLead', 'plain'])
+    expect(await reach(service, 'plain')).toEqual(['lead', 'otherLead', 'solo'])
+    expect(await service.send('solo', 'm1', 'hi')).toEqual({ delivered: false, reason: 'no such session: m1' })
+    expect(await service.peek('otherMember', 'm1')).toBeUndefined()
+  })
+
+  it('names the role and team on each row', async () => {
+    const rows = await teamRig().list('lead')
+    expect(rows.find((row) => row.id === 'm1')).toMatchObject({ role: 'member', team: 'Atlas' })
+    expect(rows.find((row) => row.id === 'otherLead')).toMatchObject({ role: 'lead', team: 'Orbit' })
+    expect(rows.find((row) => row.id === 'plain')).not.toHaveProperty('role')
+  })
+
+  it('never publishes a member to the relay', async () => {
+    const service = teamRig()
+    const published = (await service.relayEntries(undefined)).map((entry) => entry.id)
+    expect(published).not.toContain('m1')
+    expect(published).toContain('lead')
+    expect(await service.relayPeek('m1', 3, undefined)).toBeUndefined()
   })
 })

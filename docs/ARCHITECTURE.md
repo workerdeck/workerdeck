@@ -531,6 +531,23 @@ across gateways, because the picker and the resolver both read the composed dire
 (`GET /v1/sessions/:id/peers`, the same rows `peers_list` answers), but the resolution happens on
 the sender's gateway and only a remote session's id and title travel into the envelope.
 
+## Agents and teams
+
+An **agent** is a long-lived identity the gateway keeps (`AgentInfo`: name, avatar, a standing
+brief, the config its sessions start from) that owns one session at a time. The session is the
+run; the agent survives it: `POST /agents/:id/restart` starts a fresh session under the same
+identity and team and moves the old id to `pastSessions`. Clear, compaction, engine sleep and
+dormancy all keep the session id, so a restart is only needed after a failure. `POST /agents`
+creates an agent and its first session in one call through the ordinary create ladder, or adopts
+an existing session (`adopt`). Retiring (`DELETE`) closes the agent's session and releases its
+members (or retires them, `members: 'retire'`).
+
+A **team** is a lead and the agents whose `lead` names it, one level deep. Teams gate peer
+messaging: a member reaches only its lead and teammates, nobody outside a team reaches its members,
+and members never cross the relay. The gateway serves each agent's avatar
+(`GET /agents/:id/avatar.png`), composed from a persisted monkeyart recipe, so no client ports the
+composer. Invariants: `docs/GOTCHAS.md` §Agents and teams.
+
 ## Tooling conventions
 
 pnpm workspace + turbo; TS 7 native preview (`tsgo`) for typecheck; oxlint; tsdown builds

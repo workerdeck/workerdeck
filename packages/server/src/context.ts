@@ -2,7 +2,9 @@ import type { EngineAdapter, PeerDirectory } from '@workerdeck/core'
 import type { JobQueue } from '@workerdeck/queue'
 import type { PricingOverrides, ProfileEngine } from '@workerdeck/protocol'
 import type { SdkSessionLister, WorkerServerOptions } from './options.ts'
+import type { AgentService } from './services/agents.ts'
 import type { AttachmentStore } from './services/attachments.ts'
+import type { AvatarService } from './services/avatars.ts'
 import type { AuthService } from './services/auth.ts'
 import type { AvailabilityTracker } from './services/availability.ts'
 import type { BridgeHub } from './services/bridge.ts'
@@ -27,6 +29,8 @@ export type ServerContext = {
   availability: AvailabilityTracker
   auth: AuthService
   factory: SessionFactory
+  agents: AgentService
+  avatars: AvatarService
 
   registry: SessionRegistry
   parking: SessionParkManager

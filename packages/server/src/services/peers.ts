@@ -17,6 +17,7 @@ import {
   peerMentionKey,
   peerMentionSlug,
   scanPeerMentions,
+  teamReaches,
   type MessageOrigin,
   type SessionEvent,
   type SessionInfo,
@@ -45,7 +46,11 @@ const DEFAULT_MAX_HOPS = 12
 const WINDOW_MS = 60_000
 
 function visible(from: SessionInfo, to: SessionInfo): boolean {
-  return to.id !== from.id && scopeMatches(from.scope, to.scope)
+  return to.id !== from.id && scopeMatches(from.scope, to.scope) && teamReaches(from.agent, to.agent)
+}
+
+function relayable(info: SessionInfo, exposed: Record<string, string> | undefined): boolean {
+  return info.status !== 'closed' && info.agent?.lead === undefined && scopeMatches(exposed, info.scope)
 }
 
 export type PeerService = PeerDirectory & {
@@ -221,7 +226,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
 
   const exposedInfo = async (sessionId: string, exposed: Record<string, string> | undefined): Promise<SessionInfo | undefined> => {
     const info = await infoOf(sessionId)
-    return info && info.status !== 'closed' && scopeMatches(exposed, info.scope) ? info : undefined
+    return info && relayable(info, exposed) ? info : undefined
   }
 
   const relayEntries = async (exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]> => {
@@ -230,9 +235,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
         .list()
         .map((info) => info.id),
     )
-    return (await allSessions())
-      .filter((info) => info.status !== 'closed' && scopeMatches(exposed, info.scope))
-      .map((info) => relayEntry(info, live.has(info.id)))
+    return (await allSessions()).filter((info) => relayable(info, exposed)).map((info) => relayEntry(info, live.has(info.id)))
   }
 
   const relayPeek = async (

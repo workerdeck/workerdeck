@@ -140,7 +140,7 @@ export function createRelayLink(options: RelayLinkOptions, peers: PeerService, l
 
   const reachesRemote = async (from: string): Promise<boolean> => {
     const me = await peers.relaySender(from)
-    return me.scope === undefined || Object.keys(me.scope).length === 0
+    return (me.scope === undefined || Object.keys(me.scope).length === 0) && me.agent?.lead === undefined
   }
 
   const directory: PeerDirectory = {
