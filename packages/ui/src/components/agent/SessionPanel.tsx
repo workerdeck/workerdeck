@@ -41,6 +41,7 @@ import { cn } from '../../lib/utils.ts'
 import { Button } from '../ui/Button.tsx'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '../ui/Menu.tsx'
 import { Composer, type ComposerHandle } from './Composer.tsx'
+import type { AgentAvatarImage } from './AgentAvatar.tsx'
 import {
   buildClientCommands,
   composerCommandRows,
@@ -105,6 +106,8 @@ export interface SessionPanelProps {
   // `#` mentions of the other sessions on this gateway. On by default; an embedder whose people
   // should not learn that the other sessions exist turns it off.
   peerMentions?: boolean
+  // The `#` rows' avatars, keyed by session id (`peerAvatarsOf`). The host fetches them, as for the session list.
+  peerAvatars?: Readonly<Record<string, AgentAvatarImage>>
   onToggleBookmark?: (itemId: string) => void
   // Where a file link in the transcript goes. Without it, such a link stays an ordinary anchor.
   onOpenFile?: FileLinkOpener
@@ -214,6 +217,7 @@ export function SessionPanel({
   scrubber = false,
   bookmarks,
   peerMentions = true,
+  peerAvatars,
   onToggleBookmark,
   reveal,
   subagents,
@@ -737,6 +741,7 @@ export function SessionPanel({
                 draft={draft}
                 onSearchFiles={hostFiles.available ? searchComposerFiles : undefined}
                 peers={peers.peers}
+                peerAvatars={peerAvatars}
                 onShellCommand={shell ? runShell : undefined}
                 layout={controlsExternal ? 'inline' : 'stacked'}
                 toolbar={controlsExternal ? undefined : sessionControls}

@@ -121,6 +121,8 @@ export type HostToPanel =
   | { kind: 'wd-set-effort'; effort?: string }
   | { kind: 'wd-set-permission-mode'; mode: PermissionMode }
   | { kind: 'wd-insert-composer-text'; text: string }
+  // The composer's `#` rows, keyed by session id on the surface's own gateway.
+  | { kind: 'wd-peer-avatars'; avatars: Record<string, AgentAvatarImage> }
   | {
       kind: 'wd-focus-composer'
     }
@@ -236,6 +238,7 @@ export type HostToSidebar =
       icons: Record<string, string>
     }
   | { kind: 'wd-agent-avatars'; avatars: Record<string, AgentAvatarImage> }
+  | { kind: 'wd-avatar-picker'; hostId: string; sessionId: string }
 
 export type GatewaysToHost =
   | { kind: 'wd-ready' }

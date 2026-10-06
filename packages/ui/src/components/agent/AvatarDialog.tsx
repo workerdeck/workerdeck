@@ -1,39 +1,56 @@
 import { useEffect, useState } from 'react'
-import type { SessionRow } from '@workerdeck/protocol'
+import type { WorkerDeckClient } from '@workerdeck/client'
 import { errorMessage } from '@workerdeck/protocol'
-import { Button, Dialog, DialogBody, DialogContent, DialogHeader, Spinner, cn, toast } from '@workerdeck/ui'
 import { Shuffle } from 'lucide-react'
-import { clientFor } from '@/lib/hosts.ts'
+import { cn } from '../../lib/utils.ts'
+import { Button } from '../ui/Button.tsx'
+import { Dialog, DialogBody, DialogContent, DialogHeader } from '../ui/Dialog.tsx'
+import { Spinner } from '../ui/Spinner.tsx'
 
 const CANDIDATES = 8
 
 type Candidate = { seed: string; src?: string }
 
+export type AvatarDialogAgent = { id: string; name: string }
+
+export interface AvatarDialogProps {
+  client: WorkerDeckClient | undefined
+  // Open while set.
+  agent: AvatarDialogAgent | undefined
+  onClose: () => void
+  onChanged?: () => void
+}
+
 function seeds(): Candidate[] {
   return Array.from({ length: CANDIDATES }, () => ({ seed: crypto.randomUUID() }))
 }
 
-export function AvatarDialog({ row, onClose, onChanged }: { row?: SessionRow; onClose: () => void; onChanged: () => void }) {
+export function AvatarDialog({ client, agent, onClose, onChanged }: AvatarDialogProps) {
   return (
-    <Dialog open={row !== undefined} onOpenChange={(next) => !next && onClose()}>
+    <Dialog open={agent !== undefined && client !== undefined} onOpenChange={(next) => !next && onClose()}>
       <DialogContent size="sm">
-        <DialogHeader title={`Avatar for ${row?.info.agent?.name ?? 'agent'}`} />
-        <DialogBody>{row ? <AvatarPicker key={row.info.id} row={row} onClose={onClose} onChanged={onChanged} /> : null}</DialogBody>
+        <DialogHeader title={`Avatar for ${agent?.name ?? 'agent'}`} />
+        <DialogBody>
+          {agent && client ? <AvatarPicker key={agent.id} client={client} agentId={agent.id} onClose={onClose} onChanged={onChanged} /> : null}
+        </DialogBody>
       </DialogContent>
     </Dialog>
   )
 }
 
-function AvatarPicker({ row, onClose, onChanged }: { row: SessionRow; onClose: () => void; onChanged: () => void }) {
-  const agent = row.info.agent!
+interface AvatarPickerProps {
+  client: WorkerDeckClient
+  agentId: string
+  onClose: () => void
+  onChanged?: () => void
+}
+
+function AvatarPicker({ client, agentId, onClose, onChanged }: AvatarPickerProps) {
   const [candidates, setCandidates] = useState<Candidate[]>(seeds)
   const [saving, setSaving] = useState<string>()
+  const [error, setError] = useState<string>()
 
   useEffect(() => {
-    const client = clientFor(row.hostId)
-    if (!client) {
-      return
-    }
     let alive = true
     const urls: string[] = []
     for (const candidate of candidates) {
@@ -41,7 +58,7 @@ function AvatarPicker({ row, onClose, onChanged }: { row: SessionRow; onClose: (
         continue
       }
       void client
-        .agentAvatarPreview(agent.id, candidate.seed)
+        .agentAvatarPreview(agentId, candidate.seed)
         .then((blob) => {
           const src = URL.createObjectURL(blob)
           urls.push(src)
@@ -57,23 +74,20 @@ function AvatarPicker({ row, onClose, onChanged }: { row: SessionRow; onClose: (
         URL.revokeObjectURL(url)
       }
     }
-  }, [candidates.map((c) => c.seed).join(','), agent.id, row.hostId])
+  }, [candidates.map((c) => c.seed).join(','), agentId, client])
 
   const choose = (seed: string) => {
-    const client = clientFor(row.hostId)
-    if (!client) {
-      return
-    }
     setSaving(seed)
+    setError(undefined)
     void client
-      .changeAgentAvatar(agent.id, seed)
+      .changeAgentAvatar(agentId, seed)
       .then(() => {
-        onChanged()
+        onChanged?.()
         onClose()
       })
       .catch((e: unknown) => {
         setSaving(undefined)
-        toast.error(errorMessage(e, 'Could not change the avatar'))
+        setError(errorMessage(e, 'Could not change the avatar'))
       })
   }
 
@@ -93,13 +107,14 @@ function AvatarPicker({ row, onClose, onChanged }: { row: SessionRow; onClose: (
             )}
           >
             {candidate.src ? (
-              <img src={candidate.src} alt="" className="size-14 [image-rendering:pixelated]" draggable={false} />
+              <img src={candidate.src} alt="" className="size-4/5 max-w-14 [image-rendering:pixelated]" draggable={false} />
             ) : (
               <Spinner className="size-4 text-fg-4" />
             )}
           </button>
         ))}
       </div>
+      {error ? <p className="text-label text-danger">{error}</p> : null}
       <p className="text-label text-fg-4">Pick one. The agent can also change its own with change_avatar.</p>
       <div className="flex justify-end gap-2">
         <Button variant="outline" disabled={saving !== undefined} onClick={() => setCandidates(seeds())}>

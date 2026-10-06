@@ -1,9 +1,10 @@
 import { Layers, Plug } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { WorkerDeckClient } from '@workerdeck/client'
 import type { SessionRow } from '@workerdeck/protocol'
 import type { SidebarState, SidebarToHost, SurfaceTarget } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
-import { SessionBrowser, SessionFilters, SessionSearch, type AgentAvatars, type SelectModifiers } from '@workerdeck/ui'
+import { AvatarDialog, SessionBrowser, SessionFilters, SessionSearch, type AgentAvatars, type SelectModifiers } from '@workerdeck/ui'
 import { Empty, Key } from '../ui/Empty.tsx'
 import { CardActions } from './CardActions.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
@@ -35,6 +36,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [avatars, setAvatars] = useState<AgentAvatars>({})
   const [searchOpen, setSearchOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [avatarFor, setAvatarFor] = useState<{ hostId: string; sessionId: string }>()
   const persisted = bridge.getState<Persisted>()
   // Normalized: a config persisted by an older build is missing newer fields, or groups by the retired gateway facet.
   const [config, setConfig] = useState<ViewConfig>(() => normalizeViewConfig(persisted?.config))
@@ -62,6 +64,10 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           }
           case 'wd-agent-avatars': {
             setAvatars((held) => ({ ...held, ...msg.avatars }))
+            return
+          }
+          case 'wd-avatar-picker': {
+            setAvatarFor({ hostId: msg.hostId, sessionId: msg.sessionId })
             return
           }
           case 'wd-search-open': {
@@ -93,6 +99,12 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const subset = subsetSummary(config, scope, filtered.length, rows.length)
   const selected = state?.selected
   const isActive = (row: SessionRow) => selected?.hostId === row.hostId && selected.sessionId === row.info.id
+  const avatarAgent = avatarFor ? state?.sessions[avatarFor.hostId]?.find((s) => s.id === avatarFor.sessionId)?.agent : undefined
+  const avatarBaseUrl = avatarFor ? hosts.find((h) => h.id === avatarFor.hostId)?.baseUrl : undefined
+  const avatarClient = useMemo(
+    () => (avatarBaseUrl ? new WorkerDeckClient({ baseUrl: avatarBaseUrl, fetchImpl: bridge.fetch, WebSocketImpl: bridge.WebSocketImpl }) : undefined),
+    [bridge, avatarBaseUrl],
+  )
   const postRow = <K extends RowMessage['kind']>(kind: K, row: SessionRow, extra: RowExtra<K>) =>
     bridge.post({ kind, hostId: row.hostId, sessionId: row.info.id, ...extra } as RowMessage)
 
@@ -192,6 +204,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           />
         )}
       </div>
+      <AvatarDialog client={avatarClient} agent={avatarAgent} onClose={() => setAvatarFor(undefined)} />
     </div>
   )
 }

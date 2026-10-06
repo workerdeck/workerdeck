@@ -13,6 +13,18 @@ export function avatarOf(avatars: AgentAvatars | undefined, agent: AgentRef | un
   return agent?.avatar === undefined ? undefined : avatars?.[agent.avatar]
 }
 
+// Re-keyed by session id for the composer's `#` rows, which carry no `AgentRef`.
+export function peerAvatarsOf(rows: readonly SessionRow[], avatars: AgentAvatars): Record<string, AgentAvatarImage> {
+  const byId: Record<string, AgentAvatarImage> = {}
+  for (const row of rows) {
+    const image = avatarOf(avatars, row.info.agent)
+    if (image) {
+      byId[row.info.id] = image
+    }
+  }
+  return byId
+}
+
 export interface AgentAvatarProps {
   row: SessionRow
   image?: AgentAvatarImage

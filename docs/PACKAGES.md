@@ -1886,7 +1886,12 @@ config (`CUSTOM_GROUP_ICON_MAX`). Avatars arrive through
 `avatars` (keyed by `AgentRef.avatar`), because the gateway route needs the host's credentials: the
 host fetches and hands over data URLs, exactly like `projectIcons`. Once any row has an agent,
 plain rows draw as tiles too, so the column holds. An agent card renames the agent
-(`onRenameAgent`), never the session title.
+(`onRenameAgent`), never the session title. `AvatarDialog` is the one avatar picker (eight
+`agentAvatarPreview` candidates, More, `changeAgentAvatar`, errors inline because a VS Code view has
+no toaster) for every client. The composer's `#` rows take `peerAvatars` (`SessionPanel` /
+`SessionWorkspace`), keyed by session id, since `PeerSessionSummary` carries the agent's name but no
+avatar; `peerAvatarsOf(rows, avatars)` builds it from the list's own rows, and once any row has one
+the plain rows keep the icon in a tile-width box.
 
 `SessionBrowser` is the styled sessions list *around* the card built on protocol's view model -
 search, facets, grouping, the subset line - for a host that wants the dashboard's look without

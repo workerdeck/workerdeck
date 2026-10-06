@@ -12,7 +12,7 @@ import {
   type TerminalMetrics,
   type TranscriptVariant,
 } from '@workerdeck/ui'
-import type { SurfaceState } from '../src/bridge-protocol.ts'
+import type { AgentAvatarImage, SurfaceState } from '../src/bridge-protocol.ts'
 import type { Bridge } from './bridge.ts'
 
 type Shown = {
@@ -44,6 +44,7 @@ export function App({
   const [openSubagent, setOpenSubagent] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const [reveal, setReveal] = useState<{ toolUseId: string; nonce: number } | undefined>(undefined)
   const [openShell, setOpenShell] = useState<{ shellId: string; nonce: number } | undefined>(undefined)
+  const [peerAvatars, setPeerAvatars] = useState<Record<string, AgentAvatarImage>>({})
   const controls = useRef<SessionControls | undefined>(undefined)
   // Switching sessions remounts the panel and React flushes the new `onControls` on its own schedule, which can be
   // after a `wd-focus-composer` lands - so the request is recorded and retried rather than fired at whatever is mounted.
@@ -89,6 +90,8 @@ export function App({
           setReveal({ toolUseId: msg.toolUseId, nonce: msg.nonce })
         } else if (msg.kind === 'wd-open-shell') {
           setOpenShell({ shellId: msg.shellId, nonce: msg.nonce })
+        } else if (msg.kind === 'wd-peer-avatars') {
+          setPeerAvatars(msg.avatars)
         }
       }),
     [bridge],
@@ -155,6 +158,7 @@ export function App({
         fontSize={fontSize}
         scrubber
         bookmarks={bookmarks}
+        peerAvatars={peerAvatars}
         onToggleBookmark={toggleBookmark}
         onOpenFile={(path, line) => bridge.post({ kind: 'wd-open-path', path, line })}
         openSubagent={openSubagent}

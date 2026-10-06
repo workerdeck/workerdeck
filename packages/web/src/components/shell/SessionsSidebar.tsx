@@ -35,9 +35,9 @@ import {
   SessionStatusIcon,
   cn,
   toast,
+  AvatarDialog,
   type GroupTarget,
 } from '@workerdeck/ui'
-import { AvatarDialog } from '@/components/AvatarDialog.tsx'
 import { ChevronDown, Layers, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { NewAgentDialog } from '@/components/NewAgentDialog.tsx'
@@ -447,7 +447,12 @@ export function SessionsSidebar() {
         onOneOff={(next) => startCreate({ hostId: next.hostId, cwd: next.cwd })}
       />
 
-      <AvatarDialog row={avatarFor} onClose={() => setAvatarFor(undefined)} onChanged={() => void refresh()} />
+      <AvatarDialog
+        client={avatarFor ? clientFor(avatarFor.hostId) : undefined}
+        agent={avatarFor?.info.agent}
+        onClose={() => setAvatarFor(undefined)}
+        onChanged={() => void refresh()}
+      />
 
       <StatusDialog
         row={labeling}

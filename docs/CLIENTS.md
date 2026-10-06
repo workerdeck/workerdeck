@@ -490,7 +490,12 @@ misalignment.
 and then asks for a name and a brief (`createAgent` in `new-session.ts`). Team verbs live in the
 card's `⋯` QuickPick (`#teamItems` in `sidebar.ts`): Make agent (adopt), Add to team, Leave team,
 Dissolve team, New conversation (restart), Retire. Avatars are fetched host-side by
-`AgentAvatarCache` and posted as `wd-agent-avatars`. Drag to join posts `wd-team-move` (session ids;
+`AgentAvatarCache` and posted as `wd-agent-avatars`. **Change avatar** is the one `⋯` row that
+does not stay native: a QuickPick cannot show the candidates, so it posts `wd-avatar-picker` and the
+sidebar webview opens `packages/ui`'s `AvatarDialog` (the dashboard's picker) over a
+`WorkerDeckClient` on the bridge transports; a request before the view has booted waits for its
+`wd-ready`. Each session surface also gets `wd-peer-avatars` (session id to image, for its own
+gateway, posted only when the map changes) for the composer's `#` rows. Drag to join posts `wd-team-move` (session ids;
 the host maps them to agents, adopts a plain session, then patches `order` for it and its siblings).
 
 What is left extension-shaped after the card moved out is exactly **two** things, and they are the

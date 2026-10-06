@@ -110,3 +110,35 @@ export const ShellModeTerminal: Story = {
     ),
   ],
 }
+
+function pixelAvatar(hue: number): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = 8
+  canvas.height = 8
+  const ctx = canvas.getContext('2d')!
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 4; x++) {
+      if ((x * 7 + y * 3 + hue) % 3 !== 0) {
+        ctx.fillStyle = `hsl(${hue} 60% ${40 + ((x + y) % 3) * 10}%)`
+        ctx.fillRect(x, y, 1, 1)
+        ctx.fillRect(7 - x, y, 1, 1)
+      }
+    }
+  }
+  return canvas.toDataURL()
+}
+
+const PEER = { status: 'idle', cwd: '/Users/me/src/workerdeck', project: 'WorkerDeck', engine: 'claude' } as const
+
+// Type `#` to open the picker: agents draw their avatar, a plain session keeps the generic icon.
+export const PeerMentions: Story = {
+  args: {
+    layout: 'stacked',
+    peers: [
+      { ...PEER, id: 's-juno', slug: 'Juno', label: 'Juno' },
+      { ...PEER, id: 's-atlas', slug: 'Atlas', label: 'Atlas', engine: 'codex' },
+      { ...PEER, id: 's-plain', slug: 'fix-the-relay', label: 'fix the relay', status: 'running' },
+    ],
+  },
+  render: (args) => <Composer {...args} peerAvatars={{ 's-juno': { still: pixelAvatar(20) }, 's-atlas': { still: pixelAvatar(200) } }} />,
+}

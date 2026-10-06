@@ -10,6 +10,7 @@ import {
   AlertDialogTrigger,
   AgentHeading,
   avatarOf,
+  peerAvatarsOf,
   Badge,
   Button,
   CopyButton,
@@ -89,6 +90,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   const rows = useSessionRows(snapshots)
   const agentRow = rows.find((row) => row.hostId === hostId && row.info.id === sessionId && row.info.agent)
   const avatars = useAgentAvatars(rows)
+  const peerAvatars = useMemo(() => peerAvatarsOf(rows.filter((row) => row.hostId === hostId), avatars), [rows, avatars, hostId])
   const polled = useMemo(
     () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
     [snapshots, hostId, sessionId],
@@ -114,6 +116,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       key={sessionId}
       client={client}
       sessionId={sessionId}
+      peerAvatars={peerAvatars}
       transcriptVariant={variant}
       transcriptFont={font}
       affordances={{ labels: actionStyle === 'labeled' }}

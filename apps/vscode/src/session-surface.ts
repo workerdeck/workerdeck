@@ -16,7 +16,7 @@ import {
   transcriptVariant,
 } from './webview-html.ts'
 import { WebviewHost, type WebviewSurface } from './webview-host.ts'
-import type { HostToPanel, PanelToHost } from './bridge-protocol.ts'
+import type { AgentAvatarImage, HostToPanel, PanelToHost } from './bridge-protocol.ts'
 
 export type SessionRef = {
   host: GatewayHost
@@ -36,6 +36,12 @@ export type SurfaceDelegate = {
   unseen: (hostId: string, sessionId: string) => { itemCount: number; since: number } | undefined
   visibilityChanged: (surface: AnySurface) => void
   focused: (surface: AnySurface) => void
+  peerAvatars: (hostId: string) => Record<string, AgentAvatarImage>
+}
+
+function sameImages(a: Record<string, AgentAvatarImage>, b: Record<string, AgentAvatarImage>): boolean {
+  const keys = Object.keys(b)
+  return keys.length === Object.keys(a).length && keys.every((key) => a[key] === b[key])
 }
 
 export function sameSession(a: SessionRef | undefined, hostId: string, sessionId: string): boolean {
@@ -67,6 +73,7 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   // returned the mark that opening had just moved, which cost the recap seam, the dimming and the jump target.
   #unseen: { itemCount: number; since: number } | undefined
   #transports: WebviewTransportHost | undefined
+  #peerAvatarsSent: Record<string, AgentAvatarImage> | undefined
 
   vitals: SessionVitals | undefined
   subagentToolUseId: string | undefined
@@ -187,6 +194,21 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
       this.post({ kind: 'wd-focus-composer' })
     }
     this.#flushPending()
+    this.pushPeerAvatars()
+  }
+
+  // Data URLs are heavy and the model polls every 1.2 s, so only a changed map is posted.
+  pushPeerAvatars(): void {
+    const session = this.#session
+    if (!session || !this.view || !this.ready) {
+      return
+    }
+    const avatars = this.delegate.peerAvatars(session.host.id)
+    if (this.#peerAvatarsSent && sameImages(this.#peerAvatarsSent, avatars)) {
+      return
+    }
+    this.#peerAvatarsSent = avatars
+    this.post({ kind: 'wd-peer-avatars', avatars })
   }
 
   focusComposer(): void {
@@ -227,6 +249,7 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
   }
 
   protected override onReady(): void {
+    this.#peerAvatarsSent = undefined
     // Safe ahead of the flushes below: a queued frame is re-posted straight after.
     this.subagentToolUseId = undefined
     this.shellId = undefined

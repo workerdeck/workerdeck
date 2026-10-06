@@ -26,6 +26,11 @@ export class AgentAvatarCache implements vscode.Disposable {
     return Object.fromEntries(this.#byPath)
   }
 
+  imageFor(info: SessionInfo): AgentAvatarImage | undefined {
+    const key = info.agent?.avatar
+    return key === undefined ? undefined : this.#byPath.get(key)
+  }
+
   // `iconPath` takes a file, not a data URL, so the still is also written under the extension's global storage.
   iconFor(info: SessionInfo | undefined): vscode.Uri | undefined {
     const key = info?.agent?.avatar

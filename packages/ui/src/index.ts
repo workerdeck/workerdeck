@@ -179,11 +179,13 @@ export {
   AgentHeading,
   LeadChip,
   avatarOf,
+  peerAvatarsOf,
   type AgentAvatarImage,
   type AgentAvatarProps,
   type AgentAvatars,
   type AgentHeadingProps,
 } from './components/agent/AgentAvatar.tsx'
+export { AvatarDialog, type AvatarDialogAgent, type AvatarDialogProps } from './components/agent/AvatarDialog.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
 export {

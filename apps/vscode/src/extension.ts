@@ -13,7 +13,7 @@ import { SessionEditorTab, sessionTitle } from './session-tab.ts'
 import { SurfaceRegistry } from './surfaces.ts'
 import type { AnySurface, SessionRef, SurfaceDelegate } from './session-surface.ts'
 import type { SelectOptions } from './sidebar.ts'
-import type { SurfaceState } from './bridge-protocol.ts'
+import type { AgentAvatarImage, SurfaceState } from './bridge-protocol.ts'
 import { addProfile, editProfile, manageProfiles, removeProfile, type ProfileFlowDeps } from './profiles.ts'
 import { ProfilesModel } from './profiles-model.ts'
 import { ProfilesViewProvider } from './profiles-view.ts'
@@ -187,6 +187,18 @@ export function activate(context: vscode.ExtensionContext): void {
       void model.refresh().then(() => markSeen(surface, true))
     },
     focused: (surface) => registry.setFocused(surface),
+    peerAvatars: (hostId) => {
+      const sessions = model.sessionsOf(hostId)
+      avatars.ensure({ [hostId]: sessions })
+      const byId: Record<string, AgentAvatarImage> = {}
+      for (const info of sessions) {
+        const image = avatars.imageFor(info)
+        if (image) {
+          byId[info.id] = image
+        }
+      }
+      return byId
+    },
   }
   const panel = new SessionPanelView(context.extensionUri, store, {
     ...surfaceDelegate,
@@ -358,6 +370,11 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   registry.onDidChange(() => syncSurfaces())
   registry.onDidChangeFocus(() => syncSurfaces())
+  const pushPeerAvatars = () => {
+    for (const surface of registry.all()) {
+      surface.pushPeerAvatars()
+    }
+  }
   model.onDidChange(() => {
     for (const tab of registry.tabs()) {
       syncTab(tab)
@@ -367,11 +384,13 @@ export function activate(context: vscode.ExtensionContext): void {
       panel.retitleHeld(titleOf(held.host.id, held.sessionId))
     }
     pushStatusBar()
+    pushPeerAvatars()
   })
   avatars.onDidChange(() => {
     for (const tab of registry.tabs()) {
       syncTab(tab)
     }
+    pushPeerAvatars()
   })
   syncSurfaces()
 

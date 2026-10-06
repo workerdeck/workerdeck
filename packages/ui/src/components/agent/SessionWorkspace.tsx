@@ -21,6 +21,7 @@ export interface SessionWorkspaceProps {
   affordances?: SessionPanelProps['affordances']
   scrubber?: SessionPanelProps['scrubber']
   bookmarks?: SessionPanelProps['bookmarks']
+  peerAvatars?: SessionPanelProps['peerAvatars']
   onToggleBookmark?: SessionPanelProps['onToggleBookmark']
   stickyPrompt?: SessionPanelProps['stickyPrompt']
   openSubagent?: SessionPanelProps['openSubagent']
@@ -58,6 +59,7 @@ export function SessionWorkspace({
   affordances,
   scrubber,
   bookmarks,
+  peerAvatars,
   onToggleBookmark,
   stickyPrompt,
   openSubagent,
@@ -221,6 +223,7 @@ export function SessionWorkspace({
             affordances={affordances}
             scrubber={scrubber}
             bookmarks={bookmarks}
+            peerAvatars={peerAvatars}
             onToggleBookmark={onToggleBookmark}
             stickyPrompt={stickyPrompt}
             openSubagent={openSubagent}

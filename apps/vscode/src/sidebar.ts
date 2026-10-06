@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { STATUS_LABEL_EMOJI_MAX, STATUS_LABEL_TEXT_MAX, errorMessage, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
@@ -54,6 +53,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   #transports: WebviewTransportHost | undefined
   #searchOpen = false
   #filtersRequested = false
+  #avatarRequested: Extract<HostToSidebar, { kind: 'wd-avatar-picker' }> | undefined
   readonly #context: vscode.ExtensionContext
   #viewConfig: ViewConfig
   readonly #icons: ProjectIconCache
@@ -180,6 +180,10 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     if (this.#filtersRequested) {
       this.#filtersRequested = false
       this.post({ kind: 'wd-filters-toggle' })
+    }
+    if (this.#avatarRequested) {
+      this.post(this.#avatarRequested)
+      this.#avatarRequested = undefined
     }
   }
 
@@ -356,7 +360,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         items.push({
           label: '$(smiley) Change avatar',
           detail: 'Pick a new avatar from a few candidates',
-          run: () => this.#changeAvatar(hostId, agent.id, agent.name),
+          run: () => this.#changeAvatar(hostId, info.id),
         })
       }
       items.push({
@@ -378,41 +382,15 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     return items
   }
 
-  async #changeAvatar(hostId: string, agentId: string, name: string): Promise<void> {
-    const host = this.#store.get(hostId)
-    const client = host && (await clientFor(this.#store, host))
-    if (!client) {
+  // The picker draws the candidates, so it lives in this webview; a request before the view has booted waits for `onReady`.
+  async #changeAvatar(hostId: string, sessionId: string): Promise<void> {
+    const picker = { kind: 'wd-avatar-picker' as const, hostId, sessionId }
+    if (this.view && this.ready) {
+      this.post(picker)
       return
     }
-    const dir = vscode.Uri.joinPath(this.#context.globalStorageUri, 'avatar-previews')
-    await vscode.workspace.fs.createDirectory(dir)
-    for (;;) {
-      const seeds = Array.from({ length: 8 }, () => randomUUID())
-      const items = await Promise.all(
-        seeds.map(async (seed, i) => {
-          const file = vscode.Uri.joinPath(dir, `${seed}.png`)
-          try {
-            await vscode.workspace.fs.writeFile(file, new Uint8Array(await (await client.agentAvatarPreview(agentId, seed)).arrayBuffer()))
-            return { label: `Avatar ${i + 1}`, iconPath: file, seed }
-          } catch {
-            return undefined
-          }
-        }),
-      )
-      const shuffle = { label: '$(refresh) More', seed: undefined }
-      const picked = await vscode.window.showQuickPick([...items.filter((item) => item !== undefined), shuffle], {
-        title: `Avatar for ${name}`,
-        placeHolder: 'Pick one; the agent can also change its own with change_avatar',
-      })
-      await Promise.all(seeds.map((seed) => vscode.workspace.fs.delete(vscode.Uri.joinPath(dir, `${seed}.png`)).then(undefined, () => {})))
-      if (!picked) {
-        return
-      }
-      if (picked.seed !== undefined) {
-        await this.#agentCall(hostId, 'could not change the avatar', (c) => c.changeAgentAvatar(agentId, picked.seed))
-        return
-      }
-    }
+    this.#avatarRequested = picker
+    await vscode.commands.executeCommand(`${SidebarProvider.viewId}.focus`)
   }
 
   async #setStatus(hostId: string, info: SessionInfo): Promise<void> {
