@@ -242,8 +242,8 @@ export function SessionItem({
       )}
     >
       {agent && variant === 'member' ? (
-        <div className={cn('flex h-6 items-center gap-1.5 overflow-hidden py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-          <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={22} />
+        <div className={cn('flex h-9 items-center gap-1.5 overflow-hidden py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
+          <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={32} />
           {nameLabel}
           {status ? (
             <span title={status} className="min-w-0 flex-1 truncate text-body-sm text-fg-3">
@@ -258,7 +258,7 @@ export function SessionItem({
         </div>
       ) : agent || tile ? (
         <div className={cn('flex items-center gap-2 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-          <AgentAvatar row={row} image={avatarOf(avatars, agent)} state={badgeState} />
+          <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={48} state={badgeState} />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}
