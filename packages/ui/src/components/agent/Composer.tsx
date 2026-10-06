@@ -444,6 +444,12 @@ export function Composer({
           className={cn('term-composer', shellMode && 'term-composer-shell', disabled && 'opacity-60')}
         >
           <div className="term-composer-body">
+            {sendNow ? (
+              <div className="term-row">
+                <span aria-hidden className="term-gutter" />
+                {sendNow}
+              </div>
+            ) : null}
             {stagedStrip}
             <div className="term-row">
               {canAttach && !shellMode ? fileField : null}
@@ -453,12 +459,6 @@ export function Composer({
                 {submitButton}
               </div>
             </div>
-            {sendNow ? (
-              <div className="term-row">
-                <span aria-hidden className="term-gutter" />
-                {sendNow}
-              </div>
-            ) : null}
             {helpOpen ? (
               <div role="note" aria-label="Composer shortcuts" className="term-row">
                 <span aria-hidden className="term-gutter" />
@@ -486,6 +486,7 @@ export function Composer({
   return (
     <div data-slot="composer" className={cn('px-[var(--wd-composer-padding)] pb-[var(--wd-composer-padding)]', className)}>
       {helpRow}
+      {sendNow ? <div className="mx-auto mb-1 w-full max-w-[var(--wd-transcript-max-width)] text-text-muted">{sendNow}</div> : null}
       <div
         {...dropHandlers}
         className={cn(
@@ -518,7 +519,6 @@ export function Composer({
           </>
         )}
       </div>
-      {sendNow ? <div className="mx-auto mt-1 w-full max-w-[var(--wd-transcript-max-width)] text-text-muted">{sendNow}</div> : null}
       {errorRow}
     </div>
   )

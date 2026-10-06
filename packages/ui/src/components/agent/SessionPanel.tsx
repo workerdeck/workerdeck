@@ -69,7 +69,8 @@ import {
   type TerminalAffordances,
 } from '../terminal/affordances.tsx'
 import type { FileLinkOpener } from '../terminal/file-link.tsx'
-import { hasBackgroundable } from '../terminal/live-tool.ts'
+import { backgroundableSince, SEND_NOW_AFTER_MS } from '../terminal/live-tool.ts'
+import { useTicker } from '../terminal/items.tsx'
 import { ApprovalPrompts, type ApprovalPromptProps } from './ApprovalPrompts.tsx'
 import { SessionPanelProviders } from './session-panel-providers.tsx'
 import { useCatchUp } from './use-catch-up.ts'
@@ -489,7 +490,9 @@ export function SessionPanel({
     send(text, attachmentIds)
   }
 
-  const runningForeground = canBackgroundTasks && hasBackgroundable(state.items)
+  const foregroundSince = canBackgroundTasks ? backgroundableSince(state.items) : undefined
+  const tick = useTicker(foregroundSince !== undefined)
+  const runningForeground = foregroundSince !== undefined && tick - foregroundSince >= SEND_NOW_AFTER_MS
   const handleSendNow = (text: string, attachmentIds: string[]) => {
     handleSend(text, attachmentIds)
     backgroundTask()

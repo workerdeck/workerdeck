@@ -4,6 +4,7 @@ import type { ToolCallItem } from './blocks.ts'
 
 export const LIVE_TAIL_LINES = 5
 export const ELAPSED_AFTER_MS = 5000
+export const SEND_NOW_AFTER_MS = 5000
 // The widest label the header grows by while busy, so a height estimate never undercounts a wrap.
 export const ELAPSED_WIDEST = ' ·\u00a059m\u00a059s'
 
@@ -53,15 +54,18 @@ export function runTailLines(items: readonly ToolCallItem[]): string[] {
 }
 
 // Walks back only through the current turn: a running call is never older than the last prompt.
-export function hasBackgroundable(items: readonly TranscriptItem[]): boolean {
+// The earliest start among them, or 0 when a call carries no `ts`.
+export function backgroundableSince(items: readonly TranscriptItem[]): number | undefined {
+  let since: number | undefined
   for (let index = items.length - 1; index >= 0; index--) {
     const item = items[index]!
     if (item.kind === 'user' && item.parentToolUseId == null) {
-      return false
+      break
     }
     if (item.kind === 'tool_call' && canBackground(item)) {
-      return true
+      const ts = item.ts ?? 0
+      since = since === undefined ? ts : Math.min(since, ts)
     }
   }
-  return false
+  return since
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { TranscriptItem } from '@workerdeck/react'
 import {
+  backgroundableSince,
   canBackground,
   elapsedLabel,
-  hasBackgroundable,
   liveTailLines,
   runStartedAt,
   runTailLines,
@@ -37,7 +37,8 @@ describe('live tool rows', () => {
     expect(canBackground(call({ parentToolUseId: 'task-1' }))).toBe(false)
     expect(canBackground(call({ status: 'settled' }))).toBe(false)
     const prompt: TranscriptItem = { kind: 'user', id: 'u', text: 'hi' }
-    expect(hasBackgroundable([prompt, call()])).toBe(true)
-    expect(hasBackgroundable([call(), prompt])).toBe(false)
+    expect(backgroundableSince([prompt, call({ ts: 30 }), call({ id: 'b', ts: 20 })])).toBe(20)
+    expect(backgroundableSince([prompt, call({ ts: undefined })])).toBe(0)
+    expect(backgroundableSince([call(), prompt])).toBeUndefined()
   })
 })
