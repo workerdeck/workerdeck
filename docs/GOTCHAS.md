@@ -1333,6 +1333,13 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   rides `ProjectInfoService`'s `decorate` chain, so every `withProject` funnel (list, get, WS hello,
   notifications, peers) carries it, and parked or dormant records never embed it. An agent whose
   session was deleted stays bound to that dead id; clients draw it from `GET /agents`.
+- **The library default is an in-memory store**, so a host that forgets `agentStore` loses every
+  agent on restart or hot reload while their sessions survive as plain cards. The CLI shipped that
+  bug once: `stateDirDefaults` built `<state-dir>/agents.json` and `startInstance` never passed it
+  on. Anything `stateDirDefaults` builds needs a test through `startInstance`, not only through
+  `createWorkerServer`.
+- **`#` mentions match the agent name first** (`resolvePeerMentions`, `peerSessionOption`), then
+  the title and id. A new agent's session has no title, so a title-only lookup offers it by short id.
 - **The brief never rides the wire.** It is an agent field that becomes `instructions` (host
   authority, §Host instructions) inside `buildRunner`, looked up by session id, so a dormant wake or
   a parked rebuild re-derives it. A create passes it explicitly (`createRunner(config, { brief })`)
