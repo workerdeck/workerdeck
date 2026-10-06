@@ -86,6 +86,8 @@ html[data-font='editor'] {
   --row-hover: var(--vscode-list-hoverBackground, #2a2d2e);
   --row-selected: var(--vscode-list-activeSelectionBackground, #04395e);
   --row-selected-weak: var(--vscode-list-inactiveSelectionBackground, #37373d);
+  /* The theme's warning hue at the selection's weight, so "needs you" reads as loud as "selected". */
+  --row-attention: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 32%, var(--vscode-sideBar-background, #181818));
   /* A count that is not an alert - VS Code's own badge, which every theme tunes
      to sit quietly. The unread badge stays on `--accent`. */
   --badge: var(--vscode-badge-background, #616161);

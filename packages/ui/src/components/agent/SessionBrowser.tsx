@@ -143,6 +143,8 @@ export function SessionBrowser({
       return (
         <CustomGroupHeader
           group={group}
+          look={config.customGroups?.find((custom) => custom.id === group.custom)}
+          onStyle={(look) => group.custom && drag.style(group.custom, look)}
           editing={group.custom !== undefined && editingGroup === group.custom}
           onEditingChange={(editing) => setEditingGroup(editing ? group.custom : undefined)}
           onRename={(name) => group.custom && drag.rename(group.custom, name)}
@@ -246,7 +248,7 @@ export function SessionBrowser({
           <Empty icon={<Layers />} title="Nothing here" description="No session to show." />
         )
       ) : (
-        <div className="flex flex-col gap-4 px-1">
+        <div className="flex flex-col gap-2 px-1">
           {groups.map((group) => (
             <div
               key={group.key}

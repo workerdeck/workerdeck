@@ -65,6 +65,9 @@
   --row-active: rgb(0 0 0 / 0.08);
   --row-selected: #cfe4f7;
   --row-selected-weak: #e4e6f1;
+  /* A card that is waiting on the person: an approval or a question, its own or a team member's. As loud as
+     the selection, in the warning hue, because it is the one card that asks for an action. */
+  --row-attention: #fbdcb8;
 
   /* A count badge that is NOT an alert. The unread badge wears `--accent`
      because unread is a call to look; a plain count (how many sub-agents, how
@@ -187,6 +190,7 @@
   --row-active: rgb(255 255 255 / 0.1);
   --row-selected: #04395e;
   --row-selected-weak: #37373d;
+  --row-attention: #5c3906;
 
   /* See the light block. */
   --badge: #616161;
@@ -352,6 +356,7 @@
   --color-row-active: var(--row-active);
   --color-row-selected: var(--row-selected);
   --color-row-selected-weak: var(--row-selected-weak);
+  --color-row-attention: var(--row-attention);
   --color-badge: var(--badge);
   --color-badge-fg: var(--badge-fg);
   /* Named code-bg (not code) so it can't shadow the --text-code font-size token:

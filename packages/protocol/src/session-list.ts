@@ -1,3 +1,4 @@
+import { projectAccent } from './agents.ts'
 import { SHELL_LINGER_MS, SHELL_PROMOTE_MS } from './index.ts'
 import type { SessionInfo, ShellInfo, SubagentInfo } from './index.ts'
 
@@ -59,8 +60,13 @@ export type SortBy = 'recent' | 'name' | Facet
 
 export const GROUP_BY: readonly GroupBy[] = ['none', 'state', 'adapter', 'project', 'custom']
 
-// `members` are `sessionKey` values, in the order the group draws them.
-export type CustomGroup = { id: string; name: string; members: string[] }
+// `members` are `sessionKey` values, in the order the group draws them. `color` is the badge colour (one of
+// `PROJECT_ACCENTS` from the pickers, any CSS colour accepted); `icon` an image the operator chose, as a small data URL,
+// drawn instead of the colour.
+export type CustomGroup = { id: string; name: string; members: string[]; color?: string; icon?: string }
+
+// The largest `icon` data URL a client stores: a 64 px PNG fits many times over, a raw photo does not.
+export const CUSTOM_GROUP_ICON_MAX = 48_000
 
 // How much of one of a card's child lists it draws. A layout preference, not a facet filter.
 export type StepDisplay = 'all' | 'active' | 'none'
@@ -489,6 +495,36 @@ export function addCustomGroup(groups: readonly CustomGroup[], name: string, id 
 
 export function renameCustomGroup(groups: readonly CustomGroup[], id: string, name: string): CustomGroup[] {
   return groups.map((group) => (group.id === id ? { ...group, name } : group))
+}
+
+// The colour a group's badge draws: its own, else a stable one derived from its id.
+export function customGroupColor(group: Pick<CustomGroup, 'id' | 'color'>): string {
+  return group.color ?? projectAccent(`group:${group.id}`)
+}
+
+// `null` removes the field; an `icon` over `CUSTOM_GROUP_ICON_MAX` or not an image data URL is ignored.
+export function styleCustomGroup(
+  groups: readonly CustomGroup[],
+  id: string,
+  look: { color?: string | null; icon?: string | null },
+): CustomGroup[] {
+  return groups.map((group) => {
+    if (group.id !== id) {
+      return group
+    }
+    const next = { ...group }
+    if (look.color === null) {
+      delete next.color
+    } else if (look.color !== undefined) {
+      next.color = look.color
+    }
+    if (look.icon === null) {
+      delete next.icon
+    } else if (look.icon !== undefined && look.icon.startsWith('data:image/') && look.icon.length <= CUSTOM_GROUP_ICON_MAX) {
+      next.icon = look.icon
+    }
+    return next
+  })
 }
 
 export function removeCustomGroup(groups: readonly CustomGroup[], id: string): CustomGroup[] {

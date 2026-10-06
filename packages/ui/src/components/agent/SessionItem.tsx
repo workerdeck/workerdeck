@@ -109,6 +109,8 @@ export function SessionItem({
 
   const model = friendlyModel(info.model)
   const status = statusLine(info.statusLabel)
+  // Its own approval or question, or (on a lead) a team member's: the one card that asks for an action.
+  const needsYou = row.state === 'attention' || row.teamState === 'attention' || badgeState === 'attention'
   const parts: ReactNode[] = []
   if (model) {
     parts.push(
@@ -229,7 +231,13 @@ export function SessionItem({
       className={cn(
         'group flex w-full cursor-pointer flex-col p-1 text-left outline-none',
         'rounded-[4px] transition-colors focus-visible:ring-2 focus-visible:ring-ring',
-        holdsOpenStep ? 'bg-row-selected-weak' : active ? 'bg-row-selected' : 'hover:bg-row-hover',
+        needsYou
+          ? cn('bg-row-attention', active && 'ring-1 ring-accent ring-inset')
+          : holdsOpenStep
+            ? 'bg-row-selected-weak'
+            : active
+              ? 'bg-row-selected'
+              : 'hover:bg-row-hover',
         className,
       )}
     >

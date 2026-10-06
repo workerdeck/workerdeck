@@ -1876,7 +1876,13 @@ top-level edge or empty space leaves. Joining renumbers the team densely (`TeamM
 `teamDropRefusal` mirrors the gateway's `leadRefusal` wording so a refused hover says why; a
 rejected `onTeamMove` draws its message under the card for 5 s. `AgentHeading` is the panel title
 for an agent (avatar, name, LEAD or team, `conversation n` from `AgentRef.conversation`, the
-gateway's `pastSessions.length + 1`, sent from the second on). Avatars arrive through
+gateway's `pastSessions.length + 1`, sent from the second on). A card whose own state is
+`attention`, or a lead whose team's is, fills with `--row-attention` (the warning hue at the
+selection's weight; the VS Code webview mixes the theme's warning colour into the sidebar), so the
+card that asks for an action is the loudest one. Custom groups draw a badge (`GroupBadge`: the
+group's `icon`, else `customGroupColor`, a stable palette colour until one is picked) and keep the
+case the operator typed; an image from disk is scaled to 64 px and stored as a data URL in the view
+config (`CUSTOM_GROUP_ICON_MAX`). Avatars arrive through
 `avatars` (keyed by `AgentRef.avatar`), because the gateway route needs the host's credentials: the
 host fetches and hands over data URLs, exactly like `projectIcons`. Once any row has an agent,
 plain rows draw as tiles too, so the column holds. An agent card renames the agent

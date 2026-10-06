@@ -98,7 +98,7 @@ export function teamReaches(from: AgentRef | undefined, to: AgentRef | undefined
   return true
 }
 
-const PROJECT_ACCENTS = ['#497eae', '#8a6bb8', '#3f8f6b', '#b0794a', '#a85a6e', '#4f8f96', '#7c8a3f', '#6b72b8'] as const
+export const PROJECT_ACCENTS = ['#497eae', '#8a6bb8', '#3f8f6b', '#b0794a', '#a85a6e', '#4f8f96', '#7c8a3f', '#6b72b8'] as const
 
 // A stable colour per project key (a host and root, or any string), the same on every client and the gateway.
 export function projectAccent(key: string): string {

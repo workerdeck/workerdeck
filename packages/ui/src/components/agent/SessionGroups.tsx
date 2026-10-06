@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent, HTMLAttributes, ReactNode } from 'react'
-import { GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { GripVertical, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   addCustomGroup,
   moveCustomGroup,
@@ -9,11 +9,15 @@ import {
   removeCustomGroup,
   renameCustomGroup,
   sessionKey,
+  styleCustomGroup,
+  customGroupColor,
+  PROJECT_ACCENTS,
 } from '@workerdeck/protocol'
 import type { CustomGroup, SessionGroup, SessionRow } from '@workerdeck/protocol'
 import { dropZone, joinDrop, memberDrop, type DropZone, type TeamMove } from '../../lib/team-drop.ts'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover.tsx'
 import { cn } from '../../lib/utils.ts'
 
 type DragItem = { kind: 'session'; key: string } | { kind: 'group'; id: string }
@@ -213,23 +217,29 @@ export function useGroupDrag(
       return id
     },
     rename: (id: string, name: string) => onChange(renameCustomGroup(groups, id, name)),
+    style: (id: string, look: { color?: string | null; icon?: string | null }) => onChange(styleCustomGroup(groups, id, look)),
     remove: (id: string) => onChange(removeCustomGroup(groups, id)),
   }
 }
 
 export function CustomGroupHeader({
   group,
+  look,
   editing,
   onEditingChange,
   onRename,
   onRemove,
+  onStyle,
   dragProps,
 }: {
   group: SessionGroup
+  // The stored group, for its colour and image; absent for the ungrouped bucket.
+  look?: CustomGroup
   editing: boolean
   onEditingChange: (editing: boolean) => void
   onRename: (name: string) => void
   onRemove: () => void
+  onStyle?: (look: { color?: string | null; icon?: string | null }) => void
   dragProps: HTMLAttributes<HTMLDivElement>
 }) {
   if (editing) {
@@ -242,9 +252,17 @@ export function CustomGroupHeader({
       {...dragProps}
       label={group.label ?? ''}
       count={group.rows.length}
+      caps={!custom}
       className={cn('group/heading', custom && 'cursor-grab')}
       onDoubleClick={custom ? () => onEditingChange(true) : undefined}
-      leading={custom ? <GripVertical className="-ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" /> : undefined}
+      leading={
+        custom ? (
+          <>
+            <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" />
+            {look ? <GroupBadge group={look} onStyle={onStyle} /> : null}
+          </>
+        ) : undefined
+      }
       actions={
         custom ? (
           <>
@@ -298,6 +316,7 @@ export function GroupHeading({
   count,
   leading,
   actions,
+  caps = true,
   className,
   ...rest
 }: {
@@ -305,11 +324,13 @@ export function GroupHeading({
   count: number
   leading?: ReactNode
   actions?: ReactNode
+  // Off for a name the operator typed, which keeps its own case.
+  caps?: boolean
 } & HTMLAttributes<HTMLDivElement>) {
   return (
     <div {...rest} className={cn('group/heading flex min-h-5 items-center gap-2 px-2 text-label font-medium text-fg-4', className)}>
       {leading}
-      <span className="min-w-0 truncate uppercase tracking-wide">{label}</span>
+      <span className={cn('min-w-0 truncate', caps ? 'uppercase tracking-wide' : 'text-fg-3')}>{label}</span>
       <span className="text-fg-4/70">{count}</span>
       {actions ? (
         <span className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/heading:opacity-100 focus-within:opacity-100">
@@ -355,4 +376,106 @@ export function NewGroupButton({ onClick }: { onClick: () => void }) {
       New group
     </Button>
   )
+}
+
+const ICON_PX = 64
+
+// A group's badge: its image, else its colour; pressing it picks either.
+export function GroupBadge({
+  group,
+  onStyle,
+}: {
+  group: CustomGroup
+  onStyle?: (look: { color?: string | null; icon?: string | null }) => void
+}) {
+  const [error, setError] = useState<string>()
+  const file = useRef<HTMLInputElement>(null)
+  const mark = group.icon ? (
+    <img src={group.icon} alt="" className="size-3.5 rounded-[3px] object-cover" draggable={false} />
+  ) : (
+    <span className="size-2 rounded-[2px]" style={{ background: customGroupColor(group) }} />
+  )
+  if (!onStyle) {
+    return <span className="flex size-3.5 shrink-0 items-center justify-center">{mark}</span>
+  }
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            aria-label={`Colour or image for ${group.name}`}
+            title="Colour or image"
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className="flex size-3.5 shrink-0 items-center justify-center rounded-[3px] hover:ring-1 hover:ring-border"
+          >
+            {mark}
+          </button>
+        }
+      />
+      <PopoverContent align="start" className="flex w-44 flex-col gap-2">
+        <div className="grid grid-cols-4 gap-1.5">
+          {PROJECT_ACCENTS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              aria-label={`Colour ${color}`}
+              onClick={() => onStyle({ color, icon: null })}
+              className={cn(
+                'h-6 rounded-[4px] ring-offset-1 ring-offset-surface',
+                !group.icon && customGroupColor(group) === color && 'ring-2 ring-fg-3',
+              )}
+              style={{ background: color }}
+            />
+          ))}
+        </div>
+        <input
+          ref={file}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const picked = e.target.files?.[0]
+            e.target.value = ''
+            if (!picked) {
+              return
+            }
+            setError(undefined)
+            void iconFromFile(picked)
+              .then((icon) => onStyle({ icon }))
+              .catch(() => setError('That image could not be read'))
+          }}
+        />
+        <Button variant="outline" size="xs" onClick={() => file.current?.click()}>
+          <ImageIcon />
+          Choose image…
+        </Button>
+        {group.icon ? (
+          <Button variant="ghost" size="xs" onClick={() => onStyle({ icon: null })}>
+            Remove image
+          </Button>
+        ) : null}
+        {error ? <span className="text-label text-danger">{error}</span> : null}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+// Scaled to cover a 64 px square and re-encoded, so a photo from disk stores as a few kB in the view config.
+async function iconFromFile(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = ICON_PX
+  canvas.height = ICON_PX
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('no canvas')
+  }
+  const scale = Math.max(ICON_PX / bitmap.width, ICON_PX / bitmap.height)
+  const width = bitmap.width * scale
+  const height = bitmap.height * scale
+  context.drawImage(bitmap, (ICON_PX - width) / 2, (ICON_PX - height) / 2, width, height)
+  bitmap.close()
+  return canvas.toDataURL('image/png')
 }
