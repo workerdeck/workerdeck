@@ -48,6 +48,7 @@ export type CliFlags = {
   trustProxy?: boolean
   approvalTimeoutMs?: number | null
   engineSleepAfterMs?: number
+  agentSleepAfterMs?: number
   effortDefaults?: Record<string, string>
   agentContextReset?: 'on' | 'off' | 'never'
   stateDir?: string
@@ -101,6 +102,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--insecure-host', (f, v) => f.insecureHosts.push(v)],
   ['--approval-timeout', (f, v, name) => (f.approvalTimeoutMs = parseDuration(v, name))],
   ['--engine-sleep-after', (f, v, name) => (f.engineSleepAfterMs = parseDuration(v, name) ?? 0)],
+  ['--agent-sleep-after', (f, v, name) => (f.agentSleepAfterMs = parseDuration(v, name) ?? 0)],
   ['--effort-default', (f, v, name) => (f.effortDefaults = { ...f.effortDefaults, ...parseEffortDefault(v, name) })],
   ['--agent-context-reset', (f, v, name) => (f.agentContextReset = parseAgentContextReset(v, name))],
   ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
@@ -434,6 +436,9 @@ export function resolveInstanceConfig(
   }
   if (flags.engineSleepAfterMs !== undefined) {
     options.engineSleepAfterMs = flags.engineSleepAfterMs
+  }
+  if (flags.agentSleepAfterMs !== undefined) {
+    options.agentSleepAfterMs = flags.agentSleepAfterMs
   }
   if (flags.agentContextReset === 'never') {
     options.agentContextReset = false

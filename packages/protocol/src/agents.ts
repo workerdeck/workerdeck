@@ -8,6 +8,8 @@ export type AgentRef = {
   team?: string
   leads?: true
   order?: number
+  // Which conversation the agent is on, from 1: each restart ("New conversation") starts the next one.
+  conversation?: number
 }
 
 export type AgentConfig = {
@@ -70,6 +72,9 @@ export function agentRef(agent: AgentInfo, team: { leadName?: string; leads?: bo
   }
   if (team.leads) {
     ref.leads = true
+  }
+  if (agent.pastSessions.length > 0) {
+    ref.conversation = agent.pastSessions.length + 1
   }
   if (agent.order !== undefined) {
     ref.order = agent.order

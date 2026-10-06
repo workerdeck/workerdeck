@@ -71,6 +71,17 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--engine-sleep-after', 'later'])).toThrow(ConfigError)
   })
 
+  it('parses --agent-sleep-after as a duration, with never as 0', () => {
+    expect(parseArgs(['--agent-sleep-after', '45m']).agentSleepAfterMs).toBe(2_700_000)
+    expect(parseArgs(['--agent-sleep-after', 'never']).agentSleepAfterMs).toBe(0)
+    expect(parseArgs(['--agent-sleep-after', '0']).agentSleepAfterMs).toBe(0)
+    expect(parseArgs([]).agentSleepAfterMs).toBeUndefined()
+    expect(() => parseArgs(['--agent-sleep-after', 'later'])).toThrow(ConfigError)
+    const fromFile = { path: null, options: { agentSleepAfterMs: 60_000 } }
+    expect(resolveInstanceConfig(parseArgs(['--agent-sleep-after', '2h']), fromFile, {}).options.agentSleepAfterMs).toBe(7_200_000)
+    expect(resolveInstanceConfig(parseArgs([]), fromFile, {}).options.agentSleepAfterMs).toBe(60_000)
+  })
+
   it('maps --agent-context-reset onto the gateway option, keeping the config file rate limits', () => {
     expect(() => parseArgs(['--agent-context-reset', 'yes'])).toThrow(ConfigError)
     const fromFile = { path: null, options: { agentContextReset: { maxPerHour: 1 } } }

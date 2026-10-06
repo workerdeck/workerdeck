@@ -13,6 +13,7 @@ export type AgentServiceOptions = {
   store: AgentStore
   basePath: string
   avatars?: boolean
+  sleepAfterMs?: number
   now?: () => number
 }
 
@@ -77,6 +78,7 @@ export class AgentService {
   #store: AgentStore
   #basePath: string
   #avatars: boolean
+  #sleepAfterMs: number
   #now: () => number
   #agents = new Map<string, StoredAgent>()
 
@@ -84,6 +86,7 @@ export class AgentService {
     this.#store = options.store
     this.#basePath = options.basePath
     this.#avatars = options.avatars ?? false
+    this.#sleepAfterMs = options.sleepAfterMs ?? AGENT_SLEEP_AFTER_MS_DEFAULT
     this.#now = options.now ?? Date.now
   }
 
@@ -124,7 +127,7 @@ export class AgentService {
 
   sleepAfterFor(sessionId: string): number | undefined {
     const agent = this.bySession(sessionId)
-    return agent ? (agent.config.sleepAfterMs ?? AGENT_SLEEP_AFTER_MS_DEFAULT) : undefined
+    return agent ? (agent.config.sleepAfterMs ?? this.#sleepAfterMs) : undefined
   }
 
   public(agent: StoredAgent): AgentInfo {

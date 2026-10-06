@@ -92,6 +92,8 @@ export type WorkerServerOptions = {
   notifications?: SessionNotificationOptions
   // Stop a live session's engine child after it has sat idle with no client attached this long; 0 or omitted: never.
   engineSleepAfterMs?: number
+  // The same for an agent's session when the agent sets no `sleepAfterMs` of its own; omitted: 15 minutes, 0: never.
+  agentSleepAfterMs?: number
   // The `context_reset` tool: an agent clears its own conversation between turns and continues from a prompt it wrote.
   // Available unless `false`; a session gets it from its request, then its profile's `defaults`, then `default` here.
   agentContextReset?: false | AgentContextResetOptions

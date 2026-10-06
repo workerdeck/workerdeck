@@ -81,6 +81,10 @@ Options
                             has watched it for this long (30m, 2h; config:
                             engineSleepAfterMs). The session stays listed and
                             wakes on its next message. Default 'never'.
+      --agent-sleep-after <d>
+                            the same for an agent's session, unless the agent sets
+                            its own sleepAfterMs (30m, 2h, never; config:
+                            agentSleepAfterMs). Default 15m.
       --effort-default <model>=<effort>
                             reasoning effort a session starts at, or switches to,
                             on this model (opus=high, gpt-6-sol=xhigh; repeatable;

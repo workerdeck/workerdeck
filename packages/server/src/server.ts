@@ -121,7 +121,12 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const generation = randomUUID()
   const shells = options.shell?.enabled === true ? shellRegistryFor(options.shell, generation) : null
-  const agents = new AgentService({ store: options.agentStore ?? createMemoryAgentStore(), basePath, avatars: options.avatars !== undefined })
+  const agents = new AgentService({
+    store: options.agentStore ?? createMemoryAgentStore(),
+    basePath,
+    avatars: options.avatars !== undefined,
+    sleepAfterMs: options.agentSleepAfterMs,
+  })
   const projects = new ProjectInfoService({ decorate: (info) => agents.decorate(shells ? shells.decorate(info) : info) })
 
   const notifier = new SessionNotifier({

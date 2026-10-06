@@ -3,8 +3,16 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentInfo, AgentResponse, SessionInfo } from '@workerdeck/protocol'
-import { createFileAgentStore, createFileSessionStore, createWorkerServer, type AvatarProvider, type WorkerServerOptions } from '../src/index.ts'
+import { AGENT_SLEEP_AFTER_MS_DEFAULT, type AgentInfo, type AgentResponse, type SessionInfo } from '@workerdeck/protocol'
+import {
+  createFileAgentStore,
+  createFileSessionStore,
+  createWorkerServer,
+  type AvatarProvider,
+  type WorkerServerOptions,
+} from '../src/index.ts'
+import { createMemoryAgentStore } from '../src/services/agent-store.ts'
+import { AgentService } from '../src/services/agents.ts'
 import { fakeHarness, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
@@ -59,11 +67,12 @@ async function startGateway(dir?: string, extra: Pick<WorkerServerOptions, 'auth
 }
 
 async function call<T>(base: string, path: string, method = 'GET', body?: unknown): Promise<{ status: number; body: T }> {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  const init: RequestInit = { method }
+  if (body !== undefined) {
+    init.headers = { 'content-type': 'application/json' }
+    init.body = JSON.stringify(body)
+  }
+  const res = await fetch(`${base}${path}`, init)
   return { status: res.status, body: (await res.json()) as T }
 }
 
@@ -190,7 +199,7 @@ describe('agents', () => {
       pastSessions: [member.session!.id],
     })
     expect(restarted.body.session!.id).not.toBe(member.session!.id)
-    expect(restarted.body.session!.agent).toMatchObject({ name: 'Pip', team: 'Atlas' })
+    expect(restarted.body.session!.agent).toMatchObject({ name: 'Pip', team: 'Atlas', conversation: 2 })
     expect(server.registry.get(member.session!.id)?.info().status).toBe('closed')
   })
 
@@ -244,5 +253,25 @@ describe('agents', () => {
     const res = await fetch(`${base}/agents`, { headers: { authorization: 'Bearer user' } })
     expect(res.status).toBe(404)
     expect((await fetch(`${base}/agents`, { headers: { authorization: 'Bearer op' } })).status).toBe(200)
+  })
+})
+
+describe('agent sleep default', () => {
+  async function sleepAfter(gateway: number | undefined, own?: number): Promise<{ agent?: number; plain?: number }> {
+    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', sleepAfterMs: gateway })
+    const draft = agents.draft({ name: 'Atlas', config: own === undefined ? {} : { sleepAfterMs: own } })
+    if ('error' in draft) {
+      throw new Error(draft.error)
+    }
+    await agents.bind(draft, 'session-1')
+    return { agent: agents.sleepAfterFor('session-1'), plain: agents.sleepAfterFor('session-2') }
+  }
+
+  it('falls back to 15 minutes, then the gateway default, and lets the agent override both', async () => {
+    expect(await sleepAfter(undefined)).toEqual({ agent: AGENT_SLEEP_AFTER_MS_DEFAULT, plain: undefined })
+    expect(await sleepAfter(60_000)).toEqual({ agent: 60_000, plain: undefined })
+    expect(await sleepAfter(0)).toEqual({ agent: 0, plain: undefined })
+    expect(await sleepAfter(0, 120_000)).toEqual({ agent: 120_000, plain: undefined })
+    expect(await sleepAfter(60_000, 0)).toEqual({ agent: 0, plain: undefined })
   })
 })
