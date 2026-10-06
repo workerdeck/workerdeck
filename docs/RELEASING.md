@@ -1456,6 +1456,19 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   dashboard. **Not verified**: agents across a hot reload, VS Code tab icons and drag in a real
   window, iOS (phase 5 not started; the phone ignores `agent`).
 
+
+  **3.6.0** - **status label, avatar change and packs, released 2026-10-06** (tag `v3.6.0`). A
+  **minor**, protocol stays **1** (`SessionInfo.statusLabel`, the `status_label` event,
+  `UpdateSessionRequest.statusLabel`, `AgentRef.avatar` gaining `?v=` are all additive). Ships:
+  `set_status` on every engine (event-log folded, cleared by a reset, kept by the dormant record),
+  `change_avatar` + `POST /agents/:id/avatar` + `avatar-preview.png` (avatar served `no-cache`),
+  monkeyart packs monkey / steampunk-bulldogs / toad by default (`--avatar-packs`; recipes now
+  `{ pack, recipe }`, bare ones still draw), custom group colour / image badges, orange attention
+  cards, the card layout change. **Verified**: full `pnpm test`, the web avatar picker and group
+  badge in a browser, status label persistence across a gateway restart (server test). **Not
+  verified**: a paid smoke of `set_status` / `change_avatar`, the VS Code picker and tab icons, iOS
+  (draws none of it yet).
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

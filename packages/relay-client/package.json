@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/relay-client",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "type": "module",
   "description": "Gateway side of the WorkerDeck relay: the relay wire frames, the dial-out connection with auth, heartbeat and reconnect, the session registry publisher, and the remote peer directory. Lets agents on separate gateways list, peek at and message each other.",
   "license": "MIT",

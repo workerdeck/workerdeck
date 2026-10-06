@@ -5,6 +5,29 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.6.0] - 2026-10-06
+
+### Added
+
+- **Status line.** Every session shows a short status under its name, like a chat status. Agents
+  set it with the new `set_status` tool; set or clear it yourself with *Set status* in the card menu.
+  It stays until changed and clears when the conversation resets.
+- **Change avatar.** *Change avatar* in an agent's card menu offers candidates to pick from, and an
+  agent can give itself a new one with `change_avatar`. New avatars come from three art packs:
+  monkeys, dogs and toads.
+- **Cards that need you turn orange**: an approval or question waiting, on the card itself or on a
+  lead whose team member is waiting.
+- **Custom groups** get a colour badge, or an image you choose from disk, and keep the case you type.
+
+### Changed
+
+- An agent card shows the model first, then the status; the time sits dimmed beside the name.
+- Less space between groups.
+
+### Fixed
+
+- An agent card no longer repeats its name on the second line.
+
 ## [3.5.0] - 2026-10-06
 
 ### Added
