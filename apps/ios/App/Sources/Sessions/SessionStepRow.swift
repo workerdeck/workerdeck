@@ -44,7 +44,7 @@ struct SessionStepRow: View {
         .foregroundStyle(tone)
         .frame(width: 16)
       Text(step.label)
-        .font(.footnote)
+        .font(step.kind == .shell ? .footnote.monospaced() : .footnote)
         .lineLimit(1)
         .truncationMode(.tail)
         .foregroundStyle(tone)

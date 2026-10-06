@@ -157,7 +157,7 @@ export function StepRow({ step, active = false, onSelect }: { step: Step; active
         className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 pl-3.5 text-left text-micro outline-none"
       >
         <StepIcon step={step} />
-        <span className="min-w-0 flex-1 truncate">{step.label}</span>
+        <span className={cn('min-w-0 flex-1 truncate', step.kind === 'shell' && 'font-mono')}>{step.label}</span>
         {step.detail ? <span className="shrink-0 tabular-nums text-fg-4">{step.detail}</span> : null}
         {step.kind === 'agent' ? <ArrowRight className="size-3.5 shrink-0 text-fg-4" /> : null}
       </button>
