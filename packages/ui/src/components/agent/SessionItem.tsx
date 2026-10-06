@@ -242,6 +242,7 @@ export function SessionItem({
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}
               {agent?.leads ? <LeadChip /> : null}
+              {agent ? <span className="w-max max-w-max min-w-0 grow basis-0 truncate text-label text-fg-4/70">{time}</span> : null}
               <span className="flex-1" />
               {unread}
               {teamUnseen > 0 ? (
@@ -259,19 +260,13 @@ export function SessionItem({
             <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
               {agent ? (
                 <>
-                  {topic ? <span className="min-w-0 truncate text-fg-4">{topic}</span> : null}
-                  <span className="shrink-0 text-fg-4">
-                    {model ? (
-                      <>
-                        {topic ? '· ' : ''}
-                        <span className={vendorTextClass(engine, info.model)}>{model}</span>
-                        {' · '}
-                      </>
-                    ) : topic ? (
-                      '· '
-                    ) : null}
-                    {time}
-                  </span>
+                  {model ? <span className={cn('shrink-0', vendorTextClass(engine, info.model))}>{model}</span> : null}
+                  {topic ? (
+                    <span className="min-w-0 truncate text-fg-4">
+                      {model ? '· ' : ''}
+                      {topic}
+                    </span>
+                  ) : null}
                 </>
               ) : (
                 <>
