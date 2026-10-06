@@ -216,11 +216,12 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
 
   const fallback = createFallback(auth, webRoot, hostAllowed, apns?.handleRequest ?? createApnsRoute(null, authenticatePush))
 
-  const { parking, profileStore, shell, spend } = stateDirDefaults(config)
+  const { agentStore, parking, profileStore, shell, spend } = stateDirDefaults(config)
 
   const server = createWorkerServer({
     ...config.options,
     ...(profileStore ? { profileStore } : {}),
+    agentStore,
     // On by default here, off in the library: a mispointed config dir should say so at startup.
     checkCredentials: config.options.checkCredentials ?? true,
     parking,

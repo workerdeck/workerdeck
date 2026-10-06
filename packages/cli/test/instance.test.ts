@@ -174,6 +174,18 @@ describe('an unauthenticated instance', () => {
   })
 })
 
+describe('agents in the state dir', () => {
+  it('persists an agent to agents.json, so a restart or hot reload keeps it', async () => {
+    const { base, stateDir } = await start([])
+    const post = (path: string, body: unknown) =>
+      fetch(`${base}/v1${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    const session = (await (await post('/sessions', { cwd: '/tmp' })).json()) as { session: { id: string } }
+    expect((await post('/agents', { adopt: session.session.id, name: 'Atlas' })).status).toBe(201)
+    const stored = JSON.parse(await readFile(join(stateDir!, 'agents.json'), 'utf8')) as Array<{ name: string }>
+    expect(stored.map((agent) => agent.name)).toEqual(['Atlas'])
+  })
+})
+
 describe('an instance with --auth-key', () => {
   it('shows the login page instead of the dashboard, and refuses the API', async () => {
     const { base } = await start(['--auth-key', SECRET])
