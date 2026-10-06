@@ -91,6 +91,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   )
 
   const hosts = state?.hosts ?? []
+  const relays = useMemo(() => Object.fromEntries(hosts.map((host) => [host.id, host.relay])), [hosts])
   const scope = state?.scope
   const rows = useMemo(() => buildRows(state), [state])
   const gateways = useMemo(() => hosts.map((host) => ({ id: host.id, name: host.name })), [hosts])
@@ -162,6 +163,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             showSearch={false}
             showSubset={false}
             gatewayCount={hosts.length}
+            relays={relays}
             projectIcons={projectIcons}
             avatars={avatars}
             isActive={isActive}
@@ -185,8 +187,9 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             onTeamMove={(move) =>
               postRow('wd-team-move', move.row, {
                 leadSessionId: move.lead?.info.id ?? null,
+                ...(move.lead && move.lead.hostId !== move.row.hostId ? { leadHostId: move.lead.hostId } : {}),
                 order: move.order,
-                siblings: move.siblings?.map((s) => ({ sessionId: s.row.info.id, order: s.order })),
+                siblings: move.siblings?.map((s) => ({ hostId: s.row.hostId, sessionId: s.row.info.id, order: s.order })),
               })
             }
             onCreateInGroup={(target) => bridge.post({ kind: 'wd-new-session', hostId: target.hostId, cwd: target.cwd })}

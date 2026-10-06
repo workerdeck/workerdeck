@@ -2,7 +2,7 @@ import * as vscode from 'vscode'
 import type { SessionInfo } from '@workerdeck/protocol'
 import type { GatewayHost, HostStore } from './hosts.ts'
 import { apiUrl } from './hosts.ts'
-import { forgetLocality, isLocalHostCached, refreshLocality } from './machine.ts'
+import { forgetLocality, isLocalHostCached, refreshLocality, relayOfCached } from './machine.ts'
 import { probe, refreshPerHost, type ProbeResult } from './gateway.ts'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
 import { workspaceScope } from './workspace-scope.ts'
@@ -212,6 +212,7 @@ export class SessionsModel implements vscode.Disposable {
       }
       const snap = this.#snapshots.get(host.id)
       const local = isLocalHostCached(host)
+      const relay = relayOfCached(host)
       const folder = scope?.roots.find((r) => (r.hostId ? r.hostId.toLowerCase() === host.id.toLowerCase() : local))?.path
       hosts.push({
         id: host.id,
@@ -222,6 +223,7 @@ export class SessionsModel implements vscode.Disposable {
         probe: snap?.probe ?? 'pending',
         cwdSuggestion: folder ?? this.sessionsOf(host.id)[0]?.cwd,
         ...(host.managed ? { managed: true } : {}),
+        ...(relay ? { relay } : {}),
       })
       if (snap?.probe === 'connected') {
         sessions[host.id] = snap.sessions

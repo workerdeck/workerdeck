@@ -158,6 +158,15 @@ export class WorkerDeckClient {
     return await this.#call('PATCH', this.#agent(id), patch)
   }
 
+  // Lead side of a cross-gateway join: a 10 minute invitation for `agent` (`gateway:agentId`) to join this lead.
+  async inviteRemoteMember(id: string, agent: string): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/remote-members'), { agent })
+  }
+
+  async removeRemoteMember(id: string, agent: string): Promise<AgentResponse> {
+    return await this.#call('DELETE', this.#agent(id, `/remote-members/${encodeURIComponent(agent)}`))
+  }
+
   async restartAgent(id: string, prompt?: string): Promise<AgentResponse> {
     return await this.#call('POST', this.#agent(id, '/restart'), prompt === undefined ? {} : { prompt })
   }
@@ -426,3 +435,5 @@ export type { QueueHandleEvents } from './queue-handle.ts'
 export { apiUrl, isLoopbackHost } from './host-url.ts'
 export type { HostUrl } from './host-url.ts'
 export { hostAuth } from './host-auth.ts'
+export { runTeamMove } from './team-move.ts'
+export type { TeamMovePlan } from './team-move.ts'

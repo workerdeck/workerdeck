@@ -1,4 +1,4 @@
-import type { PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
+import type { GatewayRelayMeta, PermissionMode, ScopeRoot, SessionInfo, WorkspaceScope } from '@workerdeck/protocol'
 import type { SubagentDisplay, ViewConfig } from './view-config.ts'
 import type { SessionSurfacePanel, SessionVitals } from '@workerdeck/ui'
 
@@ -11,6 +11,7 @@ export type WireHost = {
   probe: 'connected' | 'unauthorized' | 'unreachable' | 'pending'
   cwdSuggestion?: string
   managed?: boolean
+  relay?: GatewayRelayMeta
 }
 
 export type WireProfile = {
@@ -195,10 +196,11 @@ export type SidebarToHost =
       kind: 'wd-team-move'
       hostId: string
       sessionId: string
-      // The lead's session, or null to leave the team.
+      // The lead's session, or null to leave the team. `leadHostId` is set when the lead lives on another gateway.
       leadSessionId: string | null
+      leadHostId?: string
       order?: number
-      siblings?: { sessionId: string; order: number }[]
+      siblings?: { hostId?: string; sessionId: string; order: number }[]
     }
   | {
       kind: 'wd-reveal-gateways'

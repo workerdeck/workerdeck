@@ -1,4 +1,4 @@
-import type { SessionRow } from '@workerdeck/protocol'
+import type { HostRelays, SessionRow } from '@workerdeck/protocol'
 
 export type DropZone = 'before' | 'join' | 'after'
 
@@ -14,12 +14,16 @@ export function dropZone(offsetY: number, height: number): DropZone {
   return at < 0.25 ? 'before' : at > 0.75 ? 'after' : 'join'
 }
 
-// Mirrors the gateway's `leadRefusal`, so a drag can say no before it asks; the 409 stays the authority.
-export function teamDropRefusal(dragged: SessionRow, lead: SessionRow): string | undefined {
+// Mirrors the gateway's `leadRefusal`, so a drag can say no before it asks; the 409 stays the authority. Across
+// gateways both must dial a relay that routes teams, under one owner (another operator's agent needs an invitation).
+export function teamDropRefusal(dragged: SessionRow, lead: SessionRow, relays: HostRelays = {}): string | undefined {
   const mover = dragged.info.agent
   const target = lead.info.agent
   if (dragged.hostId !== lead.hostId) {
-    return 'a team stays on one gateway'
+    const crossing = crossGatewayRefusal(relays[dragged.hostId], relays[lead.hostId], dragged, lead)
+    if (crossing) {
+      return crossing
+    }
   }
   if (!target) {
     return 'only an agent can lead a team'
@@ -36,9 +40,41 @@ export function teamDropRefusal(dragged: SessionRow, lead: SessionRow): string |
   return undefined
 }
 
+function crossGatewayRefusal(
+  from: HostRelays[string],
+  to: HostRelays[string],
+  dragged: SessionRow,
+  lead: SessionRow,
+): string | undefined {
+  if (!from || !to) {
+    return 'a team spans gateways only through a relay both gateways dial'
+  }
+  for (const [relay, row] of [
+    [from, dragged],
+    [to, lead],
+  ] as const) {
+    if (!relay.online) {
+      return `${row.hostName} is not connected to its relay`
+    }
+    if (!relay.features.includes('teams')) {
+      return 'the relay does not route teams yet'
+    }
+  }
+  if (from.owner !== to.owner) {
+    return 'that gateway belongs to another operator'
+  }
+  return undefined
+}
+
 // The move a drop over a member asks for: join (or reorder within) that member's team, at the member's place.
-export function memberDrop(dragged: SessionRow, lead: SessionRow, member: SessionRow, zone: DropZone): TeamMove | string {
-  const refusal = teamDropRefusal(dragged, lead)
+export function memberDrop(
+  dragged: SessionRow,
+  lead: SessionRow,
+  member: SessionRow,
+  zone: DropZone,
+  relays: HostRelays = {},
+): TeamMove | string {
+  const refusal = teamDropRefusal(dragged, lead, relays)
   if (refusal) {
     return refusal
   }
@@ -48,8 +84,8 @@ export function memberDrop(dragged: SessionRow, lead: SessionRow, member: Sessio
   return placeMember(dragged, lead, others, index)
 }
 
-export function joinDrop(dragged: SessionRow, lead: SessionRow): TeamMove | string {
-  const refusal = teamDropRefusal(dragged, lead)
+export function joinDrop(dragged: SessionRow, lead: SessionRow, relays: HostRelays = {}): TeamMove | string {
+  const refusal = teamDropRefusal(dragged, lead, relays)
   if (refusal) {
     return refusal
   }

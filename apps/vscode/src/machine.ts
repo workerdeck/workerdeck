@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import type { GatewayRelayMeta } from '@workerdeck/protocol'
 import { arch, homedir, hostname, platform } from 'node:os'
 import { clientFor } from './gateway.ts'
 import { isLoopbackHost, type GatewayHost, type HostStore } from './hosts.ts'
@@ -20,6 +21,13 @@ function localMachineId(): string {
 // different box keeps its id, and the stale answer would open that box's paths as local files.
 const known = new Map<string, { baseUrl: string; local: boolean }>()
 const inFlight = new Map<string, Promise<boolean>>()
+// The relay identity rides the same `/meta` read; a team spanning two configured gateways needs both.
+const relays = new Map<string, { baseUrl: string; relay?: GatewayRelayMeta }>()
+
+export function relayOfCached(host: GatewayHost): GatewayRelayMeta | undefined {
+  const hit = relays.get(host.id)
+  return hit?.baseUrl === host.baseUrl ? hit.relay : undefined
+}
 
 function remembered(host: GatewayHost): boolean | undefined {
   const hit = known.get(host.id)
@@ -52,6 +60,7 @@ export async function refreshLocality(store: HostStore, host: GatewayHost): Prom
     try {
       const client = await clientFor(store, host)
       const meta = await client?.meta()
+      relays.set(host.id, { baseUrl: host.baseUrl, relay: meta?.relay })
       // A gateway that predates `/meta`, or answers a non-operator principal, has no fingerprint to
       // match - which is the remote answer, the one that was always taken before.
       const local = meta?.machineId !== undefined && meta.machineId === localMachineId()
@@ -69,5 +78,6 @@ export async function refreshLocality(store: HostStore, host: GatewayHost): Prom
 
 export function forgetLocality(hostId: string): void {
   known.delete(hostId)
+  relays.delete(hostId)
   inFlight.delete(hostId)
 }

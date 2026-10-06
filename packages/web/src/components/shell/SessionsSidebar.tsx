@@ -10,7 +10,7 @@ import {
   type StatusLabelInput,
   errorMessage,
 } from '@workerdeck/protocol'
-import type { WorkerDeckClient } from '@workerdeck/client'
+import { runTeamMove, type WorkerDeckClient } from '@workerdeck/client'
 import {
   AlertDialog,
   AlertDialogClose,
@@ -48,6 +48,7 @@ import { getSearchShown, setSearchShown } from '@/lib/sidebar.ts'
 import { useProjectIcons } from '@workerdeck/react'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
+import { useHostRelays } from '@/hooks/useHostRelays.ts'
 import { useViewConfig } from '@/hooks/useViewConfig.ts'
 
 export function SessionsSidebar() {
@@ -59,6 +60,7 @@ export function SessionsSidebar() {
   const activeSubagentId = useSearch({ strict: false }).subagent
   const activeShellId = useSearch({ strict: false }).shell
   const { snapshots, refresh } = useSessions()
+  const relays = useHostRelays()
   const rows = useSessionRows(snapshots)
   // `clientFor` is module scope and stable, so it is not a dependency that would re-fire the fetch.
   const projectIcons = useProjectIcons(rows, clientFor)
@@ -155,27 +157,20 @@ export function SessionsSidebar() {
 
   // Rejects with the gateway's message, which the list draws under the card it was dropped on.
   const teamMove = async (move: TeamMove) => {
-    const client = clientFor(move.row.hostId)
-    if (!client) {
-      return
-    }
     const lead = move.lead?.info.agent?.id ?? null
-    const mover = move.row.info.agent?.id
     try {
-      if (mover) {
-        await client.updateAgent(mover, lead ? { lead, ...(move.order === undefined ? {} : { order: move.order }) } : { lead: null })
-      } else if (lead) {
-        const adopted = await client.createAgent({ adopt: move.row.info.id, lead })
-        if (move.order !== undefined) {
-          await client.updateAgent(adopted.agent.id, { order: move.order })
-        }
-      }
-      for (const sibling of move.siblings ?? []) {
-        const id = sibling.row.info.agent?.id
-        if (id) {
-          await client.updateAgent(id, { order: sibling.order })
-        }
-      }
+      await runTeamMove(
+        {
+          mover: { hostId: move.row.hostId, sessionId: move.row.info.id, agentId: move.row.info.agent?.id },
+          lead: lead && move.lead ? { hostId: move.lead.hostId, agentId: lead } : null,
+          order: move.order,
+          siblings: (move.siblings ?? []).flatMap(({ row, order }) =>
+            row.info.agent ? [{ hostId: row.hostId, agentId: row.info.agent.id, order }] : [],
+          ),
+        },
+        clientFor,
+        (hostId) => relays[hostId],
+      )
     } catch (e) {
       throw new Error(errorMessage(e, lead ? 'Could not join the team' : 'Could not leave the team'), { cause: e })
     } finally {
@@ -410,6 +405,7 @@ export function SessionsSidebar() {
             onRename={rename}
             onRenameAgent={renameAgent}
             onTeamMove={teamMove}
+            relays={relays}
             avatars={avatars}
             rowActions={(row) => <SessionCardActions row={row} rows={rows} onAction={(action) => onCardAction(row, action)} />}
             emptyState={

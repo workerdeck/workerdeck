@@ -6,6 +6,7 @@ import {
   filterRows,
   groupRows,
   hasFacetFilter,
+  relayHostsOf,
   isTeamCollapsed,
   scopeActive,
   sessionKey,
@@ -14,6 +15,7 @@ import {
   toggleTeamCollapsed,
 } from '@workerdeck/protocol'
 import type {
+  HostRelays,
   SessionGroup,
   SessionRow,
   SessionState,
@@ -69,6 +71,8 @@ export interface SessionBrowserProps {
   // Makes cards draggable onto each other: the middle of a card joins its team, a member dropped outside leaves.
   // Reject with an Error to draw its message under the card.
   onTeamMove?: (move: TeamMove) => Promise<void> | void
+  // Each gateway's `GatewayMeta.relay` by host id: draws a member under a lead on another gateway, and allows the drop.
+  relays?: HostRelays
   // Draws a `+` on each project heading: start a session on that gateway, in that project's root.
   onCreateInGroup?: (target: GroupTarget) => void
   emptyState?: ReactNode
@@ -113,6 +117,7 @@ export function SessionBrowser({
   onShellAgentWrite,
   avatars,
   onTeamMove,
+  relays,
   onCreateInGroup,
   emptyState,
   showControls = true,
@@ -124,7 +129,11 @@ export function SessionBrowser({
   const rowGateways = useMemo(() => new Set(rows.map((row) => row.hostId)).size, [rows])
   const gateways = gatewayCount ?? rowGateways
   const visible = useMemo(() => filterRows(rows, config, scope), [rows, config, scope])
-  const groups = useMemo(() => groupRows(visible, config, { gatewayCount: gateways, all: rows }), [visible, config, gateways, rows])
+  const relayHosts = useMemo(() => relayHostsOf(relays ?? {}), [relays])
+  const groups = useMemo(
+    () => groupRows(visible, config, { gatewayCount: gateways, all: rows, relayHosts }),
+    [visible, config, gateways, rows, relayHosts],
+  )
   const subset = subsetSummary(config, scope, visible.length, rows.length)
   const tiles = useMemo(() => rows.some((row) => row.info.agent !== undefined), [rows])
   const custom = config.groupBy === 'custom'
@@ -134,7 +143,7 @@ export function SessionBrowser({
   const byKey = useMemo(() => new Map(rows.map((row) => [sessionKey(row), row])), [rows])
   const drag = useGroupDrag(config.customGroups ?? [], (customGroups) => set({ customGroups }), {
     custom,
-    team: onTeamMove ? { rowOf: (key) => byKey.get(key), onMove: onTeamMove } : undefined,
+    team: onTeamMove ? { rowOf: (key) => byKey.get(key), onMove: onTeamMove, relays } : undefined,
   })
   const draggable = custom || onTeamMove !== undefined
 

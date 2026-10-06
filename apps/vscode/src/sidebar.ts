@@ -1,8 +1,9 @@
 import { STATUS_LABEL_EMOJI_MAX, STATUS_LABEL_TEXT_MAX, errorMessage, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
-import type { SessionHandle, WorkerDeckClient } from '@workerdeck/client'
+import { runTeamMove, type SessionHandle, type WorkerDeckClient } from '@workerdeck/client'
 import { clientFor } from './gateway.ts'
+import { relayOfCached } from './machine.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost, SurfaceTarget } from './bridge-protocol.ts'
@@ -410,29 +411,43 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   }
 
   async #teamMove(msg: Extract<SidebarToHost, { kind: 'wd-team-move' }>): Promise<void> {
-    const sessions = this.#model.sessionsOf(msg.hostId)
-    const agentOf = (sessionId: string) => sessions.find((s) => s.id === sessionId)?.agent?.id
-    const lead = msg.leadSessionId === null ? null : agentOf(msg.leadSessionId)
+    const agentOn = (hostId: string, sessionId: string) => this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)?.agent?.id
+    const leadHostId = msg.leadHostId ?? msg.hostId
+    const lead = msg.leadSessionId === null ? null : agentOn(leadHostId, msg.leadSessionId)
     if (lead === undefined) {
       return
     }
-    const mover = agentOf(msg.sessionId)
-    await this.#agentCall(msg.hostId, lead ? 'could not join the team' : 'could not leave the team', async (client) => {
-      if (mover) {
-        await client.updateAgent(mover, lead ? { lead, ...(msg.order === undefined ? {} : { order: msg.order }) } : { lead: null })
-      } else if (lead) {
-        const adopted = await client.createAgent({ adopt: msg.sessionId, lead })
-        if (msg.order !== undefined) {
-          await client.updateAgent(adopted.agent.id, { order: msg.order })
-        }
+    const hostIds = new Set([msg.hostId, leadHostId, ...(msg.siblings ?? []).map((s) => s.hostId ?? msg.hostId)])
+    const clients = new Map<string, WorkerDeckClient>()
+    for (const id of hostIds) {
+      const host = this.#store.get(id)
+      const client = host && (await clientFor(this.#store, host))
+      if (client) {
+        clients.set(id, client)
       }
-      for (const sibling of msg.siblings ?? []) {
-        const id = agentOf(sibling.sessionId)
-        if (id) {
-          await client.updateAgent(id, { order: sibling.order })
-        }
-      }
-    })
+    }
+    try {
+      await runTeamMove(
+        {
+          mover: { hostId: msg.hostId, sessionId: msg.sessionId, agentId: agentOn(msg.hostId, msg.sessionId) },
+          lead: lead ? { hostId: leadHostId, agentId: lead } : null,
+          order: msg.order,
+          siblings: (msg.siblings ?? []).flatMap((s) => {
+            const hostId = s.hostId ?? msg.hostId
+            const agentId = agentOn(hostId, s.sessionId)
+            return agentId ? [{ hostId, agentId, order: s.order }] : []
+          }),
+        },
+        (id) => clients.get(id),
+        (id) => {
+          const host = this.#store.get(id)
+          return host ? relayOfCached(host) : undefined
+        },
+      )
+    } catch (err) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${lead ? 'could not join the team' : 'could not leave the team'} - ${errorMessage(err)}`)
+    }
+    await this.#model.refresh()
   }
 
   async #agentCall(hostId: string, failure: string, call: (client: WorkerDeckClient) => Promise<unknown>): Promise<void> {

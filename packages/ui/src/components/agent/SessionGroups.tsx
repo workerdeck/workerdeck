@@ -13,7 +13,7 @@ import {
   customGroupColor,
   PROJECT_ACCENTS,
 } from '@workerdeck/protocol'
-import type { CustomGroup, SessionGroup, SessionRow } from '@workerdeck/protocol'
+import type { CustomGroup, HostRelays, SessionGroup, SessionRow } from '@workerdeck/protocol'
 import { dropZone, joinDrop, memberDrop, type DropZone, type TeamMove } from '../../lib/team-drop.ts'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
@@ -31,6 +31,8 @@ export type TeamDrag = {
   rowOf: (key: string) => SessionRow | undefined
   // A rejection's message is drawn under the card it was dropped on: a gateway 409 is user-facing copy.
   onMove: (move: TeamMove) => Promise<void> | void
+  // Each gateway's relay identity by host id; without it a drop across gateways is refused.
+  relays?: HostRelays
 }
 
 type Over = { spot: string; refusal?: string }
@@ -98,13 +100,13 @@ export function useGroupDrag(
     const rect = e.currentTarget.getBoundingClientRect()
     const zone = dropZone(e.clientY - rect.top, rect.height)
     if (place.lead) {
-      const result = memberDrop(dragged, place.lead, place.row, zone)
+      const result = memberDrop(dragged, place.lead, place.row, zone, team.relays)
       return typeof result === 'string'
         ? { spot: `refused:${key}`, refusal: result }
         : { spot: `${zone === 'before' ? 'before' : 'after'}:${key}`, run: move(key, result) }
     }
     if (zone === 'join') {
-      const result = joinDrop(dragged, place.row)
+      const result = joinDrop(dragged, place.row, team.relays)
       if (typeof result !== 'string') {
         return { spot: `join:${key}`, run: move(key, result) }
       }

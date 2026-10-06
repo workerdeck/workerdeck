@@ -1399,6 +1399,13 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   a join is accepted only when the origin's owner (stamped by the relay from enrollment) matches.
   `relay.teams` is part of the relay link's identity, so a hot reload with edited policy dials
   fresh instead of adopting the old connection.
+- **Clients join leads across gateways through each gateway's `GatewayMeta.relay`.** `groupRows` takes
+  `relayHosts` (relay gateway name to client host id, `relayHostsOf`), and a member whose
+  `AgentRef.leadGateway` names an unconfigured gateway draws top-level. A drop across gateways is two
+  operator calls in `runTeamMove` (`@workerdeck/client`, shared by web and VS Code): invite on the
+  lead's gateway, then PATCH the qualified lead on the mover's; `teamDropRefusal` refuses it without
+  both relay identities online with `teams`, or across owners (that needs phase 5's invitation).
+  VS Code reads the relay identity on the same `/meta` poll as locality (`relayOfCached`).
 - **No team-change notice.** Telling a member it joined would be a message, and a message starts a
   paid turn on an idle session; members learn their team from `peers_list` (`agent`, `role`, `team`). `agent` (the agent's name)
   is what a model addresses by: a session's title is its topic, so `smoke:teams` failed on titles alone.

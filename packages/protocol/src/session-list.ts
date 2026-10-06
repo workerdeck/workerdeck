@@ -1,6 +1,6 @@
 import { projectAccent } from './agents.ts'
 import { SHELL_LINGER_MS, SHELL_PROMOTE_MS } from './index.ts'
-import type { SessionInfo, ShellInfo, SubagentInfo } from './index.ts'
+import type { GatewayRelayMeta, SessionInfo, ShellInfo, SubagentInfo } from './index.ts'
 
 export type SessionState = 'attention' | 'working' | 'idle' | 'ended'
 
@@ -146,7 +146,22 @@ export type SessionGroup = {
 }
 
 // `all` is the unfiltered list: a member matched by a filter pulls its lead in from there as a context row.
-export type GroupOptions = { gatewayCount?: number; all?: readonly SessionRow[] }
+// `relayHosts` maps a relay gateway name to this client's host id for it, so a member whose lead lives on another
+// configured gateway (`AgentRef.lead` = `gateway:agentId`) still draws under that lead.
+export type GroupOptions = { gatewayCount?: number; all?: readonly SessionRow[]; relayHosts?: Readonly<Record<string, string>> }
+
+export type HostRelays = Readonly<Record<string, GatewayRelayMeta | undefined>>
+
+// Each configured gateway's relay identity (from its `GatewayMeta.relay`, keyed by host id), inverted for `relayHosts`.
+export function relayHostsOf(relays: HostRelays): Record<string, string> {
+  const hosts: Record<string, string> = {}
+  for (const [hostId, relay] of Object.entries(relays)) {
+    if (relay) {
+      hosts[relay.gateway] = hostId
+    }
+  }
+  return hosts
+}
 
 export const UNGROUPED_KEY = 'custom:ungrouped'
 
@@ -336,7 +351,7 @@ function compare(a: SessionRow, b: SessionRow, sortBy: SortBy): number {
 // `gatewayCount` defaults to the gateways among `rows`; a host passing filtered rows passes the unfiltered count, so a
 // filter never renames a project heading.
 export function groupRows(rows: readonly SessionRow[], config: ViewConfig, options: GroupOptions = {}): SessionGroup[] {
-  const units = teamUnits(rows, options.all ?? rows).sort((a, b) => compare(a, b, config.sortBy))
+  const units = teamUnits(rows, options.all ?? rows, options.relayHosts ?? {}).sort((a, b) => compare(a, b, config.sortBy))
   const foldsEarlier = config.groupBy !== 'state' && config.groupBy !== 'custom'
   const earlier = foldsEarlier ? units.filter(isEarlier) : []
   const sorted = earlier.length ? units.filter((row) => !isEarlier(row)) : units
@@ -375,9 +390,17 @@ export function teamKey(row: Pick<SessionRow, 'hostId' | 'info'>): string | unde
   return agent ? `${row.hostId}:${agent.id}` : undefined
 }
 
-function leadKeyOf(row: SessionRow): string | undefined {
-  const lead = row.info.agent?.lead
-  return lead === undefined ? undefined : `${row.hostId}:${lead}`
+function leadKeyOf(row: SessionRow, relayHosts: Readonly<Record<string, string>>): string | undefined {
+  const agent = row.info.agent
+  const lead = agent?.lead
+  if (lead === undefined) {
+    return undefined
+  }
+  if (agent?.leadGateway === undefined) {
+    return `${row.hostId}:${lead}`
+  }
+  const host = relayHosts[agent.leadGateway]
+  return host === undefined ? undefined : `${host}:${lead.slice(agent.leadGateway.length + 1)}`
 }
 
 function isEarlier(row: SessionRow): boolean {
@@ -385,7 +408,7 @@ function isEarlier(row: SessionRow): boolean {
 }
 
 // A member whose lead is not in the list at all (its session gone) stays top-level rather than vanish.
-function teamUnits(rows: readonly SessionRow[], all: readonly SessionRow[]): SessionRow[] {
+function teamUnits(rows: readonly SessionRow[], all: readonly SessionRow[], relayHosts: Readonly<Record<string, string>>): SessionRow[] {
   const leads = new Map<string, SessionRow>()
   for (const row of all) {
     const key = teamKey(row)
@@ -397,7 +420,7 @@ function teamUnits(rows: readonly SessionRow[], all: readonly SessionRow[]): Ses
   const members = new Map<string, SessionRow[]>()
   const top: SessionRow[] = []
   for (const row of rows) {
-    const lead = leadKeyOf(row)
+    const lead = leadKeyOf(row, relayHosts)
     if (lead !== undefined && leads.has(lead)) {
       members.set(lead, [...(members.get(lead) ?? []), row])
     } else {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_VIEW_CONFIG,
   UNGROUPED_KEY,
+  relayHostsOf,
   addCustomGroup,
   adaptersOf,
   clearFilters,
@@ -558,6 +559,20 @@ describe('agent teams in the list', () => {
   it('leaves a member top-level when its lead is not in the list at all', () => {
     const [group] = groupRows([pip, solo], { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' })
     expect(group!.rows.map((r) => r.info.id).sort()).toEqual(['s-pip', 's-solo'])
+  })
+
+  it('draws a member on another gateway under its lead when that gateway is configured, top-level otherwise', () => {
+    const remote = {
+      ...agentRow('s-win', { id: 'W', name: 'MagWin', avatar: '/w', lead: 'sw-mac:A', leadGateway: 'sw-mac', team: 'Atlas' }),
+      hostId: 'win',
+    }
+    const rows = [lead, remote]
+    const relayHosts = relayHostsOf({ mac: { gateway: 'sw-mac', online: true, features: ['teams'] }, win: undefined })
+    const [joined] = groupRows(rows, { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' }, { relayHosts })
+    expect(joined!.rows.map((r) => r.info.id)).toEqual(['s-lead'])
+    expect(joined!.rows[0]!.members?.map((r) => `${r.hostId}:${r.info.id}`)).toEqual(['win:s-win'])
+    const [apart] = groupRows(rows, { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' })
+    expect(apart!.rows.map((r) => r.info.id).sort()).toEqual(['s-lead', 's-win'])
   })
 
   it('folds ended one-off sessions into a trailing Earlier group, except under state and custom grouping', () => {

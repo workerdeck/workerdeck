@@ -34,7 +34,24 @@ describe('teamDropRefusal', () => {
     expect(teamDropRefusal(row('pip', {}), row('juno', { lead: 'a-atlas' }))).toBe('juno is a member of a team; teams are one level deep')
     expect(teamDropRefusal(atlas, row('orbit', {}))).toBe('atlas leads a team; teams are one level deep')
     expect(teamDropRefusal(row('pip', {}), row('plain'))).toBe('only an agent can lead a team')
-    expect(teamDropRefusal(row('pip', {}), row('far', {}, { hostId: 'desk' }))).toBe('a team stays on one gateway')
+  })
+
+  it('allows a drop across gateways only when both dial a relay that routes teams, under one owner', () => {
+    const far = row('far', {}, { hostId: 'desk', hostName: 'Desk' })
+    const relay = (gateway: string, over = {}) => ({ gateway, owner: 'tobias', online: true, features: ['teams'], ...over })
+    const both = { mac: relay('sw-mac'), desk: relay('sw-desk') }
+    expect(teamDropRefusal(row('pip', {}), far)).toBe('a team spans gateways only through a relay both gateways dial')
+    expect(teamDropRefusal(row('pip', {}), far, both)).toBeUndefined()
+    expect(teamDropRefusal(row('pip', {}), far, { ...both, desk: relay('sw-desk', { online: false }) })).toBe(
+      'Desk is not connected to its relay',
+    )
+    expect(teamDropRefusal(row('pip', {}), far, { ...both, mac: relay('sw-mac', { features: [] }) })).toBe(
+      'the relay does not route teams yet',
+    )
+    expect(teamDropRefusal(row('pip', {}), far, { ...both, desk: relay('sw-desk', { owner: 'dan' }) })).toBe(
+      'that gateway belongs to another operator',
+    )
+    expect(joinDrop(row('pip', {}), far, both)).toMatchObject({ lead: { hostId: 'desk' }, order: 0 })
   })
 })
 
