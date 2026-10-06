@@ -1371,9 +1371,15 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
 - **The peers rule is `teamReaches(from.agent, to.agent)` after the scope rule**, a pure function in
   `protocol`. A member is published to the relay only when its team spans gateways
   (`AgentService.spansGateways`), and the gateway re-checks every inbound peek and send to a member
-  against the relay-stamped `origin.agent` (`teamAdmits`), so a lying relay cannot widen it. Members
-  still never reach the relay (`reachesRemote`). Refusals read as "no such session", the scope
-  rule's posture.
+  against the relay-stamped `origin.agent` (`teamAdmits`), so a lying relay cannot widen it. A member
+  reaches the relay under the same condition (`reacher` in `peer-relay.ts`), and the gateway
+  re-filters every remote row with `teamReaches` over `qualifyAgent` refs (local ids qualified with
+  the own gateway, relay rows already qualified); a member's remote send is checked against that
+  filtered list first. Refusals read as "no such session", the scope rule's posture.
+- **A peer message is captioned with the sender's agent name**, not its session title, both locally
+  and across the relay (the relay's `originOf` uses `agent.name ?? title`). Remote rows carry
+  `agent`, `role`, `team` and `owner`; a remote member's `team` is resolved from the visible lead row
+  or, when the lead is local, from this gateway's own agents.
 - **A cross-gateway edge has two halves, each written only by its own gateway** (`TeamLinks`,
   `services/team-links.ts`). The member's gateway holds `lead` as a qualified `gateway:agentId`
   plus a `remoteLead` cache; the lead's gateway holds an `accepted` entry in `remoteMembers`, which

@@ -123,6 +123,16 @@ export function teamReaches(from: AgentRef | undefined, to: AgentRef | undefined
   return true
 }
 
+// Qualifies an agent ref's ids with its gateway, so local and remote refs compare in `teamReaches`. A qualified id
+// (`gateway:agentId`) is left as it is; local agent ids are UUIDs and never contain a colon.
+export function qualifyAgent(ref: AgentRef | undefined, gateway: string): AgentRef | undefined {
+  if (ref === undefined) {
+    return undefined
+  }
+  const qualify = (id: string) => (id.includes(':') ? id : `${gateway}:${id}`)
+  return { ...ref, id: qualify(ref.id), ...(ref.lead !== undefined ? { lead: qualify(ref.lead) } : {}) }
+}
+
 export const PROJECT_ACCENTS = ['#497eae', '#8a6bb8', '#3f8f6b', '#b0794a', '#a85a6e', '#4f8f96', '#7c8a3f', '#6b72b8'] as const
 
 // A stable colour per project key (a host and root, or any string), the same on every client and the gateway.

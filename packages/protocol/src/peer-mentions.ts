@@ -22,6 +22,7 @@ export type PeerMentionToken = { start: number; end: number; body: string }
 export type PeerSessionSummary = {
   id: string
   gateway?: string
+  owner?: string
   engine?: ProfileEngine
   status: SessionStatus
   title?: string

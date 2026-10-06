@@ -1,10 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import type { PeerDirectory, PeerPeek, PeerSendResult, PeerSessionSummary } from '@workerdeck/core'
-import type { ChecklistItem } from '@workerdeck/protocol'
+import { qualifyAgent, teamReaches, type AgentRef, type ChecklistItem, type SessionInfo } from '@workerdeck/protocol'
 import {
   connectRelay,
   parseRelayPeerId,
+  type RelayAgentEntry,
   type RelayConnection,
   type RelayHost,
   type RelayOp,
@@ -78,10 +79,32 @@ function identityOf(options: RelayLinkOptions): string {
   ])
 }
 
-function remoteSummary(row: RelayPeerRow): PeerSessionSummary {
+// Ids on a relay row are already qualified by the relay.
+function remoteRef(agent: RelayAgentEntry | undefined): AgentRef | undefined {
+  return agent ? { id: agent.id, name: agent.name, ...(agent.lead !== undefined ? { lead: agent.lead } : {}) } : undefined
+}
+
+type TeamNames = { nameOf(agentId: string): string | undefined; leads: ReadonlySet<string> }
+
+function teamFields(agent: RelayAgentEntry | undefined, names: TeamNames): Pick<PeerSessionSummary, 'agent' | 'role' | 'team'> {
+  if (!agent) {
+    return {}
+  }
+  if (agent.lead !== undefined) {
+    const team = names.nameOf(agent.lead)
+    return { agent: agent.name, role: 'member', ...(team !== undefined ? { team } : {}) }
+  }
+  const leads = (agent.accepts?.length ?? 0) > 0 || names.leads.has(agent.id)
+  return leads ? { agent: agent.name, role: 'lead', team: agent.name } : { agent: agent.name }
+}
+
+const NO_NAMES: TeamNames = { nameOf: () => undefined, leads: new Set() }
+
+function remoteSummary(row: RelayPeerRow, names: TeamNames = NO_NAMES): PeerSessionSummary {
   return {
     id: `${row.gateway}:${row.id}`,
     gateway: row.gateway,
+    ...(row.owner !== undefined ? { owner: row.owner } : {}),
     engine: row.engine,
     status: row.status,
     title: row.title,
@@ -94,11 +117,12 @@ function remoteSummary(row: RelayPeerRow): PeerSessionSummary {
     lastActivityAt: row.lastActivityAt,
     pendingPermissionCount: row.pendingPermissionCount,
     allow: row.allow.filter((op) => op === 'send' || op === 'peek'),
+    ...teamFields(row.agent, names),
   }
 }
 
-function remotePeek(gateway: string, peek: RelayPeek): PeerPeek {
-  const { allow: _allow, ...summary } = remoteSummary({ ...peek, gateway, allow: [] })
+function remotePeek(gateway: string, peek: RelayPeek, names: TeamNames): PeerPeek {
+  const { allow: _allow, ...summary } = remoteSummary({ ...peek, gateway, allow: [] }, names)
   return {
     ...summary,
     live: peek.live,
@@ -171,19 +195,39 @@ export function createRelayLink(
 
   const remoteTarget = parseRelayPeerId
 
-  const reachesRemote = async (from: string): Promise<boolean> => {
+  // A scoped session never leaves its gateway; a member does only when its team spans gateways.
+  const reacher = async (from: string): Promise<SessionInfo | undefined> => {
     const me = await peers.relaySender(from)
-    return (me.scope === undefined || Object.keys(me.scope).length === 0) && me.agent?.lead === undefined
+    const scoped = me.scope !== undefined && Object.keys(me.scope).length > 0
+    return !scoped && (me.agent?.lead === undefined || peers.relaySpans(me.id)) ? me : undefined
+  }
+  const reachesRemote = async (from: string): Promise<boolean> => (await reacher(from)) !== undefined
+
+  const localName = (agentId: string): string | undefined => {
+    const target = parseRelayPeerId(agentId)
+    return target?.gateway === options.gateway ? peers.relayAgentName(target.id) : undefined
+  }
+
+  // The relay already applied the team rule; the gateway applies it again to every row, so a misbehaving relay cannot
+  // show a member anything outside its team.
+  const teamRows = async (me: SessionInfo, from: string): Promise<{ rows: RelayPeerRow[]; names: TeamNames }> => {
+    const mine = qualifyAgent(me.agent, options.gateway)
+    const rows = (await connection!.list(from)).filter((row) => teamReaches(mine, remoteRef(row.agent)))
+    const byId = new Map(rows.flatMap((row) => (row.agent ? [[row.agent.id, row.agent.name] as const] : [])))
+    const leads = new Set(rows.flatMap((row) => (row.agent?.lead !== undefined ? [row.agent.lead] : [])))
+    return { rows, names: { nameOf: (id) => byId.get(id) ?? localName(id), leads } }
   }
 
   const directory: PeerDirectory = {
     list: async (from) => {
       const local = await peers.list(from)
-      if (!connection || connection.state() !== 'online' || !(await reachesRemote(from))) {
+      const me = connection?.state() === 'online' ? await reacher(from) : undefined
+      if (!me) {
         return local
       }
       try {
-        return [...local, ...(await connection.list(from)).map(remoteSummary)]
+        const { rows, names } = await teamRows(me, from)
+        return [...local, ...rows.map((row) => remoteSummary(row, names))]
       } catch {
         return local
       }
@@ -199,22 +243,34 @@ export function createRelayLink(
       if (!target) {
         return peers.peek(from, sessionId, peekOptions)
       }
-      if (!connection || !(await reachesRemote(from))) {
+      const me = connection ? await reacher(from) : undefined
+      if (!connection || !me) {
         return undefined
       }
       const peek = await connection.peek(from, target, peekOptions?.recent)
-      return peek ? remotePeek(target.gateway, peek) : undefined
+      if (!peek || !teamReaches(qualifyAgent(me.agent, options.gateway), remoteRef(peek.agent))) {
+        return undefined
+      }
+      const names: TeamNames = { nameOf: (id) => localName(id), leads: new Set() }
+      return remotePeek(target.gateway, peek, names)
     },
     send: async (from, sessionId, text, sendOptions): Promise<PeerSendResult> => {
       const target = remoteTarget(sessionId)
       if (!target) {
         return peers.send(from, sessionId, text, sendOptions)
       }
-      if (!(await reachesRemote(from))) {
+      const me = await reacher(from)
+      if (!me) {
         return { delivered: false, reason: `no such session: ${sessionId}` }
       }
       if (!connection || connection.state() !== 'online') {
         return { delivered: false, reason: 'remote gateways are unavailable right now; try again later' }
+      }
+      if (me.agent?.lead !== undefined) {
+        const { rows } = await teamRows(me, from).catch(() => ({ rows: [] as RelayPeerRow[] }))
+        if (!rows.some((row) => row.gateway === target.gateway && row.id === target.id)) {
+          return { delivered: false, reason: `no such session: ${sessionId}` }
+        }
       }
       try {
         const result = await connection.send(from, target, text, sendOptions?.hops ?? peers.relayChain(from))

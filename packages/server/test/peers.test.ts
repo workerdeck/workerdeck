@@ -274,6 +274,7 @@ describe('peer service: teams', () => {
       teams: {
         relayAgent: (id) => (refs[id] ? { id: refs[id].id, name: refs[id].name, ...(refs[id].lead ? { lead: refs[id].lead } : {}) } : undefined),
         spansGateways: (id) => spanning.includes(id),
+        agentName: (id) => Object.values(refs).find((ref) => ref.id === id)?.name,
       },
     })
     for (const id of [...Object.keys(refs), 'plain']) {

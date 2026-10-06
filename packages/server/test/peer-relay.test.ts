@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { runPeerTool } from '@workerdeck/core'
 import { enrollGateway, startRelay, type Relay } from '@workerdeck/relay'
 import { createRelayLink, type RelayLink, type RelayLinkOptions } from '../src/services/peer-relay.ts'
-import { createPeerService } from '../src/services/peers.ts'
+import { createPeerService, resolvePeerMentions } from '../src/services/peers.ts'
 import { ProjectInfoService } from '../src/services/project-info.ts'
 import { SessionRegistry } from '../src/services/registry.ts'
 import type { AgentRef } from '@workerdeck/protocol'
@@ -45,12 +45,25 @@ async function gateway(
   runners: PeerRunner[],
   expose?: RelayLinkOptions['expose'],
   agents: Record<string, AgentRef> = {},
+  teams: { accepts?: Record<string, string[]>; spans?: string[] } = {},
 ) {
   const key = await enrollGateway(stateDir, name)
   await relay.reload()
   const registry = new SessionRegistry()
   const projects = new ProjectInfoService({ decorate: (info) => (agents[info.id] ? { ...info, agent: agents[info.id] } : info) })
-  const service = createPeerService({ refs: { registry }, projects })
+  const service = createPeerService({
+    refs: { registry },
+    projects,
+    teams: {
+      relayAgent: (id) => {
+        const ref = agents[id]
+        const accepts = teams.accepts?.[id]
+        return ref ? { id: ref.id, name: ref.name, ...(ref.lead ? { lead: ref.lead } : {}), ...(accepts ? { accepts } : {}) } : undefined
+      },
+      spansGateways: (id) => teams.spans?.includes(id) === true,
+      agentName: (agentId) => Object.values(agents).find((ref) => ref.id === agentId)?.name,
+    },
+  })
   registry.observe((runner) => service.watch(runner))
   for (const runner of runners) {
     registry.register(runner)
@@ -58,7 +71,9 @@ async function gateway(
   const link: RelayLink = createRelayLink({ url: relay.url, gateway: name, key, expose }, service, () => {})
   cleanups.push(() => link.close())
   const published = runners.filter(
-    (runner) => (!expose?.scope || runner.scope?.team === expose.scope.team) && agents[runner.id]?.lead === undefined,
+    (runner) =>
+      (!expose?.scope || runner.scope?.team === expose.scope.team) &&
+      (agents[runner.id]?.lead === undefined || teams.spans?.includes(runner.id) === true),
   ).length
   await until(() => relay.status().gateways.find((row) => row.name === name)?.sessions === published, `${name} published`)
   return link
@@ -126,6 +141,65 @@ describe('peer relay link', () => {
     expect(await mac.directory.send('member', 'pi:b1', 'hi')).toEqual({ delivered: false, reason: 'no such session: pi:b1' })
     expect((await mac.directory.list('lead')).map((row) => row.id)).toEqual(['member', 'pi:b1'])
     expect((await pi.directory.list('b1')).map((row) => row.id)).toEqual(['mac:lead'])
+  })
+
+  it('lets a team span gateways: a member reaches its lead and nothing else, and only team rows reach the member', async () => {
+    const { relay, stateDir } = await relayRig()
+    const leadRunner = new PeerRunner('lead', { title: 'Planning' })
+    const memberRunner = new PeerRunner('member', { title: 'Windows build' })
+    const outsiderRunner = new PeerRunner('outsider')
+    const mac = await gateway(
+      relay,
+      stateDir,
+      'mac',
+      [leadRunner, new PeerRunner('plain')],
+      undefined,
+      { lead: { id: 'L', name: 'AC-Lead', leads: true } },
+      { accepts: { lead: ['win:M'] } },
+    )
+    const win = await gateway(
+      relay,
+      stateDir,
+      'win',
+      [memberRunner, new PeerRunner('wplain')],
+      undefined,
+      { member: { id: 'M', name: 'MagWin', lead: 'mac:L', team: 'AC-Lead' } },
+      { spans: ['member'] },
+    )
+    const pi = await gateway(
+      relay,
+      stateDir,
+      'pi',
+      [outsiderRunner, new PeerRunner('faker')],
+      undefined,
+      { faker: { id: 'F', name: 'Faker', lead: 'mac:L' } },
+      { spans: ['faker'] },
+    )
+    const ids = async (link: RelayLink, from: string) => (await link.directory.list(from)).map((row) => row.id).sort()
+
+    expect(await ids(win, 'member')).toEqual(['mac:lead'])
+    expect((await win.directory.list('member'))[0]).toMatchObject({ agent: 'AC-Lead', role: 'lead', team: 'AC-Lead' })
+    expect((await mac.directory.list('lead')).find((row) => row.id === 'win:member')).toMatchObject({
+      agent: 'MagWin',
+      role: 'member',
+      team: 'AC-Lead',
+    })
+    expect(await ids(mac, 'plain')).toEqual(['lead', 'pi:outsider', 'win:wplain'])
+    expect(await ids(win, 'wplain')).toEqual(['mac:lead', 'mac:plain', 'pi:outsider'])
+    expect(await ids(pi, 'outsider')).toEqual(['mac:lead', 'mac:plain', 'win:wplain'])
+    expect(await ids(pi, 'faker')).toEqual([])
+
+    expect(resolvePeerMentions(await win.directory.list('member'), 'ask #AC-Lead')).toMatchObject([{ id: 'mac:lead', name: 'AC-Lead' }])
+    expect((await win.directory.send('member', 'mac:lead', 'built')).delivered).toBe(true)
+    expect(leadRunner.sent[0]!.options?.origin).toMatchObject({ sessionId: 'win:member', name: 'MagWin' })
+    expect((await mac.directory.send('lead', 'win:member', 'thanks')).delivered).toBe(true)
+    expect(await win.directory.send('member', 'mac:plain', 'hi')).toEqual({ delivered: false, reason: 'no such session: mac:plain' })
+    expect(await win.directory.send('member', 'pi:outsider', 'hi')).toEqual({ delivered: false, reason: 'no such session: pi:outsider' })
+    expect(await pi.directory.send('outsider', 'win:member', 'hi')).toEqual({ delivered: false, reason: 'no such session: win:member' })
+    expect(await pi.directory.send('faker', 'win:member', 'hi')).toEqual({ delivered: false, reason: 'no such session: win:member' })
+    expect(await mac.directory.peek('plain', 'win:member')).toBeUndefined()
+    expect(memberRunner.sent.map((sent) => sent.text)).toEqual(['thanks'])
+    expect(outsiderRunner.sent).toEqual([])
   })
 
   it('says remote gateways are unavailable instead of failing when the relay is gone', async () => {

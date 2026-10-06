@@ -236,6 +236,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
               const agent = agents.bySession(sessionId)
               return agent !== undefined && agents.spansGateways(agent)
             },
+            agentName: (agentId) => agents.get(agentId)?.name,
           },
           options: options.peers,
         })

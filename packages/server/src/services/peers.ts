@@ -40,6 +40,7 @@ export type PeerServiceOptions = {
 export type PeerAgentTeams = {
   relayAgent(sessionId: string): RelayAgentEntry | undefined
   spansGateways(sessionId: string): boolean
+  agentName(agentId: string): string | undefined
 }
 
 export type PeerServiceDeps = {
@@ -80,6 +81,8 @@ export type PeerService = PeerDirectory & {
   // answers an inbound request, whatever the relay asks.
   relaySender(from: string): Promise<SessionInfo>
   relayChain(from: string): string[]
+  relaySpans(sessionId: string): boolean
+  relayAgentName(agentId: string): string | undefined
   relayEntries(exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]>
   relayPeek(
     origin: RelayOrigin,
@@ -225,7 +228,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       return { delivered: false, reason: `no such session: ${sessionId}` }
     }
     const hops = [...(options?.hops ?? inbound.get(from) ?? []), from]
-    return deliver(target, text, { kind: 'peer', sessionId: from, name: me.title, engine: me.engine, hops }, from)
+    return deliver(target, text, { kind: 'peer', sessionId: from, name: me.agent?.name ?? me.title, engine: me.engine, hops }, from)
   }
 
   const deliver = async (target: SessionInfo, text: string, origin: MessageOrigin, rateKey: string): Promise<PeerSendResult> => {
@@ -338,6 +341,8 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     watch,
     relaySender: sender,
     relayChain: (from) => [...(inbound.get(from) ?? []), from],
+    relaySpans: (sessionId) => deps.teams?.spansGateways(sessionId) === true,
+    relayAgentName: (agentId) => deps.teams?.agentName(agentId),
     relayEntries,
     relayPeek,
     relaySend,
