@@ -34,6 +34,7 @@ export type PeerSessionSummary = {
   lastActivityAt?: number
   pendingPermissionCount: number
   allow?: Array<'send' | 'peek'>
+  agent?: string
   role?: 'lead' | 'member'
   team?: string
 }

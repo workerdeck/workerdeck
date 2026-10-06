@@ -296,13 +296,15 @@ export function peerSummary(info: SessionInfo): PeerSessionSummary {
   }
 }
 
-function teamFields(info: SessionInfo): Pick<PeerSessionSummary, 'role' | 'team'> {
+function teamFields(info: SessionInfo): Pick<PeerSessionSummary, 'agent' | 'role' | 'team'> {
+  const agent = info.agent?.name
+  const named = agent === undefined ? {} : { agent }
   const role = teamRole(info.agent)
   if (role === undefined) {
-    return {}
+    return named
   }
   const team = role === 'member' ? info.agent?.team : info.agent?.name
-  return team === undefined ? { role } : { role, team }
+  return team === undefined ? { ...named, role } : { ...named, role, team }
 }
 
 // The lines a person would skim to answer "how far along is it": the peer's own prose plus the prompts that drove it,

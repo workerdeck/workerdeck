@@ -278,11 +278,13 @@ describe('peer service: teams', () => {
     expect(await service.peek('otherMember', 'm1')).toBeUndefined()
   })
 
-  it('names the role and team on each row', async () => {
+  it('names the agent, role and team on each row', async () => {
     const rows = await teamRig().list('lead')
-    expect(rows.find((row) => row.id === 'm1')).toMatchObject({ role: 'member', team: 'Atlas' })
-    expect(rows.find((row) => row.id === 'otherLead')).toMatchObject({ role: 'lead', team: 'Orbit' })
+    expect(rows.find((row) => row.id === 'm1')).toMatchObject({ agent: 'Pip', role: 'member', team: 'Atlas' })
+    expect(rows.find((row) => row.id === 'otherLead')).toMatchObject({ agent: 'Orbit', role: 'lead', team: 'Orbit' })
+    expect(rows.find((row) => row.id === 'solo')).toMatchObject({ agent: 'Marlow' })
     expect(rows.find((row) => row.id === 'plain')).not.toHaveProperty('role')
+    expect(rows.find((row) => row.id === 'plain')).not.toHaveProperty('agent')
   })
 
   it('never publishes a member to the relay', async () => {

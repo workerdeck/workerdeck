@@ -13,6 +13,7 @@ Things `pnpm test` deliberately cannot check. Run these by hand.
 | Attach bytes | `pnpm smoke:attach <host> <sessionId> [truncate] [refs]` | No |
 | APNs push | `pnpm smoke:push <host> [sessionId]` | No, but it rings a real phone |
 | Cross-gateway peers (relay) | `pnpm smoke:relay` (models via `WD_SMOKE_CLAUDE_MODEL` / `WD_SMOKE_CODEX_MODEL`, default `haiku` / `gpt-5.6-luna`) | **Yes, a few short turns on each engine** |
+| Agent teams (peers rule, brief as instructions) | `pnpm smoke:teams` (same model env vars as `smoke:relay`) | **Yes, a few short turns: three claude, one codex** |
 | Agent context reset | `pnpm smoke:context-reset [claude\|codex\|all]` (codex model as an extra `gpt-*` arg) | **Yes, two short turns per engine** |
 | Restart, end to end | `pnpm smoke:restart [claude\|codex] [clear] [noprofile] [swept] [all]` | **Yes, two short turns** |
 

@@ -1346,7 +1346,8 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   `protocol`. Members are also never published to the relay (`relayable`) and never reach it
   (`reachesRemote`). Refusals read as "no such session", the scope rule's posture.
 - **No team-change notice.** Telling a member it joined would be a message, and a message starts a
-  paid turn on an idle session; members learn their team from `peers_list` (`role`, `team`).
+  paid turn on an idle session; members learn their team from `peers_list` (`agent`, `role`, `team`). `agent` (the agent's name)
+  is what a model addresses by: a session's title is its topic, so `smoke:teams` failed on titles alone.
 - **Sleep defaults on for agents.** `EngineSleepTimers` takes `afterMsFor` (the agent's
   `sleepAfterMs`, default 15 min) over the gateway's `afterMs`, and so watches every sleepable runner
   even when the gateway default is 0.
