@@ -1457,7 +1457,10 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   window, iOS (phase 5 not started; the phone ignores `agent`).
 
 
-  **3.6.0** - **status label, avatar change and packs, released 2026-10-06** (tag `v3.6.0`). A
+  **3.6.1** - **status label, avatar change and packs, released 2026-10-06** (tag `v3.6.1`).
+  **`v3.6.0` is a pushed but never-published tag**: its CI gate failed on a new server test that
+  read the dormant record before the file existed (a race CI hit, local runs did not); never
+  publish it. 3.6.1 is the same content with that test fixed. A
   **minor**, protocol stays **1** (`SessionInfo.statusLabel`, the `status_label` event,
   `UpdateSessionRequest.statusLabel`, `AgentRef.avatar` gaining `?v=` are all additive). Ships:
   `set_status` on every engine (event-log folded, cleared by a reset, kept by the dormant record),

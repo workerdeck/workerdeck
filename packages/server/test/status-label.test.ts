@@ -72,7 +72,7 @@ describe('status label', () => {
     expect(set.body.session.statusLabel).toMatchObject({ text: 'waiting on CI', emoji: '⏳' })
     expect((await call(first.base, `/sessions/${id}`, 'PATCH', { statusLabel: { text: 'x'.repeat(81) } })).status).toBe(400)
 
-    await until(async () => (await readFile(join(dir, `${id}.json`), 'utf8')).includes('waiting on CI'))
+    await until(async () => (await readFile(join(dir, `${id}.json`), 'utf8').catch(() => '')).includes('waiting on CI'))
     await first.server.close()
     const second = await startGateway(dir)
     const listed = await call<{ sessions: SessionInfo[] }>(second.base, '/sessions')
