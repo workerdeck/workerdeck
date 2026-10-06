@@ -13,6 +13,7 @@ import type {
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
+import type { AvatarDirectory } from './lib/avatar-tool.ts'
 import type { ContextResetDirectory } from './lib/context-reset.ts'
 import type { CostLedgerState } from './lib/cost-ledger.ts'
 import type { SessionInstructions } from './lib/instructions.ts'
@@ -30,6 +31,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   instructions?: SessionInstructions
   defaultApprovalTimeoutMs?: number | null
   peers?: PeerDirectory
+  // Set by the gateway only on an agent's session where it draws avatars; its presence is what offers `change_avatar`.
+  avatar?: AvatarDirectory
   // Set by the gateway only where the agent may reset its own context; its presence is what offers `context_reset`.
   contextReset?: ContextResetDirectory
   shells?: ShellDirectory

@@ -1396,6 +1396,13 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   when the provider has no busy animation; monkey has one since 0.3.0. The pack PNG is ~1 MB, so
   it loads lazily. The art is CC BY 4.0 (`@monkeyart/packs` carries `LICENSE-ART`): credit it
   wherever it is shown.
+- **Changing an avatar is a new seed** (`POST /agents/:id/avatar { seed? }`, random without one;
+  `GET /agents/:id/avatar-preview.png?seed=` renders a candidate without saving). The seed also
+  versions the address (`avatar.png?v=<sha1>`, absent while the seed is still the agent id), because
+  every client cache is keyed by `AgentRef.avatar`; the image itself is served `no-cache` and
+  revalidated by `ETag`, since the bare route is stable per agent. The agent's `change_avatar` tool
+  is stamped only on an agent's session (`BuildOptions.agent` on create, `agents.bySession` on every
+  rebuild), so an adopted session gets it at its next wake, not at once.
 
 ## Relay (cross-gateway peers)
 

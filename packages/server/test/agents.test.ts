@@ -227,6 +227,40 @@ describe('agents', () => {
     expect(avatars.rolls).toBe(1)
   })
 
+  it('changes the avatar to a previewed seed or a random one, under a new address', async () => {
+    const { base } = await startGateway()
+    const origin = base.replace(/\/v1$/, '')
+    const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
+    const before = (await fetch(origin + agent.avatar)).headers.get('etag')
+    const preview = await fetch(`${base}/agents/${agent.id}/avatar-preview.png?seed=otter`)
+    expect(preview.status).toBe(200)
+    const chosen = await call<AgentResponse>(base, `/agents/${agent.id}/avatar`, 'POST', { seed: 'otter' })
+    expect(chosen.status).toBe(200)
+    expect(chosen.body.agent.avatar).toMatch(new RegExp(`^/v1/agents/${agent.id}/avatar\\.png\\?v=[0-9a-f]{10}$`))
+    const after = await fetch(origin + chosen.body.agent.avatar)
+    expect(after.headers.get('etag')).toBe(preview.headers.get('etag'))
+    expect(after.headers.get('etag')).not.toBe(before)
+    expect(after.headers.get('cache-control')).toBe('private, no-cache')
+    const random = await call<AgentResponse>(base, `/agents/${agent.id}/avatar`, 'POST', {})
+    expect(random.body.agent.avatar).not.toBe(chosen.body.agent.avatar)
+    expect((await call(base, `/agents/${agent.id}/avatar`, 'POST', { seed: 'x'.repeat(65) })).status).toBe(400)
+    expect((await fetch(`${base}/agents/${agent.id}/avatar-preview.png`)).status).toBe(400)
+  })
+
+  it('offers change_avatar to an agent session only, and the tool rolls a new avatar', async () => {
+    const { base, harness } = await startGateway()
+    const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
+    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    const servers = (harness.captured.options?.mcpServers ?? {}) as Record<string, { instance: unknown }>
+    const tools = (servers.workerdeck!.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>)['_registeredTools']!
+    expect(Object.keys(tools)).toContain('change_avatar')
+    const out = (await tools.change_avatar!.handler({ seed: 'heron' }, {})) as { content: { text: string }[]; isError?: boolean }
+    expect(out.isError).toBeFalsy()
+    expect(out.content[0]!.text).toMatch(/avatar is changed/)
+    const listed = (await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents.find((a) => a.id === agent.id)!
+    expect(listed.avatar).not.toBe(agent.avatar)
+  })
+
   it('serves the busy animation as one strip with its frame durations', async () => {
     const { base } = await startGateway()
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body

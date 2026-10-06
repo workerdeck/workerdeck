@@ -166,6 +166,20 @@ export class WorkerDeckClient {
     return await this.#call('DELETE', this.#agent(id), request)
   }
 
+  // A new avatar for the agent: `seed` picks a known one (a preview's), none rolls a random one.
+  async changeAgentAvatar(id: string, seed?: string): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/avatar'), seed === undefined ? {} : { seed })
+  }
+
+  agentAvatarPreviewUrl(id: string, seed: string): string {
+    return `${this.#options.baseUrl}${this.#agent(id, `/avatar-preview.png?seed=${encodeURIComponent(seed)}`)}`
+  }
+
+  async agentAvatarPreview(id: string, seed: string): Promise<Blob> {
+    const res = await this.#callRaw(this.agentAvatarPreviewUrl(id, seed), { headers: { ...this.#options.headers } }, 'avatar preview request failed')
+    return await res.blob()
+  }
+
   agentAvatarUrl(id: string, busy = false): string {
     return `${this.#options.baseUrl}${this.#agent(id, busy ? '/avatar-busy.png' : '/avatar.png')}`
   }

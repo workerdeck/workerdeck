@@ -7,6 +7,7 @@ import {
   LogOut,
   MessageSquareText,
   MoreHorizontal,
+  Smile,
   Pencil,
   RotateCcw,
   Trash2,
@@ -19,6 +20,7 @@ import {
 export type CardAction =
   | { kind: 'rename' }
   | { kind: 'status' }
+  | { kind: 'avatar' }
   | { kind: 'clear' }
   | { kind: 'sleep' }
   | { kind: 'close' }
@@ -111,6 +113,11 @@ export function SessionCardActions({
           <Item icon={<MessageSquareText />} onClick={() => onAction({ kind: 'status' })}>
             {row.info.statusLabel ? 'Change status' : 'Set status'}
           </Item>
+          {agent?.avatar ? (
+            <Item icon={<Smile />} onClick={() => onAction({ kind: 'avatar' })}>
+              Change avatar
+            </Item>
+          ) : null}
           <MenuSeparator />
           {agent ? null : (
             <Item icon={<UserPlus />} onClick={() => onAction({ kind: 'adopt' })}>

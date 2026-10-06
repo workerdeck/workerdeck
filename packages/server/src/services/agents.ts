@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   AGENT_SLEEP_AFTER_MS_DEFAULT,
   agentRef,
@@ -132,7 +132,12 @@ export class AgentService {
 
   public(agent: StoredAgent): AgentInfo {
     const { avatarSeed: _seed, avatarRecipe: _recipe, avatar: _avatar, ...info } = agent
-    return this.#avatars ? { ...info, avatar: `${this.#basePath}/agents/${agent.id}/avatar.png` } : info
+    if (!this.#avatars) {
+      return info
+    }
+    // Versioned by the seed, so a changed avatar is a new address to every client cache keyed by it.
+    const version = agent.avatarSeed === agent.id ? '' : `?v=${createHash('sha1').update(agent.avatarSeed).digest('hex').slice(0, 10)}`
+    return { ...info, avatar: `${this.#basePath}/agents/${agent.id}/avatar.png${version}` }
   }
 
   draft(input: { name?: unknown; config?: unknown; lead?: unknown }): StoredAgent | AgentRefusal {

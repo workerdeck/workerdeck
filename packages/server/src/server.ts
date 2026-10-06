@@ -3,15 +3,17 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { Duplex } from 'node:stream'
 import { WebSocketServer } from 'ws'
 import {
+  avatarDirectoryHandle,
   contextResetDirectoryHandle,
   getEngineAdapter,
+  installAvatarDirectory,
   installContextResetDirectory,
   installPeerDirectory,
   installShellDirectory,
   peerDirectoryHandle,
   shellDirectoryHandle,
 } from '@workerdeck/core'
-import type { EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
+import type { AvatarDirectory, EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
 import { mergePricing, type CreateSessionRequest, type ProfileEngine } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
@@ -20,6 +22,7 @@ import { httpErrorStatus, json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
+import { rerollAvatar } from './routes/agents.ts'
 import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
@@ -147,6 +150,20 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       : new ContextResetService({ ...options.agentContextReset, onError: (error) => diagnose(error, 'context-reset') })
   let ownContextResets = contextResets
   installContextResetDirectory(contextResets)
+  const avatarChanges: AvatarDirectory | undefined = options.avatars
+    ? {
+        change: async (sessionId, seed) => {
+          const agent = agents.bySession(sessionId)
+          if (!agent) {
+            throw new Error('only an agent has an avatar, and this session is not one')
+          }
+          await rerollAvatar(ctx, agent, seed)
+          return seed ? `Your avatar is changed (seed "${seed}"); the human sees it beside your name now.` : 'Your avatar is changed; the human sees it beside your name now.'
+        },
+      }
+    : undefined
+  let ownAvatarChanges = avatarChanges
+  installAvatarDirectory(avatarChanges)
   // Built first because everything else holds it. The watchers it attaches read the later-built services only when
   // a runner registers, which no code path does before this function returns.
   const registry = new SessionRegistry({
@@ -244,6 +261,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     parking,
     bridge,
     agentBrief: (sessionId) => agents.briefFor(sessionId),
+    avatar: avatarChanges
+      ? { directory: avatarDirectoryHandle(() => ownAvatarChanges), isAgent: (sessionId) => sessionId !== undefined && agents.bySession(sessionId) !== undefined }
+      : undefined,
   })
 
   const availability = new AvailabilityTracker({
@@ -359,6 +379,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       ownShells = undefined
       contextResets?.close()
       ownContextResets = undefined
+      ownAvatarChanges = undefined
     },
   })
 

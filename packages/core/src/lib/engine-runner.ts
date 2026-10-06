@@ -133,6 +133,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
     return {
       report: () => this.sessionReport(),
       status: (input) => this.setStatusLabel(input),
+      avatar: this.config.avatar,
       reset: this.config.contextReset,
       peers: this.config.peers,
       shells: this.config.shells,

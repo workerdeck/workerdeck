@@ -37,6 +37,7 @@ import {
   toast,
   type GroupTarget,
 } from '@workerdeck/ui'
+import { AvatarDialog } from '@/components/AvatarDialog.tsx'
 import { ChevronDown, Layers, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
 import { CreateSessionDialog } from '@/views/SessionsView.tsx'
 import { NewAgentDialog } from '@/components/NewAgentDialog.tsx'
@@ -69,6 +70,7 @@ export function SessionsSidebar() {
   const [creatingAgent, setCreatingAgent] = useState(false)
   const [renaming, setRenaming] = useState<SessionRow>()
   const [labeling, setLabeling] = useState<SessionRow>()
+  const [avatarFor, setAvatarFor] = useState<SessionRow>()
   const [retiring, setRetiring] = useState<SessionRow>()
   // Kept after close so the dialog does not re-render against another gateway while it fades out.
   const [target, setTarget] = useState<Partial<GroupTarget>>({})
@@ -224,6 +226,10 @@ export function SessionsSidebar() {
       }
       case 'status': {
         setLabeling(row)
+        break
+      }
+      case 'avatar': {
+        setAvatarFor(row)
         break
       }
       case 'clear': {
@@ -440,6 +446,8 @@ export function SessionsSidebar() {
         }}
         onOneOff={(next) => startCreate({ hostId: next.hostId, cwd: next.cwd })}
       />
+
+      <AvatarDialog row={avatarFor} onClose={() => setAvatarFor(undefined)} onChanged={() => void refresh()} />
 
       <StatusDialog
         row={labeling}

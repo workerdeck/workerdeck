@@ -8,6 +8,7 @@ import type { PeerDirectory } from '../../lib/peers.ts'
 import type { ShellDirectory } from '../../lib/shells.ts'
 import type { SessionReportSource } from '../../lib/session-report.ts'
 import type { StatusLabelSink } from '../../lib/status-label.ts'
+import type { AvatarDirectory } from '../../lib/avatar-tool.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 
 export type ToolTrust = 'sandboxed' | 'authoritative'
@@ -38,6 +39,7 @@ export type ToolContextOptions = {
   selfId?: () => string
   report?: SessionReportSource
   status?: StatusLabelSink
+  avatar?: AvatarDirectory
 }
 
 export type ToolContext = {
@@ -119,6 +121,7 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
     {
       report: options.report,
       status: options.status,
+      avatar: options.avatar,
       reset: options.contextReset,
       peers: options.peers,
       shells: options.shells,

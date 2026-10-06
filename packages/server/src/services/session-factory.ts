@@ -9,6 +9,7 @@ import {
 } from '@workerdeck/protocol'
 import { composeInstructions } from '@workerdeck/core'
 import type {
+  AvatarDirectory,
   ContextResetDirectory,
   EngineAdapter,
   PeerDirectory,
@@ -46,9 +47,11 @@ export type SessionFactoryDeps = {
   parking: SessionParkManager
   bridge: BridgeHub
   agentBrief?: (sessionId: string | undefined) => string | undefined
+  avatar?: { directory: AvatarDirectory; isAgent: (sessionId: string | undefined) => boolean }
 }
 
-export type BuildOptions = { brief?: string }
+// `agent` marks a create the agent is bound to only after the runner exists, as `brief` does for its brief.
+export type BuildOptions = { brief?: string; agent?: boolean }
 
 // A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
 // door passes it beside the request instead, because the host's hook and a job record see only the wire type.
@@ -245,6 +248,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       ...(deps.pricing ? { pricing: deps.pricing } : {}),
     }
     delete config.contextReset
+    delete config.avatar
     delete config.shells
     delete config.shellAgentWrite
     delete config.effortDefaults
@@ -261,6 +265,9 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
       if (write !== 'read-only' && built.createdByOperator === true) {
         config.shellAgentWrite = write
       }
+    }
+    if (deps.avatar && (options?.agent === true || deps.avatar.isAgent(id ?? restore?.id))) {
+      config.avatar = deps.avatar.directory
     }
     const brief = options?.brief ?? deps.agentBrief?.(id ?? restore?.id)
     if (brief) {

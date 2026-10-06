@@ -52,5 +52,7 @@ turns it off), the VS Code setting `workerdeck.host.agentSleepAfterMinutes`, or 
 
 ## Avatars
 
-The `workerdeck` CLI draws avatars with monkeyart (art under CC BY 4.0). A gateway embedded
-without an avatar provider sends no `avatar`, and every client draws an engine tile instead.
+The `workerdeck` CLI draws avatars with monkeyart (art under CC BY 4.0). *Change avatar* in a card's
+menu shows a few candidates to pick from, and an agent can give itself a new one with the
+`change_avatar` tool. A gateway embedded without an avatar provider sends no `avatar`, and every
+client draws an engine tile instead.
