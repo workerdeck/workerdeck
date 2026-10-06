@@ -118,6 +118,36 @@ per generation (old module graphs stay reachable from live closures), which is w
 loop and not a deployment strategy. The invariants that bite are in
 [GOTCHAS.md](./GOTCHAS.md) under Hot reload.
 
+## Safe restarts across the fleet
+
+Tobias's dev gateway hosts other projects' agents, and the decks (mini, MAGWIN) host more. A hot
+reload ends every running PTY shell and in-flight `shell_run` / bash command in every session on
+that gateway; a restart also ends every turn. The WorkerDeck lead agent (WD-Lead) coordinates
+these, and **only with Tobias's approval**. The procedure, run before any reload or restart:
+
+1. **Inventory.** `peers_list` shows every session on this gateway and, through the relay, the
+   others. `peers_peek` each one that matters: `status` says whether a turn runs, but an idle
+   session can still own a long-running shell (a dev server, a build), so read its recent lines.
+2. **Ask to pause.** `peers_send` to each session that is running or owns a shell: say what is
+   about to restart and what will die with it, ask it to reach a safe stopping point, write its
+   handoff (including how to bring back anything that dies), and reply "paused". Message a team's
+   **lead** only; it pauses its members. Do not ask an idle session with nothing live.
+3. **Wait for every "paused".** Replies arrive as peer messages. Record each one's bring-back
+   steps (e.g. which dev server to restart in which shell) so they can be handed to Tobias.
+   A "paused" does not stay true: a session that runs `context_reset` wakes on its queued prompt
+   and starts working again, so ask agents to pause rather than reset, and treat a planned reset
+   as not paused yet. A peer message wakes an idle session too, so tell paused agents to send
+   nothing to each other (not even an ack) until the restart is over.
+4. **Remote decks first.** Upgrade and restart them per gitignored `_docs/CONSUMERS.md`; their
+   `npm run restart` runs `workerdeck guard` first, which counts turns but not shells (open
+   follow-up), so step 2 still applies there.
+5. **Re-run `peers_list` immediately before reporting**; every session must be idle. Members of
+   other teams are not in your list (`teamReaches`), so for them you have only their lead's word;
+   say so.
+6. **Report to Tobias** that the fleet is paused, with the bring-back steps, and let him do the
+   laptop restart or approve the reload himself. Never send SIGUSR2 or restart the laptop gateway
+   on your own.
+
 ## Testing
 
 `pnpm test` - core: fake `queryFn` harness (no CLI spawn) + a scripted JSON-RPC peer

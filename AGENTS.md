@@ -70,6 +70,9 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
   sessions and their engine children through the swap; a restart kills every turn in flight and
   dormancy brings the session back idle. `docs/DEVELOPMENT.md` §Hot reload, invariants in
   `docs/GOTCHAS.md` §Hot reload.
+- **Before any reload or restart, pause the fleet.** The lead agent checks every peer session and
+  asks those with live turns or shells to pause, then reports to Tobias, who approves the reload
+  or does the restart. Procedure in `docs/DEVELOPMENT.md` §Safe restarts across the fleet.
 - **Read `pnpm lint`'s warnings; never grep it for `error`.** `wd/max-comment-lines` reports as a
   warning by design, so an error-only filter reports clean while it fires. `pnpm lint:changed`
   escalates the two comment rules to failures on changed files only, and a `PostToolUse` hook
