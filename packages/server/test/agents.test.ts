@@ -197,7 +197,7 @@ describe('agents', () => {
     expect(first.status).toBe(200)
     expect(first.headers.get('content-type')).toBe('image/png')
     const bytes = new Uint8Array(await first.arrayBuffer())
-    expect([...bytes.slice(1, 4)].map((c) => String.fromCharCode(c)).join('')).toBe('PNG')
+    expect(String.fromCharCode(...bytes.subarray(1, 4))).toBe('PNG')
     const etag = first.headers.get('etag')!
     expect((await fetch(url, { headers: { 'if-none-match': etag } })).status).toBe(304)
     expect((await fetch(url)).headers.get('etag')).toBe(etag)

@@ -482,6 +482,12 @@ misalignment.
 
 ### Overflow menu, rename & theme colours
 
+**Agents.** `workerdeck.newAgent` (the person icon in the Sessions title) runs the New Session flow
+and then asks for a name and a brief (`createAgent` in `new-session.ts`). Team verbs live in the
+card's `⋯` QuickPick (`#teamItems` in `sidebar.ts`): Make agent (adopt), Add to team, Leave team,
+Dissolve team, New conversation (restart), Retire. Avatars are fetched host-side by
+`AgentAvatarCache` and posted as `wd-agent-avatars`. Not yet: drag to join, avatar editor tabs.
+
 What is left extension-shaped after the card moved out is exactly **two** things, and they are the
 two `SessionItem` takes as props. First, **the overflow is a native menu**: the two hover actions
 became one always-visible `⋯` in the card's `actions` slot (`CardMenu`, which posts

@@ -400,6 +400,15 @@ them. The pure edits (`addCustomGroup`, `renameCustomGroup`, `removeCustomGroup`
 `SessionGroups.tsx`, HTML5 drag with the payload held in React state because `dataTransfer` is
 unreadable during `dragover`. iOS mirrors the gateway merge only, and does not draw custom groups yet.
 
+**Agent teams in the list.** `groupRows` assembles team units before grouping: a lead row carries
+`members` (team order, then creation) and `teamState` (the most urgent state across the team, which
+is what state grouping places it by), and members never appear top-level. Pass the unfiltered list
+as `options.all`: a filter that matches only a member then pulls its lead in as a `context` row. A
+member whose lead is not in the list at all stays top-level rather than vanish. Ended sessions with
+no agent fold into a trailing `earlier` group, except under state grouping (which already has
+Ended) and custom grouping (the operator placed them). `collapsedTeams` (team keys,
+`hostId:agentId`) and `earlierOpen` are per-client view preferences.
+
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
 name drawing the no-project fallback - or an image **address, never bytes**, fetched from
 `GET {basePath}/sessions/:id/project/icon`. Its `hash` is the cache key, and the route serves that
@@ -1851,6 +1860,15 @@ the card for the same reason the card does - the extension's list draws it too -
 re-exports it only so the package's public surface does not shift under a host importing it from
 there. `expanded`/`editing` are uncontrolled by default and `renameOn` chooses the trigger:
 `doubleClick` is the editor feel (the extension's), `external` hands it to a host affordance.
+**Agent cards.** A row with `info.agent` draws as the agent card (`AgentAvatar`: 32 px, status on
+the corner, busy strip played by CSS `steps()`, desaturated asleep), named by the agent, with the
+session title as its topic. Members are the one-row `variant="member"` under the lead on a tree
+line (`TeamBlock` in `SessionBrowser`), folded by the knob into a summary. Avatars arrive through
+`avatars` (keyed by `AgentRef.avatar`), because the gateway route needs the host's credentials: the
+host fetches and hands over data URLs, exactly like `projectIcons`. Once any row has an agent,
+plain rows draw as tiles too, so the column holds. An agent card renames the agent
+(`onRenameAgent`), never the session title.
+
 `SessionBrowser` is the styled sessions list *around* the card built on protocol's view model -
 search, facets, grouping, the subset line - for a host that wants the dashboard's look without
 reimplementing the rules; its `SessionRowItem` is a thin wrapper that passes `renameOn='external'`

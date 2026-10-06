@@ -31,9 +31,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitFor(check: () => boolean, timeoutMs: number, what: string): Promise<boolean> {
+async function waitFor(done: () => boolean, timeoutMs: number, what: string): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
-  while (!check()) {
+  while (!done()) {
     if (Date.now() > deadline) {
       fail(what, `timed out after ${Math.round(timeoutMs / 1000)}s`)
       return false

@@ -548,8 +548,8 @@ describe('agent teams in the list', () => {
   })
 
   it('keeps the lead as a dimmed context row when a filter matches only a member', () => {
-    const config = { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' as const, states: ['working' as const] }
-    const [group] = groupRows(filterRows(all, config), config, { all })
+    const working = { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' as const, states: ['working' as const] }
+    const [group] = groupRows(filterRows(all, working), working, { all })
     expect(group!.rows).toHaveLength(1)
     expect(group!.rows[0]).toMatchObject({ context: true, info: { id: 's-lead' } })
     expect(group!.rows[0]!.members?.map((r) => r.info.id)).toEqual(['s-juno'])
