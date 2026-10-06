@@ -257,7 +257,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       return { delivered: false, reason: error instanceof Error ? error.message : String(error) }
     }
     inbound.set(sessionId, hops)
-    return { delivered: true, sessionId, name: target.title, queued: before === 'running' || before === 'awaiting_approval' }
+    return { delivered: true, sessionId, name: target.agent?.name ?? target.title, queued: before === 'running' || before === 'awaiting_approval' }
   }
 
   const exposedInfo = async (

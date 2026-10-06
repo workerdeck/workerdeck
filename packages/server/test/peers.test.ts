@@ -91,6 +91,18 @@ describe('peer service: send', () => {
     expect(peerDeliveredTo(spoken.text)).toEqual({ sessionId: 'b', name: 'Beta' })
   })
 
+  it("names an agent's session by its agent name, not its session title", async () => {
+    const registry = new SessionRegistry()
+    const agent: AgentRef = { id: 'B', name: 'Box-Lead', avatar: '' }
+    const service = createPeerService({
+      refs: { registry },
+      projects: new ProjectInfoService({ decorate: (info) => (info.id === 'b' ? { ...info, agent } : info) }),
+    })
+    registry.register(new PeerRunner('a', { title: 'Alpha' }))
+    registry.register(new PeerRunner('b', { title: '1. we do trust the relay' }))
+    expect(await service.send('a', 'b', 'hello')).toMatchObject({ delivered: true, sessionId: 'b', name: 'Box-Lead' })
+  })
+
   it('refuses self, oversize and closed targets, and reports a runner that throws', async () => {
     const { service, add } = rig({ maxMessageChars: 10 })
     add(new PeerRunner('a'))
