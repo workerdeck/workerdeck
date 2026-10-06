@@ -13,7 +13,9 @@ function fakeClient(calls: string[], name: string): WorkerDeckClient {
   } as unknown as WorkerDeckClient
 }
 
-const relay = (gateway: string) => ({ gateway, online: true, features: ['teams'] })
+function relay(gateway: string) {
+  return { gateway, online: true, features: ['teams'] }
+}
 
 describe('runTeamMove', () => {
   it('joins on one gateway with a single PATCH', async () => {
