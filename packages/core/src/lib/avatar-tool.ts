@@ -15,8 +15,9 @@ const CHANGE_AVATAR_TOOL_SHAPES = {
   [CHANGE_AVATAR_TOOL]: {
     description:
       'Give yourself a new avatar: the picture the human sees beside your name in the session list. Each call rolls a ' +
-      'new one; pass `seed` to get the same avatar for the same seed (any short word or phrase). You cannot see the ' +
-      'result, so only change it when the human asks or you have a reason to.',
+      'new one; pass `seed` to get the same avatar for the same seed (any short word or phrase). On the workerdeck CLI a ' +
+      'seed starting with a pack name and a colon picks the family: `monkey:`, `toad:`, `steampunk-bulldogs:` or `panda:`. ' +
+      'You cannot see the result, so only change it when the human asks or you have a reason to.',
     shape: {
       seed: z.string().trim().min(1).max(AVATAR_SEED_MAX).optional().describe('Optional: the same seed always rolls the same avatar'),
     },

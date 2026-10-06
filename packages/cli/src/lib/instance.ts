@@ -227,7 +227,7 @@ export async function startInstance(config: ResolvedConfig, options: StartOption
     parking,
     shell,
     spend,
-    avatars: config.options.avatars ?? new MonkeyartAvatars(),
+    avatars: config.options.avatars ?? new MonkeyartAvatars(config.avatarPacks),
     // Composed, not replaced: turning push on must not unhook a config file's own observer.
     notifications:
       apns === undefined

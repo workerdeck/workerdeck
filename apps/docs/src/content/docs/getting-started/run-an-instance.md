@@ -165,6 +165,7 @@ by a scoped principal is never offered the write tools, whatever the flag says.
 | `--approval-timeout <d>` | - | `none` - prompts and questions never expire (config: `approvalTimeoutMs`) |
 | `--engine-sleep-after <d>` | - | `never` - an idle, unwatched session keeps its engine process (config: `engineSleepAfterMs`) |
 | `--agent-sleep-after <d>` | - | `15m` - the same for an agent's session, unless the agent sets its own `sleepAfterMs`; `never` turns it off (config: `agentSleepAfterMs`) |
+| `--avatar-packs <list>` | - | `monkey,steampunk-bulldogs,toad` - the monkeyart packs new agent avatars are drawn from (also `panda`; config: `avatarPacks`) |
 | `--effort-default <model>=<effort>` (repeatable) | - | the engine's own default per model (config: `effortDefaults`) |
 | `--agent-context-reset <on\|off\|never>` | - | `off` - sessions get the `context_reset` tool only when their request or profile asks (config: `agentContextReset`) |
 | `--no-parking-store` | - | durable parking on |

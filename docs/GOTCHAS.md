@@ -1403,6 +1403,11 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   revalidated by `ETag`, since the bare route is stable per agent. The agent's `change_avatar` tool
   is stamped only on an agent's session (`BuildOptions.agent` on create, `agents.bySession` on every
   rebuild), so an adopted session gets it at its next wake, not at once.
+- **Several packs, chosen by the seed** (CLI `MonkeyartAvatars(packs)`, `--avatar-packs` /
+  `avatarPacks`, default monkey, steampunk-bulldogs, toad). A seed `<pack>:<rest>` names its pack,
+  any other one picks an enabled pack by its hash, so a picker of random seeds spreads across them.
+  The stored recipe is `{ pack, recipe }`; a bare one predates packs and draws as a monkey. Only
+  monkey and toad have the busy strip; the others fall back to the spinner badge.
 
 ## Relay (cross-gateway peers)
 

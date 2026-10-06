@@ -85,6 +85,11 @@ Options
                             the same for an agent's session, unless the agent sets
                             its own sleepAfterMs (30m, 2h, never; config:
                             agentSleepAfterMs). Default 15m.
+      --avatar-packs <list>
+                            monkeyart packs new agent avatars are drawn from,
+                            comma separated (monkey, toad, steampunk-bulldogs,
+                            panda; config: avatarPacks). Default
+                            monkey,steampunk-bulldogs,toad.
       --effort-default <model>=<effort>
                             reasoning effort a session starts at, or switches to,
                             on this model (opus=high, gpt-6-sol=xhigh; repeatable;

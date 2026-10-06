@@ -75,6 +75,8 @@ describe('parseArgs', () => {
     expect(parseArgs(['--agent-sleep-after', '45m']).agentSleepAfterMs).toBe(2_700_000)
     expect(parseArgs(['--agent-sleep-after', 'never']).agentSleepAfterMs).toBe(0)
     expect(parseArgs(['--agent-sleep-after', '0']).agentSleepAfterMs).toBe(0)
+    expect(parseArgs(['--avatar-packs', 'toad, monkey']).avatarPacks).toEqual(['toad', 'monkey'])
+    expect(() => parseArgs(['--avatar-packs', 'unicorn'])).toThrow(/unknown avatar pack "unicorn"/)
     expect(parseArgs([]).agentSleepAfterMs).toBeUndefined()
     expect(() => parseArgs(['--agent-sleep-after', 'later'])).toThrow(ConfigError)
     const fromFile = { path: null, options: { agentSleepAfterMs: 60_000 } }

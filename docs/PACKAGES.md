@@ -2240,7 +2240,8 @@ failure retries after 60 s); the session header draws `AgentHeading` for an agen
 published unscoped as **`workerdeck`**, the turnkey instance (`npx
 WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. It is also the
 package that owns the agent avatar art: `src/lib/avatars.ts` (`MonkeyartAvatars`, the server's
-`AvatarProvider` over `@monkeyart/composer` + `@monkeyart/packs`: loads the default pack once,
+`AvatarProvider` over `@monkeyart/composer` + `@monkeyart/packs`: loads each enabled pack once
+(`avatarPacks`; the seed picks the pack, see `docs/GOTCHAS.md` §Agents and teams),
 caches PNGs) is wired unless a config file supplies its own `avatars`. The pack art is CC BY 4.0
 (`LICENSE-ART` in `@monkeyart/packs`), so the attribution travels with this package. Single-origin
 is load-bearing, not cosmetic - a tab can't put a header on a WS handshake, so a cookie is the
