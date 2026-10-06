@@ -1218,8 +1218,12 @@ handover wrong.
   `config.contextReset` (transient, never persisted) from request `agentContextReset` ??
   profile `defaults.agentContextReset` ?? the gateway `default`. The engines register tools once
   (claude MCP server at query start, codex `dynamicTools` at thread start), so there is no live
-  toggle; flipping it needs a new session. The request field is durable, so a dormant wake
-  re-derives the same answer.
+  toggle inside a running engine. But the factory re-applies the grant **every time it builds a
+  runner** (create, dormant wake, park restore), so a changed gateway or profile default reaches an
+  existing session at its next wake after a gateway restart; only an explicit request field is
+  durable. A `/clear` rebuilds nothing (it is the CLI's own command on the same process and MCP
+  server); an agent that "finds" the tool after one had it already and simply had not noticed the
+  deferred tool name arrive (seen 2026-10-06).
 - **Claude stamps the reason on the CLI's own reset.** `clearContext` remembers `agentReason` and
   `#takeAgentReset` merges it into the next normalized `conversation_reset`. A human `/clear`
   typed between the request and that event would carry the agent's reason; it is rare enough to
