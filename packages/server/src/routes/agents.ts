@@ -5,6 +5,7 @@ import type {
   AgentConfig,
   AgentResponse,
   CreateAgentRequest,
+  InviteRemoteMemberRequest,
   RetireAgentRequest,
   SessionInfo,
   UpdateAgentRequest,
@@ -12,7 +13,7 @@ import type {
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { isAgentRefusal, type AgentService } from '../services/agents.ts'
+import { isAgentRefusal, type AgentRefusal, type AgentService, type RemoteJoin } from '../services/agents.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import type { AvatarImage } from '../services/avatars.ts'
 import { vetCreateRequest } from './create-vet.ts'
@@ -38,8 +39,12 @@ export async function handleAgents(
   }
   const [id, action, ...extra] = rest.split('/').map(decodeURIComponent)
   const agent = id === undefined ? undefined : agents.get(id)
-  if (!agent || extra.length > 0) {
+  if (!agent || extra.length > (action === 'remote-members' ? 1 : 0)) {
     fail(404, 'agent not found')
+  }
+  if (action === 'remote-members') {
+    await remoteMembers(ctx, req, res, agent, extra[0])
+    return
   }
   if (action === 'restart') {
     requireMethod(req, 'POST')
@@ -85,7 +90,7 @@ export async function handleAgents(
   }
   if (req.method === 'PATCH') {
     const patch = (await readJsonBody(req, ctx.maxBodyBytes)) as UpdateAgentRequest
-    const updated = await agents.update(agent.id, isRecord(patch) ? patch : {})
+    const updated = await updateAgent(ctx, agent, isRecord(patch) ? patch : {})
     if (isAgentRefusal(updated)) {
       fail(updated.status, updated.error)
     }
@@ -94,6 +99,7 @@ export async function handleAgents(
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as RetireAgentRequest
   const members = body.members === 'retire' ? 'retire' : 'release'
+  ctx.teams?.retiring(agent)
   const outcome = await agents.retire(agent.id, members)
   if (isAgentRefusal(outcome)) {
     fail(outcome.status, outcome.error)
@@ -121,8 +127,91 @@ async function createAgent(ctx: ServerContext, agents: AgentService, req: Incomi
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }
-  const created = await startSession(ctx, draft, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
-  await respond(ctx, res, 201, await bindWithAvatar(ctx, draft, created), created)
+  const remoteLead = remoteLeadOf(ctx, body.lead)
+  // Saved before the session starts so the lead's reconcile finds the member half; undone if the start fails.
+  const agent = remoteLead ? await joinRemote(ctx, draft, remoteLead, (joined) => agents.save({ ...draft, ...joined })) : draft
+  let created: SessionInfo
+  try {
+    created = await startSession(ctx, agent, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
+  } catch (error) {
+    if (remoteLead) {
+      ctx.teams?.retiring(agent)
+      await agents.retire(agent.id, 'release')
+    }
+    throw error
+  }
+  await respond(ctx, res, 201, await bindWithAvatar(ctx, agent, created), created)
+}
+
+function remoteLeadOf(ctx: ServerContext, lead: unknown): string | undefined {
+  if (typeof lead !== 'string') {
+    return undefined
+  }
+  const id = ctx.agents.localId(lead)
+  return ctx.agents.remoteGateway(id) ? id : undefined
+}
+
+async function joinRemote(
+  ctx: ServerContext,
+  mover: StoredAgent,
+  lead: string,
+  commit: (joined: RemoteJoin) => Promise<StoredAgent>,
+): Promise<StoredAgent> {
+  if (!ctx.teams) {
+    fail(409, 'this gateway is not connected to a relay')
+  }
+  const joined = await ctx.teams.join(mover, lead, commit)
+  if (isAgentRefusal(joined)) {
+    fail(joined.status, joined.error)
+  }
+  return joined
+}
+
+// The rest of the patch lands first, so a bad name or config never leaves a join the lead accepted and this side dropped.
+async function updateAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
+  const remoteLead = remoteLeadOf(ctx, patch.lead)
+  if (remoteLead === undefined) {
+    const updated = await ctx.agents.update(agent.id, patch)
+    if (!isAgentRefusal(updated) && patch.lead !== undefined && updated.lead !== agent.lead) {
+      ctx.teams?.left(agent.id, agent.lead)
+    }
+    return updated
+  }
+  const { lead: _lead, ...rest } = patch
+  const updated = await ctx.agents.update(agent.id, rest)
+  if (isAgentRefusal(updated) || updated.lead === remoteLead) {
+    return updated
+  }
+  return joinRemote(ctx, updated, remoteLead, async (joined) => {
+    const stored = await ctx.agents.update(agent.id, { lead: remoteLead }, joined)
+    if (isAgentRefusal(stored)) {
+      fail(stored.status, stored.error)
+    }
+    return stored
+  })
+}
+
+async function remoteMembers(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, lead: StoredAgent, member?: string) {
+  const teams = ctx.teams
+  if (!teams) {
+    fail(409, 'this gateway is not connected to a relay')
+  }
+  let outcome: StoredAgent | AgentRefusal
+  if (member === undefined) {
+    requireMethod(req, 'POST')
+    const body = (await readJsonBody(req, ctx.maxBodyBytes)) as InviteRemoteMemberRequest
+    if (!isRecord(body) || typeof body.agent !== 'string') {
+      fail(400, 'agent must be an agent id on another gateway (gateway:agentId)')
+    }
+    outcome = await teams.invite(lead, body.agent)
+  } else {
+    requireMethod(req, 'DELETE')
+    outcome = await teams.removeMember(lead, member)
+  }
+  if (isAgentRefusal(outcome)) {
+    fail(outcome.status, outcome.error)
+  }
+  await respond(ctx, res, 200, outcome)
 }
 
 async function adoptSession(ctx: ServerContext, agents: AgentService, res: ServerResponse, body: CreateAgentRequest) {
@@ -140,7 +229,11 @@ async function adoptSession(ctx: ServerContext, agents: AgentService, res: Serve
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }
-  await respond(ctx, res, 201, await bindWithAvatar(ctx, draft, info))
+  const remoteLead = remoteLeadOf(ctx, body.lead)
+  const bound = remoteLead
+    ? await joinRemote(ctx, draft, remoteLead, (joined) => bindWithAvatar(ctx, { ...draft, ...joined }, info))
+    : await bindWithAvatar(ctx, draft, info)
+  await respond(ctx, res, 201, bound)
 }
 
 function readSeed(seed: unknown): string | undefined {

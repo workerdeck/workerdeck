@@ -160,4 +160,22 @@ describe('peer relay link', () => {
     await until(() => relay.status().gateways.find((row) => row.name === 'mac')?.sessions === 2, 'second generation publishes')
     expect(relay.status().gateways.find((row) => row.name === 'mac')!.connectedAt).toBe(connectedAt)
   })
+
+  it('dials fresh on release when the team policy changed, so edited acceptFrom is never adopted stale', async () => {
+    const { relay, stateDir } = await relayRig()
+    const key = await enrollGateway(stateDir, 'mac')
+    await relay.reload()
+    const registry = new SessionRegistry()
+    registry.register(new PeerRunner('a1'))
+    const service = createPeerService({ refs: { registry }, projects: new ProjectInfoService() })
+    const first = createRelayLink({ url: relay.url, gateway: 'mac', key, teams: { acceptFrom: [] } }, service, () => {})
+    await until(() => relay.status().gateways.find((row) => row.name === 'mac')?.sessions === 1, 'first generation')
+    const connectedAt = relay.status().gateways.find((row) => row.name === 'mac')!.connectedAt
+    first.release()
+    first.close()
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = createRelayLink({ url: relay.url, gateway: 'mac', key, teams: { acceptFrom: ['win'] } }, service, () => {})
+    cleanups.push(() => second.close())
+    await until(() => (relay.status().gateways.find((row) => row.name === 'mac')?.connectedAt ?? connectedAt) !== connectedAt, 'a fresh dial')
+  })
 })

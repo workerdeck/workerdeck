@@ -1077,9 +1077,17 @@ export type ListHostRootsResponse = {
 // the gateway process runs on, not an identity or a secret: a client that computes the same
 // fingerprint for itself knows the gateway's paths are its own paths, and can open them natively
 // instead of proxying them over `/fs`. Optional, so a gateway that predates it just stays remote.
+export type GatewayRelayMeta = {
+  gateway: string
+  owner?: string
+  online: boolean
+  features: string[]
+}
+
 export type GatewayMeta = {
   protocolVersion: number
   machineId?: string
+  relay?: GatewayRelayMeta
 }
 
 export type HostDirEntry = {

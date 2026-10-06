@@ -10,6 +10,11 @@ import {
   type RelayOp,
   type RelayPeek,
   type RelayPeerRow,
+  type RelayTeamOrigin,
+  type TeamEdge,
+  type TeamFrameKind,
+  type TeamResult,
+  type TeamStatusEdge,
 } from '@workerdeck/relay-client'
 import type { PeerService } from './peers.ts'
 
@@ -22,11 +27,27 @@ export type RelayLinkOptions = {
   // The gateway ceiling. Sessions outside `scope` are never published and never answer a relay-routed request;
   // `allow` is what this gateway accepts from other gateways at all, whatever the relay's rules say.
   expose?: { scope?: Record<string, string>; allow?: RelayOp[] }
+  // Cross-gateway teams: same-owner gateways whose agents may join a lead here without a per-join invitation.
+  teams?: { acceptFrom?: string[] }
   log?: (message: string) => void
 }
 
+export type RelayTeamHandler = {
+  inbound(kind: TeamFrameKind, origin: RelayTeamOrigin, to: string): Promise<TeamResult>
+  inboundStatus(origin: { gateway: string; owner: string }, edges: TeamEdge[]): Promise<Array<Omit<TeamStatusEdge, 'from' | 'to'>>>
+  reconcile(): Promise<void>
+}
+
+export type RelayLinkStatus = { gateway: string; owner?: string; online: boolean; features: string[] }
+
 export type RelayLink = {
   directory: PeerDirectory
+  gateway: string
+  status(): RelayLinkStatus
+  // Why team frames cannot go out right now, or undefined when they can.
+  teamsUnavailable(): string | undefined
+  team(kind: TeamFrameKind, from: string, to: string): Promise<TeamResult>
+  teamStatus(gateway: string, edges: TeamEdge[]): Promise<TeamStatusEdge[]>
   nudge(): void
   // Hands the connection to the next module generation instead of closing it (hot reload).
   release(): void
@@ -53,6 +74,7 @@ function identityOf(options: RelayLinkOptions): string {
     options.key ? 'inline' : '',
     options.caFile ?? '',
     options.expose?.allow ?? null,
+    options.teams ?? null,
   ])
 }
 
@@ -102,7 +124,12 @@ export async function readRelayKey(options: RelayLinkOptions): Promise<string> {
 
 // The local peer directory with the relay composed in: bare ids stay local, `gateway:session` ids go to the relay.
 // A scoped session never reaches past its own gateway, because nothing on the wire carries scope tags.
-export function createRelayLink(options: RelayLinkOptions, peers: PeerService, log: (message: string) => void): RelayLink {
+export function createRelayLink(
+  options: RelayLinkOptions,
+  peers: PeerService,
+  log: (message: string) => void,
+  teams?: () => RelayTeamHandler | undefined,
+): RelayLink {
   const identity = identityOf(options)
   const exposed = options.expose?.scope
   let connection: RelayConnection | undefined
@@ -111,8 +138,11 @@ export function createRelayLink(options: RelayLinkOptions, peers: PeerService, l
 
   const host: RelayHost = {
     snapshot: () => peers.relayEntries(exposed),
-    peek: (_origin, sessionId, recent) => peers.relayPeek(sessionId, recent, exposed),
-    send: (origin, sessionId, text) => peers.relaySend(origin, sessionId, text, exposed),
+    peek: (origin, sessionId, recent) => peers.relayPeek(origin, sessionId, recent, exposed, options.gateway),
+    send: (origin, sessionId, text) => peers.relaySend(origin, sessionId, text, exposed, options.gateway),
+    team: async (kind, origin, to) => (await teams?.()?.inbound(kind, origin, to)) ?? { ok: false, reason: 'no such agent' },
+    teamStatus: async (origin, edges) => (await teams?.()?.inboundStatus(origin, edges)) ?? [],
+    online: () => void teams?.()?.reconcile(),
   }
 
   const carried = slots[CARRIED]
@@ -131,7 +161,10 @@ export function createRelayLink(options: RelayLinkOptions, peers: PeerService, l
       const key = await readRelayKey(options)
       const ca = options.caFile ? await readFile(expandHome(options.caFile)) : undefined
       if (!closed) {
-        connection = connectRelay({ url: options.url, gateway: options.gateway, key, ca, allow: options.expose?.allow, log }, host)
+        connection = connectRelay(
+          { url: options.url, gateway: options.gateway, key, ca, allow: options.expose?.allow, features: teams ? ['teams'] : [], log },
+          host,
+        )
       }
     })().catch((error: unknown) => log(error instanceof Error ? error.message : String(error)))
   }
@@ -192,8 +225,25 @@ export function createRelayLink(options: RelayLinkOptions, peers: PeerService, l
     },
   }
 
+  const teamsUnavailable = (): string | undefined => {
+    if (!connection || connection.state() !== 'online') {
+      return 'remote gateways are unavailable right now; try again later'
+    }
+    return connection.features().includes('teams') ? undefined : 'the relay does not route teams; upgrade it first'
+  }
+
   return {
     directory,
+    gateway: options.gateway,
+    status: () => {
+      const online = connection?.state() === 'online'
+      const owner = connection?.owner()
+      return { gateway: options.gateway, ...(owner ? { owner } : {}), online, features: online ? connection!.features() : [] }
+    },
+    teamsUnavailable,
+    team: (kind, from, to) => (connection ? connection.team(kind, from, to) : Promise.reject(new Error(teamsUnavailable()))),
+    teamStatus: (gateway, edges) =>
+      connection ? connection.teamStatus(gateway, edges) : Promise.reject(new Error(teamsUnavailable())),
     nudge: () => connection?.nudge(),
     release: () => {
       if (connection && !closed) {

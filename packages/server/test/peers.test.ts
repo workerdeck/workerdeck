@@ -266,11 +266,15 @@ describe('peer service: teams', () => {
     otherMember: { id: 'F', name: 'Fern', avatar: '', lead: 'O', team: 'Orbit' },
   }
 
-  function teamRig() {
+  function teamRig(spanning: string[] = []) {
     const registry = new SessionRegistry()
     const service = createPeerService({
       refs: { registry },
       projects: new ProjectInfoService({ decorate: (info) => (refs[info.id] ? { ...info, agent: refs[info.id] } : info) }),
+      teams: {
+        relayAgent: (id) => (refs[id] ? { id: refs[id].id, name: refs[id].name, ...(refs[id].lead ? { lead: refs[id].lead } : {}) } : undefined),
+        spansGateways: (id) => spanning.includes(id),
+      },
     })
     for (const id of [...Object.keys(refs), 'plain']) {
       registry.register(new PeerRunner(id))
@@ -305,11 +309,27 @@ describe('peer service: teams', () => {
     expect(rows.find((row) => row.id === 'plain')).not.toHaveProperty('agent')
   })
 
-  it('never publishes a member to the relay', async () => {
+  it('never publishes a member of a team that stays on this gateway', async () => {
     const service = teamRig()
     const published = (await service.relayEntries(undefined)).map((entry) => entry.id)
     expect(published).not.toContain('m1')
     expect(published).toContain('lead')
-    expect(await service.relayPeek('m1', 3, undefined)).toBeUndefined()
+    const origin = { gateway: 'pi', sessionId: 'x', agent: { id: 'mac:lead', name: 'Atlas' }, hops: [] }
+    expect(await service.relayPeek(origin, 'm1', 3, undefined, 'mac')).toBeUndefined()
+  })
+
+  it('publishes a member whose team spans gateways, and answers only its lead and teammates', async () => {
+    const service = teamRig(['m1'])
+    const entry = (await service.relayEntries(undefined)).find((row) => row.id === 'm1')
+    expect(entry?.agent).toEqual({ id: refs.m1!.id, name: 'Pip', lead: refs.m1!.lead })
+    const lead = `mac:${refs.m1!.lead}`
+    const outsider = { gateway: 'pi', sessionId: 'x', agent: { id: 'pi:Z', name: 'Zed' }, hops: [] }
+    const teammate = { gateway: 'pi', sessionId: 'y', agent: { id: 'pi:T', name: 'Tee', lead }, hops: [] }
+    const theLead = { gateway: 'pi', sessionId: 'z', agent: { id: lead, name: 'Atlas' }, hops: [] }
+    expect(await service.relayPeek(outsider, 'm1', 0, undefined, 'mac')).toBeUndefined()
+    expect(await service.relayPeek({ ...outsider, agent: undefined }, 'm1', 0, undefined, 'mac')).toBeUndefined()
+    expect(await service.relaySend(outsider, 'm1', 'hi', undefined, 'mac')).toEqual({ delivered: false, reason: 'no such session: m1' })
+    expect(await service.relayPeek(teammate, 'm1', 0, undefined, 'mac')).toMatchObject({ id: 'm1' })
+    expect(await service.relayPeek(theLead, 'm1', 0, undefined, 'mac')).toMatchObject({ id: 'm1' })
   })
 })

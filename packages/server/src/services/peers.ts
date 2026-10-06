@@ -22,7 +22,7 @@ import {
   type SessionEvent,
   type SessionInfo,
 } from '@workerdeck/protocol'
-import type { RelayOrigin, RelayPeek, RelaySendResult, RelaySessionEntry } from '@workerdeck/relay-client'
+import { qualifyId, type RelayAgentEntry, type RelayOrigin, type RelayPeek, type RelaySendResult, type RelaySessionEntry } from '@workerdeck/relay-client'
 import { scopeMatches } from '../lib/scope.ts'
 import type { LateBoundRefs } from '../options.ts'
 import type { ProjectInfoService } from './project-info.ts'
@@ -35,9 +35,17 @@ export type PeerServiceOptions = {
   maxHops?: number
 }
 
+// What the relay half needs to know about agents: the entry each session publishes, and whether a member's team spans
+// gateways (only then is a member published at all).
+export type PeerAgentTeams = {
+  relayAgent(sessionId: string): RelayAgentEntry | undefined
+  spansGateways(sessionId: string): boolean
+}
+
 export type PeerServiceDeps = {
   refs: LateBoundRefs
   projects: ProjectInfoService
+  teams?: PeerAgentTeams
   options?: PeerServiceOptions
 }
 
@@ -49,8 +57,20 @@ function visible(from: SessionInfo, to: SessionInfo): boolean {
   return to.id !== from.id && scopeMatches(from.scope, to.scope) && teamReaches(from.agent, to.agent)
 }
 
-function relayable(info: SessionInfo, exposed: Record<string, string> | undefined): boolean {
-  return info.status !== 'closed' && info.agent?.lead === undefined && scopeMatches(exposed, info.scope)
+function relayable(info: SessionInfo, exposed: Record<string, string> | undefined, teams: PeerAgentTeams | undefined): boolean {
+  const member = info.agent?.lead !== undefined
+  return info.status !== 'closed' && (!member || teams?.spansGateways(info.id) === true) && scopeMatches(exposed, info.scope)
+}
+
+// The gateway's own re-check of the relay's team rule: a member answers only its lead and teammates, whatever the relay
+// routed. The relay stamps `origin.agent` from the sender's published entry with qualified ids.
+function teamAdmits(info: SessionInfo, origin: RelayOrigin, gateway: string): boolean {
+  const lead = info.agent?.lead
+  if (lead === undefined) {
+    return true
+  }
+  const qualified = qualifyId(gateway, lead)
+  return origin.agent !== undefined && (origin.agent.id === qualified || origin.agent.lead === qualified)
 }
 
 export type PeerService = PeerDirectory & {
@@ -61,14 +81,27 @@ export type PeerService = PeerDirectory & {
   relaySender(from: string): Promise<SessionInfo>
   relayChain(from: string): string[]
   relayEntries(exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]>
-  relayPeek(sessionId: string, recent: number | undefined, exposed: Record<string, string> | undefined): Promise<RelayPeek | undefined>
-  relaySend(origin: RelayOrigin, sessionId: string, text: string, exposed: Record<string, string> | undefined): Promise<RelaySendResult>
+  relayPeek(
+    origin: RelayOrigin,
+    sessionId: string,
+    recent: number | undefined,
+    exposed: Record<string, string> | undefined,
+    gateway: string,
+  ): Promise<RelayPeek | undefined>
+  relaySend(
+    origin: RelayOrigin,
+    sessionId: string,
+    text: string,
+    exposed: Record<string, string> | undefined,
+    gateway: string,
+  ): Promise<RelaySendResult>
 }
 
-export function relayEntry(info: SessionInfo, live: boolean): RelaySessionEntry {
+export function relayEntry(info: SessionInfo, live: boolean, agent?: RelayAgentEntry): RelaySessionEntry {
   const items = info.checklist
   return {
     id: info.id,
+    agent,
     engine: info.engine,
     status: info.status,
     title: info.title,
@@ -224,9 +257,14 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     return { delivered: true, sessionId, name: target.title, queued: before === 'running' || before === 'awaiting_approval' }
   }
 
-  const exposedInfo = async (sessionId: string, exposed: Record<string, string> | undefined): Promise<SessionInfo | undefined> => {
+  const exposedInfo = async (
+    sessionId: string,
+    exposed: Record<string, string> | undefined,
+    origin: RelayOrigin,
+    gateway: string,
+  ): Promise<SessionInfo | undefined> => {
     const info = await infoOf(sessionId)
-    return info && relayable(info, exposed) ? info : undefined
+    return info && relayable(info, exposed, deps.teams) && teamAdmits(info, origin, gateway) ? info : undefined
   }
 
   const relayEntries = async (exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]> => {
@@ -235,21 +273,25 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
         .list()
         .map((info) => info.id),
     )
-    return (await allSessions()).filter((info) => relayable(info, exposed)).map((info) => relayEntry(info, live.has(info.id)))
+    return (await allSessions())
+      .filter((info) => relayable(info, exposed, deps.teams))
+      .map((info) => relayEntry(info, live.has(info.id), deps.teams?.relayAgent(info.id)))
   }
 
   const relayPeek = async (
+    origin: RelayOrigin,
     sessionId: string,
     recent: number | undefined,
     exposed: Record<string, string> | undefined,
+    gateway: string,
   ): Promise<RelayPeek | undefined> => {
-    const info = await exposedInfo(sessionId, exposed)
+    const info = await exposedInfo(sessionId, exposed, origin, gateway)
     if (!info) {
       return undefined
     }
     const { runner, lines } = recentOf(sessionId, recent)
     return {
-      ...relayEntry(info, runner !== undefined),
+      ...relayEntry(info, runner !== undefined, deps.teams?.relayAgent(info.id)),
       checklistItems: info.checklist,
       pendingApprovals: runner ? runner.pendingApprovals.map((request) => request.title ?? request.toolName) : [],
       recent: lines,
@@ -261,6 +303,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     sessionId: string,
     text: string,
     exposed: Record<string, string> | undefined,
+    gateway: string,
   ): Promise<RelaySendResult> => {
     if (text.length === 0 || text.length > maxChars) {
       return {
@@ -268,7 +311,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
         reason: `message is ${text.length} characters; the limit is ${maxChars}. Write it to a file and send the path.`,
       }
     }
-    const target = await exposedInfo(sessionId, exposed)
+    const target = await exposedInfo(sessionId, exposed, origin, gateway)
     if (!target) {
       return { delivered: false, reason: `no such session: ${sessionId}` }
     }

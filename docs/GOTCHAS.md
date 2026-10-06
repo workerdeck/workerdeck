@@ -1369,8 +1369,30 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   anything joining a member, and self-leading, as 409s whose `error` is drawn as the drop tooltip,
   so the strings are UI copy. A team is only "some agent has `lead` = me"; there is no team record.
 - **The peers rule is `teamReaches(from.agent, to.agent)` after the scope rule**, a pure function in
-  `protocol`. Members are also never published to the relay (`relayable`) and never reach it
-  (`reachesRemote`). Refusals read as "no such session", the scope rule's posture.
+  `protocol`. A member is published to the relay only when its team spans gateways
+  (`AgentService.spansGateways`), and the gateway re-checks every inbound peek and send to a member
+  against the relay-stamped `origin.agent` (`teamAdmits`), so a lying relay cannot widen it. Members
+  still never reach the relay (`reachesRemote`). Refusals read as "no such session", the scope
+  rule's posture.
+- **A cross-gateway edge has two halves, each written only by its own gateway** (`TeamLinks`,
+  `services/team-links.ts`). The member's gateway holds `lead` as a qualified `gateway:agentId`
+  plus a `remoteLead` cache; the lead's gateway holds an `accepted` entry in `remoteMembers`, which
+  it publishes as the registry entry's `accepts` so the relay can validate the member's claim.
+  `lead` stays set on the member whatever happens, so every `lead !== undefined` check fails closed.
+  A qualified lead is only ever written with the relay's `team.join` answer in hand
+  (`AgentService.update(id, patch, joined)`); the rest of a PATCH lands first, so a bad name never
+  strands a join the lead accepted.
+- **Only an authoritative answer dissolves an edge.** The 15 s reconcile (and one on every relay
+  `welcome`) sends `team.status` per other gateway; `known: false` from that gateway removes the
+  edge, while offline, a timeout or an edge the rules drop from the answer only marks it
+  (`remoteLead.state: 'unreachable'`, `unreachableSince` on the lead side). An agent mid-join counts
+  as holding its edge, so a lead-side reconcile racing the member's write is not answered "unknown".
+  Leave, release and retire send a frame best-effort and never wait for the other side.
+- **Same-owner acceptance is an invitation or `relay.teams.acceptFrom`.** `POST
+  /agents/:id/remote-members` records a 10 min `invited` entry stamped with this gateway's owner;
+  a join is accepted only when the origin's owner (stamped by the relay from enrollment) matches.
+  `relay.teams` is part of the relay link's identity, so a hot reload with edited policy dials
+  fresh instead of adopting the old connection.
 - **No team-change notice.** Telling a member it joined would be a message, and a message starts a
   paid turn on an idle session; members learn their team from `peers_list` (`agent`, `role`, `team`). `agent` (the agent's name)
   is what a model addresses by: a session's title is its topic, so `smoke:teams` failed on titles alone.

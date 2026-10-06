@@ -7,6 +7,7 @@ import {
   type SessionInfo,
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
+import { parseRelayPeerId, type RelayAgentEntry } from '@workerdeck/relay-client'
 import type { AgentStore, StoredAgent } from './agent-store.ts'
 
 export type AgentServiceOptions = {
@@ -14,12 +15,16 @@ export type AgentServiceOptions = {
   basePath: string
   avatars?: boolean
   sleepAfterMs?: number
+  // This gateway's relay name: a lead id qualified with it is local.
+  gateway?: string
   now?: () => number
 }
 
 export type AgentRefusal = { status: number; error: string }
 
 export type RetireOutcome = { retired: StoredAgent[]; released: StoredAgent[] }
+
+export type RemoteJoin = Required<Pick<StoredAgent, 'lead' | 'remoteLead'>>
 
 const NAMES = [
   'Atlas',
@@ -79,6 +84,7 @@ export class AgentService {
   #basePath: string
   #avatars: boolean
   #sleepAfterMs: number
+  #gateway: string | undefined
   #now: () => number
   #agents = new Map<string, StoredAgent>()
 
@@ -87,6 +93,7 @@ export class AgentService {
     this.#basePath = options.basePath
     this.#avatars = options.avatars ?? false
     this.#sleepAfterMs = options.sleepAfterMs ?? AGENT_SLEEP_AFTER_MS_DEFAULT
+    this.#gateway = options.gateway
     this.#now = options.now ?? Date.now
   }
 
@@ -116,8 +123,50 @@ export class AgentService {
     if (!agent) {
       return info
     }
-    const leadName = agent.lead === undefined ? undefined : this.#agents.get(agent.lead)?.name
-    return { ...info, agent: agentRef(this.public(agent), { leadName, leads: this.hasMembers(agent.id) }) }
+    const remote = this.remoteGateway(agent.lead)
+    const leadName = agent.lead === undefined ? undefined : remote ? agent.remoteLead?.name : this.#agents.get(agent.lead)?.name
+    return { ...info, agent: agentRef(this.public(agent), { leadName, leadGateway: remote, leads: this.hasMembers(agent.id) }) }
+  }
+
+  // The gateway a lead id names when it is not this one; undefined for a local or absent lead.
+  remoteGateway(lead: string | undefined): string | undefined {
+    const target = lead === undefined ? undefined : parseRelayPeerId(lead)
+    return target && target.gateway !== this.#gateway ? target.gateway : undefined
+  }
+
+  localId(id: string): string {
+    const target = parseRelayPeerId(id)
+    return target && target.gateway === this.#gateway ? target.id : id
+  }
+
+  // A member is published to the relay only when its team spans gateways; the relay's team rule then decides who sees it.
+  spansGateways(agent: StoredAgent): boolean {
+    if (agent.lead === undefined) {
+      return false
+    }
+    if (this.remoteGateway(agent.lead)) {
+      return true
+    }
+    return acceptedRemote(this.#agents.get(agent.lead)).length > 0
+  }
+
+  relayAgent(sessionId: string): RelayAgentEntry | undefined {
+    const agent = this.bySession(sessionId)
+    if (!agent) {
+      return undefined
+    }
+    const entry: RelayAgentEntry = { id: agent.id, name: agent.name }
+    if (agent.lead !== undefined) {
+      entry.lead = agent.lead
+    }
+    if (agent.order !== undefined) {
+      entry.order = agent.order
+    }
+    const accepts = acceptedRemote(agent).map((member) => member.agent)
+    if (accepts.length > 0) {
+      entry.accepts = accepts
+    }
+    return entry
   }
 
   briefFor(sessionId: string | undefined): string | undefined {
@@ -161,12 +210,18 @@ export class AgentService {
       config,
     }
     if (input.lead !== undefined && input.lead !== null) {
-      const refused =
-        typeof input.lead === 'string' ? this.leadRefusal(agent, input.lead) : { status: 400, error: 'lead must be an agent id' }
+      if (typeof input.lead !== 'string') {
+        return { status: 400, error: 'lead must be an agent id' }
+      }
+      const leadId = this.localId(input.lead)
+      const refused = this.leadRefusal(agent, leadId)
       if (refused) {
         return refused
       }
-      agent.lead = input.lead as string
+      // A lead on another gateway is set by the caller once the relay has answered the join.
+      if (!this.remoteGateway(leadId)) {
+        agent.lead = leadId
+      }
     }
     return agent
   }
@@ -185,6 +240,9 @@ export class AgentService {
   }
 
   hasMembers(id: string): boolean {
+    if (acceptedRemote(this.#agents.get(id)).length > 0) {
+      return true
+    }
     for (const agent of this.#agents.values()) {
       if (agent.lead === id) {
         return true
@@ -202,6 +260,15 @@ export class AgentService {
     if (leadId === mover.id) {
       return { status: 409, error: 'an agent cannot lead its own team' }
     }
+    if (this.remoteGateway(leadId)) {
+      if (this.hasMembers(mover.id)) {
+        return { status: 409, error: `${mover.name} leads a team; teams are one level deep` }
+      }
+      if (this.pendingInvites(mover).length > 0) {
+        return { status: 409, error: `${mover.name} has open team invitations; withdraw them first` }
+      }
+      return null
+    }
     const lead = this.#agents.get(leadId)
     if (!lead) {
       return { status: 404, error: `no such agent: ${leadId}` }
@@ -215,7 +282,13 @@ export class AgentService {
     return null
   }
 
-  async update(id: string, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
+  pendingInvites(agent: StoredAgent): NonNullable<StoredAgent['remoteMembers']> {
+    const now = this.#now()
+    return (agent.remoteMembers ?? []).filter((member) => member.state === 'invited' && (member.expiresAt ?? Infinity) > now)
+  }
+
+  // A lead on another gateway is only ever written with the relay's answer in hand (`joined`), never from a bare patch.
+  async update(id: string, patch: UpdateAgentRequest, joined?: RemoteJoin): Promise<StoredAgent | AgentRefusal> {
     const agent = this.#agents.get(id)
     if (!agent) {
       return { status: 404, error: `no such agent: ${id}` }
@@ -240,15 +313,26 @@ export class AgentService {
     }
     if (patch.lead === null) {
       delete next.lead
+      delete next.remoteLead
     } else if (patch.lead !== undefined) {
       if (typeof patch.lead !== 'string') {
         return { status: 400, error: 'lead must be an agent id or null' }
       }
-      const refused = this.leadRefusal(agent, patch.lead)
-      if (refused) {
-        return refused
+      const leadId = this.localId(patch.lead)
+      if (this.remoteGateway(leadId)) {
+        if (joined?.lead !== leadId) {
+          return { status: 409, error: 'a lead on another gateway is joined through the relay' }
+        }
+        next.lead = joined.lead
+        next.remoteLead = joined.remoteLead
+      } else {
+        const refused = this.leadRefusal(agent, leadId)
+        if (refused) {
+          return refused
+        }
+        next.lead = leadId
+        delete next.remoteLead
       }
-      next.lead = patch.lead
     }
     if (patch.order !== undefined) {
       if (typeof patch.order !== 'number' || !Number.isFinite(patch.order)) {
@@ -269,7 +353,7 @@ export class AgentService {
     const released: StoredAgent[] = []
     if (members === 'release') {
       for (const member of crew) {
-        const { lead: _lead, ...rest } = member
+        const { lead: _lead, remoteLead: _remote, ...rest } = member
         released.push(await this.save(rest))
       }
     }
@@ -293,6 +377,10 @@ export class AgentService {
       }
     }
   }
+}
+
+function acceptedRemote(agent: StoredAgent | undefined): NonNullable<StoredAgent['remoteMembers']> {
+  return (agent?.remoteMembers ?? []).filter((member) => member.state === 'accepted')
 }
 
 export function isAgentRefusal(value: unknown): value is AgentRefusal {

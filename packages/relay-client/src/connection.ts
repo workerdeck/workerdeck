@@ -32,6 +32,7 @@ export type RelayHost = {
   send(origin: RelayOrigin, sessionId: string, text: string): Promise<RelaySendResult>
   team?(kind: TeamFrameKind, origin: RelayTeamOrigin, agentId: string): Promise<TeamResult>
   teamStatus?(origin: { gateway: string; owner: string }, edges: TeamEdge[]): Promise<Array<Omit<TeamStatusEdge, 'from' | 'to'>>>
+  online?(): void
 }
 
 export type RelayConnectOptions = {
@@ -244,6 +245,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
         void publishSnapshot().catch((error) => log(`relay: snapshot failed: ${error instanceof Error ? error.message : String(error)}`))
         tickTimer = setInterval(() => void tick(), tickMs)
         digestTimer = setInterval(() => sendFrame(publisher.digest()), digestMs)
+        host.online?.()
         return
       }
       case 'registry.resync': {

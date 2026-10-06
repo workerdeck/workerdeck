@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { PROTOCOL_VERSION } from '@workerdeck/protocol'
+import { PROTOCOL_VERSION, type GatewayMeta } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { json, type Refusal } from '../lib/http.ts'
 import { machineId } from '../lib/machine-id.ts'
@@ -88,7 +88,10 @@ export function httpRoutes(ctx: ServerContext): HttpRoute[] {
       // Degrades rather than refusing: the fingerprint is only ever acted on by a client that also means to read this
       // machine's files, so it is gated behind the same principal as `/fs`.
       handler: (_, res, __, auth) =>
-        json(res, 200, { protocolVersion: PROTOCOL_VERSION, ...(ctx.auth.isOperator(auth) ? { machineId: machineId() } : {}) }),
+        json(res, 200, {
+          protocolVersion: PROTOCOL_VERSION,
+          ...(ctx.auth.isOperator(auth) ? { machineId: machineId(), ...(ctx.relayStatus ? { relay: ctx.relayStatus() } : {}) } : {}),
+        } satisfies GatewayMeta),
     }),
     // Authenticated before the 404-when-unconfigured answer: an unauthenticated caller must not learn whether a
     // filesystem is exposed.

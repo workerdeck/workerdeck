@@ -5,6 +5,7 @@ export type AgentRef = {
   name: string
   avatar?: string
   lead?: string
+  leadGateway?: string
   team?: string
   leads?: true
   order?: number
@@ -23,6 +24,23 @@ export type AgentConfig = {
   sleepAfterMs?: number
 }
 
+export type RemoteLead = {
+  name: string
+  owner?: string
+  state: 'joined' | 'unreachable'
+  since: number
+}
+
+export type RemoteMember = {
+  agent: string
+  name?: string
+  owner?: string
+  state: 'invited' | 'accepted'
+  at: number
+  expiresAt?: number
+  unreachableSince?: number
+}
+
 export type AgentInfo = {
   id: string
   name: string
@@ -34,7 +52,11 @@ export type AgentInfo = {
   config: AgentConfig
   lead?: string
   order?: number
+  remoteLead?: RemoteLead
+  remoteMembers?: RemoteMember[]
 }
+
+export type InviteRemoteMemberRequest = { agent: string }
 
 export type CreateAgentRequest = {
   name?: string
@@ -59,13 +81,16 @@ export type AgentResponse = { agent: AgentInfo; session?: SessionInfo }
 
 export const AGENT_SLEEP_AFTER_MS_DEFAULT = 15 * 60_000
 
-export function agentRef(agent: AgentInfo, team: { leadName?: string; leads?: boolean } = {}): AgentRef {
+export function agentRef(agent: AgentInfo, team: { leadName?: string; leadGateway?: string; leads?: boolean } = {}): AgentRef {
   const ref: AgentRef = { id: agent.id, name: agent.name }
   if (agent.avatar !== undefined) {
     ref.avatar = agent.avatar
   }
   if (agent.lead !== undefined) {
     ref.lead = agent.lead
+    if (team.leadGateway !== undefined) {
+      ref.leadGateway = team.leadGateway
+    }
     if (team.leadName !== undefined) {
       ref.team = team.leadName
     }

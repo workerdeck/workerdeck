@@ -42,6 +42,7 @@ import { ProfileService, isEffortMap } from './services/profiles.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
 import { SpendLedger } from './services/spend-ledger.ts'
 import { createRelayLink } from './services/peer-relay.ts'
+import { TeamLinks } from './services/team-links.ts'
 import { createPeerService } from './services/peers.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
@@ -129,6 +130,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     basePath,
     avatars: options.avatars !== undefined,
     sleepAfterMs: options.agentSleepAfterMs,
+    gateway: options.relay?.gateway,
   })
   const projects = new ProjectInfoService({ decorate: (info) => agents.decorate(shells ? shells.decorate(info) : info) })
 
@@ -223,14 +225,41 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   })
 
   const peers =
-    options.peers?.enabled === false ? undefined : createPeerService({ refs: { registry, parking }, projects, options: options.peers })
+    options.peers?.enabled === false
+      ? undefined
+      : createPeerService({
+          refs: { registry, parking },
+          projects,
+          teams: {
+            relayAgent: (sessionId) => agents.relayAgent(sessionId),
+            spansGateways: (sessionId) => {
+              const agent = agents.bySession(sessionId)
+              return agent !== undefined && agents.spansGateways(agent)
+            },
+          },
+          options: options.peers,
+        })
   const shellDirectory = shells ? createShellDirectory(shells, { runnerFor: (id) => registry.get(id) }) : undefined
   // Each runner resolves its own server's directory first and the process-wide slot only once that server has
   // closed, which is the hot-reload handover: a carried runner then reaches whichever generation installed last.
-  const relay =
-    peers && options.relay
-      ? createRelayLink(options.relay, peers, options.relay.log ?? ((message) => diagnose(new Error(message), 'relay')))
-      : undefined
+  const relayLog = options.relay?.log ?? ((message: string) => diagnose(new Error(message), 'relay'))
+  let teamLinks: TeamLinks | undefined
+  const relay = peers && options.relay ? createRelayLink(options.relay, peers, relayLog, () => teamLinks) : undefined
+  if (relay) {
+    teamLinks = new TeamLinks({
+      agents,
+      transport: {
+        gateway: relay.gateway,
+        ready: relay.teamsUnavailable,
+        owner: () => relay.status().owner,
+        team: relay.team,
+        teamStatus: relay.teamStatus,
+        nudge: relay.nudge,
+      },
+      acceptFrom: options.relay?.teams?.acceptFrom,
+      log: relayLog,
+    })
+  }
   let ownPeers: PeerDirectory | undefined = relay?.directory ?? peers
   let ownShells = shellDirectory
   if (ownPeers) {
@@ -309,6 +338,8 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     auth,
     factory,
     agents,
+    teams: teamLinks,
+    relayStatus: relay ? () => relay.status() : undefined,
     avatars: options.avatars,
     registry,
     parking,
@@ -374,6 +405,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     closeQueueSockets: queueSockets.clear,
     diagnose,
     releaseDirectories: () => {
+      teamLinks?.stop()
       relay?.close()
       ownPeers = undefined
       ownShells = undefined
@@ -394,6 +426,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       await profiles.refreshStored()
       await profiles.seedStore()
       await agents.hydrate()
+      teamLinks?.start()
       await parking.hydrate()
       await shells?.hydrate()
       return new Promise((resolve, reject) => {

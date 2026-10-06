@@ -3,6 +3,8 @@ import type { JobQueue } from '@workerdeck/queue'
 import type { PricingOverrides, ProfileEngine } from '@workerdeck/protocol'
 import type { SdkSessionLister, WorkerServerOptions } from './options.ts'
 import type { AgentService } from './services/agents.ts'
+import type { RelayLinkStatus } from './services/peer-relay.ts'
+import type { TeamLinks } from './services/team-links.ts'
 import type { AttachmentStore } from './services/attachments.ts'
 import type { AvatarProvider } from './services/avatars.ts'
 import type { AuthService } from './services/auth.ts'
@@ -30,6 +32,9 @@ export type ServerContext = {
   auth: AuthService
   factory: SessionFactory
   agents: AgentService
+  // Present when the gateway dials a relay: the cross-gateway half of teams.
+  teams?: TeamLinks
+  relayStatus?: () => RelayLinkStatus
   avatars: AvatarProvider | undefined
 
   registry: SessionRegistry
