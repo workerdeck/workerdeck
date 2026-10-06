@@ -10,25 +10,36 @@ import {
   RELAY_MAX_HOPS,
   RELAY_MESSAGE_MAX_CHARS,
   RELAY_WIRE_VERSION,
+  RELAY_FEATURES,
   canonicalJson,
   decodeFrame,
   encodeFrame,
+  isRelayFeature,
   isRelayOp,
+  isTeamFrameKind,
   parseRelayPeerId,
+  qualifyId,
   registryHash,
   relayPeerId,
   type InboundPeek,
   type InboundSend,
+  type InboundTeam,
+  type InboundTeamStatus,
+  type RelayFeature,
   type RelayFrame,
   type RelayOp,
   type RelayOrigin,
   type RelayPeerRow,
   type RelaySendResult,
   type RelaySessionEntry,
+  type TeamEdge,
+  type TeamResult,
+  type TeamStatusEdge,
 } from '@workerdeck/relay-client'
 import { enrollmentPath, keyMatches, readEnrollments, type EnrollmentFile } from './enrollment.ts'
 import { allowedOps, readRules, rulesPath, type RelayRule } from './rules.ts'
 import { serveStatusSocket, statusSocketPath } from './status.ts'
+import { projectForOtherOwner, sanitizeEntry, teamAllows, type TeamNode } from './teams.ts'
 
 export type RelayOptions = {
   stateDir: string
@@ -42,10 +53,23 @@ export type RelayOptions = {
   maxHops?: number
   maxMessageChars?: number
   watchIntervalMs?: number
+  owner?: string
+  teamPerMinute?: number
+  invitesPerDay?: number
   log?: (line: string) => void
 }
 
-export type RelayGatewayStatus = { name: string; online: boolean; sessions: number; connectedAt?: number; ops: RelayOp[] }
+export const DEFAULT_RELAY_OWNER = 'operator'
+
+export type RelayGatewayStatus = {
+  name: string
+  owner: string
+  online: boolean
+  sessions: number
+  connectedAt?: number
+  ops: RelayOp[]
+  features: RelayFeature[]
+}
 
 export type RelayStatus = { version: number; gateways: RelayGatewayStatus[] }
 
@@ -59,8 +83,10 @@ export type Relay = {
 
 type Gateway = {
   name: string
+  owner: string
   socket: WebSocket
   ops: Set<RelayOp>
+  features: Set<RelayFeature>
   connectedAt: number
   seq: number
   entries: Map<string, RelaySessionEntry>
@@ -72,7 +98,12 @@ type Routed = { gateway: string; timer: NodeJS.Timeout; settle: (frame: { ok: bo
 
 type Frame = { t: string; [key: string]: unknown }
 
+type Outbound = Omit<InboundPeek, 'id'> | Omit<InboundSend, 'id'> | Omit<InboundTeam, 'id'> | Omit<InboundTeamStatus, 'id'>
+
 const WINDOW_MS = 60_000
+const DAY_MS = 24 * 60 * 60_000
+const MAX_STATUS_EDGES = 64
+const NO_SUCH_AGENT: TeamResult = { ok: false, reason: 'no such agent' }
 
 function notFound(_req: IncomingMessage, res: ServerResponse): void {
   res.writeHead(404).end()
@@ -102,6 +133,9 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
   const maxHops = options.maxHops ?? RELAY_MAX_HOPS
   const maxChars = options.maxMessageChars ?? RELAY_MESSAGE_MAX_CHARS
   const watchIntervalMs = options.watchIntervalMs ?? 2_000
+  const defaultOwner = options.owner ?? DEFAULT_RELAY_OWNER
+  const teamPerMinute = options.teamPerMinute ?? 30
+  const invitesPerDay = options.invitesPerDay ?? 10
 
   let enrollments: EnrollmentFile = await readEnrollments(options.stateDir)
   let rules: RelayRule[] = await readRules(options.stateDir)
@@ -143,14 +177,18 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     for (const gateway of gateways.values()) {
       if (!enrollments.gateways[gateway.name]) {
         drop(gateway, RELAY_CLOSE.revoked, 'revoked')
+      } else {
+        gateway.owner = ownerOf(gateway.name)
       }
     }
   }
 
-  const underRateLimit = (key: string): boolean => {
+  const ownerOf = (name: string): string => enrollments.gateways[name]?.owner ?? defaultOwner
+
+  const underRateLimit = (key: string, limit = perMinute, windowMs = WINDOW_MS): boolean => {
     const now = Date.now()
-    const recent = (sent.get(key) ?? []).filter((at) => now - at < WINDOW_MS)
-    const ok = recent.length < perMinute
+    const recent = (sent.get(key) ?? []).filter((at) => now - at < windowMs)
+    const ok = recent.length < limit
     if (ok) {
       recent.push(now)
     }
@@ -158,7 +196,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     return ok
   }
 
-  const route = (target: Gateway, frame: Omit<InboundPeek, 'id'> | Omit<InboundSend, 'id'>): Promise<unknown> => {
+  const route = (target: Gateway, frame: Outbound): Promise<unknown> => {
     const id = `r${++nextId}`
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -174,44 +212,162 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     })
   }
 
-  const visible = (from: Gateway, target: Gateway, entry: RelaySessionEntry): RelayOp[] =>
-    target === from ? [] : allowedOps(rules, from.name, target.name, entry, target.ops)
+  const findAgent = (qualifiedId: string): { gateway: Gateway; entry: RelaySessionEntry } | undefined => {
+    const target = parseRelayPeerId(qualifiedId)
+    const gateway = target ? gateways.get(target.gateway) : undefined
+    if (!gateway) {
+      return undefined
+    }
+    for (const entry of gateway.entries.values()) {
+      if (entry.agent?.id === qualifiedId) {
+        return { gateway, entry }
+      }
+    }
+    return undefined
+  }
 
-  const list = (from: Gateway): RelayPeerRow[] => {
+  const lookup = (qualifiedId: string): TeamNode | undefined => {
+    const found = findAgent(qualifiedId)
+    return found ? nodeOf(found.gateway, found.entry) : undefined
+  }
+
+  const opsBetween = (from: Gateway, target: Gateway, entry: RelaySessionEntry): RelayOp[] =>
+    target === from ? [] : allowedOps(rules, from.name, target.name, entry, target.ops, from.owner !== target.owner)
+
+  const visible = (from: Gateway, sender: RelaySessionEntry, target: Gateway, entry: RelaySessionEntry): RelayOp[] =>
+    teamAllows(nodeOf(from, sender), nodeOf(target, entry), lookup) ? opsBetween(from, target, entry).filter((op) => op !== 'team') : []
+
+  const list = (from: Gateway, sender: RelaySessionEntry): RelayPeerRow[] => {
     const rows: RelayPeerRow[] = []
     for (const target of gateways.values()) {
       for (const entry of target.entries.values()) {
-        const allow = visible(from, target, entry)
+        const allow = visible(from, sender, target, entry)
         if (allow.length > 0) {
-          rows.push({ ...entry, gateway: target.name, allow })
+          const shown = target.owner === from.owner ? entry : projectForOtherOwner(entry)
+          rows.push({ ...shown, gateway: target.name, owner: target.owner, allow })
         }
       }
     }
     return rows.sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
   }
 
-  const resolveTarget = (from: Gateway, to: unknown, op: RelayOp): { target: Gateway; entry: RelaySessionEntry } | undefined => {
+  const resolveTarget = (
+    from: Gateway,
+    sender: RelaySessionEntry,
+    to: unknown,
+    op: RelayOp,
+  ): { target: Gateway; entry: RelaySessionEntry } | undefined => {
     const where = to as { gateway?: unknown; id?: unknown } | undefined
     if (typeof where?.gateway !== 'string' || typeof where.id !== 'string') {
       return undefined
     }
     const target = gateways.get(where.gateway)
     const entry = target?.entries.get(where.id)
-    if (!target || !entry || !visible(from, target, entry).includes(op)) {
+    if (!target || !entry || !visible(from, sender, target, entry).includes(op)) {
       return undefined
     }
     return { target, entry }
   }
 
+  const teamTarget = (from: Gateway, to: unknown): { target: Gateway; entry: RelaySessionEntry } | undefined => {
+    const found = typeof to === 'string' ? findAgent(to) : undefined
+    if (!found || found.gateway === from || !found.gateway.features.has('teams')) {
+      return undefined
+    }
+    if (from.owner !== found.gateway.owner && found.entry.agent?.share === 'none') {
+      return undefined
+    }
+    return opsBetween(from, found.gateway, found.entry).includes('team') ? { target: found.gateway, entry: found.entry } : undefined
+  }
+
+  const teamRequest = async (from: Gateway, frame: Frame): Promise<unknown> => {
+    const kind = frame.t
+    if (!isTeamFrameKind(kind)) {
+      return NO_SUCH_AGENT
+    }
+    const quiet = kind === 'team.invite' || kind === 'team.request'
+    const miss = quiet ? ({ ok: true } satisfies TeamResult) : NO_SUCH_AGENT
+    const agent =
+      typeof frame.from === 'string' && frame.from && !parseRelayPeerId(frame.from) ? qualifyId(from.name, frame.from) : undefined
+    const found = agent ? teamTarget(from, frame.to) : undefined
+    if (!agent || !found) {
+      return miss
+    }
+    if (!underRateLimit(`team:${from.name}->${found.target.name}`, teamPerMinute)) {
+      return quiet ? miss : ({ ok: false, reason: `rate limit: at most ${teamPerMinute} team requests a minute` } satisfies TeamResult)
+    }
+    if (quiet && !underRateLimit(`invite:${from.owner}->${found.target.owner}`, invitesPerDay, DAY_MS)) {
+      return miss
+    }
+    const name = findAgent(agent)?.entry.agent?.name
+    const delivery = route(found.target, {
+      t: kind,
+      origin: { gateway: from.name, owner: from.owner, agent, ...(name ? { name } : {}) },
+      to: found.entry.agent!.id.slice(found.target.name.length + 1),
+    })
+    if (quiet) {
+      delivery.catch(() => {})
+      return miss
+    }
+    return delivery
+  }
+
+  const teamStatus = async (from: Gateway, frame: Frame): Promise<TeamStatusEdge[]> => {
+    const target = typeof frame.gateway === 'string' ? gateways.get(frame.gateway) : undefined
+    if (!target || target === from || !target.features.has('teams') || !Array.isArray(frame.edges)) {
+      throw new Error('unreachable')
+    }
+    if (!underRateLimit(`team:${from.name}->${target.name}`, teamPerMinute)) {
+      throw new Error('rate limit')
+    }
+    const edges: TeamEdge[] = []
+    for (const raw of frame.edges.slice(0, MAX_STATUS_EDGES) as Array<Partial<TeamEdge> | null>) {
+      if (typeof raw?.from !== 'string' || !raw.from || parseRelayPeerId(raw.from) || typeof raw.to !== 'string') {
+        continue
+      }
+      const remote = parseRelayPeerId(raw.to)
+      if (remote?.gateway !== target.name) {
+        continue
+      }
+      const entry = findAgent(raw.to)?.entry ?? { id: '', status: 'idle', cwd: '', createdAt: 0, pendingPermissionCount: 0, live: false }
+      if (opsBetween(from, target, entry).includes('team')) {
+        edges.push({ from: raw.from, to: raw.to })
+      }
+    }
+    if (edges.length === 0) {
+      return []
+    }
+    const answer = await route(target, {
+      t: 'team.status',
+      origin: { gateway: from.name, owner: from.owner },
+      edges: edges.map((edge) => ({ from: qualifyId(from.name, edge.from), to: parseRelayPeerId(edge.to)!.id })),
+    })
+    const rows = Array.isArray(answer) ? (answer as Array<Partial<TeamStatusEdge> | null>) : []
+    return edges.flatMap((edge, index) => {
+      const row = rows[index]
+      if (typeof row?.known !== 'boolean') {
+        return []
+      }
+      return [
+        {
+          ...edge,
+          known: row.known,
+          ...(typeof row.name === 'string' ? { name: row.name } : {}),
+          ...(typeof row.session === 'string' ? { session: row.session } : {}),
+        },
+      ]
+    })
+  }
+
   const peerRequest = async (from: Gateway, frame: Frame): Promise<unknown> => {
     const sender = typeof frame.from === 'string' ? from.entries.get(frame.from) : undefined
     if (frame.t === 'peer.list') {
-      return sender ? list(from) : []
+      return sender ? list(from, sender) : []
     }
     const to = frame.to as { gateway?: string; id?: string } | undefined
     const label = `${to?.gateway ?? '?'}:${to?.id ?? '?'}`
     if (frame.t === 'peer.peek') {
-      const found = sender && resolveTarget(from, frame.to, 'peek')
+      const found = sender && resolveTarget(from, sender, frame.to, 'peek')
       if (!found) {
         return null
       }
@@ -219,7 +375,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       return route(found.target, { t: 'peer.peek', origin: originOf(from, sender, []), to: found.entry.id, recent })
     }
     const text = typeof frame.text === 'string' ? frame.text : ''
-    const found = sender && resolveTarget(from, frame.to, 'send')
+    const found = sender && resolveTarget(from, sender, frame.to, 'send')
     if (!found || !sender) {
       return { delivered: false, reason: `no such session: ${label}` } satisfies RelaySendResult
     }
@@ -251,7 +407,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
         if (!entries || typeof frame.seq !== 'number') {
           return
         }
-        gateway.entries = new Map(entries.map((entry) => [entry.id, entry]))
+        gateway.entries = new Map(entries.map((entry) => [entry.id, sanitizeEntry(gateway.name, entry)]))
         gateway.json = new Map(entries.map((entry) => [entry.id, canonicalJson(entry)]))
         gateway.seq = frame.seq
         return
@@ -268,7 +424,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
           gateway.json.delete(id)
         }
         for (const entry of upsert) {
-          gateway.entries.set(entry.id, entry)
+          gateway.entries.set(entry.id, sanitizeEntry(gateway.name, entry))
           gateway.json.set(entry.id, canonicalJson(entry))
         }
         gateway.seq = frame.seq
@@ -302,11 +458,20 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
         if (!id) {
           return
         }
-        peerRequest(gateway, frame).then(
-          (result) => send(gateway.socket, { t: 'res', id, ok: true, result: result ?? null }),
-          (error: unknown) =>
-            send(gateway.socket, { t: 'res', id, ok: false, error: error instanceof Error ? error.message : String(error) }),
-        )
+        respond(gateway, id, peerRequest(gateway, frame))
+        return
+      }
+      case 'team.join':
+      case 'team.leave':
+      case 'team.release':
+      case 'team.invite':
+      case 'team.request':
+      case 'team.status': {
+        const id = typeof frame.id === 'string' ? frame.id : undefined
+        if (!id || !gateway.features.has('teams')) {
+          return
+        }
+        respond(gateway, id, frame.t === 'team.status' ? teamStatus(gateway, frame) : teamRequest(gateway, frame))
         return
       }
     }
@@ -329,14 +494,17 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       return undefined
     }
     const ceiling = (frame.ceiling as { ops?: unknown } | undefined)?.ops
+    const features = Array.isArray(frame.features) ? frame.features.filter(isRelayFeature) : []
     const previous = gateways.get(name)
     if (previous) {
       drop(previous, RELAY_CLOSE.replaced, 'replaced by a newer connection')
     }
     const gateway: Gateway = {
       name,
+      owner: enrollment?.owner ?? defaultOwner,
       socket,
       ops: new Set(Array.isArray(ceiling) ? ceiling.filter(isRelayOp) : []),
+      features: new Set(features),
       connectedAt: Date.now(),
       seq: 0,
       entries: new Map(),
@@ -345,7 +513,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     }
     gateways.set(name, gateway)
     log(`relay: ${name} online`)
-    send(socket, { t: 'welcome', relayVersion: RELAY_WIRE_VERSION })
+    send(socket, { t: 'welcome', relayVersion: RELAY_WIRE_VERSION, features: [...RELAY_FEATURES], owner: gateway.owner })
     return gateway
   }
 
@@ -387,9 +555,18 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       version: RELAY_WIRE_VERSION,
       gateways: [...names].sort().map((name) => {
         const gateway = gateways.get(name)
+        const owner = ownerOf(name)
         return gateway
-          ? { name, online: true, sessions: gateway.entries.size, connectedAt: gateway.connectedAt, ops: [...gateway.ops] }
-          : { name, online: false, sessions: 0, ops: [] }
+          ? {
+              name,
+              owner,
+              online: true,
+              sessions: gateway.entries.size,
+              connectedAt: gateway.connectedAt,
+              ops: [...gateway.ops],
+              features: [...gateway.features],
+            }
+          : { name, owner, online: false, sessions: 0, ops: [], features: [] }
       }),
     }
   }
@@ -472,6 +649,26 @@ function send(socket: WebSocket, frame: RelayFrame): void {
   }
 }
 
+function nodeOf(gateway: Gateway, entry: RelaySessionEntry | undefined): TeamNode {
+  return { gateway: gateway.name, owner: gateway.owner, agent: entry?.agent }
+}
+
+function respond(gateway: Gateway, id: string, work: Promise<unknown>): void {
+  work.then(
+    (result) => send(gateway.socket, { t: 'res', id, ok: true, result: result ?? null }),
+    (error: unknown) => send(gateway.socket, { t: 'res', id, ok: false, error: error instanceof Error ? error.message : String(error) }),
+  )
+}
+
 function originOf(from: Gateway, sender: RelaySessionEntry, hops: string[]): RelayOrigin {
-  return { gateway: from.name, sessionId: sender.id, name: sender.title, engine: sender.engine, hops }
+  const agent = sender.agent
+  return {
+    gateway: from.name,
+    owner: from.owner,
+    sessionId: sender.id,
+    name: agent?.name ?? sender.title,
+    engine: sender.engine,
+    ...(agent ? { agent: { id: agent.id, name: agent.name, ...(agent.lead ? { lead: agent.lead } : {}) } } : {}),
+    hops,
+  }
 }

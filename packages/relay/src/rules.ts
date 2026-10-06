@@ -1,12 +1,13 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { RELAY_OPS, isRelayOp, type RelayOp, type RelaySessionEntry } from '@workerdeck/relay-client'
+import { RELAY_ALL_OPS, RELAY_OPS, isRelayOp, type RelayOp, type RelaySessionEntry } from '@workerdeck/relay-client'
 
 export type RelayRule = {
   from: string
   to: string
   allow: RelayOp[]
   projects?: string[]
+  crossOperator?: boolean
 }
 
 export const RULES_FILE = 'rules.json'
@@ -21,13 +22,16 @@ export function parseRules(value: unknown): RelayRule[] {
     throw new Error('rules file must be an object with a "rules" array')
   }
   return list.map((raw, index) => {
-    const rule = raw as { from?: unknown; to?: unknown; allow?: unknown; scope?: { projects?: unknown } }
+    const rule = raw as { from?: unknown; to?: unknown; allow?: unknown; scope?: { projects?: unknown }; crossOperator?: unknown }
     const where = `rules[${index}]`
     if (typeof rule?.from !== 'string' || typeof rule.to !== 'string' || !rule.from || !rule.to) {
       throw new Error(`${where}: "from" and "to" must be gateway names or "*"`)
     }
     if (rule.allow !== undefined && (!Array.isArray(rule.allow) || !rule.allow.every(isRelayOp))) {
-      throw new Error(`${where}: "allow" must list "send" and/or "peek"`)
+      throw new Error(`${where}: "allow" must list ops from ${RELAY_ALL_OPS.map((op) => `"${op}"`).join(', ')}`)
+    }
+    if (rule.crossOperator !== undefined && typeof rule.crossOperator !== 'boolean') {
+      throw new Error(`${where}: "crossOperator" must be true or false`)
     }
     const projects = rule.scope?.projects
     if (
@@ -41,6 +45,7 @@ export function parseRules(value: unknown): RelayRule[] {
       to: rule.to,
       allow: rule.allow === undefined ? [...RELAY_OPS] : [...new Set(rule.allow as RelayOp[])],
       ...(projects ? { projects: projects as string[] } : {}),
+      ...(rule.crossOperator === true ? { crossOperator: true } : {}),
     }
   })
 }
@@ -71,21 +76,28 @@ function inScope(rule: RelayRule, entry: RelaySessionEntry): boolean {
 }
 
 // Union of every matching rule, intersected with what the target gateway accepts at all. Empty means
-// the session is invisible to the requester.
+// the session is invisible to the requester. A plain rule matches gateways of one owner only, a
+// crossOperator rule gateways of different owners only.
 export function allowedOps(
   rules: readonly RelayRule[],
   from: string,
   to: string,
   entry: RelaySessionEntry,
   ceiling: ReadonlySet<RelayOp>,
+  crossOperator = false,
 ): RelayOp[] {
   const ops = new Set<RelayOp>()
   for (const rule of rules) {
-    if ((rule.from === '*' || rule.from === from) && (rule.to === '*' || rule.to === to) && inScope(rule, entry)) {
+    if (
+      (rule.crossOperator === true) === crossOperator &&
+      (rule.from === '*' || rule.from === from) &&
+      (rule.to === '*' || rule.to === to) &&
+      inScope(rule, entry)
+    ) {
       for (const op of rule.allow) {
         ops.add(op)
       }
     }
   }
-  return RELAY_OPS.filter((op) => ops.has(op) && ceiling.has(op))
+  return RELAY_ALL_OPS.filter((op) => ops.has(op) && ceiling.has(op))
 }

@@ -107,7 +107,9 @@ describe('relay', () => {
 
     const result = await connA.send('a1', { gateway: 'pi', id: 'b1' }, 'hello', ['a0'])
     expect(result).toEqual({ delivered: true, sessionId: 'b1', queued: false })
-    expect(b.sent).toEqual([{ origin: { gateway: 'mac', sessionId: 'a1', name: 'Astra', hops: ['mac:a0'] }, to: 'b1', text: 'hello' }])
+    expect(b.sent).toEqual([
+      { origin: { gateway: 'mac', owner: 'operator', sessionId: 'a1', name: 'Astra', hops: ['mac:a0'] }, to: 'b1', text: 'hello' },
+    ])
   })
 
   it('denies by default and answers every miss the same way', async () => {

@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { enrollGateway, readEnrollments, revokeGateway } from './enrollment.ts'
-import { startRelay, type RelayStatus } from './relay.ts'
+import { enrollGateway, enrollGatewayHash, readEnrollments, revokeGateway, setGatewayOwner, writeKeyFile } from './enrollment.ts'
+import { DEFAULT_RELAY_OWNER, startRelay, type RelayStatus } from './relay.ts'
 import { fetchRelayStatus, statusSocketPath } from './status.ts'
 import { readRules, rulesPath } from './rules.ts'
 
@@ -10,10 +10,16 @@ export const RELAY_HELP = `workerdeck-relay - the cross-gateway peer relay. Also
 
 Usage
   workerdeck-relay serve [options]          run the relay
-  workerdeck-relay enroll <name> [--rotate] enroll a gateway and print its key once
+  workerdeck-relay enroll <name> [--rotate] [--owner <label>] [--hash <sha256>]
+                                            enroll a gateway and print its key once, or store the
+                                            hash a colleague's \`keygen\` printed (the key stays theirs)
+  workerdeck-relay owner <name> <label>     set the owner of an enrolled gateway (--clear to unset)
   workerdeck-relay revoke <name>            revoke a gateway; a running relay drops it within seconds
   workerdeck-relay list                     list enrolled gateways
   workerdeck-relay status                   ask the relay serving this state dir who is online
+  workerdeck-relay keygen [--out <file>] [--force]
+                                            on a gateway's machine: write a new key (default
+                                            ~/.workerdeck/relay.key, mode 0600) and print only its hash
 
 Options
   --state-dir <path>   enrollments, rules and the status socket (relay.sock); default ~/.workerdeck/relay
@@ -21,6 +27,7 @@ Options
   --port <n>           listen port (default 7777)
   --tls-cert <file>    serve wss:// with this certificate (optional, plain ws:// otherwise)
   --tls-key <file>     the certificate's private key
+  --owner <label>      serve: the owner of gateways enrolled without one (default ${DEFAULT_RELAY_OWNER})
   -h, --help           this text
 `
 
@@ -33,13 +40,19 @@ export type RelayFlags = {
   tlsCert?: string
   tlsKey?: string
   rotate?: boolean
+  owner?: string
+  hash?: string
+  out?: string
+  force?: boolean
+  clear?: boolean
   help?: boolean
+  rest: string[]
 }
 
 export class RelayUsageError extends Error {}
 
 export function parseRelayArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): RelayFlags {
-  const flags: RelayFlags = { stateDir: env.WORKERDECK_RELAY_STATE_DIR ?? join(homedir(), '.workerdeck', 'relay') }
+  const flags: RelayFlags = { stateDir: env.WORKERDECK_RELAY_STATE_DIR ?? join(homedir(), '.workerdeck', 'relay'), rest: [] }
   const positional: string[] = []
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!
@@ -79,6 +92,26 @@ export function parseRelayArgs(argv: readonly string[], env: NodeJS.ProcessEnv =
         flags.rotate = true
         break
       }
+      case '--owner': {
+        flags.owner = value()
+        break
+      }
+      case '--hash': {
+        flags.hash = value()
+        break
+      }
+      case '--out': {
+        flags.out = resolve(value())
+        break
+      }
+      case '--force': {
+        flags.force = true
+        break
+      }
+      case '--clear': {
+        flags.clear = true
+        break
+      }
       case '-h':
       case '--help': {
         flags.help = true
@@ -94,6 +127,7 @@ export function parseRelayArgs(argv: readonly string[], env: NodeJS.ProcessEnv =
   }
   flags.command = positional[0]
   flags.name = positional[1]
+  flags.rest = positional.slice(2)
   if (Boolean(flags.tlsCert) !== Boolean(flags.tlsKey)) {
     throw new RelayUsageError('--tls-cert and --tls-key go together')
   }
@@ -123,6 +157,7 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
         host: flags.host,
         port: flags.port,
         tls: flags.tlsCert && flags.tlsKey ? { cert: await readFile(flags.tlsCert), key: await readFile(flags.tlsKey) } : undefined,
+        owner: flags.owner,
       })
       const enrolled = Object.keys((await readEnrollments(flags.stateDir)).gateways).length
       console.log(`workerdeck-relay listening on ${relay.url} (${enrolled} gateway(s) enrolled, rules at ${rulesPath(flags.stateDir)})`)
@@ -137,10 +172,44 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       if (!flags.name) {
         throw new RelayUsageError('enroll needs a gateway name')
       }
-      const key = await enrollGateway(flags.stateDir, flags.name, { rotate: flags.rotate })
+      const options = { rotate: flags.rotate, owner: flags.owner }
+      const owned = flags.owner ? ` (owner ${flags.owner})` : ''
+      if (flags.hash) {
+        await enrollGatewayHash(flags.stateDir, flags.name, flags.hash, options)
+        console.log(`Enrolled ${flags.name}${owned} with the key hash it generated; its key never left that machine.`)
+        return 0
+      }
+      const key = await enrollGateway(flags.stateDir, flags.name, options)
       console.log(
-        `Enrolled ${flags.name}. Its key, shown once:\n\n  ${key}\n\n` +
+        `Enrolled ${flags.name}${owned}. Its key, shown once:\n\n  ${key}\n\n` +
           `Save it on that gateway (for example ~/.workerdeck/relay.key, mode 0600) and point relay.keyFile at it.`,
+      )
+      return 0
+    }
+    case 'owner': {
+      const label = flags.clear ? undefined : flags.rest[0]
+      if (!flags.name || (!flags.clear && !label)) {
+        throw new RelayUsageError('owner needs a gateway name and a label (or --clear)')
+      }
+      const changed = await setGatewayOwner(flags.stateDir, flags.name, label)
+      console.log(changed ? `${flags.name}: owner ${label ?? 'cleared'}.` : `${flags.name} is not enrolled.`)
+      return changed ? 0 : 1
+    }
+    case 'keygen': {
+      const out = flags.out ?? join(homedir(), '.workerdeck', 'relay.key')
+      let hash: string
+      try {
+        hash = await writeKeyFile(out, { force: flags.force })
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+          console.error(`workerdeck-relay: ${out} exists; pass --force to replace it (the old key stops working once re-enrolled)`)
+          return 1
+        }
+        throw error
+      }
+      console.log(
+        `Wrote a new gateway key to ${out} (mode 0600). Send the relay operator only this hash:\n\n  ${hash}\n\n` +
+          `They enroll it with: workerdeck relay enroll <gateway-name> --owner <you> --hash ${hash}`,
       )
       return 0
     }
@@ -159,7 +228,9 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
         console.log('No gateways enrolled.')
       }
       for (const [name, entry] of names) {
-        console.log(`${name}\tenrolled ${new Date(entry.enrolledAt).toISOString()}`)
+        console.log(
+          `${name}\towner ${entry.owner ?? `${DEFAULT_RELAY_OWNER} (default)`}\tenrolled ${new Date(entry.enrolledAt).toISOString()}`,
+        )
       }
       return 0
     }
@@ -175,8 +246,9 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       for (const gateway of status.gateways) {
         console.log(
           gateway.online
-            ? `${gateway.name}\tonline\t${gateway.sessions} session(s)\taccepts ${gateway.ops.join(', ') || 'nothing'}`
-            : `${gateway.name}\toffline`,
+            ? `${gateway.name}\t${gateway.owner}\tonline\t${gateway.sessions} session(s)\taccepts ${gateway.ops.join(', ') || 'nothing'}` +
+                (gateway.features?.length ? `\tfeatures ${gateway.features.join(', ')}` : '')
+            : `${gateway.name}\t${gateway.owner}\toffline`,
         )
       }
       return 0

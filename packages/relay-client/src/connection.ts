@@ -6,8 +6,11 @@ import {
   RELAY_WIRE_VERSION,
   decodeFrame,
   encodeFrame,
+  isRelayFeature,
   isRelayOp,
+  isTeamFrameKind,
   type GatewayFrame,
+  type RelayFeature,
   type RelayOp,
   type RelayOrigin,
   type RelayPeek,
@@ -15,6 +18,11 @@ import {
   type RelaySendResult,
   type RelaySessionEntry,
   type RelayTarget,
+  type RelayTeamOrigin,
+  type TeamEdge,
+  type TeamFrameKind,
+  type TeamResult,
+  type TeamStatusEdge,
 } from './frames.ts'
 import { createRegistryPublisher } from './registry.ts'
 
@@ -22,6 +30,8 @@ export type RelayHost = {
   snapshot(): Promise<RelaySessionEntry[]>
   peek(origin: RelayOrigin, sessionId: string, recent?: number): Promise<RelayPeek | undefined>
   send(origin: RelayOrigin, sessionId: string, text: string): Promise<RelaySendResult>
+  team?(kind: TeamFrameKind, origin: RelayTeamOrigin, agentId: string): Promise<TeamResult>
+  teamStatus?(origin: { gateway: string; owner: string }, edges: TeamEdge[]): Promise<Array<Omit<TeamStatusEdge, 'from' | 'to'>>>
 }
 
 export type RelayConnectOptions = {
@@ -29,6 +39,7 @@ export type RelayConnectOptions = {
   gateway: string
   key: string
   allow?: readonly RelayOp[]
+  features?: readonly RelayFeature[]
   ca?: string | Buffer
   tickMs?: number
   digestMs?: number
@@ -46,6 +57,10 @@ export type RelayConnection = {
   list(from: string): Promise<RelayPeerRow[]>
   peek(from: string, to: RelayTarget, recent?: number): Promise<RelayPeek | undefined>
   send(from: string, to: RelayTarget, text: string, hops: string[]): Promise<RelaySendResult>
+  team(kind: TeamFrameKind, from: string, to: string): Promise<TeamResult>
+  teamStatus(gateway: string, edges: TeamEdge[]): Promise<TeamStatusEdge[]>
+  features(): RelayFeature[]
+  owner(): string | undefined
   nudge(): void
   setHost(host: RelayHost): void
   close(): void
@@ -75,6 +90,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
   const backoffMin = options.backoffMinMs ?? 1_000
   const backoffMax = options.backoffMaxMs ?? 60_000
   const allow = new Set<RelayOp>((options.allow ?? RELAY_OPS).filter(isRelayOp))
+  const ownFeatures = [...new Set((options.features ?? []).filter(isRelayFeature))]
   const log = options.log ?? (() => {})
 
   let host = initialHost
@@ -91,6 +107,8 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
   let nextId = 0
   let lastTerminal: number | undefined
   let publisher = createRegistryPublisher()
+  let agreed: RelayFeature[] = []
+  let ownOwner: string | undefined
   const pending = new Map<string, Pending>()
 
   const sendFrame = (frame: GatewayFrame): void => {
@@ -155,6 +173,28 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     }
   }
 
+  const onInboundTeam = (frame: { t: string; [key: string]: unknown }): void => {
+    const id = typeof frame.id === 'string' ? frame.id : undefined
+    const origin = frame.origin as Partial<RelayTeamOrigin> | undefined
+    if (!id || typeof origin?.gateway !== 'string' || typeof origin.owner !== 'string') {
+      return
+    }
+    const open = allow.has('team') && agreed.includes('teams')
+    if (frame.t === 'team.status') {
+      const edges = Array.isArray(frame.edges) ? (frame.edges as TeamEdge[]) : []
+      const handler = host.teamStatus
+      void answer(id, async () => (open && handler ? handler({ gateway: origin.gateway!, owner: origin.owner! }, edges) : []))
+      return
+    }
+    const to = typeof frame.to === 'string' ? frame.to : undefined
+    const handler = host.team
+    if (!isTeamFrameKind(frame.t) || typeof origin.agent !== 'string' || !to || !open || !handler) {
+      void answer(id, async () => ({ ok: false, reason: 'no such agent' }) satisfies TeamResult)
+      return
+    }
+    void answer(id, () => handler(frame.t as TeamFrameKind, origin as RelayTeamOrigin, to))
+  }
+
   const onInbound = (frame: { t: string; [key: string]: unknown }): void => {
     const id = typeof frame.id === 'string' ? frame.id : undefined
     const origin = frame.origin as RelayOrigin | undefined
@@ -195,6 +235,8 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
           return
         }
         state = 'online'
+        agreed = Array.isArray(frame.features) ? ownFeatures.filter((feature) => (frame.features as unknown[]).includes(feature)) : []
+        ownOwner = typeof frame.owner === 'string' ? frame.owner : undefined
         attempt = 0
         lastTerminal = undefined
         log(`relay: connected to ${options.url} as ${options.gateway}`)
@@ -227,6 +269,17 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
       case 'peer.send': {
         if (state === 'online') {
           onInbound(frame)
+        }
+        return
+      }
+      case 'team.join':
+      case 'team.leave':
+      case 'team.release':
+      case 'team.invite':
+      case 'team.request':
+      case 'team.status': {
+        if (state === 'online') {
+          onInboundTeam(frame)
         }
         return
       }
@@ -274,7 +327,14 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     socket = ws
     lastHeard = Date.now()
     ws.on('open', () => {
-      sendFrame({ t: 'hello', gateway: options.gateway, key: options.key, version: RELAY_WIRE_VERSION, ceiling: { ops: [...allow] } })
+      sendFrame({
+        t: 'hello',
+        gateway: options.gateway,
+        key: options.key,
+        version: RELAY_WIRE_VERSION,
+        ceiling: { ops: [...allow] },
+        ...(ownFeatures.length > 0 ? { features: ownFeatures } : {}),
+      })
       heartbeatTimer = setInterval(() => {
         if (Date.now() - lastHeard > heartbeatMs * 2 + 1_000) {
           ws.terminate()
@@ -314,6 +374,11 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
 
   const newId = (): string => `g${++nextId}`
 
+  const teamsAgreed = (): Promise<void> =>
+    state === 'online' && !agreed.includes('teams')
+      ? Promise.reject(new RelayUnavailableError('the relay does not route teams'))
+      : Promise.resolve()
+
   dial()
 
   return {
@@ -321,6 +386,10 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     list: (from) => request<RelayPeerRow[]>({ t: 'peer.list', id: newId(), from }),
     peek: async (from, to, recent) => (await request<RelayPeek | null>({ t: 'peer.peek', id: newId(), from, to, recent })) ?? undefined,
     send: (from, to, text, hops) => request<RelaySendResult>({ t: 'peer.send', id: newId(), from, to, text, hops }),
+    team: (kind, from, to) => teamsAgreed().then(() => request<TeamResult>({ t: kind, id: newId(), from, to })),
+    teamStatus: (gateway, edges) => teamsAgreed().then(() => request<TeamStatusEdge[]>({ t: 'team.status', id: newId(), gateway, edges })),
+    features: () => (state === 'online' ? [...agreed] : []),
+    owner: () => ownOwner,
     nudge: () => void tick(),
     setHost: (next) => {
       host = next

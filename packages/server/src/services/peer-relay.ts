@@ -71,7 +71,7 @@ function remoteSummary(row: RelayPeerRow): PeerSessionSummary {
     contextUsage: row.contextUsage,
     lastActivityAt: row.lastActivityAt,
     pendingPermissionCount: row.pendingPermissionCount,
-    allow: row.allow,
+    allow: row.allow.filter((op) => op === 'send' || op === 'peek'),
   }
 }
 
