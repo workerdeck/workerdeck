@@ -5,6 +5,31 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.4.0] - 2026-10-06
+
+### Added
+
+- **Reasoning effort.** The status bar shows the session's effort level; click it (or run *Select
+  Reasoning Effort*, or type `/effort`) to change it. `workerdeck.host.effortDefaults` sets a
+  default per model.
+- **Sleep.** *Sleep Session* stops an idle session's engine to free its memory; the next message
+  wakes it with its history intact. `workerdeck.host.engineSleepAfterMinutes` puts unwatched idle
+  sessions to sleep on their own (0, the default, never does).
+- **Agents can reset their own context** between turns with a reason you see in the transcript,
+  rate limited. Governed by `workerdeck.host.agentContextReset`.
+- **Live tool rows.** A running command shows its elapsed time and the tail of its output. On
+  claude, a running Bash call or sub-agent can be moved to the background, and after five seconds
+  the composer offers ⌥↵ to send a message now and background the command.
+- **`#` mentions across gateways** in the composer, when a relay is running.
+- **`workerdeck.host.name`** names the integrated gateway; group headers show gateway and project
+  apart.
+- Every agent can call `session_info` to read its own context use, cost and rate limits.
+
+### Fixed
+
+- Hover actions on a transcript row stay reachable.
+- A peer message no longer shows as raw XML after a session is resumed.
+
 ## [3.3.0] - 2026-09-29
 
 ### Added

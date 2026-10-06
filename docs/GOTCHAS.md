@@ -1188,8 +1188,7 @@ handover wrong.
   through `refreshUsage` (60s floor). Each probe races a 5s deadline and falls back to the log's
   last reading (`measured: 'last_turn'`), so a CLI that cannot answer mid-call costs five seconds,
   never the tool. The live read also emits `context_usage`, so asking moves every client's meter.
-  **Unverified against the real CLI**: it needs a paid run that calls the tool mid-turn, and no
-  existing smoke does yet.
+  Confirmed by hand on a real claude session (2026-10-06); no smoke asserts the live reading.
 - **Codex reads the active turn** (`contextTokens`/`contextWindow` from the latest
   `thread/tokenUsage/updated`) before falling back to the log. Rate limits on both engines come from
   the session's own `rate_limit` events, latest per window; `logCoalesceKey` already keeps only
@@ -1252,8 +1251,8 @@ has the shape; these are the ways to get it wrong.
   arrives as the server request `item/tool/call`.** Both need `experimentalApi`, which
   `INITIALIZE_PARAMS` already sends. Measured against 0.153.4: `thread/start` with `dynamicTools`
   is accepted and unknown fields are ignored, not refused, so a binary that drops the field
-  silently drops the tools. **Whether `thread/resume` honours it is unverified** (a resume needs a
-  rollout, which needs a turn, which costs tokens); `pnpm smoke:codex` is the check. There is no
+  silently drops the tools. `thread/resume` honours it: `pnpm smoke:sleep codex` calls
+  `session_info` after a sleep wake, which is a resume. There is no
   stdio MCP server and no `config.toml` write: `thread/start` also accepts a per-thread
   `config: { mcp_servers }` override (measured), kept in reserve, and never used for this because a
   child process with the gateway's address in argv is exactly what `mcpStatusInfo` forwards.

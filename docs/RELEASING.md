@@ -1424,6 +1424,22 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   tag had published) and went green, all 12 packages live within 210 s and the Marketplace job
   reporting v3.3.0. The test now polls for its state (`f20706ac` on master, after the tag).
 
+  **3.4.0** - **effort, sleep, agent context reset, live tool rows, released 2026-10-06** (tag
+  `v3.4.0`). A **minor**, protocol stays **1** (every wire addition is optional: `SessionInfo.effort`,
+  `engineAsleep`, `agentContextReset`, `tool_output`, `engine_sleep`, `effort_changed`,
+  `conversation_reset.agentReason`). One breaking CLI change taken as a minor by the 3.1.0 choice:
+  `workerdeck relay status` reads a state-dir unix socket (`--state-dir`), the HTTP `/status` is
+  gone. Ships: the `session_info` tool (all engines), engine sleep (`Runner.sleep`,
+  `engineSleepAfterMs`, sleep on dormant wake), reasoning effort on every client including iOS,
+  the agent `context_reset` tool, live tool rows and move-to-background (send-now gated at 5 s and
+  drawn above the prompt), cross-gateway `#` mentions, the host name setting, edited-config hot
+  reload, and the peer-origin restore on resume backfill. Agent SDK stays 0.3.284 and codex
+  0.158.0 (0.3.290 and 0.160.1 were out; not taken, so the catalogs were not re-extracted).
+  **Verified**: paid `smoke:sleep` 18/18, `smoke:background` 9/9, `smoke:context-reset` 14/14 on
+  both engines, `smoke:codex --canary` 10/10, full `pnpm test` (the sandbox memory-cap case failed
+  once under load and passed alone), and Tobias by hand on effort, peer replay, `session_info`,
+  sleep, context reset, the VS Code `#` picker and group headers. `demo/tours` not included.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
