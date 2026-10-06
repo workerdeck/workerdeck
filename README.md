@@ -167,6 +167,12 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   composer, `#` names one of them: it completes from the sessions this gateway shows and sends a
   hint, not an order - "commit what #Astra left unstaged" tells the agent which session to go and
   read, and the transcript keeps the bare text you typed.
+- **Agents that outlive their sessions, in teams.** An agent is a name, an avatar and a standing
+  brief the gateway keeps across restarts; it owns one session at a time and *New conversation*
+  starts it fresh. Drag one agent onto another to form a team (one level deep): members sit under
+  their lead in every client, reach only their lead and teammates through the peer tools, and sleep
+  when idle (`--agent-sleep-after`, 15 minutes by default). `#` in the composer finds an agent by
+  name.
 - **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
   and an icon, found by an ancestor walk from the session's cwd - so a list of sessions reads as
   a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it

@@ -5,6 +5,20 @@ All notable changes to the WorkerDeck VS Code extension are documented here. The
 with the `@workerdeck/*` packages it is built from, so a version here is the same release as the
 gateway and protocol it talks to.
 
+## [3.5.0] - 2026-10-06
+
+### Added
+
+- **Agents and teams.** *New Agent* (the person icon in the Sessions title) starts a named,
+  long-lived agent with an avatar and a standing brief; *Make agent* turns a session into one.
+  Agents keep their identity across restarts, and *New conversation* starts them fresh.
+- **Teams.** Drag an agent onto another to join its team (or use *Add to team* in the card menu);
+  drag a member out to leave. Members sit under their lead, and a folded team shows its members'
+  avatars and status on the lead's line. One level deep: a lead cannot join another team.
+- An agent's editor tab shows its avatar, and a member's tab names its team.
+- **`workerdeck.host.agentSleepAfterMinutes`** (default 15, 0 never) puts idle agents to sleep.
+- `#` mentions find agents by their name.
+
 ## [3.4.0] - 2026-10-06
 
 ### Added

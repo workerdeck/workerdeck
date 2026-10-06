@@ -1440,6 +1440,22 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   once under load and passed alone), and Tobias by hand on effort, peer replay, `session_info`,
   sleep, context reset, the VS Code `#` picker and group headers. `demo/tours` not included.
 
+  **3.5.0** - **agents and teams, released 2026-10-06** (tag `v3.5.0`). A **minor**, protocol stays
+  **1** (every wire addition is optional: `SessionInfo.agent`, `AgentRef`, `PeerSessionSummary.agent`,
+  `AgentRef.conversation`; `/agents` is a new operator-only route family). Ships: agents as gateway
+  records persisted to `<state-dir>/agents.json`, one-level teams and the `teamReaches` peers rule,
+  the brief as host instructions, avatars as an optional `AvatarProvider` (the CLI wires monkeyart
+  0.3.0, so `@monkeyart/*` became CLI dependencies), agent sleep (`agentSleepAfterMs`,
+  `--agent-sleep-after`, VS Code `agentSleepAfterMinutes`), the session list's team units (folded
+  team tray on the lead line, Earlier fold), drag to join, `AgentHeading`, the web New agent dialog
+  and card verbs, VS Code New Agent, team verbs, avatar tabs, and `#` mentions by agent name. Agent
+  SDK stays 0.3.284 and codex 0.158.0 (0.3.291 and 0.160.1 were out; not taken, so the catalogs
+  were not re-extracted). **Verified**: paid `smoke:teams` 24/24 (before the avatar seam and the
+  persistence fix), `smoke:codex --canary` 10/10, full `pnpm test`, agent persistence across two
+  restarts of a private gateway, drag join / reorder / leave against a private gateway in the
+  dashboard. **Not verified**: agents across a hot reload, VS Code tab icons and drag in a real
+  window, iOS (phase 5 not started; the phone ignores `agent`).
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
