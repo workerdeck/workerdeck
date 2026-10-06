@@ -7,6 +7,7 @@ import type { ContextResetDirectory } from '../../lib/context-reset.ts'
 import type { PeerDirectory } from '../../lib/peers.ts'
 import type { ShellDirectory } from '../../lib/shells.ts'
 import type { SessionReportSource } from '../../lib/session-report.ts'
+import type { StatusLabelSink } from '../../lib/status-label.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 
 export type ToolTrust = 'sandboxed' | 'authoritative'
@@ -36,6 +37,7 @@ export type ToolContextOptions = {
   // The runner does not exist while its tools are built, so the caller's own id is read at call time.
   selfId?: () => string
   report?: SessionReportSource
+  status?: StatusLabelSink
 }
 
 export type ToolContext = {
@@ -116,6 +118,7 @@ export function createToolContext(options: ToolContextOptions): ToolContext {
   const gatewayTools = sessionTools(
     {
       report: options.report,
+      status: options.status,
       reset: options.contextReset,
       peers: options.peers,
       shells: options.shells,

@@ -13,11 +13,13 @@ import {
   runSessionInfoTool,
   type SessionReportSource,
 } from './session-report.ts'
+import { SET_STATUS_TOOL, SET_STATUS_TOOL_SHAPE, isSetStatusToolName, runSetStatusTool, type StatusLabelSink } from './status-label.ts'
 import { PEER_TOOL_NAMES, PEER_TOOL_SHAPES, isPeerToolName, runPeerTool, type PeerDirectory } from './peers.ts'
 import { SHELL_TOOL_SHAPES, isShellToolName, runShellTool, shellToolNames, type ShellDirectory } from './shells.ts'
 
 export type SessionToolSources = {
   report?: SessionReportSource
+  status?: StatusLabelSink
   reset?: ContextResetDirectory
   peers?: PeerDirectory
   shells?: ShellDirectory
@@ -26,11 +28,13 @@ export type SessionToolSources = {
 
 export type SessionTool = GatewayToolShape & { name: string; run(args: unknown): Promise<GatewayToolOutput> }
 
-// The gateway's own tools a session is offered, session_info, context_reset, peers, shells: the order every engine registers them in.
+// The gateway's own tools a session is offered, session_info, set_status, context_reset, peers, shells: the order every engine
+// registers them in.
 export function sessionTools(sources: SessionToolSources, from: () => string): SessionTool[] {
-  const { report, reset, peers, shells, write } = sources
+  const { report, status, reset, peers, shells, write } = sources
   return [
     ...(report ? [{ name: SESSION_INFO_TOOL, ...SESSION_INFO_TOOL_SHAPE, run: () => runSessionInfoTool(report, from()) }] : []),
+    ...(status ? [{ name: SET_STATUS_TOOL, ...SET_STATUS_TOOL_SHAPE, run: (args: unknown) => runSetStatusTool(status, from(), args) }] : []),
     ...(reset
       ? [{ name: CONTEXT_RESET_TOOL, ...CONTEXT_RESET_TOOL_SHAPE, run: (args: unknown) => runContextResetTool(reset, from(), args) }]
       : []),
@@ -60,6 +64,9 @@ export function runSessionTool(
 ): Promise<GatewayToolOutput> | undefined {
   if (sources.report && isSessionInfoToolName(name)) {
     return runSessionInfoTool(sources.report, from)
+  }
+  if (sources.status && isSetStatusToolName(name)) {
+    return runSetStatusTool(sources.status, from, args)
   }
   if (sources.reset && isContextResetToolName(name)) {
     return runContextResetTool(sources.reset, from, args)

@@ -108,11 +108,19 @@ export function SessionItem({
   ].filter((part): part is string => Boolean(part))
 
   const model = friendlyModel(info.model)
+  const status = statusLine(info.statusLabel)
   const parts: ReactNode[] = []
   if (model) {
     parts.push(
       <span key="model" className={vendorTextClass(engine, info.model)}>
         {model}
+      </span>,
+    )
+  }
+  if (status) {
+    parts.push(
+      <span key="status" title={status} className="text-fg-3">
+        {status}
       </span>,
     )
   }
@@ -147,7 +155,6 @@ export function SessionItem({
   )
   const holdsOpenStep = steps.some((s) => s.key === activeStepKey)
   const agent = info.agent
-  const topic = agentTopic(info)
   const label = agent ? agent.name : sessionLabel(info)
   const editable = agent ? agent.name : (info.title ?? '')
   const time = formatRelativeTime(info.lastActivityAt ?? info.createdAt)
@@ -230,7 +237,13 @@ export function SessionItem({
         <div className={cn('flex h-6 items-center gap-1.5 overflow-hidden py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
           <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={22} />
           {nameLabel}
-          {topic ? <span className="min-w-0 flex-1 truncate text-body-sm text-fg-3">{topic}</span> : <span className="flex-1" />}
+          {status ? (
+            <span title={status} className="min-w-0 flex-1 truncate text-body-sm text-fg-3">
+              {status}
+            </span>
+          ) : (
+            <span className="flex-1" />
+          )}
           {unread}
           <span className="shrink-0 text-body-sm text-fg-4">{time}</span>
           {actions}
@@ -261,10 +274,10 @@ export function SessionItem({
               {agent ? (
                 <>
                   {model ? <span className={cn('shrink-0', vendorTextClass(engine, info.model))}>{model}</span> : null}
-                  {topic ? (
-                    <span className="min-w-0 truncate text-fg-4">
+                  {status ? (
+                    <span title={status} className="min-w-0 truncate text-fg-3">
                       {model ? '· ' : ''}
-                      {topic}
+                      {status}
                     </span>
                   ) : null}
                 </>
@@ -395,12 +408,6 @@ function NameEditor({
   )
 }
 
-// An agent card's second line is the session's topic; a title that only repeats the agent's name (an adopted
-// session keeps the title it was named from) says nothing.
-export function agentTopic(info: Pick<SessionInfo, 'title' | 'agent'>): string | undefined {
-  const title = info.title?.trim()
-  if (!title || title.toLowerCase() === info.agent?.name.trim().toLowerCase()) {
-    return undefined
-  }
-  return title
+export function statusLine(label: SessionInfo['statusLabel']): string | undefined {
+  return label ? (label.emoji ? `${label.emoji} ${label.text}` : label.text) : undefined
 }

@@ -483,9 +483,13 @@ engine has none. Rules in `docs/GOTCHAS.md` §Reasoning effort.
 
 **Context reset**: `lib/context-reset.ts` defines the `context_reset` tool and its
 `ContextResetDirectory` (a late-bound handle plus a `Symbol.for` slot, like peers). The tool is
-offered right after `session_info` whenever `EngineRunnerConfig.contextReset` is set; core never
+offered right after `set_status` whenever `EngineRunnerConfig.contextReset` is set; core never
 decides the grant or the timing. `Runner.clearContext({ agentReason })` stamps the reason on the
 `conversation_reset` it emits, on all three engines. See `docs/GOTCHAS.md` §Agent context reset.
+
+**Status label**: `lib/status-label.ts` defines `set_status`, runner-local like `session_info`
+(the sink is `EngineRunner.setStatusLabel`, which emits `status_label`), offered on every engine
+right after `session_info`. See `docs/GOTCHAS.md` §Status label.
 
 the engines, shipped as **adapters** (`src/engines/`): one `EngineAdapter`
 per engine (capability record pinned by identity to protocol's `ENGINE_CAPABILITIES`, a model

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { PermissionRequest, SessionEvent, SessionInfo, SessionStatus } from '@workerdeck/protocol'
+import type { PermissionRequest, SessionEvent, SessionInfo, SessionStatus, StatusLabel, StatusLabelInput } from '@workerdeck/protocol'
 import type { EngineRunnerConfig, PermissionDecision, SendMessageOptions, SessionEventListener } from '../runner-interface.ts'
 import { resolveApprovalTimeoutMs } from './approval-timeout.ts'
 import { attachmentRef, type AttachmentInput } from './attachments.ts'
@@ -71,6 +71,13 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
     this.config = withTitle(this.config, title)
   }
 
+  setStatusLabel(input: StatusLabelInput | null): StatusLabel | null {
+    this.assertAccepting()
+    const label = input ? { ...input, setAt: Date.now() } : null
+    this.core.emit({ type: 'status_label', label })
+    return label
+  }
+
   carryCost(state: CostLedgerState): void {
     this.core.carryCost(state)
   }
@@ -125,6 +132,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
   protected get toolSources(): SessionToolSources {
     return {
       report: () => this.sessionReport(),
+      status: (input) => this.setStatusLabel(input),
       reset: this.config.contextReset,
       peers: this.config.peers,
       shells: this.config.shells,
@@ -151,6 +159,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       scope: this.config.scope,
       agentContextReset: this.config.contextReset ? (true as const) : undefined,
       title: sessionTitle(this.config, engineTitle),
+      statusLabel: (log.statusLabel === undefined ? this.config.statusLabel : log.statusLabel) ?? undefined,
       costUsd: this.core.cost.costUsd,
       usageByModel: this.core.cost.byModel,
       lastActivityAt: log.lastActivityAt,

@@ -74,6 +74,7 @@ export {
 } from './lib/context-reset.ts'
 export type { ContextResetDirectory, ContextResetRequest } from './lib/context-reset.ts'
 export { SESSION_INFO_TOOL, buildSessionReport } from './lib/session-report.ts'
+export { SET_STATUS_TOOL, type StatusLabelSink } from './lib/status-label.ts'
 export type { SessionContextReport, SessionRateLimitReport, SessionReport } from './lib/session-report.ts'
 export {
   SHELL_KEY_NAMES,

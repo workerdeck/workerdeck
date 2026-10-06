@@ -1,4 +1,5 @@
 import type { AgentRef } from './agents.ts'
+import type { StatusLabel, StatusLabelInput } from './status-label.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
 export const PROTOCOL_VERSION = 1
@@ -224,6 +225,7 @@ export type SessionEventBody =
   | { type: 'skills'; skills: SkillInfo[] }
   | { type: 'tool_titles'; titles: Record<string, string> }
   | { type: 'checklist'; items: ChecklistItem[] }
+  | { type: 'status_label'; label: StatusLabel | null }
   | {
       type: 'file_produced'
       fileId: string
@@ -866,6 +868,7 @@ export type SessionInfo = {
   // The agent holds `context_reset` and may clear its own conversation between turns.
   agentContextReset?: true
   agent?: AgentRef
+  statusLabel?: StatusLabel
 }
 
 export function contextReading(body: SessionEventBody): ContextReading | undefined {
@@ -977,6 +980,9 @@ export function replayCoalesceKey(body: SessionEventBody): string | undefined {
     case 'checklist': {
       return 'checklist'
     }
+    case 'status_label': {
+      return 'status_label'
+    }
     case 'engine_sleep': {
       return 'engine_sleep'
     }
@@ -1031,7 +1037,7 @@ export type ListSessionsResponse = { sessions: SessionInfo[] }
 export type CreateSessionResponse = { session: SessionInfo }
 export type GetSessionResponse = { session: SessionInfo }
 
-export type UpdateSessionRequest = { title?: string | null }
+export type UpdateSessionRequest = { title?: string | null; statusLabel?: StatusLabelInput | null }
 export type UpdateSessionResponse = { session: SessionInfo }
 
 export type ResolvePermissionRequest =
@@ -1247,6 +1253,7 @@ export * from './paths.ts'
 export * from './pricing.ts'
 export * from './peer-mentions.ts'
 export * from './session-list.ts'
+export * from './status-label.ts'
 export * from './tool-titles.ts'
 export * from './usage.ts'
 export * from './watermarks.ts'

@@ -8,6 +8,8 @@ import type {
   ProfileEngine,
   SessionEvent,
   SessionInfo,
+  StatusLabel,
+  StatusLabelInput,
 } from '@workerdeck/protocol'
 import type { SandboxVfs } from '@workerdeck/sandbox'
 import type { AttachmentInput } from './lib/attachments.ts'
@@ -40,6 +42,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   // Set by the gateway on a dormant wake: the runner backfills, then waits for the first message to start its engine.
   startAsleep?: boolean
   effortDefaults?: Record<string, string>
+  // The status label a woken session last showed; the event log takes over once it sees a set or a reset.
+  statusLabel?: StatusLabel
 }
 
 export type ParkedExecution = {
@@ -96,6 +100,8 @@ export interface Runner {
   reconnectMcpServer?(name: string): Promise<void>
   setMcpServerEnabled?(name: string, enabled: boolean): Promise<void>
   setTitle(title: string | undefined): void
+  // Null clears. Emits `status_label`; the label shows on `info().statusLabel`.
+  setStatusLabel?(label: StatusLabelInput | null): StatusLabel | null
   resolvePermission(requestId: string, decision: PermissionDecision): boolean
   interrupt(): Promise<void>
   // Resolves false when the record has no stoppable background task (unknown, settled, or not the engine's to stop).

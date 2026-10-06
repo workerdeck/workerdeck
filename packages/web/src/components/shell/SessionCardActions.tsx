@@ -1,10 +1,24 @@
 import type { ReactNode, SyntheticEvent } from 'react'
 import type { SessionRow } from '@workerdeck/protocol'
 import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, cn } from '@workerdeck/ui'
-import { BedDouble, Eraser, LogOut, MoreHorizontal, Pencil, RotateCcw, Trash2, Ungroup, UserMinus, UserPlus, Users } from 'lucide-react'
+import {
+  BedDouble,
+  Eraser,
+  LogOut,
+  MessageSquareText,
+  MoreHorizontal,
+  Pencil,
+  RotateCcw,
+  Trash2,
+  Ungroup,
+  UserMinus,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 
 export type CardAction =
   | { kind: 'rename' }
+  | { kind: 'status' }
   | { kind: 'clear' }
   | { kind: 'sleep' }
   | { kind: 'close' }
@@ -93,6 +107,9 @@ export function SessionCardActions({
         <MenuContent>
           <Item icon={<Pencil />} onClick={() => onAction({ kind: 'rename' })}>
             {agent ? 'Rename agent' : 'Rename session'}
+          </Item>
+          <Item icon={<MessageSquareText />} onClick={() => onAction({ kind: 'status' })}>
+            {row.info.statusLabel ? 'Change status' : 'Set status'}
           </Item>
           <MenuSeparator />
           {agent ? null : (

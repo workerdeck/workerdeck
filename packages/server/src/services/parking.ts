@@ -1,5 +1,5 @@
 import type { ParkedExecution, Runner, SessionRunnerConfig, ToolExecutionResult } from '@workerdeck/core'
-import { ENGINE_CAPABILITIES, type SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import { engineOf } from '../lib/profile-env.ts'
 import type { SessionRegistry } from './registry.ts'
 import {
@@ -110,7 +110,8 @@ export class SessionParkManager {
           void this.#persistLive(runner)
           return
         }
-        case 'system_init': {
+        case 'system_init':
+        case 'status_label': {
           void this.#rememberDormant(runner)
           return
         }
@@ -212,6 +213,23 @@ export class SessionParkManager {
       const info: SessionInfo = { ...record.info, title: shown, meta: title ? { ...record.info.meta, title } : meta }
       const config: SessionRunnerConfig = { ...record.config, meta: title ? { ...meta, title } : meta }
       await this.#options.store.save({ ...record, info, config })
+      return info
+    })
+  }
+
+  // Dormant records only: a parked one replays its own log on wake, whose last label would win over the record's.
+  relabel(id: string, input: StatusLabelInput | null): Promise<SessionInfo | undefined | 'parked'> {
+    return this.#queue(id, async () => {
+      const record = await this.#options.store.get(id)
+      if (!record || this.#options.registry.get(id)) {
+        return undefined
+      }
+      if (!isDormant(record)) {
+        return 'parked' as const
+      }
+      const statusLabel = input ? { ...input, setAt: Date.now() } : undefined
+      const info: SessionInfo = { ...record.info, statusLabel }
+      await this.#options.store.save({ ...record, info, config: { ...record.config, statusLabel } })
       return info
     })
   }
@@ -528,7 +546,7 @@ function idleRecordBase(
     id: runner.id,
     info: { ...info, status: 'idle' },
     profile: info.profile,
-    config: { ...config, meta: info.meta },
+    config: { ...config, meta: info.meta, statusLabel: info.statusLabel },
     cost: runner.costState?.(),
   }
 }

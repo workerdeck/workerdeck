@@ -1,6 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
-import { filterRows, sessionLabel, type SessionRow, type SessionTask, errorMessage } from '@workerdeck/protocol'
+import {
+  STATUS_LABEL_EMOJI_MAX,
+  STATUS_LABEL_TEXT_MAX,
+  filterRows,
+  sessionLabel,
+  type SessionRow,
+  type SessionTask,
+  type StatusLabelInput,
+  errorMessage,
+} from '@workerdeck/protocol'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import {
   AlertDialog,
@@ -59,6 +68,7 @@ export function SessionsSidebar() {
   const [creating, setCreating] = useState(false)
   const [creatingAgent, setCreatingAgent] = useState(false)
   const [renaming, setRenaming] = useState<SessionRow>()
+  const [labeling, setLabeling] = useState<SessionRow>()
   const [retiring, setRetiring] = useState<SessionRow>()
   // Kept after close so the dialog does not re-render against another gateway while it fades out.
   const [target, setTarget] = useState<Partial<GroupTarget>>({})
@@ -210,6 +220,10 @@ export function SessionsSidebar() {
     switch (action.kind) {
       case 'rename': {
         setRenaming(row)
+        break
+      }
+      case 'status': {
+        setLabeling(row)
         break
       }
       case 'clear': {
@@ -427,6 +441,14 @@ export function SessionsSidebar() {
         onOneOff={(next) => startCreate({ hostId: next.hostId, cwd: next.cwd })}
       />
 
+      <StatusDialog
+        row={labeling}
+        onClose={() => setLabeling(undefined)}
+        onSave={(row, statusLabel) =>
+          agentCall(row, 'Could not set the status', (client) => client.updateSession(row.info.id, { statusLabel }))
+        }
+      />
+
       <RenameDialog
         row={renaming}
         onClose={() => setRenaming(undefined)}
@@ -522,6 +544,83 @@ function RenameForm({
         <Button type="submit" disabled={agent !== undefined && !name}>
           Rename
         </Button>
+      </div>
+    </form>
+  )
+}
+
+function StatusDialog({
+  row,
+  onClose,
+  onSave,
+}: {
+  row?: SessionRow
+  onClose: () => void
+  onSave: (row: SessionRow, label: StatusLabelInput | null) => void
+}) {
+  return (
+    <Dialog open={row !== undefined} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent size="sm">
+        <DialogHeader title="Status" />
+        <DialogBody>{row ? <StatusForm key={row.info.id} row={row} onClose={onClose} onSave={onSave} /> : null}</DialogBody>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function StatusForm({
+  row,
+  onClose,
+  onSave,
+}: {
+  row: SessionRow
+  onClose: () => void
+  onSave: (row: SessionRow, label: StatusLabelInput | null) => void
+}) {
+  const [emoji, setEmoji] = useState(row.info.statusLabel?.emoji ?? '')
+  const [text, setText] = useState(row.info.statusLabel?.text ?? '')
+  const save = (label: StatusLabelInput | null) => {
+    onSave(row, label)
+    onClose()
+  }
+  return (
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        save(text.trim() ? { text: text.trim(), ...(emoji.trim() ? { emoji: emoji.trim() } : {}) } : null)
+      }}
+    >
+      <div className="flex gap-2">
+        <Input
+          value={emoji}
+          onChange={(e) => setEmoji(e.target.value)}
+          placeholder="🙂"
+          aria-label="Emoji"
+          maxLength={STATUS_LABEL_EMOJI_MAX}
+          className="w-12 text-center"
+        />
+        <Input
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="What is this session doing?"
+          aria-label="Status"
+          maxLength={STATUS_LABEL_TEXT_MAX}
+          spellCheck={false}
+        />
+      </div>
+      <p className="text-label text-fg-4">Shown under the name in the session list. The agent can change it with set_status.</p>
+      <div className="flex justify-end gap-2">
+        {row.info.statusLabel ? (
+          <Button variant="outline" onClick={() => save(null)}>
+            Clear
+          </Button>
+        ) : null}
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit">Save</Button>
       </div>
     </form>
   )

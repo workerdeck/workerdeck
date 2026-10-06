@@ -41,7 +41,7 @@ describe('SessionRunner: peer tools', () => {
     const server = (harness.captured.options!.mcpServers as Record<string, { instance: unknown }>).workerdeck
     const instance = server.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>
     const tools = instance['_registeredTools'] ?? {}
-    expect(Object.keys(tools).sort()).toEqual(['peers_list', 'peers_peek', 'peers_send', 'session_info'])
+    expect(Object.keys(tools).sort()).toEqual(['peers_list', 'peers_peek', 'peers_send', 'session_info', 'set_status'])
     const result = await tools.peers_send!.handler({ sessionId: 'b', text: 'hi' }, {})
     expect(result).toMatchObject({ isError: false, content: [{ type: 'text', text: expect.stringContaining('Delivered to b') }] })
     expect(peers.sent).toEqual([{ from: runner.id, to: 'b', text: 'hi' }])

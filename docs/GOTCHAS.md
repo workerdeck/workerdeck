@@ -1201,6 +1201,25 @@ handover wrong.
   says so in `context.note`. No model table is shipped on purpose: it would go stale silently.
   Provider rate limits are `null`: they exist only as vendor-specific response headers.
 
+## Status label (`set_status`, `SessionInfo.statusLabel`)
+
+A one-line status a session shows under its name (`StatusLabel`: text up to 80, an optional emoji, `setAt`).
+
+- **The event log holds it, the runner config seeds it.** `status_label` events fold into
+  `EventLog.statusLabel` (`undefined` = no set or reset seen yet, `null` = cleared), and
+  `conversation_reset` folds it to `null`. `baseInfo` reads the log, falling back to
+  `config.statusLabel` only while the log has said nothing: that is how a dormant wake (fresh log,
+  config from the record) keeps it. `statusLabel` is a durable host-only config key.
+- **Persisted by the dormant record, re-saved on every change.** `idleRecordBase` copies
+  `info.statusLabel` into the record's config, and parking re-remembers on `status_label`. A
+  label PATCHed onto a stored session is applied to **dormant** records only (`parking.relabel`); a
+  parked one answers 409, because its snapshot log replays on wake and its last `status_label`
+  would win over the record.
+- **No expiry and no auto-clear on turns** (Tobias, 2026-10-06): the agent owns it through the tool;
+  only a reset or an explicit clear removes it. `set_status` is offered on every engine, like
+  `session_info`, and goes through the normal permission path. `Runner.setStatusLabel` is optional
+  so test fakes need not grow it; the route answers 501 without it.
+
 ## Agent context reset (`context_reset`, `agentContextReset`)
 
 - **The tool schedules; the gateway runs it.** `context_reset` can only ever be called mid-turn, so

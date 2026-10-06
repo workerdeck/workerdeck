@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { PeerSessionsResponse, ResolvePermissionRequest, SessionInfo, UpdateSessionRequest } from '@workerdeck/protocol'
+import { readStatusLabelInput, type PeerSessionsResponse, type ResolvePermissionRequest, type SessionInfo, type UpdateSessionRequest } from '@workerdeck/protocol'
 import { contentTypeFor, fail, json, readJsonBody, requireMethod, sendUntrusted } from '../lib/http.ts'
 import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
 import { permissionDecision } from '../lib/permissions.ts'
@@ -102,8 +102,22 @@ async function handleSession({ ctx, req, res, route, runner, parked, info }: Ses
       fail(400, 'title must be a string or null')
     }
     const title = typeof body?.title === 'string' ? body.title.trim() || undefined : undefined
+    const label = body?.statusLabel === undefined ? undefined : readStatusLabelInput(body.statusLabel)
+    if (typeof label === 'string') {
+      fail(400, label)
+    }
     if (!runner && parked) {
-      const renamed = body?.title === undefined ? parked.info : await parking.retitle(route.id, title)
+      let renamed: SessionInfo | undefined = parked.info
+      if (body?.title !== undefined) {
+        renamed = await parking.retitle(route.id, title)
+      }
+      if (label !== undefined && renamed) {
+        const relabeled = await parking.relabel(route.id, label)
+        if (relabeled === 'parked') {
+          fail(409, 'session is parked mid-turn; set its status once it wakes')
+        }
+        renamed = relabeled
+      }
       json(res, 200, { session: projects.withProject(requireRenamed(renamed)) })
       return
     }
@@ -111,6 +125,12 @@ async function handleSession({ ctx, req, res, route, runner, parked, info }: Ses
     if (body?.title !== undefined) {
       live.setTitle(title)
       parking.touch(live)
+    }
+    if (label !== undefined) {
+      if (!live.setStatusLabel) {
+        fail(501, 'this engine does not carry a status label')
+      }
+      live.setStatusLabel(label)
     }
     json(res, 200, { session: projects.withProject(live.info()) })
     return

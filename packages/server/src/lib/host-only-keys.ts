@@ -26,6 +26,7 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   fallbackTitle: 'transient',
   startAsleep: 'transient',
   effortDefaults: 'transient',
+  statusLabel: 'durable',
   connectFn: 'transient',
   codexHome: 'durable',
   codexPathOverride: 'durable',

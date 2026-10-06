@@ -223,7 +223,7 @@ describe('context_reset through the gateway', () => {
     const { base: askedBase } = await fx.startServer(asked)
     const id = await createSession(askedBase, 'operator', { cwd: fx.tempDir(), prompt: 'hi', agentContextReset: true })
     await vi.waitFor(() => expect(asked.captured.options).toBeDefined())
-    expect(Object.keys(gatewayTools(asked)).slice(0, 2)).toEqual(['session_info', 'context_reset'])
+    expect(Object.keys(gatewayTools(asked)).slice(0, 3)).toEqual(['session_info', 'set_status', 'context_reset'])
     expect((await info(askedBase, id)).agentContextReset).toBe(true)
     await fx.cleanup()
 

@@ -28,7 +28,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     const plain = new CodexRunner({ cwd: '/tmp', prompt: 'hi', connectFn: bare.connectFn })
     void plain.start()
     await vi.waitFor(() => expect(threadStart(bare)).toBeDefined())
-    expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info'])
+    expect(threadStart(bare).dynamicTools!.map((t) => t.name)).toEqual(['session_info', 'set_status'])
 
     const peer = scriptedPeer()
     scriptTurn(peer, () => {})
@@ -38,6 +38,7 @@ describe('CodexRunner: peer tools ride thread/start as dynamic tools', () => {
     const tools = threadStart(peer).dynamicTools!
     expect(tools.map((t) => [t.type, t.name])).toEqual([
       ['function', 'session_info'],
+      ['function', 'set_status'],
       ['function', 'peers_list'],
       ['function', 'peers_peek'],
       ['function', 'peers_send'],

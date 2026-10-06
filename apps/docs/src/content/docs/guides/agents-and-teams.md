@@ -34,6 +34,15 @@ Teams also scope peer messaging: a member reaches only its lead and teammates, n
 team reaches a member, and members never cross a [relay](/workerdeck/docs/guides/cross-gateway-peers/). In the
 composer, `#` finds an agent by its name.
 
+## Status
+
+Every session, agent or not, has a one-line status shown under its name: the model, then the
+status. The agent sets it with the `set_status` tool (`text`, an optional `emoji`; an empty text
+clears it), and you can set or clear it from the card menu or with
+`PATCH /v1/sessions/:id` `{ "statusLabel": { "text": "..." } }`. It stays until changed and clears
+when the conversation resets. Tell agents in your `AGENTS.md` when to use it, for example "set
+your status when you start waiting on something, clear it when you're done".
+
 ## Sleep
 
 An idle agent's engine sleeps after 15 minutes by default, freeing its memory; the next message

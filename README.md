@@ -153,6 +153,11 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   it can also start, type into and kill shells of its own, each keystroke behind a permission
   card that shows it verbatim, and ask to take over one of yours (`shell_request_write`), which
   you grant or revoke from the shell's row.
+- **A status line the agent writes.** Every session gets `set_status`: one short line (and an
+  emoji) shown under its name in every client, like a chat status - "waiting on CI", "blocked:
+  needs an API key". It stays until the agent changes it, clears when the conversation resets, and
+  you can set or clear it yourself from the card menu. An `AGENTS.md` line telling agents when to
+  use it is all the setup there is.
 - **Sessions that know their own budget.** Every session, on any engine, gets `session_info`:
   engine, vendor and model, context usage (tokens used, window, percent left), turns, cost and
   the account rate-limit windows. An agent can check it before a big step and wrap up, summarise

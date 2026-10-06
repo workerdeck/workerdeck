@@ -1,4 +1,4 @@
-import { errorMessage, type SessionInfo } from '@workerdeck/protocol'
+import { STATUS_LABEL_EMOJI_MAX, STATUS_LABEL_TEXT_MAX, errorMessage, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
 import type { SessionHandle, WorkerDeckClient } from '@workerdeck/client'
@@ -269,6 +269,11 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         run: () => this.#delegate.selectSession(hostId, sessionId, { target: 'editor' }),
       })
     }
+    items.push({
+      label: info.statusLabel ? '$(comment) Change status' : '$(comment) Set status',
+      detail: 'The line under the name in the list; the agent can change it with set_status',
+      run: () => this.#setStatus(hostId, info),
+    })
     if (info.capabilities?.clearContext) {
       items.push({
         label: '$(clear-all) Clear context',
@@ -363,6 +368,22 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       })
     }
     return items
+  }
+
+  async #setStatus(hostId: string, info: SessionInfo): Promise<void> {
+    const current = info.statusLabel
+    const text = await vscode.window.showInputBox({
+      title: 'Status',
+      prompt: 'Start with an emoji if you like. Leave empty to clear.',
+      value: current ? (current.emoji ? `${current.emoji} ${current.text}` : current.text) : '',
+      validateInput: (value) => (value.trim().length > STATUS_LABEL_TEXT_MAX + STATUS_LABEL_EMOJI_MAX + 1 ? 'Too long' : undefined),
+    })
+    if (text === undefined) {
+      return
+    }
+    await this.#agentCall(hostId, 'could not set the status', (client) =>
+      client.updateSession(info.id, { statusLabel: statusLabelFrom(text) }),
+    )
   }
 
   async #teamMove(msg: Extract<SidebarToHost, { kind: 'wd-team-move' }>): Promise<void> {
@@ -558,4 +579,17 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   dispose(): void {
     this.#transports?.dispose()
   }
+}
+
+// A leading emoji (one grapheme of pictographic text) splits off; the rest is the line.
+export function statusLabelFrom(input: string): StatusLabelInput | null {
+  const line = input.trim()
+  if (!line) {
+    return null
+  }
+  const [first, ...rest] = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(line)].map((part) => part.segment)
+  if (first && /\p{Extended_Pictographic}/u.test(first) && rest.join('').trim()) {
+    return { emoji: first, text: rest.join('').trim() }
+  }
+  return { text: line }
 }

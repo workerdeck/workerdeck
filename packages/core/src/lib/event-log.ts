@@ -7,6 +7,7 @@ import {
   type ContextReading,
   type SessionEvent,
   type SessionEventBody,
+  type StatusLabel,
 } from '@workerdeck/protocol'
 
 export class EventLog {
@@ -16,6 +17,7 @@ export class EventLog {
   #proseCount = 0
   #contextUsage: ContextReading | undefined
   #checklist: ChecklistItem[] | undefined
+  #statusLabel: StatusLabel | null | undefined
   #resetSeq = 0
   #lastActivityAt: number | undefined
 
@@ -42,6 +44,11 @@ export class EventLog {
 
   get checklist(): ChecklistItem[] | undefined {
     return this.#checklist
+  }
+
+  // `undefined` until this log has seen a set or a reset, so the runner falls back to the label it was built with.
+  get statusLabel(): StatusLabel | null | undefined {
+    return this.#statusLabel
   }
 
   get resetSeq(): number {
@@ -74,6 +81,7 @@ export class EventLog {
     this.#proseCount = 0
     this.#contextUsage = undefined
     this.#checklist = undefined
+    this.#statusLabel = undefined
     this.#resetSeq = 0
     for (const event of events) {
       this.#fold(event)
@@ -102,10 +110,14 @@ export class EventLog {
     if (event.type === 'checklist') {
       this.#checklist = event.items.length > 0 ? event.items : undefined
     }
+    if (event.type === 'status_label') {
+      this.#statusLabel = event.label
+    }
     if (event.type === 'conversation_reset') {
       this.#resetSeq = event.seq
       this.#contextUsage = undefined
       this.#checklist = undefined
+      this.#statusLabel = null
     }
   }
 }

@@ -121,7 +121,13 @@ function agent(id: string, name: string, team: { lead?: string; team?: string; l
 }
 
 const TEAM_ROWS = [
-  makeRow({ id: 't1', title: 'Agent Teams: protocol and list', status: 'idle', agent: agent('atlas', 'Atlas', { leads: true }) } as never),
+  makeRow({
+    id: 't1',
+    title: 'Agent Teams: protocol and list',
+    status: 'idle',
+    statusLabel: { text: 'waiting on CI for #412', emoji: '⏳', setAt: 1 },
+    agent: agent('atlas', 'Atlas', { leads: true }),
+  } as never),
   makeRow(
     {
       id: 't2',
@@ -135,6 +141,7 @@ const TEAM_ROWS = [
   makeRow({
     id: 't3',
     title: 'peers.ts: team visibility',
+    statusLabel: { text: 'blocked: needs the relay key', setAt: 1 },
     engine: 'codex',
     model: 'gpt-6-sol',
     agent: agent('juno', 'Juno', { lead: 'atlas', team: 'Atlas', order: 1 }),
