@@ -26,6 +26,12 @@ export type RetireOutcome = { retired: StoredAgent[]; released: StoredAgent[] }
 
 export type RemoteJoin = Required<Pick<StoredAgent, 'lead' | 'remoteLead'>>
 
+export type AgentMutation = (current: StoredAgent) => StoredAgent | AgentRefusal
+
+export type UpdateOptions = { joined?: RemoteJoin; onLeadChanged?: (previous: string | undefined) => void }
+
+type JoinReservation = { lead: string; name: string }
+
 const NAMES = [
   'Atlas',
   'Juno',
@@ -87,6 +93,10 @@ export class AgentService {
   #gateway: string | undefined
   #now: () => number
   #agents = new Map<string, StoredAgent>()
+  #joining = new Map<string, JoinReservation>()
+  #retired = new Set<string>()
+  #queue: Promise<unknown> = Promise.resolve()
+  #closed = false
 
   constructor(options: AgentServiceOptions) {
     this.#store = options.store
@@ -99,6 +109,10 @@ export class AgentService {
 
   async hydrate(): Promise<void> {
     this.#agents = new Map((await this.#store.list()).map((agent) => [agent.id, agent]))
+  }
+
+  close(): void {
+    this.#closed = true
   }
 
   list(): AgentInfo[] {
@@ -226,17 +240,59 @@ export class AgentService {
     return agent
   }
 
-  async save(agent: StoredAgent): Promise<StoredAgent> {
-    const stored = { ...agent, updatedAt: this.#now() }
-    await this.#store.save(stored)
-    this.#agents.set(stored.id, stored)
-    return stored
+  create(agent: StoredAgent, joined?: RemoteJoin): Promise<StoredAgent | AgentRefusal> {
+    return this.#transition(async () => {
+      if (this.#agents.has(agent.id) || this.#retired.has(agent.id)) {
+        return { status: 409, error: `agent ${agent.id} already exists` }
+      }
+      if (agent.sessionId !== undefined && this.bySession(agent.sessionId)) {
+        return { status: 409, error: 'that session already belongs to an agent' }
+      }
+      const next: StoredAgent = { ...agent }
+      if (joined) {
+        if (this.#joining.get(agent.id)?.lead !== joined.lead) {
+          return { status: 409, error: `${agent.name} is no longer joining that team` }
+        }
+        next.lead = joined.lead
+        next.remoteLead = joined.remoteLead
+      } else if (next.lead !== undefined) {
+        const refused = this.leadRefusal(next, next.lead)
+        if (refused) {
+          return refused
+        }
+      }
+      return this.#write(next)
+    })
   }
 
-  async bind(agent: StoredAgent, sessionId: string): Promise<StoredAgent> {
-    const past =
-      agent.sessionId !== undefined && agent.sessionId !== sessionId ? [...agent.pastSessions, agent.sessionId] : agent.pastSessions
-    return this.save({ ...agent, sessionId, pastSessions: past })
+  patch(id: string, mutate: AgentMutation): Promise<StoredAgent | AgentRefusal> {
+    return this.#transition(async () => {
+      const current = this.#agents.get(id)
+      if (!current) {
+        return { status: 404, error: `no such agent: ${id}` }
+      }
+      const next = mutate(current)
+      if (isAgentRefusal(next) || next === current) {
+        return next
+      }
+      return this.#write(next)
+    })
+  }
+
+  bind(id: string, sessionId: string, avatarRecipe?: unknown): Promise<StoredAgent | AgentRefusal> {
+    return this.patch(id, (agent) => {
+      const owner = this.bySession(sessionId)
+      if (owner && owner.id !== id) {
+        return { status: 409, error: 'that session already belongs to an agent' }
+      }
+      const past =
+        agent.sessionId !== undefined && agent.sessionId !== sessionId ? [...agent.pastSessions, agent.sessionId] : agent.pastSessions
+      const next: StoredAgent = { ...agent, sessionId, pastSessions: past }
+      if (next.avatarRecipe === undefined && avatarRecipe !== undefined) {
+        next.avatarRecipe = avatarRecipe
+      }
+      return next
+    })
   }
 
   hasMembers(id: string): boolean {
@@ -276,10 +332,45 @@ export class AgentService {
     if (lead.lead !== undefined) {
       return { status: 409, error: `${lead.name} is a member of a team; teams are one level deep` }
     }
+    if (this.#joining.has(lead.id)) {
+      return { status: 409, error: `${lead.name} is joining a team` }
+    }
     if (this.hasMembers(mover.id)) {
       return { status: 409, error: `${mover.name} leads a team; teams are one level deep` }
     }
     return null
+  }
+
+  joiningLead(id: string): string | undefined {
+    return this.#joining.get(id)?.lead
+  }
+
+  joiningName(id: string): string | undefined {
+    return this.#joining.get(id)?.name
+  }
+
+  reserveJoin(mover: StoredAgent, lead: string): Promise<AgentRefusal | null> {
+    return this.#transition(() => {
+      if (this.#retired.has(mover.id)) {
+        return { status: 404, error: `no such agent: ${mover.id}` }
+      }
+      if (this.#joining.has(mover.id)) {
+        return { status: 409, error: `${mover.name} is already joining a team` }
+      }
+      const current = this.#agents.get(mover.id) ?? mover
+      const refused = this.leadRefusal(current, lead)
+      if (refused) {
+        return refused
+      }
+      this.#joining.set(mover.id, { lead, name: current.name })
+      return null
+    })
+  }
+
+  releaseJoin(id: string, lead: string): void {
+    if (this.#joining.get(id)?.lead === lead) {
+      this.#joining.delete(id)
+    }
   }
 
   pendingInvites(agent: StoredAgent): NonNullable<StoredAgent['remoteMembers']> {
@@ -288,80 +379,130 @@ export class AgentService {
   }
 
   // A lead on another gateway is only ever written with the relay's answer in hand (`joined`), never from a bare patch.
-  async update(id: string, patch: UpdateAgentRequest, joined?: RemoteJoin): Promise<StoredAgent | AgentRefusal> {
-    const agent = this.#agents.get(id)
-    if (!agent) {
-      return { status: 404, error: `no such agent: ${id}` }
-    }
-    const next: StoredAgent = { ...agent }
-    if (patch.name !== undefined) {
-      const name = readName(patch.name)
-      if (typeof name !== 'string') {
-        return name
-      }
-      next.name = name
-    }
-    if (patch.config !== undefined) {
-      if (!isRecord(patch.config)) {
-        return { status: 400, error: 'config must be an object' }
-      }
-      const config = readConfig({ ...agent.config, ...patch.config })
-      if ('error' in config) {
-        return config
-      }
-      next.config = config
-    }
-    if (patch.lead === null) {
-      delete next.lead
-      delete next.remoteLead
-    } else if (patch.lead !== undefined) {
-      if (typeof patch.lead !== 'string') {
-        return { status: 400, error: 'lead must be an agent id or null' }
-      }
-      const leadId = this.localId(patch.lead)
-      if (this.remoteGateway(leadId)) {
-        if (joined?.lead !== leadId) {
-          return { status: 409, error: 'a lead on another gateway is joined through the relay' }
+  update(id: string, patch: UpdateAgentRequest, options: UpdateOptions = {}): Promise<StoredAgent | AgentRefusal> {
+    const { joined } = options
+    let previous: string | undefined
+    const updated = this.patch(id, (agent) => {
+      previous = agent.lead
+      const next: StoredAgent = { ...agent }
+      if (patch.name !== undefined) {
+        const name = readName(patch.name)
+        if (typeof name !== 'string') {
+          return name
         }
-        next.lead = joined.lead
-        next.remoteLead = joined.remoteLead
-      } else {
-        const refused = this.leadRefusal(agent, leadId)
-        if (refused) {
-          return refused
+        next.name = name
+      }
+      if (patch.config !== undefined) {
+        if (!isRecord(patch.config)) {
+          return { status: 400, error: 'config must be an object' }
         }
-        next.lead = leadId
+        const config = readConfig({ ...agent.config, ...patch.config })
+        if ('error' in config) {
+          return config
+        }
+        next.config = config
+      }
+      if (patch.lead !== undefined && this.#joining.has(id) && joined === undefined) {
+        return { status: 409, error: `${agent.name} is joining a team` }
+      }
+      if (patch.lead === null) {
+        delete next.lead
         delete next.remoteLead
+      } else if (patch.lead !== undefined) {
+        if (typeof patch.lead !== 'string') {
+          return { status: 400, error: 'lead must be an agent id or null' }
+        }
+        const leadId = this.localId(patch.lead)
+        if (this.remoteGateway(leadId)) {
+          if (joined?.lead !== leadId || this.#joining.get(id)?.lead !== leadId) {
+            return { status: 409, error: 'a lead on another gateway is joined through the relay' }
+          }
+          if (this.hasMembers(id)) {
+            return { status: 409, error: `${agent.name} leads a team; teams are one level deep` }
+          }
+          next.lead = joined.lead
+          next.remoteLead = joined.remoteLead
+        } else {
+          const refused = this.leadRefusal(agent, leadId)
+          if (refused) {
+            return refused
+          }
+          next.lead = leadId
+          delete next.remoteLead
+        }
       }
-    }
-    if (patch.order !== undefined) {
-      if (typeof patch.order !== 'number' || !Number.isFinite(patch.order)) {
-        return { status: 400, error: 'order must be a number' }
+      if (patch.order !== undefined) {
+        if (typeof patch.order !== 'number' || !Number.isFinite(patch.order)) {
+          return { status: 400, error: 'order must be a number' }
+        }
+        next.order = patch.order
       }
-      next.order = patch.order
-    }
-    return this.save(next)
+      return next
+    })
+    return updated.then((result) => {
+      if (!isAgentRefusal(result) && result.lead !== previous) {
+        options.onLeadChanged?.(previous)
+      }
+      return result
+    })
   }
 
-  async retire(id: string, members: 'release' | 'retire'): Promise<RetireOutcome | AgentRefusal> {
-    const agent = this.#agents.get(id)
-    if (!agent) {
-      return { status: 404, error: `no such agent: ${id}` }
-    }
-    const crew = this.members(id)
-    const retired = [agent, ...(members === 'retire' ? crew : [])]
-    const released: StoredAgent[] = []
-    if (members === 'release') {
-      for (const member of crew) {
-        const { lead: _lead, remoteLead: _remote, ...rest } = member
-        released.push(await this.save(rest))
+  retire(id: string, members: 'release' | 'retire'): Promise<RetireOutcome | AgentRefusal> {
+    return this.#transition(async () => {
+      const agent = this.#agents.get(id)
+      if (!agent) {
+        return { status: 404, error: `no such agent: ${id}` }
       }
+      const crew = this.members(id)
+      const retired = [agent, ...(members === 'retire' ? crew : [])]
+      const at = this.#now()
+      const released =
+        members === 'release' ? crew.map(({ lead: _lead, remoteLead: _remote, ...rest }) => ({ ...rest, updatedAt: at })) : []
+      await this.#apply(
+        released,
+        retired.map((gone) => gone.id),
+      )
+      for (const gone of retired) {
+        this.#agents.delete(gone.id)
+        this.#joining.delete(gone.id)
+        this.#retired.add(gone.id)
+      }
+      for (const member of released) {
+        this.#agents.set(member.id, member)
+      }
+      return { retired, released }
+    })
+  }
+
+  #transition<T>(step: () => T | Promise<T>): Promise<T> {
+    const run = this.#queue.then(() => {
+      if (this.#closed) {
+        throw new Error('this gateway generation has ended; its agent store is closed')
+      }
+      return step()
+    })
+    this.#queue = run.catch(() => {})
+    return run
+  }
+
+  async #write(agent: StoredAgent): Promise<StoredAgent> {
+    const stored = { ...agent, updatedAt: this.#now() }
+    await this.#apply([stored], [])
+    this.#agents.set(stored.id, stored)
+    return stored
+  }
+
+  async #apply(saves: StoredAgent[], deletes: string[]): Promise<void> {
+    if (this.#store.apply) {
+      await this.#store.apply({ saves, deletes })
+      return
     }
-    for (const gone of retired) {
-      await this.#store.delete(gone.id)
-      this.#agents.delete(gone.id)
+    for (const agent of saves) {
+      await this.#store.save(agent)
     }
-    return { retired, released }
+    for (const id of deletes) {
+      await this.#store.delete(id)
+    }
   }
 
   #suggestName(): string {

@@ -754,7 +754,8 @@ socket close beside `parking.onDetach`. Rules in `docs/GOTCHAS.md` §Engine slee
 
 **Agents** live in `services/agents.ts` (`AgentService`: the in-memory index over an `AgentStore`,
 the decorator, the one-level team rule, name suggestions), `services/agent-store.ts` (memory and
-JSON-file stores, `agentStore` option; the CLI wires `<state-dir>/agents.json`),
+JSON-file stores, `agentStore` option; the CLI wires `<state-dir>/agents.json`; a host store
+may add `apply` to write one transition's records together, both built-ins do),
 `services/avatars.ts` (the `AvatarProvider` seam only: `roll` an opaque recipe, `still` /
 `busy` render it; injected as `avatars`, absent by default, so an embedder pays for no art) and
 `routes/agents.ts` (operator-only `/agents`). Session creation goes through `vetCreateRequest` and `factory.createRunner` like

@@ -4,10 +4,13 @@ import { readJsonOrSync, writeJsonAtomicSync } from '../lib/atomic-file.ts'
 
 export type StoredAgent = AgentInfo & { avatarSeed: string; avatarRecipe?: unknown }
 
+export type AgentStoreChanges = { saves: StoredAgent[]; deletes: string[] }
+
 export type AgentStore = {
   list(): StoredAgent[] | Promise<StoredAgent[]>
   save(agent: StoredAgent): void | Promise<void>
   delete(id: string): void | Promise<void>
+  apply?(changes: AgentStoreChanges): void | Promise<void>
 }
 
 export function createMemoryAgentStore(seed: StoredAgent[] = []): AgentStore {
@@ -16,6 +19,14 @@ export function createMemoryAgentStore(seed: StoredAgent[] = []): AgentStore {
     list: () => [...agents.values()],
     save: (agent) => void agents.set(agent.id, agent),
     delete: (id) => void agents.delete(id),
+    apply: ({ saves, deletes }) => {
+      for (const agent of saves) {
+        agents.set(agent.id, agent)
+      }
+      for (const id of deletes) {
+        agents.delete(id)
+      }
+    },
   }
 }
 
@@ -41,6 +52,16 @@ export function createFileAgentStore(path = join(process.cwd(), '.workerdeck', '
       if (agents.delete(id)) {
         write(agents)
       }
+    },
+    apply: ({ saves, deletes }) => {
+      const agents = read()
+      for (const agent of saves) {
+        agents.set(agent.id, agent)
+      }
+      for (const id of deletes) {
+        agents.delete(id)
+      }
+      write(agents)
     },
   }
 }

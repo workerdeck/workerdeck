@@ -1365,6 +1365,24 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   because the agent is bound only after the runner exists. `CreateSessionRequest` gained nothing.
 - **`/agents` is operator-only** (route auth `operator`, the same 404 as a missing route): the brief
   is model-visible text.
+- **Every agent write is one serial transition** (`AgentService`: `create`, `patch`, `bind`,
+  `update`, `retire`, `reserveJoin`). Validation, reservation and the write run together against
+  the record as it is at write time, so two concurrent moves cannot form a cycle and a write
+  prepared before an await (an avatar roll, a reconcile answer) patches only its own fields and
+  never restores an old lead. Nothing awaits another gateway or the avatar provider inside one:
+  roll or ask first, then patch. `create` is the only whole-record write; `patch` on a retired id
+  is a 404, so a late avatar or bind never revives an agent, and `create` refuses a retired or
+  duplicate id and a session another agent already holds. `retire` writes the lead and its
+  released members as one store `apply`. `close()` (from `releaseDirectories`) refuses every
+  later transition, so an old hot-reload generation cannot write over the new one's store.
+- **A remote join is a reservation, not a lock.** `reserveJoin` runs `leadRefusal` and marks the
+  agent joining before the `team.join` frame; while it stands, the agent cannot change lead,
+  be anyone's local lead, be invited or accept a join, and `inboundStatus` answers `known` for it
+  even as an unsaved draft. The commit (`create(draft, joined)` or `update(.., { joined })`)
+  requires the reservation; retiring the agent drops it, so the commit is refused and `TeamLinks`
+  sends `team.leave` to withdraw the lead's acceptance. A crash between the lead's acceptance and
+  the commit leaves only the lead's half, which the next reconcile dissolves (persisted pending
+  joins are R3 workstream E).
 - **Teams are one level deep, enforced in one place.** `leadRefusal` refuses a lead joining a team,
   anything joining a member, and self-leading, as 409s whose `error` is drawn as the drop tooltip,
   so the strings are UI copy. A team is only "some agent has `lead` = me"; there is no team record.
@@ -1386,13 +1404,14 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   it publishes as the registry entry's `accepts` so the relay can validate the member's claim.
   `lead` stays set on the member whatever happens, so every `lead !== undefined` check fails closed.
   A qualified lead is only ever written with the relay's `team.join` answer in hand
-  (`AgentService.update(id, patch, joined)`); the rest of a PATCH lands first, so a bad name never
+  (`AgentService.update(id, patch, { joined })`); the rest of a PATCH lands first, so a bad name never
   strands a join the lead accepted.
 - **Only an authoritative answer dissolves an edge.** The 15 s reconcile (and one on every relay
   `welcome`) sends `team.status` per other gateway; `known: false` from that gateway removes the
   edge, while offline, a timeout or an edge the rules drop from the answer only marks it
   (`remoteLead.state: 'unreachable'`, `unreachableSince` on the lead side). An agent mid-join counts
-  as holding its edge, so a lead-side reconcile racing the member's write is not answered "unknown".
+  as holding its edge (the reservation above), so a lead-side reconcile racing the member's write
+  is not answered "unknown".
   Leave, release and retire send a frame best-effort and never wait for the other side.
 - **Same-owner acceptance is an invitation or `relay.teams.acceptFrom`.** `POST
   /agents/:id/remote-members` records a 10 min `invited` entry stamped with this gateway's owner;

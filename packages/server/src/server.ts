@@ -27,7 +27,7 @@ import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
 import { createMemoryAgentStore } from './services/agent-store.ts'
-import { AgentService } from './services/agents.ts'
+import { AgentService, isAgentRefusal } from './services/agents.ts'
 import { AttachmentStore } from './services/attachments.ts'
 import { createAuthService } from './services/auth.ts'
 import { AvailabilityTracker } from './services/availability.ts'
@@ -159,8 +159,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
           if (!agent) {
             throw new Error('only an agent has an avatar, and this session is not one')
           }
-          await rerollAvatar(ctx, agent, seed)
-          return seed ? `Your avatar is changed (seed "${seed}"); the human sees it beside your name now.` : 'Your avatar is changed; the human sees it beside your name now.'
+          const changed = await rerollAvatar(ctx, agent, seed)
+          if (isAgentRefusal(changed)) {
+            throw new Error(changed.error)
+          }
+          return seed
+            ? `Your avatar is changed (seed "${seed}"); the human sees it beside your name now.`
+            : 'Your avatar is changed; the human sees it beside your name now.'
         },
       }
     : undefined
@@ -407,6 +412,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     diagnose,
     releaseDirectories: () => {
       teamLinks?.stop()
+      agents.close()
       relay?.close()
       ownPeers = undefined
       ownShells = undefined

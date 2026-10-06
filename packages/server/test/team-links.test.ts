@@ -198,8 +198,8 @@ async function memberRig(): Promise<{ agents: AgentService; teams: TeamLinks; tr
   const transport = fakeTransport()
   const teams = new TeamLinks({ agents, transport, now: () => 1_000 })
   const draft = agents.draft({ name: 'Scout' }) as StoredAgent
-  await agents.save(draft)
-  const member = await teams.join(draft, 'mac:L1', (joined) => agents.update(draft.id, { lead: 'mac:L1' }, joined) as Promise<StoredAgent>)
+  await agents.create(draft)
+  const member = await teams.join(draft, 'mac:L1', (joined) => agents.update(draft.id, { lead: 'mac:L1' }, { joined }))
   return { agents, teams, transport, member: member as StoredAgent }
 }
 
@@ -227,7 +227,7 @@ describe('team reconcile', () => {
     expect(agents.get(member.id)?.remoteLead).toBeUndefined()
   })
 
-  it('answers status for edges it holds, and counts an agent mid-join as holding its edge', async () => {
+  it('answers status for the edges it holds and only to the gateway on their other end', async () => {
     const { teams, member } = await memberRig()
     expect(await teams.inboundStatus({ gateway: 'mac' }, [{ from: 'mac:L1', to: member.id }])).toEqual([{ known: true, name: 'Scout' }])
     expect(await teams.inboundStatus({ gateway: 'mac' }, [{ from: 'mac:L2', to: member.id }])).toEqual([{ known: false }])
@@ -241,8 +241,8 @@ describe('team reconcile', () => {
     let release: (result: TeamResult) => void = () => {}
     transport.team = () => new Promise((resolve) => (release = resolve))
     const teams = new TeamLinks({ agents, transport, acceptFrom: ['mac'] })
-    const mover = await agents.save(agents.draft({ name: 'Scout' }) as StoredAgent)
-    const joining = teams.join(mover, 'mac:L1', (joined) => agents.update(mover.id, { lead: 'mac:L1' }, joined) as Promise<StoredAgent>)
+    const mover = (await agents.create(agents.draft({ name: 'Scout' }) as StoredAgent)) as StoredAgent
+    const joining = teams.join(mover, 'mac:L1', (joined) => agents.update(mover.id, { lead: 'mac:L1' }, { joined }))
     const inbound = await teams.inbound('team.join', { gateway: 'mac', owner: 'tobias', agent: 'mac:L1', name: 'AC-Lead' }, mover.id)
     expect(inbound).toEqual({ ok: false, reason: 'Scout is joining a team' })
     release({ ok: true, leadName: 'AC-Lead' })
@@ -254,7 +254,7 @@ describe('team reconcile', () => {
     const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'mac', now: () => now })
     await agents.hydrate()
     const teams = new TeamLinks({ agents, transport: { ...fakeTransport(), gateway: 'mac' }, now: () => now, inviteTtlMs: 100 })
-    const lead = await agents.save(agents.draft({ name: 'AC-Lead' }) as StoredAgent)
+    const lead = (await agents.create(agents.draft({ name: 'AC-Lead' }) as StoredAgent)) as StoredAgent
     await teams.invite(lead, 'win:M1')
     now = 200
     const origin = { gateway: 'win', owner: 'tobias', agent: 'win:M1', name: 'Scout' }
@@ -267,7 +267,7 @@ describe('team reconcile', () => {
     const path = join(await tempDir(), 'agents.json')
     const agents = new AgentService({ store: createFileAgentStore(path), basePath: '/v1', gateway: 'mac' })
     await agents.hydrate()
-    const lead = await agents.save(agents.draft({ name: 'AC-Lead' }) as StoredAgent)
+    const lead = (await agents.create(agents.draft({ name: 'AC-Lead' }) as StoredAgent)) as StoredAgent
     await new TeamLinks({ agents, transport: { ...fakeTransport(), gateway: 'mac' } }).invite(lead, 'win:M1')
     const reread = new AgentService({ store: createFileAgentStore(path), basePath: '/v1', gateway: 'mac' })
     await reread.hydrate()

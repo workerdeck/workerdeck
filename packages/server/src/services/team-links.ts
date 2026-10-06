@@ -8,7 +8,7 @@ import {
   type TeamStatusEdge,
 } from '@workerdeck/relay-client'
 import type { StoredAgent } from './agent-store.ts'
-import type { AgentRefusal, AgentService, RemoteJoin } from './agents.ts'
+import { isAgentRefusal, type AgentRefusal, type AgentService, type RemoteJoin } from './agents.ts'
 
 export type TeamTransport = {
   gateway: string
@@ -48,7 +48,6 @@ export class TeamLinks {
   #inviteTtlMs: number
   #now: () => number
   #log: (message: string) => void
-  #joining = new Map<string, string>()
   #timer: NodeJS.Timeout | undefined
   #reconciling: Promise<void> | undefined
 
@@ -73,21 +72,20 @@ export class TeamLinks {
     this.#timer = undefined
   }
 
-  // Runs the join handshake and hands the lead fields to `commit` while the agent still counts as joining, so a
-  // reconcile from the lead's gateway that lands before the write is not answered "unknown".
-  async join(mover: StoredAgent, lead: string, commit: (joined: RemoteJoin) => Promise<StoredAgent>): Promise<StoredAgent | AgentRefusal> {
-    const refused = this.#agents.leadRefusal(mover, lead)
-    if (refused) {
-      return refused
-    }
-    if (this.#joining.has(mover.id)) {
-      return { status: 409, error: `${mover.name} is already joining a team` }
-    }
+  // A commit the local graph no longer allows is refused here, so the lead's acceptance is withdrawn with a leave.
+  async join(
+    mover: StoredAgent,
+    lead: string,
+    commit: (joined: RemoteJoin) => Promise<StoredAgent | AgentRefusal>,
+  ): Promise<StoredAgent | AgentRefusal> {
     const unavailable = this.#transport.ready()
     if (unavailable) {
       return { status: 409, error: unavailable }
     }
-    this.#joining.set(mover.id, lead)
+    const refused = await this.#agents.reserveJoin(mover, lead)
+    if (refused) {
+      return refused
+    }
     try {
       let result: TeamResult
       try {
@@ -98,18 +96,29 @@ export class TeamLinks {
       if (!result.ok) {
         return { status: 409, error: result.reason }
       }
-      const previous = mover.lead
-      const stored = await commit({
-        lead,
-        remoteLead: { name: result.leadName ?? lead, owner: this.#transport.owner(), state: 'joined', since: this.#now() },
-      })
-      if (previous !== undefined && previous !== lead) {
-        this.#notify('team.leave', mover.id, previous)
+      const previous = this.#agents.get(mover.id)?.lead
+      let stored: StoredAgent | AgentRefusal
+      try {
+        stored = await commit({
+          lead,
+          remoteLead: { name: result.leadName ?? lead, owner: this.#transport.owner(), state: 'joined', since: this.#now() },
+        })
+      } catch (error) {
+        this.#notify('team.leave', mover.id, lead)
+        throw error
       }
-      this.#transport.nudge()
+      if (isAgentRefusal(stored)) {
+        this.#notify('team.leave', mover.id, lead)
+        return stored
+      }
+      if (previous !== undefined && previous !== lead) {
+        this.left(mover.id, previous)
+      } else {
+        this.#transport.nudge()
+      }
       return stored
     } finally {
-      this.#joining.delete(mover.id)
+      this.#agents.releaseJoin(mover.id, lead)
     }
   }
 
@@ -127,33 +136,42 @@ export class TeamLinks {
     if (!target || !this.#agents.remoteGateway(agent)) {
       return { status: 400, error: 'agent must be an agent id on another gateway (gateway:agentId)' }
     }
-    if (lead.lead !== undefined) {
-      return { status: 409, error: `${lead.name} is a member of a team; teams are one level deep` }
-    }
-    if (this.#joining.has(lead.id)) {
-      return { status: 409, error: `${lead.name} is joining a team` }
-    }
-    const members = lead.remoteMembers ?? []
-    const existing = members.find((member) => member.agent === agent)
-    if (existing?.state === 'accepted') {
-      return lead
-    }
-    if (!existing && members.length >= MAX_REMOTE_MEMBERS) {
-      return { status: 409, error: `a team holds at most ${MAX_REMOTE_MEMBERS} members from other gateways` }
-    }
-    const at = this.#now()
-    const invited: RemoteMember = { agent, owner: this.#transport.owner(), state: 'invited', at, expiresAt: at + this.#inviteTtlMs }
-    return this.#agents.save({ ...lead, remoteMembers: [...members.filter((member) => member.agent !== agent), invited] })
+    return this.#agents.patch(lead.id, (current) => {
+      if (current.lead !== undefined) {
+        return { status: 409, error: `${current.name} is a member of a team; teams are one level deep` }
+      }
+      if (this.#agents.joiningLead(current.id) !== undefined) {
+        return { status: 409, error: `${current.name} is joining a team` }
+      }
+      const members = current.remoteMembers ?? []
+      const existing = members.find((member) => member.agent === agent)
+      if (existing?.state === 'accepted') {
+        return current
+      }
+      if (!existing && members.length >= MAX_REMOTE_MEMBERS) {
+        return { status: 409, error: `a team holds at most ${MAX_REMOTE_MEMBERS} members from other gateways` }
+      }
+      const at = this.#now()
+      const invited: RemoteMember = { agent, owner: this.#transport.owner(), state: 'invited', at, expiresAt: at + this.#inviteTtlMs }
+      return { ...current, remoteMembers: [...members.filter((member) => member.agent !== agent), invited] }
+    })
   }
 
   async removeMember(lead: StoredAgent, agent: string): Promise<StoredAgent | AgentRefusal> {
-    const members = lead.remoteMembers ?? []
-    const entry = members.find((member) => member.agent === agent)
-    if (!entry) {
-      return { status: 404, error: `no such member: ${agent}` }
+    let accepted = false
+    const saved = await this.#agents.patch(lead.id, (current) => {
+      const members = current.remoteMembers ?? []
+      const entry = members.find((member) => member.agent === agent)
+      if (!entry) {
+        return { status: 404, error: `no such member: ${agent}` }
+      }
+      accepted = entry.state === 'accepted'
+      return { ...current, remoteMembers: members.filter((member) => member !== entry) }
+    })
+    if (isAgentRefusal(saved)) {
+      return saved
     }
-    const saved = await this.#agents.save({ ...lead, remoteMembers: members.filter((member) => member !== entry) })
-    if (entry.state === 'accepted') {
+    if (accepted) {
       this.#notify('team.release', lead.id, agent)
     }
     this.#transport.nudge()
@@ -179,19 +197,28 @@ export class TeamLinks {
         return this.#acceptJoin(origin, to)
       }
       case 'team.leave': {
-        const lead = this.#agents.get(to)
-        const members = lead?.remoteMembers ?? []
-        if (lead && members.some((member) => member.agent === origin.agent)) {
-          await this.#agents.save({ ...lead, remoteMembers: members.filter((member) => member.agent !== origin.agent) })
+        let changed = false
+        await this.#agents.patch(to, (lead) => {
+          const members = lead.remoteMembers ?? []
+          changed = members.some((member) => member.agent === origin.agent)
+          return changed ? { ...lead, remoteMembers: members.filter((member) => member.agent !== origin.agent) } : lead
+        })
+        if (changed) {
           this.#transport.nudge()
         }
         return { ok: true }
       }
       case 'team.release': {
-        const member = this.#agents.get(to)
-        if (member && member.lead === origin.agent) {
+        let changed = false
+        await this.#agents.patch(to, (member) => {
+          changed = member.lead === origin.agent
+          if (!changed) {
+            return member
+          }
           const { lead: _lead, remoteLead: _remote, ...rest } = member
-          await this.#agents.save(rest)
+          return rest
+        })
+        if (changed) {
           this.#transport.nudge()
         }
         return { ok: true }
@@ -204,15 +231,18 @@ export class TeamLinks {
 
   async inboundStatus(origin: { gateway: string }, edges: TeamEdge[]): Promise<Array<Omit<TeamStatusEdge, 'from' | 'to'>>> {
     return edges.map((edge) => {
-      const agent = typeof edge.to === 'string' ? this.#agents.get(edge.to) : undefined
+      const to = typeof edge.to === 'string' ? edge.to : ''
       const from = typeof edge.from === 'string' ? edge.from : ''
-      if (!agent || parseRelayPeerId(from)?.gateway !== origin.gateway) {
+      if (parseRelayPeerId(from)?.gateway !== origin.gateway) {
         return { known: false }
       }
+      if (this.#agents.joiningLead(to) === from) {
+        return { known: true, name: this.#agents.get(to)?.name ?? this.#agents.joiningName(to) }
+      }
+      const agent = this.#agents.get(to)
       const known =
-        agent.lead === from ||
-        this.#joining.get(agent.id) === from ||
-        (agent.remoteMembers ?? []).some((member) => member.agent === from && member.state === 'accepted')
+        agent !== undefined &&
+        (agent.lead === from || (agent.remoteMembers ?? []).some((member) => member.agent === from && member.state === 'accepted'))
       return known ? { known, name: agent.name } : { known }
     })
   }
@@ -225,39 +255,45 @@ export class TeamLinks {
   }
 
   async #acceptJoin(origin: RelayTeamOrigin, to: string): Promise<TeamResult> {
-    const lead = this.#agents.get(to)
-    if (!lead) {
-      return NO_SUCH_AGENT
+    let changed = false
+    const outcome = await this.#agents.patch(to, (lead) => {
+      if (lead.lead !== undefined) {
+        return { status: 409, error: `${lead.name} is a member of a team; teams are one level deep` }
+      }
+      if (this.#agents.joiningLead(lead.id) !== undefined) {
+        return { status: 409, error: `${lead.name} is joining a team` }
+      }
+      const members = lead.remoteMembers ?? []
+      const existing = members.find((member) => member.agent === origin.agent)
+      if (existing?.state === 'accepted') {
+        return lead
+      }
+      const sameOwner = origin.owner === this.#transport.owner()
+      const invited = existing?.state === 'invited' && existing.owner === origin.owner && (existing.expiresAt ?? Infinity) > this.#now()
+      if (!invited && !(sameOwner && this.#acceptFrom.has(origin.gateway))) {
+        return { status: 409, error: `${lead.name} has not invited this agent` }
+      }
+      if (!existing && members.length >= MAX_REMOTE_MEMBERS) {
+        return { status: 409, error: `a team holds at most ${MAX_REMOTE_MEMBERS} members from other gateways` }
+      }
+      changed = true
+      const accepted: RemoteMember = { agent: origin.agent, name: origin.name, owner: origin.owner, state: 'accepted', at: this.#now() }
+      return { ...lead, remoteMembers: [...members.filter((member) => member.agent !== origin.agent), accepted] }
+    })
+    if (isAgentRefusal(outcome)) {
+      return outcome.status === 404 ? NO_SUCH_AGENT : { ok: false, reason: outcome.error }
     }
-    if (lead.lead !== undefined) {
-      return { ok: false, reason: `${lead.name} is a member of a team; teams are one level deep` }
+    if (changed) {
+      this.#transport.nudge()
     }
-    if (this.#joining.has(lead.id)) {
-      return { ok: false, reason: `${lead.name} is joining a team` }
-    }
-    const members = lead.remoteMembers ?? []
-    const existing = members.find((member) => member.agent === origin.agent)
-    if (existing?.state === 'accepted') {
-      return { ok: true, leadName: lead.name }
-    }
-    const sameOwner = origin.owner === this.#transport.owner()
-    const invited =
-      existing?.state === 'invited' && existing.owner === origin.owner && (existing.expiresAt ?? Infinity) > this.#now()
-    if (!invited && !(sameOwner && this.#acceptFrom.has(origin.gateway))) {
-      return { ok: false, reason: `${lead.name} has not invited this agent` }
-    }
-    if (!existing && members.length >= MAX_REMOTE_MEMBERS) {
-      return { ok: false, reason: `a team holds at most ${MAX_REMOTE_MEMBERS} members from other gateways` }
-    }
-    const accepted: RemoteMember = { agent: origin.agent, name: origin.name, owner: origin.owner, state: 'accepted', at: this.#now() }
-    await this.#agents.save({ ...lead, remoteMembers: [...members.filter((member) => member.agent !== origin.agent), accepted] })
-    this.#transport.nudge()
-    return { ok: true, leadName: lead.name }
+    return { ok: true, leadName: outcome.name }
   }
 
   #notify(kind: 'team.leave' | 'team.release', from: string, to: string): void {
     this.#transport.team(kind, from, to).catch((error: unknown) => {
-      this.#log(`teams: ${kind} to ${to} not delivered (${error instanceof Error ? error.message : String(error)}); reconcile will settle it`)
+      this.#log(
+        `teams: ${kind} to ${to} not delivered (${error instanceof Error ? error.message : String(error)}); reconcile will settle it`,
+      )
     })
   }
 
@@ -308,61 +344,64 @@ export class TeamLinks {
   // No answer (offline, timeout, a rule that denies) only marks the edge unreachable; `known: false` from the other
   // gateway itself is the one thing that dissolves it.
   async #settle(edge: Edge, answer: TeamStatusEdge | undefined): Promise<void> {
-    const agent = this.#agents.get(edge.from)
-    if (!agent) {
-      return
-    }
     const now = this.#now()
-    if (edge.side === 'member') {
-      if (agent.lead !== edge.to || this.#joining.has(agent.id)) {
-        return
+    let dissolved: string | undefined
+    const outcome = await this.#agents.patch(edge.from, (agent) => {
+      if (edge.side === 'member') {
+        if (agent.lead !== edge.to || this.#agents.joiningLead(agent.id) !== undefined) {
+          return agent
+        }
+        if (answer && !answer.known) {
+          dissolved = `teams: ${agent.name} left ${agent.remoteLead?.name ?? edge.to}, which no longer lists it`
+          const { lead: _lead, remoteLead: _remote, ...rest } = agent
+          return rest
+        }
+        const current = agent.remoteLead ?? { name: edge.to, state: 'joined' as const, since: now }
+        const state = answer ? 'joined' : 'unreachable'
+        const name = answer?.name ?? current.name
+        if (current.state === state && current.name === name) {
+          return agent
+        }
+        return { ...agent, remoteLead: { ...current, name, state, since: current.state === state ? current.since : now } }
+      }
+      const members = agent.remoteMembers ?? []
+      const entry = members.find((member) => member.agent === edge.to && member.state === 'accepted')
+      if (!entry) {
+        return agent
       }
       if (answer && !answer.known) {
-        const { lead: _lead, remoteLead: _remote, ...rest } = agent
-        await this.#agents.save(rest)
-        this.#log(`teams: ${agent.name} left ${agent.remoteLead?.name ?? edge.to}, which no longer lists it`)
-        this.#transport.nudge()
-        return
+        dissolved = ''
+        return { ...agent, remoteMembers: members.filter((member) => member !== entry) }
       }
-      const current = agent.remoteLead ?? { name: edge.to, state: 'joined' as const, since: now }
-      const state = answer ? 'joined' : 'unreachable'
-      const name = answer?.name ?? current.name
-      if (current.state !== state || current.name !== name) {
-        await this.#agents.save({ ...agent, remoteLead: { ...current, name, state, since: current.state === state ? current.since : now } })
+      const next: RemoteMember = { ...entry }
+      if (answer) {
+        delete next.unreachableSince
+        next.name = answer.name ?? entry.name
+      } else {
+        next.unreachableSince = entry.unreachableSince ?? now
       }
+      if (next.name === entry.name && next.unreachableSince === entry.unreachableSince) {
+        return agent
+      }
+      return { ...agent, remoteMembers: members.map((member) => (member === entry ? next : member)) }
+    })
+    if (isAgentRefusal(outcome) || dissolved === undefined) {
       return
     }
-    const members = agent.remoteMembers ?? []
-    const entry = members.find((member) => member.agent === edge.to && member.state === 'accepted')
-    if (!entry) {
-      return
+    if (dissolved) {
+      this.#log(dissolved)
     }
-    if (answer && !answer.known) {
-      await this.#agents.save({ ...agent, remoteMembers: members.filter((member) => member !== entry) })
-      this.#transport.nudge()
-      return
-    }
-    const next: RemoteMember = { ...entry }
-    if (answer) {
-      delete next.unreachableSince
-      next.name = answer.name ?? entry.name
-    } else {
-      next.unreachableSince = entry.unreachableSince ?? now
-    }
-    if (next.name !== entry.name || next.unreachableSince !== entry.unreachableSince) {
-      await this.#agents.save({ ...agent, remoteMembers: members.map((member) => (member === entry ? next : member)) })
-    }
+    this.#transport.nudge()
   }
 
   async #pruneInvites(): Promise<void> {
-    const now = this.#now()
     for (const info of this.#agents.list()) {
-      const agent = this.#agents.get(info.id)!
-      const members = agent.remoteMembers ?? []
-      const kept = members.filter((member) => member.state !== 'invited' || (member.expiresAt ?? Infinity) > now)
-      if (kept.length !== members.length) {
-        await this.#agents.save({ ...agent, remoteMembers: kept })
-      }
+      await this.#agents.patch(info.id, (agent) => {
+        const now = this.#now()
+        const members = agent.remoteMembers ?? []
+        const kept = members.filter((member) => member.state !== 'invited' || (member.expiresAt ?? Infinity) > now)
+        return kept.length === members.length ? agent : { ...agent, remoteMembers: kept }
+      })
     }
   }
 }

@@ -55,13 +55,21 @@ export async function handleAgents(
     if (previous && status !== 'closed' && status !== 'failed') {
       previous.close('server')
     }
-    await respond(ctx, res, 200, await bindWithAvatar(ctx, agent, created), created)
+    const bound = await bindWithAvatar(ctx, agent, created)
+    if (isAgentRefusal(bound)) {
+      ctx.registry.get(created.id)?.close('server')
+      fail(bound.status, bound.error)
+    }
+    await respond(ctx, res, 200, bound, created)
     return
   }
   if (action === 'avatar') {
     requireMethod(req, 'POST')
     const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { seed?: unknown }
     const changed = await rerollAvatar(ctx, agent, readSeed(body.seed))
+    if (isAgentRefusal(changed)) {
+      fail(changed.status, changed.error)
+    }
     await respond(ctx, res, 200, changed)
     return
   }
@@ -99,10 +107,12 @@ export async function handleAgents(
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as RetireAgentRequest
   const members = body.members === 'retire' ? 'retire' : 'release'
-  ctx.teams?.retiring(agent)
   const outcome = await agents.retire(agent.id, members)
   if (isAgentRefusal(outcome)) {
     fail(outcome.status, outcome.error)
+  }
+  for (const gone of outcome.retired) {
+    ctx.teams?.retiring(gone)
   }
   for (const gone of outcome.retired) {
     const runner = gone.sessionId === undefined ? undefined : ctx.registry.get(gone.sessionId)
@@ -128,19 +138,26 @@ async function createAgent(ctx: ServerContext, agents: AgentService, req: Incomi
     fail(draft.status, draft.error)
   }
   const remoteLead = remoteLeadOf(ctx, body.lead)
-  // Saved before the session starts so the lead's reconcile finds the member half; undone if the start fails.
-  const agent = remoteLead ? await joinRemote(ctx, draft, remoteLead, (joined) => agents.save({ ...draft, ...joined })) : draft
+  // Stored before the session starts so the lead's reconcile finds the member half; undone if the start fails.
+  const agent = settled(
+    remoteLead ? await joinRemote(ctx, draft, remoteLead, (joined) => agents.create(draft, joined)) : await agents.create(draft),
+  )
   let created: SessionInfo
   try {
     created = await startSession(ctx, agent, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
   } catch (error) {
-    if (remoteLead) {
-      ctx.teams?.retiring(agent)
-      await agents.retire(agent.id, 'release')
+    const undone = await agents.retire(agent.id, 'release')
+    if (!isAgentRefusal(undone)) {
+      undone.retired.forEach((gone) => ctx.teams?.retiring(gone))
     }
     throw error
   }
-  await respond(ctx, res, 201, await bindWithAvatar(ctx, agent, created), created)
+  const bound = await bindWithAvatar(ctx, agent, created)
+  if (isAgentRefusal(bound)) {
+    ctx.registry.get(created.id)?.close('server')
+    fail(bound.status, bound.error)
+  }
+  await respond(ctx, res, 201, bound, created)
 }
 
 function remoteLeadOf(ctx: ServerContext, lead: unknown): string | undefined {
@@ -155,40 +172,33 @@ async function joinRemote(
   ctx: ServerContext,
   mover: StoredAgent,
   lead: string,
-  commit: (joined: RemoteJoin) => Promise<StoredAgent>,
-): Promise<StoredAgent> {
+  commit: (joined: RemoteJoin) => Promise<StoredAgent | AgentRefusal>,
+): Promise<StoredAgent | AgentRefusal> {
   if (!ctx.teams) {
-    fail(409, 'this gateway is not connected to a relay')
+    return { status: 409, error: 'this gateway is not connected to a relay' }
   }
-  const joined = await ctx.teams.join(mover, lead, commit)
-  if (isAgentRefusal(joined)) {
-    fail(joined.status, joined.error)
+  return ctx.teams.join(mover, lead, commit)
+}
+
+function settled(outcome: StoredAgent | AgentRefusal): StoredAgent {
+  if (isAgentRefusal(outcome)) {
+    fail(outcome.status, outcome.error)
   }
-  return joined
+  return outcome
 }
 
 // The rest of the patch lands first, so a bad name or config never leaves a join the lead accepted and this side dropped.
 async function updateAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
   const remoteLead = remoteLeadOf(ctx, patch.lead)
   if (remoteLead === undefined) {
-    const updated = await ctx.agents.update(agent.id, patch)
-    if (!isAgentRefusal(updated) && patch.lead !== undefined && updated.lead !== agent.lead) {
-      ctx.teams?.left(agent.id, agent.lead)
-    }
-    return updated
+    return ctx.agents.update(agent.id, patch, { onLeadChanged: (previous) => ctx.teams?.left(agent.id, previous) })
   }
   const { lead: _lead, ...rest } = patch
   const updated = await ctx.agents.update(agent.id, rest)
   if (isAgentRefusal(updated) || updated.lead === remoteLead) {
     return updated
   }
-  return joinRemote(ctx, updated, remoteLead, async (joined) => {
-    const stored = await ctx.agents.update(agent.id, { lead: remoteLead }, joined)
-    if (isAgentRefusal(stored)) {
-      fail(stored.status, stored.error)
-    }
-    return stored
-  })
+  return joinRemote(ctx, updated, remoteLead, (joined) => ctx.agents.update(agent.id, { lead: remoteLead }, { joined }))
 }
 
 async function remoteMembers(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, lead: StoredAgent, member?: string) {
@@ -229,11 +239,13 @@ async function adoptSession(ctx: ServerContext, agents: AgentService, res: Serve
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }
+  const recipe = await rollAvatar(ctx, draft, info)
+  const bound: StoredAgent = { ...draft, sessionId: info.id, ...(recipe === undefined ? {} : { avatarRecipe: recipe }) }
   const remoteLead = remoteLeadOf(ctx, body.lead)
-  const bound = remoteLead
-    ? await joinRemote(ctx, draft, remoteLead, (joined) => bindWithAvatar(ctx, { ...draft, ...joined }, info))
-    : await bindWithAvatar(ctx, draft, info)
-  await respond(ctx, res, 201, bound)
+  const adopted = settled(
+    remoteLead ? await joinRemote(ctx, bound, remoteLead, (joined) => agents.create(bound, joined)) : await agents.create(bound),
+  )
+  await respond(ctx, res, 201, adopted)
 }
 
 function readSeed(seed: unknown): string | undefined {
@@ -259,15 +271,15 @@ async function rollFor(ctx: ServerContext, agent: StoredAgent, seed: string): Pr
 }
 
 // A new seed (random unless given) rolls and saves a new avatar; the agent's `avatar` address changes with it.
-export async function rerollAvatar(ctx: ServerContext, agent: StoredAgent, seed?: string): Promise<StoredAgent> {
+export async function rerollAvatar(ctx: ServerContext, agent: StoredAgent, seed?: string): Promise<StoredAgent | AgentRefusal> {
   const next = seed ?? randomUUID()
   const recipe = await rollFor(ctx, agent, next)
-  return ctx.agents.save({ ...agent, avatarSeed: next, avatarRecipe: recipe })
+  return ctx.agents.patch(agent.id, (current) => ({ ...current, avatarSeed: next, avatarRecipe: recipe }))
 }
 
-async function bindWithAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo): Promise<StoredAgent> {
-  const recipe = agent.avatarRecipe ?? (await rollAvatar(ctx, agent, session))
-  return ctx.agents.bind(recipe === undefined ? agent : { ...agent, avatarRecipe: recipe }, session.id)
+async function bindWithAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo): Promise<StoredAgent | AgentRefusal> {
+  const recipe = (ctx.agents.get(agent.id) ?? agent).avatarRecipe ?? (await rollAvatar(ctx, agent, session))
+  return ctx.agents.bind(agent.id, session.id, recipe)
 }
 
 async function rollAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo | undefined): Promise<unknown> {
@@ -290,11 +302,14 @@ async function sendAvatar(ctx: ServerContext, req: IncomingMessage, res: ServerR
   let recipe = agent.avatarRecipe
   if (recipe === undefined) {
     const session = agent.sessionId === undefined ? undefined : await sessionInfoOf(ctx, agent.sessionId)
-    recipe = await rollAvatar(ctx, agent, session)
-    if (recipe === undefined) {
+    const rolled = await rollAvatar(ctx, agent, session)
+    if (rolled === undefined) {
       fail(503, 'the avatar pack could not be loaded')
     }
-    await ctx.agents.save({ ...agent, avatarRecipe: recipe })
+    const stored = settled(
+      await ctx.agents.patch(agent.id, (current) => (current.avatarRecipe === undefined ? { ...current, avatarRecipe: rolled } : current)),
+    )
+    recipe = stored.avatarRecipe
   }
   const image = busy ? await avatars.busy(recipe) : await avatars.still(recipe)
   if (!image) {

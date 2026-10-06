@@ -50,6 +50,32 @@ function fakeAvatars(): AvatarProvider & { rolls: number } {
   }
 }
 
+function gatedAvatars(): AvatarProvider & { hold(): void; release(): void; waiting(): number } {
+  const base = fakeAvatars()
+  let gate: Promise<void> | undefined
+  let open: () => void = () => {}
+  let waiting = 0
+  return {
+    ...base,
+    roll: async (seed, engine, project) => {
+      if (gate) {
+        waiting++
+        await gate
+        waiting--
+      }
+      return base.roll(seed, engine, project)
+    },
+    hold: () => {
+      gate = new Promise((resolve) => (open = resolve))
+    },
+    release: () => {
+      gate = undefined
+      open()
+    },
+    waiting: () => waiting,
+  }
+}
+
 async function startGateway(dir?: string, extra: Pick<WorkerServerOptions, 'authenticate' | 'avatars'> = { avatars: fakeAvatars() }) {
   const harness = fakeHarness()
   const server = createWorkerServer({
@@ -261,6 +287,30 @@ describe('agents', () => {
     expect(listed.avatar).not.toBe(agent.avatar)
   })
 
+  it('keeps a move and a retire that land while an avatar change is still rolling', async () => {
+    const avatars = gatedAvatars()
+    const { base } = await startGateway(undefined, { avatars })
+    const lead = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Lead', config: { cwd: '/tmp/project' } })).body.agent
+    const member = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Member', config: { cwd: '/tmp/project' } })).body.agent
+    avatars.hold()
+    const rolling = call<AgentResponse>(base, `/agents/${member.id}/avatar`, 'POST', { seed: 'otter' })
+    await vi.waitFor(() => expect(avatars.waiting()).toBe(1))
+    expect((await call(base, `/agents/${member.id}`, 'PATCH', { lead: lead.id })).status).toBe(200)
+    avatars.release()
+    const changed = await rolling
+    expect(changed.status).toBe(200)
+    expect(changed.body.agent).toMatchObject({ lead: lead.id })
+    expect(changed.body.agent.avatar).not.toBe(member.avatar)
+
+    avatars.hold()
+    const late = call<{ error: string }>(base, `/agents/${member.id}/avatar`, 'POST', { seed: 'heron' })
+    await vi.waitFor(() => expect(avatars.waiting()).toBe(1))
+    expect((await call(base, `/agents/${member.id}`, 'DELETE', {})).status).toBe(200)
+    avatars.release()
+    expect(await late).toEqual({ status: 404, body: { error: `no such agent: ${member.id}` } })
+    expect((await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents.map((a) => a.name)).toEqual(['Lead'])
+  })
+
   it('serves the busy animation as one strip with its frame durations', async () => {
     const { base } = await startGateway()
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
@@ -297,7 +347,7 @@ describe('agent sleep default', () => {
     if ('error' in draft) {
       throw new Error(draft.error)
     }
-    await agents.bind(draft, 'session-1')
+    await agents.create({ ...draft, sessionId: 'session-1' })
     return { agent: agents.sleepAfterFor('session-1'), plain: agents.sleepAfterFor('session-2') }
   }
 
