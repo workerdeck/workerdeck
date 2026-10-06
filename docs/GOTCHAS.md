@@ -1354,7 +1354,8 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   `AgentInfo`), at bind time or at the first avatar request. Rendering goes through
   `resolveRecipe`, so a rebuilt pack draws the stored sprite as-is (never a silent re-roll). The
   route sends an `ETag` over pack checksum + recipe and answers `If-None-Match` with 304; the busy
-  strip (`avatar-busy.png`, `x-frame-durations`) is 404 while the pack has no busy animation. The
+  strip (`avatar-busy.png`, one row of frames plus `x-frame-durations`) is 404 only for a pack
+  without a busy animation; monkey has one since 0.3.0. The pack PNG is ~1 MB, so it loads lazily. The
   art is CC BY 4.0 (`@monkeyart/packs` carries `LICENSE-ART`): credit it wherever it is shown.
 
 ## Relay (cross-gateway peers)

@@ -203,6 +203,15 @@ describe('agents', () => {
     expect((await fetch(url)).headers.get('etag')).toBe(etag)
   })
 
+  it('serves the busy animation as one strip with its frame durations', async () => {
+    const { base } = await startGateway()
+    const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
+    const res = await fetch(base.replace(/\/v1$/, '') + agent.avatar.replace(/avatar\.png$/, 'avatar-busy.png'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('image/png')
+    expect(res.headers.get('x-frame-durations')).toBe('160,160,160,160')
+  })
+
   it('is operator-only: anyone else gets the same 404 as a missing route', async () => {
     const { base } = await startGateway(undefined, {
       authenticate: (req) => (req.headers.authorization === 'Bearer op' ? {} : { scope: { tenant: 't1' } }),

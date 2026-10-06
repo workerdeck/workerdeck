@@ -638,11 +638,11 @@ importers:
   packages/server:
     dependencies:
       '@monkeyart/composer':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.0
+        version: 0.3.0
       '@monkeyart/packs':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.0
+        version: 0.3.0
       '@workerdeck/core':
         specifier: workspace:*
         version: link:../core
@@ -1751,12 +1751,12 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
-  '@monkeyart/composer@0.2.0':
-    resolution: {integrity: sha512-xiG4VJ9Eb+xXp+psoNaDaviOj+PKeWV2oqNmaFn/AXYCM0nEzVIgWLXifHhkwYBdYrC3BTXAD8fofymyA0zf+A==}
+  '@monkeyart/composer@0.3.0':
+    resolution: {integrity: sha512-6704t1RsqfV8oyRPASJAONVPaqBluk3xNneUJoT064JA7VaSOfVVugT3Nn14SkPFKrJvzLRX5uAW+ueh0B8N+w==}
     engines: {node: '>=22.18'}
 
-  '@monkeyart/packs@0.2.0':
-    resolution: {integrity: sha512-9wSLPB5k59Nv7NdFTQW9wnsPxmZCJa5Nl+G9Cfyt21aEcrARS8T4f4M19vqX/7TmOgnN5JVrqjcR+3Bgi9M+4Q==}
+  '@monkeyart/packs@0.3.0':
+    resolution: {integrity: sha512-gMy7Kw4/ofp77zszvucj/qYfN+D5Tb1ZyXQVaux79U+YVHjc/ZGiqAEZhrHBDA1dFXwCs+FhqXZNcLWav5intQ==}
     engines: {node: '>=22.18'}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
@@ -7319,9 +7319,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@monkeyart/composer@0.2.0': {}
+  '@monkeyart/composer@0.3.0': {}
 
-  '@monkeyart/packs@0.2.0': {}
+  '@monkeyart/packs@0.3.0': {}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
