@@ -190,6 +190,15 @@ export type SidebarToHost =
     }
   | { kind: 'wd-rename-agent'; hostId: string; sessionId: string; name: string }
   | {
+      kind: 'wd-team-move'
+      hostId: string
+      sessionId: string
+      // The lead's session, or null to leave the team.
+      leadSessionId: string | null
+      order?: number
+      siblings?: { sessionId: string; order: number }[]
+    }
+  | {
       kind: 'wd-reveal-gateways'
       add?: boolean
     }

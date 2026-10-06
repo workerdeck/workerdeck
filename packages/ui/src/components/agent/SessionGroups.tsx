@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DragEvent, HTMLAttributes, ReactNode } from 'react'
 import { GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
@@ -8,8 +8,10 @@ import {
   newCustomGroupId,
   removeCustomGroup,
   renameCustomGroup,
+  sessionKey,
 } from '@workerdeck/protocol'
-import type { CustomGroup, SessionGroup } from '@workerdeck/protocol'
+import type { CustomGroup, SessionGroup, SessionRow } from '@workerdeck/protocol'
+import { dropZone, joinDrop, memberDrop, type DropZone, type TeamMove } from '../../lib/team-drop.ts'
 import { Button } from '../ui/Button.tsx'
 import { Input } from '../ui/Input.tsx'
 import { cn } from '../../lib/utils.ts'
@@ -18,11 +20,36 @@ type DragItem = { kind: 'session'; key: string } | { kind: 'group'; id: string }
 
 export type GroupDrag = ReturnType<typeof useGroupDrag>
 
+// Where a card sits: `lead` is set for a member, the team it is drawn under.
+export type DragPlace = { row: SessionRow; lead?: SessionRow }
+
+export type TeamDrag = {
+  rowOf: (key: string) => SessionRow | undefined
+  // A rejection's message is drawn under the card it was dropped on: a gateway 409 is user-facing copy.
+  onMove: (move: TeamMove) => Promise<void> | void
+}
+
+type Over = { spot: string; refusal?: string }
+
+export type DropCue = { zone?: DropZone | 'refused'; message?: string }
+type Landing = Over & { run?: () => void }
+
+const ERROR_MS = 5000
+
 // The payload lives in state rather than `dataTransfer`, which is unreadable during `dragover`; `setData` is still
-// written because some engines refuse to start a drag without it.
-export function useGroupDrag(groups: readonly CustomGroup[], onChange: (groups: CustomGroup[]) => void) {
+// written because some engines refuse to start a drag without it. A card is split in three: the middle joins its
+// team, the edges reorder (custom groups) or leave a team.
+export function useGroupDrag(
+  groups: readonly CustomGroup[],
+  onChange: (groups: CustomGroup[]) => void,
+  options: { custom: boolean; team?: TeamDrag },
+) {
+  const { custom, team } = options
   const [item, setItem] = useState<DragItem>()
-  const [over, setOver] = useState<string>()
+  const [over, setOver] = useState<Over>()
+  const [failure, setFailure] = useState<{ key: string; message: string }>()
+  const failureTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(failureTimer.current), [])
   const end = () => {
     setItem(undefined)
     setOver(undefined)
@@ -33,49 +60,109 @@ export function useGroupDrag(groups: readonly CustomGroup[], onChange: (groups: 
     e.dataTransfer.setData('text/plain', next.kind === 'session' ? next.key : next.id)
     setItem(next)
   }
-  const accept = (e: DragEvent, spot: string) => {
+  const accept = (e: DragEvent, next: Over) => {
     e.preventDefault()
     e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    setOver(spot)
+    e.dataTransfer.dropEffect = next.refusal ? 'none' : 'move'
+    if (over?.spot !== next.spot || over.refusal !== next.refusal) {
+      setOver(next)
+    }
+  }
+  const fail = (key: string, err: unknown) => {
+    clearTimeout(failureTimer.current)
+    setFailure({ key, message: err instanceof Error ? err.message : String(err) })
+    failureTimer.current = setTimeout(() => setFailure(undefined), ERROR_MS)
+  }
+  const move = (key: string, next: TeamMove) => () => {
+    setFailure(undefined)
+    void Promise.resolve()
+      .then(() => team!.onMove(next))
+      .catch((err: unknown) => fail(key, err))
   }
 
-  function session(key: string, group: SessionGroup): HTMLAttributes<HTMLDivElement> {
+  function land(e: DragEvent<HTMLDivElement>, key: string, group: SessionGroup, place?: DragPlace): Landing | undefined {
+    if (item?.kind !== 'session' || item.key === key) {
+      return undefined
+    }
+    const reorder = custom
+      ? { spot: `row:${key}`, run: () => onChange(moveToCustomGroup(groups, item.key, group.custom, group.custom ? key : undefined)) }
+      : undefined
+    const dragged = team?.rowOf(item.key)
+    if (!team || !dragged || !place) {
+      return reorder
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const zone = dropZone(e.clientY - rect.top, rect.height)
+    if (place.lead) {
+      const result = memberDrop(dragged, place.lead, place.row, zone)
+      return typeof result === 'string'
+        ? { spot: `refused:${key}`, refusal: result }
+        : { spot: `${zone === 'before' ? 'before' : 'after'}:${key}`, run: move(key, result) }
+    }
+    if (zone === 'join') {
+      const result = joinDrop(dragged, place.row)
+      if (typeof result !== 'string') {
+        return { spot: `join:${key}`, run: move(key, result) }
+      }
+      return reorder ?? { spot: `refused:${key}`, refusal: result }
+    }
+    if (dragged.info.agent?.lead !== undefined) {
+      const leave = move(key, { row: dragged, lead: null })
+      return {
+        spot: `${zone}:${key}`,
+        run: () => {
+          leave()
+          reorder?.run()
+        },
+      }
+    }
+    return reorder ? { ...reorder, spot: `${zone}:${key}` } : undefined
+  }
+
+  function session(key: string, group: SessionGroup, place?: DragPlace): HTMLAttributes<HTMLDivElement> {
     return {
       draggable: true,
       onDragStart: (e) => start(e, { kind: 'session', key }),
       onDragEnd: end,
       onDragOver: (e) => {
-        if (item?.kind === 'session') {
-          accept(e, `row:${key}`)
+        const landing = land(e, key, group, place)
+        if (landing) {
+          accept(e, landing)
         }
       },
       onDrop: (e) => {
-        if (item?.kind !== 'session') {
+        const landing = land(e, key, group, place)
+        if (!landing) {
           return
         }
         e.preventDefault()
         e.stopPropagation()
-        if (item.key !== key) {
-          onChange(moveToCustomGroup(groups, item.key, group.custom, group.custom ? key : undefined))
-        }
+        landing.run?.()
         end()
       },
     }
   }
 
   function container(group: SessionGroup): HTMLAttributes<HTMLDivElement> {
+    const leaving = () => {
+      const dragged = item?.kind === 'session' ? team?.rowOf(item.key) : undefined
+      return dragged?.info.agent?.lead !== undefined ? dragged : undefined
+    }
     return {
       onDragOver: (e) => {
-        if (item) {
-          accept(e, `group:${group.key}`)
+        if (item && (custom || leaving())) {
+          accept(e, { spot: `group:${group.key}` })
         }
       },
       onDrop: (e) => {
         e.preventDefault()
-        if (item?.kind === 'session') {
+        const member = leaving()
+        if (member) {
+          move(sessionKey(member), { row: member, lead: null })()
+        }
+        if (custom && item?.kind === 'session') {
           onChange(moveToCustomGroup(groups, item.key, group.custom))
-        } else if (item?.kind === 'group') {
+        } else if (custom && item?.kind === 'group') {
           onChange(moveCustomGroup(groups, item.id, group.custom))
         }
         end()
@@ -91,9 +178,32 @@ export function useGroupDrag(groups: readonly CustomGroup[], onChange: (groups: 
     return { draggable: true, onDragStart: (e) => start(e, { kind: 'group', id }), onDragEnd: end }
   }
 
+  // What to draw on a card while something hovers it, and a rejected drop's message for a while after.
+  function cue(key: string): DropCue {
+    if (failure?.key === key) {
+      return { zone: 'refused', message: failure.message }
+    }
+    const spot = over?.spot
+    if (!spot || spot.slice(spot.indexOf(':') + 1) !== key) {
+      return {}
+    }
+    const kind = spot.slice(0, spot.indexOf(':'))
+    if (kind === 'refused') {
+      return { zone: 'refused', message: over?.refusal }
+    }
+    return kind === 'row' || kind === 'before'
+      ? { zone: 'before' }
+      : kind === 'after'
+        ? { zone: 'after' }
+        : kind === 'join'
+          ? { zone: 'join' }
+          : {}
+  }
+
   return {
     dragging: item !== undefined,
-    isOver: (spot: string) => over === spot,
+    isOver: (spot: string) => over?.spot === spot,
+    cue,
     session,
     container,
     header,

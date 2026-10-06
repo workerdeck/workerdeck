@@ -170,6 +170,13 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             onShellAgentWrite={(row, shellId, enabled) => postRow('wd-shell-agent-write', row, { shellId, enabled })}
             onRename={(row, title) => postRow('wd-rename-session', row, { title })}
             onRenameAgent={(row, name) => postRow('wd-rename-agent', row, { name })}
+            onTeamMove={(move) =>
+              postRow('wd-team-move', move.row, {
+                leadSessionId: move.lead?.info.id ?? null,
+                order: move.order,
+                siblings: move.siblings?.map((s) => ({ sessionId: s.row.info.id, order: s.order })),
+              })
+            }
             onCreateInGroup={(target) => bridge.post({ kind: 'wd-new-session', hostId: target.hostId, cwd: target.cwd })}
             emptyState={
               <Empty

@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
+import { AGENT_SLEEP_AFTER_MS_DEFAULT } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 
 export type HostSettings = {
@@ -21,6 +22,7 @@ export type HostSettings = {
   statusBar: boolean
   name: string
   engineSleepAfterMinutes: number
+  agentSleepAfterMinutes: number
   effortDefaults: Record<string, string>
   agentContextReset: AgentContextReset
 }
@@ -28,6 +30,8 @@ export type HostSettings = {
 export const HOST_SECTION = 'workerdeck.host'
 
 export const DEFAULT_HOST_NAME = 'This machine'
+
+export const AGENT_SLEEP_AFTER_MINUTES = AGENT_SLEEP_AFTER_MS_DEFAULT / 60_000
 
 export type ShellAgentWrite = 'read-only' | 'gated' | 'allow'
 
@@ -77,6 +81,7 @@ export function readHostSettings(): HostSettings {
     statusBar: config.get<boolean>('statusBar', true),
     name: config.get<string>('name', DEFAULT_HOST_NAME).trim() || DEFAULT_HOST_NAME,
     engineSleepAfterMinutes: minutes(config.get<number>('engineSleepAfterMinutes', 0)),
+    agentSleepAfterMinutes: minutes(config.get<number>('agentSleepAfterMinutes', AGENT_SLEEP_AFTER_MINUTES)),
     effortDefaults: effortDefaults(config.get<Record<string, unknown>>('effortDefaults', {})),
     agentContextReset: agentContextReset(config.get<string>('agentContextReset', 'off')),
   }
@@ -97,6 +102,7 @@ const RESTART_KEYS = [
   'useNpx',
   'npxSpec',
   'engineSleepAfterMinutes',
+  'agentSleepAfterMinutes',
   'effortDefaults',
   'agentContextReset',
 ]

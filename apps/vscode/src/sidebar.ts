@@ -18,7 +18,7 @@ import {
 } from './view-config.ts'
 import { WebviewViewHost } from './webview-host.ts'
 import { ProjectIconCache } from './project-icons.ts'
-import { AgentAvatarCache } from './agent-avatars.ts'
+import type { AgentAvatarCache } from './agent-avatars.ts'
 
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 
@@ -65,6 +65,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     extensionUri: vscode.Uri,
     store: HostStore,
     model: SessionsModel,
+    avatars: AgentAvatarCache,
     delegate: SidebarDelegate,
   ) {
     super(extensionUri)
@@ -73,7 +74,8 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.#model = model
     this.#delegate = delegate
     this.#icons = new ProjectIconCache(store, () => this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() }))
-    this.#avatars = new AgentAvatarCache(store, () => this.post({ kind: 'wd-agent-avatars', avatars: this.#avatars.entries() }))
+    this.#avatars = avatars
+    avatars.onDidChange(() => this.post({ kind: 'wd-agent-avatars', avatars: this.#avatars.entries() }))
     this.#viewConfig = normalizeViewConfig(context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY))
     // Seeds the context keys, so the title bar shows the right toggle icons before the view opens.
     this.setSearchOpen(context.globalState.get<boolean>(SEARCH_OPEN_KEY) ?? false)
@@ -227,6 +229,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
           ? this.#agentCall(msg.hostId, 'rename failed', (client) => client.updateAgent(agentId, { name: msg.name }))
           : undefined
       }
+      case 'wd-team-move': {
+        return this.#teamMove(msg)
+      }
       case 'wd-delete-session': {
         return this.#deleteSession(msg.hostId, msg.sessionId)
       }
@@ -358,6 +363,32 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       })
     }
     return items
+  }
+
+  async #teamMove(msg: Extract<SidebarToHost, { kind: 'wd-team-move' }>): Promise<void> {
+    const sessions = this.#model.sessionsOf(msg.hostId)
+    const agentOf = (sessionId: string) => sessions.find((s) => s.id === sessionId)?.agent?.id
+    const lead = msg.leadSessionId === null ? null : agentOf(msg.leadSessionId)
+    if (lead === undefined) {
+      return
+    }
+    const mover = agentOf(msg.sessionId)
+    await this.#agentCall(msg.hostId, lead ? 'could not join the team' : 'could not leave the team', async (client) => {
+      if (mover) {
+        await client.updateAgent(mover, lead ? { lead, ...(msg.order === undefined ? {} : { order: msg.order }) } : { lead: null })
+      } else if (lead) {
+        const adopted = await client.createAgent({ adopt: msg.sessionId, lead })
+        if (msg.order !== undefined) {
+          await client.updateAgent(adopted.agent.id, { order: msg.order })
+        }
+      }
+      for (const sibling of msg.siblings ?? []) {
+        const id = agentOf(sibling.sessionId)
+        if (id) {
+          await client.updateAgent(id, { order: sibling.order })
+        }
+      }
+    })
   }
 
   async #agentCall(hostId: string, failure: string, call: (client: WorkerDeckClient) => Promise<unknown>): Promise<void> {

@@ -4,11 +4,12 @@ import { hostCommands, pickCommand, registerCommands, sessionCommands, viewComma
 import { startDevReload } from './dev-reload.ts'
 import { WorkerdeckFileSystem } from './fsp.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
+import { AgentAvatarCache } from './agent-avatars.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore } from './hosts.ts'
 import { createAgent, createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 import { SessionPanelView } from './panel.ts'
-import { SessionEditorTab } from './session-tab.ts'
+import { SessionEditorTab, sessionTitle } from './session-tab.ts'
 import { SurfaceRegistry } from './surfaces.ts'
 import type { AnySurface, SessionRef, SurfaceDelegate } from './session-surface.ts'
 import type { SelectOptions } from './sidebar.ts'
@@ -52,7 +53,8 @@ export function activate(context: vscode.ExtensionContext): void {
   syncUnreadWatcher()
 
   const infoOf = (hostId: string, sessionId: string) => model.sessionsOf(hostId).find((s) => s.id === sessionId)
-  const titleOf = (hostId: string, sessionId: string) => infoOf(hostId, sessionId)?.title ?? sessionId.slice(0, 8)
+  const titleOf = (hostId: string, sessionId: string) => sessionTitle(infoOf(hostId, sessionId), sessionId)
+  const avatars = new AgentAvatarCache(store, context.globalStorageUri)
   const sessionRef = (hostId: string, sessionId: string, cwd?: string): SessionRef | undefined => {
     const host = store.get(hostId)
     return host ? { host, sessionId, cwd: cwd ?? infoOf(hostId, sessionId)?.cwd } : undefined
@@ -225,12 +227,22 @@ export function activate(context: vscode.ExtensionContext): void {
       panel.hold(ref, title)
     }
     const tab = SessionEditorTab.create(context.extensionUri, store, tabDelegate, ref, title, column, focus)
-    const info = infoOf(ref.host.id, ref.sessionId)
-    if (info) {
-      tab.setState(sessionState(info))
-    }
+    syncTab(tab)
     registry.add(tab)
     return tab
+  }
+  const syncTab = (tab: SessionEditorTab) => {
+    const session = tab.session
+    const info = session && infoOf(session.host.id, session.sessionId)
+    if (!info) {
+      return
+    }
+    tab.setTitle(sessionTitle(info, session.sessionId))
+    tab.setState(sessionState(info))
+    tab.setAvatar(avatars.iconFor(info))
+    if (info.agent?.avatar) {
+      avatars.ensure({ [session.host.id]: [info] })
+    }
   }
   const moveToPanel = async (tab: SessionEditorTab) => {
     const session = tab.session
@@ -301,7 +313,7 @@ export function activate(context: vscode.ExtensionContext): void {
       surface.openShell(options.shellId)
     }
   }
-  sidebar = new SidebarProvider(context, context.extensionUri, store, model, {
+  sidebar = new SidebarProvider(context, context.extensionUri, store, model, avatars, {
     selectSession,
     sessionDeleted: async (hostId, sessionId) => {
       const tab = registry.tabFor(hostId, sessionId)
@@ -348,18 +360,18 @@ export function activate(context: vscode.ExtensionContext): void {
   registry.onDidChangeFocus(() => syncSurfaces())
   model.onDidChange(() => {
     for (const tab of registry.tabs()) {
-      const session = tab.session
-      const info = session && infoOf(session.host.id, session.sessionId)
-      if (info) {
-        tab.setTitle(info.title ?? session.sessionId.slice(0, 8))
-        tab.setState(sessionState(info))
-      }
+      syncTab(tab)
     }
     const held = panel.heldSession
     if (held) {
       panel.retitleHeld(titleOf(held.host.id, held.sessionId))
     }
     pushStatusBar()
+  })
+  avatars.onDidChange(() => {
+    for (const tab of registry.tabs()) {
+      syncTab(tab)
+    }
   })
   syncSurfaces()
 
@@ -403,6 +415,7 @@ export function activate(context: vscode.ExtensionContext): void {
   void model.refresh()
 
   context.subscriptions.push(
+    avatars,
     startDevReload(context, [{ reloadWebview: () => registry.reloadAll() }, sidebar, gateways, profiles, ...Object.values(sections)]),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (

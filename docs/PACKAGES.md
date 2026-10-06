@@ -1863,7 +1863,16 @@ there. `expanded`/`editing` are uncontrolled by default and `renameOn` chooses t
 **Agent cards.** A row with `info.agent` draws as the agent card (`AgentAvatar`: 32 px, status on
 the corner, busy strip played by CSS `steps()`, desaturated asleep), named by the agent, with the
 session title as its topic. Members are the one-row `variant="member"` under the lead on a tree
-line (`TeamBlock` in `SessionBrowser`), folded by the knob into a summary. Avatars arrive through
+line (`TeamBlock` in `SessionBrowser`). The knob folds a team into its lead: no row of its own, the
+members' avatars (each with its status) drawn on the lead's first line before the context ring
+(`teamTray`, at most four, then `+n`), which unfold it again; a member that needs approval still
+draws as a row. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
+middle of a card joins its team, a member's edges place the drop beside it, a member dropped on a
+top-level edge or empty space leaves. Joining renumbers the team densely (`TeamMove.siblings`).
+`teamDropRefusal` mirrors the gateway's `leadRefusal` wording so a refused hover says why; a
+rejected `onTeamMove` draws its message under the card for 5 s. `AgentHeading` is the panel title
+for an agent (avatar, name, LEAD or team, `conversation n` from `AgentRef.conversation`, the
+gateway's `pastSessions.length + 1`, sent from the second on). Avatars arrive through
 `avatars` (keyed by `AgentRef.avatar`), because the gateway route needs the host's credentials: the
 host fetches and hands over data URLs, exactly like `projectIcons`. Once any row has an agent,
 plain rows draw as tiles too, so the column holds. An agent card renames the agent
@@ -2207,6 +2216,15 @@ Serve hashed assets `immutable` and `index.html` with `no-cache`, or a deployed 
 reaches a browser that already has the old one. Routing needs no server support at all - the app
 uses hash history, so only `index.html` is ever requested.
 
+**Agents.** The header `+` is a split button: the main half opens `NewAgentDialog` (name, project,
+profile, permission mode, model, effort, brief, first prompt, the context-reset and sleep toggles,
+join a team; "One-off session instead" hands over to the session dialog). A blank name lets the
+gateway pick one. `CwdField` and `EffortField` are shared with `RunForm`. Card verbs live in
+`SessionCardActions` (`rowActions`, so the dashboard redraws the clear / sleep / close icons
+itself), errors as toasts; drag to join is `onTeamMove` in `SessionsSidebar`, whose rejection the
+list draws under the card instead. `useAgentAvatars` fetches each avatar path once per page (a
+failure retries after 60 s); the session header draws `AgentHeading` for an agent.
+
 ## `packages/cli`
 
 published unscoped as **`workerdeck`**, the turnkey instance (`npx
@@ -2250,7 +2268,9 @@ boot - whatever the file holds belongs to a dead process - and again on a gracef
 failure, write through the server's atomic helper) and `jsonPushRoute`, the one preamble for both
 `/apns/*` routes (claimed with or without push, 405, 401, 415, 413, 400 on bad JSON, in that order).
 `parseArgs` (`config.ts`) is two lookup tables, switches and valued flags; a new flag is one row, and
-`test/config.test.ts` pins every flag, alias and refusal message.
+`test/config.test.ts` pins every flag, alias and refusal message. The duration flags
+(`--engine-sleep-after`, `--agent-sleep-after`) map `never` and `0` to `0`, which the server reads as
+never; `--approval-timeout` maps them to `null` instead.
 
 Browser
 logins are durable (`auth-sessions.ts` → `<stateDir>/auth-sessions.json`, 0600) and the table is

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { DEFAULT_VIEW_CONFIG } from '@workerdeck/protocol'
-import type { ViewConfig } from '@workerdeck/protocol'
+import type { SessionRow, ViewConfig } from '@workerdeck/protocol'
 import { SessionBrowser } from '../src/components/agent/SessionBrowser.tsx'
+import { AgentHeading } from '../src/components/agent/AgentAvatar.tsx'
+import type { TeamMove } from '../src/lib/team-drop.ts'
 import { AGENTS, makeRow } from './session-fixtures.ts'
 
 const meta: Meta<typeof SessionBrowser> = {
@@ -187,4 +189,54 @@ export const Teams: Story = {
 
 export const TeamsByState: Story = {
   render: () => <Browser rows={TEAM_ROWS} avatars={AVATARS} showControls={false} initial={{ groupBy: 'state' }} />,
+}
+
+function applyMove(rows: SessionRow[], move: TeamMove): SessionRow[] {
+  const lead = move.lead?.info.agent
+  const orders = new Map((move.siblings ?? []).map((s) => [s.row.info.id, s.order]))
+  return rows.map((row) => {
+    const own = row.info.agent
+    if (row.info.id === move.row.info.id) {
+      const base = own ?? { id: row.info.id, name: row.info.title ?? row.info.id }
+      const next = lead ? { ...base, lead: lead.id, team: lead.name, order: move.order } : { ...base, lead: undefined, team: undefined }
+      return { ...row, info: { ...row.info, agent: next } }
+    }
+    if (own && orders.has(row.info.id)) {
+      return { ...row, info: { ...row.info, agent: { ...own, order: orders.get(row.info.id) } } }
+    }
+    if (own && lead && own.id === lead.id) {
+      return { ...row, info: { ...row.info, agent: { ...own, leads: true } } }
+    }
+    return row
+  })
+}
+
+function DraggableTeams() {
+  const [rows, setRows] = useState(TEAM_ROWS)
+  return (
+    <Browser
+      rows={rows}
+      avatars={AVATARS}
+      showControls={false}
+      initial={{ groupBy: 'none' }}
+      onTeamMove={(move) => {
+        if (move.row.info.id === 't5') {
+          throw new Error('Marlow is busy; try again when the turn ends')
+        }
+        setRows((held) => applyMove(held, move))
+      }}
+    />
+  )
+}
+
+export const TeamsDrag: Story = { render: () => <DraggableTeams /> }
+
+export const Heading: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      <AgentHeading row={TEAM_ROWS[0]!} image={AVATARS['/v1/agents/atlas/avatar.png']} conversation={3} />
+      <AgentHeading row={TEAM_ROWS[2]!} image={AVATARS['/v1/agents/juno/avatar.png']} conversation={1} />
+      <AgentHeading row={TEAM_ROWS[4]!} />
+    </div>
+  ),
 }

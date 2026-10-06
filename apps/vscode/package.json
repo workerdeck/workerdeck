@@ -744,11 +744,20 @@
             "description": "Minutes an idle session with no open view waits before its engine process is released. 0 means never.",
             "markdownDescription": "Idle sessions with no open view release their engine process after this many minutes and wake on the next message. The session stays listed, and its conversation is resumed when it wakes. `0` means never. Passed to the server as `--engine-sleep-after`."
           },
+          "workerdeck.host.agentSleepAfterMinutes": {
+            "type": "number",
+            "default": 15,
+            "minimum": 0,
+            "scope": "machine",
+            "order": 13,
+            "description": "Minutes an agent's idle session with no open view waits before its engine process is released, unless the agent sets its own. 0 means never.",
+            "markdownDescription": "The same as `#workerdeck.host.engineSleepAfterMinutes#`, for agents: an agent's idle session with no open view releases its engine process after this many minutes, unless the agent sets its own value. `0` means never. Passed to the server as `--agent-sleep-after` when it differs from the default of 15."
+          },
           "workerdeck.host.effortDefaults": {
             "type": "object",
             "default": {},
             "scope": "machine",
-            "order": 13,
+            "order": 14,
             "additionalProperties": {
               "type": "string",
               "enum": [
@@ -778,7 +787,7 @@
             ],
             "default": "off",
             "scope": "machine",
-            "order": 14,
+            "order": 15,
             "description": "Whether agents get the context_reset tool, which clears their own conversation between turns and continues from a prompt they wrote.",
             "markdownDescription": "Whether agents get the `context_reset` tool: an agent clears its own conversation once its turn ends and continues from a prompt it wrote, for long unattended work. Rate-limited by the server. Passed to the server as `--agent-context-reset`."
           }

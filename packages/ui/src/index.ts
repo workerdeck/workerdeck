@@ -164,6 +164,7 @@ export {
   type GroupTarget,
   type SessionBrowserProps,
 } from './components/agent/SessionBrowser.tsx'
+export { teamDropRefusal, type TeamMove } from './lib/team-drop.ts'
 export {
   STEP_DISPLAY_OPTIONS,
   SessionFilters,
@@ -173,7 +174,16 @@ export {
   type SessionFiltersProps,
 } from './components/agent/SessionFilters.tsx'
 export { SessionItem, type SelectModifiers, type SessionItemProps } from './components/agent/SessionItem.tsx'
-export { AgentAvatar, type AgentAvatarImage, type AgentAvatarProps, type AgentAvatars } from './components/agent/AgentAvatar.tsx'
+export {
+  AgentAvatar,
+  AgentHeading,
+  LeadChip,
+  avatarOf,
+  type AgentAvatarImage,
+  type AgentAvatarProps,
+  type AgentAvatars,
+  type AgentHeadingProps,
+} from './components/agent/AgentAvatar.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
 export {

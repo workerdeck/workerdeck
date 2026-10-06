@@ -11,7 +11,7 @@ import { confirmDisruption, summarizeBusy } from './busy.ts'
 import { clearLock, logPath, ownedLock, pidAlive, writeLock } from './lock.ts'
 import { LogTail } from './log-tail.ts'
 import { resolveLaunch, type LaunchSpec } from './runtime.ts'
-import { bindsPublicly, managedUrl, readHostSettings, settingsProblem, type HostSettings } from './settings.ts'
+import { AGENT_SLEEP_AFTER_MINUTES, bindsPublicly, managedUrl, readHostSettings, settingsProblem, type HostSettings } from './settings.ts'
 
 export const MANAGED_HOST_ID = 'workerdeck-managed'
 
@@ -419,6 +419,9 @@ export class HostSupervisor implements vscode.Disposable {
     }
     if (settings.engineSleepAfterMinutes > 0) {
       args.push('--engine-sleep-after', `${settings.engineSleepAfterMinutes}m`)
+    }
+    if (settings.agentSleepAfterMinutes !== AGENT_SLEEP_AFTER_MINUTES) {
+      args.push('--agent-sleep-after', settings.agentSleepAfterMinutes > 0 ? `${settings.agentSleepAfterMinutes}m` : 'never')
     }
     for (const [model, effort] of Object.entries(settings.effortDefaults)) {
       args.push('--effort-default', `${model}=${effort}`)

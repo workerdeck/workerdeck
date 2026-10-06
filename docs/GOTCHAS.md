@@ -1356,8 +1356,13 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   paid turn on an idle session; members learn their team from `peers_list` (`agent`, `role`, `team`). `agent` (the agent's name)
   is what a model addresses by: a session's title is its topic, so `smoke:teams` failed on titles alone.
 - **Sleep defaults on for agents.** `EngineSleepTimers` takes `afterMsFor` (the agent's
-  `sleepAfterMs`, default 15 min) over the gateway's `afterMs`, and so watches every sleepable runner
-  even when the gateway default is 0.
+  `sleepAfterMs`, else the gateway's `agentSleepAfterMs`, else 15 min) over the gateway's `afterMs`,
+  and so watches every sleepable runner even when the gateway default is 0. `0` at either level means
+  never, as for `engineSleepAfterMs`, and an agent's own value (`0` included) beats the gateway's.
+  For an agent's session the agent ladder replaces `engineSleepAfterMs` outright: a gateway with
+  plain sessions on 5 min and agents on `never` leaves agents awake. CLI `--agent-sleep-after`
+  (`never` maps to 0), VS Code `workerdeck.host.agentSleepAfterMinutes` (default 15, passed only
+  when it differs, as `never` for 0).
 - **Avatars are an optional `AvatarProvider`** (`ServerOptions.avatars`); the server imports no
   art. The CLI wires monkeyart (`packages/cli/src/lib/avatars.ts`). Without a provider,
   `AgentInfo.avatar` / `AgentRef.avatar` are absent, the avatar routes answer 404, and clients draw
@@ -2988,6 +2993,13 @@ Five filters sit on the replay/live path, and compose. Keep them distinct:
   persisted `{ hostId, sessionId, cwd }` alone, titles it by short id, and lets the next
   `model.onDidChange` retitle it; a restored tab on the panel's remembered session converts the
   panel to the held state, whichever of the two restores first.
+- **An agent's tab wears its avatar and its name.** `syncTab` (every `model.onDidChange`, and every
+  `AgentAvatarCache.onDidChange`) titles the tab with `sessionTitle`: the agent name, plus
+  `· <lead> team` for a member, never the session title. `iconPath` needs a file, so the cache writes
+  each fetched still to `<globalStorageUri>/agent-avatars/<sha1 of the avatar path>.png` and the tab
+  swaps its state dot for it; no avatar, a failed fetch or a failed write keeps the dot. The avatar
+  replaces the state dot, so an agent tab does not show working or attention. The cache is one
+  instance shared with the Sessions view, which reads its data URLs.
 
 ## VS Code Host Mode (the supervised `workerdeck` child)
 

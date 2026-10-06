@@ -1,18 +1,7 @@
 import { errorMessage } from '@workerdeck/protocol'
 import { useState } from 'react'
 import type { SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
-import {
-  Button,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  Empty,
-  EmptyKey,
-  Spinner,
-  formatRelativeTime,
-  toast,
-} from '@workerdeck/ui'
+import { Button, Dialog, DialogBody, DialogContent, DialogHeader, Empty, Spinner, formatRelativeTime, toast } from '@workerdeck/ui'
 import { History, Plus } from 'lucide-react'
 import { QuestionsField, RunFormFields, useRunForm, type RunTarget } from '@/components/RunForm.tsx'
 import { BrandMark } from '@/components/shell/BrandMark.tsx'
@@ -171,11 +160,7 @@ export function SessionsView() {
       <Empty
         icon={<BrandMark />}
         title="No session open"
-        description={
-          <>
-            Pick one on the left, or start a new one with <EmptyKey>+</EmptyKey> above.
-          </>
-        }
+        description="Pick one on the left, or start a new agent or session from the buttons above it."
       />
     </div>
   )

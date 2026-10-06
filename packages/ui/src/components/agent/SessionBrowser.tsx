@@ -30,7 +30,8 @@ import { Input } from '../ui/Input.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
-import { CustomGroupHeader, GroupHeading, HeadingAction, NewGroupButton, useGroupDrag } from './SessionGroups.tsx'
+import { CustomGroupHeader, GroupHeading, HeadingAction, NewGroupButton, useGroupDrag, type DropCue } from './SessionGroups.tsx'
+import type { TeamMove } from '../../lib/team-drop.ts'
 import { cn } from '../../lib/utils.ts'
 
 export { SessionStatusIcon } from './SessionStatusIcon.tsx'
@@ -65,6 +66,9 @@ export interface SessionBrowserProps {
   onKillShell?: (row: SessionRow, shellId: string) => void
   onShellAgentWrite?: (row: SessionRow, shellId: string, enabled: boolean) => void
   avatars?: AgentAvatars
+  // Makes cards draggable onto each other: the middle of a card joins its team, a member dropped outside leaves.
+  // Reject with an Error to draw its message under the card.
+  onTeamMove?: (move: TeamMove) => Promise<void> | void
   // Draws a `+` on each project heading: start a session on that gateway, in that project's root.
   onCreateInGroup?: (target: GroupTarget) => void
   emptyState?: ReactNode
@@ -108,6 +112,7 @@ export function SessionBrowser({
   onKillShell,
   onShellAgentWrite,
   avatars,
+  onTeamMove,
   onCreateInGroup,
   emptyState,
   showControls = true,
@@ -126,7 +131,12 @@ export function SessionBrowser({
   const [editingGroup, setEditingGroup] = useState<string>()
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
-  const drag = useGroupDrag(config.customGroups ?? [], (customGroups) => set({ customGroups }))
+  const byKey = useMemo(() => new Map(rows.map((row) => [sessionKey(row), row])), [rows])
+  const drag = useGroupDrag(config.customGroups ?? [], (customGroups) => set({ customGroups }), {
+    custom,
+    team: onTeamMove ? { rowOf: (key) => byKey.get(key), onMove: onTeamMove } : undefined,
+  })
+  const draggable = custom || onTeamMove !== undefined
 
   const heading = (group: SessionGroup) => {
     if (custom) {
@@ -240,8 +250,8 @@ export function SessionBrowser({
           {groups.map((group) => (
             <div
               key={group.key}
-              {...(custom ? drag.container(group) : {})}
-              className={cn('flex flex-col gap-1 rounded-md', custom && drag.isOver(`group:${group.key}`) && 'bg-row-hover/50')}
+              {...(draggable ? drag.container(group) : {})}
+              className={cn('flex flex-col gap-1 rounded-md', draggable && drag.isOver(`group:${group.key}`) && 'bg-row-hover/50')}
             >
               {heading(group)}
               {custom && group.custom !== undefined && group.rows.length === 0 ? (
@@ -255,8 +265,12 @@ export function SessionBrowser({
                     const item = (member: SessionRow, variant: 'card' | 'member', extra: Partial<SessionRowItemProps> = {}) => (
                       <SessionRowItem
                         key={sessionKey(member)}
-                        dragProps={custom && variant === 'card' ? drag.session(sessionKey(member), group) : undefined}
-                        dropTarget={custom && drag.isOver(`row:${sessionKey(member)}`)}
+                        dragProps={
+                          onTeamMove || (custom && variant === 'card')
+                            ? drag.session(sessionKey(member), group, variant === 'member' ? { row: member, lead: row } : { row })
+                            : undefined
+                        }
+                        dropCue={draggable ? drag.cue(sessionKey(member)) : undefined}
                         row={member}
                         variant={variant}
                         active={isActive(member)}
@@ -297,11 +311,12 @@ export function SessionBrowser({
                         collapsed={collapsed}
                         avatars={avatars}
                         onToggle={() => onConfigChange(toggleTeamCollapsed(config, row))}
-                        renderLead={(summary) =>
+                        renderLead={(summary, tray) =>
                           item(row, 'card', {
                             className: row.context ? 'opacity-50' : undefined,
                             badgeState: collapsed ? row.teamState : undefined,
                             teamUnseen: collapsed ? summary.unseen : 0,
+                            teamTray: tray,
                           })
                         }
                         renderMember={(member) => item(member, 'member')}
@@ -328,10 +343,11 @@ interface SessionRowItemProps {
   avatars?: AgentAvatars
   badgeState?: SessionState
   teamUnseen?: number
+  teamTray?: ReactNode
   tile?: boolean
   className?: string
   dragProps?: HTMLAttributes<HTMLDivElement>
-  dropTarget?: boolean
+  dropCue?: DropCue
   active?: boolean
   actions?: ReactNode
   activeSubagentId?: string
@@ -362,10 +378,11 @@ function SessionRowItem({
   avatars,
   badgeState,
   teamUnseen,
+  teamTray,
   tile,
   className,
   dragProps,
-  dropTarget,
+  dropCue,
   active,
   actions,
   activeSubagentId,
@@ -399,6 +416,7 @@ function SessionRowItem({
       avatars={avatars}
       badgeState={badgeState}
       teamUnseen={teamUnseen}
+      teamTray={teamTray}
       tile={tile}
       className={className}
       active={active === true}
@@ -460,14 +478,33 @@ function SessionRowItem({
   if (!dragProps) {
     return item
   }
+  const zone = dropCue?.zone
   return (
-    <div {...dragProps} className={cn('rounded-md', dropTarget && 'shadow-[inset_0_2px_0_0_var(--color-accent)]')}>
+    <div
+      {...dragProps}
+      title={zone === 'refused' ? dropCue?.message : undefined}
+      className={cn(
+        'rounded-md',
+        zone === 'before' && 'shadow-[inset_0_2px_0_0_var(--color-accent)]',
+        zone === 'after' && 'shadow-[inset_0_-2px_0_0_var(--color-accent)]',
+        zone === 'join' && 'bg-accent/10 ring-1 ring-accent',
+        zone === 'refused' && 'ring-1 ring-danger/60',
+      )}
+    >
       {item}
+      {zone === 'refused' && dropCue?.message ? (
+        <div role="status" className="px-3 pb-1 text-label text-danger">
+          {dropCue.message}
+        </div>
+      ) : null}
     </div>
   )
 }
 
-// The tree line runs under the lead's avatar centre; the knob sits atop it, so expanded teams need no twistie.
+const TRAY_MAX = 4
+
+// A folded team draws its members on the lead's first line (avatar and status each) and no row of its own; the tray
+// unfolds it. Expanded, a tree line runs from the lead's avatar with the knob atop it, so neither state needs a twistie.
 function TeamBlock({
   lead,
   collapsed,
@@ -480,7 +517,7 @@ function TeamBlock({
   collapsed: boolean
   avatars?: AgentAvatars
   onToggle: () => void
-  renderLead: (summary: ReturnType<typeof teamSummary>) => ReactNode
+  renderLead: (summary: ReturnType<typeof teamSummary>, tray?: ReactNode) => ReactNode
   renderMember: (member: SessionRow) => ReactNode
 }) {
   const members = lead.members ?? []
@@ -492,39 +529,42 @@ function TeamBlock({
       summary.working ? `${summary.working} working` : undefined,
       summary.attention ? `${summary.attention} need${summary.attention === 1 ? 's' : ''} you` : undefined,
     ].filter(Boolean)
+    const hidden = members.length - TRAY_MAX
+    const tray = (
+      <button
+        type="button"
+        aria-expanded={false}
+        aria-label={`Expand ${lead.info.agent?.name ?? 'team'}: ${counts.join(', ')}`}
+        title={counts.join(' · ')}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggle()
+        }}
+        className="flex shrink-0 items-center gap-1 rounded-[4px] px-0.5 hover:bg-row-hover"
+      >
+        {members.slice(0, hidden > 0 ? TRAY_MAX - 1 : TRAY_MAX).map((member) => (
+          <AgentAvatar
+            key={sessionKey(member)}
+            row={member}
+            image={avatarOf(avatars, member.info.agent)}
+            size={16}
+            className="rounded-[3px]"
+          />
+        ))}
+        {hidden > 0 ? <span className="text-label text-fg-4 tabular-nums">+{hidden + 1}</span> : null}
+      </button>
+    )
     return (
       <div data-slot="team" data-collapsed className="flex flex-col">
-        {renderLead(summary)}
-        <button
-          type="button"
-          aria-expanded={false}
-          aria-label={`Expand ${lead.info.agent?.name ?? 'team'}`}
-          onClick={onToggle}
-          className="mx-1 flex h-6 items-center gap-1.5 rounded-[4px] pl-2.5 text-left text-label text-fg-4 hover:bg-row-hover hover:text-fg-2"
-        >
-          <ChevronRight className="size-3.5 shrink-0" />
-          <span className="flex shrink-0 -space-x-1.5">
-            {members.slice(0, 4).map((member) => (
-              <AgentAvatar
-                key={sessionKey(member)}
-                row={member}
-                image={avatarOf(avatars, member.info.agent)}
-                size={16}
-                badge={false}
-                className="rounded-[4px] ring-1 ring-bg"
-              />
-            ))}
-          </span>
-          <span className="truncate">{counts.join(' · ')}</span>
-        </button>
-        {surfaced.length ? <div className="ml-5 flex flex-col">{surfaced.map(renderMember)}</div> : null}
+        {renderLead(summary, tray)}
+        {surfaced.length ? <div className="ml-3 flex flex-col">{surfaced.map(renderMember)}</div> : null}
       </div>
     )
   }
   return (
     <div data-slot="team" className="flex flex-col">
       {renderLead(summary)}
-      <div className="relative ml-[1.625rem] flex flex-col pl-2">
+      <div className="relative ml-3.5 flex flex-col pl-1">
         <span aria-hidden className="absolute top-0 bottom-3 left-0 w-px bg-border" />
         <button
           type="button"

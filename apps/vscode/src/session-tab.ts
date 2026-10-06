@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import type { SessionState } from '@workerdeck/protocol'
+import type { SessionInfo, SessionState } from '@workerdeck/protocol'
 import type { HostStore } from './hosts.ts'
 import { SessionSurface, type SessionRef, type SurfaceDelegate } from './session-surface.ts'
 
@@ -19,6 +19,14 @@ function stateIcon(state: SessionState): vscode.Uri {
   return vscode.Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`)
 }
 
+export function sessionTitle(info: SessionInfo | undefined, sessionId: string): string {
+  const agent = info?.agent
+  if (!agent) {
+    return info?.title ?? sessionId.slice(0, 8)
+  }
+  return agent.team === undefined ? agent.name : `${agent.name} · ${agent.team} team`
+}
+
 // A session in an editor tab. Exactly one per session at most (the registry enforces it); the tab
 // persists `{ hostId, sessionId, cwd }` through the webview's `setState`, which the serializer
 // hands back on window reload.
@@ -29,6 +37,7 @@ export class SessionEditorTab extends SessionSurface<vscode.WebviewPanel> implem
   readonly #tabDelegate: TabDelegate
   #panel: vscode.WebviewPanel | undefined
   #state: SessionState = 'idle'
+  #avatar: vscode.Uri | undefined
   #disposed = false
 
   private constructor(extensionUri: vscode.Uri, store: HostStore, delegate: TabDelegate) {
@@ -76,7 +85,7 @@ export class SessionEditorTab extends SessionSurface<vscode.WebviewPanel> implem
   #adopt(panel: vscode.WebviewPanel, session: SessionRef, title: string, focus: boolean): void {
     this.#panel = panel
     panel.title = title
-    panel.iconPath = stateIcon(this.#state)
+    panel.iconPath = this.#icon()
     this.attach(panel)
     this.setSession(session, { focus })
     // A tab VS Code opened or restored active never reports the transition, so read it once here.
@@ -128,9 +137,23 @@ export class SessionEditorTab extends SessionSurface<vscode.WebviewPanel> implem
       return
     }
     this.#state = state
-    if (this.#panel) {
-      this.#panel.iconPath = stateIcon(state)
+    if (this.#panel && !this.#avatar) {
+      this.#panel.iconPath = this.#icon()
     }
+  }
+
+  setAvatar(avatar: vscode.Uri | undefined): void {
+    if (this.#avatar?.toString() === avatar?.toString()) {
+      return
+    }
+    this.#avatar = avatar
+    if (this.#panel) {
+      this.#panel.iconPath = this.#icon()
+    }
+  }
+
+  #icon(): vscode.Uri {
+    return this.#avatar ?? stateIcon(this.#state)
   }
 
   dispose(): void {

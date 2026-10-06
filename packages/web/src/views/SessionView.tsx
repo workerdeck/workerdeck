@@ -8,6 +8,8 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
   AlertDialogTrigger,
+  AgentHeading,
+  avatarOf,
   Badge,
   Button,
   CopyButton,
@@ -20,7 +22,8 @@ import { clientFor, useHosts } from '@/lib/hosts.ts'
 import { getActionStyle, getCatchUp, getFontSize, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
-import { nudgeSessions, useSessions } from '@/hooks/useSessions.ts'
+import { nudgeSessions, useSessionRows, useSessions } from '@/hooks/useSessions.ts'
+import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
 
 // Split in two so the inner view takes a *defined* client: a link can outlive the gateway it named, and hooks cannot
 // be skipped while we find that out.
@@ -83,6 +86,9 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   // Mark off the same record the badge counts from, the polled sessions list. `onVitals` and `useSessionInfo` both
   // look right here and are not.
   const { snapshots } = useSessions()
+  const rows = useSessionRows(snapshots)
+  const agentRow = rows.find((row) => row.hostId === hostId && row.info.id === sessionId && row.info.agent)
+  const avatars = useAgentAvatars(rows)
   const polled = useMemo(
     () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
     [snapshots, hostId, sessionId],
@@ -160,7 +166,11 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       }}
       header={({ actions }) => (
         <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
-          <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
+          {agentRow ? (
+            <AgentHeading row={agentRow} image={avatarOf(avatars, agentRow.info.agent)} className="shrink-0" />
+          ) : (
+            <span className="truncate text-body-sm font-medium text-fg-1">{info?.title ?? project ?? sessionId.slice(0, 8)}</span>
+          )}
           {info?.engine && info.engine !== 'claude' ? (
             <Badge variant="neutral" className="shrink-0">
               {info.engine}

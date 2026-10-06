@@ -95,7 +95,11 @@ reconnect on switch) and survive a window reload through a `WebviewPanelSerializ
 webview persists `{ hostId, sessionId, cwd }` via `bridge.setState` on every
 `wd-show-session`, and deserialization rebuilds the tab, converting a panel restored on the
 same session into the held state. Title follows the session title on every model change; the
-icon is a data-URI circle in the row's `SessionState` colour. The sidebar's `open` map
+icon is a data-URI circle in the row's `SessionState` colour. An agent's tab is titled by the agent
+name instead (a member's reads `Juno · Atlas team`, the same title the panel's held state uses), and
+its icon is the agent's avatar still, fetched through the gateway by the shared `AgentAvatarCache`
+and written as a PNG under the extension's global storage, because `iconPath` takes a file; without
+an avatar it keeps the circle (`docs/GOTCHAS.md` §VS Code surfaces). The sidebar's `open` map
 (`SidebarState.open`, `host:session` → `'editor'`) draws the "in editor" glyph in the card's
 `actions` slot.
 
@@ -486,7 +490,8 @@ misalignment.
 and then asks for a name and a brief (`createAgent` in `new-session.ts`). Team verbs live in the
 card's `⋯` QuickPick (`#teamItems` in `sidebar.ts`): Make agent (adopt), Add to team, Leave team,
 Dissolve team, New conversation (restart), Retire. Avatars are fetched host-side by
-`AgentAvatarCache` and posted as `wd-agent-avatars`. Not yet: drag to join, avatar editor tabs.
+`AgentAvatarCache` and posted as `wd-agent-avatars`. Drag to join posts `wd-team-move` (session ids;
+the host maps them to agents, adopts a plain session, then patches `order` for it and its siblings).
 
 What is left extension-shaped after the card moved out is exactly **two** things, and they are the
 two `SessionItem` takes as props. First, **the overflow is a native menu**: the two hover actions
@@ -515,6 +520,9 @@ status bar's tooltip says for the focused one. Automatic sleep is a Host Mode se
 `workerdeck.host.engineSleepAfterMinutes` (0, the default, means never): above zero it reaches the
 child as `--engine-sleep-after <n>m` and joins the restart-offer keys, and the gateway only puts to
 sleep sessions that no client is attached to, so a session open in a view never sleeps on its own.
+Agents have their own default, `workerdeck.host.agentSleepAfterMinutes` (15, the gateway's own
+default, so it reaches the child as `--agent-sleep-after` only when changed, and `0` as `never`);
+an agent's own `sleepAfterMs` still wins, and it is a restart-offer key too.
 
 **Reasoning effort** is a status bar item right of the model (`$(lightbulb) high`, priority 44,
 the mode moved to 43), shown when `vitals.efforts` is non-empty and `vitals.effort` is not `null`

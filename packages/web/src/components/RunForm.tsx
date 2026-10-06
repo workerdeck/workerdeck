@@ -163,30 +163,11 @@ export function RunFormFields({
   actions,
   onProfileChange,
 }: RunFormFieldsProps) {
-  const candidates = useCwdCandidates(sessions, form.hostId)
-  const listId = useId()
   const { engine } = form
 
   return (
     <>
-      {engine.capabilities.hostCwd !== false && (
-        <label className="flex flex-col gap-1">
-          <span className="text-label font-medium text-fg-3">Working directory</span>
-          <Input
-            value={form.cwd}
-            list={listId}
-            onChange={(e) => form.setCwd(e.target.value)}
-            placeholder="/path/to/project"
-            spellCheck={false}
-            className="font-mono"
-          />
-          <datalist id={listId}>
-            {candidates.map((path) => (
-              <option key={path} value={path} />
-            ))}
-          </datalist>
-        </label>
-      )}
+      <CwdField form={form} sessions={sessions} />
       <label className="flex flex-col gap-1">
         <span className="text-label font-medium text-fg-3">{promptLabel}</span>
         <Textarea value={form.prompt} onChange={(e) => form.setPrompt(e.target.value)} rows={2} placeholder={promptPlaceholder} />
@@ -210,29 +191,63 @@ export function RunFormFields({
           <span className="text-label font-medium text-fg-3">Model</span>
           <ModelPicker value={engine.model} onChange={form.setModel} models={engine.models} className="min-w-40" />
         </label>
-        {engine.reasoningEfforts.length > 0 ? (
-          <label className="flex min-w-0 flex-col gap-1">
-            <span className="text-label font-medium text-fg-3">Effort</span>
-            <Select
-              items={[{ value: 'default', label: 'Default' }, ...engine.reasoningEfforts.map((e) => ({ value: e, label: e }))]}
-              value={form.effort || 'default'}
-              onValueChange={(value) => form.setEffort(value === 'default' ? '' : String(value))}
-            >
-              <SelectTrigger className="min-w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {['default', ...engine.reasoningEfforts].map((e) => (
-                  <SelectItem key={e} value={e}>
-                    <SelectItemText>{e}</SelectItemText>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </label>
-        ) : null}
+        <EffortField form={form} />
         {actions}
       </div>
     </>
+  )
+}
+
+export function CwdField({ form, sessions, label = 'Working directory' }: { form: RunForm; sessions: SessionInfo[]; label?: string }) {
+  const candidates = useCwdCandidates(sessions, form.hostId)
+  const listId = useId()
+  if (form.engine.capabilities.hostCwd === false) {
+    return null
+  }
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-label font-medium text-fg-3">{label}</span>
+      <Input
+        value={form.cwd}
+        list={listId}
+        onChange={(e) => form.setCwd(e.target.value)}
+        placeholder="/path/to/project"
+        spellCheck={false}
+        className="font-mono"
+      />
+      <datalist id={listId}>
+        {candidates.map((path) => (
+          <option key={path} value={path} />
+        ))}
+      </datalist>
+    </label>
+  )
+}
+
+export function EffortField({ form }: { form: RunForm }) {
+  const { engine } = form
+  if (engine.reasoningEfforts.length === 0) {
+    return null
+  }
+  return (
+    <label className="flex min-w-0 flex-col gap-1">
+      <span className="text-label font-medium text-fg-3">Effort</span>
+      <Select
+        items={[{ value: 'default', label: 'Default' }, ...engine.reasoningEfforts.map((e) => ({ value: e, label: e }))]}
+        value={form.effort || 'default'}
+        onValueChange={(value) => form.setEffort(value === 'default' ? '' : String(value))}
+      >
+        <SelectTrigger className="min-w-28">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {['default', ...engine.reasoningEfforts].map((e) => (
+            <SelectItem key={e} value={e}>
+              <SelectItemText>{e}</SelectItemText>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </label>
   )
 }

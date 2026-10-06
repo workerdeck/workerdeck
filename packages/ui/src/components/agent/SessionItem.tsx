@@ -3,7 +3,7 @@ import { Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
 import type { SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
-import { AgentAvatar, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
+import { AgentAvatar, LeadChip, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
@@ -46,6 +46,8 @@ export interface SessionItemProps {
   badgeState?: SessionState
   // Unread summed over a folded team's members, drawn with the team glyph beside the lead's own.
   teamUnseen?: number
+  // A folded lead's members, drawn on its first line before the context ring.
+  teamTray?: ReactNode
   // Draws a session with no agent in the agent card's shape (an engine-mark tile for the avatar), so a list mixing
   // agents and plain sessions keeps one column.
   tile?: boolean
@@ -81,6 +83,7 @@ export function SessionItem({
   variant = 'card',
   badgeState,
   teamUnseen = 0,
+  teamTray,
   tile = false,
   className,
 }: SessionItemProps) {
@@ -237,11 +240,7 @@ export function SessionItem({
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}
-              {agent?.leads ? (
-                <span className="shrink-0 rounded-[3px] border border-accent/50 px-1 text-[0.625rem] leading-3.5 font-medium tracking-wide text-accent">
-                  LEAD
-                </span>
-              ) : null}
+              {agent?.leads ? <LeadChip /> : null}
               <span className="flex-1" />
               {unread}
               {teamUnseen > 0 ? (
@@ -253,6 +252,7 @@ export function SessionItem({
                   {teamUnseen}
                 </span>
               ) : null}
+              {teamTray}
               <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
             </div>
             <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">

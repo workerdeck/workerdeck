@@ -74,3 +74,44 @@ export function AgentAvatar({ row, image, size = 32, state, badge = true, classN
     </span>
   )
 }
+
+export function LeadChip({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-[3px] border border-accent/50 px-1 text-[0.625rem] leading-3.5 font-medium tracking-wide text-accent',
+        className,
+      )}
+    >
+      LEAD
+    </span>
+  )
+}
+
+export interface AgentHeadingProps {
+  row: SessionRow
+  image?: AgentAvatarImage
+  // Overrides `AgentRef.conversation`, which a gateway sends from the second conversation on.
+  conversation?: number
+  className?: string
+}
+
+// A session panel's title for an agent: avatar, name, its place in a team. Plain sessions keep the host's own title.
+export function AgentHeading({ row, image, conversation, className }: AgentHeadingProps) {
+  const agent = row.info.agent
+  if (!agent) {
+    return null
+  }
+  const n = conversation ?? agent.conversation ?? 1
+  const detail = [agent.lead !== undefined && agent.team ? `${agent.team} team` : undefined, `conversation ${n}`]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <span data-slot="agent-heading" className={cn('flex min-w-0 items-center gap-2', className)}>
+      <AgentAvatar row={row} image={image} size={24} />
+      <span className="truncate text-body-sm font-medium text-fg-1">{agent.name}</span>
+      {agent.leads ? <LeadChip /> : null}
+      {detail ? <span className="shrink-0 text-label text-fg-4">{detail}</span> : null}
+    </span>
+  )
+}
