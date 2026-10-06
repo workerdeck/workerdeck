@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
-import type { SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
+import type { SessionInfo, SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
 import { AgentAvatar, LeadChip, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
@@ -147,6 +147,7 @@ export function SessionItem({
   )
   const holdsOpenStep = steps.some((s) => s.key === activeStepKey)
   const agent = info.agent
+  const topic = agentTopic(info)
   const label = agent ? agent.name : sessionLabel(info)
   const editable = agent ? agent.name : (info.title ?? '')
   const time = formatRelativeTime(info.lastActivityAt ?? info.createdAt)
@@ -229,7 +230,7 @@ export function SessionItem({
         <div className={cn('flex h-6 items-center gap-1.5 overflow-hidden py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
           <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={22} />
           {nameLabel}
-          {info.title ? <span className="min-w-0 flex-1 truncate text-body-sm text-fg-3">{info.title}</span> : <span className="flex-1" />}
+          {topic ? <span className="min-w-0 flex-1 truncate text-body-sm text-fg-3">{topic}</span> : <span className="flex-1" />}
           {unread}
           <span className="shrink-0 text-body-sm text-fg-4">{time}</span>
           {actions}
@@ -258,15 +259,15 @@ export function SessionItem({
             <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
               {agent ? (
                 <>
-                  {info.title ? <span className="min-w-0 truncate text-fg-4">{info.title}</span> : null}
+                  {topic ? <span className="min-w-0 truncate text-fg-4">{topic}</span> : null}
                   <span className="shrink-0 text-fg-4">
                     {model ? (
                       <>
-                        {info.title ? '· ' : ''}
+                        {topic ? '· ' : ''}
                         <span className={vendorTextClass(engine, info.model)}>{model}</span>
                         {' · '}
                       </>
-                    ) : info.title ? (
+                    ) : topic ? (
                       '· '
                     ) : null}
                     {time}
@@ -397,4 +398,14 @@ function NameEditor({
       )}
     />
   )
+}
+
+// An agent card's second line is the session's topic; a title that only repeats the agent's name (an adopted
+// session keeps the title it was named from) says nothing.
+export function agentTopic(info: Pick<SessionInfo, 'title' | 'agent'>): string | undefined {
+  const title = info.title?.trim()
+  if (!title || title.toLowerCase() === info.agent?.name.trim().toLowerCase()) {
+    return undefined
+  }
+  return title
 }
