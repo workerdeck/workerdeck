@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentInfo, AgentResponse, SessionInfo } from '@workerdeck/protocol'
-import { createFileAgentStore, createFileSessionStore, createWorkerServer, type WorkerServerOptions } from '../src/index.ts'
+import { createFileAgentStore, createFileSessionStore, createWorkerServer, type AvatarProvider, type WorkerServerOptions } from '../src/index.ts'
 import { fakeHarness, gatewayFixture, listenOn } from './helpers.ts'
 
 const initMessage = {
@@ -25,10 +25,24 @@ const initMessage = {
   uuid: 'uuid-init',
 } as unknown as SDKMessage
 
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47])
+
 const { servers, stateDir, cleanup } = gatewayFixture('wd-agents-')
 afterEach(cleanup)
 
-async function startGateway(dir?: string, extra: Pick<WorkerServerOptions, 'authenticate'> = {}) {
+function fakeAvatars(): AvatarProvider & { rolls: number } {
+  return {
+    rolls: 0,
+    async roll(seed) {
+      this.rolls++
+      return { seed }
+    },
+    still: async (recipe) => ({ png: PNG, etag: `"still-${JSON.stringify(recipe)}"` }),
+    busy: async (recipe) => ({ png: PNG, etag: `"busy-${JSON.stringify(recipe)}"`, durations: [160, 160] }),
+  }
+}
+
+async function startGateway(dir?: string, extra: Pick<WorkerServerOptions, 'authenticate' | 'avatars'> = { avatars: fakeAvatars() }) {
   const harness = fakeHarness()
   const server = createWorkerServer({
     allowUnauthenticated: extra.authenticate === undefined,
@@ -190,26 +204,37 @@ describe('agents', () => {
   })
 
   it('serves a stable avatar rolled once and persisted, with a cache validator', async () => {
-    const { base } = await startGateway()
+    const avatars = fakeAvatars()
+    const { base } = await startGateway(undefined, { avatars })
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
     const url = base.replace(/\/v1$/, '') + agent.avatar
     const first = await fetch(url)
     expect(first.status).toBe(200)
     expect(first.headers.get('content-type')).toBe('image/png')
-    const bytes = new Uint8Array(await first.arrayBuffer())
-    expect(String.fromCharCode(...bytes.subarray(1, 4))).toBe('PNG')
+    expect(new Uint8Array(await first.arrayBuffer())).toEqual(PNG)
     const etag = first.headers.get('etag')!
     expect((await fetch(url, { headers: { 'if-none-match': etag } })).status).toBe(304)
     expect((await fetch(url)).headers.get('etag')).toBe(etag)
+    expect(avatars.rolls).toBe(1)
   })
 
   it('serves the busy animation as one strip with its frame durations', async () => {
     const { base } = await startGateway()
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
-    const res = await fetch(base.replace(/\/v1$/, '') + agent.avatar.replace(/avatar\.png$/, 'avatar-busy.png'))
+    const res = await fetch(base.replace(/\/v1$/, '') + agent.avatar!.replace(/avatar\.png$/, 'avatar-busy.png'))
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('image/png')
-    expect(res.headers.get('x-frame-durations')).toBe('160,160,160,160')
+    expect(res.headers.get('x-frame-durations')).toBe('160,160')
+  })
+
+  it('omits avatar and 404s the route on a gateway without an avatar provider', async () => {
+    const { base } = await startGateway(undefined, {})
+    const created = await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })
+    expect(created.status).toBe(201)
+    const { agent } = created.body
+    expect(agent).not.toHaveProperty('avatar')
+    expect((await call<{ sessions: SessionInfo[] }>(base, '/sessions')).body.sessions[0]!.agent).toEqual({ id: agent.id, name: 'Atlas' })
+    expect((await fetch(`${base}/agents/${agent.id}/avatar.png`)).status).toBe(404)
   })
 
   it('is operator-only: anyone else gets the same 404 as a missing route', async () => {

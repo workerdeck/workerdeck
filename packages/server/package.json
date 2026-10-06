@@ -24,8 +24,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@monkeyart/composer": "^0.3.0",
-    "@monkeyart/packs": "^0.3.0",
     "@workerdeck/core": "workspace:*",
     "@workerdeck/protocol": "workspace:*",
     "@workerdeck/queue": "workspace:*",

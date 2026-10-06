@@ -23,7 +23,7 @@ import type {
   ViewConfig,
   WorkspaceScope,
 } from '@workerdeck/protocol'
-import { AgentAvatar, type AgentAvatars } from './AgentAvatar.tsx'
+import { AgentAvatar, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
 import { Input } from '../ui/Input.tsx'
@@ -508,7 +508,7 @@ function TeamBlock({
               <AgentAvatar
                 key={sessionKey(member)}
                 row={member}
-                image={member.info.agent ? avatars?.[member.info.agent.avatar] : undefined}
+                image={avatarOf(avatars, member.info.agent)}
                 size={16}
                 badge={false}
                 className="rounded-[4px] ring-1 ring-bg"

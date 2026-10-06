@@ -544,9 +544,9 @@ members (or retires them, `members: 'retire'`).
 
 A **team** is a lead and the agents whose `lead` names it, one level deep. Teams gate peer
 messaging: a member reaches only its lead and teammates, nobody outside a team reaches its members,
-and members never cross the relay. The gateway serves each agent's avatar
-(`GET /agents/:id/avatar.png`), composed from a persisted monkeyart recipe, so no client ports the
-composer. Invariants: `docs/GOTCHAS.md` §Agents and teams.
+and members never cross the relay. A gateway with an `AvatarProvider` (the CLI wires monkeyart)
+serves each agent's avatar (`GET /agents/:id/avatar.png`) from a persisted recipe, so no client
+ports the composer; without one, `avatar` is absent and clients draw the engine tile. Invariants: `docs/GOTCHAS.md` §Agents and teams.
 
 ## Tooling conventions
 

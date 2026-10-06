@@ -129,6 +129,9 @@ async function bindWithAvatar(ctx: ServerContext, agent: StoredAgent, session: S
 }
 
 async function rollAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo | undefined): Promise<unknown> {
+  if (!ctx.avatars) {
+    return undefined
+  }
   const project = session ? (ctx.projects.withProject(session).project?.root ?? session.cwd) : undefined
   try {
     return await ctx.avatars.roll(agent.avatarSeed, session?.engine, project || undefined)
@@ -138,6 +141,10 @@ async function rollAvatar(ctx: ServerContext, agent: StoredAgent, session: Sessi
 }
 
 async function sendAvatar(ctx: ServerContext, req: IncomingMessage, res: ServerResponse, agent: StoredAgent, busy: boolean): Promise<void> {
+  const avatars = ctx.avatars
+  if (!avatars) {
+    fail(404, 'this gateway draws no avatars')
+  }
   let recipe = agent.avatarRecipe
   if (recipe === undefined) {
     const session = agent.sessionId === undefined ? undefined : await sessionInfoOf(ctx, agent.sessionId)
@@ -147,7 +154,7 @@ async function sendAvatar(ctx: ServerContext, req: IncomingMessage, res: ServerR
     }
     await ctx.agents.save({ ...agent, avatarRecipe: recipe })
   }
-  const image = busy ? await ctx.avatars.busy(recipe) : await ctx.avatars.still(recipe)
+  const image = busy ? await avatars.busy(recipe) : await avatars.still(recipe)
   if (!image) {
     fail(404, 'this avatar pack has no busy animation')
   }

@@ -3,7 +3,7 @@ import { Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
 import type { SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
-import { AgentAvatar, type AgentAvatars } from './AgentAvatar.tsx'
+import { AgentAvatar, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
@@ -224,7 +224,7 @@ export function SessionItem({
     >
       {agent && variant === 'member' ? (
         <div className={cn('flex h-6 items-center gap-1.5 overflow-hidden py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-          <AgentAvatar row={row} image={avatars?.[agent.avatar]} size={22} />
+          <AgentAvatar row={row} image={avatarOf(avatars, agent)} size={22} />
           {nameLabel}
           {info.title ? <span className="min-w-0 flex-1 truncate text-body-sm text-fg-3">{info.title}</span> : <span className="flex-1" />}
           {unread}
@@ -233,7 +233,7 @@ export function SessionItem({
         </div>
       ) : agent || tile ? (
         <div className={cn('flex items-center gap-2 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-          <AgentAvatar row={row} image={agent ? avatars?.[agent.avatar] : undefined} state={badgeState} />
+          <AgentAvatar row={row} image={avatarOf(avatars, agent)} state={badgeState} />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}

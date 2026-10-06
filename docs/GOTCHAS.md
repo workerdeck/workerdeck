@@ -1351,13 +1351,20 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
 - **Sleep defaults on for agents.** `EngineSleepTimers` takes `afterMsFor` (the agent's
   `sleepAfterMs`, default 15 min) over the gateway's `afterMs`, and so watches every sleepable runner
   even when the gateway default is 0.
+- **Avatars are an optional `AvatarProvider`** (`ServerOptions.avatars`); the server imports no
+  art. The CLI wires monkeyart (`packages/cli/src/lib/avatars.ts`). Without a provider,
+  `AgentInfo.avatar` / `AgentRef.avatar` are absent, the avatar routes answer 404, and clients draw
+  the engine tile. The URL is derived on the way out, never stored, so adding or removing a
+  provider changes every agent at once.
 - **The avatar is rolled once and persisted** (`avatarRecipe` on the stored agent, never in
-  `AgentInfo`), at bind time or at the first avatar request. Rendering goes through
+  `AgentInfo`), at bind time or at the first avatar request. The recipe is opaque to the server;
+  swapping providers leaves old recipes that the new one must tolerate. Monkeyart renders through
   `resolveRecipe`, so a rebuilt pack draws the stored sprite as-is (never a silent re-roll). The
-  route sends an `ETag` over pack checksum + recipe and answers `If-None-Match` with 304; the busy
-  strip (`avatar-busy.png`, one row of frames plus `x-frame-durations`) is 404 only for a pack
-  without a busy animation; monkey has one since 0.3.0. The pack PNG is ~1 MB, so it loads lazily. The
-  art is CC BY 4.0 (`@monkeyart/packs` carries `LICENSE-ART`): credit it wherever it is shown.
+  route sends the provider's `ETag` (monkeyart: pack checksum + recipe) and answers `If-None-Match`
+  with 304; the busy strip (`avatar-busy.png`, one row of frames plus `x-frame-durations`) is 404
+  when the provider has no busy animation; monkey has one since 0.3.0. The pack PNG is ~1 MB, so
+  it loads lazily. The art is CC BY 4.0 (`@monkeyart/packs` carries `LICENSE-ART`): credit it
+  wherever it is shown.
 
 ## Relay (cross-gateway peers)
 

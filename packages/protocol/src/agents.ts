@@ -3,7 +3,7 @@ import type { PermissionMode, SessionInfo } from './index.ts'
 export type AgentRef = {
   id: string
   name: string
-  avatar: string
+  avatar?: string
   lead?: string
   team?: string
   leads?: true
@@ -26,7 +26,7 @@ export type AgentInfo = {
   name: string
   createdAt: number
   updatedAt: number
-  avatar: string
+  avatar?: string
   sessionId?: string
   pastSessions: string[]
   config: AgentConfig
@@ -58,7 +58,10 @@ export type AgentResponse = { agent: AgentInfo; session?: SessionInfo }
 export const AGENT_SLEEP_AFTER_MS_DEFAULT = 15 * 60_000
 
 export function agentRef(agent: AgentInfo, team: { leadName?: string; leads?: boolean } = {}): AgentRef {
-  const ref: AgentRef = { id: agent.id, name: agent.name, avatar: agent.avatar }
+  const ref: AgentRef = { id: agent.id, name: agent.name }
+  if (agent.avatar !== undefined) {
+    ref.avatar = agent.avatar
+  }
   if (agent.lead !== undefined) {
     ref.lead = agent.lead
     if (team.leadName !== undefined) {

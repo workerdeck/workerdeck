@@ -12,6 +12,7 @@ import type { AgentStore, StoredAgent } from './agent-store.ts'
 export type AgentServiceOptions = {
   store: AgentStore
   basePath: string
+  avatars?: boolean
   now?: () => number
 }
 
@@ -75,12 +76,14 @@ const CONFIG_KEYS: readonly (keyof AgentConfig)[] = [
 export class AgentService {
   #store: AgentStore
   #basePath: string
+  #avatars: boolean
   #now: () => number
   #agents = new Map<string, StoredAgent>()
 
   constructor(options: AgentServiceOptions) {
     this.#store = options.store
     this.#basePath = options.basePath
+    this.#avatars = options.avatars ?? false
     this.#now = options.now ?? Date.now
   }
 
@@ -89,7 +92,7 @@ export class AgentService {
   }
 
   list(): AgentInfo[] {
-    return [...this.#agents.values()].map(publicAgent)
+    return [...this.#agents.values()].map((agent) => this.public(agent))
   }
 
   get(id: string): StoredAgent | undefined {
@@ -111,7 +114,7 @@ export class AgentService {
       return info
     }
     const leadName = agent.lead === undefined ? undefined : this.#agents.get(agent.lead)?.name
-    return { ...info, agent: agentRef(agent, { leadName, leads: this.hasMembers(agent.id) }) }
+    return { ...info, agent: agentRef(this.public(agent), { leadName, leads: this.hasMembers(agent.id) }) }
   }
 
   briefFor(sessionId: string | undefined): string | undefined {
@@ -125,7 +128,8 @@ export class AgentService {
   }
 
   public(agent: StoredAgent): AgentInfo {
-    return publicAgent(agent)
+    const { avatarSeed: _seed, avatarRecipe: _recipe, avatar: _avatar, ...info } = agent
+    return this.#avatars ? { ...info, avatar: `${this.#basePath}/agents/${agent.id}/avatar.png` } : info
   }
 
   draft(input: { name?: unknown; config?: unknown; lead?: unknown }): StoredAgent | AgentRefusal {
@@ -144,7 +148,6 @@ export class AgentService {
       name,
       createdAt: at,
       updatedAt: at,
-      avatar: `${this.#basePath}/agents/${id}/avatar.png`,
       avatarSeed: id,
       pastSessions: [],
       config,
@@ -286,11 +289,6 @@ export class AgentService {
 
 export function isAgentRefusal(value: unknown): value is AgentRefusal {
   return isRecord(value) && typeof value.status === 'number' && typeof value.error === 'string'
-}
-
-function publicAgent(agent: StoredAgent): AgentInfo {
-  const { avatarSeed: _seed, avatarRecipe: _recipe, ...info } = agent
-  return info
 }
 
 function readName(value: unknown): string | AgentRefusal {

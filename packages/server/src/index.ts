@@ -33,6 +33,7 @@ export { createFileSessionStore, MemorySessionStore, toDurableRecord } from './s
 export { isDormant } from './services/session-store.ts'
 export type { FileSessionStoreOptions, ParkedSessionRecord, SessionStore, StoredSessionRecord } from './services/session-store.ts'
 export { createFileProfileStore, createMemoryProfileStore, type ProfileStore } from './services/profile-store.ts'
+export type { AvatarImage, AvatarProvider } from './services/avatars.ts'
 export { createFileAgentStore, createMemoryAgentStore, type AgentStore, type StoredAgent } from './services/agent-store.ts'
 export { createShellDirectory, createShellRegistry, shellPermitted, SHELL_REFUSAL } from './services/shells.ts'
 export type {

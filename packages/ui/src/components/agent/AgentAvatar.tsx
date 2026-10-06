@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { SessionRow, SessionState } from '@workerdeck/protocol'
+import type { AgentRef, SessionRow, SessionState } from '@workerdeck/protocol'
 import { EngineIcon, vendorMarkClass } from './EngineIcon.tsx'
 import { SessionStatusIcon } from './SessionStatusIcon.tsx'
 import { cn } from '../../lib/utils.ts'
@@ -8,6 +8,10 @@ export type AgentAvatarImage = { still: string; busy?: { src: string; durations:
 
 // Keyed by `AgentRef.avatar`, the gateway path: the host fetches with its own credentials and hands over data URLs.
 export type AgentAvatars = Record<string, AgentAvatarImage>
+
+export function avatarOf(avatars: AgentAvatars | undefined, agent: AgentRef | undefined): AgentAvatarImage | undefined {
+  return agent?.avatar === undefined ? undefined : avatars?.[agent.avatar]
+}
 
 export interface AgentAvatarProps {
   row: SessionRow

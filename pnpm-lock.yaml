@@ -362,6 +362,12 @@ importers:
 
   packages/cli:
     dependencies:
+      '@monkeyart/composer':
+        specifier: ^0.3.0
+        version: 0.3.0
+      '@monkeyart/packs':
+        specifier: ^0.3.0
+        version: 0.3.0
       '@openai/codex':
         specifier: ~0.158.0
         version: 0.158.0
@@ -637,12 +643,6 @@ importers:
 
   packages/server:
     dependencies:
-      '@monkeyart/composer':
-        specifier: ^0.3.0
-        version: 0.3.0
-      '@monkeyart/packs':
-        specifier: ^0.3.0
-        version: 0.3.0
       '@workerdeck/core':
         specifier: workspace:*
         version: link:../core

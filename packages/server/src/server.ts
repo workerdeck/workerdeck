@@ -26,7 +26,6 @@ import { dispatchRoute, httpRoutes } from './routes/table.ts'
 import { createMemoryAgentStore } from './services/agent-store.ts'
 import { AgentService } from './services/agents.ts'
 import { AttachmentStore } from './services/attachments.ts'
-import { AvatarService } from './services/avatars.ts'
 import { createAuthService } from './services/auth.ts'
 import { AvailabilityTracker } from './services/availability.ts'
 import { EngineSleepTimers } from './services/engine-sleep.ts'
@@ -122,7 +121,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const generation = randomUUID()
   const shells = options.shell?.enabled === true ? shellRegistryFor(options.shell, generation) : null
-  const agents = new AgentService({ store: options.agentStore ?? createMemoryAgentStore(), basePath })
+  const agents = new AgentService({ store: options.agentStore ?? createMemoryAgentStore(), basePath, avatars: options.avatars !== undefined })
   const projects = new ProjectInfoService({ decorate: (info) => agents.decorate(shells ? shells.decorate(info) : info) })
 
   const notifier = new SessionNotifier({
@@ -285,7 +284,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     auth,
     factory,
     agents,
-    avatars: new AvatarService(),
+    avatars: options.avatars,
     registry,
     parking,
     engineSleep,

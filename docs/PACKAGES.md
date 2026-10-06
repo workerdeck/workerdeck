@@ -424,7 +424,7 @@ an existence oracle for the gateway's filesystem.
 `AgentInfo`/`AgentRef` (`SessionInfo.agent`, optional, so protocol stays 1) and the two rules both
 sides share: `teamReaches(from, to)` is the peers rule for teams (the gateway enforces it; a client
 may use it to section a `#` picker), and `projectAccent(key)` is the stable per-project colour the
-gateway bakes into avatar backdrops and a client should reuse for group dots.
+CLI's avatar provider bakes into backdrops and a client should reuse for group dots.
 
 ### Pricing
 
@@ -751,9 +751,9 @@ socket close beside `parking.onDetach`. Rules in `docs/GOTCHAS.md` §Engine slee
 **Agents** live in `services/agents.ts` (`AgentService`: the in-memory index over an `AgentStore`,
 the decorator, the one-level team rule, name suggestions), `services/agent-store.ts` (memory and
 JSON-file stores, `agentStore` option; the CLI wires `<state-dir>/agents.json`),
-`services/avatars.ts` (`AvatarService`: loads `@monkeyart/packs`' default pack once, rolls and
-renders recipes through `@monkeyart/composer`, caches PNGs) and `routes/agents.ts` (operator-only
-`/agents`). Session creation goes through `vetCreateRequest` and `factory.createRunner` like
+`services/avatars.ts` (the `AvatarProvider` seam only: `roll` an opaque recipe, `still` /
+`busy` render it; injected as `avatars`, absent by default, so an embedder pays for no art) and
+`routes/agents.ts` (operator-only `/agents`). Session creation goes through `vetCreateRequest` and `factory.createRunner` like
 `POST /sessions`. Rules in `docs/GOTCHAS.md` §Agents and teams.
 
 **Agent context reset** lives in `services/context-resets.ts` (`ContextResetService`, the
@@ -2210,7 +2210,11 @@ uses hash history, so only `index.html` is ever requested.
 ## `packages/cli`
 
 published unscoped as **`workerdeck`**, the turnkey instance (`npx
-WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. Single-origin
+WorkerDeck`): gateway + dashboard on ONE port via the server's `fallback` hook. It is also the
+package that owns the agent avatar art: `src/lib/avatars.ts` (`MonkeyartAvatars`, the server's
+`AvatarProvider` over `@monkeyart/composer` + `@monkeyart/packs`: loads the default pack once,
+caches PNGs) is wired unless a config file supplies its own `avatars`. The pack art is CC BY 4.0
+(`LICENSE-ART` in `@monkeyart/packs`), so the attribution travels with this package. Single-origin
 is load-bearing, not cosmetic - a tab can't put a header on a WS handshake, so a cookie is the
 only credential it can present on an attach, and cookies are per-origin. `--auth-key` is one
 secret over two transports (login-page cookie for browsers, header for services); a config file

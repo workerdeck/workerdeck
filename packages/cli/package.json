@@ -28,6 +28,8 @@
     "dev": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register src/cli.ts"
   },
   "dependencies": {
+    "@monkeyart/composer": "^0.3.0",
+    "@monkeyart/packs": "^0.3.0",
     "@openai/codex": "~0.158.0",
     "@workerdeck/relay": "workspace:*",
     "@workerdeck/server": "workspace:*",
