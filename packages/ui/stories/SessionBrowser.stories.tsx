@@ -100,3 +100,91 @@ export const Custom: Story = {
     />
   ),
 }
+
+function avatar(name: string): string {
+  return new URL(`./avatars/${name}.png`, import.meta.url).href
+}
+
+const AVATARS = Object.fromEntries(
+  ['atlas', 'pip', 'juno', 'rook', 'marlow', 'orbit', 'fern'].map((name) => [
+    `/v1/agents/${name}/avatar.png`,
+    name === 'juno'
+      ? { still: avatar(name), busy: { src: avatar('juno-busy'), durations: [160, 160, 160, 160] } }
+      : { still: avatar(name) },
+  ]),
+)
+
+function agent(id: string, name: string, team: { lead?: string; team?: string; leads?: true; order?: number } = {}) {
+  return { id, name, avatar: `/v1/agents/${id}/avatar.png`, ...team }
+}
+
+const TEAM_ROWS = [
+  makeRow({ id: 't1', title: 'Agent Teams: protocol and list', status: 'idle', agent: agent('atlas', 'Atlas', { leads: true }) } as never),
+  makeRow(
+    {
+      id: 't2',
+      title: 'Needs approval: Bash pnpm test',
+      status: 'awaiting_approval',
+      pendingPermissionCount: 1,
+      agent: agent('pip', 'Pip', { lead: 'atlas', team: 'Atlas', order: 0 }),
+    } as never,
+    2,
+  ),
+  makeRow({
+    id: 't3',
+    title: 'peers.ts: team visibility',
+    engine: 'codex',
+    model: 'gpt-6-sol',
+    agent: agent('juno', 'Juno', { lead: 'atlas', team: 'Atlas', order: 1 }),
+  } as never),
+  makeRow({
+    id: 't4',
+    title: 'iOS mirror review',
+    status: 'idle',
+    engineAsleep: true,
+    agent: agent('rook', 'Rook', { lead: 'atlas', team: 'Atlas', order: 2 }),
+  } as never),
+  makeRow({ id: 't5', title: 'Relay follow-ups', status: 'running', agent: agent('marlow', 'Marlow') } as never, 3),
+  makeRow(
+    {
+      id: 't6',
+      title: 'Docs site refresh',
+      status: 'idle',
+      engine: 'codex',
+      model: 'gpt-6-sol',
+      agent: agent('orbit', 'Orbit', { leads: true }),
+    } as never,
+    1,
+  ),
+  makeRow(
+    {
+      id: 't7',
+      title: 'Changelog draft',
+      status: 'running',
+      engine: 'provider',
+      model: 'kimi-k3',
+      agent: agent('fern', 'Fern', { lead: 'orbit', team: 'Orbit' }),
+    } as never,
+    1,
+  ),
+  makeRow({ id: 't8', title: 'Weekly dependency bump', status: 'idle' } as never),
+  makeRow({ id: 't9', title: 'One-off grep', status: 'closed' } as never),
+  makeRow({ id: 't10', title: 'Old spike', status: 'failed' } as never),
+]
+
+export const Teams: Story = {
+  render: () => (
+    <Browser
+      rows={TEAM_ROWS}
+      avatars={AVATARS}
+      activeId="t3"
+      showControls={false}
+      onRenameAgent={() => {}}
+      initial={{ groupBy: 'none', collapsedTeams: ['local:orbit'] }}
+    />
+  ),
+}
+
+export const TeamsByState: Story = {
+  render: () => <Browser rows={TEAM_ROWS} avatars={AVATARS} showControls={false} initial={{ groupBy: 'state' }} />,
+}

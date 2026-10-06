@@ -1,7 +1,7 @@
 import { errorMessage, type SessionInfo } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
-import type { SessionHandle } from '@workerdeck/client'
+import type { SessionHandle, WorkerDeckClient } from '@workerdeck/client'
 import { clientFor } from './gateway.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
@@ -18,6 +18,7 @@ import {
 } from './view-config.ts'
 import { WebviewViewHost } from './webview-host.ts'
 import { ProjectIconCache } from './project-icons.ts'
+import { AgentAvatarCache } from './agent-avatars.ts'
 
 const VIEW_CONFIG_KEY = 'workerdeck.viewConfig.v1'
 
@@ -55,6 +56,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   readonly #context: vscode.ExtensionContext
   #viewConfig: ViewConfig
   readonly #icons: ProjectIconCache
+  readonly #avatars: AgentAvatarCache
 
   protected readonly bundle = 'sidebar.js'
 
@@ -71,6 +73,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     this.#model = model
     this.#delegate = delegate
     this.#icons = new ProjectIconCache(store, () => this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() }))
+    this.#avatars = new AgentAvatarCache(store, () => this.post({ kind: 'wd-agent-avatars', avatars: this.#avatars.entries() }))
     this.#viewConfig = normalizeViewConfig(context.globalState.get<ViewConfig>(VIEW_CONFIG_KEY))
     // Seeds the context keys, so the title bar shows the right toggle icons before the view opens.
     this.setSearchOpen(context.globalState.get<boolean>(SEARCH_OPEN_KEY) ?? false)
@@ -140,6 +143,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       const state = this.#model.sidebarState()
       this.post({ kind: 'wd-sidebar-state', state })
       this.#icons.ensure(state.sessions)
+      this.#avatars.ensure(state.sessions)
     }
     this.refreshUnread()
   }
@@ -165,6 +169,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
   protected override onReady(): void {
     // Whole, not incremental: a webview VS Code rebuilt has no map to merge into.
     this.post({ kind: 'wd-project-icons', icons: this.#icons.entries() })
+    this.post({ kind: 'wd-agent-avatars', avatars: this.#avatars.entries() })
     this.#pushState()
     // The webview boots with the bar closed and learns otherwise here: it cannot read a context key.
     this.post({ kind: 'wd-search-open', open: this.#searchOpen })
@@ -215,6 +220,12 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       }
       case 'wd-rename-session': {
         return this.#renameSession(msg.hostId, msg.sessionId, msg.title)
+      }
+      case 'wd-rename-agent': {
+        const agentId = this.#model.sessionsOf(msg.hostId).find((s) => s.id === msg.sessionId)?.agent?.id
+        return agentId
+          ? this.#agentCall(msg.hostId, 'rename failed', (client) => client.updateAgent(agentId, { name: msg.name }))
+          : undefined
       }
       case 'wd-delete-session': {
         return this.#deleteSession(msg.hostId, msg.sessionId)
@@ -267,9 +278,10 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         run: () => this.sleepSession(hostId, sessionId),
       })
     }
+    items.push(...this.#teamItems(hostId, info))
     items.push({
       label: '$(trash) Delete',
-      detail: 'Remove the session from the gateway',
+      detail: info.agent ? 'End this session; the agent stays and can be restarted' : 'Remove the session from the gateway',
       run: () => this.#deleteSession(hostId, sessionId),
     })
     const picked = await vscode.window.showQuickPick(items, {
@@ -277,6 +289,89 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       placeHolder: 'Session actions',
     })
     await picked?.run()
+  }
+
+  #teamItems(hostId: string, info: SessionInfo): (vscode.QuickPickItem & { run: () => Promise<void> })[] {
+    const agent = info.agent
+    const sessions = this.#model.sessionsOf(hostId)
+    const leads = sessions.filter((s) => s.agent && s.agent.lead === undefined && s.agent.id !== agent?.id && s.id !== info.id)
+    const items: (vscode.QuickPickItem & { run: () => Promise<void> })[] = []
+    if (!agent) {
+      items.push({
+        label: '$(person) Make agent',
+        detail: 'Keep this session as a named agent with an avatar',
+        run: () => this.#agentCall(hostId, 'could not make an agent', (client) => client.createAgent({ adopt: info.id })),
+      })
+    }
+    if (agent?.lead !== undefined) {
+      items.push({
+        label: '$(sign-out) Leave team',
+        detail: `Leave ${agent.team ?? 'the team'} and stand on its own`,
+        run: () => this.#agentCall(hostId, 'could not leave the team', (client) => client.updateAgent(agent.id, { lead: null })),
+      })
+    } else if (!agent?.leads && leads.length > 0) {
+      items.push({
+        label: '$(organization) Add to team…',
+        detail: 'Join another agent as a team member',
+        run: async () => {
+          const target = await vscode.window.showQuickPick(
+            leads.map((lead) => ({ label: lead.agent!.name, description: lead.title, id: lead.agent!.id })),
+            { title: `Add ${agent?.name ?? info.title ?? 'session'} to a team`, placeHolder: 'Lead' },
+          )
+          if (!target) {
+            return
+          }
+          await this.#agentCall(hostId, 'could not join the team', (client) =>
+            agent ? client.updateAgent(agent.id, { lead: target.id }) : client.createAgent({ adopt: info.id, lead: target.id }),
+          )
+        },
+      })
+    }
+    if (agent?.leads) {
+      const members = sessions.filter((s) => s.agent?.lead === agent.id)
+      items.push({
+        label: '$(ungroup-by-ref-type) Dissolve team',
+        detail: `Release ${members.length} member${members.length === 1 ? '' : 's'}; they stay as agents`,
+        run: () =>
+          this.#agentCall(hostId, 'could not dissolve the team', async (client) => {
+            for (const member of members) {
+              await client.updateAgent(member.agent!.id, { lead: null })
+            }
+          }),
+      })
+    }
+    if (agent) {
+      items.push({
+        label: '$(debug-restart) New conversation',
+        detail: 'Restart the agent in a fresh session; the old one stays resumable',
+        run: () => this.#agentCall(hostId, 'could not restart the agent', (client) => client.restartAgent(agent.id)),
+      })
+      items.push({
+        label: '$(person-remove) Retire agent',
+        detail: agent.leads ? 'End the agent and its session; members are released' : 'End the agent and its session',
+        run: async () => {
+          const ok = await vscode.window.showWarningMessage(`Retire ${agent.name}?`, { modal: true }, 'Retire')
+          if (ok === 'Retire') {
+            await this.#agentCall(hostId, 'could not retire the agent', (client) => client.retireAgent(agent.id))
+          }
+        },
+      })
+    }
+    return items
+  }
+
+  async #agentCall(hostId: string, failure: string, call: (client: WorkerDeckClient) => Promise<unknown>): Promise<void> {
+    const host = this.#store.get(hostId)
+    const client = host && (await clientFor(this.#store, host))
+    if (!client) {
+      return
+    }
+    try {
+      await call(client)
+    } catch (err) {
+      void vscode.window.showErrorMessage(`WorkerDeck: ${failure} - ${errorMessage(err)}`)
+    }
+    await this.#model.refresh()
   }
 
   async sleepSession(hostId: string, sessionId: string): Promise<void> {

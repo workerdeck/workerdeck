@@ -7,6 +7,7 @@ export type AgentRef = {
   lead?: string
   team?: string
   leads?: true
+  order?: number
 }
 
 export type AgentConfig = {
@@ -66,6 +67,9 @@ export function agentRef(agent: AgentInfo, team: { leadName?: string; leads?: bo
   }
   if (team.leads) {
     ref.leads = true
+  }
+  if (agent.order !== undefined) {
+    ref.order = agent.order
   }
   return ref
 }

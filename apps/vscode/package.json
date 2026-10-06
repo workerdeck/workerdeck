@@ -147,6 +147,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "workerdeck.newAgent",
+        "title": "New Agent",
+        "category": "WorkerDeck",
+        "icon": "$(person-add)"
+      },
+      {
         "command": "workerdeck.resumeSession",
         "title": "Resume Session",
         "category": "WorkerDeck",
@@ -356,6 +362,11 @@
         },
         {
           "command": "workerdeck.newSession",
+          "when": "view == workerdeck.sessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "workerdeck.newAgent",
           "when": "view == workerdeck.sessions",
           "group": "navigation@1"
         },

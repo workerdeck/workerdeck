@@ -19,6 +19,7 @@ type CreateBody = {
   title?: string
   model?: string
   permissionMode?: PermissionMode
+  agent?: { name?: string; brief?: string }
 }
 
 export type NewSessionDeps = {
@@ -39,7 +40,11 @@ export async function resumeSession(deps: NewSessionDeps): Promise<void> {
   await run(deps, { resume: true })
 }
 
-async function run(deps: NewSessionDeps, options: { resume: boolean; preset?: NewSessionPreset }): Promise<void> {
+export async function createAgent(deps: NewSessionDeps, preset?: NewSessionPreset): Promise<void> {
+  await run(deps, { resume: false, agent: true, preset })
+}
+
+async function run(deps: NewSessionDeps, options: { resume: boolean; agent?: boolean; preset?: NewSessionPreset }): Promise<void> {
   const { preset } = options
   const loaded = await loadAdapters(deps)
   if (loaded === undefined) {
@@ -92,7 +97,9 @@ async function run(deps: NewSessionDeps, options: { resume: boolean; preset?: Ne
       cwd = picked
       step = 2
     } else {
-      const done = options.resume ? await pickAndResume(deps, adapter!, cwd!) : await pickModelAndCreate(deps, adapter!, cwd!)
+      const done = options.resume
+        ? await pickAndResume(deps, adapter!, cwd!)
+        : await pickModelAndCreate(deps, adapter!, cwd!, options.agent === true)
       if (done === BACK) {
         if (preset?.cwd) {
           if (adapters.length === 1) {
@@ -351,12 +358,17 @@ function lastSessionOf(deps: NewSessionDeps, adapter: AdapterChoice): SessionInf
   )
 }
 
-async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, cwd: string): Promise<Answer<void>> {
+async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, cwd: string, agent: boolean): Promise<Answer<void>> {
   const previous = lastSessionOf(deps, adapter)
   const mode = resolveMode(adapter, previous)
   const models = adapter.profile.models ?? []
+  const noun = agent ? 'agent' : 'session'
   if (models.length === 0) {
-    await create(deps, adapter, { cwd, permissionMode: mode })
+    const named = agent ? await askAgent() : undefined
+    if (named === CANCEL) {
+      return CANCEL
+    }
+    await create(deps, adapter, { cwd, permissionMode: mode, agent: named })
     return undefined
   }
 
@@ -383,8 +395,8 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
     fallbackRow,
   ]
   const picked = await showPick(items, {
-    title: 'New session: model',
-    placeHolder: `Model for this session - permission mode: ${modeLabel(mode)}`,
+    title: `New ${noun}: model`,
+    placeHolder: `Model for this ${noun} - permission mode: ${modeLabel(mode)}`,
     activeItem: items[models.findIndex(isPreferred)] ?? fallbackRow,
     step: 3,
     totalSteps: 3,
@@ -395,8 +407,33 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   if (picked === BACK) {
     return BACK
   }
-  await create(deps, adapter, { cwd, model: picked.value, permissionMode: mode })
+  const named = agent ? await askAgent() : undefined
+  if (named === CANCEL) {
+    return CANCEL
+  }
+  await create(deps, adapter, { cwd, model: picked.value, permissionMode: mode, agent: named })
   return undefined
+}
+
+// Both answers are optional: a blank name lets the gateway suggest one, a blank brief means none.
+async function askAgent(): Promise<{ name?: string; brief?: string } | typeof CANCEL> {
+  const name = await vscode.window.showInputBox({
+    title: 'New agent: name',
+    prompt: 'Leave empty for a suggested name',
+    ignoreFocusOut: true,
+  })
+  if (name === undefined) {
+    return CANCEL
+  }
+  const brief = await vscode.window.showInputBox({
+    title: 'New agent: brief',
+    prompt: 'Standing instructions the agent keeps across conversations (optional)',
+    ignoreFocusOut: true,
+  })
+  if (brief === undefined) {
+    return CANCEL
+  }
+  return { name: name.trim() || undefined, brief: brief.trim() || undefined }
 }
 
 function resolveMode(adapter: AdapterChoice, previous: SessionInfo | undefined): PermissionMode | undefined {
@@ -504,10 +541,26 @@ async function create(deps: NewSessionDeps, adapter: AdapterChoice, body: Create
     const info = await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `WorkerDeck: creating session…${modeNote}`,
+        title: `WorkerDeck: creating ${body.agent ? 'agent' : 'session'}…${modeNote}`,
       },
-      () =>
-        client.createSession({
+      async () => {
+        if (body.agent) {
+          const created = await client.createAgent({
+            name: body.agent.name,
+            config: {
+              cwd: body.cwd,
+              profile: adapter.explicit ? adapter.profile.name : undefined,
+              model: body.model,
+              permissionMode: body.permissionMode,
+              brief: body.agent.brief,
+            },
+          })
+          if (!created.session) {
+            throw new Error('the gateway created the agent without a session')
+          }
+          return created.session
+        }
+        return await client.createSession({
           cwd: body.cwd,
           profile: adapter.explicit ? adapter.profile.name : undefined,
           resume: body.resume,
@@ -517,11 +570,12 @@ async function create(deps: NewSessionDeps, adapter: AdapterChoice, body: Create
           // never, and asking for the mode without this flag is asking to be refused.
           allowDangerouslySkipPermissions: body.permissionMode === 'bypassPermissions' ? true : undefined,
           meta: body.title ? { title: body.title } : undefined,
-        }),
+        })
+      },
     )
     await deps.refresh()
     await deps.reveal(adapter.host.id, info.id)
   } catch (err) {
-    void vscode.window.showErrorMessage(`WorkerDeck: could not create the session - ${errorMessage(err)}`)
+    void vscode.window.showErrorMessage(`WorkerDeck: could not create the ${body.agent ? 'agent' : 'session'} - ${errorMessage(err)}`)
   }
 }

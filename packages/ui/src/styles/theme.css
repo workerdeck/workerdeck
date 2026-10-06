@@ -666,6 +666,23 @@
   opacity: 0;
   animation: wd-hold-appear 150ms ease-out 600ms forwards;
 }
+@keyframes wd-avatar-strip {
+  to {
+    background-position-x: var(--wd-strip-end);
+  }
+}
+.wd-avatar-strip {
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  animation-name: wd-avatar-strip;
+  animation-timing-function: steps(var(--wd-strip-steps));
+  animation-iteration-count: infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wd-avatar-strip {
+    animation: none;
+  }
+}
 
 @keyframes prompt-area-chip-ripple {
   0% {

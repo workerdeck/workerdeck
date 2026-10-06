@@ -80,6 +80,9 @@ export type ViewConfig = {
   shells?: StepDisplay
   tasks?: StepDisplay
   customGroups?: CustomGroup[]
+  // `teamKey` values: the teams this client draws folded. A viewing preference, never sent to the gateway.
+  collapsedTeams?: string[]
+  earlierOpen?: boolean
 }
 
 export const DEFAULT_VIEW_CONFIG: ViewConfig = {
@@ -112,6 +115,12 @@ export type SessionRow = {
   // that is only running tools contributes 0: the badge answers "is there something to
   // read", not "is anything happening", which is what `state` is for.
   unseen: number
+  // Set by `groupRows` on a lead: its members, in team order, drawn under it and never top-level.
+  members?: SessionRow[]
+  // Set by `groupRows` on a lead: the most urgent state across the lead and its members.
+  teamState?: SessionState
+  // A lead drawn only because a filter matched one of its members.
+  context?: true
 }
 
 export type SessionGroup = {
@@ -126,9 +135,12 @@ export type SessionGroup = {
   cwd?: string
   // Set on a custom group; the ungrouped bucket has neither this nor a place in `customGroups`.
   custom?: string
+  // The trailing fold of ended sessions that belong to no agent.
+  earlier?: true
 }
 
-export type GroupOptions = { gatewayCount?: number }
+// `all` is the unfiltered list: a member matched by a filter pulls its lead in from there as a context row.
+export type GroupOptions = { gatewayCount?: number; all?: readonly SessionRow[] }
 
 export const UNGROUPED_KEY = 'custom:ungrouped'
 
@@ -227,6 +239,7 @@ function matchesSearch(row: SessionRow, needle: string): boolean {
   }
   return (
     sessionLabel(row.info).toLowerCase().includes(needle) ||
+    (row.info.agent?.name.toLowerCase().includes(needle) ?? false) ||
     row.info.cwd.toLowerCase().includes(needle) ||
     (row.info.project?.name.toLowerCase().includes(needle) ?? false) ||
     (row.info.project?.shortcode?.toLowerCase().includes(needle) ?? false) ||
@@ -272,19 +285,23 @@ export function filterRows(rows: readonly SessionRow[], config: ViewConfig, scop
 }
 
 function facetKey(row: SessionRow, facet: Facet): string {
-  return facet === 'gateway' ? row.hostId : facet === 'adapter' ? row.adapter : facet === 'project' ? projectKey(row) : row.state
+  return facet === 'gateway' ? row.hostId : facet === 'adapter' ? row.adapter : facet === 'project' ? projectKey(row) : unitState(row)
+}
+
+function unitState(row: SessionRow): SessionState {
+  return row.teamState ?? row.state
 }
 
 function facetLabel(row: SessionRow, facet: Facet, multiGateway = false): string {
   if (facet === 'project') {
     return multiGateway ? `${row.hostName} ${projectLabel(row)}` : projectLabel(row)
   }
-  return facet === 'gateway' ? row.hostName : facet === 'adapter' ? row.adapter : STATE_LABELS[row.state]
+  return facet === 'gateway' ? row.hostName : facet === 'adapter' ? row.adapter : STATE_LABELS[unitState(row)]
 }
 
 function facetRank(row: SessionRow, facet: Facet, multiGateway = false): string {
   if (facet === 'state') {
-    return String(STATE_ORDER.indexOf(row.state))
+    return String(STATE_ORDER.indexOf(unitState(row)))
   }
   if (facet === 'project' && multiGateway) {
     return `${row.hostName.toLowerCase()}\u0000${projectLabel(row).toLowerCase()}`
@@ -313,9 +330,13 @@ function compare(a: SessionRow, b: SessionRow, sortBy: SortBy): number {
 // `gatewayCount` defaults to the gateways among `rows`; a host passing filtered rows passes the unfiltered count, so a
 // filter never renames a project heading.
 export function groupRows(rows: readonly SessionRow[], config: ViewConfig, options: GroupOptions = {}): SessionGroup[] {
-  const sorted = [...rows].sort((a, b) => compare(a, b, config.sortBy))
+  const units = teamUnits(rows, options.all ?? rows).sort((a, b) => compare(a, b, config.sortBy))
+  const foldsEarlier = config.groupBy !== 'state' && config.groupBy !== 'custom'
+  const earlier = foldsEarlier ? units.filter(isEarlier) : []
+  const sorted = earlier.length ? units.filter((row) => !isEarlier(row)) : units
+  const trailing: SessionGroup[] = earlier.length ? [{ key: 'earlier', label: 'Earlier', rows: earlier, earlier: true }] : []
   if (config.groupBy === 'none') {
-    return sorted.length ? [{ key: 'all', rows: sorted }] : []
+    return [...(sorted.length ? [{ key: 'all', rows: sorted }] : []), ...trailing]
   }
   if (config.groupBy === 'custom') {
     return customGroupRows(sorted, config.customGroups ?? [])
@@ -340,7 +361,98 @@ export function groupRows(rows: readonly SessionRow[], config: ViewConfig, optio
       })
     }
   }
-  return [...groups.values()].sort((a, b) => ranks.get(a.key)!.localeCompare(ranks.get(b.key)!))
+  return [...[...groups.values()].sort((a, b) => ranks.get(a.key)!.localeCompare(ranks.get(b.key)!)), ...trailing]
+}
+
+export function teamKey(row: Pick<SessionRow, 'hostId' | 'info'>): string | undefined {
+  const agent = row.info.agent
+  return agent ? `${row.hostId}:${agent.id}` : undefined
+}
+
+function leadKeyOf(row: SessionRow): string | undefined {
+  const lead = row.info.agent?.lead
+  return lead === undefined ? undefined : `${row.hostId}:${lead}`
+}
+
+function isEarlier(row: SessionRow): boolean {
+  return row.info.agent === undefined && row.state === 'ended'
+}
+
+// A member whose lead is not in the list at all (its session gone) stays top-level rather than vanish.
+function teamUnits(rows: readonly SessionRow[], all: readonly SessionRow[]): SessionRow[] {
+  const leads = new Map<string, SessionRow>()
+  for (const row of all) {
+    const key = teamKey(row)
+    if (key !== undefined && row.info.agent?.lead === undefined) {
+      leads.set(key, row)
+    }
+  }
+  const shown = new Set(rows.map((row) => sessionKey(row)))
+  const members = new Map<string, SessionRow[]>()
+  const top: SessionRow[] = []
+  for (const row of rows) {
+    const lead = leadKeyOf(row)
+    if (lead !== undefined && leads.has(lead)) {
+      members.set(lead, [...(members.get(lead) ?? []), row])
+    } else {
+      top.push(row)
+    }
+  }
+  for (const lead of members.keys()) {
+    const leadRow = leads.get(lead)!
+    if (!shown.has(sessionKey(leadRow))) {
+      top.push({ ...leadRow, context: true })
+    }
+  }
+  return top.map((row) => {
+    const key = teamKey(row)
+    const crew = key === undefined ? undefined : members.get(key)
+    if (!crew) {
+      return row
+    }
+    const ordered = [...crew].sort(byTeamOrder)
+    return { ...row, members: ordered, teamState: teamState([row, ...ordered]) }
+  })
+}
+
+function byTeamOrder(a: SessionRow, b: SessionRow): number {
+  const ao = a.info.agent?.order ?? Number.MAX_SAFE_INTEGER
+  const bo = b.info.agent?.order ?? Number.MAX_SAFE_INTEGER
+  return ao - bo || a.info.createdAt - b.info.createdAt
+}
+
+export function teamState(rows: readonly SessionRow[]): SessionState {
+  let best = STATE_ORDER.length - 1
+  for (const row of rows) {
+    best = Math.min(best, STATE_ORDER.indexOf(row.state))
+  }
+  return STATE_ORDER[best]!
+}
+
+export function isTeamCollapsed(config: ViewConfig, row: SessionRow): boolean {
+  const key = teamKey(row)
+  return key !== undefined && (config.collapsedTeams ?? []).includes(key)
+}
+
+export function toggleTeamCollapsed(config: ViewConfig, row: SessionRow): ViewConfig {
+  const key = teamKey(row)
+  if (key === undefined) {
+    return config
+  }
+  const held = config.collapsedTeams ?? []
+  return { ...config, collapsedTeams: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
+}
+
+export type TeamSummary = { members: number; working: number; attention: number; unseen: number }
+
+export function teamSummary(lead: SessionRow): TeamSummary {
+  const members = lead.members ?? []
+  return {
+    members: members.length,
+    working: members.filter((row) => row.state === 'working').length,
+    attention: members.filter((row) => row.state === 'attention').length,
+    unseen: members.reduce((sum, row) => sum + row.unseen, 0),
+  }
 }
 
 function projectTarget(row: SessionRow): { hostId: string; cwd?: string } {

@@ -12,6 +12,7 @@ import {
   groupRows,
   hasFacetFilter,
   inScope,
+  isTeamCollapsed,
   moveCustomGroup,
   moveToCustomGroup,
   normalizeViewConfig,
@@ -27,6 +28,8 @@ import {
   sessionLabel,
   sessionState,
   subsetSummary,
+  teamSummary,
+  toggleTeamCollapsed,
   visibleShells,
 } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, ShellInfo, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
@@ -516,5 +519,61 @@ describe('custom groups', () => {
 
   it('survives clearFilters', () => {
     expect(clearFilters(config({ groupBy: 'custom', customGroups: groups, search: 'x' })).customGroups).toBe(groups)
+  })
+})
+
+describe('agent teams in the list', () => {
+  function agentRow(id: string, agent: SessionInfo['agent'], over: Partial<SessionInfo> = {}): SessionRow {
+    return row({ info: info({ id, agent, ...over }) })
+  }
+
+  const lead = agentRow('s-lead', { id: 'A', name: 'Atlas', avatar: '/a', leads: true }, { lastActivityAt: 10 })
+  const pip = agentRow('s-pip', { id: 'P', name: 'Pip', avatar: '/p', lead: 'A', team: 'Atlas', order: 1 }, { pendingPermissionCount: 1 })
+  const juno = agentRow('s-juno', { id: 'J', name: 'Juno', avatar: '/j', lead: 'A', team: 'Atlas', order: 0 }, { status: 'running' })
+  const solo = agentRow('s-solo', { id: 'M', name: 'Marlow', avatar: '/m' }, { lastActivityAt: 5 })
+  const oneOff = row({ info: info({ id: 's-old', status: 'closed' }) })
+  const all = [lead, pip, juno, solo, oneOff]
+
+  it('draws members under their lead in team order, never top-level', () => {
+    const [group] = groupRows(all, { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' })
+    expect(group!.rows.map((r) => r.info.id)).toEqual(['s-lead', 's-solo'])
+    expect(group!.rows[0]!.members?.map((r) => r.info.id)).toEqual(['s-juno', 's-pip'])
+  })
+
+  it('places a team by its most urgent state', () => {
+    const groups = groupRows(all, { ...DEFAULT_VIEW_CONFIG, groupBy: 'state' })
+    expect(groups[0]!.key).toBe('attention')
+    expect(groups[0]!.rows.map((r) => r.info.id)).toEqual(['s-lead'])
+    expect(groups[0]!.rows[0]!.teamState).toBe('attention')
+  })
+
+  it('keeps the lead as a dimmed context row when a filter matches only a member', () => {
+    const config = { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' as const, states: ['working' as const] }
+    const [group] = groupRows(filterRows(all, config), config, { all })
+    expect(group!.rows).toHaveLength(1)
+    expect(group!.rows[0]).toMatchObject({ context: true, info: { id: 's-lead' } })
+    expect(group!.rows[0]!.members?.map((r) => r.info.id)).toEqual(['s-juno'])
+  })
+
+  it('leaves a member top-level when its lead is not in the list at all', () => {
+    const [group] = groupRows([pip, solo], { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' })
+    expect(group!.rows.map((r) => r.info.id).sort()).toEqual(['s-pip', 's-solo'])
+  })
+
+  it('folds ended one-off sessions into a trailing Earlier group, except under state and custom grouping', () => {
+    const groups = groupRows(all, { ...DEFAULT_VIEW_CONFIG, groupBy: 'project' })
+    expect(groups.at(-1)).toMatchObject({ key: 'earlier', earlier: true })
+    expect(groups.at(-1)!.rows.map((r) => r.info.id)).toEqual(['s-old'])
+    expect(groupRows(all, { ...DEFAULT_VIEW_CONFIG, groupBy: 'state' }).some((g) => g.earlier)).toBe(false)
+  })
+
+  it('toggles collapse per team key and sums the members for the folded summary', () => {
+    const [group] = groupRows(all, { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' })
+    const unit = group!.rows[0]!
+    const folded = toggleTeamCollapsed(DEFAULT_VIEW_CONFIG, unit)
+    expect(folded.collapsedTeams).toEqual(['mac:A'])
+    expect(isTeamCollapsed(folded, unit)).toBe(true)
+    expect(isTeamCollapsed(toggleTeamCollapsed(folded, unit), unit)).toBe(false)
+    expect(teamSummary(unit)).toEqual({ members: 2, working: 1, attention: 1, unseen: 0 })
   })
 })

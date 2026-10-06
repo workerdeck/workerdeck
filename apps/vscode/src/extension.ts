@@ -6,7 +6,7 @@ import { WorkerdeckFileSystem } from './fsp.ts'
 import { GatewaysViewProvider } from './gateways-view.ts'
 import { addGateway, editGateway, type GatewayFlowDeps } from './new-gateway.ts'
 import { HostStore } from './hosts.ts'
-import { createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
+import { createAgent, createSession, resumeSession, type NewSessionDeps } from './new-session.ts'
 import { SessionPanelView } from './panel.ts'
 import { SessionEditorTab } from './session-tab.ts'
 import { SurfaceRegistry } from './surfaces.ts'
@@ -493,6 +493,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'workerdeck.addGateway': () => addGateway(gatewayFlow),
         'workerdeck.showGateways': () => gateways.reveal(),
         'workerdeck.newSession': () => createSession(sessionFlow),
+        'workerdeck.newAgent': () => createAgent(sessionFlow),
         'workerdeck.resumeSession': () => resumeSession(sessionFlow),
         'workerdeck.refreshSessions': () => model.refresh(),
       },

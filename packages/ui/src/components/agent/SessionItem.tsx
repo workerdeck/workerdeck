@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
-import type { SessionRow, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
+import type { SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
+import { AgentAvatar, type AgentAvatars } from './AgentAvatar.tsx'
 import { ContextRing } from './ContextRing.tsx'
 import { EngineIcon, vendorMarkClass, vendorTextClass } from './EngineIcon.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
@@ -36,6 +38,17 @@ export interface SessionItemProps {
   editing?: boolean
   onEditingChange?: (editing: boolean) => void
   actions?: ReactNode
+  // Drawn when `row.info.agent` is set: the card then leads with the avatar and names the agent.
+  avatars?: AgentAvatars
+  // `member` is the one-row card a team draws under its lead.
+  variant?: 'card' | 'member'
+  // The state the avatar badge draws, for a folded lead standing in for its team.
+  badgeState?: SessionState
+  // Unread summed over a folded team's members, drawn with the team glyph beside the lead's own.
+  teamUnseen?: number
+  // Draws a session with no agent in the agent card's shape (an engine-mark tile for the avatar), so a list mixing
+  // agents and plain sessions keeps one column.
+  tile?: boolean
   className?: string
 }
 
@@ -64,6 +77,11 @@ export function SessionItem({
   editing,
   onEditingChange,
   actions,
+  avatars,
+  variant = 'card',
+  badgeState,
+  teamUnseen = 0,
+  tile = false,
   className,
 }: SessionItemProps) {
   const { info } = row
@@ -125,6 +143,54 @@ export function SessionItem({
     },
   )
   const holdsOpenStep = steps.some((s) => s.key === activeStepKey)
+  const agent = info.agent
+  const label = agent ? agent.name : sessionLabel(info)
+  const editable = agent ? agent.name : (info.title ?? '')
+  const time = formatRelativeTime(info.lastActivityAt ?? info.createdAt)
+  const nameLabel =
+    isEditing && onRename ? (
+      <NameEditor
+        initial={editable}
+        placeholder={agent ? 'Agent name' : 'Session name'}
+        onCommit={(title) => {
+          setEditing(false)
+          if (title !== editable && (title || !agent)) {
+            onRename(title)
+          }
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    ) : (
+      <span
+        onDoubleClick={
+          onRename && renameOn === 'doubleClick'
+            ? (e) => {
+                e.stopPropagation()
+                setEditing(true)
+              }
+            : undefined
+        }
+        className="min-w-0 shrink truncate text-body-sm font-medium tracking-[-0.005em] text-fg-1"
+      >
+        {label}
+      </span>
+    )
+  const unread =
+    row.unseen > 0 ? (
+      <span
+        // Prose, not rows: `unseen` counts messages a person has not read (`proseCount`).
+        title={`${row.unseen} new message${row.unseen === 1 ? '' : 's'}`}
+        className={cn(
+          'flex h-4 min-w-6 shrink-0 items-center justify-center rounded-full px-2',
+          'text-[0.75rem] leading-none tracking-[-0.005em] tabular-nums',
+          // Grey while the turn is still producing, accent once it has stopped: the badge's colour
+          // answers "is this waiting for me", and a working session is not yet.
+          row.state === 'working' ? 'bg-badge text-badge-fg' : 'bg-accent text-accent-fg',
+        )}
+      >
+        {row.unseen}
+      </span>
+    ) : null
 
   return (
     <div
@@ -156,75 +222,110 @@ export function SessionItem({
         className,
       )}
     >
-      <div className={cn('flex flex-col gap-1 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
-        <div className="flex h-5 items-center gap-1.5 overflow-hidden">
-          <Gutter>
-            <SessionStatusIcon row={row} />
-          </Gutter>
-          {isEditing && onRename ? (
-            <NameEditor
-              initial={info.title ?? ''}
-              onCommit={(title) => {
-                setEditing(false)
-                if (title !== (info.title ?? '')) {
-                  onRename(title)
-                }
-              }}
-              onCancel={() => setEditing(false)}
-            />
-          ) : (
-            <span
-              onDoubleClick={
-                onRename && renameOn === 'doubleClick'
-                  ? (e) => {
-                      e.stopPropagation()
-                      setEditing(true)
-                    }
-                  : undefined
-              }
-              className="min-w-0 flex-1 truncate text-body-sm font-medium tracking-[-0.005em] text-fg-1"
-            >
-              {sessionLabel(info)}
-            </span>
-          )}
-          {row.unseen > 0 ? (
-            <span
-              // Prose, not rows: `unseen` counts messages a person has not read (`proseCount`).
-              title={`${row.unseen} new message${row.unseen === 1 ? '' : 's'}`}
-              className={cn(
-                'flex h-4 min-w-6 shrink-0 items-center justify-center rounded-full px-2',
-                'text-[0.75rem] leading-none tracking-[-0.005em] tabular-nums',
-                // Grey while the turn is still producing, accent once it has stopped: the badge's colour
-                // answers "is this waiting for me", and a working session is not yet.
-                row.state === 'working' ? 'bg-badge text-badge-fg' : 'bg-accent text-accent-fg',
-              )}
-            >
-              {row.unseen}
-            </span>
-          ) : null}
-          <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
-        </div>
-
-        <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
-          <Gutter>
-            <EngineIcon engine={engine} model={info.model} className={cn('size-4', vendorMarkClass(engine, info.model))} />
-          </Gutter>
-          <span className="min-w-0 truncate text-fg-4">
-            {parts.map((part, i) => (
-              <Fragment key={i}>
-                {i > 0 ? ' · ' : ''}
-                {part}
-              </Fragment>
-            ))}
-          </span>
-          <span className="shrink-0 text-fg-4">
-            {parts.length > 0 ? '· ' : ''}
-            {formatRelativeTime(info.lastActivityAt ?? info.createdAt)}
-          </span>
-          <span className="min-w-0 flex-1" />
+      {agent && variant === 'member' ? (
+        <div className={cn('flex h-6 items-center gap-1.5 overflow-hidden py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
+          <AgentAvatar row={row} image={avatars?.[agent.avatar]} size={22} />
+          {nameLabel}
+          {info.title ? <span className="min-w-0 flex-1 truncate text-body-sm text-fg-3">{info.title}</span> : <span className="flex-1" />}
+          {unread}
+          <span className="shrink-0 text-body-sm text-fg-4">{time}</span>
           {actions}
         </div>
-      </div>
+      ) : agent || tile ? (
+        <div className={cn('flex items-center gap-2 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
+          <AgentAvatar row={row} image={agent ? avatars?.[agent.avatar] : undefined} state={badgeState} />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex h-5 items-center gap-1.5 overflow-hidden">
+              {nameLabel}
+              {agent?.leads ? (
+                <span className="shrink-0 rounded-[3px] border border-accent/50 px-1 text-[0.625rem] leading-3.5 font-medium tracking-wide text-accent">
+                  LEAD
+                </span>
+              ) : null}
+              <span className="flex-1" />
+              {unread}
+              {teamUnseen > 0 ? (
+                <span
+                  title={`${teamUnseen} new message${teamUnseen === 1 ? '' : 's'} in the team`}
+                  className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-accent px-1.5 text-[0.75rem] leading-none text-accent-fg tabular-nums"
+                >
+                  <Users className="size-3" />
+                  {teamUnseen}
+                </span>
+              ) : null}
+              <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
+            </div>
+            <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
+              {agent ? (
+                <>
+                  {info.title ? <span className="min-w-0 truncate text-fg-4">{info.title}</span> : null}
+                  <span className="shrink-0 text-fg-4">
+                    {model ? (
+                      <>
+                        {info.title ? '· ' : ''}
+                        <span className={vendorTextClass(engine, info.model)}>{model}</span>
+                        {' · '}
+                      </>
+                    ) : info.title ? (
+                      '· '
+                    ) : null}
+                    {time}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="min-w-0 truncate text-fg-4">
+                    {parts.map((part, i) => (
+                      <Fragment key={i}>
+                        {i > 0 ? ' · ' : ''}
+                        {part}
+                      </Fragment>
+                    ))}
+                  </span>
+                  <span className="shrink-0 text-fg-4">
+                    {parts.length > 0 ? '· ' : ''}
+                    {time}
+                  </span>
+                </>
+              )}
+              <span className="min-w-0 flex-1" />
+              {actions}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={cn('flex flex-col gap-1 py-0.5 pr-0.5 pl-1.5', info.engineAsleep && 'opacity-60')}>
+          <div className="flex h-5 items-center gap-1.5 overflow-hidden">
+            <Gutter>
+              <SessionStatusIcon row={row} />
+            </Gutter>
+            {nameLabel}
+            <span className="flex-1" />
+            {unread}
+            <ContextRing usage={info.contextUsage} engine={engine} size={16} className="p-0.5" />
+          </div>
+
+          <div className="flex h-5 items-center gap-1.5 overflow-hidden text-body-sm tracking-[-0.005em]">
+            <Gutter>
+              <EngineIcon engine={engine} model={info.model} className={cn('size-4', vendorMarkClass(engine, info.model))} />
+            </Gutter>
+            <span className="min-w-0 truncate text-fg-4">
+              {parts.map((part, i) => (
+                <Fragment key={i}>
+                  {i > 0 ? ' · ' : ''}
+                  {part}
+                </Fragment>
+              ))}
+            </span>
+            <span className="shrink-0 text-fg-4">
+              {parts.length > 0 ? '· ' : ''}
+              {time}
+            </span>
+            <span className="min-w-0 flex-1" />
+            {actions}
+          </div>
+        </div>
+      )}
 
       {steps.length > 0 ? (
         <div className="flex flex-col">
@@ -241,7 +342,17 @@ function Gutter({ children }: { children: ReactNode }) {
   return <span className="flex size-4 shrink-0 items-center justify-center">{children}</span>
 }
 
-function NameEditor({ initial, onCommit, onCancel }: { initial: string; onCommit: (title: string) => void; onCancel: () => void }) {
+function NameEditor({
+  initial,
+  placeholder,
+  onCommit,
+  onCancel,
+}: {
+  initial: string
+  placeholder: string
+  onCommit: (title: string) => void
+  onCancel: () => void
+}) {
   const [value, setValue] = useState(initial)
   const ref = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -261,8 +372,8 @@ function NameEditor({ initial, onCommit, onCancel }: { initial: string; onCommit
       ref={ref}
       value={value}
       spellCheck={false}
-      placeholder="Session name"
-      aria-label="Session name"
+      placeholder={placeholder}
+      aria-label={placeholder}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       onChange={(e) => setValue(e.target.value)}

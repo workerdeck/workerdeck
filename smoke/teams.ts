@@ -176,10 +176,16 @@ async function main(): Promise<void> {
     config: { ...claudeConfig, brief: `Your codename is ${CODENAME}. Say it whenever you are asked for your codename.` },
   })
   const scout = await createAgent(server, base, 'scout', { name: 'Scout', lead: lead.agentId, config: claudeConfig })
-  const bolt = await createAgent(server, base, 'bolt', { name: 'Bolt', lead: lead.agentId, config: { profile: 'codex', model: CODEX_MODEL } })
+  const bolt = await createAgent(server, base, 'bolt', {
+    name: 'Bolt',
+    lead: lead.agentId,
+    config: { profile: 'codex', model: CODEX_MODEL },
+  })
   const other = await createAgent(server, base, 'other', { name: 'Outsider', config: claudeConfig })
   note(`lead ${lead.id}, scout ${scout.id}, bolt ${bolt.id}, outsider ${other.id}`)
-  const list = (await (await fetch(`${base}/sessions`)).json()) as { sessions: Array<{ id: string; agent?: { lead?: string; team?: string; leads?: true } }> }
+  const list = (await (await fetch(`${base}/sessions`)).json()) as {
+    sessions: Array<{ id: string; agent?: { lead?: string; team?: string; leads?: true } }>
+  }
   const row = (m: Member) => list.sessions.find((s) => s.id === m.id)?.agent
   check(row(lead)?.leads === true, 'the lead row is decorated as leading')
   check(row(bolt)?.lead === lead.agentId && row(bolt)?.team === 'Atlas', 'a member row names its lead and team', JSON.stringify(row(bolt)))
@@ -194,7 +200,15 @@ async function main(): Promise<void> {
       '3. Reply with the exact text the peers_send tool returned, then stop.',
   )
   if (await waitFor(() => turnsDone(other, 1), 180_000, 'the outsider turn')) {
-    listing('outsider peers_list', resultText(other.events, 'peers_list'), [['the lead', lead.id]], [['scout (member)', scout.id], ['bolt (member)', bolt.id]])
+    listing(
+      'outsider peers_list',
+      resultText(other.events, 'peers_list'),
+      [['the lead', lead.id]],
+      [
+        ['scout (member)', scout.id],
+        ['bolt (member)', bolt.id],
+      ],
+    )
     const refusal = resultText(other.events, 'peers_send')
     check(calls(other.events, 'peers_send').length >= 1, 'the outsider attempted the send')
     check(/no such session/i.test(refusal), 'the refusal reads as an unknown id', refusal.slice(0, 160))
@@ -212,7 +226,16 @@ async function main(): Promise<void> {
   )
   if (await waitFor(() => turnsDone(lead, 1), 180_000, 'the lead turn')) {
     const text = resultText(lead.events, 'peers_list')
-    listing('lead peers_list', text, [['scout', scout.id], ['bolt', bolt.id], ['the outsider', other.id]], [])
+    listing(
+      'lead peers_list',
+      text,
+      [
+        ['scout', scout.id],
+        ['bolt', bolt.id],
+        ['the outsider', other.id],
+      ],
+      [],
+    )
     check(/"role":\s*"member"|role: member|\bmember\b/.test(text), 'lead peers_list marks members by role', text.slice(0, 200))
     check(prose(lead.events).includes(CODENAME), 'the brief reached the model as instructions', CODENAME)
   }
@@ -224,13 +247,29 @@ async function main(): Promise<void> {
   if (await waitFor(() => peerMessages(lead.events).some((t) => t.includes(PONG)), 240_000, 'the lead received the pong')) {
     ok('the lead received the pong')
   }
-  listing('codex member peers_list', resultText(bolt.events, 'peers_list'), [['its lead', lead.id], ['its teammate', scout.id]], [['the outsider', other.id]])
+  listing(
+    'codex member peers_list',
+    resultText(bolt.events, 'peers_list'),
+    [
+      ['its lead', lead.id],
+      ['its teammate', scout.id],
+    ],
+    [['the outsider', other.id]],
+  )
 
   step('member (claude): lists its team')
   scout.runner.sendMessage('Automated test: call peers_list once, then reply with just "done".')
   if (await waitFor(() => turnsDone(scout, 1), 180_000, 'the claude member turn')) {
     const text = resultText(scout.events, 'peers_list')
-    listing('claude member peers_list', text, [['its lead', lead.id], ['its teammate', bolt.id]], [['the outsider', other.id]])
+    listing(
+      'claude member peers_list',
+      text,
+      [
+        ['its lead', lead.id],
+        ['its teammate', bolt.id],
+      ],
+      [['the outsider', other.id]],
+    )
     check(text.includes('Atlas'), 'the member sees its team named after the lead')
   }
 

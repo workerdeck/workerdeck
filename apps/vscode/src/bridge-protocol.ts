@@ -188,6 +188,7 @@ export type SidebarToHost =
       sessionId: string
       title: string
     }
+  | { kind: 'wd-rename-agent'; hostId: string; sessionId: string; name: string }
   | {
       kind: 'wd-reveal-gateways'
       add?: boolean
@@ -201,6 +202,9 @@ export type SidebarToHost =
       hostId: string
       cwd?: string
     }
+
+// The same shape as `@workerdeck/ui`'s `AgentAvatarImage`, restated so the extension host never imports the ui package.
+export type AgentAvatarImage = { still: string; busy?: { src: string; durations: number[] } }
 
 export type HostToSidebar =
   | TransportToWebview
@@ -222,6 +226,7 @@ export type HostToSidebar =
       kind: 'wd-project-icons'
       icons: Record<string, string>
     }
+  | { kind: 'wd-agent-avatars'; avatars: Record<string, AgentAvatarImage> }
 
 export type GatewaysToHost =
   | { kind: 'wd-ready' }

@@ -129,7 +129,7 @@ async function bindWithAvatar(ctx: ServerContext, agent: StoredAgent, session: S
 }
 
 async function rollAvatar(ctx: ServerContext, agent: StoredAgent, session: SessionInfo | undefined): Promise<unknown> {
-  const project = session ? ctx.projects.withProject(session).project?.root ?? session.cwd : undefined
+  const project = session ? (ctx.projects.withProject(session).project?.root ?? session.cwd) : undefined
   try {
     return await ctx.avatars.roll(agent.avatarSeed, session?.engine, project || undefined)
   } catch {
@@ -170,6 +170,7 @@ async function startSession(ctx: ServerContext, agent: StoredAgent, prompt: stri
     model: config.model,
     reasoningEffort: config.reasoningEffort,
     permissionMode: config.permissionMode,
+    allowDangerouslySkipPermissions: config.permissionMode === 'bypassPermissions' ? true : undefined,
     agentContextReset: config.agentContextReset ?? true,
     prompt,
   }

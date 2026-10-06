@@ -1,4 +1,9 @@
 import type {
+  AgentInfo,
+  AgentResponse,
+  CreateAgentRequest,
+  RetireAgentRequest,
+  UpdateAgentRequest,
   CreateJobRequest,
   CreateProfileRequest,
   CreateSessionRequest,
@@ -138,6 +143,44 @@ export class WorkerDeckClient {
 
   async projectIcon(sessionId: string): Promise<Blob> {
     return await this.#blob(this.projectIconUrl(sessionId), 'project icon request failed')
+  }
+
+  // Operator-only: a gateway without agents, or a scoped caller, answers 404.
+  async listAgents(): Promise<AgentInfo[]> {
+    return await this.#pick('GET', '/agents', 'agents')
+  }
+
+  async createAgent(request: CreateAgentRequest): Promise<AgentResponse> {
+    return await this.#call('POST', '/agents', request)
+  }
+
+  async updateAgent(id: string, patch: UpdateAgentRequest): Promise<AgentResponse> {
+    return await this.#call('PATCH', this.#agent(id), patch)
+  }
+
+  async restartAgent(id: string, prompt?: string): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/restart'), prompt === undefined ? {} : { prompt })
+  }
+
+  async retireAgent(id: string, request: RetireAgentRequest = {}): Promise<{ retired: string[]; released: string[] }> {
+    return await this.#call('DELETE', this.#agent(id), request)
+  }
+
+  agentAvatarUrl(id: string, busy = false): string {
+    return `${this.#options.baseUrl}${this.#agent(id, busy ? '/avatar-busy.png' : '/avatar.png')}`
+  }
+
+  // `durations` is set on the busy strip only: one entry per frame, frames laid out left to right.
+  async agentAvatar(id: string, busy = false): Promise<{ blob: Blob; durations?: number[] }> {
+    const res = await this.#callRaw(this.agentAvatarUrl(id, busy), { headers: { ...this.#options.headers } }, 'agent avatar request failed')
+    const header = res.headers.get('x-frame-durations')
+    const durations = header
+      ? header
+          .split(',')
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0)
+      : undefined
+    return durations?.length ? { blob: await res.blob(), durations } : { blob: await res.blob() }
   }
 
   // The sessions this one may address, relay included: what its `peers_list` tool answers.
@@ -315,6 +358,10 @@ export class WorkerDeckClient {
 
   #sess(sessionId: string, suffix = ''): string {
     return `/sessions/${encodeURIComponent(sessionId)}${suffix}`
+  }
+
+  #agent(id: string, suffix = ''): string {
+    return `/agents/${encodeURIComponent(id)}${suffix}`
   }
 
   #shell(sessionId: string, shellId: string, suffix = ''): string {

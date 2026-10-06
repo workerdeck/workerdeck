@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { SessionRow } from '@workerdeck/protocol'
 import type { SidebarState, SidebarToHost, SurfaceTarget } from '../../src/bridge-protocol.ts'
 import type { AppHostMessage, Bridge } from '../bridge.ts'
-import { SessionBrowser, SessionFilters, SessionSearch, type SelectModifiers } from '@workerdeck/ui'
+import { SessionBrowser, SessionFilters, SessionSearch, type AgentAvatars, type SelectModifiers } from '@workerdeck/ui'
 import { Empty, Key } from '../ui/Empty.tsx'
 import { CardActions } from './CardActions.tsx'
 import { SubsetLine } from './SubsetLine.tsx'
@@ -32,6 +32,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
   const [state, setState] = useState<SidebarState | undefined>(undefined)
   // Merged, never replaced: the host sends each hash once as it resolves.
   const [projectIcons, setProjectIcons] = useState<Record<string, string>>({})
+  const [avatars, setAvatars] = useState<AgentAvatars>({})
   const [searchOpen, setSearchOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const persisted = bridge.getState<Persisted>()
@@ -57,6 +58,10 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
           }
           case 'wd-project-icons': {
             setProjectIcons((held) => ({ ...held, ...msg.icons }))
+            return
+          }
+          case 'wd-agent-avatars': {
+            setAvatars((held) => ({ ...held, ...msg.avatars }))
             return
           }
           case 'wd-search-open': {
@@ -146,6 +151,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             showSubset={false}
             gatewayCount={hosts.length}
             projectIcons={projectIcons}
+            avatars={avatars}
             isActive={isActive}
             activeSubagentId={selected?.subagentToolUseId}
             activeShellId={selected?.shellId}
@@ -163,6 +169,7 @@ export function SidebarApp({ bridge }: { bridge: Bridge }) {
             onKillShell={(row, shellId) => postRow('wd-kill-shell', row, { shellId })}
             onShellAgentWrite={(row, shellId, enabled) => postRow('wd-shell-agent-write', row, { shellId, enabled })}
             onRename={(row, title) => postRow('wd-rename-session', row, { title })}
+            onRenameAgent={(row, name) => postRow('wd-rename-agent', row, { name })}
             onCreateInGroup={(target) => bridge.post({ kind: 'wd-new-session', hostId: target.hostId, cwd: target.cwd })}
             emptyState={
               <Empty
