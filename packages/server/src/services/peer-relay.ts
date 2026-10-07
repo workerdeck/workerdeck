@@ -84,6 +84,15 @@ function remoteRef(agent: RelayAgentEntry | undefined): AgentRef | undefined {
   return agent ? { id: agent.id, name: agent.name, ...(agent.lead !== undefined ? { lead: agent.lead } : {}) } : undefined
 }
 
+// A peek answer from an older gateway carries bare ids; the gateway it came from is the one it was asked.
+function qualifyPeek(peek: RelayPeek, gateway: string): RelayPeek {
+  const qualified = qualifyAgent(remoteRef(peek.agent), gateway)
+  if (!peek.agent || !qualified) {
+    return peek
+  }
+  return { ...peek, agent: { ...peek.agent, id: qualified.id, ...(qualified.lead !== undefined ? { lead: qualified.lead } : {}) } }
+}
+
 type TeamNames = { nameOf(agentId: string): string | undefined; leads: ReadonlySet<string> }
 
 function teamFields(agent: RelayAgentEntry | undefined, names: TeamNames): Pick<PeerSessionSummary, 'agent' | 'role' | 'team'> {
@@ -160,8 +169,10 @@ export function createRelayLink(
   let closed = false
   let released = false
 
+  const teamsAgreed = (): boolean => connection?.features().includes('teams') === true
+
   const host: RelayHost = {
-    snapshot: () => peers.relayEntries(exposed),
+    snapshot: () => peers.relayEntries(exposed, teamsAgreed()),
     peek: (origin, sessionId, recent) => peers.relayPeek(origin, sessionId, recent, exposed, options.gateway),
     send: (origin, sessionId, text) => peers.relaySend(origin, sessionId, text, exposed, options.gateway),
     team: async (kind, origin, to) => (await teams?.()?.inbound(kind, origin, to)) ?? { ok: false, reason: 'no such agent' },
@@ -199,7 +210,7 @@ export function createRelayLink(
   const reacher = async (from: string): Promise<SessionInfo | undefined> => {
     const me = await peers.relaySender(from)
     const scoped = me.scope !== undefined && Object.keys(me.scope).length > 0
-    return !scoped && (me.agent?.lead === undefined || peers.relaySpans(me.id)) ? me : undefined
+    return !scoped && (me.agent?.lead === undefined || (teamsAgreed() && peers.relaySpans(me.id))) ? me : undefined
   }
   const reachesRemote = async (from: string): Promise<boolean> => (await reacher(from)) !== undefined
 
@@ -208,11 +219,14 @@ export function createRelayLink(
     return target?.gateway === options.gateway ? peers.relayAgentName(target.id) : undefined
   }
 
-  // The relay already applied the team rule; the gateway applies it again to every row, so a misbehaving relay cannot
-  // show a member anything outside its team.
+  // The relay already applied the team rule; the gateway applies it again to every row, after checking the row's team
+  // claims against its own records, so a row the relay attributes to a team here must be one of that team's members.
+  const admits = (mine: AgentRef | undefined, gateway: string, agent: AgentRef | undefined): boolean =>
+    (agent === undefined || peers.relayVouches(agent, gateway)) && teamReaches(mine, agent)
+
   const teamRows = async (me: SessionInfo, from: string): Promise<{ rows: RelayPeerRow[]; names: TeamNames }> => {
     const mine = qualifyAgent(me.agent, options.gateway)
-    const rows = (await connection!.list(from)).filter((row) => teamReaches(mine, remoteRef(row.agent)))
+    const rows = (await connection!.list(from)).filter((row) => admits(mine, row.gateway, remoteRef(row.agent)))
     const byId = new Map(rows.flatMap((row) => (row.agent ? [[row.agent.id, row.agent.name] as const] : [])))
     const leads = new Set(rows.flatMap((row) => (row.agent?.lead !== undefined ? [row.agent.lead] : [])))
     return { rows, names: { nameOf: (id) => byId.get(id) ?? localName(id), leads } }
@@ -247,8 +261,12 @@ export function createRelayLink(
       if (!connection || !me) {
         return undefined
       }
-      const peek = await connection.peek(from, target, peekOptions?.recent)
-      if (!peek || !teamReaches(qualifyAgent(me.agent, options.gateway), remoteRef(peek.agent))) {
+      const answer = await connection.peek(from, target, peekOptions?.recent)
+      if (!answer) {
+        return undefined
+      }
+      const peek = qualifyPeek(answer, target.gateway)
+      if (!admits(qualifyAgent(me.agent, options.gateway), target.gateway, remoteRef(peek.agent))) {
         return undefined
       }
       const names: TeamNames = { nameOf: (id) => localName(id), leads: new Set() }

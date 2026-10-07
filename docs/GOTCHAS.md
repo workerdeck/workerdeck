@@ -1393,12 +1393,17 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   so the strings are UI copy. A team is only "some agent has `lead` = me"; there is no team record.
 - **The peers rule is `teamReaches(from.agent, to.agent)` after the scope rule**, a pure function in
   `protocol`. A member is published to the relay only when its team spans gateways
-  (`AgentService.spansGateways`), and the gateway re-checks every inbound peek and send to a member
-  against the relay-stamped `origin.agent` (`teamAdmits`), so a lying relay cannot widen it. A member
-  reaches the relay under the same condition (`reacher` in `peer-relay.ts`), and the gateway
-  re-filters every remote row with `teamReaches` over `qualifyAgent` refs (local ids qualified with
-  the own gateway, relay rows already qualified); a member's remote send is checked against that
-  filtered list first. Refusals read as "no such session", the scope rule's posture.
+  (`AgentService.spansGateways`) **and** the connection negotiated `teams` (an older relay would list
+  it to everyone), and only then does a member reach the relay (`reacher` in `peer-relay.ts`).
+  Every remote team claim is checked against this gateway's records first
+  (`AgentService.vouches`): the agent id must name the gateway the origin or row came from, and a
+  claim to be a member of a lead **here** needs that lead's accepted `remoteMembers` entry. A claim
+  to a lead on another gateway is taken on the relay's word until the lead's roster exists (R3
+  workstream E). The gateway applies this to inbound peeks and sends (`teamAdmits`, then
+  `teamReaches` over the origin and the qualified target, so a remote member cannot reach an
+  outsider here either), to every remote row, and to peek answers. A peek answer travels through
+  the relay unqualified, so both ends qualify it with the answering gateway (`qualifyEntry`,
+  `qualifyPeek`). Refusals read as "no such session", the scope rule's posture.
 - **A peer message is captioned with the sender's agent name**, not its session title, both locally
   and across the relay (the relay's `originOf` uses `agent.name ?? title`). Remote rows carry
   `agent`, `role`, `team` and `owner`; a remote member's `team` is resolved from the visible lead row

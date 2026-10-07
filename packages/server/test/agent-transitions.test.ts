@@ -293,3 +293,20 @@ describe('agent mutation transitions', () => {
     expect((await store.list()).map((a) => a.name)).toEqual(['First'])
   })
 })
+
+describe('remote team claims', () => {
+  it('vouches for a member of a lead here only with that lead accepted entry, and checks the id names its gateway', async () => {
+    const agents = await service()
+    const transport = heldTransport()
+    const teams = new TeamLinks({ agents, transport, acceptFrom: ['mac'] })
+    const lead = await stored(agents, 'Lead')
+    await teams.inbound('team.join', { gateway: 'mac', owner: 'tobias', agent: 'mac:M1', name: 'M1' }, lead.id)
+    const local = `win:${lead.id}`
+    expect(agents.vouches({ id: 'mac:M1', lead: local }, 'mac')).toBe(true)
+    expect(agents.vouches({ id: 'mac:M2', lead: local }, 'mac')).toBe(false)
+    expect(agents.vouches({ id: 'mac:M1', lead: local }, 'evil')).toBe(false)
+    expect(agents.vouches({ id: `win:${lead.id}` }, 'win')).toBe(false)
+    expect(agents.vouches({ id: 'pi:X', lead: 'mac:L9' }, 'pi')).toBe(true)
+    expect(agents.vouches({ id: 'pi:X' }, 'pi')).toBe(true)
+  })
+})

@@ -242,6 +242,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
               return agent !== undefined && agents.spansGateways(agent)
             },
             agentName: (agentId) => agents.get(agentId)?.name,
+            vouches: (ref, gateway) => agents.vouches(ref, gateway),
           },
           options: options.peers,
         })

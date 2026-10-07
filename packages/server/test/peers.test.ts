@@ -268,6 +268,16 @@ describe('peer service: `#` mentions', () => {
   })
 })
 
+function macVouches(ref: { id: string; lead?: string }, gateway: string, accepts: Record<string, string[]>): boolean {
+  if (gateway === 'mac' || !ref.id.startsWith(`${gateway}:`)) {
+    return false
+  }
+  if (ref.lead === undefined || !ref.lead.startsWith('mac:')) {
+    return true
+  }
+  return (accepts[ref.lead.slice(4)] ?? []).includes(ref.id)
+}
+
 describe('peer service: teams', () => {
   const refs: Record<string, AgentRef> = {
     lead: { id: 'A', name: 'Atlas', avatar: '', leads: true },
@@ -287,6 +297,7 @@ describe('peer service: teams', () => {
         relayAgent: (id) => (refs[id] ? { id: refs[id].id, name: refs[id].name, ...(refs[id].lead ? { lead: refs[id].lead } : {}) } : undefined),
         spansGateways: (id) => spanning.includes(id),
         agentName: (id) => Object.values(refs).find((ref) => ref.id === id)?.name,
+        vouches: (ref, gateway) => macVouches(ref, gateway, { A: ['pi:T'] }),
       },
     })
     for (const id of [...Object.keys(refs), 'plain']) {
@@ -324,7 +335,7 @@ describe('peer service: teams', () => {
 
   it('never publishes a member of a team that stays on this gateway', async () => {
     const service = teamRig()
-    const published = (await service.relayEntries(undefined)).map((entry) => entry.id)
+    const published = (await service.relayEntries(undefined, true)).map((entry) => entry.id)
     expect(published).not.toContain('m1')
     expect(published).toContain('lead')
     const origin = { gateway: 'pi', sessionId: 'x', agent: { id: 'mac:lead', name: 'Atlas' }, hops: [] }
@@ -333,16 +344,35 @@ describe('peer service: teams', () => {
 
   it('publishes a member whose team spans gateways, and answers only its lead and teammates', async () => {
     const service = teamRig(['m1'])
-    const entry = (await service.relayEntries(undefined)).find((row) => row.id === 'm1')
+    const entry = (await service.relayEntries(undefined, true)).find((row) => row.id === 'm1')
     expect(entry?.agent).toEqual({ id: refs.m1!.id, name: 'Pip', lead: refs.m1!.lead })
     const lead = `mac:${refs.m1!.lead}`
     const outsider = { gateway: 'pi', sessionId: 'x', agent: { id: 'pi:Z', name: 'Zed' }, hops: [] }
     const teammate = { gateway: 'pi', sessionId: 'y', agent: { id: 'pi:T', name: 'Tee', lead }, hops: [] }
-    const theLead = { gateway: 'pi', sessionId: 'z', agent: { id: lead, name: 'Atlas' }, hops: [] }
+    const invented = { gateway: 'pi', sessionId: 'w', agent: { id: 'pi:X', name: 'Forged', lead }, hops: [] }
+    const misplaced = { gateway: 'evil', sessionId: 'v', agent: { id: 'pi:T', name: 'Tee', lead }, hops: [] }
     expect(await service.relayPeek(outsider, 'm1', 0, undefined, 'mac')).toBeUndefined()
     expect(await service.relayPeek({ ...outsider, agent: undefined }, 'm1', 0, undefined, 'mac')).toBeUndefined()
     expect(await service.relaySend(outsider, 'm1', 'hi', undefined, 'mac')).toEqual({ delivered: false, reason: 'no such session: m1' })
     expect(await service.relayPeek(teammate, 'm1', 0, undefined, 'mac')).toMatchObject({ id: 'm1' })
-    expect(await service.relayPeek(theLead, 'm1', 0, undefined, 'mac')).toMatchObject({ id: 'm1' })
+    expect(await service.relayPeek(invented, 'm1', 0, undefined, 'mac')).toBeUndefined()
+    expect(await service.relaySend(invented, 'm1', 'hi', undefined, 'mac')).toEqual({ delivered: false, reason: 'no such session: m1' })
+    expect(await service.relayPeek(misplaced, 'm1', 0, undefined, 'mac')).toBeUndefined()
+  })
+
+  it('answers a peek with ids qualified by this gateway, and publishes members only once teams are negotiated', async () => {
+    const service = teamRig(['m1'])
+    const teammate = { gateway: 'pi', sessionId: 'y', agent: { id: 'pi:T', name: 'Tee', lead: 'mac:A' }, hops: [] }
+    expect((await service.relayPeek(teammate, 'm1', 0, undefined, 'mac'))?.agent).toEqual({ id: 'mac:P', name: 'Pip', lead: 'mac:A' })
+    expect((await service.relayEntries(undefined, false)).map((entry) => entry.id)).not.toContain('m1')
+  })
+
+  it('refuses a remote member reaching an outsider here, whatever the relay routed', async () => {
+    const service = teamRig()
+    const member = { gateway: 'pi', sessionId: 'y', agent: { id: 'pi:Q', name: 'Q', lead: 'pi:K' }, hops: [] }
+    expect(await service.relaySend(member, 'solo', 'hi', undefined, 'mac')).toEqual({ delivered: false, reason: 'no such session: solo' })
+    expect(await service.relayPeek({ ...member, agent: { id: 'pi:K', name: 'K' } }, 'solo', 0, undefined, 'mac')).toMatchObject({
+      id: 'solo',
+    })
   })
 })

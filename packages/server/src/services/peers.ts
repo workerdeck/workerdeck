@@ -16,13 +16,20 @@ import {
   PEER_MENTION_MAX,
   peerMentionKey,
   peerMentionSlug,
+  qualifyAgent,
   scanPeerMentions,
   teamReaches,
   type MessageOrigin,
   type SessionEvent,
   type SessionInfo,
 } from '@workerdeck/protocol'
-import { qualifyId, type RelayAgentEntry, type RelayOrigin, type RelayPeek, type RelaySendResult, type RelaySessionEntry } from '@workerdeck/relay-client'
+import {
+  type RelayAgentEntry,
+  type RelayOrigin,
+  type RelayPeek,
+  type RelaySendResult,
+  type RelaySessionEntry,
+} from '@workerdeck/relay-client'
 import { scopeMatches } from '../lib/scope.ts'
 import type { LateBoundRefs } from '../options.ts'
 import type { ProjectInfoService } from './project-info.ts'
@@ -41,6 +48,7 @@ export type PeerAgentTeams = {
   relayAgent(sessionId: string): RelayAgentEntry | undefined
   spansGateways(sessionId: string): boolean
   agentName(agentId: string): string | undefined
+  vouches(ref: { id: string; lead?: string }, gateway: string): boolean
 }
 
 export type PeerServiceDeps = {
@@ -58,20 +66,25 @@ function visible(from: SessionInfo, to: SessionInfo): boolean {
   return to.id !== from.id && scopeMatches(from.scope, to.scope) && teamReaches(from.agent, to.agent)
 }
 
-function relayable(info: SessionInfo, exposed: Record<string, string> | undefined, teams: PeerAgentTeams | undefined): boolean {
+// A member is published only to a relay that negotiated teams: an older one would list it to everyone.
+function relayable(
+  info: SessionInfo,
+  exposed: Record<string, string> | undefined,
+  teams: PeerAgentTeams | undefined,
+  teamsOn: boolean,
+): boolean {
   const member = info.agent?.lead !== undefined
-  return info.status !== 'closed' && (!member || teams?.spansGateways(info.id) === true) && scopeMatches(exposed, info.scope)
+  return info.status !== 'closed' && (!member || (teamsOn && teams?.spansGateways(info.id) === true)) && scopeMatches(exposed, info.scope)
 }
 
-// The gateway's own re-check of the relay's team rule: a member answers only its lead and teammates, whatever the relay
-// routed. The relay stamps `origin.agent` from the sender's published entry with qualified ids.
-function teamAdmits(info: SessionInfo, origin: RelayOrigin, gateway: string): boolean {
-  const lead = info.agent?.lead
-  if (lead === undefined) {
-    return true
+// The gateway's own re-check of the relay's team rule over the relay-stamped `origin.agent`, after checking that
+// agent's claims against this gateway's records.
+function teamAdmits(info: SessionInfo, origin: RelayOrigin, gateway: string, teams: PeerAgentTeams | undefined): boolean {
+  const from = origin.agent
+  if (from && teams?.vouches(from, origin.gateway) === false) {
+    return false
   }
-  const qualified = qualifyId(gateway, lead)
-  return origin.agent !== undefined && (origin.agent.id === qualified || origin.agent.lead === qualified)
+  return teamReaches(from, qualifyAgent(info.agent, gateway))
 }
 
 export type PeerService = PeerDirectory & {
@@ -83,7 +96,8 @@ export type PeerService = PeerDirectory & {
   relayChain(from: string): string[]
   relaySpans(sessionId: string): boolean
   relayAgentName(agentId: string): string | undefined
-  relayEntries(exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]>
+  relayVouches(ref: { id: string; lead?: string }, gateway: string): boolean
+  relayEntries(exposed: Record<string, string> | undefined, teamsOn: boolean): Promise<RelaySessionEntry[]>
   relayPeek(
     origin: RelayOrigin,
     sessionId: string,
@@ -98,6 +112,15 @@ export type PeerService = PeerDirectory & {
     exposed: Record<string, string> | undefined,
     gateway: string,
   ): Promise<RelaySendResult>
+}
+
+// A peek answer goes back through the relay as it is, so its ids are qualified here, the way the relay qualifies rows.
+function qualifyEntry(agent: RelayAgentEntry | undefined, gateway: string): RelayAgentEntry | undefined {
+  if (!agent) {
+    return undefined
+  }
+  const qualified = qualifyAgent(agent, gateway)!
+  return { ...agent, id: qualified.id, ...(qualified.lead !== undefined ? { lead: qualified.lead } : {}) }
 }
 
 export function relayEntry(info: SessionInfo, live: boolean, agent?: RelayAgentEntry): RelaySessionEntry {
@@ -267,17 +290,17 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     gateway: string,
   ): Promise<SessionInfo | undefined> => {
     const info = await infoOf(sessionId)
-    return info && relayable(info, exposed, deps.teams) && teamAdmits(info, origin, gateway) ? info : undefined
+    return info && relayable(info, exposed, deps.teams, true) && teamAdmits(info, origin, gateway, deps.teams) ? info : undefined
   }
 
-  const relayEntries = async (exposed: Record<string, string> | undefined): Promise<RelaySessionEntry[]> => {
+  const relayEntries = async (exposed: Record<string, string> | undefined, teamsOn: boolean): Promise<RelaySessionEntry[]> => {
     const live = new Set(
       registry()
         .list()
         .map((info) => info.id),
     )
     return (await allSessions())
-      .filter((info) => relayable(info, exposed, deps.teams))
+      .filter((info) => relayable(info, exposed, deps.teams, teamsOn))
       .map((info) => relayEntry(info, live.has(info.id), deps.teams?.relayAgent(info.id)))
   }
 
@@ -294,7 +317,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     }
     const { runner, lines } = recentOf(sessionId, recent)
     return {
-      ...relayEntry(info, runner !== undefined, deps.teams?.relayAgent(info.id)),
+      ...relayEntry(info, runner !== undefined, qualifyEntry(deps.teams?.relayAgent(info.id), gateway)),
       checklistItems: info.checklist,
       pendingApprovals: runner ? runner.pendingApprovals.map((request) => request.title ?? request.toolName) : [],
       recent: lines,
@@ -343,6 +366,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     relayChain: (from) => [...(inbound.get(from) ?? []), from],
     relaySpans: (sessionId) => deps.teams?.spansGateways(sessionId) === true,
     relayAgentName: (agentId) => deps.teams?.agentName(agentId),
+    relayVouches: (ref, gateway) => deps.teams?.vouches(ref, gateway) ?? true,
     relayEntries,
     relayPeek,
     relaySend,

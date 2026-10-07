@@ -184,6 +184,27 @@ export class AgentService {
     return entry
   }
 
+  // Whether this gateway's records allow a remote agent's claims: its id names the gateway it came from, and a claim to
+  // be a member of a lead here needs that lead's accepted entry. A claim to a lead on another gateway is that relay's
+  // assertion until the lead's roster exists (R3 workstream E).
+  vouches(ref: { id: string; lead?: string }, gateway: string): boolean {
+    if (gateway === this.#gateway || parseRelayPeerId(ref.id)?.gateway !== gateway) {
+      return false
+    }
+    if (ref.lead === undefined) {
+      return true
+    }
+    const lead = parseRelayPeerId(ref.lead)
+    if (!lead) {
+      return false
+    }
+    if (lead.gateway !== this.#gateway) {
+      return true
+    }
+    const record = this.#agents.get(lead.id)
+    return record?.lead === undefined && acceptedRemote(record).some((member) => member.agent === ref.id)
+  }
+
   briefFor(sessionId: string | undefined): string | undefined {
     const brief = sessionId === undefined ? undefined : this.bySession(sessionId)?.config.brief?.trim()
     return brief || undefined

@@ -62,13 +62,33 @@ async function gateway(
       },
       spansGateways: (id) => teams.spans?.includes(id) === true,
       agentName: (agentId) => Object.values(agents).find((ref) => ref.id === agentId)?.name,
+      vouches: (ref, from) => {
+        if (from === name || !ref.id.startsWith(`${from}:`)) {
+          return false
+        }
+        if (ref.lead === undefined || !ref.lead.startsWith(`${name}:`)) {
+          return true
+        }
+        const leadSession = Object.keys(agents).find((id) => agents[id]!.id === ref.lead!.slice(name.length + 1))
+        return leadSession !== undefined && (teams.accepts?.[leadSession] ?? []).includes(ref.id)
+      },
     },
   })
   registry.observe((runner) => service.watch(runner))
   for (const runner of runners) {
     registry.register(runner)
   }
-  const link: RelayLink = createRelayLink({ url: relay.url, gateway: name, key, expose }, service, () => {})
+  const handler = {
+    inbound: async () => ({ ok: false, reason: 'no such agent' }),
+    inboundStatus: async () => [],
+    reconcile: async () => {},
+  }
+  const link: RelayLink = createRelayLink(
+    { url: relay.url, gateway: name, key, expose },
+    service,
+    () => {},
+    () => handler,
+  )
   cleanups.push(() => link.close())
   const published = runners.filter(
     (runner) =>
@@ -155,7 +175,7 @@ describe('peer relay link', () => {
       [leadRunner, new PeerRunner('plain')],
       undefined,
       { lead: { id: 'L', name: 'AC-Lead', leads: true } },
-      { accepts: { lead: ['win:M'] } },
+      { accepts: { lead: ['win:M', 'pi:T'] } },
     )
     const win = await gateway(
       relay,
@@ -170,15 +190,20 @@ describe('peer relay link', () => {
       relay,
       stateDir,
       'pi',
-      [outsiderRunner, new PeerRunner('faker')],
+      [outsiderRunner, new PeerRunner('faker'), new PeerRunner('mate')],
       undefined,
-      { faker: { id: 'F', name: 'Faker', lead: 'mac:L' } },
-      { spans: ['faker'] },
+      { faker: { id: 'F', name: 'Faker', lead: 'mac:L' }, mate: { id: 'T', name: 'Tee', lead: 'mac:L', team: 'AC-Lead' } },
+      { spans: ['faker', 'mate'] },
     )
     const ids = async (link: RelayLink, from: string) => (await link.directory.list(from)).map((row) => row.id).sort()
 
-    expect(await ids(win, 'member')).toEqual(['mac:lead'])
-    expect((await win.directory.list('member'))[0]).toMatchObject({ agent: 'AC-Lead', role: 'lead', team: 'AC-Lead' })
+    expect(await ids(win, 'member')).toEqual(['mac:lead', 'pi:mate'])
+    expect(await ids(pi, 'mate')).toEqual(['faker', 'mac:lead', 'win:member'])
+    expect((await win.directory.list('member')).find((row) => row.id === 'mac:lead')).toMatchObject({
+      agent: 'AC-Lead',
+      role: 'lead',
+      team: 'AC-Lead',
+    })
     expect((await mac.directory.list('lead')).find((row) => row.id === 'win:member')).toMatchObject({
       agent: 'MagWin',
       role: 'member',
@@ -187,7 +212,7 @@ describe('peer relay link', () => {
     expect(await ids(mac, 'plain')).toEqual(['lead', 'pi:outsider', 'win:wplain'])
     expect(await ids(win, 'wplain')).toEqual(['mac:lead', 'mac:plain', 'pi:outsider'])
     expect(await ids(pi, 'outsider')).toEqual(['mac:lead', 'mac:plain', 'win:wplain'])
-    expect(await ids(pi, 'faker')).toEqual([])
+    expect(await ids(pi, 'faker')).toEqual(['mate'])
 
     expect(resolvePeerMentions(await win.directory.list('member'), 'ask #AC-Lead')).toMatchObject([{ id: 'mac:lead', name: 'AC-Lead' }])
     expect((await win.directory.send('member', 'mac:lead', 'built')).delivered).toBe(true)
@@ -198,6 +223,16 @@ describe('peer relay link', () => {
     expect(await pi.directory.send('outsider', 'win:member', 'hi')).toEqual({ delivered: false, reason: 'no such session: win:member' })
     expect(await pi.directory.send('faker', 'win:member', 'hi')).toEqual({ delivered: false, reason: 'no such session: win:member' })
     expect(await mac.directory.peek('plain', 'win:member')).toBeUndefined()
+    expect(await win.directory.peek('member', 'mac:lead')).toMatchObject({ id: 'mac:lead', agent: 'AC-Lead' })
+    expect(await mac.directory.peek('lead', 'win:member')).toMatchObject({
+      id: 'win:member',
+      agent: 'MagWin',
+      role: 'member',
+      team: 'AC-Lead',
+    })
+    expect(await pi.directory.peek('mate', 'win:member')).toMatchObject({ id: 'win:member', role: 'member' })
+    expect(await win.directory.peek('member', 'pi:mate')).toMatchObject({ id: 'pi:mate', role: 'member' })
+    expect(await pi.directory.peek('faker', 'win:member')).toBeUndefined()
     expect(memberRunner.sent.map((sent) => sent.text)).toEqual(['thanks'])
     expect(outsiderRunner.sent).toEqual([])
   })
