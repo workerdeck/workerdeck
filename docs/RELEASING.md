@@ -1472,6 +1472,26 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   verified**: a paid smoke of `set_status` / `change_avatar`, the VS Code picker and tab icons, iOS
   (draws none of it yet).
 
+  **3.7.0** - **cross-gateway teams, owners, Private/Shared, released 2026-10-07** (tag `v3.7.0`).
+  A **minor** by the 3.1.0 choice, protocol and relay wire both stay **1**, but **upgrade the relay
+  before the gateways**: a gateway enrolled with several owners refuses an old relay, and a
+  multi-owner gateway on a relay without `owners` publishes nothing. Breaking for embedders:
+  `RelayAgentEntry.share` became `shared`, enrollment records with several owners keep their hash in
+  `ownersHash` (an older relay refuses them). Ships all of Revision 3 (`_docs/plans/CROSS-GATEWAY-TEAMS.md`
+  R3.7): cross-gateway teams (phases 1 to 4: relay team frames, `TeamLinks`, peers across the relay,
+  clients dragging across configured gateways), A serial agent transitions, B remote claims checked
+  against local records, E lead rosters and member consent (ops, persisted pending joins, schema 2
+  migration), F owners per session and agent (`--owner`, profile `owner`, relay `--owners`), G
+  Private/Shared (`--agent-sharing`, `PATCH /agents/:id { sharing }`), C client outcomes for team
+  moves (Withdraw invitation, cross-owner confirmation, Private/Shared in web and VS Code), D docs
+  and the relay-stamped owner on `team.status` answers. Plus monospace shell rows, bigger avatars,
+  and `peers_send` addressed by agent name. Agent SDK stays 0.3.284 and codex 0.158.0, so the
+  catalogs were not re-extracted. **Verified**: full serial `pnpm test`, `smoke:codex --canary`
+  10/10, WD-Review reviews of A, E, F, G and C with every finding fixed. **Not verified**: the
+  hand check of C in web and VS Code across two real gateways (the mini relay and MAGWIN were on
+  3.4.0 / 3.6.1 at release, so cross-gateway joins could not be tried; Tobias chose to release and
+  check during rollout), a paid `smoke:teams` across gateways, iOS (deferred to Agent Teams phase 5).
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
