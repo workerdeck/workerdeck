@@ -47,6 +47,7 @@ export {
   installedPeerDirectory,
   peerDirectoryHandle,
   peerMentionsEnvelope,
+  peerContextPreview,
   peerMessageEnvelope,
   peerSummary,
   peerToolSpecs,

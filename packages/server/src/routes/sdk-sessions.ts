@@ -1,10 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { peerContextPreview } from '@workerdeck/core'
 import type { ProfileInfo, SdkSessionSummary } from '@workerdeck/protocol'
 import { fail, json, requireMethod } from '../lib/http.ts'
 import { cwdAllowed, engineOf } from '../lib/profile-env.ts'
 import type { SdkSessionLister } from '../options.ts'
 import type { AuthContext } from '../services/auth.ts'
 import type { ServerContext } from '../context.ts'
+
+// The engine stores what the model was sent, so a session a peer started previews its envelope.
+function withoutEnvelopes(sessions: SdkSessionSummary[]): SdkSessionSummary[] {
+  return sessions.map((s) => ({
+    ...s,
+    summary: peerContextPreview(s.summary),
+    ...(s.firstPrompt === undefined ? {} : { firstPrompt: peerContextPreview(s.firstPrompt) }),
+  }))
+}
 
 // A summary with no `cwd` cannot be shown to be inside the roots, so it is dropped.
 function withinRoots(sessions: SdkSessionSummary[], roots: string[], limit?: number, offset = 0): SdkSessionSummary[] {
@@ -62,10 +72,10 @@ export async function handleSdkSessions(ctx: ServerContext, req: IncomingMessage
   try {
     if (withinScope && !dir) {
       // A bare listing spans every project on the host, so it filters after listing - which is why the paging is applied here too.
-      json(res, 200, { sdkSessions: withinRoots(await lister({}), roots, limit, offset) })
+      json(res, 200, { sdkSessions: withinRoots(withoutEnvelopes(await lister({})), roots, limit, offset) })
       return
     }
-    json(res, 200, { sdkSessions: await lister({ dir, limit, offset }) })
+    json(res, 200, { sdkSessions: withoutEnvelopes(await lister({ dir, limit, offset })) })
   } catch (error) {
     json(res, 500, { error: error instanceof Error ? error.message : 'failed to list sessions' })
   }

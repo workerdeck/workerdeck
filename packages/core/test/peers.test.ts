@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PEER_MENTION_MAX, type SessionEvent, type SessionEventBody } from '@workerdeck/protocol'
 import {
   installPeerDirectory,
+  peerContextPreview,
   peerDirectoryHandle,
   peerMentionsEnvelope,
   peerMessageEnvelope,
@@ -198,6 +199,24 @@ describe('withoutPeerContext', () => {
     for (const text of ['hello', '<peer-message from-session="abc">\nhi\n</peer-message>', 'see <peer-mentions> below']) {
       expect(withoutPeerContext(text)).toEqual({ text })
     }
+  })
+})
+
+describe('peerContextPreview', () => {
+  const origin = { kind: 'peer' as const, sessionId: 'abc', name: 'WD-Lead', engine: 'claude' as const }
+  const mention: PeerMention = { typed: 'Astra', id: 'abc', name: 'Astra', status: 'idle', cwd: '/work' }
+
+  it('keeps only the text of a whole or cut envelope', () => {
+    const full = withPeerContext('ship it', { origin })
+    expect(peerContextPreview(full)).toBe('ship it')
+    expect(peerContextPreview(full.slice(0, full.indexOf('</peer-message>') + 5))).toBe('ship it')
+    expect(peerContextPreview(full.slice(0, full.indexOf('ship it') + 4))).toBe('ship')
+  })
+
+  it("drops a cut mentions block from a person's prompt", () => {
+    const full = withPeerContext('ask #Astra', { mentions: [mention] })
+    expect(peerContextPreview(full.slice(0, full.indexOf('<peer-mention ') + 3))).toBe('ask #Astra')
+    expect(peerContextPreview('plain prompt')).toBe('plain prompt')
   })
 })
 

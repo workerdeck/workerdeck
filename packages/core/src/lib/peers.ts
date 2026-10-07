@@ -257,6 +257,28 @@ export function withoutPeerContext(text: string): { text: string; origin?: Messa
   return { text: match[2]!, origin }
 }
 
+// A listing preview is the stored prompt cut to a length, so the full inverse rarely matches: keep the peer's own text
+// and drop a mentions block from wherever it starts.
+export function peerContextPreview(text: string): string {
+  const restored = withoutPeerContext(text)
+  if (restored.origin) {
+    return restored.text
+  }
+  const mentions = restored.text.indexOf('\n\n<peer-mentions>')
+  const bare = mentions === -1 ? restored.text : restored.text.slice(0, mentions)
+  const open = /^<peer-message (?:[a-z-]+="[^"]*" ?)+>\n/.exec(bare)
+  if (!open) {
+    return bare
+  }
+  const body = bare.slice(open[0].length)
+  const close = body.indexOf('\n</peer-message>')
+  if (close !== -1) {
+    return body.slice(0, close)
+  }
+  const cut = body.lastIndexOf('\n')
+  return cut !== -1 && '\n</peer-message>'.startsWith(body.slice(cut)) ? body.slice(0, cut) : body
+}
+
 export function withoutPeerContextMessage(message: ApiMessage): { message: ApiMessage; origin?: MessageOrigin } {
   if (typeof message.content === 'string') {
     const { text, origin } = withoutPeerContext(message.content)

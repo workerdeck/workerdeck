@@ -530,6 +530,7 @@ describe('createWorkerServer', () => {
     const inProject = {
       sessionId: 'sdk-1',
       summary: 'earlier session',
+      firstPrompt: '<peer-message from-session="abc" from-name="WD-Lead">\nship it\n</peer-mess',
       lastModified: 1000,
       cwd: '/tmp/project',
     }
@@ -562,8 +563,9 @@ describe('createWorkerServer', () => {
 
     const res = await fetch(`${base}/sdk-sessions?dir=/tmp/project&limit=10`)
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { sdkSessions: Array<{ sessionId: string }> }
+    const body = (await res.json()) as { sdkSessions: Array<{ sessionId: string; firstPrompt?: string }> }
     expect(body.sdkSessions.map((s) => s.sessionId)).toEqual(['sdk-1'])
+    expect(body.sdkSessions[0]!.firstPrompt).toBe('ship it')
     expect(lister).toHaveBeenCalledWith({ dir: '/tmp/project', limit: 10, offset: undefined })
 
     expect((await fetch(`${base}/sdk-sessions`, { method: 'POST' })).status).toBe(405)
