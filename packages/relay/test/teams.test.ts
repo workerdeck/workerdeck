@@ -17,7 +17,7 @@ import {
 import { enrollGateway, enrollGatewayHash, readEnrollments, setGatewayOwner, setGatewayOwners, writeKeyFile } from '../src/enrollment.ts'
 import { parseRules } from '../src/rules.ts'
 import { startRelay, type Relay } from '../src/relay.ts'
-import { accessOps, projectCard, projectForOtherOwner, sanitizeAgent, teamAllows, type TeamNode } from '../src/teams.ts'
+import { accessOps, projectForOtherOwner, sanitizeAgent, teamAllows, type TeamNode } from '../src/teams.ts'
 
 type TeamCall = { kind: TeamFrameKind; origin: RelayTeamOrigin; to: string; op?: string }
 
