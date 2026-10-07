@@ -51,9 +51,11 @@ async function gateway(
   await relay.reload()
   const registry = new SessionRegistry()
   const projects = new ProjectInfoService({ decorate: (info) => (agents[info.id] ? { ...info, agent: agents[info.id] } : info) })
+  let link: RelayLink | undefined
   const service = createPeerService({
     refs: { registry },
     projects,
+    defaultOwner: () => link?.status().owner,
     teams: {
       relayAgent: (id) => {
         const ref = agents[id]
@@ -86,20 +88,21 @@ async function gateway(
     inboundStatus: async () => ({ edges: [] }),
     reconcile: async () => {},
   }
-  const link: RelayLink = createRelayLink(
+  const created: RelayLink = createRelayLink(
     { url: relay.url, gateway: name, key, expose },
     service,
     () => {},
     () => handler,
   )
-  cleanups.push(() => link.close())
+  link = created
+  cleanups.push(() => created.close())
   const published = runners.filter(
     (runner) =>
       (!expose?.scope || runner.scope?.team === expose.scope.team) &&
       (agents[runner.id]?.lead === undefined || teams.spans?.includes(runner.id) === true),
   ).length
   await until(() => relay.status().gateways.find((row) => row.name === name)?.sessions === published, `${name} published`)
-  return link
+  return created
 }
 
 describe('peer relay link', () => {

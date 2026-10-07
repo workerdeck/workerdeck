@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { peerOps, type AgentRef, type AgentResponse, type ProfileInfo, type SessionInfo } from '@workerdeck/protocol'
 import type { RelayOrigin } from '@workerdeck/relay-client'
 import { createWorkerServer, type WorkerServerOptions } from '../src/index.ts'
+import type { LateBoundRefs } from '../src/options.ts'
+import { OwnerService } from '../src/services/owners.ts'
+import { TeamLinks, type TeamTransport } from '../src/services/team-links.ts'
 import { createMemoryAgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService } from '../src/services/agents.ts'
 import { createPeerService, relayEntry } from '../src/services/peers.ts'
@@ -218,5 +221,121 @@ describe('shared agents on one gateway and through the relay', () => {
     expect((await service.relaySend({ ...origin, agent: unshared }, 'box', 'hello', undefined, 'mini')).delivered).toBe(false)
     expect((await service.relaySend(origin, 'wild', 'hello', undefined, 'mini')).delivered).toBe(false)
     expect(registry.get('box')).toBeDefined()
+  })
+})
+
+describe('G review follow-ups', () => {
+  type Party = Pick<SessionInfo, 'owner' | 'agent' | 'permissionMode'>
+
+  it('checks a send again on the woken session, right before it lands', async () => {
+    const parties: Record<string, Party> = {
+      stack: { owner: 'tobias', agent: { id: 'S', name: 'Stack-Lead', shared: true } },
+      box: { owner: 'silkweave', agent: { id: 'B', name: 'Box-Lead', shared: true } },
+    }
+    const registry = new SessionRegistry()
+    const box = new PeerRunner('box')
+    let wake: () => void = () => {}
+    const refs: LateBoundRefs = {
+      registry,
+      parking: {
+        listInfo: async () => [{ ...box.info(), status: 'parked' }],
+        get: async (id: string) => (id === 'box' ? { id, info: { ...box.info(), status: 'parked' } } : null),
+        ensureLive: async (id: string) => {
+          await new Promise<void>((resolve) => (wake = resolve))
+          registry.register(box)
+          return registry.get(id)
+        },
+      } as unknown as LateBoundRefs['parking'],
+    }
+    const projects = new ProjectInfoService({ decorate: (info) => ({ ...info, ...parties[info.id] }) })
+    const service = createPeerService({ refs, multiOwner: () => true, projects })
+    registry.register(new PeerRunner('stack'))
+    const origin: RelayOrigin = {
+      gateway: 'mac',
+      owner: 'tobias',
+      sessionId: 'x',
+      agent: { id: 'mac:T', name: 'T', shared: true },
+      hops: [],
+    }
+
+    const lowered = service.send('stack', 'box', 'hello')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    parties.box = { ...parties.box, agent: { id: 'B', name: 'Box-Lead' } }
+    wake()
+    expect((await lowered).delivered).toBe(false)
+
+    registry.evict('box')
+    parties.box = { owner: 'silkweave', agent: { id: 'B', name: 'Box-Lead', shared: true } }
+    const unprompted = service.relaySend(origin, 'box', 'hello', undefined, 'mini')
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    parties.box = { ...parties.box, permissionMode: 'bypassPermissions' }
+    wake()
+    expect((await unprompted).delivered).toBe(false)
+    expect(box.sent).toEqual([])
+  })
+
+  it('never lends the sender owner to a target that names none', async () => {
+    const member = new PeerRunner('m')
+    const registry = new SessionRegistry()
+    registry.register(member)
+    let mode: string | undefined = 'bypassPermissions'
+    const projects = new ProjectInfoService({
+      decorate: (info) => ({
+        ...info,
+        agent: { id: 'M', name: 'Mate', lead: 'mac:L' },
+        permissionMode: mode as SessionInfo['permissionMode'],
+      }),
+    })
+    const origin: RelayOrigin = { gateway: 'mac', owner: 'alice', sessionId: 'l', agent: { id: 'mac:L', name: 'Lead' }, hops: [] }
+    const teams = { relayAgent: () => undefined, spansGateways: () => true, agentName: () => undefined, vouches: () => true }
+    for (const defaultOwner of ['bob', undefined]) {
+      const service = createPeerService({ refs: { registry }, teams, multiOwner: () => false, defaultOwner: () => defaultOwner, projects })
+      expect((await service.relaySend(origin, 'm', 'hi', undefined, 'mini')).delivered).toBe(false)
+    }
+    mode = 'default'
+    const service = createPeerService({ refs: { registry }, teams, multiOwner: () => false, defaultOwner: () => 'bob', projects })
+    expect((await service.relaySend(origin, 'm', 'hi', undefined, 'mini')).delivered).toBe(true)
+  })
+
+  it('takes the one owner a gateway has as its default, even from a profile', () => {
+    const owners = new OwnerService({ profiles: () => [{ name: 'p', owner: 'bob' }], relayOwners: () => ['bob'] })
+    expect(owners.forProfile(undefined)).toBe('bob')
+    expect(new OwnerService({ profiles: () => [{ name: 'p', owner: 'bob' }], relayOwners: () => ['alice'] }).defaultOwner()).toBeUndefined()
+  })
+
+  it('refuses a team across owners for an agent that runs without prompts, locally and remotely', async () => {
+    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'mini' })
+    await agents.hydrate()
+    const make = async (name: string, owner: string, permissionMode?: 'bypassPermissions') =>
+      (await agents.create(agents.draft({ name, owner, config: permissionMode ? { permissionMode } : {} }) as StoredAgent)) as StoredAgent
+    const lead = await make('Lead', 'alice')
+    const wild = await make('Wild', 'bob', 'bypassPermissions')
+    expect(agents.leadRefusal(wild, lead.id, true)).toMatchObject({
+      status: 409,
+      error: expect.stringMatching(/without permission prompts/),
+    })
+    expect(agents.leadRefusal(await make('Tame', 'bob'), lead.id, true)).toBeNull()
+    expect(agents.leadRefusal(await make('Own', 'alice', 'bypassPermissions'), lead.id)).toBeNull()
+
+    const sent: Array<{ kind: string }> = []
+    const transport: TeamTransport = {
+      gateway: 'mini',
+      ready: () => undefined,
+      team: async (kind) => {
+        sent.push({ kind })
+        return { ok: true, leadName: 'Remote', owner: 'carol' }
+      },
+      teamStatus: async () => ({ edges: [] }),
+      nudge: () => {},
+    }
+    const teams = new TeamLinks({ agents, transport })
+    const joined = await teams.join(wild, 'mac:R', (remote) => agents.update(wild.id, { lead: 'mac:R' }, { joined: remote }))
+    expect(joined).toMatchObject({ status: 409 })
+    expect(sent.map((frame) => frame.kind)).toEqual(['team.join', 'team.leave'])
+    expect(agents.get(wild.id)?.lead).toBeUndefined()
+
+    const wildLead = await make('WildLead', 'alice', 'bypassPermissions')
+    await teams.invite(wildLead, 'pi:M', 'dan')
+    expect((await teams.inbound('team.join', { gateway: 'pi', owner: 'dan', agent: 'pi:M' }, wildLead.id, 'o1')).ok).toBe(false)
   })
 })

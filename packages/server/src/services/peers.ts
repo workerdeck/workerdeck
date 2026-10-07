@@ -60,6 +60,8 @@ export type PeerServiceDeps = {
   teams?: PeerAgentTeams
   // Whether this gateway runs sessions of several owners; then a session with no owner matches nobody.
   multiOwner?: () => boolean
+  // The owner a session that names none answers to on a gateway of one owner; never taken from a sender.
+  defaultOwner?: () => string | undefined
   options?: PeerServiceOptions
 }
 
@@ -97,7 +99,7 @@ function relayable(
 
 // The gateway's own re-check of the relay's owner and team rule over the relay-stamped origin, after checking that
 // agent's claims against this gateway's records.
-// A session that names no owner on a gateway of one owner is that owner's, which the relay stamped on its row.
+// A session that names no owner on a gateway of one owner is that owner's; an unknown owner never borrows the sender's.
 function teamAdmits(
   info: SessionInfo,
   origin: RelayOrigin,
@@ -105,12 +107,13 @@ function teamAdmits(
   teams: PeerAgentTeams | undefined,
   multiOwner: boolean,
   op: 'peek' | 'send',
+  defaultOwner: string | undefined,
 ): boolean {
   const from = origin.agent
   if (from && teams?.vouches(from, origin.gateway, origin.owner) === false) {
     return false
   }
-  const owner = info.owner ?? (multiOwner ? undefined : origin.owner)
+  const owner = info.owner ?? (multiOwner ? undefined : defaultOwner)
   const to = { owner, agent: qualifyAgent(info.agent, gateway), permissionMode: info.permissionMode }
   return peerOps({ owner: origin.owner, agent: from }, to, multiOwner)[op]
 }
@@ -287,10 +290,19 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       return { delivered: false, reason: `no such session: ${sessionId}` }
     }
     const hops = [...(options?.hops ?? inbound.get(from) ?? []), from]
-    return deliver(target, text, { kind: 'peer', sessionId: from, name: me.agent?.name ?? me.title, engine: me.engine, hops }, from)
+    const origin: MessageOrigin = { kind: 'peer', sessionId: from, name: me.agent?.name ?? me.title, engine: me.engine, hops }
+    return deliver(target, text, origin, from, (current) => opsBetween(me, current, multiOwner()).send)
   }
 
-  const deliver = async (target: SessionInfo, text: string, origin: MessageOrigin, rateKey: string): Promise<PeerSendResult> => {
+  // `allowed` runs again on the woken session, right before the message lands: sharing, team or permission mode may have
+  // changed while it woke.
+  const deliver = async (
+    target: SessionInfo,
+    text: string,
+    origin: MessageOrigin,
+    rateKey: string,
+    allowed: (current: SessionInfo) => boolean,
+  ): Promise<PeerSendResult> => {
     const sessionId = target.id
     if (target.status === 'closed' || target.status === 'failed') {
       return { delivered: false, reason: `session ${sessionId} is ${target.status}` }
@@ -308,6 +320,9 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     const runner = (await deps.refs.parking?.ensureLive(sessionId)) ?? registry().get(sessionId)
     if (!runner) {
       return { delivered: false, reason: `session ${sessionId} could not be woken` }
+    }
+    if (!allowed(deps.projects.withProject(runner.info()))) {
+      return { delivered: false, reason: `no such session: ${sessionId}` }
     }
     const before = runner.info().status
     try {
@@ -332,7 +347,9 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     op: 'peek' | 'send',
   ): Promise<SessionInfo | undefined> => {
     const info = await infoOf(sessionId)
-    return info && relayable(info, exposed, deps.teams, true) && teamAdmits(info, origin, gateway, deps.teams, multiOwner(), op)
+    return info &&
+      relayable(info, exposed, deps.teams, true) &&
+      teamAdmits(info, origin, gateway, deps.teams, multiOwner(), op, deps.defaultOwner?.())
       ? info
       : undefined
   }
@@ -391,6 +408,9 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       text,
       { kind: 'peer', sessionId: from, hostId: origin.gateway, name: origin.name, engine: origin.engine, hops: origin.hops },
       from,
+      (current) =>
+        relayable(current, exposed, deps.teams, true) &&
+        teamAdmits(current, origin, gateway, deps.teams, multiOwner(), 'send', deps.defaultOwner?.()),
     )
   }
 

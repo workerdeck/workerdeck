@@ -141,6 +141,11 @@ export class TeamLinks {
       if (!result.ok) {
         return { status: 409, error: result.reason }
       }
+      const unprompted = result.owner !== undefined && result.owner !== this.#ownerOf(mover) ? this.#agents.unpromptedRefusal(mover) : null
+      if (unprompted) {
+        this.#notify('team.leave', mover.id, lead, op, this.#ownerOf(mover))
+        return unprompted
+      }
       const previous = this.#agents.get(mover.id)
       let stored: StoredAgent | AgentRefusal
       try {
@@ -335,6 +340,10 @@ export class TeamLinks {
       }
       if (this.#agents.joiningLead(lead.id) !== undefined) {
         return { status: 409, error: `${lead.name} is joining a team` }
+      }
+      const unprompted = origin.owner !== this.#ownerOf(lead) ? this.#agents.unpromptedRefusal(lead) : null
+      if (unprompted) {
+        return unprompted
       }
       const members = lead.remoteMembers ?? []
       const existing = members.find((member) => member.agent === origin.agent)

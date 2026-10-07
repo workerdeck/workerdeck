@@ -1484,7 +1484,12 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   another owner is sent to a session in `bypassPermissions` or `dontAsk`, team or not, and such a
   session is never published as shared. The relay's `teamAllows` + `accessOps` mirror it with
   team claims checked against the lead's accepts; the target gateway re-checks every inbound
-  frame against the current record, so lowering sharing blocks the next frame, and `PATCH
+  frame against the current record, and checks a send once more on the woken runner right before
+  `sendMessage` (a wake is asynchronous), so lowering sharing blocks the next frame. A target that
+  names no owner takes this gateway's one owner (`OwnerService.defaultOwner`, which counts profile
+  owners and an old relay's `owner` too), never the sender's. A team across owners refuses, at
+  join on both gateways, an agent whose effective mode (live session, config, profile default) is
+  `bypassPermissions` or `dontAsk`; a later switch is caught at delivery. `PATCH
   /agents/:id { sharing }` republishes at once. `AgentInfo.sharing` is stored at create (the
   request, else profile `defaults.sharing`, else `agentSharing.default` / `--agent-sharing`, else
   private), absent

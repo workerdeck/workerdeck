@@ -53,13 +53,16 @@ export class OwnerService {
     return owners.size > 1
   }
 
-  // Without any owner configured here, a relay that enrolled this gateway with exactly one owner names it.
+  // The configured default, else the one owner this gateway has at all (config, records and enrollments together).
   defaultOwner(): string | undefined {
     if (this.#owner !== undefined) {
       return this.#owner
     }
-    const relay = this.#enrolledNow()
-    return this.local().size === 0 && relay.length === 1 ? relay[0] : undefined
+    const owners = this.local()
+    for (const owner of [...this.#retained, ...this.#enrolledNow(), ...this.#enrolled]) {
+      owners.add(owner)
+    }
+    return owners.size === 1 ? [...owners][0] : undefined
   }
 
   known(owner: string): boolean {

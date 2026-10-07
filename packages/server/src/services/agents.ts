@@ -17,6 +17,8 @@ export type AgentServiceOptions = {
   basePath: string
   avatars?: boolean
   sleepAfterMs?: number
+  // The permission mode the agent's session runs in, or would start in: its config, its live session, its profile.
+  modeOf?: (agent: StoredAgent) => string | undefined
   // False when the gateway shares no agent with other owners: stored sharing stays, but nothing is shared.
   allowShared?: boolean
   // This gateway's relay name: a lead id qualified with it is local.
@@ -109,6 +111,7 @@ export class AgentService {
   #avatars: boolean
   #sleepAfterMs: number
   #allowShared: boolean
+  #modeOf: (agent: StoredAgent) => string | undefined
   #gateway: string | undefined
   #now: () => number
   #agents = new Map<string, StoredAgent>()
@@ -127,6 +130,7 @@ export class AgentService {
     this.#avatars = options.avatars ?? false
     this.#sleepAfterMs = options.sleepAfterMs ?? AGENT_SLEEP_AFTER_MS_DEFAULT
     this.#allowShared = options.allowShared !== false
+    this.#modeOf = options.modeOf ?? ((agent) => agent.config.permissionMode)
     this.#gateway = options.gateway
     this.#now = options.now ?? Date.now
   }
@@ -491,7 +495,18 @@ export class AgentService {
         error: `${mover.name} belongs to ${mover.owner ?? 'no owner'} and ${lead.name} to ${lead.owner ?? 'no owner'}; confirm a team across owners`,
       }
     }
+    if (lead.owner !== mover.owner) {
+      return this.unpromptedRefusal(mover) ?? this.unpromptedRefusal(lead)
+    }
     return null
+  }
+
+  // A team across owners never holds an agent that runs tools without asking (decision 15).
+  unpromptedRefusal(agent: StoredAgent): AgentRefusal | null {
+    const mode = this.#modeOf(agent)
+    return mode === 'bypassPermissions' || mode === 'dontAsk'
+      ? { status: 409, error: `${agent.name} runs without permission prompts (${mode}); a team across owners needs them` }
+      : null
   }
 
   // For records from before owners: each agent without one gets its profile's owner once that resolves, and keeps it.

@@ -137,6 +137,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     avatars: options.avatars !== undefined,
     sleepAfterMs: options.agentSleepAfterMs,
     allowShared: options.agentSharing?.allowShared,
+    modeOf: (agent) =>
+      (agent.sessionId === undefined ? undefined : registry.get(agent.sessionId)?.info().permissionMode) ??
+      agent.config.permissionMode ??
+      (agent.config.profile === undefined ? undefined : profiles.get(agent.config.profile)?.defaults?.permissionMode),
     gateway: options.relay?.gateway,
   })
   const projects = new ProjectInfoService({
@@ -262,6 +266,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
             },
           },
           multiOwner: () => owners.multi(),
+          defaultOwner: () => owners.defaultOwner(),
           options: options.peers,
         })
   const shellDirectory = shells ? createShellDirectory(shells, { runnerFor: (id) => registry.get(id) }) : undefined
@@ -285,7 +290,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         })
       : undefined
   if (relay) {
-    relayOwners = () => relay.status().owners ?? []
+    // A relay from before owners names this gateway's one owner in `owner` alone.
+    relayOwners = () => {
+      const status = relay.status()
+      return status.owners ?? (status.online && status.owner !== undefined ? [status.owner] : [])
+    }
     teamLinks = new TeamLinks({
       agents,
       owners,
