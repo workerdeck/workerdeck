@@ -1492,6 +1492,13 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   3.4.0 / 3.6.1 at release, so cross-gateway joins could not be tried; Tobias chose to release and
   check during rollout), a paid `smoke:teams` across gateways, iOS (deferred to Agent Teams phase 5).
 
+  **3.8.2** - **policy-settled requests never offered, released 2026-10-07** (tag `v3.8.2`). A
+  **patch**, protocol stays **1** (`permission_requested.byPolicy` is optional). A request settled by
+  the session's own policy (`questionBehavior` `auto`/`deny`, shell read tools) reached queue
+  `job_progress`, notifications and the VS Code popup as one to answer; the Silkweave Box answered,
+  got `false` and cancelled the job. **Verified**: full serial `pnpm test` with new queue and
+  notifier tests; the Box's live bypass job with a denied question (with its workaround).
+
   **3.8.1** - **jobs-only bypass, released 2026-10-07** (tag `v3.8.1`). **`v3.8.0` is a pushed but
   never-published tag**: its CI gate failed on a relay reload race (the file watcher's reload and an
   explicit one overlapped, and the stale read landed last); reloads are serial now. Never publish it.
