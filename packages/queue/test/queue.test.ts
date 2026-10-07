@@ -420,7 +420,7 @@ describe('JobQueue', () => {
 
   it('re-queues a failed run with backoff, then completes on a later attempt', async () => {
     const { queue, runners, events } = makeQueue()
-    const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 5 }))
+    const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 200 }))
     await tick()
     runners[0]!.emit(assistantWithUsage(90))
     runners[0]!.emit(errorResult())
@@ -451,7 +451,7 @@ describe('JobQueue', () => {
 
   it('sums our own costUsd across attempts, for engines that report no cost of their own', async () => {
     const { queue, runners } = makeQueue()
-    const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 5 }))
+    const job = await queue.submit(jobRequest({ attempts: 2, retryDelayMs: 200 }))
     await tick()
     runners[0]!.emit(priced(errorResult(), 0.4))
     await tick()
