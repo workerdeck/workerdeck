@@ -197,7 +197,8 @@ export class TeamLinks {
       }
       const at = this.#now()
       const expected = owner ?? this.#ownerOf(current)
-      const renewed = existing?.state === 'invited' && existing.owner === expected ? existing.invite : undefined
+      const live = existing?.state === 'invited' && existing.owner === expected && (existing.expiresAt ?? Infinity) > at
+      const renewed = live ? existing.invite : undefined
       const invite = renewed ?? randomUUID()
       const invited: RemoteMember = { agent, owner: expected, state: 'invited', at, expiresAt: at + this.#inviteTtlMs, invite }
       return { ...current, remoteMembers: [...members.filter((member) => member.agent !== agent), invited] }

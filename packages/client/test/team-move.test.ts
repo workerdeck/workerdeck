@@ -28,7 +28,10 @@ function relay(gateway: string) {
 const relays: Record<string, ReturnType<typeof relay>> = { mac: relay('sw-mac'), desk: relay('sw-desk') }
 
 function pair(calls: string[], desk: Failures = {}, mac: Failures = {}, inviteState?: 'invited' | 'accepted') {
-  const clients: Record<string, WorkerDeckClient> = { mac: fakeClient(calls, 'mac', mac, inviteState), desk: fakeClient(calls, 'desk', desk) }
+  const clients: Record<string, WorkerDeckClient> = {
+    mac: fakeClient(calls, 'mac', mac, inviteState),
+    desk: fakeClient(calls, 'desk', desk),
+  }
   return (id: string) => clients[id]
 }
 
@@ -39,7 +42,10 @@ describe('runTeamMove', () => {
   it('joins on one gateway with a single PATCH', async () => {
     const calls: string[] = []
     const mac = fakeClient(calls, 'mac')
-    const outcome = await runTeamMove({ mover: { hostId: 'mac', sessionId: 's1', agentId: 'P' }, lead: { hostId: 'mac', agentId: 'A' }, order: 0 }, () => mac)
+    const outcome = await runTeamMove(
+      { mover: { hostId: 'mac', sessionId: 's1', agentId: 'P' }, lead: { hostId: 'mac', agentId: 'A' }, order: 0 },
+      () => mac,
+    )
     expect(outcome).toEqual({ committed: 'yes' })
     expect(calls).toEqual(['mac update P {"lead":"A","order":0}'])
   })
@@ -47,7 +53,10 @@ describe('runTeamMove', () => {
   it('carries the confirmation of a cross-owner join on one gateway, for an agent and for an adoption', async () => {
     const calls: string[] = []
     const mac = fakeClient(calls, 'mac')
-    await runTeamMove({ mover: { hostId: 'mac', sessionId: 's1', agentId: 'P' }, lead: { hostId: 'mac', agentId: 'A' }, crossOwner: true }, () => mac)
+    await runTeamMove(
+      { mover: { hostId: 'mac', sessionId: 's1', agentId: 'P' }, lead: { hostId: 'mac', agentId: 'A' }, crossOwner: true },
+      () => mac,
+    )
     await runTeamMove({ mover: { hostId: 'mac', sessionId: 's2' }, lead: { hostId: 'mac', agentId: 'A' }, crossOwner: true }, () => mac)
     expect(calls).toEqual(['mac update P {"lead":"A","crossOwner":true}', 'mac create {"adopt":"s2","lead":"A","crossOwner":true}'])
   })
@@ -156,6 +165,23 @@ describe('runTeamMove', () => {
       adopted: { hostId: 'desk', agentId: 'adopted' },
     })
     expect(calls).toEqual(['desk create {"adopt":"s9"}', 'mac invite A sw-desk:adopted'])
+  })
+
+  it('reports an invitation of unknown state when the invite got no answer, and offers no withdrawal without an id', async () => {
+    const calls: string[] = []
+    const outcome = await runTeamMove(
+      { mover: { hostId: 'desk', sessionId: 's9', agentId: 'W' }, lead: { hostId: 'mac', agentId: 'A' } },
+      pair(calls, {}, { invite: offline }),
+      (id) => relays[id],
+    )
+    expect(outcome).toEqual({
+      committed: 'no',
+      error: 'fetch failed',
+      invitation: { hostId: 'mac', leadAgentId: 'A', member: 'sw-desk:W', state: 'unknown' },
+    })
+    expect(calls).toEqual(['mac invite A sw-desk:W'])
+    expect(teamMoveMessage(outcome)).toBe("Fetch failed. The lead's gateway may hold an invitation; it lapses within 10 minutes.")
+    await expect(withdrawTeamInvitation(outcome.invitation!, pair(calls))).rejects.toThrow('that invitation has no id to withdraw by')
   })
 
   it('collects every sibling whose order failed instead of stopping at the first', async () => {

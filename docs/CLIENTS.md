@@ -502,7 +502,7 @@ the `TeamMoveOutcome` (`packages/client`) comes back as one message, with a With
 button while an invitation stays open. The QuickPick title carries the owner; a top-level agent
 gets Share with other owners / Make private (marked "turned off on this gateway" when the gateway
 refuses sharing, since QuickPick rows cannot be disabled). New Agent asks Private or Shared only
-for a gateway on a relay that allows sharing, defaulting as the gateway would. The host setting
+for a gateway that allows sharing and dials a relay or hosts several owners (`meta.agents.multiOwner`), defaulting as the gateway would. The host setting
 `workerdeck.host.agentSharing` (`private`, `shared`, `never`) reaches the server as
 `--agent-sharing` when not `private`, and is a restart-offer key. `refreshLocality` reads `/meta`
 for loopback hosts too (their locality needs no answer, their relay identity does) and forgets a

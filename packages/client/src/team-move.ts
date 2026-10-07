@@ -12,7 +12,14 @@ export type TeamMovePlan = {
   crossOwner?: true
 }
 
-export type TeamInvitation = { hostId: string; leadAgentId: string; member: string; invite: string; state: 'withdrawn' | 'open' }
+// `unknown`: the invite got no answer, so the lead's gateway may hold one; with no id there is nothing safe to withdraw.
+export type TeamInvitation = {
+  hostId: string
+  leadAgentId: string
+  member: string
+  invite?: string
+  state: 'withdrawn' | 'open' | 'unknown'
+}
 
 // `committed: 'unknown'` means the gateway never answered the join, so it may still go through.
 export type TeamMoveOutcome = {
@@ -107,24 +114,26 @@ async function acrossGateways(
   const member = `${moverRelay.gateway}:${agentId}`
   const invited = await step(leadGateway.inviteRemoteMember(target.agentId, member, move.mover.owner))
   if (!invited.ok) {
-    return { committed: 'no', error: invited.error, ...kept }
+    const unanswered = invited.definite
+      ? {}
+      : { invitation: { hostId: target.hostId, leadAgentId: target.agentId, member, state: 'unknown' as const } }
+    return { committed: 'no', error: invited.error, ...kept, ...unanswered }
   }
   const entry = invited.response.agent.remoteMembers?.find((candidate) => candidate.agent === member)
+  const invite = entry?.state === 'invited' ? entry.invite : undefined
   const invitation: TeamInvitation | undefined =
-    entry?.state === 'invited' && entry.invite !== undefined
-      ? { hostId: target.hostId, leadAgentId: target.agentId, member, invite: entry.invite, state: 'open' }
-      : undefined
+    invite === undefined ? undefined : { hostId: target.hostId, leadAgentId: target.agentId, member, invite, state: 'open' }
   const joined = await step(gateway.updateAgent(agentId, { lead: `${target.gateway}:${target.agentId}`, ...order }))
   if (joined.ok) {
     return { committed: 'yes', ...kept }
   }
-  if (!invitation) {
+  if (!invitation || invite === undefined) {
     return { committed: joined.definite ? 'no' : 'unknown', error: joined.error, ...kept }
   }
   if (!joined.definite) {
     return { committed: 'unknown', error: joined.error, ...kept, invitation }
   }
-  const withdrawn = await step(leadGateway.withdrawInvitation(target.agentId, member, invitation.invite))
+  const withdrawn = await step(leadGateway.withdrawInvitation(target.agentId, member, invite))
   return { committed: 'no', error: joined.error, ...kept, invitation: { ...invitation, state: withdrawn.ok ? 'withdrawn' : 'open' } }
 }
 
@@ -134,8 +143,8 @@ export async function withdrawTeamInvitation(
   clientOf: (hostId: string) => WorkerDeckClient | undefined,
 ): Promise<void> {
   const client = clientOf(invitation.hostId)
-  if (!client) {
-    throw new Error('that gateway is not configured here')
+  if (!client || invitation.invite === undefined) {
+    throw new Error(client ? 'that invitation has no id to withdraw by' : 'that gateway is not configured here')
   }
   await client.withdrawInvitation(invitation.leadAgentId, invitation.member, invitation.invite)
 }
@@ -155,6 +164,8 @@ export function teamMoveMessage(outcome: TeamMoveOutcome): string | undefined {
     parts.push('The invitation was withdrawn.')
   } else if (outcome.invitation?.state === 'open') {
     parts.push('The invitation stays open for up to 10 minutes.')
+  } else if (outcome.invitation?.state === 'unknown') {
+    parts.push("The lead's gateway may hold an invitation; it lapses within 10 minutes.")
   }
   if (outcome.unordered?.length) {
     const count = outcome.unordered.length

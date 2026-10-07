@@ -145,6 +145,28 @@ describe('cross-gateway teams, same owner', () => {
     expect(await withdraw(again!)).toEqual({ status: 409, body: { error: 'that invitation is gone: it expired or was withdrawn' } })
   })
 
+  it('mints a fresh invitation id when renewing an expired invitation before the prune', async () => {
+    let now = 1_000
+    const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'mac' })
+    await agents.hydrate()
+    const transport = {
+      ready: () => undefined,
+      owner: () => 'tobias',
+      team: async (): Promise<TeamResult> => ({ ok: true }),
+      teamStatus: async () => ({ edges: [] }),
+      nudge: () => {},
+    } as unknown as TeamTransport
+    const teams = new TeamLinks({ agents, transport, now: () => now })
+    const lead = (await agents.create(agents.draft({ name: 'Lead' }) as StoredAgent)) as StoredAgent
+    const first = ((await teams.invite(lead, 'pc:M')) as StoredAgent).remoteMembers?.[0]?.invite
+    now += 11 * 60_000
+    const renewed = (await teams.invite(agents.get(lead.id)!, 'pc:M')) as StoredAgent
+    const second = renewed.remoteMembers?.[0]?.invite
+    expect(second).not.toBe(first)
+    expect(await teams.removeMember(renewed, 'pc:M', first)).toEqual({ status: 409, error: 'a newer invitation replaced that one' })
+    expect(agents.get(lead.id)?.remoteMembers).toMatchObject([{ agent: 'pc:M', state: 'invited', invite: second }])
+  })
+
   it('accepts a same-owner join without an invitation from a gateway listed in acceptFrom', async () => {
     const { relay, stateDir } = await relayRig()
     const mac = await gateway(relay, stateDir, 'mac', ['win'])

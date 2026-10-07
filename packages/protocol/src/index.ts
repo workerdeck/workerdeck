@@ -1092,6 +1092,7 @@ export type GatewayRelayMeta = {
 
 export type GatewayAgentDefaults = {
   owner?: string
+  multiOwner?: true
   sharing: Sharing
   allowShared: boolean
 }

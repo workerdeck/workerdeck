@@ -1127,7 +1127,8 @@ its first change; after that it returns a `TeamMoveOutcome`: `committed` (`yes`,
 when the join got no answer and may still commit), a kept adoption (never undone: retiring would
 end the session), the invitation it opened across gateways, and siblings whose `order` failed. A
 definite refusal (an HTTP answer below 500) withdraws its own invitation by the invitation's id
-(`withdrawInvitation`, a conditional `DELETE ?invite=`); an unknown join leaves it open, and the
+(`withdrawInvitation`, a conditional `DELETE ?invite=`); an unknown join leaves it open (an invite
+that got no answer is reported as `state: 'unknown'` with no id, so nothing is withdrawn), and the
 host offers `withdrawTeamInvitation` as the next action, which a committed join answers with 409.
 Across gateways the invitation carries the mover's owner (`plan.mover.owner`), else the lead's
 gateway expects its own owner and refuses the join; `plan.crossOwner` carries the person's

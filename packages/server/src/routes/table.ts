@@ -165,6 +165,7 @@ function agentDefaults(ctx: ServerContext): GatewayAgentDefaults {
   const owner = ctx.owners.defaultOwner()
   return {
     ...(owner === undefined ? {} : { owner }),
+    ...(ctx.owners.multi() ? { multiOwner: true as const } : {}),
     sharing: allowShared && ctx.options.agentSharing?.default === 'shared' ? 'shared' : 'private',
     allowShared,
   }

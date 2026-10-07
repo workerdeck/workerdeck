@@ -419,7 +419,8 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
 }
 
 // Both answers are optional: a blank name lets the gateway suggest one, a blank brief means none. Sharing is asked
-// only where another owner could see the agent at all: a gateway on a relay that allows sharing.
+// only where another owner could see the agent at all: a gateway that allows sharing and either dials a relay or
+// hosts several owners itself.
 async function askAgent(deps: NewSessionDeps, adapter: AdapterChoice): Promise<NewAgentAnswers | typeof CANCEL> {
   const name = await vscode.window.showInputBox({
     title: 'New agent: name',
@@ -440,7 +441,7 @@ async function askAgent(deps: NewSessionDeps, adapter: AdapterChoice): Promise<N
   const answers = { name: name.trim() || undefined, brief: brief.trim() || undefined }
   const host = deps.store.get(adapter.host.id)
   const defaults = host ? agentDefaultsCached(host) : undefined
-  if (!host || !relayOfCached(host) || defaults?.allowShared === false) {
+  if (!host || !(relayOfCached(host) || defaults?.multiOwner) || defaults?.allowShared === false) {
     return answers
   }
   const fallback = newAgentSharing(defaults, adapter.profile)
