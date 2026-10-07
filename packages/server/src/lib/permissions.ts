@@ -1,4 +1,4 @@
-import type { PermissionMode, ResolvePermissionRequest } from '@workerdeck/protocol'
+import { isJobRun, type PermissionMode, type ResolvePermissionRequest, type SessionInfo } from '@workerdeck/protocol'
 
 export type PermissionModePolicy = { operator: boolean; disableBypass?: boolean }
 
@@ -19,6 +19,18 @@ export function refusePermissionMode(mode: PermissionMode | undefined, policy: P
     return `permission mode '${mode}' is reserved to operators`
   }
   return null
+}
+
+export type BypassOption = boolean | 'sessions' | undefined
+
+export function bypassDisabled(option: BypassOption, origin: { job?: boolean } = {}): boolean {
+  return option === true || (option === 'sessions' && !origin.job)
+}
+
+export function refuseJobInput(info: SessionInfo, option: BypassOption): string | null {
+  return option === 'sessions' && isJobRun(info) && info.permissionMode === 'bypassPermissions'
+    ? 'this job runs in bypassPermissions; it takes no input until it ends'
+    : null
 }
 
 export function permissionDecision(input: PermissionDecisionInput): ResolvePermissionRequest {

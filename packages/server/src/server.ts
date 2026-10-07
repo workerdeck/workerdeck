@@ -266,6 +266,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
             },
           },
           multiOwner: () => owners.multi(),
+          disableBypassPermissions: options.disableBypassPermissions,
           defaultOwner: () => owners.defaultOwner(),
           options: options.peers,
         })

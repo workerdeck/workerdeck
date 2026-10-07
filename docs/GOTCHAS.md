@@ -159,6 +159,15 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   is spread into the SDK options *after* the vetted `permissionMode`, so a body key the ladder
   never looked at used to bring bypass back through the side. The projection that closes that is
   in § Server, profiles & auth ("`SessionRunnerConfig` is a host-only superset").
+- **`disableBypassPermissions: 'sessions'` leaves one door open: an operator's job.** Sessions,
+  agents, profile defaults and the WS mode switch refuse bypass as with `true`; `POST /jobs` (and
+  only it, `vetCreateRequest(.., { job: true })`) lets it through, and non-operators are refused
+  anyway (`OPERATOR_ONLY_MODES`). A job's session sits in the registry while it runs and anyone
+  who may attach could type into it, so `refuseJobInput` locks it: a WS `user_message` and a peer
+  send to a job session still in `bypassPermissions` are refused until the job ends (the job's
+  first result closes it). Lowering its mode lifts the lock; raising it back is refused.
+  The job's own `context_reset` is not locked: the agent asking is the one already in bypass.
+  Every new path that feeds a message into a session must call `refuseJobInput`.
 
 ## Provider engine (AI SDK v7)
 

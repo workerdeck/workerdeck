@@ -3,7 +3,7 @@ import type { WebSocket } from 'ws'
 import { isSlashCommand, type Runner } from '@workerdeck/core'
 import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
-import { permissionDecision, refusePermissionMode } from '../lib/permissions.ts'
+import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
 import { mentionsFor } from '../services/peers.ts'
 import { sleepRunner } from './sleep.ts'
@@ -94,6 +94,10 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
   const { attachmentStore, bridge } = ctx
   switch (frame.type) {
     case 'user_message': {
+      const locked = refuseJobInput(runner.info(), ctx.options.disableBypassPermissions)
+      if (locked) {
+        throw new Error(locked)
+      }
       // The one place `mentions` is ever set: this frame is a person typing. A slash command is
       // matched on the whole message by the CLI, so nothing may be appended to one, and a failure
       // to resolve is silent - a hint must never lose the text it was a hint about.
@@ -137,7 +141,7 @@ async function handleCommand(ctx: ServerContext, frame: ClientFrame, runner: Run
       return
     }
     case 'set_permission_mode': {
-      const refused = refusePermissionMode(frame.mode, { operator: access.operator, disableBypass: ctx.options.disableBypassPermissions })
+      const refused = refusePermissionMode(frame.mode, { operator: access.operator, disableBypass: bypassDisabled(ctx.options.disableBypassPermissions) })
       if (refused) {
         throw new Error(refused)
       }

@@ -376,3 +376,18 @@ describe('peer service: teams', () => {
     })
   })
 })
+
+describe('peer service: a job running in bypass', () => {
+  it("takes no peer message under disableBypassPermissions 'sessions'", async () => {
+    const registry = new SessionRegistry()
+    const service = createPeerService({ refs: { registry }, projects: new ProjectInfoService(), disableBypassPermissions: 'sessions' })
+    registry.observe((runner) => service.watch(runner))
+    registry.register(new PeerRunner('a'))
+    const job = new PeerRunner('j')
+    const info = job.info.bind(job)
+    job.info = () => ({ ...info(), meta: { jobId: 'job-1' }, permissionMode: 'bypassPermissions' })
+    registry.register(job)
+    expect(await service.send('a', 'j', 'hi')).toMatchObject({ delivered: false, reason: expect.stringContaining('takes no input') })
+    expect(job.sent).toEqual([])
+  })
+})

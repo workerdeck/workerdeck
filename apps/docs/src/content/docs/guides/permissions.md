@@ -56,7 +56,9 @@ Two modes have extra conditions the CLI enforces:
   Servers can forbid all of it with `disableBypassPermissions` on `createWorkerServer`:
   explicit bypass-mode requests get a 403, and the pre-authorization capability is silently
   stripped (so UIs that request it by default keep working - the later switch attempt then
-  fails with the CLI's own visible error).
+  fails with the CLI's own visible error). `disableBypassPermissions: 'sessions'` does the same
+  for every session but still lets an operator submit a **job** in `bypassPermissions`; while
+  such a job runs, nobody can type into it and no peer can message it.
 - **`auto`** (a model classifier approves/denies) is gated CLI-side: it needs a supporting
   model and plan, and can be disabled via the config dir's settings
   (`permissions.disableAutoMode`). When the gate denies, the CLI falls back to `default` or

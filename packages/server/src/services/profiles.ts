@@ -12,7 +12,7 @@ export type ProfileServiceOptions = {
   seed?: ProfileInfo[]
   store?: ProfileStore
   allowedConfigDirRoots?: string[]
-  disableBypassPermissions?: boolean
+  disableBypassPermissions?: boolean | 'sessions'
   hasEngineRunnerFactory: boolean
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
   decorate: {

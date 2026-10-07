@@ -1,3 +1,4 @@
+import { refuseJobInput, type BypassOption } from '../lib/permissions.ts'
 import {
   PEER_MESSAGE_MAX_CHARS,
   PEER_RECENT_DEFAULT,
@@ -62,6 +63,8 @@ export type PeerServiceDeps = {
   multiOwner?: () => boolean
   // The owner a session that names none answers to on a gateway of one owner; never taken from a sender.
   defaultOwner?: () => string | undefined
+  // A job running in bypass under `disableBypassPermissions: 'sessions'` takes no peer message (`refuseJobInput`).
+  disableBypassPermissions?: BypassOption
   options?: PeerServiceOptions
 }
 
@@ -323,6 +326,10 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     }
     if (!allowed(deps.projects.withProject(runner.info()))) {
       return { delivered: false, reason: `no such session: ${sessionId}` }
+    }
+    const locked = refuseJobInput(runner.info(), deps.disableBypassPermissions)
+    if (locked) {
+      return { delivered: false, reason: locked }
     }
     const before = runner.info().status
     try {

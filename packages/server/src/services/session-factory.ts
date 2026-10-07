@@ -19,7 +19,7 @@ import type {
   ShellDirectory,
 } from '@workerdeck/core'
 import type { Refusal } from '../lib/http.ts'
-import { refusePermissionMode } from '../lib/permissions.ts'
+import { bypassDisabled, refusePermissionMode, type BypassOption } from '../lib/permissions.ts'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
 import type { EngineRunnerContext, ShellAgentWriteOption } from '../options.ts'
@@ -36,7 +36,7 @@ export type SessionFactoryDeps = {
   hostBuildRunnerConfig: (req: CreateSessionRequest) => SessionRunnerConfig
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
   allowedCwdRoots?: string[]
-  disableBypassPermissions?: boolean
+  disableBypassPermissions?: BypassOption
   approvalTimeoutMs?: number | null
   effortDefaults?: Record<string, string>
   requireApiKey?: boolean
@@ -105,8 +105,8 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
 
   const subscriptionNoticeShown = new Set<string>()
 
-  const applyBypassPolicy = (req: CreateSessionRequest): string | null => {
-    if (!deps.disableBypassPermissions) {
+  const applyBypassPolicy = (req: CreateSessionRequest, origin: { job?: boolean } = {}): string | null => {
+    if (!bypassDisabled(deps.disableBypassPermissions, origin)) {
       return null
     }
     const refused = refusePermissionMode(req.permissionMode, { operator: true, disableBypass: true })

@@ -17,7 +17,14 @@ export type VettedCreateRequest = { ok: true; request: CreateSessionRequest } | 
 // the projected object is what the ladder mutates (inert fields stripped, profile name pinned)
 // and what the caller must hand on.
 // `owner` is set when the session's owner is already settled (an agent's), so its profile need not name one.
-export function vetCreateRequest(ctx: ServerContext, body: unknown, auth: AuthContext, owner?: string): VettedCreateRequest {
+// `job` marks the `POST /jobs` door, the one `disableBypassPermissions: 'sessions'` leaves open to bypass.
+export function vetCreateRequest(
+  ctx: ServerContext,
+  body: unknown,
+  auth: AuthContext,
+  owner?: string,
+  origin: { job?: boolean } = {},
+): VettedCreateRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { ok: false, status: 400, error: 'request body must be a JSON object' }
   }
@@ -33,7 +40,7 @@ export function vetCreateRequest(ctx: ServerContext, body: unknown, auth: AuthCo
   }
   const req = pickCreateSessionRequest(body as Record<string, unknown>)
   const { availability, factory } = ctx
-  const early = factory.applyScope(req, auth) ?? refusal(403, factory.applyBypassPolicy(req))
+  const early = factory.applyScope(req, auth) ?? refusal(403, factory.applyBypassPolicy(req, origin))
   if (early) {
     return { ok: false, ...early }
   }

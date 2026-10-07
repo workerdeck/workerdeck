@@ -75,7 +75,9 @@ export type WorkerServerOptions = {
   fallback?: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
   cors?: { origins: string[] }
   maxBodyBytes?: number
-  disableBypassPermissions?: boolean
+  // `true` refuses bypassPermissions everywhere. `'sessions'` refuses it for sessions, agents and mode changes but lets an
+  // operator submit a job in it; nothing typed, sent by a peer or queued by a context reset reaches such a job while it runs.
+  disableBypassPermissions?: boolean | 'sessions'
   // How long a permission prompt or an AskUserQuestion may sit unanswered before the engine denies it.
   // Omitted or null: never - a prompt waits for a human for as long as the session lives. A session may
   // override it per request with CreateSessionRequest.approvalTimeoutMs.

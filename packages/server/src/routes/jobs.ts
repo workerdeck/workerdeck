@@ -40,7 +40,7 @@ export async function handleJobs(
     if (!prompt || typeof prompt !== 'string') {
       fail(400, 'session.prompt is required')
     }
-    const vetted = vetCreateRequest(ctx, body.session, auth)
+    const vetted = vetCreateRequest(ctx, body.session, auth, undefined, { job: true })
     if (!vetted.ok) {
       fail(vetted.status, vetted.error)
     }

@@ -765,6 +765,42 @@ describe('createWorkerServer', () => {
     }
   })
 
+  it("disableBypassPermissions 'sessions' lets an operator's job run in bypass and locks its input", async () => {
+    const harness = fakeHarness()
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      disableBypassPermissions: 'sessions',
+      buildRunnerConfig: (req) => ({ ...req, queryFn: harness.queryFn }),
+      queue: { maxConcurrency: 1 },
+    })
+    const { base, wsBase } = await listenOn(running)
+    const post = (path: string, body: unknown) =>
+      fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+
+    expect((await post('/sessions', { cwd: '/tmp/project', permissionMode: 'bypassPermissions' })).status).toBe(403)
+    const created = await post('/jobs', { session: { cwd: '/tmp/project', prompt: 'go', permissionMode: 'bypassPermissions' } })
+    expect(created.status).toBe(201)
+    const { job } = (await created.json()) as { job: JobInfo }
+    let sessionId: string | undefined
+    await vi.waitFor(async () => {
+      sessionId = ((await (await fetch(`${base}/jobs/${job.id}`)).json()) as { job: JobInfo }).job.sessionId
+      expect(sessionId).toBeDefined()
+    })
+    expect(harness.captured.options?.permissionMode).toBe('bypassPermissions')
+
+    const ws = new WebSocket(`${wsBase}/sessions/${sessionId}/ws`)
+    const collector = frameCollector(ws)
+    await collector.waitFor((f) => f.type === 'attached')
+    ws.send(JSON.stringify({ type: 'user_message', text: 'and also' }))
+    const refused = await collector.waitFor((f) => f.type === 'protocol_error')
+    expect(refused).toMatchObject({ message: expect.stringContaining('takes no input') })
+    ws.send(JSON.stringify({ type: 'set_permission_mode', mode: 'bypassPermissions' }))
+    await collector.waitFor((f) => f.type === 'protocol_error' && /disableBypassPermissions/.test(f.message))
+    expect(harness.captured.inputs.map((m) => m.message.content)).not.toContain('and also')
+    ws.close()
+  })
+
   it('passes allowDangerouslySkipPermissions through to job sessions when requested', async () => {
     const harness = fakeHarness()
     running = createWorkerServer({
