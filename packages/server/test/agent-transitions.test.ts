@@ -190,6 +190,86 @@ describe('agent mutation transitions', () => {
     ])
   })
 
+  it("lets the next generation hydrate only after the old one's active write has landed", async () => {
+    const backing = createMemoryAgentStore()
+    const gate = deferred<void>()
+    let held = false
+    let entered = 0
+    const store: AgentStore = {
+      ...backing,
+      apply: async (changes) => {
+        if (held) {
+          entered++
+          await gate.promise
+        }
+        await backing.apply!(changes)
+      },
+    }
+    const old = await service(store)
+    const agent = await stored(old, 'Atlas')
+    held = true
+    const oldWrite = old.update(agent.id, { name: 'Old write' })
+    await until(() => entered === 1)
+    let closed = false
+    const closing = old.close().then(() => (closed = true))
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(closed).toBe(false)
+    gate.resolve()
+    await closing
+    expect(await oldWrite).toMatchObject({ name: 'Old write' })
+    held = false
+    const next = await service(store)
+    expect(await next.update(agent.id, { name: 'New generation' })).toMatchObject({ name: 'New generation' })
+    expect((await backing.list()).map((a) => a.name)).toEqual(['New generation'])
+  })
+
+  it('fails a retire closed on a store without apply: a member left behind keeps its lead', async () => {
+    const backing = createMemoryAgentStore()
+    const legacy: AgentStore = {
+      list: backing.list,
+      save: backing.save,
+      delete: () => {
+        throw new Error('disk full')
+      },
+    }
+    const agents = await service(legacy)
+    const lead = await stored(agents, 'Lead')
+    const member = await stored(agents, 'Member')
+    await agents.update(member.id, { lead: lead.id })
+    await expect(agents.retire(lead.id, 'release')).rejects.toThrow('disk full')
+    expect((await backing.list()).find((a) => a.id === member.id)?.lead).toBe(lead.id)
+    expect(agents.get(member.id)?.lead).toBe(lead.id)
+  })
+
+  it('ends a reconcile quietly when the generation stops while a status answer is outstanding', async () => {
+    const agents = await service()
+    const transport = heldTransport()
+    const status = deferred<[]>()
+    transport.teamStatus = () => status.promise
+    const logged: string[] = []
+    const teams = new TeamLinks({ agents, transport, log: (line) => logged.push(line) })
+    const mover = await stored(agents, 'Scout')
+    const joining = teams.join(mover, 'mac:L1', (joined) => agents.update(mover.id, { lead: 'mac:L1' }, { joined }))
+    transport.held.resolve({ ok: true, leadName: 'AC-Lead' })
+    await joining
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const pass = teams.reconcile()
+      await until(() => transport.frames.length > 0)
+      teams.stop()
+      await agents.close()
+      status.resolve([])
+      await pass
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+    expect(unhandled).toEqual([])
+    expect(logged).toEqual([])
+  })
+
   it('refuses every write once its generation has closed, including one already queued', async () => {
     const store = createMemoryAgentStore()
     const gate = deferred<void>()

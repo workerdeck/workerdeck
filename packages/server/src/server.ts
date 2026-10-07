@@ -412,13 +412,14 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     diagnose,
     releaseDirectories: () => {
       teamLinks?.stop()
-      agents.close()
+      const agentWrites = agents.close()
       relay?.close()
       ownPeers = undefined
       ownShells = undefined
       contextResets?.close()
       ownContextResets = undefined
       ownAvatarChanges = undefined
+      return agentWrites
     },
   })
 

@@ -50,6 +50,7 @@ export class TeamLinks {
   #log: (message: string) => void
   #timer: NodeJS.Timeout | undefined
   #reconciling: Promise<void> | undefined
+  #stopped = false
 
   constructor(options: TeamLinksOptions) {
     this.#agents = options.agents
@@ -63,11 +64,13 @@ export class TeamLinks {
 
   start(): void {
     this.stop()
+    this.#stopped = false
     this.#timer = setInterval(() => void this.reconcile(), this.#reconcileMs)
     this.#timer.unref()
   }
 
   stop(): void {
+    this.#stopped = true
     clearInterval(this.#timer)
     this.#timer = undefined
   }
@@ -247,10 +250,17 @@ export class TeamLinks {
     })
   }
 
+  // Never rejects: the timer and the relay's welcome both launch it without a handler.
   reconcile(): Promise<void> {
-    this.#reconciling ??= this.#reconcileOnce().finally(() => {
-      this.#reconciling = undefined
-    })
+    this.#reconciling ??= this.#reconcileOnce()
+      .catch((error: unknown) => {
+        if (!this.#stopped) {
+          this.#log(`teams: reconcile failed (${error instanceof Error ? error.message : String(error)})`)
+        }
+      })
+      .finally(() => {
+        this.#reconciling = undefined
+      })
     return this.#reconciling
   }
 
@@ -323,6 +333,9 @@ export class TeamLinks {
     }
     const offline = this.#transport.ready() !== undefined
     for (const [gateway, edges] of byGateway) {
+      if (this.#stopped) {
+        return
+      }
       let answers: TeamStatusEdge[] | undefined
       if (!offline) {
         try {
@@ -335,6 +348,9 @@ export class TeamLinks {
         }
       }
       for (const edge of edges) {
+        if (this.#stopped) {
+          return
+        }
         const answer = answers?.find((row) => row.from === edge.from && row.to === edge.to)
         await this.#settle(edge, answer)
       }

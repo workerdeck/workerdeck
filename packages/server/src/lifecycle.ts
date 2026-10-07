@@ -23,7 +23,8 @@ export type ServerLifecycleDeps = {
   queue: JobQueue | undefined
   engineSleep: EngineSleepTimers
   closeQueueSockets: () => void
-  releaseDirectories: () => void
+  // Resolves once the agent store's in-flight write has landed; the next generation hydrates only after close.
+  releaseDirectories: () => Promise<void>
   diagnose: DiagnosticSink
 }
 
@@ -98,12 +99,12 @@ async function drainSessions(registry: SessionRegistry, shells: ShellRegistry | 
 function closeServer(deps: ServerLifecycleDeps): Promise<void> {
   const { server, wss, registry, parking, shells, queue } = deps
   return new Promise((resolve) => {
-    deps.releaseDirectories()
+    const released = deps.releaseDirectories().catch((error: unknown) => deps.diagnose(error, 'agent-flush'))
     queue?.close()
     // Before the runners close: their `session_closed` would settle every shell as `killed`, and a graceful stop is
     // `server_stopped`. The index lands through `flushed` below, ahead of resolving.
     shells?.killAll('server_stopped')
-    const flushed = shells?.flush().catch((error: unknown) => deps.diagnose(error, 'shell-flush')) ?? Promise.resolve()
+    const flushed = Promise.all([released, shells?.flush().catch((error: unknown) => deps.diagnose(error, 'shell-flush'))])
     // Ordering is load-bearing: parking's `#closed` guard must be set before the registry closes runners with
     // reason 'server', or shutdown discards every dormant record. See docs/GOTCHAS.md.
     parking.close()

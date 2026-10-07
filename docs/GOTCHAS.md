@@ -1373,8 +1373,13 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   roll or ask first, then patch. `create` is the only whole-record write; `patch` on a retired id
   is a 404, so a late avatar or bind never revives an agent, and `create` refuses a retired or
   duplicate id and a session another agent already holds. `retire` writes the lead and its
-  released members as one store `apply`. `close()` (from `releaseDirectories`) refuses every
-  later transition, so an old hot-reload generation cannot write over the new one's store.
+  released members as one store `apply`; a host store without `apply` gets deletes before saves,
+  so a failure partway leaves a member pointing at a missing lead (restricted), never a released
+  member whose lead still exists. `close()` (from `releaseDirectories`) refuses every later
+  transition and resolves once the write in flight has landed; server close awaits it, and hot
+  reload awaits close before the next generation hydrates, so an old generation cannot write over
+  the new one's store. `TeamLinks.reconcile` never rejects (timer and relay welcome launch it
+  unhandled) and a pass stops at its next step once `stop()` runs.
 - **A remote join is a reservation, not a lock.** `reserveJoin` runs `leadRefusal` and marks the
   agent joining before the `team.join` frame; while it stands, the agent cannot change lead,
   be anyone's local lead, be invited or accept a join, and `inboundStatus` answers `known` for it

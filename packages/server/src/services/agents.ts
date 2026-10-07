@@ -111,8 +111,9 @@ export class AgentService {
     this.#agents = new Map((await this.#store.list()).map((agent) => [agent.id, agent]))
   }
 
-  close(): void {
+  close(): Promise<void> {
     this.#closed = true
+    return this.#queue.then(() => {})
   }
 
   list(): AgentInfo[] {
@@ -497,11 +498,13 @@ export class AgentService {
       await this.#store.apply({ saves, deletes })
       return
     }
-    for (const agent of saves) {
-      await this.#store.save(agent)
-    }
+    // Deletes first: a store that fails partway then leaves a member pointing at a missing lead, which stays
+    // restricted, never a released member whose lead still exists.
     for (const id of deletes) {
       await this.#store.delete(id)
+    }
+    for (const agent of saves) {
+      await this.#store.save(agent)
     }
   }
 
