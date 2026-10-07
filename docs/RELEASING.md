@@ -1492,6 +1492,14 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   3.4.0 / 3.6.1 at release, so cross-gateway joins could not be tried; Tobias chose to release and
   check during rollout), a paid `smoke:teams` across gateways, iOS (deferred to Agent Teams phase 5).
 
+  **3.8.0** - **jobs-only bypass, released 2026-10-07** (tag `v3.8.0`). A **minor**, protocol stays
+  **1**: `disableBypassPermissions: 'sessions'` refuses bypass for sessions, agents, profile defaults
+  and the WS mode switch but lets an operator's `POST /jobs` run in it, and `refuseJobInput` refuses
+  typed and peer messages into a job session still in bypass. Asked for by the Silkweave Box
+  (scheduled heavy jobs moving off `claude -p --dangerously-skip-permissions`). **Verified**: full
+  serial `pnpm test` with new server and peer tests. **Not verified**: a real job in bypass on the
+  Box, and whether the CLI routes AskUserQuestion through canUseTool under bypass.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
