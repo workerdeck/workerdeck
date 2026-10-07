@@ -106,6 +106,21 @@ describe('OwnerService', () => {
     expect(service(undefined, [], []).multi()).toBe(false)
   })
 
+  it('stays a gateway of several owners after a profile edit, and counts every owner the relay ever enrolled', () => {
+    const list: ProfileInfo[] = [{ name: 'p', owner: 'alice' }]
+    let relay: string[] = []
+    const owners = new OwnerService({ profiles: () => list, relayOwners: () => relay })
+    expect(owners.resolve('p')).toEqual({ owner: 'alice' })
+    list[0] = { name: 'p', owner: 'bob' }
+    expect(owners.multi()).toBe(true)
+
+    const enrolledOnly = new OwnerService({ profiles: () => [], relayOwners: () => relay })
+    relay = ['alice', 'bob']
+    expect(enrolledOnly.resolve(undefined)).toMatchObject({ status: 409, error: expect.stringMatching(/names no owner/) })
+    relay = []
+    expect(enrolledOnly.multi()).toBe(true)
+  })
+
   it('rejects a malformed gateway owner at startup', () => {
     expect(() => service('Silk Weave')).toThrow(/owner/)
   })
@@ -299,6 +314,28 @@ describe('team links by agent owner', () => {
     expect((await teams.inbound('team.join', { gateway: 'pi', owner: 'dan', agent: 'pi:M' }, tobyLead.id, 'o4')).ok).toBe(true)
   })
 
+  it('confirms a join retry and a status question only under the owner the edge was accepted with', async () => {
+    const { agents, lead: tobyLead } = await lead('tobias')
+    const teams = new TeamLinks({ agents, transport: transport() })
+    await teams.invite(tobyLead, 'pi:M', 'alice')
+    expect((await teams.inbound('team.join', { gateway: 'pi', owner: 'alice', agent: 'pi:M' }, tobyLead.id, 'o1')).ok).toBe(true)
+    expect((await teams.inbound('team.join', { gateway: 'pi', owner: 'bob', agent: 'pi:M' }, tobyLead.id, 'o1')).ok).toBe(false)
+    const ask = (owner: string) => teams.inboundStatus({ gateway: 'pi' }, { edges: [{ from: 'pi:M', to: tobyLead.id, op: 'o1', owner }] })
+    expect((await ask('bob')).edges).toEqual([{ known: false }])
+    expect((await ask('alice')).edges).toMatchObject([{ known: true }])
+  })
+
+  it('answers for a member only while its lead keeps the owner it joined under', async () => {
+    const { agents } = await lead('tobias')
+    const teams = new TeamLinks({ agents, transport: transport() })
+    const mover = (await agents.create(agents.draft({ name: 'Pip', owner: 'tobias' }) as StoredAgent)) as StoredAgent
+    await teams.join(mover, 'mac:L', (remote) => agents.update(mover.id, { lead: 'mac:L' }, { joined: remote }))
+    const op = agents.get(mover.id)!.remoteLead!.op!
+    const ask = (owner: string) => teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from: 'mac:L', to: mover.id, op, owner }] })
+    expect((await ask('ruli')).edges).toEqual([{ known: false }])
+    expect((await ask('tobias')).edges).toMatchObject([{ known: true }])
+  })
+
   it('sends the mover owner on its join and stores the lead owner the relay answered with', async () => {
     const sent: Array<{ owner?: string }> = []
     const { agents } = await lead('tobias')
@@ -349,5 +386,79 @@ describe('a gateway of several owners on a relay without owners', () => {
     expect((await link.directory.list('s1')).map((row) => row.id)).toEqual([])
     multi = false
     expect(link.teamsUnavailable()).toBe('the relay does not route teams; upgrade it first')
+  })
+})
+
+describe('a gateway of one configured owner on a relay without owners', () => {
+  async function oldRelay(handle: (frame: Record<string, unknown>, reply: (result: unknown) => void) => void) {
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' })
+    cleanups.push(() => new Promise((resolve) => wss.close(resolve)))
+    wss.on('connection', (socket) => {
+      socket.on('message', (raw) => {
+        const frame = decodeFrame(raw) as Record<string, unknown> | undefined
+        if (frame?.t === 'hello') {
+          socket.send(encodeFrame({ t: 'welcome', relayVersion: 1, features: ['teams'], owner: 'operator' }))
+          return
+        }
+        if (frame) {
+          handle(frame, (result) => socket.send(encodeFrame({ t: 'res', id: frame.id as string, ok: true, result })))
+        }
+      })
+    })
+    await new Promise((resolve) => wss.once('listening', resolve))
+    return `ws://127.0.0.1:${(wss.address() as { port: number }).port}`
+  }
+
+  it('publishes nothing once a kept session carries another owner than the profile names now', async () => {
+    const snapshots: RelaySessionEntry[][] = []
+    const url = await oldRelay((frame) => {
+      if (frame.t === 'registry.snapshot') {
+        snapshots.push(frame.entries as RelaySessionEntry[])
+      }
+    })
+    const owners = new OwnerService({ profiles: () => [{ name: 'p', owner: 'bob' }] })
+    const registry = new SessionRegistry()
+    registry.register(new PeerRunner('old', { owner: 'alice' }))
+    registry.register(new PeerRunner('new', { owner: 'bob' }))
+    const peers = createPeerService({ refs: { registry }, projects: new ProjectInfoService(), multiOwner: () => owners.multi() })
+    expect(owners.multi()).toBe(false)
+    const link = createRelayLink({ url, gateway: 'mini', key: 'k' }, peers, () => {}, undefined, {
+      multiOwner: () => owners.multi(),
+      retain: (owner) => owners.retain(owner),
+    })
+    cleanups.push(() => link.close())
+    await until(() => snapshots.length > 0, 'a snapshot')
+    expect(snapshots.every((entries) => entries.length === 0)).toBe(true)
+    expect(owners.multi()).toBe(true)
+  })
+
+  it('peeks a peer the old relay listed, taking its owner from the listed row', async () => {
+    const row = {
+      id: 'remote',
+      gateway: 'other',
+      owner: 'operator',
+      allow: ['send', 'peek'],
+      status: 'idle',
+      cwd: '',
+      createdAt: 1,
+      pendingPermissionCount: 0,
+      live: true,
+    }
+    const url = await oldRelay((frame, reply) => {
+      if (frame.t === 'peer.list') {
+        reply([row])
+      }
+      if (frame.t === 'peer.peek') {
+        const { owner: _owner, gateway: _gateway, allow: _allow, ...entry } = row
+        reply({ ...entry, pendingApprovals: [], recent: ['assistant: hi'] })
+      }
+    })
+    const registry = new SessionRegistry()
+    registry.register(new PeerRunner('s1'))
+    const peers = createPeerService({ refs: { registry }, projects: new ProjectInfoService() })
+    const link = createRelayLink({ url, gateway: 'mini', key: 'k' }, peers, () => {})
+    cleanups.push(() => link.close())
+    await until(async () => (await link.directory.list('s1')).some((peer) => peer.id === 'other:remote'), 'the listed peer')
+    expect((await link.directory.peek('s1', 'other:remote'))?.recent).toEqual(['assistant: hi'])
   })
 })

@@ -55,6 +55,12 @@ const INVITE_TTL_MS = 10 * 60_000
 const SOON_MS = 1_000
 const NO_SUCH_AGENT: TeamResult = { ok: false, reason: 'no such agent' }
 
+// An edge stored before owners, or asked through a relay without them, fits any owner; otherwise it holds only for
+// the owner it was agreed with.
+function ownerFits(stored: string | undefined, asked: string | undefined): boolean {
+  return stored === undefined || asked === undefined || stored === asked
+}
+
 // The cross-gateway half of teams. The lead's gateway owns the roster, the member's gateway owns the member's consent:
 // an edge exists when both hold it under the same join op, and only an authoritative answer from the other gateway
 // removes one. Rosters of remote leads are cached here, in memory, to vouch for teammates on third gateways.
@@ -327,7 +333,7 @@ export class TeamLinks {
       }
       const members = lead.remoteMembers ?? []
       const existing = members.find((member) => member.agent === origin.agent)
-      if (existing?.state === 'accepted' && existing.op === op) {
+      if (existing?.state === 'accepted' && existing.op === op && ownerFits(existing.owner, origin.owner)) {
         return lead
       }
       // A member already accepted may join again under a new op: its gateway owns its consent, the lead already gave its.
@@ -374,13 +380,20 @@ export class TeamLinks {
     if (!agent) {
       return { known: false }
     }
-    if (agent.lead === from && agent.remoteLead?.op === op && this.#eligible(agent, 'member')) {
+    if (
+      agent.lead === from &&
+      agent.remoteLead?.op === op &&
+      ownerFits(agent.remoteLead.owner, edge.owner) &&
+      this.#eligible(agent, 'member')
+    ) {
       if (agent.remoteLead.state === 'unconfirmed') {
         await this.#confirm(to, 'member', from, op)
       }
       return { known: true, name: agent.name }
     }
-    const entry = (agent.remoteMembers ?? []).find((member) => member.agent === from && member.op === op && member.state !== 'invited')
+    const entry = (agent.remoteMembers ?? []).find(
+      (member) => member.agent === from && member.op === op && member.state !== 'invited' && ownerFits(member.owner, edge.owner),
+    )
     if (entry && this.#eligible(agent, 'lead')) {
       if (entry.state === 'unconfirmed') {
         await this.#confirm(to, 'lead', from, op)

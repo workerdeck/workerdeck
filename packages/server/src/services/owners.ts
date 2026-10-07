@@ -8,10 +8,14 @@ export type OwnerServiceOptions = {
 }
 
 // Resolves whom a new session or agent answers to. Every answer is stamped where it lands, never resolved again.
+// Whether the gateway holds several owners counts what config names now, every owner a record here still carries and
+// every owner the relay ever enrolled it with, so a profile edit or a reconnect never makes it look single.
 export class OwnerService {
   #owner: string | undefined
   #profiles: () => readonly ProfileInfo[]
   #relayOwners: () => readonly string[]
+  #retained = new Set<string>()
+  #enrolled = new Set<string>()
 
   constructor(options: OwnerServiceOptions) {
     if (options.owner !== undefined && !isOwnerName(options.owner)) {
@@ -35,8 +39,18 @@ export class OwnerService {
     return owners
   }
 
+  retain(owner: string | undefined): void {
+    if (owner !== undefined) {
+      this.#retained.add(owner)
+    }
+  }
+
   multi(): boolean {
-    return this.local().size > 1
+    const owners = this.local()
+    for (const owner of [...this.#retained, ...this.#enrolledNow(), ...this.#enrolled]) {
+      owners.add(owner)
+    }
+    return owners.size > 1
   }
 
   // Without any owner configured here, a relay that enrolled this gateway with exactly one owner names it.
@@ -44,17 +58,27 @@ export class OwnerService {
     if (this.#owner !== undefined) {
       return this.#owner
     }
-    const relay = this.#relayOwners()
+    const relay = this.#enrolledNow()
     return this.local().size === 0 && relay.length === 1 ? relay[0] : undefined
   }
 
   known(owner: string): boolean {
-    return this.local().has(owner) || this.#relayOwners().includes(owner)
+    return this.local().has(owner) || this.#enrolledNow().includes(owner)
   }
 
   forProfile(name: string | undefined): string | undefined {
     const profile = name === undefined ? undefined : this.#profiles().find((candidate) => candidate.name === name)
-    return profile?.owner ?? this.defaultOwner()
+    const owner = profile?.owner ?? this.defaultOwner()
+    this.retain(owner)
+    return owner
+  }
+
+  #enrolledNow(): readonly string[] {
+    const relay = this.#relayOwners()
+    for (const owner of relay) {
+      this.#enrolled.add(owner)
+    }
+    return relay
   }
 
   // An explicit owner must be one this gateway knows; on a gateway of several owners, none at all is refused.
@@ -66,6 +90,7 @@ export class OwnerService {
       if (!this.known(explicit)) {
         return { status: 409, error: `this gateway does not know the owner ${explicit}` }
       }
+      this.retain(explicit)
       return { owner: explicit }
     }
     const owner = this.forProfile(profile)

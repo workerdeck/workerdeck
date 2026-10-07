@@ -272,6 +272,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     peers && options.relay
       ? createRelayLink(options.relay, peers, relayLog, () => teamLinks, {
           multiOwner: () => owners.multi(),
+          retain: (owner) => owners.retain(owner),
           online: () => {
             const enrolled = relay?.status().owners ?? []
             const unclaimable = [...owners.local()].filter((owner) => enrolled.length > 0 && !enrolled.includes(owner))
@@ -472,6 +473,9 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       teamLinks?.start()
       await parking.hydrate()
       await shells?.hydrate()
+      for (const owner of [...agents.list(), ...(await parking.listInfo())].map((record) => record.owner)) {
+        owners.retain(owner)
+      }
       return new Promise((resolve, reject) => {
         server.once('error', reject)
         server.listen(port, host, () => {

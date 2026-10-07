@@ -43,7 +43,7 @@ export type RelayTeamHandler = {
 export type RelayLinkStatus = { gateway: string; owner?: string; owners?: string[]; online: boolean; features: string[] }
 
 // `multiOwner`: this gateway runs sessions of several owners, which a relay without `owners` cannot tell apart.
-export type RelayLinkHooks = { multiOwner?(): boolean; online?(): void }
+export type RelayLinkHooks = { multiOwner?(): boolean; retain?(owner: string | undefined): void; online?(): void }
 
 export type RelayLink = {
   directory: PeerDirectory
@@ -182,7 +182,18 @@ export function createRelayLink(
   const ownersBlocked = (): boolean => multiOwner() && connection?.state() === 'online' && !connection.features().includes('owners')
 
   const host: RelayHost = {
-    snapshot: async () => (ownersBlocked() ? [] : peers.relayEntries(exposed, teamsAgreed())),
+    // The owners of what is about to go out count before it goes: a record kept from before a profile edit makes
+    // this gateway one of several owners even when its config names one.
+    snapshot: async () => {
+      if (ownersBlocked()) {
+        return []
+      }
+      const entries = await peers.relayEntries(exposed, teamsAgreed())
+      for (const entry of entries) {
+        hooks.retain?.(entry.owner)
+      }
+      return ownersBlocked() ? [] : entries
+    },
     peek: async (origin, sessionId, recent) =>
       ownersBlocked() ? undefined : peers.relayPeek(origin, sessionId, recent, exposed, options.gateway),
     send: async (origin, sessionId, text) =>
@@ -268,6 +279,16 @@ export function createRelayLink(
     return { rows, names: { nameOf: (id) => byId.get(id) ?? localName(id), leads } }
   }
 
+  // A relay from before owners answers a peek without one but stamps it on the rows it lists; on such a relay the
+  // target's listed row says whose it is. A relay with owners always names one, so a missing owner stays missing.
+  const legacyOwner = async (from: string, target: { gateway: string; id: string }): Promise<string | undefined> => {
+    if (!connection || connection.features().includes('owners')) {
+      return undefined
+    }
+    const rows = await connection.list(from).catch(() => [] as RelayPeerRow[])
+    return rows.find((row) => row.gateway === target.gateway && row.id === target.id)?.owner
+  }
+
   const directory: PeerDirectory = {
     list: async (from) => {
       const local = await peers.list(from)
@@ -302,7 +323,8 @@ export function createRelayLink(
         return undefined
       }
       const peek = qualifyPeek(answer, target.gateway)
-      if (!admits(me, target.gateway, peek.owner, remoteRef(peek.agent))) {
+      const owner = peek.owner ?? (await legacyOwner(from, target))
+      if (!admits(me, target.gateway, owner, remoteRef(peek.agent))) {
         return undefined
       }
       const names: TeamNames = { nameOf: (id) => localName(id), leads: new Set() }

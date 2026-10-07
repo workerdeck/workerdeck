@@ -10,12 +10,14 @@ export class PeerRunner implements Runner {
   status: SessionStatus = 'idle'
   scope: Record<string, string> | undefined
   title: string | undefined
+  owner: string | undefined
   events: SessionEvent[] = []
   #listeners = new Set<(event: SessionEvent) => void>()
   #seq = 0
 
-  constructor(id: string, opts: { scope?: Record<string, string>; title?: string; status?: SessionStatus } = {}) {
+  constructor(id: string, opts: { scope?: Record<string, string>; title?: string; status?: SessionStatus; owner?: string } = {}) {
     this.id = id
+    this.owner = opts.owner
     this.scope = opts.scope
     this.title = opts.title
     this.status = opts.status ?? 'idle'
@@ -33,6 +35,7 @@ export class PeerRunner implements Runner {
       pendingPermissionCount: this.pendingApprovals.length,
       scope: this.scope,
       title: this.title,
+      ...(this.owner === undefined ? {} : { owner: this.owner }),
       lastActivityAt: this.#seq,
     }
   }

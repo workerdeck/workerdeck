@@ -1468,8 +1468,11 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   `owner` (agent's owner > profile `owner` > server option `owner` / CLI `--owner` > the relay's one
   enrolled owner), echoed by `baseInfo`; an agent's `owner` is resolved at create or adopt and
   persisted, and agents from before owners are stamped from their profile at hydrate and at each
-  welcome, never re-resolved. A gateway whose profiles and default name more than one owner is
-  multi-owner: there a session or agent that resolves to no owner is refused (409), and
+  welcome, never re-resolved. A gateway is multi-owner when its profiles and default, the owners
+  its records still carry (seeded at hydrate, added as sessions resolve and as snapshots go out),
+  and every owner the relay ever enrolled it with in this process come to more than one: counting
+  config alone forgets a session kept from before a profile edit. There a session or agent that
+  resolves to no owner is refused (409), and
   `peerReaches` matches a missing owner with nobody. Profile and enrollment edits never move an
   existing agent; `PATCH /agents/:id { owner }` does, and only outside teams (no lead, members,
   invitations or pending join).
@@ -1563,6 +1566,9 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   `ownersRequired`, terminal), and an old gateway whose enrollment gains a second owner is
   dropped at reload. The other way round, a multi-owner gateway on a relay without `owners`
   publishes nothing and refuses every peer and team frame (`ownersBlocked` in `peer-relay.ts`).
+  Such a relay answers a peek with no owner; the gateway takes it from the relay's listed row.
+  A join retry or a `team.status` question under the edge's op still holds only for the owner
+  the edge was accepted with (an edge stored without one fits any).
   Trust contract (R3.7 decision 1): the relay carries owners faithfully; the checks stop one
   gateway claiming another's owners, not a lying relay.
 - **Every miss reads the same.** Unknown gateway, unknown session, a rule that denies, a ceiling
