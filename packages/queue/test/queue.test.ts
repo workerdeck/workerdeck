@@ -383,6 +383,19 @@ describe('JobQueue', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4)
   })
 
+  it('reports a request its own policy already settled only as resolved, never as one to answer', async () => {
+    const { queue, runners, events } = makeQueue()
+    await queue.submit(jobRequest())
+    await tick()
+    const request = { id: 'q1', toolName: 'AskUserQuestion', input: {}, toolUseId: 'tu1' }
+    runners[0]!.emit({ type: 'permission_requested', request, byPolicy: true })
+    runners[0]!.emit({ type: 'permission_resolved', requestId: 'q1', behavior: 'deny', resolvedBy: 'policy' })
+    runners[0]!.emit({ type: 'permission_requested', request: { ...request, id: 'p2', toolName: 'Bash' } })
+    await tick()
+    const kinds = events.flatMap((e) => (e.type === 'job_progress' ? [`${e.progress.kind}:${e.progress.request?.id ?? ''}`] : []))
+    expect(kinds).toEqual(['permission_resolved:', 'permission_requested:p2'])
+  })
+
   it('announces submissions to local observers but never to the webhook', async () => {
     const delivered: JobEvent[] = []
     const fetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {

@@ -218,7 +218,7 @@ export class RunnerCore {
 
   // The card still reaches the transcript, resolved by policy, so an operator can see what ran without being asked.
   resolveByPolicy(request: PermissionRequest, behavior: 'allow' | 'deny', message?: string): void {
-    this.emit({ type: 'permission_requested', request })
+    this.emit({ type: 'permission_requested', request, byPolicy: true })
     this.emit({
       type: 'permission_resolved',
       requestId: request.id,

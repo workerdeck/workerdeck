@@ -265,3 +265,24 @@ describe('SessionNotifier diagnostics', () => {
     }
   })
 })
+
+describe('SessionNotifier and policy', () => {
+  it('never notifies a request the session already settled by its own policy', async () => {
+    const observed: SessionNotification[] = []
+    const notifier = new SessionNotifier({ onNotification: (n) => void observed.push(n) })
+    let listener: ((event: SessionEvent) => void) | undefined
+    const runner = {
+      ...fakeRunner('s1', { cwd: '/tmp' }),
+      subscribe: (next: (event: SessionEvent) => void) => {
+        listener = next
+        return () => {}
+      },
+    }
+    notifier.watch(runner)
+    const request = { id: 'q1', toolName: 'AskUserQuestion', input: {}, toolUseId: 'tu1' }
+    listener?.({ type: 'permission_requested', request, byPolicy: true, seq: 1, ts: 1 } as SessionEvent)
+    listener?.({ type: 'permission_requested', request: { ...request, id: 'p2' }, seq: 2, ts: 2 } as SessionEvent)
+    await vi.waitFor(() => expect(observed).toHaveLength(1))
+    expect(observed[0]).toMatchObject({ type: 'permission_requested', request: { id: 'p2' } })
+  })
+})

@@ -573,6 +573,9 @@ export class JobQueue {
         return
       }
       case 'permission_requested': {
+        if (event.byPolicy) {
+          return
+        }
         this.#progress(job, {
           kind: 'permission_requested',
           preview: event.request.title ?? event.request.toolName,

@@ -299,7 +299,8 @@ export type SessionEventBody =
       usageByModel?: ByModel
       costUsd?: number
     }
-  | { type: 'permission_requested'; request: PermissionRequest }
+  // `byPolicy`: already settled by the session's own policy, drawn for the record; nobody can answer it.
+  | { type: 'permission_requested'; request: PermissionRequest; byPolicy?: true }
   | {
       type: 'permission_resolved'
       requestId: string

@@ -159,6 +159,12 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   is spread into the SDK options *after* the vetted `permissionMode`, so a body key the ladder
   never looked at used to bring bypass back through the side. The projection that closes that is
   in § Server, profiles & auth ("`SessionRunnerConfig` is a host-only superset").
+- **A request settled by policy is drawn, never offered.** `resolveByPolicy` (questions under
+  `questionBehavior` `auto`/`deny`, the shell read tools) emits `permission_requested` with
+  `byPolicy: true` and its `permission_resolved` at once, so the transcript shows what happened.
+  Anything that reacts to a request (queue `job_progress`, `SessionNotifier`, the VS Code popup)
+  must skip `byPolicy`: the Box once answered such a request, got `false` back from
+  `resolvePermission` and cancelled the job.
 - **`disableBypassPermissions: 'sessions'` leaves one door open: an operator's job.** Sessions,
   agents, profile defaults and the WS mode switch refuse bypass as with `true`; `POST /jobs` (and
   only it, `vetCreateRequest(.., { job: true })`) lets it through, and non-operators are refused

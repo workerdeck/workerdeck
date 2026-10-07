@@ -307,14 +307,14 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
     }
     let frame: {
       type?: string
-      event?: { type?: string; request?: { id?: string; toolName?: string; title?: string } }
+      event?: { type?: string; byPolicy?: boolean; request?: { id?: string; toolName?: string; title?: string } }
     }
     try {
       frame = JSON.parse(text)
     } catch {
       return
     }
-    if (frame.type !== 'event' || frame.event?.type !== 'permission_requested') {
+    if (frame.type !== 'event' || frame.event?.type !== 'permission_requested' || frame.event.byPolicy) {
       return
     }
     const request = frame.event.request

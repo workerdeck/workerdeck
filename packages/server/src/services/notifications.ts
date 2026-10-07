@@ -32,6 +32,9 @@ export class SessionNotifier {
     return runner.subscribe((event) => {
       switch (event.type) {
         case 'permission_requested': {
+          if (event.byPolicy) {
+            return
+          }
           this.#emit(runner, event.seq, event.ts, {
             type: 'permission_requested',
             preview: event.request.title ?? event.request.toolName,
