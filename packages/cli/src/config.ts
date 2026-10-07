@@ -57,6 +57,7 @@ export type CliFlags = {
   avatarPacks?: string[]
   effortDefaults?: Record<string, string>
   agentContextReset?: 'on' | 'off' | 'never'
+  agentSharing?: 'private' | 'shared' | 'never'
   stateDir?: string
   parking?: boolean
   insecure?: boolean
@@ -113,6 +114,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--avatar-packs', (f, v, name) => (f.avatarPacks = parseAvatarPacks(v, name))],
   ['--effort-default', (f, v, name) => (f.effortDefaults = { ...f.effortDefaults, ...parseEffortDefault(v, name) })],
   ['--agent-context-reset', (f, v, name) => (f.agentContextReset = parseAgentContextReset(v, name))],
+  ['--agent-sharing', (f, v, name) => (f.agentSharing = parseAgentSharing(v, name))],
   ['--state-dir', (f, v) => (f.stateDir = resolve(v))],
   ['--cors-origin', (f, v) => f.corsOrigins.push(v)],
 ])
@@ -144,6 +146,13 @@ function parseAgentContextReset(raw: string, source: string): 'on' | 'off' | 'ne
     return raw
   }
   throw new ConfigError(`${source}: expected on, off or never; got: ${raw}`)
+}
+
+function parseAgentSharing(raw: string, source: string): 'private' | 'shared' | 'never' {
+  if (raw === 'private' || raw === 'shared' || raw === 'never') {
+    return raw
+  }
+  throw new ConfigError(`${source}: expected private, shared or never; got: ${raw}`)
 }
 
 function parseShellAgentWrite(value: string, name: string): ShellAgentWriteOption {
@@ -457,6 +466,11 @@ export function resolveInstanceConfig(
     options.agentContextReset = false
   } else if (flags.agentContextReset !== undefined) {
     options.agentContextReset = { ...loaded.options.agentContextReset, default: flags.agentContextReset === 'on' }
+  }
+  if (flags.agentSharing === 'never') {
+    options.agentSharing = { ...loaded.options.agentSharing, allowShared: false }
+  } else if (flags.agentSharing !== undefined) {
+    options.agentSharing = { ...loaded.options.agentSharing, default: flags.agentSharing }
   }
   if (flags.effortDefaults) {
     options.effortDefaults = { ...loaded.options.effortDefaults, ...flags.effortDefaults }

@@ -9,6 +9,7 @@ import type {
   ProfileInfo,
   SdkSessionSummary,
   SessionInfo,
+  Sharing,
 } from '@workerdeck/protocol'
 import type { BridgeHub, BridgeHubOptions } from './services/bridge.ts'
 import type { AgentContextResetOptions } from './services/context-resets.ts'
@@ -97,6 +98,10 @@ export type WorkerServerOptions = {
   engineSleepAfterMs?: number
   // The same for an agent's session when the agent sets no `sleepAfterMs` of its own; omitted: 15 minutes, 0: never.
   agentSleepAfterMs?: number
+  // Private or shared with other owners' shared agents (a card in their lists and messages, no more). `default` is what
+  // a new agent gets when neither its request nor its profile's `defaults.sharing` says; `allowShared: false` refuses
+  // sharing and stops publishing agents stored as shared, without rewriting them.
+  agentSharing?: { default?: Sharing; allowShared?: boolean }
   // The `context_reset` tool: an agent clears its own conversation between turns and continues from a prompt it wrote.
   // Available unless `false`; a session gets it from its request, then its profile's `defaults`, then `default` here.
   agentContextReset?: false | AgentContextResetOptions

@@ -104,6 +104,12 @@ Options
                             and continue from a prompt it wrote (config:
                             agentContextReset). A request or profile may turn it
                             on per session; 'never' forbids it. Default 'off'.
+      --agent-sharing <private|shared|never>
+                            whether a new agent is shared with other owners'
+                            shared agents: a card in their lists and messages,
+                            never a peek (config: agentSharing.default). A
+                            request or profile defaults.sharing wins; 'never'
+                            shares nothing. Default 'private'.
       --state-dir <path>    where parked sessions are persisted
                             (default: beside the config file, else ~/.workerdeck)
       --no-parking-store    keep parked sessions in memory only; a restart drops them

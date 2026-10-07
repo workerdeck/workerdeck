@@ -16,10 +16,11 @@ import {
   PEER_MENTION_MAX,
   peerMentionKey,
   peerMentionSlug,
-  peerReaches,
+  peerOps,
   qualifyAgent,
   scanPeerMentions,
   type MessageOrigin,
+  type PeerOps,
   type SessionEvent,
   type SessionInfo,
 } from '@workerdeck/protocol'
@@ -66,8 +67,16 @@ const DEFAULT_PER_MINUTE = 10
 const DEFAULT_MAX_HOPS = 12
 const WINDOW_MS = 60_000
 
-function visible(from: SessionInfo, to: SessionInfo, multiOwner: boolean): boolean {
-  return to.id !== from.id && scopeMatches(from.scope, to.scope) && peerReaches(from, to, multiOwner)
+const NO_OPS: PeerOps = { list: false, send: false, peek: false }
+
+function opsBetween(from: SessionInfo, to: SessionInfo, multiOwner: boolean): PeerOps {
+  return to.id !== from.id && scopeMatches(from.scope, to.scope) ? peerOps(from, to, multiOwner) : NO_OPS
+}
+
+// A shared agent of another owner outside the asker's team shows its card: no paths, profile or work in progress.
+function cardOf(summary: PeerSessionSummary): PeerSessionSummary {
+  const { cwd: _cwd, projectRoot: _root, profile: _profile, contextUsage: _context, ...rest } = summary
+  return { ...rest, cwd: '', pendingPermissionCount: 0 }
 }
 
 // A member is published only to a relay that negotiated teams: an older one would list it to everyone.
@@ -95,13 +104,15 @@ function teamAdmits(
   gateway: string,
   teams: PeerAgentTeams | undefined,
   multiOwner: boolean,
+  op: 'peek' | 'send',
 ): boolean {
   const from = origin.agent
   if (from && teams?.vouches(from, origin.gateway, origin.owner) === false) {
     return false
   }
   const owner = info.owner ?? (multiOwner ? undefined : origin.owner)
-  return peerReaches({ owner: origin.owner, agent: from }, { owner, agent: qualifyAgent(info.agent, gateway) }, multiOwner)
+  const to = { owner, agent: qualifyAgent(info.agent, gateway), permissionMode: info.permissionMode }
+  return peerOps({ owner: origin.owner, agent: from }, to, multiOwner)[op]
 }
 
 export type PeerService = PeerDirectory & {
@@ -140,12 +151,15 @@ function qualifyEntry(agent: RelayAgentEntry | undefined, gateway: string): Rela
   return { ...agent, id: qualified.id, ...(qualified.lead !== undefined ? { lead: qualified.lead } : {}) }
 }
 
+// A session that runs without prompts is never published as shared: it takes nothing from other owners.
 export function relayEntry(info: SessionInfo, live: boolean, agent?: RelayAgentEntry): RelaySessionEntry {
   const items = info.checklist
+  const unprompted = info.permissionMode === 'bypassPermissions' || info.permissionMode === 'dontAsk'
+  const { shared: _shared, ...plain } = agent ?? {}
   return {
     id: info.id,
     ...(info.owner === undefined ? {} : { owner: info.owner }),
-    agent,
+    agent: agent && unprompted ? (plain as RelayAgentEntry) : agent,
     engine: info.engine,
     status: info.status,
     title: info.title,
@@ -233,15 +247,18 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
   const list = async (from: string): Promise<PeerSessionSummary[]> => {
     const me = await sender(from)
     return (await allSessions())
-      .filter((info) => visible(me, info, multiOwner()))
-      .sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
-      .map(peerSummary)
+      .flatMap((info) => {
+        const ops = opsBetween(me, info, multiOwner())
+        return ops.list ? [{ info, card: !ops.peek }] : []
+      })
+      .sort((a, b) => (b.info.lastActivityAt ?? b.info.createdAt) - (a.info.lastActivityAt ?? a.info.createdAt))
+      .map(({ info, card }) => (card ? cardOf(peerSummary(info)) : peerSummary(info)))
   }
 
   const peek = async (from: string, sessionId: string, options?: { recent?: number }): Promise<PeerPeek | undefined> => {
     const me = await sender(from)
     const info = await infoOf(sessionId)
-    if (!info || !visible(me, info, multiOwner())) {
+    if (!info || !opsBetween(me, info, multiOwner()).peek) {
       return undefined
     }
     const { runner, lines } = recentOf(sessionId, options?.recent)
@@ -266,7 +283,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       }
     }
     const target = await infoOf(sessionId)
-    if (!target || !visible(me, target, multiOwner())) {
+    if (!target || !opsBetween(me, target, multiOwner()).send) {
       return { delivered: false, reason: `no such session: ${sessionId}` }
     }
     const hops = [...(options?.hops ?? inbound.get(from) ?? []), from]
@@ -312,9 +329,10 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     exposed: Record<string, string> | undefined,
     origin: RelayOrigin,
     gateway: string,
+    op: 'peek' | 'send',
   ): Promise<SessionInfo | undefined> => {
     const info = await infoOf(sessionId)
-    return info && relayable(info, exposed, deps.teams, true) && teamAdmits(info, origin, gateway, deps.teams, multiOwner())
+    return info && relayable(info, exposed, deps.teams, true) && teamAdmits(info, origin, gateway, deps.teams, multiOwner(), op)
       ? info
       : undefined
   }
@@ -337,7 +355,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     exposed: Record<string, string> | undefined,
     gateway: string,
   ): Promise<RelayPeek | undefined> => {
-    const info = await exposedInfo(sessionId, exposed, origin, gateway)
+    const info = await exposedInfo(sessionId, exposed, origin, gateway, 'peek')
     if (!info) {
       return undefined
     }
@@ -363,7 +381,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
         reason: `message is ${text.length} characters; the limit is ${maxChars}. Write it to a file and send the path.`,
       }
     }
-    const target = await exposedInfo(sessionId, exposed, origin, gateway)
+    const target = await exposedInfo(sessionId, exposed, origin, gateway, 'send')
     if (!target) {
       return { delivered: false, reason: `no such session: ${sessionId}` }
     }

@@ -3,18 +3,20 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AVATAR_SEED_MAX } from '@workerdeck/core'
 import {
   isOwnerName,
+  isSharing,
   type AgentConfig,
   type AgentResponse,
   type CreateAgentRequest,
   type InviteRemoteMemberRequest,
   type RetireAgentRequest,
   type SessionInfo,
+  type Sharing,
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { isAgentRefusal, type AgentRefusal, type AgentService, type RemoteJoin } from '../services/agents.ts'
+import { SHARING_OFF, isAgentRefusal, type AgentRefusal, type AgentService, type RemoteJoin } from '../services/agents.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import type { AvatarImage } from '../services/avatars.ts'
 import { vetCreateRequest } from './create-vet.ts'
@@ -134,9 +136,10 @@ async function createAgent(ctx: ServerContext, agents: AgentService, req: Incomi
     await adoptSession(ctx, agents, res, body)
     return
   }
-  const owner = settledOwner(ctx.owners.resolve(isRecord(body.config) ? stringOr(body.config.profile) : undefined, body.owner))
+  const profile = isRecord(body.config) ? stringOr(body.config.profile) : undefined
+  const owner = settledOwner(ctx.owners.resolve(profile, body.owner))
   const crossOwner = body.crossOwner === true
-  const draft = agents.draft({ ...body, owner, crossOwner })
+  const draft = agents.draft({ ...body, owner, sharing: sharingFor(ctx, profile, body.sharing), crossOwner })
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }
@@ -192,6 +195,23 @@ function settledOwner(outcome: { owner: string | undefined } | AgentRefusal): st
   return outcome.owner
 }
 
+// Materialized at create: the request, then the profile's default, then the gateway's. Later default changes never
+// move an agent. A default of shared on a gateway that shares nothing lands as private; a request for it is refused.
+function sharingFor(ctx: ServerContext, profile: string | undefined, requested: unknown): Sharing {
+  const allowed = ctx.options.agentSharing?.allowShared !== false
+  if (requested !== undefined) {
+    if (!isSharing(requested)) {
+      fail(400, "sharing must be 'private' or 'shared'")
+    }
+    if (requested === 'shared' && !allowed) {
+      fail(409, SHARING_OFF)
+    }
+    return requested
+  }
+  const fallback = (profile === undefined ? undefined : ctx.profiles.get(profile)?.defaults?.sharing) ?? ctx.options.agentSharing?.default
+  return fallback === 'shared' && allowed ? 'shared' : 'private'
+}
+
 function stringOr(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
@@ -211,6 +231,14 @@ async function updateAgent(ctx: ServerContext, agent: StoredAgent, patch: Update
       return owner
     }
   }
+  const outcome = await patchAgent(ctx, agent, patch)
+  if (patch.sharing !== undefined && !isAgentRefusal(outcome)) {
+    ctx.teams?.republish()
+  }
+  return outcome
+}
+
+async function patchAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
   const remoteLead = remoteLeadOf(ctx, patch.lead)
   if (remoteLead === undefined) {
     return ctx.agents.update(agent.id, patch, {
@@ -267,7 +295,8 @@ async function adoptSession(ctx: ServerContext, agents: AgentService, res: Serve
   const owner =
     body.owner === undefined && info.owner !== undefined ? info.owner : settledOwner(ctx.owners.resolve(config.profile, body.owner))
   const crossOwner = body.crossOwner === true
-  const draft = agents.draft({ name: body.name ?? info.title, config, lead: body.lead, owner, crossOwner })
+  const sharing = sharingFor(ctx, config.profile, body.sharing)
+  const draft = agents.draft({ name: body.name ?? info.title, config, lead: body.lead, owner, sharing, crossOwner })
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }

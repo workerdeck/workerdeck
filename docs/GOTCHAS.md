@@ -1476,9 +1476,22 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   `peerReaches` matches a missing owner with nobody. Profile and enrollment edits never move an
   existing agent; `PATCH /agents/:id { owner }` does, and only outside teams (no lead, members,
   invitations or pending join).
-- **One peer rule, local and remote: `peerReaches`** (`protocol/agents.ts`). The team rule, and
-  sessions of different owners reach each other only through a team (lead and member, or
-  teammates), on one gateway as across the relay. A local join to a lead of another owner needs
+- **One peer rule, local and remote: `peerOps`** (`protocol/agents.ts`; `peerReaches` is its
+  `list`), answered per operation (list, send, peek). The team rule, and sessions of different
+  owners reach each other only through a team (lead and member, or teammates), or as two
+  **shared** top-level agents: a card (no paths, profile, context or checklist) and messages,
+  never a peek. Both sides must be shared; members and plain sessions never are. Nothing of
+  another owner is sent to a session in `bypassPermissions` or `dontAsk`, team or not, and such a
+  session is never published as shared. The relay's `teamAllows` + `accessOps` mirror it with
+  team claims checked against the lead's accepts; the target gateway re-checks every inbound
+  frame against the current record, so lowering sharing blocks the next frame, and `PATCH
+  /agents/:id { sharing }` republishes at once. `AgentInfo.sharing` is stored at create (the
+  request, else profile `defaults.sharing`, else `agentSharing.default` / `--agent-sharing`, else
+  private), absent
+  reads as private, and a gateway with `agentSharing.allowShared: false` (`--agent-sharing never`)
+  publishes no agent as shared without rewriting records (R3 workstream G,
+  `_docs/plans/R3-G-SHARING.md`). Private never cuts a team: lending a member works whatever
+  either side's sharing says. A local join to a lead of another owner needs
   `crossOwner: true` on the request (create, adopt, PATCH); `crossOwnerDrop` in `ui` tells a
   client when to ask. Owners separate agents, not people: everyone holding a shared gateway's key
   is a co-administrator of every owner on it.

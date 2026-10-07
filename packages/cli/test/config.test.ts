@@ -96,6 +96,18 @@ describe('parseArgs', () => {
     expect(resolveInstanceConfig(parseArgs([]), fromFile, {}).options.agentContextReset).toEqual({ maxPerHour: 1 })
   })
 
+  it('maps --agent-sharing onto the gateway default, or turns sharing off', () => {
+    expect(() => parseArgs(['--agent-sharing', 'public'])).toThrow(ConfigError)
+    const fromFile = { path: null, options: { agentSharing: { default: 'shared' as const } } }
+    expect(resolveInstanceConfig(parseArgs(['--agent-sharing', 'private']), fromFile, {}).options.agentSharing).toEqual({
+      default: 'private',
+    })
+    expect(resolveInstanceConfig(parseArgs(['--agent-sharing', 'never']), fromFile, {}).options.agentSharing).toEqual({
+      default: 'shared',
+      allowShared: false,
+    })
+  })
+
   it('collects repeated --effort-default pairs and lays them over the config file', () => {
     const flags = parseArgs(['--effort-default', 'opus=high', '--effort-default', 'gpt-6-sol=xhigh'])
     expect(flags.effortDefaults).toEqual({ opus: 'high', 'gpt-6-sol': 'xhigh' })

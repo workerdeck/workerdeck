@@ -13,9 +13,6 @@ export type RelayFeature = (typeof RELAY_FEATURES)[number]
 
 export const RELAY_OWNER_NAME = OWNER_NAME
 
-export const SHARE_LEVELS = ['none', 'list', 'watch', 'message'] as const
-export type ShareLevel = (typeof SHARE_LEVELS)[number]
-
 export const RELAY_CLOSE = {
   badHello: 4400,
   unauthorized: 4401,
@@ -37,7 +34,8 @@ export type RelayAgentEntry = {
   lead?: string
   order?: number
   accepts?: string[]
-  share?: ShareLevel
+  // A top-level agent shared with other owners; never set on a member.
+  shared?: true
 }
 
 export type RelaySessionEntry = {
@@ -69,7 +67,7 @@ export type RelayOrigin = {
   sessionId: string
   name?: string
   engine?: ProfileEngine
-  agent?: { id: string; name: string; lead?: string }
+  agent?: { id: string; name: string; lead?: string; shared?: true }
   hops: string[]
 }
 
@@ -188,10 +186,6 @@ export function isRelayOp(value: unknown): value is RelayOp {
 
 export function isRelayFeature(value: unknown): value is RelayFeature {
   return (RELAY_FEATURES as readonly unknown[]).includes(value)
-}
-
-export function isShareLevel(value: unknown): value is ShareLevel {
-  return (SHARE_LEVELS as readonly unknown[]).includes(value)
 }
 
 export function isTeamFrameKind(value: unknown): value is TeamFrameKind {

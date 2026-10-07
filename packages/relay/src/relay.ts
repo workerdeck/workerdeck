@@ -44,7 +44,7 @@ import {
 import { enrollmentPath, keyMatches, ownersOf, readEnrollments, type EnrollmentFile } from './enrollment.ts'
 import { allowedOps, readRules, rulesPath, type RelayRule } from './rules.ts'
 import { serveStatusSocket, statusSocketPath } from './status.ts'
-import { projectForOtherOwner, sanitizeEntry, teamAllows, type TeamNode } from './teams.ts'
+import { accessOps, projectCard, projectForOtherOwner, sanitizeEntry, teamAllows, type TeamAccess, type TeamNode } from './teams.ts'
 
 export type RelayOptions = {
   stateDir: string
@@ -257,25 +257,35 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
   const opsBetween = (from: Gateway, fromOwner: string, target: Gateway, entry: RelaySessionEntry, targetOwner: string): RelayOp[] =>
     target === from ? [] : allowedOps(rules, from.name, target.name, entry, target.ops, fromOwner !== targetOwner)
 
-  const visible = (from: Gateway, sender: RelaySessionEntry, target: Gateway, entry: RelaySessionEntry): RelayOp[] => {
+  const access = (
+    from: Gateway,
+    sender: RelaySessionEntry,
+    target: Gateway,
+    entry: RelaySessionEntry,
+  ): { access: TeamAccess; ops: RelayOp[] } => {
     const a = nodeOf(from, sender)
     const b = nodeOf(target, entry)
-    if (!a || !b || !teamAllows(a, b, lookup)) {
-      return []
+    if (!a || !b) {
+      return { access: 'none', ops: [] }
     }
-    return opsBetween(from, a.owner, target, entry, b.owner).filter((op) => op !== 'team')
+    const allowed = teamAllows(a, b, lookup)
+    const ops = opsBetween(from, a.owner, target, entry, b.owner).filter((op) => op !== 'team')
+    return { access: allowed, ops: accessOps(allowed, ops, a, b) }
   }
+
+  const visible = (from: Gateway, sender: RelaySessionEntry, target: Gateway, entry: RelaySessionEntry): RelayOp[] =>
+    access(from, sender, target, entry).ops
 
   const list = (from: Gateway, sender: RelaySessionEntry): RelayPeerRow[] => {
     const rows: RelayPeerRow[] = []
     const mine = ownerOf(from, sender)
     for (const target of gateways.values()) {
       for (const entry of target.entries.values()) {
-        const allow = visible(from, sender, target, entry)
+        const seen = access(from, sender, target, entry)
         const owner = ownerOf(target, entry)
-        if (allow.length > 0 && owner !== undefined) {
-          const shown = owner === mine ? entry : projectForOtherOwner(entry)
-          rows.push({ ...shown, gateway: target.name, owner, allow })
+        if (seen.ops.length > 0 && owner !== undefined) {
+          const shown = owner === mine ? entry : seen.access === 'message' ? projectCard(entry) : projectForOtherOwner(entry)
+          rows.push({ ...shown, gateway: target.name, owner, allow: seen.ops })
         }
       }
     }
@@ -308,9 +318,6 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     const found = typeof to === 'string' ? findAgent(to) : undefined
     const owner = found ? ownerOf(found.gateway, found.entry) : undefined
     if (!found || owner === undefined || found.gateway === from || !found.gateway.features.has('teams')) {
-      return undefined
-    }
-    if (fromOwner !== owner && found.entry.agent?.share === 'none') {
       return undefined
     }
     return opsBetween(from, fromOwner, found.gateway, found.entry, owner).includes('team')
@@ -724,7 +731,9 @@ function ownerOf(gateway: Gateway, entry: RelaySessionEntry): string | undefined
 
 function nodeOf(gateway: Gateway, entry: RelaySessionEntry): TeamNode | undefined {
   const owner = ownerOf(gateway, entry)
-  return owner === undefined ? undefined : { gateway: gateway.name, owner, agent: entry.agent }
+  return owner === undefined
+    ? undefined
+    : { gateway: gateway.name, owner, agent: entry.agent, ...(entry.permissionMode ? { permissionMode: entry.permissionMode } : {}) }
 }
 
 function respond(gateway: Gateway, id: string, work: Promise<unknown>): void {
@@ -742,7 +751,16 @@ function originOf(from: Gateway, sender: RelaySessionEntry, hops: string[]): Rel
     sessionId: sender.id,
     name: agent?.name ?? sender.title,
     engine: sender.engine,
-    ...(agent ? { agent: { id: agent.id, name: agent.name, ...(agent.lead ? { lead: agent.lead } : {}) } } : {}),
+    ...(agent
+      ? {
+          agent: {
+            id: agent.id,
+            name: agent.name,
+            ...(agent.lead ? { lead: agent.lead } : {}),
+            ...(agent.shared ? { shared: true as const } : {}),
+          },
+        }
+      : {}),
     hops,
   }
 }

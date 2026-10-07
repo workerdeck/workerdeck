@@ -2,9 +2,11 @@ import { createHash, randomUUID } from 'node:crypto'
 import {
   AGENT_SLEEP_AFTER_MS_DEFAULT,
   agentRef,
+  isSharing,
   type AgentConfig,
   type AgentInfo,
   type SessionInfo,
+  type Sharing,
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import { parseRelayPeerId, type RelayAgentEntry } from '@workerdeck/relay-client'
@@ -15,12 +17,16 @@ export type AgentServiceOptions = {
   basePath: string
   avatars?: boolean
   sleepAfterMs?: number
+  // False when the gateway shares no agent with other owners: stored sharing stays, but nothing is shared.
+  allowShared?: boolean
   // This gateway's relay name: a lead id qualified with it is local.
   gateway?: string
   now?: () => number
 }
 
 export type AgentRefusal = { status: number; error: string }
+
+export const SHARING_OFF = 'this gateway shares no agents with other owners'
 
 export type RetireOutcome = { retired: StoredAgent[]; released: StoredAgent[] }
 
@@ -102,6 +108,7 @@ export class AgentService {
   #basePath: string
   #avatars: boolean
   #sleepAfterMs: number
+  #allowShared: boolean
   #gateway: string | undefined
   #now: () => number
   #agents = new Map<string, StoredAgent>()
@@ -119,6 +126,7 @@ export class AgentService {
     this.#basePath = options.basePath
     this.#avatars = options.avatars ?? false
     this.#sleepAfterMs = options.sleepAfterMs ?? AGENT_SLEEP_AFTER_MS_DEFAULT
+    this.#allowShared = options.allowShared !== false
     this.#gateway = options.gateway
     this.#now = options.now ?? Date.now
   }
@@ -202,11 +210,11 @@ export class AgentService {
     const remote = this.remoteGateway(agent.lead)
     const leadName = agent.lead === undefined ? undefined : remote ? agent.remoteLead?.name : this.#agents.get(agent.lead)?.name
     const owner = agent.owner ?? info.owner
-    return {
-      ...info,
-      ...(owner === undefined ? {} : { owner }),
-      agent: agentRef(this.public(agent), { leadName, leadGateway: remote, leads: this.hasMembers(agent.id) }),
+    const ref = agentRef(this.public(agent), { leadName, leadGateway: remote, leads: this.hasMembers(agent.id) })
+    if (!this.#allowShared) {
+      delete ref.shared
     }
+    return { ...info, ...(owner === undefined ? {} : { owner }), agent: ref }
   }
 
   // The gateway a lead id names when it is not this one; undefined for a local or absent lead.
@@ -246,6 +254,9 @@ export class AgentService {
     const accepts = acceptedRemote(agent).map((member) => member.agent)
     if (accepts.length > 0) {
       entry.accepts = accepts
+    }
+    if (agent.sharing === 'shared' && agent.lead === undefined && this.#allowShared) {
+      entry.shared = true
     }
     return entry
   }
@@ -321,7 +332,14 @@ export class AgentService {
     return { ...info, avatar: `${this.#basePath}/agents/${agent.id}/avatar.png${version}` }
   }
 
-  draft(input: { name?: unknown; config?: unknown; lead?: unknown; owner?: string; crossOwner?: boolean }): StoredAgent | AgentRefusal {
+  draft(input: {
+    name?: unknown
+    config?: unknown
+    lead?: unknown
+    owner?: string
+    sharing?: Sharing
+    crossOwner?: boolean
+  }): StoredAgent | AgentRefusal {
     const config = readConfig(input.config)
     if ('error' in config) {
       return config
@@ -342,6 +360,7 @@ export class AgentService {
       pastSessions: [],
       config,
       ...(input.owner === undefined ? {} : { owner: input.owner }),
+      ...(input.sharing === undefined ? {} : { sharing: input.sharing }),
     }
     if (input.lead !== undefined && input.lead !== null) {
       if (typeof input.lead !== 'string') {
@@ -593,6 +612,15 @@ export class AgentService {
         }
         next.owner = patch.owner
       }
+      if (patch.sharing !== undefined) {
+        if (!isSharing(patch.sharing)) {
+          return { status: 400, error: "sharing must be 'private' or 'shared'" }
+        }
+        if (patch.sharing === 'shared' && !this.#allowShared) {
+          return { status: 409, error: SHARING_OFF }
+        }
+        next.sharing = patch.sharing
+      }
       if (patch.config !== undefined) {
         if (!isRecord(patch.config)) {
           return { status: 400, error: 'config must be an object' }
@@ -776,6 +804,9 @@ export function normalizeAgent(agent: StoredAgent, gateway: string, now: number)
         ? { ...member, state: 'unconfirmed', op: legacyOp(self, member.agent) }
         : member,
     )
+  }
+  if (agent.sharing !== undefined && !isSharing(agent.sharing)) {
+    delete next.sharing
   }
   const pendingRemote = agent.pendingJoin && parseRelayPeerId(agent.pendingJoin.lead)?.gateway
   if (agent.pendingJoin && (pendingRemote === undefined || pendingRemote === gateway)) {

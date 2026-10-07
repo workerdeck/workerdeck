@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import type { PeerDirectory, PeerPeek, PeerSendResult, PeerSessionSummary } from '@workerdeck/core'
-import { peerReaches, qualifyAgent, type AgentRef, type ChecklistItem, type SessionInfo } from '@workerdeck/protocol'
+import { peerOps, qualifyAgent, type AgentRef, type ChecklistItem, type SessionInfo } from '@workerdeck/protocol'
 import {
   connectRelay,
   parseRelayPeerId,
@@ -86,7 +86,14 @@ function identityOf(options: RelayLinkOptions): string {
 
 // Ids on a relay row are already qualified by the relay.
 function remoteRef(agent: RelayAgentEntry | undefined): AgentRef | undefined {
-  return agent ? { id: agent.id, name: agent.name, ...(agent.lead !== undefined ? { lead: agent.lead } : {}) } : undefined
+  return agent
+    ? {
+        id: agent.id,
+        name: agent.name,
+        ...(agent.lead !== undefined ? { lead: agent.lead } : {}),
+        ...(agent.shared === true && agent.lead === undefined ? { shared: true as const } : {}),
+      }
+    : undefined
 }
 
 // A peek answer from an older gateway carries bare ids; the gateway it came from is the one it was asked.
@@ -264,13 +271,19 @@ export function createRelayLink(
   // The relay already applied the team rule; the gateway applies it again to every row, after checking the row's team
   // claims against its own records, so a row the relay attributes to a team here must be one of that team's members.
   // A gateway of one owner that names none of its own speaks for the owner the relay enrolled it with.
-  const admits = (me: SessionInfo, gateway: string, owner: string | undefined, agent: AgentRef | undefined): boolean =>
+  const admits = (
+    me: SessionInfo,
+    gateway: string,
+    owner: string | undefined,
+    agent: AgentRef | undefined,
+    op: 'list' | 'peek' = 'list',
+  ): boolean =>
     (agent === undefined || peers.relayVouches(agent, gateway, owner)) &&
-    peerReaches(
+    peerOps(
       { owner: me.owner ?? (multiOwner() ? undefined : connection?.owner()), agent: qualifyAgent(me.agent, options.gateway) },
       { owner, agent },
       true,
-    )
+    )[op]
 
   const teamRows = async (me: SessionInfo, from: string): Promise<{ rows: RelayPeerRow[]; names: TeamNames }> => {
     const rows = (await connection!.list(from)).filter((row) => admits(me, row.gateway, row.owner, remoteRef(row.agent)))
@@ -324,7 +337,7 @@ export function createRelayLink(
       }
       const peek = qualifyPeek(answer, target.gateway)
       const owner = peek.owner ?? (await legacyOwner(from, target))
-      if (!admits(me, target.gateway, owner, remoteRef(peek.agent))) {
+      if (!admits(me, target.gateway, owner, remoteRef(peek.agent), 'peek')) {
         return undefined
       }
       const names: TeamNames = { nameOf: (id) => localName(id), leads: new Set() }

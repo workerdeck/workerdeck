@@ -15,7 +15,7 @@ import {
 } from '@workerdeck/core'
 import type { AvatarDirectory, EngineAdapter, PeerDirectory, Runner, SessionRunnerConfig } from '@workerdeck/core'
 import { JobQueue } from '@workerdeck/queue'
-import { mergePricing, type CreateSessionRequest, type ProfileEngine } from '@workerdeck/protocol'
+import { isSharing, mergePricing, type CreateSessionRequest, type ProfileEngine } from '@workerdeck/protocol'
 import type { ServerContext } from './context.ts'
 import { createServerLifecycle } from './lifecycle.ts'
 import { httpErrorStatus, json } from './lib/http.ts'
@@ -136,6 +136,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     basePath,
     avatars: options.avatars !== undefined,
     sleepAfterMs: options.agentSleepAfterMs,
+    allowShared: options.agentSharing?.allowShared,
     gateway: options.relay?.gateway,
   })
   const projects = new ProjectInfoService({
@@ -305,6 +306,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     installPeerDirectory(ownPeers)
   }
   installShellDirectory(shellDirectory)
+  const sharingDefault = options.agentSharing?.default
+  if (sharingDefault !== undefined && !isSharing(sharingDefault)) {
+    throw new Error("createWorkerServer: `agentSharing.default` must be 'private' or 'shared'")
+  }
   if (options.effortDefaults !== undefined && !isEffortMap(options.effortDefaults)) {
     throw new Error('createWorkerServer: `effortDefaults` must map model names to effort levels')
   }

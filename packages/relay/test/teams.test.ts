@@ -17,7 +17,7 @@ import {
 import { enrollGateway, enrollGatewayHash, readEnrollments, setGatewayOwner, setGatewayOwners, writeKeyFile } from '../src/enrollment.ts'
 import { parseRules } from '../src/rules.ts'
 import { startRelay, type Relay } from '../src/relay.ts'
-import { projectForOtherOwner, sanitizeAgent, teamAllows, type TeamNode } from '../src/teams.ts'
+import { accessOps, projectCard, projectForOtherOwner, sanitizeAgent, teamAllows, type TeamNode } from '../src/teams.ts'
 
 type TeamCall = { kind: TeamFrameKind; origin: RelayTeamOrigin; to: string; op?: string }
 
@@ -138,29 +138,67 @@ describe('team visibility (pure)', () => {
     const stranger = node('pi', 'tobias', { id: 'pi:S', name: 'Stranger', lead: 'mac:L' })
     const top = node('mac', 'tobias', { id: 'mac:T', name: 'Top' })
     const lookup = (id: string) => (id === 'mac:L' ? lead : undefined)
-    expect(teamAllows(lead, member, lookup)).toBe(true)
-    expect(teamAllows(member, lead, lookup)).toBe(true)
-    expect(teamAllows(stranger, lead, lookup)).toBe(false)
-    expect(teamAllows(top, member, lookup)).toBe(false)
-    expect(teamAllows(member, top, lookup)).toBe(false)
-    expect(teamAllows(top, lead, lookup)).toBe(true)
-    expect(teamAllows(member, lead, () => undefined)).toBe(false)
+    expect(teamAllows(lead, member, lookup)).toBe('all')
+    expect(teamAllows(member, lead, lookup)).toBe('all')
+    expect(teamAllows(stranger, lead, lookup)).toBe('none')
+    expect(teamAllows(top, member, lookup)).toBe('none')
+    expect(teamAllows(member, top, lookup)).toBe('none')
+    expect(teamAllows(top, lead, lookup)).toBe('all')
+    expect(teamAllows(member, lead, () => undefined)).toBe('none')
   })
 
-  it('across owners sees team rows only, never an agent shared as none', () => {
+  it('across owners sees team rows and pairs of shared top-level agents only', () => {
     const lead = node('mac', 'tobias', { id: 'mac:L', name: 'Lead', accepts: ['dan:M'] })
     const member = node('dan', 'dan', { id: 'dan:M', name: 'Member', lead: 'mac:L' })
     const plain = node('dan', 'dan', { id: 'dan:P', name: 'Plain' })
     const lookup = (id: string) => (id === 'mac:L' ? lead : undefined)
-    expect(teamAllows(lead, member, lookup)).toBe(true)
-    expect(teamAllows(lead, plain, lookup)).toBe(false)
-    expect(teamAllows(node('mac', 'tobias'), node('dan', 'dan'), lookup)).toBe(false)
-    expect(teamAllows(lead, { ...member, agent: { ...member.agent!, share: 'none' } }, lookup)).toBe(false)
+    expect(teamAllows(lead, member, lookup)).toBe('all')
+    expect(teamAllows(lead, plain, lookup)).toBe('none')
+    expect(teamAllows(node('mac', 'tobias'), node('dan', 'dan'), lookup)).toBe('none')
+    const shared = node('dan', 'dan', { id: 'dan:S', name: 'Shared', shared: true })
+    const sharedLead = node('mac', 'tobias', { ...lead.agent!, shared: true })
+    expect(teamAllows(lead, shared, lookup)).toBe('none')
+    expect(teamAllows(sharedLead, shared, lookup)).toBe('message')
+    expect(teamAllows(shared, sharedLead, lookup)).toBe('message')
+    expect(teamAllows(sharedLead, { ...member, agent: { ...member.agent!, shared: true } }, lookup)).toBe('all')
+    expect(teamAllows(node('mac', 'tobias', { id: 'mac:X', name: 'X', lead: 'mac:L', shared: true }), shared, lookup)).toBe('none')
+  })
+
+  it('keeps send from a session of another owner that runs without prompts', () => {
+    const lead = node('mac', 'tobias', { id: 'mac:L', name: 'Lead', accepts: ['dan:M'], shared: true })
+    const member = { ...node('dan', 'dan', { id: 'dan:M', name: 'Member', lead: 'mac:L' }), permissionMode: 'bypassPermissions' }
+    const shared = { ...node('dan', 'dan', { id: 'dan:S', name: 'Shared', shared: true }), permissionMode: 'dontAsk' }
+    const ops = ['send', 'peek'] as const
+    expect(
+      accessOps(
+        teamAllows(lead, member, () => lead),
+        ops,
+        lead,
+        member,
+      ),
+    ).toEqual(['peek'])
+    expect(
+      accessOps(
+        teamAllows(lead, shared, () => lead),
+        ops,
+        lead,
+        shared,
+      ),
+    ).toEqual([])
+    expect(
+      accessOps(
+        teamAllows(shared, lead, () => lead),
+        ops,
+        shared,
+        lead,
+      ),
+    ).toEqual(['send'])
+    expect(accessOps('all', ops, node('dan', 'dan'), member)).toEqual(['send', 'peek'])
   })
 
   it('drops an agent id that names another gateway and qualifies the rest', () => {
     expect(sanitizeAgent('pi', { id: 'mac:L', name: 'Forged' })).toBeUndefined()
-    expect(sanitizeAgent('pi', { id: 'M', name: 'Member', lead: 'mac:L', accepts: ['X', 'dan:Y'], share: 'bogus' })).toEqual({
+    expect(sanitizeAgent('pi', { id: 'M', name: 'Member', lead: 'mac:L', accepts: ['X', 'dan:Y'], shared: true })).toEqual({
       id: 'pi:M',
       name: 'Member',
       lead: 'mac:L',
@@ -274,6 +312,47 @@ describe('relay across owners', () => {
     expect(await connPi.list('m')).toEqual([])
     expect(await connMac.list('lead')).toEqual([])
     expect(await connMac.list('top')).toEqual([])
+  })
+
+  it('shows shared top-level agents of other owners as cards that take messages and no peek', async () => {
+    const { stateDir, relay } = await setup(SAME_AND_CROSS)
+    const sent: unknown[] = []
+    const card = { project: { name: 'box', root: '/box' }, checklist: { done: 1, total: 3 }, numTurns: 9, pendingPermissionCount: 2 }
+    const mini = fakeGateway([
+      entry('box', { ...card, agent: { id: 'B', name: 'Box-Lead', shared: true, accepts: ['mini:X'] } }),
+      entry('quiet', { agent: { id: 'Q', name: 'Quiet' } }),
+      entry('wild', { agent: { id: 'W', name: 'Wild', shared: true }, permissionMode: 'bypassPermissions' }),
+      entry('member', { agent: { id: 'X', name: 'Mate', lead: 'mini:B', shared: true } }),
+    ])
+    const mac = fakeGateway([
+      entry('stack', { agent: { id: 'S', name: 'Stack-Lead', shared: true } }),
+      entry('solo', { agent: { id: 'P', name: 'Solo' } }),
+    ])
+    mini.host.send = async (origin, to) => {
+      sent.push(origin)
+      return { delivered: true, sessionId: to, queued: false }
+    }
+    await attach(relay, stateDir, 'mini', mini, { owner: 'silkweave' })
+    const connMac = await attach(relay, stateDir, 'mac', mac, { owner: 'tobias' })
+
+    const rows = await connMac.list('stack')
+    expect(ids(rows)).toEqual(['mini:box'])
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        agent: { id: 'mini:B', name: 'Box-Lead', shared: true },
+        allow: ['send'],
+        pendingPermissionCount: 0,
+        cwd: '',
+      }),
+    )
+    expect(rows[0]).not.toHaveProperty('checklist')
+    expect(rows[0]).not.toHaveProperty('numTurns')
+    expect(await connMac.list('solo')).toEqual([])
+    expect(await connMac.peek('stack', { gateway: 'mini', id: 'box' })).toBeUndefined()
+    expect((await connMac.send('stack', { gateway: 'mini', id: 'box' }, 'pull and migrate', [])).delivered).toBe(true)
+    expect(sent).toMatchObject([{ owner: 'tobias', agent: { id: 'mac:S', shared: true } }])
+    expect((await connMac.send('solo', { gateway: 'mini', id: 'box' }, 'hi', [])).delivered).toBe(false)
+    expect((await connMac.send('stack', { gateway: 'mini', id: 'wild' }, 'hi', [])).delivered).toBe(false)
   })
 
   it('stamps owner and agent name on a peer origin', async () => {

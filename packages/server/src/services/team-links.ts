@@ -219,6 +219,11 @@ export class TeamLinks {
   }
 
   // Remote members are released, never retired: no frame deletes an agent on another gateway.
+  // Sends a fresh snapshot now, so a change of what is published (sharing) does not wait for the next tick.
+  republish(): void {
+    this.#transport.nudge()
+  }
+
   retiring(agent: StoredAgent): void {
     const owner = this.#ownerOf(agent)
     for (const member of agent.remoteMembers ?? []) {

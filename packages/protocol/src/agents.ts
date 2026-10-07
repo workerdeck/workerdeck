@@ -8,6 +8,8 @@ export type AgentRef = {
   leadGateway?: string
   team?: string
   leads?: true
+  // A top-level agent its owner shares with other owners' shared agents: a card in their lists and messages, no more.
+  shared?: true
   order?: number
   // Which conversation the agent is on, from 1: each restart ("New conversation") starts the next one.
   conversation?: number
@@ -45,10 +47,19 @@ export type RemoteMember = {
   op?: string
 }
 
+export const SHARINGS = ['private', 'shared'] as const
+export type Sharing = (typeof SHARINGS)[number]
+
+export function isSharing(value: unknown): value is Sharing {
+  return value === 'private' || value === 'shared'
+}
+
 export type AgentInfo = {
   id: string
   name: string
   owner?: string
+  // Stored at create, never re-resolved from a default; absent reads as private. Inert while the agent is a member.
+  sharing?: Sharing
   createdAt: number
   updatedAt: number
   avatar?: string
@@ -70,6 +81,7 @@ export type CreateAgentRequest = {
   lead?: string
   adopt?: string
   owner?: string
+  sharing?: Sharing
   // Confirms a join whose lead belongs to another owner on this gateway.
   crossOwner?: boolean
 }
@@ -80,6 +92,7 @@ export type UpdateAgentRequest = {
   lead?: string | null
   order?: number
   owner?: string
+  sharing?: Sharing
   crossOwner?: boolean
 }
 
@@ -107,6 +120,9 @@ export function agentRef(agent: AgentInfo, team: { leadName?: string; leadGatewa
   }
   if (team.leads) {
     ref.leads = true
+  }
+  if (agent.sharing === 'shared' && agent.lead === undefined) {
+    ref.shared = true
   }
   if (agent.pastSessions.length > 0) {
     ref.conversation = agent.pastSessions.length + 1
@@ -147,16 +163,45 @@ export function teamRelated(a: AgentRef | undefined, b: AgentRef | undefined): b
   return a.lead === b.id || b.lead === a.id || (a.lead !== undefined && a.lead === b.lead)
 }
 
-export type PeerParty = { owner?: string; agent?: AgentRef }
+export type PeerParty = { owner?: string; agent?: AgentRef; permissionMode?: string }
 
-// The peers rule with owners: the team rule always holds, and sessions of different owners reach each other only
-// through a team. On a gateway with several owners a missing owner matches nobody.
-export function peerReaches(from: PeerParty, to: PeerParty, multiOwner: boolean): boolean {
+export type PeerOps = { list: boolean; send: boolean; peek: boolean }
+
+const NO_OPS: PeerOps = { list: false, send: false, peek: false }
+const ALL_OPS: PeerOps = { list: true, send: true, peek: true }
+
+function sharedLead(agent: AgentRef | undefined): boolean {
+  return agent?.shared === true && agent.lead === undefined
+}
+
+// A session that runs tools without asking takes nothing from another owner's agents.
+function unprompted(party: PeerParty): boolean {
+  return party.permissionMode === 'bypassPermissions' || party.permissionMode === 'dontAsk'
+}
+
+// The peers rule with owners and sharing, one matrix for local and relayed peers. The team rule always holds. The
+// same owner reaches everything it does. Different owners reach each other through a team (peek as the rules allow),
+// or as two shared top-level agents (a card and messages, never a peek). Either way nothing is sent to a session of
+// another owner that runs without prompts. On a gateway with several owners a missing owner matches nobody.
+export function peerOps(from: PeerParty, to: PeerParty, multiOwner: boolean): PeerOps {
   if (!teamReaches(from.agent, to.agent)) {
-    return false
+    return NO_OPS
   }
-  const same = from.owner === to.owner && (from.owner !== undefined || !multiOwner)
-  return same || teamRelated(from.agent, to.agent)
+  if (from.owner === to.owner && (from.owner !== undefined || !multiOwner)) {
+    return ALL_OPS
+  }
+  if (teamRelated(from.agent, to.agent)) {
+    return { list: true, send: !unprompted(to), peek: true }
+  }
+  const owned = from.owner !== undefined && to.owner !== undefined
+  if (owned && sharedLead(from.agent) && sharedLead(to.agent) && !unprompted(to)) {
+    return { list: true, send: true, peek: false }
+  }
+  return NO_OPS
+}
+
+export function peerReaches(from: PeerParty, to: PeerParty, multiOwner: boolean): boolean {
+  return peerOps(from, to, multiOwner).list
 }
 
 // Qualifies an agent ref's ids with its gateway, so local and remote refs compare in `teamReaches`. A qualified id

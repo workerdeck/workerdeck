@@ -1,16 +1,12 @@
-import {
-  RELAY_GATEWAY_NAME,
-  isShareLevel,
-  parseRelayPeerId,
-  qualifyId,
-  type RelayAgentEntry,
-  type RelaySessionEntry,
-} from '@workerdeck/relay-client'
+import { RELAY_GATEWAY_NAME, parseRelayPeerId, qualifyId, type RelayAgentEntry, type RelaySessionEntry } from '@workerdeck/relay-client'
 
 export const MAX_ACCEPTS = 32
 const MAX_AGENT_NAME = 64
 
-export type TeamNode = { gateway: string; owner: string; agent?: RelayAgentEntry }
+export type TeamNode = { gateway: string; owner: string; agent?: RelayAgentEntry; permissionMode?: string }
+
+// What one session may do with another past the rules: everything they grant, only list and send, or nothing.
+export type TeamAccess = 'all' | 'message' | 'none'
 
 export type AgentLookup = (qualifiedId: string) => TeamNode | undefined
 
@@ -38,8 +34,8 @@ export function sanitizeAgent(gateway: string, value: unknown): RelayAgentEntry 
       .slice(0, MAX_ACCEPTS)
       .map((id) => qualifyId(gateway, id))
   }
-  if (isShareLevel(raw.share)) {
-    agent.share = raw.share
+  if (raw.shared === true && agent.lead === undefined) {
+    agent.shared = true
   }
   return agent
 }
@@ -79,21 +75,50 @@ export function teamRelated(a: TeamNode, b: TeamNode, lookup: AgentLookup): bool
   return bLead === a.agent.id || aLead === b.agent.id || (aLead !== undefined && aLead === bLead)
 }
 
-// Same owner: sessions outside teams see each other as the rules say, and a member sees only its
-// lead and teammates. Different owners: only team rows, and an agent shared as `none` with nobody.
-export function teamAllows(sender: TeamNode, target: TeamNode, lookup: AgentLookup): boolean {
+function sharedLead(node: TeamNode): boolean {
+  return node.agent?.shared === true && node.agent.lead === undefined
+}
+
+function unprompted(node: TeamNode): boolean {
+  return node.permissionMode === 'bypassPermissions' || node.permissionMode === 'dontAsk'
+}
+
+// `peerOps` in protocol, with team claims checked against the lead's accepts. Same owner: sessions outside teams see
+// each other as the rules say, and a member sees only its lead and teammates. Different owners: team rows, or two
+// shared top-level agents, which may list and message each other and nothing more. Nothing of another owner is sent
+// to a session that runs without prompts.
+export function teamAllows(sender: TeamNode, target: TeamNode, lookup: AgentLookup): TeamAccess {
   const related = teamRelated(sender, target, lookup)
   if (sender.owner === target.owner) {
-    return related || (sender.agent?.lead === undefined && target.agent?.lead === undefined)
+    return related || (sender.agent?.lead === undefined && target.agent?.lead === undefined) ? 'all' : 'none'
   }
-  if (sender.agent?.share === 'none' || target.agent?.share === 'none') {
-    return false
+  if (related) {
+    return 'all'
   }
-  return related
+  return sharedLead(sender) && sharedLead(target) ? 'message' : 'none'
+}
+
+// The ops an access leaves of what the rules grant.
+export function accessOps<T extends string>(access: TeamAccess, ops: readonly T[], sender: TeamNode, target: TeamNode): T[] {
+  if (access === 'none') {
+    return []
+  }
+  const allowed = access === 'all' ? [...ops] : ops.filter((op) => op === 'send')
+  return sender.owner !== target.owner && unprompted(target) ? allowed.filter((op) => op !== 'send') : allowed
 }
 
 // What a gateway of another owner may learn about a session: paths and profile names stay home.
 export function projectForOtherOwner(entry: RelaySessionEntry): RelaySessionEntry {
   const { profile: _profile, permissionMode: _mode, project, ...rest } = entry
   return { ...rest, cwd: '', ...(project ? { project: { name: project.name, root: '' } } : {}) }
+}
+
+// A shared agent of another owner outside the asker's team: its card, and nothing about its work.
+export function projectCard(entry: RelaySessionEntry): RelaySessionEntry {
+  const { contextUsage: _context, checklist: _checklist, numTurns: _turns, agent, ...rest } = projectForOtherOwner(entry)
+  return {
+    ...rest,
+    pendingPermissionCount: 0,
+    ...(agent ? { agent: { id: agent.id, name: agent.name, ...(agent.shared ? { shared: true as const } : {}) } } : {}),
+  }
 }

@@ -1,4 +1,4 @@
-import type { AgentRef } from './agents.ts'
+import type { AgentRef, Sharing } from './agents.ts'
 import type { StatusLabel, StatusLabelInput } from './status-label.ts'
 import type { ByModel, PricingOverrides, ProfileSpend } from './pricing.ts'
 
@@ -482,6 +482,8 @@ export type ProfileDefaults = {
   permissionMode?: PermissionMode
   efforts?: Record<string, string>
   agentContextReset?: boolean
+  // Whether a new agent under this profile starts shared with other owners; the gateway default otherwise.
+  sharing?: Sharing
 }
 
 export type ProfileEngine = 'claude' | 'codex' | 'provider'
