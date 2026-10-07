@@ -1492,7 +1492,10 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   3.4.0 / 3.6.1 at release, so cross-gateway joins could not be tried; Tobias chose to release and
   check during rollout), a paid `smoke:teams` across gateways, iOS (deferred to Agent Teams phase 5).
 
-  **3.8.0** - **jobs-only bypass, released 2026-10-07** (tag `v3.8.0`). A **minor**, protocol stays
+  **3.8.1** - **jobs-only bypass, released 2026-10-07** (tag `v3.8.1`). **`v3.8.0` is a pushed but
+  never-published tag**: its CI gate failed on a relay reload race (the file watcher's reload and an
+  explicit one overlapped, and the stale read landed last); reloads are serial now. Never publish it.
+  A **minor**, protocol stays
   **1**: `disableBypassPermissions: 'sessions'` refuses bypass for sessions, agents, profile defaults
   and the WS mode switch but lets an operator's `POST /jobs` run in it, and `refuseJobInput` refuses
   typed and peer messages into a job session still in bypass. Asked for by the Silkweave Box

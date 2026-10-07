@@ -168,7 +168,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     }
   }
 
-  const reload = async (): Promise<void> => {
+  const reloadNow = async (): Promise<void> => {
     try {
       enrollments = await readEnrollments(options.stateDir)
     } catch (error) {
@@ -191,6 +191,13 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
         drop(gateway, RELAY_CLOSE.ownersRequired, 'several owners need a gateway that names them')
       }
     }
+  }
+
+  // Serial: the file watcher and an explicit reload may overlap, and a read that started first must not land last.
+  let reloading = Promise.resolve()
+  const reload = (): Promise<void> => {
+    reloading = reloading.then(reloadNow, reloadNow)
+    return reloading
   }
 
   const enrolledOwners = (name: string): string[] => ownersOf(enrollments.gateways[name], defaultOwner)

@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/relay",
-  "version": "3.8.0",
+  "version": "3.8.1",
   "type": "module",
   "description": "The WorkerDeck relay: one always-on process every gateway dials out to. Holds the cross-gateway session registry, authenticates enrolled gateways, enforces the visibility rules and routes peer requests between them.",
   "license": "MIT",
