@@ -1586,9 +1586,22 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   publishes nothing and refuses every peer and team frame (`ownersBlocked` in `peer-relay.ts`).
   Such a relay answers a peek with no owner; the gateway takes it from the relay's listed row.
   A join retry or a `team.status` question under the edge's op still holds only for the owner
-  the edge was accepted with (an edge stored without one fits any).
-  Trust contract (R3.7 decision 1): the relay carries owners faithfully; the checks stop one
-  gateway claiming another's owners, not a lying relay.
+  the edge was accepted with (an edge stored without one fits any). A known `team.status` answer
+  carries the answering agent's owner, stamped by the relay like `TeamResult.owner` (a claim the
+  target may not make falls back to its published entry, never through), so a join recovered
+  after a restart stores `remoteLead.owner` too and is refused for an unprompted mover across owners.
+- **The relay is trusted; the gateway checks stop other gateways, not the relay** (R3.7
+  decision 1). The relay carries roster, owner and origin assertions faithfully, and every
+  gateway-side check (`vouches`, rosters, accepts, owner fits) catches a claim *another gateway*
+  makes that the relay forwards. Nothing is signed end to end, so a compromised relay can forge
+  any origin, owner or roster and is not contained. Run it on a trusted tailnet or behind TLS, and
+  never write docs or UI copy that promise otherwise.
+- **A multi-owner enrollment delegates every listed owner to that gateway.** `enroll mini --owners
+  silkweave,tobias,ruli,dan` lets the mini speak for all four: its key, a bug in its profile owner
+  mapping, or anyone holding its auth key can act as any of them toward every other gateway. Owners
+  separate agents, not people: a shared gateway has one auth key, so everyone holding it is a
+  co-administrator of every owner on it (approvals, sharing, team moves) until per-person login
+  exists. Enroll the smallest set, and keep an owner off a gateway that person does not trust.
 - **Every miss reads the same.** Unknown gateway, unknown session, a rule that denies, a ceiling
   that denies: `peek` answers nothing and `send` answers `no such session: gateway:id`. Never
   word them differently; that is how a peer learns what exists behind a rule.
@@ -1740,6 +1753,14 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   session env with `claude auth status` at `listen()` and warns on a logged-out verdict: warn-only,
   silent on "couldn't check", off by default in the library, on in the CLI, and reads nothing but
   the `loggedIn` boolean.
+- **On macOS a pinned dir has a Keychain copy too** (verified on the mini 2026-10-07, CLI 2.1.28x
+  to 2.1.292): `Claude Code-credentials-<first 8 hex of sha256(dir path)>`. A process that can
+  open the login Keychain (a launchd agent in the GUI session) reads and writes that item; ssh and
+  cron cannot, and use `<dir>/.credentials.json`. Refresh tokens rotate, so using one dir from
+  both sides stales the other copy: the gateway then fails every turn with "OAuth session expired
+  and could not be refreshed" while `claude -p` over ssh works. For a service, use a
+  `claude setup-token` the person issued, as `CLAUDE_CODE_OAUTH_TOKEN` for that profile, or keep
+  each dir to one side. Never copy tokens out of either store (auth red lines).
 - Profile management is doubly opt-in (`profileStore` AND `canManageProfiles`), and the two profile
   sets never mix: `profiles` from server options are code (immutable over HTTP, and win a name
   collision), while the store holds UI-created ones. `validateProfile` is shared by startup and the

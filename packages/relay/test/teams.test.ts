@@ -26,6 +26,7 @@ type FakeGateway = {
   team: TeamCall[]
   status: Array<{ origin: { gateway: string; owner: string } } & TeamStatusBody>
   rosters: TeamRoster[]
+  claims?: string
   host: RelayHost
 }
 
@@ -61,7 +62,7 @@ function fakeGateway(entries: RelaySessionEntry[]): FakeGateway {
       teamStatus: async (origin, body) => {
         gateway.status.push({ origin, ...body })
         return {
-          edges: body.edges.map(() => ({ known: true, name: 'Member' })),
+          edges: body.edges.map(() => ({ known: true, name: 'Member', ...(gateway.claims ? { owner: gateway.claims } : {}) })),
           rosters: gateway.rosters,
           seen: [
             { lead: 'mac:L', epoch: 'e1', rev: 3 },
@@ -452,7 +453,7 @@ describe('team frames', () => {
         { from: 'pi:forged', to: 'pi:M' },
       ],
     })
-    expect(answer.edges).toEqual([{ from: 'L', to: 'pi:M', op: 'o1', known: true, name: 'Member' }])
+    expect(answer.edges).toEqual([{ from: 'L', to: 'pi:M', op: 'o1', known: true, name: 'Member', owner: 'operator' }])
     expect(pi.status).toEqual([
       {
         origin: { gateway: 'mac', owner: 'operator' },
@@ -462,6 +463,9 @@ describe('team frames', () => {
       },
     ])
     await expect(connMac.teamStatus('gone', { edges: [{ from: 'L', to: 'gone:M' }] })).rejects.toThrow(/unreachable/)
+    pi.claims = 'mallory'
+    const forged = await connMac.teamStatus('pi', { edges: [{ from: 'L', to: 'pi:M', op: 'o1' }] })
+    expect(forged.edges).toEqual([{ from: 'L', to: 'pi:M', op: 'o1', known: true, name: 'Member', owner: 'operator' }])
   })
 
   it('carries rosters only for the issuing gateway own leads, qualified, and seen only about the receiver', async () => {

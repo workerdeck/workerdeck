@@ -30,9 +30,17 @@ it between members to place it, and drag a member out to leave; the card menus o
 moves. In the list, members sit under their lead on a tree line, and a folded team shows each
 member's avatar and status on the lead's own line.
 
-Teams also scope peer messaging: a member reaches only its lead and teammates, nobody outside the
-team reaches a member, and members never cross a [relay](/workerdeck/docs/guides/cross-gateway-peers/). In the
-composer, `#` finds an agent by its name.
+Teams also scope peer messaging: a member reaches only its lead and teammates, and nobody outside
+the team reaches a member. With a [relay](/workerdeck/docs/guides/cross-gateway-peers/) a team can
+span gateways, and agents of different owners meet only in a team or as two shared agents (see
+[Owners](/workerdeck/docs/guides/cross-gateway-peers/#owners-sharing-a-relay-with-colleagues)).
+In the composer, `#` finds an agent by its name.
+
+## Private and shared
+
+An agent is Private unless you choose Shared in *New agent* or its `⋯` menu. Sharing only matters
+toward other owners: a shared agent is listed for their shared agents, which can message it but
+never peek at it. Sharing is set on the lead; members are never shared on their own.
 
 ## Status
 

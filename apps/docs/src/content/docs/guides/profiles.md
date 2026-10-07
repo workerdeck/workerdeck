@@ -222,7 +222,10 @@ official CLI reads, via its own `CLAUDE_CONFIG_DIR` mechanism. Two consequences:
   variable set, the CLI reads `<dir>/.credentials.json`; unset, it runs its own resolution -
   on macOS that is the login Keychain, where `claude login` stores a claude.ai login. This is
   why the default profile is never pinned, and why a profile pointing at any *other* directory
-  needs credentials of its own: run `CLAUDE_CONFIG_DIR=<dir> claude auth login` there, or
+  needs credentials of its own. On macOS the CLI also keeps a Keychain copy per pinned
+  directory, which a gateway running as a launchd agent reads, while ssh and cron read the file;
+  using one directory from both stales the other copy, so give a service its own token
+  (below) or keep each directory to one of them. To set one up: run `CLAUDE_CONFIG_DIR=<dir> claude auth login` there, or
   inject a long-lived `CLAUDE_CODE_OAUTH_TOKEN` via `buildRunnerConfig`. The server's
   `checkCredentials` option (on by default in the `workerdeck` CLI) probes each profile
   with `claude auth status` at startup and warns - never fails - when a profile looks

@@ -502,7 +502,7 @@ accept/reject/fulfil contract is the next layer, not this one.
 
 ### Across gateways: the relay
 
-Several gateways (one operator, several machines) reach each other's sessions through one
+Several gateways (one operator or a small trusted group, several machines) reach each other's sessions through one
 **relay** every gateway dials out to (`packages/relay`, run as `workerdeck relay serve`). The relay
 holds a registry of every published session, authenticates each gateway by an enrolled key,
 applies its rules file, and routes `peek` and `send` to the owning gateway. Gateways never talk to
@@ -521,12 +521,23 @@ published at all, which operations it accepts) and the relay's rules (default de
 `allow` grants `send` and `peek`; optional `scope.projects`). The relay stamps the sender half of
 every request from the authenticated connection, so a gateway cannot speak for another.
 
+**Owners** are labels for the party an agent answers to (a person or an organisation), never
+credentials. Each session and agent carries one, resolved from its profile (or the gateway's
+`--owner`, or its one enrolled owner) and persisted on the agent. The relay enrolls the set each
+gateway may claim (`enroll <name> --owners a,b`) and drops anything outside it. One peer rule
+(`peerOps` in `protocol`) answers list, send and peek for every pair, locally and across the
+relay: same-owner pairs follow the team rule, different owners meet only through a team or as two
+**shared** independent leads (a card and messages, never a peek). Sharing is set per agent,
+Private by default, with a per-gateway default and ceiling (`--agent-sharing`). The relay is
+trusted: the gateways' checks stop other gateways' false claims, not a lying relay
+(`docs/GOTCHAS.md` §Relay).
+
 Design choices that stand until real use argues otherwise. The transport is WebSocket with JSON
 frames, not gRPC: the repo speaks WS everywhere, it passes through tailnets and reverse proxies,
 and the volume is tiny. A flapping gateway gets no grace window; clearing and re-snapshotting a
 few dozen rows costs nothing, so a grace period is added only if list churn shows up in practice.
 The relay is server-to-server only: dashboards and the phone never talk to it, push does not go
-through it, and it serves one operator, never several tenants. A `#Name` mention does reach
+through it, and it serves one operator or a few trusted colleagues on one tailnet, never tenants. A `#Name` mention does reach
 across gateways, because the picker and the resolver both read the composed directory
 (`GET /v1/sessions/:id/peers`, the same rows `peers_list` answers), but the resolution happens on
 the sender's gateway and only a remote session's id and title travel into the envelope.
@@ -543,8 +554,13 @@ an existing session (`adopt`). Retiring (`DELETE`) closes the agent's session an
 members (or retires them, `members: 'retire'`).
 
 A **team** is a lead and the agents whose `lead` names it, one level deep. Teams gate peer
-messaging: a member reaches only its lead and teammates, nobody outside a team reaches its members,
-and members never cross the relay. A gateway with an `AvatarProvider` (the CLI wires monkeyart)
+messaging: a member reaches only its lead and teammates, and nobody outside a team reaches its
+members. A team may span gateways (and owners). Then **the lead's gateway owns the canonical
+roster** (epoch and revision, sent on `team.status`), and **the member's gateway owns that
+agent's consent and current binding** (the join's op, which nothing read from a lead ever sets).
+Authorization needs both, plus local policy: a member is published to the relay only once its
+team spans gateways, and a third-gateway teammate is admitted only against a fresh cached roster
+of the lead. The relay routes and filters team frames but never owns membership. A gateway with an `AvatarProvider` (the CLI wires monkeyart)
 serves each agent's avatar (`GET /agents/:id/avatar.png`) from a persisted recipe, so no client
 ports the composer; without one, `avatar` is absent and clients draw the engine tile. Invariants: `docs/GOTCHAS.md` §Agents and teams.
 

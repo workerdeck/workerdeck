@@ -406,11 +406,14 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       if (typeof row?.known !== 'boolean') {
         return []
       }
+      // A claim the target gateway may not make falls back to what the relay knows, never to the claim.
+      const owner = row.known ? (claimOwner(target, edge.to, row.owner) ?? claimOwner(target, edge.to, undefined)) : undefined
       return [
         {
           ...edge,
           known: row.known,
           ...(typeof row.name === 'string' ? { name: row.name } : {}),
+          ...(owner === undefined ? {} : { owner }),
           ...(typeof row.session === 'string' ? { session: row.session } : {}),
         },
       ]

@@ -177,7 +177,9 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   starts it fresh. Drag one agent onto another to form a team (one level deep): members sit under
   their lead in every client, reach only their lead and teammates through the peer tools, and sleep
   when idle (`--agent-sleep-after`, 15 minutes by default). `#` in the composer finds an agent by
-  name.
+  name. Over a relay a team can span machines and owners: every agent answers to an owner
+  (`--owner`, per profile, enrolled with `--owners`), and agents of different owners meet only in a
+  team or as two agents marked Shared (`--agent-sharing`; Private by default).
 - **Projects, not folder basenames.** A `.workerdeck.json` at the root of a repo gives it a name
   and an icon, found by an ancestor walk from the session's cwd - so a list of sessions reads as
   a list of projects, and can be filtered, grouped and sorted by one. The gateway resolves it

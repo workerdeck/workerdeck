@@ -91,6 +91,65 @@ says remote gateways are unavailable.
 
 A session with a `scope` never reaches past its own gateway.
 
+## Teams across gateways
+
+An agent can join a lead on another gateway: drag it onto the lead in the dashboard or VS Code
+(both gateways must be configured in that client and online at the relay). The lead's gateway
+records an invitation, the member's gateway joins under it, and the member then reaches its lead
+and teammates wherever they run. Both gateways need `team` in `expose.allow` and a rule that
+grants it:
+
+```json
+{ "rules": [{ "from": "*", "to": "*", "allow": ["send", "peek", "team"] }] }
+```
+
+A gateway can waive the per-join invitation for agents of the same owner from gateways it trusts:
+`relay: { ..., teams: { acceptFrom: ['laptop', 'win-desktop'] } }`.
+
+The lead's gateway is the authority on who is in its team; the member's gateway decides whether
+its agent is in one. A gateway that drops off the relay keeps its teams restricted, never widened,
+and only an answer from the other gateway dissolves a membership.
+
+## Owners: sharing a relay with colleagues
+
+Every gateway, session and agent has an **owner**: a label for whom it answers to, such as
+`tobias`, `ruli` or an organisation. It is not a login and has nothing to do with model
+credentials. Agents of different owners never see each other unless one of these holds:
+
+- they are in the same team (lending an agent to a colleague's team asks for confirmation), or
+- both are **shared** top-level agents: each appears as a card in the other's lists, and they can
+  message each other, never peek. Members and plain sessions are never shared.
+
+An agent is **Private** by default. Choose Private or Shared in *New agent* or the agent's `⋯`
+menu; the gateway's default is `--agent-sharing private|shared` (config `agentSharing.default`),
+and `--agent-sharing never` shares nothing. An agent whose session runs without permission
+prompts (`bypassPermissions`, `dontAsk`) receives nothing from other owners.
+
+Enroll each gateway with its owner, and give a gateway several people use each owner it may claim:
+
+```bash
+workerdeck relay enroll laptop --owner tobias
+workerdeck relay enroll mini --owners silkweave,tobias,ruli,dan
+```
+
+On a gateway with several owners, each profile names its owner in the config
+(`profiles: [{ name: 'ruli:claude', ..., owner: 'ruli' }]`) and `--owner <label>` (config `owner`)
+covers the rest. Such a gateway refuses to start a session that resolves to no owner. Rules
+between gateways of different owners need `"crossOperator": true`; a rule without it covers
+same-owner pairs only:
+
+```json
+{ "from": "*", "to": "*", "allow": ["send", "team"], "crossOperator": true }
+```
+
+What this does not protect against:
+
+- **The relay is trusted.** Gateways check each other's claims, but a compromised relay can
+  forge any of them. Run it on a tailnet or behind TLS, for people you trust.
+- **Owners separate agents, not people.** Everyone who holds a gateway's auth key can act for
+  every owner on it, and a gateway enrolled with several owners can speak for all of them.
+  Enroll the smallest set.
+
 ## Running the relay as a service
 
 The relay belongs on a machine that stays up, under a service manager that restarts it. The

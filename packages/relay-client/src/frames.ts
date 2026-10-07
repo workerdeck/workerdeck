@@ -96,7 +96,8 @@ export type TeamStatusBody = { edges: TeamEdge[]; rosters?: TeamRoster[]; seen?:
 export type TeamResult = { ok: true; leadName?: string; owner?: string } | { ok: false; reason: string }
 
 // `op` echoes the asked edge's op, so two questions about one pair (a binding and a rejoin) keep their own answers.
-export type TeamStatusEdge = { from: string; to: string; op?: string; known: boolean; name?: string; session?: string }
+// On an answer, `owner` is the answering agent's, as the relay checked it against what that gateway may claim.
+export type TeamStatusEdge = { from: string; to: string; op?: string; known: boolean; name?: string; owner?: string; session?: string }
 
 export type TeamStatusAnswer = { edges: TeamStatusEdge[]; rosters?: TeamRoster[]; seen?: TeamSeen[] }
 

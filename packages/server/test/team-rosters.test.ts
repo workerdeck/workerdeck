@@ -52,7 +52,7 @@ class Mesh {
         )
         const edges = body.edges.flatMap((edge, index) => {
           const row = answer.edges[index]
-          return typeof row?.known === 'boolean' ? [{ ...edge, known: row.known, ...(row.name ? { name: row.name } : {}) }] : []
+          return typeof row?.known === 'boolean' ? [{ ...edge, known: row.known, ...(row.name ? { name: row.name } : {}), ...(row.owner ? { owner: row.owner } : {}) }] : []
         })
         return { edges, rosters: readTeamRosters(answer.rosters, targetName), seen: answer.seen ?? [] }
       },
@@ -332,12 +332,12 @@ describe('joins across a restart', () => {
     const { mac, restarted, leadAgent, leadId, mover, op } = await interrupted('accepted')
     expect(restarted.agents.get(mover.id)?.pendingJoin).toMatchObject({ op, lead: leadId })
     expect((await restarted.teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from: leadId, to: mover.id, op }] })).edges).toEqual([
-      { known: true, name: 'MagWin' },
+      { known: true, name: 'MagWin', owner: 'tobias' },
     ])
     const refused = await restarted.teams.join(mover, leadId, (j) => restarted.agents.update(mover.id, { lead: leadId }, { joined: j }))
     expect(refused).toEqual({ status: 409, error: 'MagWin is already joining a team' })
     await restarted.teams.reconcile()
-    expect(restarted.agents.get(mover.id)).toMatchObject({ lead: leadId, remoteLead: { op, state: 'joined', name: 'AC-Lead' } })
+    expect(restarted.agents.get(mover.id)).toMatchObject({ lead: leadId, remoteLead: { op, state: 'joined', name: 'AC-Lead', owner: 'tobias' } })
     expect(restarted.agents.get(mover.id)?.pendingJoin).toBeUndefined()
     expect(restarted.agents.restoredJoins()).toEqual([])
     expect(mac.agents.get(leadAgent.id)?.remoteMembers).toMatchObject([{ state: 'accepted', op }])
@@ -554,8 +554,8 @@ describe('second review', () => {
     ])
     const win = await mesh.add('win', store)
     const ask = async (op: string) => (await win.teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from: 'mac:L', to: 'M', op }] })).edges
-    expect(await ask('op-old')).toEqual([{ known: true, name: 'M' }])
-    expect(await ask('op-new')).toEqual([{ known: true, name: 'M' }])
+    expect(await ask('op-old')).toEqual([{ known: true, name: 'M', owner: 'tobias' }])
+    expect(await ask('op-new')).toEqual([{ known: true, name: 'M', owner: 'tobias' }])
     expect(await ask('op-other')).toEqual([{ known: false }])
   })
 

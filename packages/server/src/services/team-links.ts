@@ -398,7 +398,7 @@ export class TeamLinks {
       return {}
     }
     if (this.#agents.joiningLead(to) === from && this.#agents.joiningOp(to) === op) {
-      return { known: true, name: this.#agents.get(to)?.name ?? this.#agents.joiningName(to) }
+      return { known: true, name: this.#agents.get(to)?.name ?? this.#agents.joiningName(to), ...this.#ownerRow(this.#agents.get(to)) }
     }
     const agent = this.#agents.get(to)
     if (!agent) {
@@ -413,7 +413,7 @@ export class TeamLinks {
       if (agent.remoteLead.state === 'unconfirmed') {
         await this.#confirm(to, 'member', from, op)
       }
-      return { known: true, name: agent.name }
+      return { known: true, name: agent.name, ...this.#ownerRow(agent) }
     }
     const entry = (agent.remoteMembers ?? []).find(
       (member) => member.agent === from && member.op === op && member.state !== 'invited' && ownerFits(member.owner, edge.owner),
@@ -422,7 +422,7 @@ export class TeamLinks {
       if (entry.state === 'unconfirmed') {
         await this.#confirm(to, 'lead', from, op)
       }
-      return { known: true, name: agent.name }
+      return { known: true, name: agent.name, ...this.#ownerRow(agent) }
     }
     return { known: false }
   }
@@ -452,6 +452,11 @@ export class TeamLinks {
       lead,
       remoteLead: { name: leadName ?? lead, ...(owner === undefined ? {} : { owner }), state: 'joined', since: this.#now(), op },
     }
+  }
+
+  #ownerRow(agent: StoredAgent | undefined): { owner?: string } {
+    const owner = this.#ownerOf(agent)
+    return owner === undefined ? {} : { owner }
   }
 
   #ownerOf(agent: StoredAgent | undefined): string | undefined {
@@ -756,8 +761,10 @@ export class TeamLinks {
       return
     }
     const previous = this.#agents.get(edge.from)
-    const joined = this.#joined(edge.to, edge.op, answer.name, undefined)
-    const outcome = await this.#agents.update(edge.from, { lead: edge.to }, { joined })
+    const crossOwner = answer.owner !== undefined && answer.owner !== this.#ownerOf(previous)
+    const unprompted = crossOwner && previous ? this.#agents.unpromptedRefusal(previous) : null
+    const joined = this.#joined(edge.to, edge.op, answer.name, answer.owner)
+    const outcome = unprompted ?? (await this.#agents.update(edge.from, { lead: edge.to }, { joined }))
     await this.#agents.releaseJoin(edge.from, edge.op)
     if (isAgentRefusal(outcome)) {
       this.#notify('team.leave', edge.from, edge.to, edge.op, edge.owner)
