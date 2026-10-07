@@ -1,7 +1,16 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { enrollGateway, enrollGatewayHash, readEnrollments, revokeGateway, setGatewayOwner, writeKeyFile } from './enrollment.ts'
+import {
+  enrollGateway,
+  enrollGatewayHash,
+  parseOwners,
+  readEnrollments,
+  revokeGateway,
+  setGatewayOwner,
+  setGatewayOwners,
+  writeKeyFile,
+} from './enrollment.ts'
 import { DEFAULT_RELAY_OWNER, startRelay, type RelayStatus } from './relay.ts'
 import { fetchRelayStatus, statusSocketPath } from './status.ts'
 import { readRules, rulesPath } from './rules.ts'
@@ -10,10 +19,12 @@ export const RELAY_HELP = `workerdeck-relay - the cross-gateway peer relay. Also
 
 Usage
   workerdeck-relay serve [options]          run the relay
-  workerdeck-relay enroll <name> [--rotate] [--owner <label>] [--hash <sha256>]
+  workerdeck-relay enroll <name> [--rotate] [--owner <label> | --owners <a,b,...>] [--hash <sha256>]
                                             enroll a gateway and print its key once, or store the
-                                            hash a colleague's \`keygen\` printed (the key stays theirs)
+                                            hash a colleague's \`keygen\` printed (the key stays theirs);
+                                            --owners lets a shared gateway claim each owner per session
   workerdeck-relay owner <name> <label>     set the owner of an enrolled gateway (--clear to unset)
+  workerdeck-relay owners <name> <a,b,...>  replace the owners an enrolled gateway may claim
   workerdeck-relay revoke <name>            revoke a gateway; a running relay drops it within seconds
   workerdeck-relay list                     list enrolled gateways
   workerdeck-relay status                   ask the relay serving this state dir who is online
@@ -41,6 +52,7 @@ export type RelayFlags = {
   tlsKey?: string
   rotate?: boolean
   owner?: string
+  owners?: string[]
   hash?: string
   out?: string
   force?: boolean
@@ -94,6 +106,10 @@ export function parseRelayArgs(argv: readonly string[], env: NodeJS.ProcessEnv =
       }
       case '--owner': {
         flags.owner = value()
+        break
+      }
+      case '--owners': {
+        flags.owners = parseOwners(value())
         break
       }
       case '--hash': {
@@ -172,8 +188,8 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       if (!flags.name) {
         throw new RelayUsageError('enroll needs a gateway name')
       }
-      const options = { rotate: flags.rotate, owner: flags.owner }
-      const owned = flags.owner ? ` (owner ${flags.owner})` : ''
+      const options = { rotate: flags.rotate, owner: flags.owner, owners: flags.owners }
+      const owned = flags.owners ? ` (owners ${flags.owners.join(', ')})` : flags.owner ? ` (owner ${flags.owner})` : ''
       if (flags.hash) {
         await enrollGatewayHash(flags.stateDir, flags.name, flags.hash, options)
         console.log(`Enrolled ${flags.name}${owned} with the key hash it generated; its key never left that machine.`)
@@ -193,6 +209,15 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       }
       const changed = await setGatewayOwner(flags.stateDir, flags.name, label)
       console.log(changed ? `${flags.name}: owner ${label ?? 'cleared'}.` : `${flags.name} is not enrolled.`)
+      return changed ? 0 : 1
+    }
+    case 'owners': {
+      const owners = flags.rest[0] === undefined ? [] : parseOwners(flags.rest[0])
+      if (!flags.name || owners.length === 0) {
+        throw new RelayUsageError('owners needs a gateway name and a comma-separated list of owners')
+      }
+      const changed = await setGatewayOwners(flags.stateDir, flags.name, owners)
+      console.log(changed ? `${flags.name}: owners ${owners.join(', ')}.` : `${flags.name} is not enrolled.`)
       return changed ? 0 : 1
     }
     case 'keygen': {
@@ -229,7 +254,7 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       }
       for (const [name, entry] of names) {
         console.log(
-          `${name}\towner ${entry.owner ?? `${DEFAULT_RELAY_OWNER} (default)`}\tenrolled ${new Date(entry.enrolledAt).toISOString()}`,
+          `${name}\t${entry.owners ? `owners ${entry.owners.join(', ')}` : `owner ${entry.owner ?? `${DEFAULT_RELAY_OWNER} (default)`}`}\tenrolled ${new Date(entry.enrolledAt).toISOString()}`,
         )
       }
       return 0
@@ -246,9 +271,9 @@ export async function runRelayCli(argv: readonly string[]): Promise<number> {
       for (const gateway of status.gateways) {
         console.log(
           gateway.online
-            ? `${gateway.name}\t${gateway.owner}\tonline\t${gateway.sessions} session(s)\taccepts ${gateway.ops.join(', ') || 'nothing'}` +
+            ? `${gateway.name}\t${gateway.owners.join(',')}\tonline\t${gateway.sessions} session(s)\taccepts ${gateway.ops.join(', ') || 'nothing'}` +
                 (gateway.features?.length ? `\tfeatures ${gateway.features.join(', ')}` : '')
-            : `${gateway.name}\t${gateway.owner}\toffline`,
+            : `${gateway.name}\t${gateway.owners.join(',')}\toffline`,
         )
       }
       return 0

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentRef, SessionInfo, SessionRow } from '@workerdeck/protocol'
-import { dropZone, joinDrop, memberDrop, teamDropRefusal } from '../src/lib/team-drop.ts'
+import { crossOwnerDrop, dropZone, joinDrop, memberDrop, teamDropRefusal } from '../src/lib/team-drop.ts'
 
 function row(id: string, agent?: Partial<AgentRef>, over: Partial<SessionRow> = {}): SessionRow {
   const info = {
@@ -49,9 +49,24 @@ describe('teamDropRefusal', () => {
       'the relay does not route teams yet',
     )
     expect(teamDropRefusal(row('pip', {}), far, { ...both, desk: relay('sw-desk', { owner: 'dan' }) })).toBe(
-      'that gateway belongs to another operator',
+      'pip belongs to another owner; it joins by invitation',
     )
     expect(joinDrop(row('pip', {}), far, both)).toMatchObject({ lead: { hostId: 'desk' }, order: 0 })
+  })
+
+  it('compares the agents owners, not their gateways', () => {
+    const owned = (id: string, owner: string, over: Partial<SessionRow> = {}): SessionRow => {
+      const base = row(id, {}, over)
+      return { ...base, info: { ...base.info, owner } }
+    }
+    const relay = (gateway: string) => ({ gateway, owner: 'silkweave', owners: ['silkweave', 'tobias'], online: true, features: ['teams'] })
+    const relays = { mac: relay('mini'), desk: { ...relay('desk'), owner: 'tobias', owners: ['tobias'] } }
+    const toby = owned('toby', 'tobias', { hostId: 'desk', hostName: 'Desk' })
+    expect(teamDropRefusal(owned('pip', 'tobias'), toby, relays)).toBeUndefined()
+    expect(teamDropRefusal(owned('nova', 'silkweave'), toby, relays)).toBe('nova belongs to another owner; it joins by invitation')
+    expect(crossOwnerDrop(owned('nova', 'silkweave'), owned('pip', 'tobias'))).toBe(true)
+    expect(crossOwnerDrop(owned('nova', 'tobias'), owned('pip', 'tobias'))).toBe(false)
+    expect(crossOwnerDrop(owned('nova', 'silkweave'), toby)).toBe(false)
   })
 })
 

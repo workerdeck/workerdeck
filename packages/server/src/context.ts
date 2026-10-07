@@ -1,3 +1,4 @@
+import type { OwnerService } from './services/owners.ts'
 import type { EngineAdapter, PeerDirectory } from '@workerdeck/core'
 import type { JobQueue } from '@workerdeck/queue'
 import type { PricingOverrides, ProfileEngine } from '@workerdeck/protocol'
@@ -32,6 +33,7 @@ export type ServerContext = {
   auth: AuthService
   factory: SessionFactory
   agents: AgentService
+  owners: OwnerService
   // Present when the gateway dials a relay: the cross-gateway half of teams.
   teams?: TeamLinks
   relayStatus?: () => RelayLinkStatus

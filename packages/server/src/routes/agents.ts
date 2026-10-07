@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { AVATAR_SEED_MAX } from '@workerdeck/core'
-import type {
-  AgentConfig,
-  AgentResponse,
-  CreateAgentRequest,
-  InviteRemoteMemberRequest,
-  RetireAgentRequest,
-  SessionInfo,
-  UpdateAgentRequest,
+import {
+  isOwnerName,
+  type AgentConfig,
+  type AgentResponse,
+  type CreateAgentRequest,
+  type InviteRemoteMemberRequest,
+  type RetireAgentRequest,
+  type SessionInfo,
+  type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
@@ -133,14 +134,18 @@ async function createAgent(ctx: ServerContext, agents: AgentService, req: Incomi
     await adoptSession(ctx, agents, res, body)
     return
   }
-  const draft = agents.draft(body)
+  const owner = settledOwner(ctx.owners.resolve(isRecord(body.config) ? stringOr(body.config.profile) : undefined, body.owner))
+  const crossOwner = body.crossOwner === true
+  const draft = agents.draft({ ...body, owner, crossOwner })
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }
   const remoteLead = remoteLeadOf(ctx, body.lead)
   // Stored before the session starts so the lead's reconcile finds the member half; undone if the start fails.
   const agent = settled(
-    remoteLead ? await joinRemote(ctx, draft, remoteLead, (joined) => agents.create(draft, joined)) : await agents.create(draft),
+    remoteLead
+      ? await joinRemote(ctx, draft, remoteLead, (joined) => agents.create(draft, joined))
+      : await agents.create(draft, undefined, crossOwner),
   )
   let created: SessionInfo
   try {
@@ -180,6 +185,17 @@ async function joinRemote(
   return ctx.teams.join(mover, lead, commit)
 }
 
+function settledOwner(outcome: { owner: string | undefined } | AgentRefusal): string | undefined {
+  if (isAgentRefusal(outcome)) {
+    fail(outcome.status, outcome.error)
+  }
+  return outcome.owner
+}
+
+function stringOr(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
 function settled(outcome: StoredAgent | AgentRefusal): StoredAgent {
   if (isAgentRefusal(outcome)) {
     fail(outcome.status, outcome.error)
@@ -189,6 +205,12 @@ function settled(outcome: StoredAgent | AgentRefusal): StoredAgent {
 
 // The rest of the patch lands first, so a bad name or config never leaves a join the lead accepted and this side dropped.
 async function updateAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
+  if (patch.owner !== undefined) {
+    const owner = ctx.owners.resolve(undefined, patch.owner)
+    if (isAgentRefusal(owner)) {
+      return owner
+    }
+  }
   const remoteLead = remoteLeadOf(ctx, patch.lead)
   if (remoteLead === undefined) {
     return ctx.agents.update(agent.id, patch, {
@@ -216,7 +238,10 @@ async function remoteMembers(ctx: ServerContext, req: IncomingMessage, res: Serv
     if (!isRecord(body) || typeof body.agent !== 'string') {
       fail(400, 'agent must be an agent id on another gateway (gateway:agentId)')
     }
-    outcome = await teams.invite(lead, body.agent)
+    if (body.owner !== undefined && !isOwnerName(body.owner)) {
+      fail(400, 'owner must be 1 to 32 lowercase letters, digits or dashes')
+    }
+    outcome = await teams.invite(lead, body.agent, body.owner)
   } else {
     requireMethod(req, 'DELETE')
     outcome = await teams.removeMember(lead, member)
@@ -238,7 +263,11 @@ async function adoptSession(ctx: ServerContext, agents: AgentService, res: Serve
   if (agents.bySession(info.id)) {
     fail(409, 'that session already belongs to an agent')
   }
-  const draft = agents.draft({ name: body.name ?? info.title, config: { ...configOf(info), ...body.config }, lead: body.lead })
+  const config = { ...configOf(info), ...body.config }
+  const owner =
+    body.owner === undefined && info.owner !== undefined ? info.owner : settledOwner(ctx.owners.resolve(config.profile, body.owner))
+  const crossOwner = body.crossOwner === true
+  const draft = agents.draft({ name: body.name ?? info.title, config, lead: body.lead, owner, crossOwner })
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }
@@ -246,7 +275,9 @@ async function adoptSession(ctx: ServerContext, agents: AgentService, res: Serve
   const bound: StoredAgent = { ...draft, sessionId: info.id, ...(recipe === undefined ? {} : { avatarRecipe: recipe }) }
   const remoteLead = remoteLeadOf(ctx, body.lead)
   const adopted = settled(
-    remoteLead ? await joinRemote(ctx, bound, remoteLead, (joined) => agents.create(bound, joined)) : await agents.create(bound),
+    remoteLead
+      ? await joinRemote(ctx, bound, remoteLead, (joined) => agents.create(bound, joined))
+      : await agents.create(bound, undefined, crossOwner),
   )
   await respond(ctx, res, 201, adopted)
 }
@@ -346,11 +377,12 @@ async function startSession(ctx: ServerContext, agent: StoredAgent, prompt: stri
     agentContextReset: config.agentContextReset ?? true,
     prompt,
   }
-  const vetted = vetCreateRequest(ctx, stripUndefined(request), auth)
+  const vetted = vetCreateRequest(ctx, stripUndefined(request), auth, agent.owner)
   if (!vetted.ok) {
     fail(vetted.status, vetted.error)
   }
-  const runner = await ctx.factory.createRunner(ctx.factory.buildRunnerConfig(vetted.request, { operator: ctx.auth.isOperator(auth) }), {
+  const principal = { operator: ctx.auth.isOperator(auth), ...(agent.owner === undefined ? {} : { owner: agent.owner }) }
+  const runner = await ctx.factory.createRunner(ctx.factory.buildRunnerConfig(vetted.request, principal), {
     brief: config.brief?.trim() || undefined,
     agent: true,
   })

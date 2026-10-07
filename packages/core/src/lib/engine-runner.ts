@@ -158,6 +158,7 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
       pendingPermissionCount: this.core.pendingCount,
       meta: this.config.meta,
       scope: this.config.scope,
+      owner: this.config.owner,
       agentContextReset: this.config.contextReset ? (true as const) : undefined,
       title: sessionTitle(this.config, engineTitle),
       statusLabel: (log.statusLabel === undefined ? this.config.statusLabel : log.statusLabel) ?? undefined,

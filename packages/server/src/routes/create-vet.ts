@@ -16,7 +16,8 @@ export type VettedCreateRequest = { ok: true; request: CreateSessionRequest } | 
 // drift. The body is untrusted JSON: it is projected onto the wire type, never cast to it, and
 // the projected object is what the ladder mutates (inert fields stripped, profile name pinned)
 // and what the caller must hand on.
-export function vetCreateRequest(ctx: ServerContext, body: unknown, auth: AuthContext): VettedCreateRequest {
+// `owner` is set when the session's owner is already settled (an agent's), so its profile need not name one.
+export function vetCreateRequest(ctx: ServerContext, body: unknown, auth: AuthContext, owner?: string): VettedCreateRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { ok: false, status: 400, error: 'request body must be a JSON object' }
   }
@@ -44,13 +45,19 @@ export function vetCreateRequest(ctx: ServerContext, body: unknown, auth: AuthCo
     refusal(403, refuseHostAuthority(ctx, req, resolved.profile, auth)) ??
     availability.checkAvailable(resolved.profile) ??
     factory.checkCwd(req, resolved.profile) ??
-    refusal(400, factory.checkPermissionMode(req.permissionMode, resolved.profile) ?? factory.checkEngineGrants(req, resolved.profile))
+    refusal(400, factory.checkPermissionMode(req.permissionMode, resolved.profile) ?? factory.checkEngineGrants(req, resolved.profile)) ??
+    (owner === undefined ? ownerRefusal(ctx, resolved.profile?.name) : null)
   if (refused) {
     return { ok: false, ...refused }
   }
   factory.stripInertFields(req, resolved.profile)
   req.profile = resolved.profile?.name
   return { ok: true, request: req }
+}
+
+function ownerRefusal(ctx: ServerContext, profile: string | undefined): Refusal | null {
+  const resolved = ctx.owners.resolve(profile)
+  return 'error' in resolved ? resolved : null
 }
 
 function refusal(status: number, error: string | null): Refusal | null {

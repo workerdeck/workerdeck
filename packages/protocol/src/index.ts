@@ -628,6 +628,7 @@ export type ProfileUsage = Record<string, ProfileUsageWindow>
 
 export type ProfileInfo = {
   name: string
+  owner?: string
   engine?: ProfileEngine
   configDir?: string
   codexHome?: string
@@ -868,6 +869,8 @@ export type SessionInfo = {
   // The agent holds `context_reset` and may clear its own conversation between turns.
   agentContextReset?: true
   agent?: AgentRef
+  // Whom the session answers to: its agent's owner, or the owner stamped at create.
+  owner?: string
   statusLabel?: StatusLabel
 }
 
@@ -1080,6 +1083,7 @@ export type ListHostRootsResponse = {
 export type GatewayRelayMeta = {
   gateway: string
   owner?: string
+  owners?: string[]
   online: boolean
   features: string[]
 }

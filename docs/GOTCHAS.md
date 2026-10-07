@@ -1455,17 +1455,37 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   which would dissolve every edge the other side holds. A record with a higher schema is loaded and never written,
   reconciled or published, not even as a plain session (`PeerAgentTeams.withheld`). Rollback:
   3.6.1 reads a remote `lead` as a member of a missing local lead (restricted).
-- **Same-owner acceptance is an invitation or `relay.teams.acceptFrom`.** `POST
-  /agents/:id/remote-members` records a 10 min `invited` entry stamped with this gateway's owner;
-  a join is accepted only when the origin's owner (stamped by the relay from enrollment) matches.
-  `relay.teams` is part of the relay link's identity, so a hot reload with edited policy dials
-  fresh instead of adopting the old connection.
+- **Acceptance is an invitation or `relay.teams.acceptFrom`, by agent owner.** `POST
+  /agents/:id/remote-members { agent, owner? }` records a 10 min `invited` entry with the owner the
+  invitee must join under (the lead's own when omitted); a join is accepted only when the origin's
+  owner (the relay's, see § Relay) matches it. `acceptFrom` waives the invitation only when the
+  joining agent's owner is the lead agent's. An accepted member that rejoins under another owner
+  than the one stored on its entry needs a new invitation. `relay.teams` is part of the relay
+  link's identity, so a hot reload with edited policy dials fresh instead of adopting the old
+  connection.
+- **Owners are per session and per agent, stamped once** (R3 workstream F,
+  `_docs/plans/R3-F-OWNERS.md`). A session's `SessionInfo.owner` is the runner config's durable
+  `owner` (agent's owner > profile `owner` > server option `owner` / CLI `--owner` > the relay's one
+  enrolled owner), echoed by `baseInfo`; an agent's `owner` is resolved at create or adopt and
+  persisted, and agents from before owners are stamped from their profile at hydrate and at each
+  welcome, never re-resolved. A gateway whose profiles and default name more than one owner is
+  multi-owner: there a session or agent that resolves to no owner is refused (409), and
+  `peerReaches` matches a missing owner with nobody. Profile and enrollment edits never move an
+  existing agent; `PATCH /agents/:id { owner }` does, and only outside teams (no lead, members,
+  invitations or pending join).
+- **One peer rule, local and remote: `peerReaches`** (`protocol/agents.ts`). The team rule, and
+  sessions of different owners reach each other only through a team (lead and member, or
+  teammates), on one gateway as across the relay. A local join to a lead of another owner needs
+  `crossOwner: true` on the request (create, adopt, PATCH); `crossOwnerDrop` in `ui` tells a
+  client when to ask. Owners separate agents, not people: everyone holding a shared gateway's key
+  is a co-administrator of every owner on it.
 - **Clients join leads across gateways through each gateway's `GatewayMeta.relay`.** `groupRows` takes
   `relayHosts` (relay gateway name to client host id, `relayHostsOf`), and a member whose
   `AgentRef.leadGateway` names an unconfigured gateway draws top-level. A drop across gateways is two
   operator calls in `runTeamMove` (`@workerdeck/client`, shared by web and VS Code): invite on the
   lead's gateway, then PATCH the qualified lead on the mover's; `teamDropRefusal` refuses it without
-  both relay identities online with `teams`, or across owners (that needs phase 5's invitation).
+  both relay identities online with `teams`, or between two agents of different owners (their
+  `SessionInfo.owner`, falling back to the host's relay owner for an older gateway).
   VS Code reads the relay identity on the same `/meta` poll as locality (`relayOfCached`).
 - **No team-change notice.** Telling a member it joined would be a message, and a message starts a
   paid turn on an idle session; members learn their team from `peers_list` (`agent`, `role`, `team`). `agent` (the agent's name)
@@ -1528,6 +1548,23 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   `hello` and the relay intersects every rule with it, but the gateway re-checks the op on every
   inbound frame and re-checks `expose.scope` on the target (`relayPeek` / `relaySend` resolve
   through `exposedInfo`). A misconfigured or compromised relay cannot widen either.
+- **Owner is per entry, checked against the enrolled set** (`ownerOf` in `relay.ts`). Enrollment
+  holds one `owner` or, with `--owners`, a set; a gateway that negotiated the `owners` feature
+  names each entry's and each team frame's owner (a draft has no entry, so `team.*` frames and
+  every `team.status` edge carry it), and the relay keeps a named owner only when it is enrolled
+  and matches the agent's published entry. A gateway enrolled with one owner speaks for it on
+  every entry. An entry or frame whose owner resolves to nothing is dropped, so removing an owner
+  from the set takes its rows off every list and route at the next reload. `opsBetween`'s
+  `crossOperator`, list projection, origins, the invite budget and `TeamResult.owner` (the lead's,
+  stamped by the relay) all use the two endpoints' owners, never the sockets'.
+- **Several owners never downgrade to one.** A record with two or more owners keeps its key hash
+  in `ownersHash`, not `hash`, so an older relay reading the file refuses the gateway; a gateway
+  enrolled with several owners that does not offer `owners` is refused at hello (close
+  `ownersRequired`, terminal), and an old gateway whose enrollment gains a second owner is
+  dropped at reload. The other way round, a multi-owner gateway on a relay without `owners`
+  publishes nothing and refuses every peer and team frame (`ownersBlocked` in `peer-relay.ts`).
+  Trust contract (R3.7 decision 1): the relay carries owners faithfully; the checks stop one
+  gateway claiming another's owners, not a lying relay.
 - **Every miss reads the same.** Unknown gateway, unknown session, a rule that denies, a ceiling
   that denies: `peek` answers nothing and `send` answers `no such session: gateway:id`. Never
   word them differently; that is how a peer learns what exists behind a rule.

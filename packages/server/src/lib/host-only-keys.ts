@@ -24,6 +24,7 @@ const HOST_ONLY_KEY_TABLE: Record<HostOnlyKey, 'durable' | 'transient'> = {
   shells: 'transient',
   shellAgentWrite: 'transient',
   createdByOperator: 'durable',
+  owner: 'durable',
   fallbackTitle: 'transient',
   startAsleep: 'transient',
   effortDefaults: 'transient',

@@ -15,7 +15,7 @@ export function dropZone(offsetY: number, height: number): DropZone {
 }
 
 // Mirrors the gateway's `leadRefusal`, so a drag can say no before it asks; the 409 stays the authority. Across
-// gateways both must dial a relay that routes teams, under one owner (another operator's agent needs an invitation).
+// gateways both must dial a relay that routes teams, and both agents have one owner (another owner's needs an invitation).
 export function teamDropRefusal(dragged: SessionRow, lead: SessionRow, relays: HostRelays = {}): string | undefined {
   const mover = dragged.info.agent
   const target = lead.info.agent
@@ -60,10 +60,20 @@ function crossGatewayRefusal(
       return 'the relay does not route teams yet'
     }
   }
-  if (from.owner !== to.owner) {
-    return 'that gateway belongs to another operator'
+  if (rowOwner(dragged, from) !== rowOwner(lead, to)) {
+    return `${dragged.info.agent?.name ?? 'that session'} belongs to another owner; it joins by invitation`
   }
   return undefined
+}
+
+// The session's own owner; a gateway from before owners has only its relay's.
+function rowOwner(row: SessionRow, relay: HostRelays[string]): string | undefined {
+  return row.info.owner ?? relay?.owner
+}
+
+// A drop between two owners' agents on one gateway goes through only with the person's confirmation (`crossOwner`).
+export function crossOwnerDrop(dragged: SessionRow, lead: SessionRow): boolean {
+  return dragged.hostId === lead.hostId && dragged.info.owner !== lead.info.owner
 }
 
 // The move a drop over a member asks for: join (or reorder within) that member's team, at the member's place.

@@ -25,12 +25,14 @@ import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
 import type { EngineRunnerContext, ShellAgentWriteOption } from '../options.ts'
 import type { BridgeHub } from './bridge.ts'
 import type { SessionParkManager } from './parking.ts'
+import type { OwnerService } from './owners.ts'
 import type { ProfileService } from './profiles.ts'
 import type { SessionRegistry } from './registry.ts'
 
 export type SessionFactoryDeps = {
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
   profiles: ProfileService
+  owners?: OwnerService
   hostBuildRunnerConfig: (req: CreateSessionRequest) => SessionRunnerConfig
   createEngineRunner?: (context: EngineRunnerContext) => Runner | Promise<Runner>
   allowedCwdRoots?: string[]
@@ -55,9 +57,10 @@ export type BuildOptions = { brief?: string; agent?: boolean }
 
 // A dormant rebuild spreads the stored config back in, so the principal's flag can arrive on the request; a create
 // door passes it beside the request instead, because the host's hook and a job record see only the wire type.
-export type CreateRequestWithPrincipal = CreateSessionRequest & { createdByOperator?: boolean }
+export type CreateRequestWithPrincipal = CreateSessionRequest & { createdByOperator?: boolean; owner?: string }
 
-export type SessionPrincipal = { operator: boolean }
+// `owner`: an agent's, which its session takes whatever its profile says.
+export type SessionPrincipal = { operator: boolean; owner?: string }
 
 export type SessionFactory = ReturnType<typeof createSessionFactory>
 
@@ -92,8 +95,9 @@ const ENGINE_GRANTS: readonly EngineGrant[] = [
 ]
 
 // Applied after the host's hook for the same reason as scope: the hook may rebuild the config from the request.
-function withPrincipal(config: SessionRunnerConfig, operator: boolean | undefined): SessionRunnerConfig {
-  return operator === undefined ? config : { ...config, createdByOperator: operator }
+function withPrincipal(config: SessionRunnerConfig, operator: boolean | undefined, owner: string | undefined): SessionRunnerConfig {
+  const stamped = owner === undefined ? config : { ...config, owner }
+  return operator === undefined ? stamped : { ...stamped, createdByOperator: operator }
 }
 
 export function createSessionFactory(deps: SessionFactoryDeps) {
@@ -206,7 +210,11 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
         }
       : req
     const config = withApprovalDefault(
-      withPrincipal(withScope(deps.hostBuildRunnerConfig(effective), req.scope), principal?.operator ?? req.createdByOperator),
+      withPrincipal(
+        withScope(deps.hostBuildRunnerConfig(effective), req.scope),
+        principal?.operator ?? req.createdByOperator,
+        principal?.owner ?? req.owner ?? deps.owners?.forProfile(req.profile),
+      ),
     )
     const sessionEnv = profile ? adapterFor(profile.engine).sessionEnv : undefined
     if (!profile || !sessionEnv) {

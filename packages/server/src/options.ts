@@ -89,6 +89,9 @@ export type WorkerServerOptions = {
   peers?: PeerServiceOptions
   // Dial out to a `workerdeck relay` so sessions can reach peers on other gateways. Needs `peers` on.
   relay?: RelayLinkOptions
+  // Whom sessions answer to when their profile names no owner (the unnamed profile included). With several owners
+  // across the profiles and no default here, a session whose profile names none is refused.
+  owner?: string
   notifications?: SessionNotificationOptions
   // Stop a live session's engine child after it has sat idle with no client attached this long; 0 or omitted: never.
   engineSleepAfterMs?: number

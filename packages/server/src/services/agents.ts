@@ -30,6 +30,7 @@ export type AgentMutation = (current: StoredAgent) => StoredAgent | AgentRefusal
 
 export type UpdateOptions = {
   joined?: RemoteJoin
+  // The patch's `owner` was checked by the caller against the owners this gateway knows.
   onLeadChanged?: (previous: StoredAgent) => void
   // `lead: null` also cancels a join in progress; its lead's acceptance, if any, is then withdrawn with a leave.
   onJoinCancelled?: (lead: string, op: string) => void
@@ -200,7 +201,12 @@ export class AgentService {
     }
     const remote = this.remoteGateway(agent.lead)
     const leadName = agent.lead === undefined ? undefined : remote ? agent.remoteLead?.name : this.#agents.get(agent.lead)?.name
-    return { ...info, agent: agentRef(this.public(agent), { leadName, leadGateway: remote, leads: this.hasMembers(agent.id) }) }
+    const owner = agent.owner ?? info.owner
+    return {
+      ...info,
+      ...(owner === undefined ? {} : { owner }),
+      agent: agentRef(this.public(agent), { leadName, leadGateway: remote, leads: this.hasMembers(agent.id) }),
+    }
   }
 
   // The gateway a lead id names when it is not this one; undefined for a local or absent lead.
@@ -247,7 +253,7 @@ export class AgentService {
   // Whether this gateway's records allow a remote agent's claims: its id names the gateway it came from, a claim to be a
   // member of a lead here needs that lead's accepted entry, and a claim to a lead on a third gateway needs that lead's
   // fresh roster, held here because an agent of this gateway is bound to the same lead.
-  vouches(ref: { id: string; lead?: string }, gateway: string): boolean {
+  vouches(ref: { id: string; lead?: string }, gateway: string, owner?: string): boolean {
     if (gateway === this.#gateway || parseRelayPeerId(ref.id)?.gateway !== gateway) {
       return false
     }
@@ -262,7 +268,12 @@ export class AgentService {
       return this.#rosterCheck(ref.lead, ref.id)
     }
     const record = this.#agents.get(lead.id)
-    return record?.lead === undefined && acceptedRemote(record).some((member) => member.agent === ref.id)
+    return (
+      record?.lead === undefined &&
+      acceptedRemote(record).some(
+        (member) => member.agent === ref.id && (member.owner === undefined || owner === undefined || member.owner === owner),
+      )
+    )
   }
 
   briefFor(sessionId: string | undefined): string | undefined {
@@ -310,7 +321,7 @@ export class AgentService {
     return { ...info, avatar: `${this.#basePath}/agents/${agent.id}/avatar.png${version}` }
   }
 
-  draft(input: { name?: unknown; config?: unknown; lead?: unknown }): StoredAgent | AgentRefusal {
+  draft(input: { name?: unknown; config?: unknown; lead?: unknown; owner?: string; crossOwner?: boolean }): StoredAgent | AgentRefusal {
     const config = readConfig(input.config)
     if ('error' in config) {
       return config
@@ -330,13 +341,14 @@ export class AgentService {
       avatarSeed: id,
       pastSessions: [],
       config,
+      ...(input.owner === undefined ? {} : { owner: input.owner }),
     }
     if (input.lead !== undefined && input.lead !== null) {
       if (typeof input.lead !== 'string') {
         return { status: 400, error: 'lead must be an agent id' }
       }
       const leadId = this.localId(input.lead)
-      const refused = this.leadRefusal(agent, leadId)
+      const refused = this.leadRefusal(agent, leadId, input.crossOwner === true)
       if (refused) {
         return refused
       }
@@ -348,7 +360,7 @@ export class AgentService {
     return agent
   }
 
-  create(agent: StoredAgent, joined?: RemoteJoin): Promise<StoredAgent | AgentRefusal> {
+  create(agent: StoredAgent, joined?: RemoteJoin, crossOwner = false): Promise<StoredAgent | AgentRefusal> {
     return this.#transition(async () => {
       if (this.#agents.has(agent.id) || this.#retired.has(agent.id)) {
         return { status: 409, error: `agent ${agent.id} already exists` }
@@ -365,7 +377,7 @@ export class AgentService {
         next.remoteLead = joined.remoteLead
         delete next.pendingJoin
       } else if (next.lead !== undefined) {
-        const refused = this.leadRefusal(next, next.lead)
+        const refused = this.leadRefusal(next, next.lead, crossOwner)
         if (refused) {
           return refused
         }
@@ -423,8 +435,9 @@ export class AgentService {
     return [...this.#agents.values()].filter((agent) => agent.lead === id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   }
 
-  // Teams are one level deep: a lead cannot join a team and a member cannot lead one.
-  leadRefusal(mover: StoredAgent, leadId: string): AgentRefusal | null {
+  // Teams are one level deep: a lead cannot join a team and a member cannot lead one. A local lead of another owner
+  // needs `crossOwner`, the caller's confirmation; a remote one is the lead's gateway's to accept or refuse.
+  leadRefusal(mover: StoredAgent, leadId: string, crossOwner = false): AgentRefusal | null {
     if (leadId === mover.id) {
       return { status: 409, error: 'an agent cannot lead its own team' }
     }
@@ -453,7 +466,44 @@ export class AgentService {
     if (this.hasMembers(mover.id)) {
       return { status: 409, error: `${mover.name} leads a team; teams are one level deep` }
     }
+    if (!crossOwner && lead.owner !== mover.owner) {
+      return {
+        status: 409,
+        error: `${mover.name} belongs to ${mover.owner ?? 'no owner'} and ${lead.name} to ${lead.owner ?? 'no owner'}; confirm a team across owners`,
+      }
+    }
     return null
+  }
+
+  // For records from before owners: each agent without one gets its profile's owner once that resolves, and keeps it.
+  stampOwners(ownerFor: (agent: StoredAgent) => string | undefined): Promise<number> {
+    return this.#transition(async () => {
+      const at = this.#now()
+      const stamped = [...this.#agents.values()].flatMap((agent) => {
+        const owner = agent.owner === undefined && !this.#frozen.has(agent.id) ? ownerFor(agent) : undefined
+        return owner === undefined ? [] : [{ ...agent, owner, schema: AGENT_SCHEMA, updatedAt: at }]
+      })
+      if (stamped.length === 0) {
+        return 0
+      }
+      await this.#apply(stamped, [])
+      for (const agent of stamped) {
+        this.#agents.set(agent.id, agent)
+      }
+      this.#changed()
+      return stamped.length
+    })
+  }
+
+  // Why an agent's owner cannot move now: every edge it holds was agreed under the owner it has.
+  transferRefusal(agent: StoredAgent): AgentRefusal | null {
+    const edges =
+      agent.lead !== undefined ||
+      this.hasMembers(agent.id) ||
+      (agent.remoteMembers ?? []).length > 0 ||
+      agent.pendingJoin !== undefined ||
+      this.#joining.has(agent.id)
+    return edges ? { status: 409, error: `${agent.name} is in a team or joining one; its owner moves only outside teams` } : null
   }
 
   joiningLead(id: string): string | undefined {
@@ -536,6 +586,13 @@ export class AgentService {
         }
         next.name = name
       }
+      if (patch.owner !== undefined && patch.owner !== agent.owner) {
+        const refused = this.transferRefusal(agent)
+        if (refused) {
+          return refused
+        }
+        next.owner = patch.owner
+      }
       if (patch.config !== undefined) {
         if (!isRecord(patch.config)) {
           return { status: 400, error: 'config must be an object' }
@@ -570,7 +627,7 @@ export class AgentService {
           next.remoteLead = joined.remoteLead
           delete next.pendingJoin
         } else {
-          const refused = this.leadRefusal(agent, leadId)
+          const refused = this.leadRefusal(next, leadId, patch.crossOwner === true)
           if (refused) {
             return refused
           }

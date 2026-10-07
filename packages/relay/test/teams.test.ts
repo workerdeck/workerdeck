@@ -14,7 +14,7 @@ import {
   type TeamRoster,
   type TeamStatusBody,
 } from '@workerdeck/relay-client'
-import { enrollGateway, enrollGatewayHash, readEnrollments, setGatewayOwner, writeKeyFile } from '../src/enrollment.ts'
+import { enrollGateway, enrollGatewayHash, readEnrollments, setGatewayOwner, setGatewayOwners, writeKeyFile } from '../src/enrollment.ts'
 import { parseRules } from '../src/rules.ts'
 import { startRelay, type Relay } from '../src/relay.ts'
 import { projectForOtherOwner, sanitizeAgent, teamAllows, type TeamNode } from '../src/teams.ts'
@@ -93,10 +93,10 @@ async function setup(rules: unknown, extra: { teamPerMinute?: number; invitesPer
   return { stateDir, relay }
 }
 
-type Attach = { owner?: string; allow?: RelayOp[]; features?: RelayFeature[] }
+type Attach = { owner?: string; owners?: string[]; allow?: RelayOp[]; features?: RelayFeature[] }
 
 async function attach(relay: Relay, stateDir: string, name: string, gateway: FakeGateway, options: Attach = {}): Promise<RelayConnection> {
-  const key = await enrollGateway(stateDir, name, { owner: options.owner })
+  const key = await enrollGateway(stateDir, name, { owner: options.owner, owners: options.owners })
   await relay.reload()
   const connection = connectRelay(
     {
@@ -307,7 +307,7 @@ describe('team frames', () => {
     const connMac = await attach(relay, stateDir, 'mac', mac, { owner: 'tobias' })
     const connPi = await attach(relay, stateDir, 'pi', pi, { owner: 'tobias' })
 
-    expect(await connPi.team('team.join', 'M', 'mac:L')).toEqual({ ok: true, leadName: 'Lead' })
+    expect(await connPi.team('team.join', 'M', 'mac:L')).toEqual({ ok: true, leadName: 'Lead', owner: 'tobias' })
     expect(mac.team).toEqual([{ kind: 'team.join', origin: { gateway: 'pi', owner: 'tobias', agent: 'pi:M', name: 'AC-MagWin' }, to: 'L' }])
     expect(await connMac.team('team.release', 'L', 'pi:M')).toEqual({ ok: false, reason: 'no such agent' })
     expect(await connPi.team('team.join', 'mac:X', 'mac:L')).toEqual({ ok: false, reason: 'no such agent' })
@@ -375,7 +375,12 @@ describe('team frames', () => {
     })
     expect(answer.edges).toEqual([{ from: 'L', to: 'pi:M', op: 'o1', known: true, name: 'Member' }])
     expect(pi.status).toEqual([
-      { origin: { gateway: 'mac', owner: 'operator' }, edges: [{ from: 'mac:L', to: 'M', op: 'o1' }], rosters: [], seen: [] },
+      {
+        origin: { gateway: 'mac', owner: 'operator' },
+        edges: [{ from: 'mac:L', to: 'M', op: 'o1', owner: 'operator' }],
+        rosters: [],
+        seen: [],
+      },
     ])
     await expect(connMac.teamStatus('gone', { edges: [{ from: 'L', to: 'gone:M' }] })).rejects.toThrow(/unreachable/)
   })
@@ -418,5 +423,174 @@ describe('team frames', () => {
     await connPi.team('team.join', 'M', 'mac:L', 'op-1')
     await connPi.team('team.leave', 'M', 'mac:L', 'x'.repeat(65))
     expect(mac.team.map((call) => call.op)).toEqual(['op-1', undefined])
+  })
+})
+
+describe('several owners on one gateway', () => {
+  const SAME_ONLY = { rules: [{ from: '*', to: '*', allow: ['send', 'peek', 'team'] }] }
+
+  function mini(): FakeGateway {
+    return fakeGateway([
+      entry('t', { owner: 'tobias', title: 'Toby' }),
+      entry('r', { owner: 'ruli', title: 'Ruli' }),
+      entry('e', { owner: 'eve', title: 'Eve' }),
+      entry('n', { title: 'Nobody' }),
+      entry('tm', { owner: 'tobias', agent: { id: 'TM', name: 'Toby-Agent' } }),
+      entry('rm', { owner: 'ruli', agent: { id: 'RM', name: 'Ruli-Agent' } }),
+    ])
+  }
+
+  async function three(rules: unknown = SAME_ONLY) {
+    const { stateDir, relay } = await setup(rules)
+    const shared = mini()
+    const mac = fakeGateway([entry('lead', { agent: { id: 'L', name: 'Lead' } }), entry('plain')])
+    const ruli = fakeGateway([entry('rp')])
+    const connMini = await attach(relay, stateDir, 'mini', shared, {
+      owners: ['silkweave', 'tobias', 'ruli'],
+      features: ['teams', 'owners'],
+    })
+    const connMac = await attach(relay, stateDir, 'mac', mac, { owner: 'tobias' })
+    const connRuli = await attach(relay, stateDir, 'ruli-mbp', ruli, { owner: 'ruli' })
+    return { stateDir, relay, shared, mac, ruli, connMini, connMac, connRuli }
+  }
+
+  it('welcomes a multi-owner gateway with its owner set', async () => {
+    const { connMini, connMac, relay } = await three()
+    expect(connMini.owners()).toEqual(['silkweave', 'tobias', 'ruli'])
+    expect(connMac.owners()).toEqual(['tobias'])
+    expect(relay.status().gateways.find((row) => row.name === 'mini')?.owners).toEqual(['silkweave', 'tobias', 'ruli'])
+  })
+
+  it('lists each entry under its own owner, and drops entries naming no enrolled owner', async () => {
+    const { connMac, connRuli } = await three()
+    const fromMac = await connMac.list('plain')
+    expect(ids(fromMac.filter((row) => row.gateway === 'mini'))).toEqual(['mini:t', 'mini:tm'])
+    expect(fromMac.find((row) => row.id === 't')).toMatchObject({ owner: 'tobias', cwd: '/work/t' })
+    expect(ids((await connRuli.list('rp')).filter((row) => row.gateway === 'mini'))).toEqual(['mini:r', 'mini:rm'])
+  })
+
+  it('projects a row for another owner even when it lives on the same gateway as one of yours', async () => {
+    const { mac, shared, connMac, relay } = await three(SAME_AND_CROSS)
+    mac.entries[0] = entry('lead', { agent: { id: 'L', name: 'Lead', accepts: ['mini:RM'] } })
+    shared.entries[5] = entry('rm', { owner: 'ruli', agent: { id: 'RM', name: 'Ruli-Agent', lead: 'mac:L' } })
+    await until(async () => (await connMac.list('lead')).some((row) => row.id === 'rm'), 'the member row')
+    const rows = await connMac.list('lead')
+    expect(rows.find((row) => row.id === 'rm')).toMatchObject({ owner: 'ruli', cwd: '' })
+    expect(rows.find((row) => row.id === 'tm')).toMatchObject({ owner: 'tobias', cwd: '/work/tm' })
+    expect(relay.status().gateways.find((row) => row.name === 'mini')?.owner).toBe('silkweave')
+  })
+
+  it('stamps origins with the sending session owner and applies the rules per pair of sessions', async () => {
+    const { connMini, mac } = await three()
+    const origins: unknown[] = []
+    mac.host.send = async (origin, to) => {
+      origins.push(origin.owner)
+      return { delivered: true, sessionId: to, queued: false }
+    }
+    expect((await connMini.send('t', { gateway: 'mac', id: 'plain' }, 'hi', [])).delivered).toBe(true)
+    expect((await connMini.send('r', { gateway: 'mac', id: 'plain' }, 'hi', [])).delivered).toBe(false)
+    expect((await connMini.send('e', { gateway: 'mac', id: 'plain' }, 'hi', [])).delivered).toBe(false)
+    expect(origins).toEqual(['tobias'])
+  })
+
+  it('checks the owner a team frame claims against the enrolled set and against the agent row', async () => {
+    const { connMini, mac } = await three(SAME_AND_CROSS)
+    expect(await connMini.team('team.join', 'D', 'mac:L', 'o1', 'ruli')).toEqual({ ok: true, leadName: 'Lead', owner: 'tobias' })
+    expect(await connMini.team('team.join', 'D', 'mac:L', 'o2', 'eve')).toEqual({ ok: false, reason: 'no such agent' })
+    expect(await connMini.team('team.join', 'D', 'mac:L', 'o3')).toEqual({ ok: false, reason: 'no such agent' })
+    expect(await connMini.team('team.join', 'TM', 'mac:L', 'o4', 'ruli')).toEqual({ ok: false, reason: 'no such agent' })
+    expect((await connMini.team('team.join', 'TM', 'mac:L', 'o5')).ok).toBe(true)
+    expect(mac.team.map((call) => [call.origin.agent, call.origin.owner, call.op])).toEqual([
+      ['mini:D', 'ruli', 'o1'],
+      ['mini:TM', 'tobias', 'o5'],
+    ])
+  })
+
+  it('forwards a mixed-owner status batch edge by edge, each under its own owner', async () => {
+    const { connMini, mac } = await three()
+    const answer = await connMini.teamStatus('mac', {
+      edges: [
+        { from: 'TM', to: 'mac:L', op: 'a' },
+        { from: 'RM', to: 'mac:L', op: 'b' },
+        { from: 'D', to: 'mac:L', op: 'c', owner: 'tobias' },
+      ],
+    })
+    expect(answer.edges.map((edge) => edge.op)).toEqual(['a', 'c'])
+    expect(mac.status[0]?.edges).toEqual([
+      { from: 'mini:TM', to: 'L', op: 'a', owner: 'tobias' },
+      { from: 'mini:D', to: 'L', op: 'c', owner: 'tobias' },
+    ])
+  })
+
+  it('drops the rows of an owner removed from the enrollment at reload', async () => {
+    const { stateDir, relay, connRuli } = await three()
+    expect((await connRuli.list('rp')).some((row) => row.gateway === 'mini')).toBe(true)
+    await setGatewayOwners(stateDir, 'mini', ['silkweave', 'tobias'])
+    await relay.reload()
+    expect((await connRuli.list('rp')).some((row) => row.gateway === 'mini')).toBe(false)
+  })
+
+  it('refuses the hello of a gateway enrolled with several owners that cannot name them', async () => {
+    const { stateDir, relay } = await setup(SAME_ONLY)
+    const key = await enrollGateway(stateDir, 'old-mini', { owners: ['silkweave', 'tobias'] })
+    await relay.reload()
+    const lines: string[] = []
+    const connection = connectRelay(
+      {
+        url: relay.url,
+        gateway: 'old-mini',
+        key,
+        features: ['teams'],
+        backoffMinMs: 20,
+        backoffMaxMs: 60_000,
+        log: (line) => lines.push(line),
+      },
+      fakeGateway([]).host,
+    )
+    cleanups.push(() => connection.close())
+    await until(() => lines.some((line) => line.includes('several owners')), 'the refusal logged')
+    expect(connection.state()).not.toBe('online')
+    expect(relay.status().gateways.find((row) => row.name === 'old-mini')?.online).toBe(false)
+  })
+
+  it('drops an old gateway whose enrollment gains a second owner', async () => {
+    const { stateDir, relay } = await setup(SAME_ONLY)
+    await attach(relay, stateDir, 'pi', fakeGateway([entry('p')]), { owner: 'tobias' })
+    await setGatewayOwners(stateDir, 'pi', ['tobias', 'ruli'])
+    await relay.reload()
+    expect(relay.status().gateways.find((row) => row.name === 'pi')?.online).toBe(false)
+  })
+})
+
+describe('enrollment with several owners', () => {
+  it('hides the key hash from older relays and reads it back', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-owners-'))
+    cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
+    await enrollGateway(stateDir, 'mini', { owners: ['silkweave', 'tobias'] })
+    await enrollGateway(stateDir, 'mac', { owners: ['tobias'] })
+    const raw = JSON.parse(await readFile(join(stateDir, 'gateways.json'), 'utf8'))
+    expect(raw.gateways.mini.hash).toBeUndefined()
+    expect(raw.gateways.mini.ownersHash).toMatch(/^[0-9a-f]{64}$/)
+    expect(raw.gateways.mac).toMatchObject({ owner: 'tobias' })
+    const file = await readEnrollments(stateDir)
+    expect(file.gateways.mini?.owners).toEqual(['silkweave', 'tobias'])
+    expect(file.gateways.mac?.owner).toBe('tobias')
+    await expect(enrollGateway(stateDir, 'x', { owner: 'a', owners: ['b'] })).rejects.toThrow(/not both/)
+    await expect(enrollGateway(stateDir, 'y', { owners: ['Bad Name'] })).rejects.toThrow(/owner/)
+  })
+
+  it('drops a multi-owner record whose owner list is unreadable instead of narrowing it', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'wd-relay-owners-'))
+    cleanups.push(() => rm(stateDir, { recursive: true, force: true }))
+    const hash = 'a'.repeat(64)
+    await writeFile(
+      join(stateDir, 'gateways.json'),
+      JSON.stringify({
+        version: 1,
+        gateways: { mini: { ownersHash: hash, owners: ['tobias', 'NOT OK'] }, ok: { ownersHash: hash, owners: ['a', 'b'] } },
+      }),
+    )
+    const file = await readEnrollments(stateDir)
+    expect(Object.keys(file.gateways)).toEqual(['ok'])
   })
 })

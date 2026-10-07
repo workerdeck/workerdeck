@@ -25,7 +25,6 @@ class Mesh {
     return {
       gateway,
       ready: () => (this.down.has(gateway) ? 'remote gateways are unavailable right now; try again later' : undefined),
-      owner: () => 'tobias',
       team: async (kind, from, to, op): Promise<TeamResult> => {
         const target = parseRelayPeerId(to)
         const node = target && this.#reach(target.gateway)
@@ -70,6 +69,7 @@ class Mesh {
     await agents.hydrate()
     const teams = new TeamLinks({
       agents,
+      owners: { defaultOwner: () => 'tobias' },
       transport: this.transport(gateway),
       acceptFrom: ['mac', 'win', 'pi'],
       now: () => this.clock.now,

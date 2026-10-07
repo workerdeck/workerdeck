@@ -46,6 +46,7 @@ import { TeamLinks } from './services/team-links.ts'
 import { createPeerService } from './services/peers.ts'
 import { ProjectInfoService } from './services/project-info.ts'
 import { SessionRegistry } from './services/registry.ts'
+import { OwnerService } from './services/owners.ts'
 import { createSessionFactory, type SessionFactory } from './services/session-factory.ts'
 import { createShellDirectory, createShellRegistry, type ShellRegistry } from './services/shells.ts'
 import { isDormant, MemorySessionStore, type StoredSessionRecord } from './services/session-store.ts'
@@ -123,6 +124,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     }
   }
 
+  let relayOwners: () => string[] = () => []
+  const owners = new OwnerService({ owner: options.owner, profiles: () => profiles.all(), relayOwners: () => relayOwners() })
+  const stampOwners = (): Promise<unknown> =>
+    agents.stampOwners((agent) => owners.forProfile(agent.config.profile)).catch((error: unknown) => diagnose(error, 'owners'))
+
   const generation = randomUUID()
   const shells = options.shell?.enabled === true ? shellRegistryFor(options.shell, generation) : null
   const agents = new AgentService({
@@ -132,7 +138,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     sleepAfterMs: options.agentSleepAfterMs,
     gateway: options.relay?.gateway,
   })
-  const projects = new ProjectInfoService({ decorate: (info) => agents.decorate(shells ? shells.decorate(info) : info) })
+  const projects = new ProjectInfoService({
+    decorate: (info) => {
+      const decorated = agents.decorate(shells ? shells.decorate(info) : info)
+      const owner = decorated.owner ?? owners.forProfile(decorated.profile)
+      return owner === undefined || owner === decorated.owner ? decorated : { ...decorated, owner }
+    },
+  })
 
   const notifier = new SessionNotifier({
     ...options.notifications,
@@ -242,12 +254,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
               return agent !== undefined && agents.spansGateways(agent)
             },
             agentName: (agentId) => agents.get(agentId)?.name,
-            vouches: (ref, gateway) => agents.vouches(ref, gateway),
+            vouches: (ref, gateway, owner) => agents.vouches(ref, gateway, owner),
             withheld: (sessionId) => {
               const agent = agents.bySession(sessionId)
               return agent !== undefined && agents.frozen(agent.id)
             },
           },
+          multiOwner: () => owners.multi(),
           options: options.peers,
         })
   const shellDirectory = shells ? createShellDirectory(shells, { runnerFor: (id) => registry.get(id) }) : undefined
@@ -255,14 +268,28 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   // closed, which is the hot-reload handover: a carried runner then reaches whichever generation installed last.
   const relayLog = options.relay?.log ?? ((message: string) => diagnose(new Error(message), 'relay'))
   let teamLinks: TeamLinks | undefined
-  const relay = peers && options.relay ? createRelayLink(options.relay, peers, relayLog, () => teamLinks) : undefined
+  const relay =
+    peers && options.relay
+      ? createRelayLink(options.relay, peers, relayLog, () => teamLinks, {
+          multiOwner: () => owners.multi(),
+          online: () => {
+            const enrolled = relay?.status().owners ?? []
+            const unclaimable = [...owners.local()].filter((owner) => enrolled.length > 0 && !enrolled.includes(owner))
+            if (unclaimable.length > 0) {
+              relayLog(`relay: enrolled for ${enrolled.join(', ')}, so sessions of ${unclaimable.join(', ')} stay off the relay`)
+            }
+            void stampOwners()
+          },
+        })
+      : undefined
   if (relay) {
+    relayOwners = () => relay.status().owners ?? []
     teamLinks = new TeamLinks({
       agents,
+      owners,
       transport: {
         gateway: relay.gateway,
         ready: relay.teamsUnavailable,
-        owner: () => relay.status().owner,
         team: relay.team,
         teamStatus: relay.teamStatus,
         nudge: relay.nudge,
@@ -283,6 +310,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const factory = createSessionFactory({
     adapterFor,
     profiles,
+    owners,
     hostBuildRunnerConfig: options.buildRunnerConfig ?? ((req: CreateSessionRequest): SessionRunnerConfig => req),
     createEngineRunner: options.createEngineRunner,
     allowedCwdRoots: options.allowedCwdRoots,
@@ -349,6 +377,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     auth,
     factory,
     agents,
+    owners,
     teams: teamLinks,
     relayStatus: relay ? () => relay.status() : undefined,
     avatars: options.avatars,
@@ -439,6 +468,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       await profiles.refreshStored()
       await profiles.seedStore()
       await agents.hydrate()
+      await stampOwners()
       teamLinks?.start()
       await parking.hydrate()
       await shells?.hydrate()

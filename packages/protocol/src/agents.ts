@@ -48,6 +48,7 @@ export type RemoteMember = {
 export type AgentInfo = {
   id: string
   name: string
+  owner?: string
   createdAt: number
   updatedAt: number
   avatar?: string
@@ -60,7 +61,7 @@ export type AgentInfo = {
   remoteMembers?: RemoteMember[]
 }
 
-export type InviteRemoteMemberRequest = { agent: string }
+export type InviteRemoteMemberRequest = { agent: string; owner?: string }
 
 export type CreateAgentRequest = {
   name?: string
@@ -68,6 +69,9 @@ export type CreateAgentRequest = {
   prompt?: string
   lead?: string
   adopt?: string
+  owner?: string
+  // Confirms a join whose lead belongs to another owner on this gateway.
+  crossOwner?: boolean
 }
 
 export type UpdateAgentRequest = {
@@ -75,6 +79,8 @@ export type UpdateAgentRequest = {
   config?: AgentConfig
   lead?: string | null
   order?: number
+  owner?: string
+  crossOwner?: boolean
 }
 
 export type RetireAgentRequest = { members?: 'release' | 'retire' }
@@ -125,6 +131,32 @@ export function teamReaches(from: AgentRef | undefined, to: AgentRef | undefined
     return to !== undefined && to.id === from.lead
   }
   return true
+}
+
+export const OWNER_NAME = /^[a-z0-9-]{1,32}$/
+
+export function isOwnerName(value: unknown): value is string {
+  return typeof value === 'string' && OWNER_NAME.test(value)
+}
+
+// Lead and member, or two members of one lead. Ids must be comparable (qualified, or all local).
+export function teamRelated(a: AgentRef | undefined, b: AgentRef | undefined): boolean {
+  if (!a || !b) {
+    return false
+  }
+  return a.lead === b.id || b.lead === a.id || (a.lead !== undefined && a.lead === b.lead)
+}
+
+export type PeerParty = { owner?: string; agent?: AgentRef }
+
+// The peers rule with owners: the team rule always holds, and sessions of different owners reach each other only
+// through a team. On a gateway with several owners a missing owner matches nobody.
+export function peerReaches(from: PeerParty, to: PeerParty, multiOwner: boolean): boolean {
+  if (!teamReaches(from.agent, to.agent)) {
+    return false
+  }
+  const same = from.owner === to.owner && (from.owner !== undefined || !multiOwner)
+  return same || teamRelated(from.agent, to.agent)
 }
 
 // Qualifies an agent ref's ids with its gateway, so local and remote refs compare in `teamReaches`. A qualified id

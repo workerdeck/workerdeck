@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import type { PeerDirectory, PeerPeek, PeerSendResult, PeerSessionSummary } from '@workerdeck/core'
-import { qualifyAgent, teamReaches, type AgentRef, type ChecklistItem, type SessionInfo } from '@workerdeck/protocol'
+import { peerReaches, qualifyAgent, type AgentRef, type ChecklistItem, type SessionInfo } from '@workerdeck/protocol'
 import {
   connectRelay,
   parseRelayPeerId,
@@ -40,7 +40,10 @@ export type RelayTeamHandler = {
   reconcile(): Promise<void>
 }
 
-export type RelayLinkStatus = { gateway: string; owner?: string; online: boolean; features: string[] }
+export type RelayLinkStatus = { gateway: string; owner?: string; owners?: string[]; online: boolean; features: string[] }
+
+// `multiOwner`: this gateway runs sessions of several owners, which a relay without `owners` cannot tell apart.
+export type RelayLinkHooks = { multiOwner?(): boolean; online?(): void }
 
 export type RelayLink = {
   directory: PeerDirectory
@@ -48,7 +51,7 @@ export type RelayLink = {
   status(): RelayLinkStatus
   // Why team frames cannot go out right now, or undefined when they can.
   teamsUnavailable(): string | undefined
-  team(kind: TeamFrameKind, from: string, to: string, op?: string): Promise<TeamResult>
+  team(kind: TeamFrameKind, from: string, to: string, op?: string, owner?: string): Promise<TeamResult>
   teamStatus(gateway: string, body: TeamStatusBody): Promise<TeamStatusAnswer>
   nudge(): void
   // Hands the connection to the next module generation instead of closing it (hot reload).
@@ -63,6 +66,7 @@ const CARRIED = Symbol.for('workerdeck.relay.carried')
 const slots = globalThis as { [CARRIED]?: Carried }
 
 const UNAVAILABLE = 'Remote gateways are unavailable right now; only sessions on this gateway are listed.'
+const OWNERS_UNSUPPORTED = 'the relay cannot tell the owners of this gateway apart; it needs WorkerDeck 3.7.0 or later'
 
 function expandHome(path: string): string {
   return path === '~' || path.startsWith('~/') ? `${homedir()}${path.slice(1)}` : path
@@ -163,6 +167,7 @@ export function createRelayLink(
   peers: PeerService,
   log: (message: string) => void,
   teams?: () => RelayTeamHandler | undefined,
+  hooks: RelayLinkHooks = {},
 ): RelayLink {
   const identity = identityOf(options)
   const exposed = options.expose?.scope
@@ -171,14 +176,31 @@ export function createRelayLink(
   let released = false
 
   const teamsAgreed = (): boolean => connection?.features().includes('teams') === true
+  const multiOwner = (): boolean => hooks.multiOwner?.() === true
+  // A gateway of several owners never speaks through a relay that would stamp them all with one: it publishes
+  // nothing and answers nothing until the relay is upgraded.
+  const ownersBlocked = (): boolean => multiOwner() && connection?.state() === 'online' && !connection.features().includes('owners')
 
   const host: RelayHost = {
-    snapshot: () => peers.relayEntries(exposed, teamsAgreed()),
-    peek: (origin, sessionId, recent) => peers.relayPeek(origin, sessionId, recent, exposed, options.gateway),
-    send: (origin, sessionId, text) => peers.relaySend(origin, sessionId, text, exposed, options.gateway),
-    team: async (kind, origin, to, op) => (await teams?.()?.inbound(kind, origin, to, op)) ?? { ok: false, reason: 'no such agent' },
-    teamStatus: async (origin, body) => (await teams?.()?.inboundStatus(origin, body)) ?? { edges: [] },
-    online: () => void teams?.()?.reconcile(),
+    snapshot: async () => (ownersBlocked() ? [] : peers.relayEntries(exposed, teamsAgreed())),
+    peek: async (origin, sessionId, recent) =>
+      ownersBlocked() ? undefined : peers.relayPeek(origin, sessionId, recent, exposed, options.gateway),
+    send: async (origin, sessionId, text) =>
+      ownersBlocked()
+        ? { delivered: false, reason: `no such session: ${sessionId}` }
+        : peers.relaySend(origin, sessionId, text, exposed, options.gateway),
+    team: async (kind, origin, to, op) =>
+      (ownersBlocked() ? undefined : await teams?.()?.inbound(kind, origin, to, op)) ?? { ok: false, reason: 'no such agent' },
+    teamStatus: async (origin, body) =>
+      (ownersBlocked() ? undefined : await teams?.()?.inboundStatus(origin, body)) ?? { edges: body.edges.map(() => ({})) },
+    online: () => {
+      if (ownersBlocked()) {
+        log(`relay: ${OWNERS_UNSUPPORTED}; this gateway publishes nothing until then`)
+        return
+      }
+      hooks.online?.()
+      void teams?.()?.reconcile()
+    },
   }
 
   const carried = slots[CARRIED]
@@ -198,7 +220,15 @@ export function createRelayLink(
       const ca = options.caFile ? await readFile(expandHome(options.caFile)) : undefined
       if (!closed) {
         connection = connectRelay(
-          { url: options.url, gateway: options.gateway, key, ca, allow: options.expose?.allow, features: teams ? ['teams'] : [], log },
+          {
+            url: options.url,
+            gateway: options.gateway,
+            key,
+            ca,
+            allow: options.expose?.allow,
+            features: teams ? ['teams', 'owners'] : ['owners'],
+            log,
+          },
           host,
         )
       }
@@ -211,7 +241,7 @@ export function createRelayLink(
   const reacher = async (from: string): Promise<SessionInfo | undefined> => {
     const me = await peers.relaySender(from)
     const scoped = me.scope !== undefined && Object.keys(me.scope).length > 0
-    return !scoped && (me.agent?.lead === undefined || (teamsAgreed() && peers.relaySpans(me.id))) ? me : undefined
+    return !scoped && !ownersBlocked() && (me.agent?.lead === undefined || (teamsAgreed() && peers.relaySpans(me.id))) ? me : undefined
   }
   const reachesRemote = async (from: string): Promise<boolean> => (await reacher(from)) !== undefined
 
@@ -222,12 +252,17 @@ export function createRelayLink(
 
   // The relay already applied the team rule; the gateway applies it again to every row, after checking the row's team
   // claims against its own records, so a row the relay attributes to a team here must be one of that team's members.
-  const admits = (mine: AgentRef | undefined, gateway: string, agent: AgentRef | undefined): boolean =>
-    (agent === undefined || peers.relayVouches(agent, gateway)) && teamReaches(mine, agent)
+  // A gateway of one owner that names none of its own speaks for the owner the relay enrolled it with.
+  const admits = (me: SessionInfo, gateway: string, owner: string | undefined, agent: AgentRef | undefined): boolean =>
+    (agent === undefined || peers.relayVouches(agent, gateway, owner)) &&
+    peerReaches(
+      { owner: me.owner ?? (multiOwner() ? undefined : connection?.owner()), agent: qualifyAgent(me.agent, options.gateway) },
+      { owner, agent },
+      true,
+    )
 
   const teamRows = async (me: SessionInfo, from: string): Promise<{ rows: RelayPeerRow[]; names: TeamNames }> => {
-    const mine = qualifyAgent(me.agent, options.gateway)
-    const rows = (await connection!.list(from)).filter((row) => admits(mine, row.gateway, remoteRef(row.agent)))
+    const rows = (await connection!.list(from)).filter((row) => admits(me, row.gateway, row.owner, remoteRef(row.agent)))
     const byId = new Map(rows.flatMap((row) => (row.agent ? [[row.agent.id, row.agent.name] as const] : [])))
     const leads = new Set(rows.flatMap((row) => (row.agent?.lead !== undefined ? [row.agent.lead] : [])))
     return { rows, names: { nameOf: (id) => byId.get(id) ?? localName(id), leads } }
@@ -267,7 +302,7 @@ export function createRelayLink(
         return undefined
       }
       const peek = qualifyPeek(answer, target.gateway)
-      if (!admits(qualifyAgent(me.agent, options.gateway), target.gateway, remoteRef(peek.agent))) {
+      if (!admits(me, target.gateway, peek.owner, remoteRef(peek.agent))) {
         return undefined
       }
       const names: TeamNames = { nameOf: (id) => localName(id), leads: new Set() }
@@ -304,6 +339,9 @@ export function createRelayLink(
     if (!connection || connection.state() !== 'online') {
       return 'remote gateways are unavailable right now; try again later'
     }
+    if (ownersBlocked()) {
+      return OWNERS_UNSUPPORTED
+    }
     return connection.features().includes('teams') ? undefined : 'the relay does not route teams; upgrade it first'
   }
 
@@ -313,11 +351,20 @@ export function createRelayLink(
     status: () => {
       const online = connection?.state() === 'online'
       const owner = connection?.owner()
-      return { gateway: options.gateway, ...(owner ? { owner } : {}), online, features: online ? connection!.features() : [] }
+      const owners = online ? connection!.owners() : []
+      return {
+        gateway: options.gateway,
+        ...(owner ? { owner } : {}),
+        ...(owners.length > 0 ? { owners } : {}),
+        online,
+        features: online ? connection!.features() : [],
+      }
     },
     teamsUnavailable,
-    team: (kind, from, to, op) => (connection ? connection.team(kind, from, to, op) : Promise.reject(new Error(teamsUnavailable()))),
-    teamStatus: (gateway, body) => (connection ? connection.teamStatus(gateway, body) : Promise.reject(new Error(teamsUnavailable()))),
+    team: (kind, from, to, op, owner) =>
+      connection && !ownersBlocked() ? connection.team(kind, from, to, op, owner) : Promise.reject(new Error(teamsUnavailable())),
+    teamStatus: (gateway, body) =>
+      connection && !ownersBlocked() ? connection.teamStatus(gateway, body) : Promise.reject(new Error(teamsUnavailable())),
     nudge: () => connection?.nudge(),
     release: () => {
       if (connection && !closed) {

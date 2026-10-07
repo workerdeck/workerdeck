@@ -184,8 +184,9 @@ describe('cross-gateway teams, same owner', () => {
     expect((await mac.call<GatewayMeta>('/meta')).body.relay).toEqual({
       gateway: 'mac',
       owner: 'operator',
+      owners: ['operator'],
       online: true,
-      features: ['teams'],
+      features: ['teams', 'owners'],
     })
   })
 })
@@ -201,7 +202,6 @@ function fakeTransport(): FakeTransport & { down?: string } {
     statusCalls: [],
     answer: (edges) => edges.map((edge) => ({ ...edge, known: true, name: 'AC-Lead renamed' })),
     ready: () => transport.down,
-    owner: () => 'tobias',
     team: async (): Promise<TeamResult> => ({ ok: true, leadName: 'AC-Lead' }),
     teamStatus: async (target, body) => {
       transport.statusCalls.push({ gateway: target, ...body })

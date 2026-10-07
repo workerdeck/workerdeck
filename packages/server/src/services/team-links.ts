@@ -16,18 +16,20 @@ import {
 } from '@workerdeck/relay-client'
 import type { StoredAgent } from './agent-store.ts'
 import { isAgentRefusal, type AgentRefusal, type AgentService, type RemoteJoin } from './agents.ts'
+import type { OwnerService } from './owners.ts'
 
 export type TeamTransport = {
   gateway: string
   ready(): string | undefined
-  owner(): string | undefined
-  team(kind: TeamFrameKind, from: string, to: string, op?: string): Promise<TeamResult>
+  // `owner` is the sending agent's, which the relay checks against what this gateway may claim.
+  team(kind: TeamFrameKind, from: string, to: string, op?: string, owner?: string): Promise<TeamResult>
   teamStatus(gateway: string, body: TeamStatusBody): Promise<TeamStatusAnswer>
   nudge(): void
 }
 
 export type TeamLinksOptions = {
   agents: AgentService
+  owners?: Pick<OwnerService, 'defaultOwner'>
   transport: TeamTransport
   // Gateways of the same owner whose agents may join a lead here without a per-join invitation.
   acceptFrom?: readonly string[]
@@ -41,7 +43,7 @@ export type TeamLinksOptions = {
   log?: (message: string) => void
 }
 
-type Edge = { gateway: string; from: string; to: string; op: string; side: 'lead' | 'member' | 'joining' }
+type Edge = { gateway: string; from: string; to: string; op: string; owner?: string; side: 'lead' | 'member' | 'joining' }
 
 type StatusRow = InboundTeamStatusAnswer['edges'][number]
 
@@ -58,6 +60,7 @@ const NO_SUCH_AGENT: TeamResult = { ok: false, reason: 'no such agent' }
 // removes one. Rosters of remote leads are cached here, in memory, to vouch for teammates on third gateways.
 export class TeamLinks {
   #agents: AgentService
+  #owners: Pick<OwnerService, 'defaultOwner'> | undefined
   #transport: TeamTransport
   #acceptFrom: ReadonlySet<string>
   #reconcileMs: number
@@ -76,6 +79,7 @@ export class TeamLinks {
 
   constructor(options: TeamLinksOptions) {
     this.#agents = options.agents
+    this.#owners = options.owners
     this.#transport = options.transport
     this.#acceptFrom = new Set(options.acceptFrom ?? [])
     this.#reconcileMs = options.reconcileMs ?? RECONCILE_MS
@@ -123,9 +127,9 @@ export class TeamLinks {
     try {
       let result: TeamResult
       try {
-        result = await this.#transport.team('team.join', mover.id, lead, op)
+        result = await this.#transport.team('team.join', mover.id, lead, op, this.#ownerOf(mover))
       } catch {
-        this.#notify('team.leave', mover.id, lead, op)
+        this.#notify('team.leave', mover.id, lead, op, this.#ownerOf(mover))
         return { status: 409, error: 'remote gateways are unavailable right now; try again later' }
       }
       if (!result.ok) {
@@ -134,13 +138,13 @@ export class TeamLinks {
       const previous = this.#agents.get(mover.id)
       let stored: StoredAgent | AgentRefusal
       try {
-        stored = await commit(this.#joined(lead, op, result.leadName))
+        stored = await commit(this.#joined(lead, op, result.leadName, result.owner))
       } catch (error) {
-        this.#notify('team.leave', mover.id, lead, op)
+        this.#notify('team.leave', mover.id, lead, op, this.#ownerOf(mover))
         throw error
       }
       if (isAgentRefusal(stored)) {
-        this.#notify('team.leave', mover.id, lead, op)
+        this.#notify('team.leave', mover.id, lead, op, this.#ownerOf(mover))
         return stored
       }
       this.#movedOff(mover.id, previous, lead)
@@ -152,14 +156,15 @@ export class TeamLinks {
 
   // Leaving never needs the lead online: the local half goes at once, and the lead's gateway drops its entry on the
   // frame or, failing that, on its next reconcile, where this gateway no longer holds the op.
-  left(agentId: string, lead: string | undefined, op: string | undefined): void {
+  left(agentId: string, lead: string | undefined, op: string | undefined, owner = this.#ownerOf(this.#agents.get(agentId))): void {
     if (this.#agents.remoteGateway(lead) && op !== undefined) {
-      this.#notify('team.leave', agentId, lead!, op)
+      this.#notify('team.leave', agentId, lead!, op, owner)
     }
     this.#transport.nudge()
   }
 
-  async invite(lead: StoredAgent, agent: string): Promise<StoredAgent | AgentRefusal> {
+  // `owner` is the one the invitee must join under; omitted, the lead's own.
+  async invite(lead: StoredAgent, agent: string, owner?: string): Promise<StoredAgent | AgentRefusal> {
     const target = parseRelayPeerId(agent)
     if (!target || !this.#agents.remoteGateway(agent)) {
       return { status: 400, error: 'agent must be an agent id on another gateway (gateway:agentId)' }
@@ -180,7 +185,8 @@ export class TeamLinks {
         return { status: 409, error: `a team holds at most ${MAX_REMOTE_MEMBERS} members from other gateways` }
       }
       const at = this.#now()
-      const invited: RemoteMember = { agent, owner: this.#transport.owner(), state: 'invited', at, expiresAt: at + this.#inviteTtlMs }
+      const expected = owner ?? this.#ownerOf(current)
+      const invited: RemoteMember = { agent, owner: expected, state: 'invited', at, expiresAt: at + this.#inviteTtlMs }
       return { ...current, remoteMembers: [...members.filter((member) => member.agent !== agent), invited] }
     })
   }
@@ -200,7 +206,7 @@ export class TeamLinks {
       return saved
     }
     if (op !== undefined) {
-      this.#notify('team.release', lead.id, agent, op)
+      this.#notify('team.release', lead.id, agent, op, this.#ownerOf(saved))
     }
     this.#transport.nudge()
     return saved
@@ -208,15 +214,16 @@ export class TeamLinks {
 
   // Remote members are released, never retired: no frame deletes an agent on another gateway.
   retiring(agent: StoredAgent): void {
+    const owner = this.#ownerOf(agent)
     for (const member of agent.remoteMembers ?? []) {
       if (member.state !== 'invited' && member.op !== undefined) {
-        this.#notify('team.release', agent.id, member.agent, member.op)
+        this.#notify('team.release', agent.id, member.agent, member.op, owner)
       }
     }
     if (agent.pendingJoin) {
-      this.#notify('team.leave', agent.id, agent.pendingJoin.lead, agent.pendingJoin.op)
+      this.#notify('team.leave', agent.id, agent.pendingJoin.lead, agent.pendingJoin.op, owner)
     }
-    this.left(agent.id, agent.lead, agent.remoteLead?.op)
+    this.left(agent.id, agent.lead, agent.remoteLead?.op, owner)
   }
 
   async inbound(kind: TeamFrameKind, origin: RelayTeamOrigin, to: string, op?: string): Promise<TeamResult> {
@@ -324,8 +331,11 @@ export class TeamLinks {
         return lead
       }
       // A member already accepted may join again under a new op: its gateway owns its consent, the lead already gave its.
-      const member = existing?.state === 'accepted' || existing?.state === 'unconfirmed'
-      const sameOwner = origin.owner === this.#transport.owner()
+      // Under another owner than the one it was accepted with, it is a new agent to this lead and needs an invitation.
+      const member =
+        (existing?.state === 'accepted' || existing?.state === 'unconfirmed') &&
+        (existing.owner === undefined || existing.owner === origin.owner)
+      const sameOwner = origin.owner === this.#ownerOf(lead)
       const invited = existing?.state === 'invited' && existing.owner === origin.owner && (existing.expiresAt ?? Infinity) > this.#now()
       if (!member && !invited && !(sameOwner && this.#acceptFrom.has(origin.gateway))) {
         return { status: 409, error: `${lead.name} has not invited this agent` }
@@ -400,8 +410,15 @@ export class TeamLinks {
     }
   }
 
-  #joined(lead: string, op: string, leadName: string | undefined): RemoteJoin {
-    return { lead, remoteLead: { name: leadName ?? lead, owner: this.#transport.owner(), state: 'joined', since: this.#now(), op } }
+  #joined(lead: string, op: string, leadName: string | undefined, owner: string | undefined): RemoteJoin {
+    return {
+      lead,
+      remoteLead: { name: leadName ?? lead, ...(owner === undefined ? {} : { owner }), state: 'joined', since: this.#now(), op },
+    }
+  }
+
+  #ownerOf(agent: StoredAgent | undefined): string | undefined {
+    return agent?.owner ?? this.#owners?.defaultOwner()
   }
 
   #movedOff(id: string, previous: StoredAgent | undefined, lead: string): void {
@@ -412,8 +429,8 @@ export class TeamLinks {
     }
   }
 
-  #notify(kind: 'team.leave' | 'team.release', from: string, to: string, op: string): void {
-    this.#transport.team(kind, from, to, op).catch((error: unknown) => {
+  #notify(kind: 'team.leave' | 'team.release', from: string, to: string, op: string, owner: string | undefined): void {
+    this.#transport.team(kind, from, to, op, owner).catch((error: unknown) => {
       this.#log(
         `teams: ${kind} to ${to} not delivered (${error instanceof Error ? error.message : String(error)}); reconcile will settle it`,
       )
@@ -555,19 +572,26 @@ export class TeamLinks {
         agent.remoteLead?.op !== undefined &&
         (agent.remoteLead.state !== 'unconfirmed' || this.#eligible(agent, 'member'))
       ) {
-        edges.push({ gateway: leadGateway, from: agent.id, to: agent.lead!, op: agent.remoteLead.op, side: 'member' })
+        edges.push({
+          gateway: leadGateway,
+          from: agent.id,
+          to: agent.lead!,
+          op: agent.remoteLead.op,
+          owner: this.#ownerOf(agent),
+          side: 'member',
+        })
       }
       for (const member of agent.remoteMembers ?? []) {
         const gateway = member.state === 'invited' ? undefined : parseRelayPeerId(member.agent)?.gateway
         if (gateway && member.op !== undefined && (member.state !== 'unconfirmed' || this.#eligible(agent, 'lead'))) {
-          edges.push({ gateway, from: agent.id, to: member.agent, op: member.op, side: 'lead' })
+          edges.push({ gateway, from: agent.id, to: member.agent, op: member.op, owner: this.#ownerOf(agent), side: 'lead' })
         }
       }
     }
     for (const join of this.#agents.restoredJoins()) {
       const gateway = this.#agents.remoteGateway(join.lead)
       if (gateway) {
-        edges.push({ gateway, from: join.id, to: join.lead, op: join.op, side: 'joining' })
+        edges.push({ gateway, from: join.id, to: join.lead, op: join.op, owner: this.#ownerOf(this.#agents.get(join.id)), side: 'joining' })
       }
     }
     return edges
@@ -595,7 +619,7 @@ export class TeamLinks {
           const rosters = await this.#rostersFor(gateway)
           const seen = this.#seenFor(gateway)
           answer = await this.#transport.teamStatus(gateway, {
-            edges: edges.map(({ from, to, op }) => ({ from, to, op })),
+            edges: edges.map(({ from, to, op, owner }) => ({ from, to, op, ...(owner === undefined ? {} : { owner }) })),
             ...(rosters.length > 0 ? { rosters } : {}),
             ...(seen.length > 0 ? { seen } : {}),
           })
@@ -676,7 +700,7 @@ export class TeamLinks {
     }
     // A member that answered no can still hold the edge, conflicted and unconfirmed; the release clears it there too.
     if (released !== undefined) {
-      this.#notify('team.release', edge.from, edge.to, released)
+      this.#notify('team.release', edge.from, edge.to, released, edge.owner)
     }
     if (dissolved) {
       this.#log(dissolved)
@@ -695,11 +719,11 @@ export class TeamLinks {
       return
     }
     const previous = this.#agents.get(edge.from)
-    const joined = this.#joined(edge.to, edge.op, answer.name)
+    const joined = this.#joined(edge.to, edge.op, answer.name, undefined)
     const outcome = await this.#agents.update(edge.from, { lead: edge.to }, { joined })
     await this.#agents.releaseJoin(edge.from, edge.op)
     if (isAgentRefusal(outcome)) {
-      this.#notify('team.leave', edge.from, edge.to, edge.op)
+      this.#notify('team.leave', edge.from, edge.to, edge.op, edge.owner)
       return
     }
     this.#log(`teams: ${outcome.name} finished joining ${joined.remoteLead.name} after a restart`)

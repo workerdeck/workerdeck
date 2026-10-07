@@ -53,6 +53,7 @@ export type CliFlags = {
   approvalTimeoutMs?: number | null
   engineSleepAfterMs?: number
   agentSleepAfterMs?: number
+  owner?: string
   avatarPacks?: string[]
   effortDefaults?: Record<string, string>
   agentContextReset?: 'on' | 'off' | 'never'
@@ -108,6 +109,7 @@ const VALUED = new Map<string, FlagValue>([
   ['--approval-timeout', (f, v, name) => (f.approvalTimeoutMs = parseDuration(v, name))],
   ['--engine-sleep-after', (f, v, name) => (f.engineSleepAfterMs = parseDuration(v, name) ?? 0)],
   ['--agent-sleep-after', (f, v, name) => (f.agentSleepAfterMs = parseDuration(v, name) ?? 0)],
+  ['--owner', (f, v) => (f.owner = v)],
   ['--avatar-packs', (f, v, name) => (f.avatarPacks = parseAvatarPacks(v, name))],
   ['--effort-default', (f, v, name) => (f.effortDefaults = { ...f.effortDefaults, ...parseEffortDefault(v, name) })],
   ['--agent-context-reset', (f, v, name) => (f.agentContextReset = parseAgentContextReset(v, name))],
@@ -447,6 +449,9 @@ export function resolveInstanceConfig(
   }
   if (flags.agentSleepAfterMs !== undefined) {
     options.agentSleepAfterMs = flags.agentSleepAfterMs
+  }
+  if (flags.owner !== undefined) {
+    options.owner = flags.owner
   }
   if (flags.agentContextReset === 'never') {
     options.agentContextReset = false

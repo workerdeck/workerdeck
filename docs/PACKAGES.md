@@ -736,7 +736,9 @@ also what refuses a second relay on the same state dir and what `status` reads; 
 are **watched and reloaded** (`watchFile`, 2 s), so `enroll` and `revoke` take effect on a running
 relay; a revoked gateway is disconnected, an invalid rules file keeps the previous rules and logs.
 The relay enforces its own copy of the guards (16k chars, 12 hops, 10 per minute per session
-pair) in front of the gateways' own. State lives in `~/.workerdeck/relay` unless `--state-dir` or
+pair) in front of the gateways' own. An enrollment names one owner or a set (`enroll --owners`,
+`owners <name> a,b`); every policy decision uses the owners of the two entries, never of the two
+sockets (§Relay in GOTCHAS). State lives in `~/.workerdeck/relay` unless `--state-dir` or
 `WORKERDECK_RELAY_STATE_DIR` says otherwise.
 
 ## `packages/server`
@@ -751,6 +753,11 @@ calls `runner.setEffort`, a `protocol_error` where the engine has none. `isEffor
 and the WS `sleep` command: 501 without `runner.sleep`, 409 with the runner's own reason). The timer
 is one more `onRegister` watcher, so a hot reload's evict detaches it; `ws.ts` re-arms it on every
 socket close beside `parking.onDetach`. Rules in `docs/GOTCHAS.md` §Engine sleep.
+
+**Owners** resolve in `services/owners.ts` (`OwnerService`: profile `owner`, the `owner` server
+option, the relay's sole enrolled owner; `multi()` when more than one is configured). The result is
+stamped on the runner config (durable host-only key `owner`) and on the agent record; nothing
+re-resolves a stamped owner.
 
 **Agents** live in `services/agents.ts` (`AgentService`: the in-memory index over an `AgentStore`,
 the decorator, the one-level team rule, name suggestions), `services/agent-store.ts` (memory and

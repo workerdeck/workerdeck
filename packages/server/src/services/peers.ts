@@ -16,9 +16,9 @@ import {
   PEER_MENTION_MAX,
   peerMentionKey,
   peerMentionSlug,
+  peerReaches,
   qualifyAgent,
   scanPeerMentions,
-  teamReaches,
   type MessageOrigin,
   type SessionEvent,
   type SessionInfo,
@@ -48,7 +48,7 @@ export type PeerAgentTeams = {
   relayAgent(sessionId: string): RelayAgentEntry | undefined
   spansGateways(sessionId: string): boolean
   agentName(agentId: string): string | undefined
-  vouches(ref: { id: string; lead?: string }, gateway: string): boolean
+  vouches(ref: { id: string; lead?: string }, gateway: string, owner?: string): boolean
   // A session never published at all, not even as a plain one (its agent record is from a newer schema).
   withheld?(sessionId: string): boolean
 }
@@ -57,6 +57,8 @@ export type PeerServiceDeps = {
   refs: LateBoundRefs
   projects: ProjectInfoService
   teams?: PeerAgentTeams
+  // Whether this gateway runs sessions of several owners; then a session with no owner matches nobody.
+  multiOwner?: () => boolean
   options?: PeerServiceOptions
 }
 
@@ -64,8 +66,8 @@ const DEFAULT_PER_MINUTE = 10
 const DEFAULT_MAX_HOPS = 12
 const WINDOW_MS = 60_000
 
-function visible(from: SessionInfo, to: SessionInfo): boolean {
-  return to.id !== from.id && scopeMatches(from.scope, to.scope) && teamReaches(from.agent, to.agent)
+function visible(from: SessionInfo, to: SessionInfo, multiOwner: boolean): boolean {
+  return to.id !== from.id && scopeMatches(from.scope, to.scope) && peerReaches(from, to, multiOwner)
 }
 
 // A member is published only to a relay that negotiated teams: an older one would list it to everyone.
@@ -84,14 +86,22 @@ function relayable(
   )
 }
 
-// The gateway's own re-check of the relay's team rule over the relay-stamped `origin.agent`, after checking that
+// The gateway's own re-check of the relay's owner and team rule over the relay-stamped origin, after checking that
 // agent's claims against this gateway's records.
-function teamAdmits(info: SessionInfo, origin: RelayOrigin, gateway: string, teams: PeerAgentTeams | undefined): boolean {
+// A session that names no owner on a gateway of one owner is that owner's, which the relay stamped on its row.
+function teamAdmits(
+  info: SessionInfo,
+  origin: RelayOrigin,
+  gateway: string,
+  teams: PeerAgentTeams | undefined,
+  multiOwner: boolean,
+): boolean {
   const from = origin.agent
-  if (from && teams?.vouches(from, origin.gateway) === false) {
+  if (from && teams?.vouches(from, origin.gateway, origin.owner) === false) {
     return false
   }
-  return teamReaches(from, qualifyAgent(info.agent, gateway))
+  const owner = info.owner ?? (multiOwner ? undefined : origin.owner)
+  return peerReaches({ owner: origin.owner, agent: from }, { owner, agent: qualifyAgent(info.agent, gateway) }, multiOwner)
 }
 
 export type PeerService = PeerDirectory & {
@@ -103,7 +113,7 @@ export type PeerService = PeerDirectory & {
   relayChain(from: string): string[]
   relaySpans(sessionId: string): boolean
   relayAgentName(agentId: string): string | undefined
-  relayVouches(ref: { id: string; lead?: string }, gateway: string): boolean
+  relayVouches(ref: { id: string; lead?: string }, gateway: string, owner?: string): boolean
   relayEntries(exposed: Record<string, string> | undefined, teamsOn: boolean): Promise<RelaySessionEntry[]>
   relayPeek(
     origin: RelayOrigin,
@@ -134,6 +144,7 @@ export function relayEntry(info: SessionInfo, live: boolean, agent?: RelayAgentE
   const items = info.checklist
   return {
     id: info.id,
+    ...(info.owner === undefined ? {} : { owner: info.owner }),
     agent,
     engine: info.engine,
     status: info.status,
@@ -160,6 +171,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
   const maxChars = deps.options?.maxMessageChars ?? PEER_MESSAGE_MAX_CHARS
   const maxHops = deps.options?.maxHops ?? DEFAULT_MAX_HOPS
   const sent = new Map<string, number[]>()
+  const multiOwner = (): boolean => deps.multiOwner?.() === true
   // The chain of sessions that led to the last peer message each session received, cleared when a human speaks to
   // it: two agents answering each other without a person in the loop is the loop this bounds.
   const inbound = new Map<string, string[]>()
@@ -221,7 +233,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
   const list = async (from: string): Promise<PeerSessionSummary[]> => {
     const me = await sender(from)
     return (await allSessions())
-      .filter((info) => visible(me, info))
+      .filter((info) => visible(me, info, multiOwner()))
       .sort((a, b) => (b.lastActivityAt ?? b.createdAt) - (a.lastActivityAt ?? a.createdAt))
       .map(peerSummary)
   }
@@ -229,7 +241,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
   const peek = async (from: string, sessionId: string, options?: { recent?: number }): Promise<PeerPeek | undefined> => {
     const me = await sender(from)
     const info = await infoOf(sessionId)
-    if (!info || !visible(me, info)) {
+    if (!info || !visible(me, info, multiOwner())) {
       return undefined
     }
     const { runner, lines } = recentOf(sessionId, options?.recent)
@@ -254,7 +266,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       }
     }
     const target = await infoOf(sessionId)
-    if (!target || !visible(me, target)) {
+    if (!target || !visible(me, target, multiOwner())) {
       return { delivered: false, reason: `no such session: ${sessionId}` }
     }
     const hops = [...(options?.hops ?? inbound.get(from) ?? []), from]
@@ -302,7 +314,9 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     gateway: string,
   ): Promise<SessionInfo | undefined> => {
     const info = await infoOf(sessionId)
-    return info && relayable(info, exposed, deps.teams, true) && teamAdmits(info, origin, gateway, deps.teams) ? info : undefined
+    return info && relayable(info, exposed, deps.teams, true) && teamAdmits(info, origin, gateway, deps.teams, multiOwner())
+      ? info
+      : undefined
   }
 
   const relayEntries = async (exposed: Record<string, string> | undefined, teamsOn: boolean): Promise<RelaySessionEntry[]> => {
@@ -378,7 +392,7 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
     relayChain: (from) => [...(inbound.get(from) ?? []), from],
     relaySpans: (sessionId) => deps.teams?.spansGateways(sessionId) === true,
     relayAgentName: (agentId) => deps.teams?.agentName(agentId),
-    relayVouches: (ref, gateway) => deps.teams?.vouches(ref, gateway) ?? true,
+    relayVouches: (ref, gateway, owner) => deps.teams?.vouches(ref, gateway, owner) ?? true,
     relayEntries,
     relayPeek,
     relaySend,

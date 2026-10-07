@@ -1,4 +1,4 @@
-import type { ContextReading, ProfileEngine, SessionStatus } from '@workerdeck/protocol'
+import { OWNER_NAME, type ContextReading, type ProfileEngine, type SessionStatus } from '@workerdeck/protocol'
 
 export const RELAY_WIRE_VERSION = 1
 
@@ -7,10 +7,11 @@ export const RELAY_GRANTED_OPS = ['team', 'watch', 'message'] as const
 export const RELAY_ALL_OPS = [...RELAY_OPS, ...RELAY_GRANTED_OPS] as const
 export type RelayOp = (typeof RELAY_ALL_OPS)[number]
 
-export const RELAY_FEATURES = ['teams'] as const
+// `owners`: entries and team frames carry their own owner, checked against the gateway's enrolled set.
+export const RELAY_FEATURES = ['teams', 'owners'] as const
 export type RelayFeature = (typeof RELAY_FEATURES)[number]
 
-export const RELAY_OWNER_NAME = /^[a-z0-9-]{1,32}$/
+export const RELAY_OWNER_NAME = OWNER_NAME
 
 export const SHARE_LEVELS = ['none', 'list', 'watch', 'message'] as const
 export type ShareLevel = (typeof SHARE_LEVELS)[number]
@@ -22,6 +23,7 @@ export const RELAY_CLOSE = {
   versionMismatch: 4426,
   replaced: 4409,
   timeout: 4408,
+  ownersRequired: 4412,
 } as const
 
 export const RELAY_FRAME_MAX_BYTES = 4 * 1024 * 1024
@@ -40,6 +42,7 @@ export type RelayAgentEntry = {
 
 export type RelaySessionEntry = {
   id: string
+  owner?: string
   agent?: RelayAgentEntry
   engine?: ProfileEngine
   status: SessionStatus
@@ -58,7 +61,7 @@ export type RelaySessionEntry = {
   live: boolean
 }
 
-export type RelayPeerRow = RelaySessionEntry & { gateway: string; owner?: string; allow: RelayOp[] }
+export type RelayPeerRow = RelaySessionEntry & { gateway: string; allow: RelayOp[] }
 
 export type RelayOrigin = {
   gateway: string
@@ -81,7 +84,8 @@ export const TEAM_ROSTER_MAX_MEMBERS = 64
 export const TEAM_STATUS_MAX_ROSTERS = 64
 
 // `op` names one join; a frame about another op than the one a gateway holds for the edge is stale.
-export type TeamEdge = { from: string; to: string; op?: string }
+// `owner` is the asking agent's, so one batch can carry agents of several owners.
+export type TeamEdge = { from: string; to: string; op?: string; owner?: string }
 
 // A lead's canonical member list, issued only by the lead's gateway. Within one epoch revisions only grow.
 export type TeamRoster = { lead: string; epoch: string; rev: number; members: Array<{ id: string; name?: string }> }
@@ -91,7 +95,7 @@ export type TeamSeen = { lead: string; epoch: string; rev: number }
 
 export type TeamStatusBody = { edges: TeamEdge[]; rosters?: TeamRoster[]; seen?: TeamSeen[] }
 
-export type TeamResult = { ok: true; leadName?: string } | { ok: false; reason: string }
+export type TeamResult = { ok: true; leadName?: string; owner?: string } | { ok: false; reason: string }
 
 // `op` echoes the asked edge's op, so two questions about one pair (a binding and a rejoin) keep their own answers.
 export type TeamStatusEdge = { from: string; to: string; op?: string; known: boolean; name?: string; session?: string }
@@ -123,7 +127,7 @@ export type HelloFrame = {
   ceiling: { ops: RelayOp[] }
   features?: RelayFeature[]
 }
-export type WelcomeFrame = { t: 'welcome'; relayVersion: number; features?: RelayFeature[]; owner?: string }
+export type WelcomeFrame = { t: 'welcome'; relayVersion: number; features?: RelayFeature[]; owner?: string; owners?: string[] }
 export type SnapshotFrame = { t: 'registry.snapshot'; seq: number; entries: RelaySessionEntry[] }
 export type DeltaFrame = { t: 'registry.delta'; seq: number; upsert: RelaySessionEntry[]; remove: string[] }
 export type DigestFrame = { t: 'registry.digest'; seq: number; count: number; hash: string }
@@ -133,7 +137,7 @@ export type ListRequest = { t: 'peer.list'; id: string; from: string }
 export type PeekRequest = { t: 'peer.peek'; id: string; from: string; to: RelayTarget; recent?: number }
 export type SendRequest = { t: 'peer.send'; id: string; from: string; to: RelayTarget; text: string; hops: string[] }
 
-export type TeamRequest = { t: TeamFrameKind; id: string; from: string; to: string; op?: string }
+export type TeamRequest = { t: TeamFrameKind; id: string; from: string; to: string; op?: string; owner?: string }
 export type TeamStatusRequest = { t: 'team.status'; id: string; gateway: string } & TeamStatusBody
 
 export type InboundPeek = { t: 'peer.peek'; id: string; origin: RelayOrigin; to: string; recent?: number }

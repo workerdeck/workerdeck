@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
+import { isOwnerName, supportsPermissionMode, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { EngineAdapter, EngineAvailability } from '@workerdeck/core'
 import type { Refusal } from '../lib/http.ts'
 import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
@@ -56,6 +56,9 @@ export class ProfileService {
     }
     if (disableBypassPermissions && p.defaults?.permissionMode === 'bypassPermissions') {
       return `profile '${p.name}' defaults to bypassPermissions but disableBypassPermissions is set`
+    }
+    if (p.owner !== undefined && !isOwnerName(p.owner)) {
+      return `profile '${p.name}' owner must be 1 to 32 lowercase letters, digits or dashes`
     }
     const efforts = p.defaults?.efforts
     if (efforts !== undefined && !isEffortMap(efforts)) {

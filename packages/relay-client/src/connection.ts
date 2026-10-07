@@ -63,10 +63,12 @@ export type RelayConnection = {
   list(from: string): Promise<RelayPeerRow[]>
   peek(from: string, to: RelayTarget, recent?: number): Promise<RelayPeek | undefined>
   send(from: string, to: RelayTarget, text: string, hops: string[]): Promise<RelaySendResult>
-  team(kind: TeamFrameKind, from: string, to: string, op?: string): Promise<TeamResult>
+  team(kind: TeamFrameKind, from: string, to: string, op?: string, owner?: string): Promise<TeamResult>
   teamStatus(gateway: string, body: TeamStatusBody): Promise<TeamStatusAnswer>
   features(): RelayFeature[]
   owner(): string | undefined
+  // The owners the relay lets this gateway claim; empty from a relay without `owners`.
+  owners(): string[]
   nudge(): void
   setHost(host: RelayHost): void
   close(): void
@@ -86,6 +88,7 @@ const TERMINAL_CLOSES: ReadonlyMap<number, string> = new Map([
   [RELAY_CLOSE.revoked, 'this gateway is not enrolled at the relay'],
   [RELAY_CLOSE.versionMismatch, 'the relay speaks a different wire version'],
   [RELAY_CLOSE.badHello, 'the relay refused the hello frame'],
+  [RELAY_CLOSE.ownersRequired, 'the relay enrolled this gateway with several owners, which needs a newer WorkerDeck'],
 ])
 
 export function connectRelay(options: RelayConnectOptions, initialHost: RelayHost): RelayConnection {
@@ -115,6 +118,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
   let publisher = createRegistryPublisher()
   let agreed: RelayFeature[] = []
   let ownOwner: string | undefined
+  let ownOwners: string[] = []
   const pending = new Map<string, Pending>()
 
   const sendFrame = (frame: GatewayFrame): void => {
@@ -251,6 +255,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
         state = 'online'
         agreed = Array.isArray(frame.features) ? ownFeatures.filter((feature) => (frame.features as unknown[]).includes(feature)) : []
         ownOwner = typeof frame.owner === 'string' ? frame.owner : undefined
+        ownOwners = Array.isArray(frame.owners) ? frame.owners.filter((owner): owner is string => typeof owner === 'string') : []
         attempt = 0
         lastTerminal = undefined
         log(`relay: connected to ${options.url} as ${options.gateway}`)
@@ -401,8 +406,17 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     list: (from) => request<RelayPeerRow[]>({ t: 'peer.list', id: newId(), from }),
     peek: async (from, to, recent) => (await request<RelayPeek | null>({ t: 'peer.peek', id: newId(), from, to, recent })) ?? undefined,
     send: (from, to, text, hops) => request<RelaySendResult>({ t: 'peer.send', id: newId(), from, to, text, hops }),
-    team: (kind, from, to, op) =>
-      teamsAgreed().then(() => request<TeamResult>({ t: kind, id: newId(), from, to, ...(op === undefined ? {} : { op }) })),
+    team: (kind, from, to, op, owner) =>
+      teamsAgreed().then(() =>
+        request<TeamResult>({
+          t: kind,
+          id: newId(),
+          from,
+          to,
+          ...(op === undefined ? {} : { op }),
+          ...(owner === undefined ? {} : { owner }),
+        }),
+      ),
     teamStatus: (gateway, body) =>
       teamsAgreed().then(async () => {
         const reply = await request<Partial<TeamStatusAnswer> | null>({ t: 'team.status', id: newId(), gateway, ...body })
@@ -414,6 +428,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
       }),
     features: () => (state === 'online' ? [...agreed] : []),
     owner: () => ownOwner,
+    owners: () => (state === 'online' ? [...ownOwners] : []),
     nudge: () => void tick(),
     setHost: (next) => {
       host = next

@@ -164,7 +164,7 @@ export {
   type GroupTarget,
   type SessionBrowserProps,
 } from './components/agent/SessionBrowser.tsx'
-export { teamDropRefusal, type TeamMove } from './lib/team-drop.ts'
+export { crossOwnerDrop, teamDropRefusal, type TeamMove } from './lib/team-drop.ts'
 export {
   STEP_DISPLAY_OPTIONS,
   SessionFilters,

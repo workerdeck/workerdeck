@@ -85,6 +85,9 @@ Options
                             the same for an agent's session, unless the agent sets
                             its own sleepAfterMs (30m, 2h, never; config:
                             agentSleepAfterMs). Default 15m.
+      --owner <label>       whom sessions answer to when their profile names no
+                            owner (config: owner; profiles take an owner field).
+                            Needed on a gateway shared by several owners.
       --avatar-packs <list>
                             monkeyart packs new agent avatars are drawn from,
                             comma separated (monkey, toad, steampunk-bulldogs,

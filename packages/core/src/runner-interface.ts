@@ -40,6 +40,8 @@ export type EngineRunnerConfig = CreateSessionRequest & {
   // Stamped by the gateway at create time from the principal that asked, and persisted with the record: the shell
   // write tools are offered only to a session an operator created.
   createdByOperator?: boolean
+  // Stamped by the gateway at create time and persisted with the record; an agent's owner overrides it in `decorate`.
+  owner?: string
   // The title a woken session last showed, ranked below the host's and the engine's, so it never freezes as a rename.
   fallbackTitle?: string
   // Set by the gateway on a dormant wake: the runner backfills, then waits for the first message to start its engine.
