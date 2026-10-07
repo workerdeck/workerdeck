@@ -191,7 +191,10 @@ function settled(outcome: StoredAgent | AgentRefusal): StoredAgent {
 async function updateAgent(ctx: ServerContext, agent: StoredAgent, patch: UpdateAgentRequest): Promise<StoredAgent | AgentRefusal> {
   const remoteLead = remoteLeadOf(ctx, patch.lead)
   if (remoteLead === undefined) {
-    return ctx.agents.update(agent.id, patch, { onLeadChanged: (previous) => ctx.teams?.left(agent.id, previous) })
+    return ctx.agents.update(agent.id, patch, {
+      onLeadChanged: (previous) => ctx.teams?.left(agent.id, previous.lead, previous.remoteLead?.op),
+      onJoinCancelled: (lead, op) => ctx.teams?.left(agent.id, lead, op),
+    })
   }
   const { lead: _lead, ...rest } = patch
   const updated = await ctx.agents.update(agent.id, rest)

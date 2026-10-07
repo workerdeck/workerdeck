@@ -22,7 +22,12 @@ import {
   type TeamEdge,
   type TeamFrameKind,
   type TeamResult,
-  type TeamStatusEdge,
+  type TeamStatusAnswer,
+  type TeamStatusBody,
+  type InboundTeamStatusAnswer,
+  readTeamOp,
+  readTeamRosters,
+  readTeamSeen,
 } from './frames.ts'
 import { createRegistryPublisher } from './registry.ts'
 
@@ -30,8 +35,8 @@ export type RelayHost = {
   snapshot(): Promise<RelaySessionEntry[]>
   peek(origin: RelayOrigin, sessionId: string, recent?: number): Promise<RelayPeek | undefined>
   send(origin: RelayOrigin, sessionId: string, text: string): Promise<RelaySendResult>
-  team?(kind: TeamFrameKind, origin: RelayTeamOrigin, agentId: string): Promise<TeamResult>
-  teamStatus?(origin: { gateway: string; owner: string }, edges: TeamEdge[]): Promise<Array<Omit<TeamStatusEdge, 'from' | 'to'>>>
+  team?(kind: TeamFrameKind, origin: RelayTeamOrigin, agentId: string, op?: string): Promise<TeamResult>
+  teamStatus?(origin: { gateway: string; owner: string }, body: TeamStatusBody): Promise<InboundTeamStatusAnswer>
   online?(): void
 }
 
@@ -58,8 +63,8 @@ export type RelayConnection = {
   list(from: string): Promise<RelayPeerRow[]>
   peek(from: string, to: RelayTarget, recent?: number): Promise<RelayPeek | undefined>
   send(from: string, to: RelayTarget, text: string, hops: string[]): Promise<RelaySendResult>
-  team(kind: TeamFrameKind, from: string, to: string): Promise<TeamResult>
-  teamStatus(gateway: string, edges: TeamEdge[]): Promise<TeamStatusEdge[]>
+  team(kind: TeamFrameKind, from: string, to: string, op?: string): Promise<TeamResult>
+  teamStatus(gateway: string, body: TeamStatusBody): Promise<TeamStatusAnswer>
   features(): RelayFeature[]
   owner(): string | undefined
   nudge(): void
@@ -182,9 +187,17 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     }
     const open = allow.has('team') && agreed.includes('teams')
     if (frame.t === 'team.status') {
-      const edges = Array.isArray(frame.edges) ? (frame.edges as TeamEdge[]) : []
+      const body: TeamStatusBody = {
+        edges: Array.isArray(frame.edges) ? (frame.edges as TeamEdge[]) : [],
+        rosters: readTeamRosters(frame.rosters),
+        seen: readTeamSeen(frame.seen),
+      }
       const handler = host.teamStatus
-      void answer(id, async () => (open && handler ? handler({ gateway: origin.gateway!, owner: origin.owner! }, edges) : []))
+      void answer(id, async () =>
+        open && handler
+          ? handler({ gateway: origin.gateway!, owner: origin.owner! }, body)
+          : ({ edges: [] } satisfies InboundTeamStatusAnswer),
+      )
       return
     }
     const to = typeof frame.to === 'string' ? frame.to : undefined
@@ -193,7 +206,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
       void answer(id, async () => ({ ok: false, reason: 'no such agent' }) satisfies TeamResult)
       return
     }
-    void answer(id, () => handler(frame.t as TeamFrameKind, origin as RelayTeamOrigin, to))
+    void answer(id, () => handler(frame.t as TeamFrameKind, origin as RelayTeamOrigin, to, readTeamOp(frame.op)))
   }
 
   const onInbound = (frame: { t: string; [key: string]: unknown }): void => {
@@ -388,8 +401,17 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     list: (from) => request<RelayPeerRow[]>({ t: 'peer.list', id: newId(), from }),
     peek: async (from, to, recent) => (await request<RelayPeek | null>({ t: 'peer.peek', id: newId(), from, to, recent })) ?? undefined,
     send: (from, to, text, hops) => request<RelaySendResult>({ t: 'peer.send', id: newId(), from, to, text, hops }),
-    team: (kind, from, to) => teamsAgreed().then(() => request<TeamResult>({ t: kind, id: newId(), from, to })),
-    teamStatus: (gateway, edges) => teamsAgreed().then(() => request<TeamStatusEdge[]>({ t: 'team.status', id: newId(), gateway, edges })),
+    team: (kind, from, to, op) =>
+      teamsAgreed().then(() => request<TeamResult>({ t: kind, id: newId(), from, to, ...(op === undefined ? {} : { op }) })),
+    teamStatus: (gateway, body) =>
+      teamsAgreed().then(async () => {
+        const reply = await request<Partial<TeamStatusAnswer> | null>({ t: 'team.status', id: newId(), gateway, ...body })
+        return {
+          edges: Array.isArray(reply?.edges) ? reply.edges : [],
+          rosters: readTeamRosters(reply?.rosters),
+          seen: readTeamSeen(reply?.seen),
+        }
+      }),
     features: () => (state === 'online' ? [...agreed] : []),
     owner: () => ownOwner,
     nudge: () => void tick(),

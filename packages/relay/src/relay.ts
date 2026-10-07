@@ -34,7 +34,12 @@ import {
   type RelaySessionEntry,
   type TeamEdge,
   type TeamResult,
+  type TeamStatusAnswer,
   type TeamStatusEdge,
+  type TeamSeen,
+  readTeamOp,
+  readTeamRosters,
+  readTeamSeen,
 } from '@workerdeck/relay-client'
 import { enrollmentPath, keyMatches, readEnrollments, type EnrollmentFile } from './enrollment.ts'
 import { allowedOps, readRules, rulesPath, type RelayRule } from './rules.ts'
@@ -300,10 +305,12 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       return miss
     }
     const name = findAgent(agent)?.entry.agent?.name
+    const op = readTeamOp(frame.op)
     const delivery = route(found.target, {
       t: kind,
       origin: { gateway: from.name, owner: from.owner, agent, ...(name ? { name } : {}) },
       to: found.entry.agent!.id.slice(found.target.name.length + 1),
+      ...(op === undefined ? {} : { op }),
     })
     if (quiet) {
       delivery.catch(() => {})
@@ -312,7 +319,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     return delivery
   }
 
-  const teamStatus = async (from: Gateway, frame: Frame): Promise<TeamStatusEdge[]> => {
+  const teamStatus = async (from: Gateway, frame: Frame): Promise<TeamStatusAnswer> => {
     const target = typeof frame.gateway === 'string' ? gateways.get(frame.gateway) : undefined
     if (!target || target === from || !target.features.has('teams') || !Array.isArray(frame.edges)) {
       throw new Error('unreachable')
@@ -331,19 +338,24 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
       }
       const entry = findAgent(raw.to)?.entry ?? { id: '', status: 'idle', cwd: '', createdAt: 0, pendingPermissionCount: 0, live: false }
       if (opsBetween(from, target, entry).includes('team')) {
-        edges.push({ from: raw.from, to: raw.to })
+        const op = readTeamOp(raw.op)
+        edges.push({ from: raw.from, to: raw.to, ...(op === undefined ? {} : { op }) })
       }
     }
     if (edges.length === 0) {
-      return []
+      return { edges: [] }
     }
-    const answer = await route(target, {
+    const answer = (await route(target, {
       t: 'team.status',
       origin: { gateway: from.name, owner: from.owner },
-      edges: edges.map((edge) => ({ from: qualifyId(from.name, edge.from), to: parseRelayPeerId(edge.to)!.id })),
-    })
-    const rows = Array.isArray(answer) ? (answer as Array<Partial<TeamStatusEdge> | null>) : []
-    return edges.flatMap((edge, index) => {
+      edges: edges.map((edge) => ({ ...edge, from: qualifyId(from.name, edge.from), to: parseRelayPeerId(edge.to)!.id })),
+      rosters: readTeamRosters(frame.rosters, from.name),
+      seen: seenOf(frame.seen, target.name),
+    })) as Partial<Record<keyof TeamStatusAnswer, unknown>> | null
+    const rows = Array.isArray(answer?.edges) ? (answer.edges as Array<Partial<TeamStatusEdge> | null>) : []
+    const rosters = readTeamRosters(answer?.rosters, target.name)
+    const seen = seenOf(answer?.seen, from.name)
+    const answered = edges.flatMap((edge, index) => {
       const row = rows[index]
       if (typeof row?.known !== 'boolean') {
         return []
@@ -357,6 +369,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
         },
       ]
     })
+    return { edges: answered, ...(rosters.length > 0 ? { rosters } : {}), ...(seen.length > 0 ? { seen } : {}) }
   }
 
   const peerRequest = async (from: Gateway, frame: Frame): Promise<unknown> => {
@@ -671,4 +684,9 @@ function originOf(from: Gateway, sender: RelaySessionEntry, hops: string[]): Rel
     ...(agent ? { agent: { id: agent.id, name: agent.name, ...(agent.lead ? { lead: agent.lead } : {}) } } : {}),
     hops,
   }
+}
+
+// A gateway may tell another only which revision it holds of that other gateway's own rosters.
+function seenOf(value: unknown, about: string): TeamSeen[] {
+  return readTeamSeen(value).filter((seen) => parseRelayPeerId(seen.lead)?.gateway === about)
 }

@@ -243,6 +243,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
             },
             agentName: (agentId) => agents.get(agentId)?.name,
             vouches: (ref, gateway) => agents.vouches(ref, gateway),
+            withheld: (sessionId) => {
+              const agent = agents.bySession(sessionId)
+              return agent !== undefined && agents.frozen(agent.id)
+            },
           },
           options: options.peers,
         })

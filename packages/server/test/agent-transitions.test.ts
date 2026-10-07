@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TeamFrameKind, TeamResult } from '@workerdeck/relay-client'
+import type { TeamFrameKind, TeamResult, TeamStatusAnswer } from '@workerdeck/relay-client'
 import { createMemoryAgentStore, type AgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService, isAgentRefusal } from '../src/services/agents.ts'
 import { TeamLinks, type TeamTransport } from '../src/services/team-links.ts'
@@ -12,7 +12,7 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve }
 }
 
-type Frame = { kind: TeamFrameKind; from: string; to: string }
+type Frame = { kind: TeamFrameKind; from: string; to: string; op?: string }
 
 function heldTransport(): TeamTransport & { frames: Frame[]; held: Deferred<TeamResult> } {
   const transport = {
@@ -21,11 +21,11 @@ function heldTransport(): TeamTransport & { frames: Frame[]; held: Deferred<Team
     held: deferred<TeamResult>(),
     ready: () => undefined,
     owner: () => 'tobias',
-    team: (kind: TeamFrameKind, from: string, to: string): Promise<TeamResult> => {
-      transport.frames.push({ kind, from, to })
+    team: (kind: TeamFrameKind, from: string, to: string, op?: string): Promise<TeamResult> => {
+      transport.frames.push({ kind, from, to, op })
       return kind === 'team.join' ? transport.held.promise : Promise.resolve({ ok: true })
     },
-    teamStatus: async () => [],
+    teamStatus: async (): Promise<TeamStatusAnswer> => ({ edges: [] }),
     nudge: () => {},
   }
   return transport
@@ -81,10 +81,23 @@ describe('agent mutation transitions', () => {
       status: 409,
       error: 'Scout is joining a team',
     })
-    expect(await agents.update(mover.id, { lead: null })).toEqual({ status: 409, error: 'Scout is joining a team' })
     transport.held.resolve({ ok: true, leadName: 'AC-Lead' })
     expect(await joining).toMatchObject({ lead: 'mac:L1', remoteLead: { name: 'AC-Lead' } })
     expect(agents.members(mover.id)).toEqual([])
+  })
+
+  it('cancels a join in flight with lead null: the late acceptance is refused and withdrawn', async () => {
+    const { agents, transport, mover, joining } = await joinRig()
+    const cancelled: string[] = []
+    expect(await agents.update(mover.id, { lead: null }, { onJoinCancelled: (_lead, op) => cancelled.push(op) })).toMatchObject({
+      id: mover.id,
+    })
+    const op = transport.frames[0]!.op!
+    expect(cancelled).toEqual([op])
+    transport.held.resolve({ ok: true, leadName: 'AC-Lead' })
+    expect(await joining).toEqual({ status: 409, error: 'a lead on another gateway is joined through the relay' })
+    expect(agents.get(mover.id)?.lead).toBeUndefined()
+    expect(transport.frames.at(-1)).toEqual({ kind: 'team.leave', from: mover.id, to: 'mac:L1', op })
   })
 
   it('withdraws the lead acceptance when the agent retires mid-join, and never revives it', async () => {
@@ -93,7 +106,7 @@ describe('agent mutation transitions', () => {
     transport.held.resolve({ ok: true, leadName: 'AC-Lead' })
     expect(await joining).toEqual({ status: 404, error: `no such agent: ${mover.id}` })
     expect(agents.get(mover.id)).toBeUndefined()
-    expect(transport.frames.at(-1)).toEqual({ kind: 'team.leave', from: mover.id, to: 'mac:L1' })
+    expect(transport.frames.at(-1)).toEqual({ kind: 'team.leave', from: mover.id, to: 'mac:L1', op: transport.frames[0]!.op })
     expect(await agents.create(mover)).toEqual({ status: 409, error: `agent ${mover.id} already exists` })
     expect(await agents.bind(mover.id, 'session-1')).toEqual({ status: 404, error: `no such agent: ${mover.id}` })
   })
@@ -105,17 +118,21 @@ describe('agent mutation transitions', () => {
     const draft = agents.draft({ name: 'Draft' }) as StoredAgent
     const joining = teams.join(draft, 'mac:L1', (joined) => agents.create(draft, joined))
     await until(() => transport.frames.length > 0)
-    expect(await teams.inboundStatus({ gateway: 'mac' }, [{ from: 'mac:L1', to: draft.id }])).toEqual([{ known: true, name: 'Draft' }])
-    expect(await teams.inboundStatus({ gateway: 'mac' }, [{ from: 'mac:L2', to: draft.id }])).toEqual([{ known: false }])
+    const op = transport.frames[0]!.op
+    const ask = async (from: string, asked = op) =>
+      (await teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from, to: draft.id, op: asked }] })).edges
+    expect(await ask('mac:L1')).toEqual([{ known: true, name: 'Draft' }])
+    expect(await ask('mac:L2')).toEqual([{ known: false }])
+    expect(await ask('mac:L1', 'another-join')).toEqual([{ known: false }])
     transport.held.resolve({ ok: true, leadName: 'AC-Lead' })
-    expect(await joining).toMatchObject({ id: draft.id, lead: 'mac:L1' })
-    expect(await teams.inboundStatus({ gateway: 'mac' }, [{ from: 'mac:L1', to: draft.id }])).toEqual([{ known: true, name: 'Draft' }])
+    expect(await joining).toMatchObject({ id: draft.id, lead: 'mac:L1', remoteLead: { op } })
+    expect(await ask('mac:L1')).toEqual([{ known: true, name: 'Draft' }])
   })
 
   it('refuses an inbound join and an invitation to an agent that is joining', async () => {
     const { teams, transport, mover, joining } = await joinRig()
     const origin = { gateway: 'mac', owner: 'tobias', agent: 'mac:X', name: 'X' }
-    expect(await teams.inbound('team.join', origin, mover.id)).toEqual({ ok: false, reason: 'Scout is joining a team' })
+    expect(await teams.inbound('team.join', origin, mover.id, 'op-1')).toEqual({ ok: false, reason: 'Scout is joining a team' })
     expect(await teams.invite(mover, 'mac:X')).toEqual({ status: 409, error: 'Scout is joining a team' })
     transport.held.resolve({ ok: true, leadName: 'AC-Lead' })
     await joining
@@ -244,7 +261,7 @@ describe('agent mutation transitions', () => {
   it('ends a reconcile quietly when the generation stops while a status answer is outstanding', async () => {
     const agents = await service()
     const transport = heldTransport()
-    const status = deferred<[]>()
+    const status = deferred<TeamStatusAnswer>()
     transport.teamStatus = () => status.promise
     const logged: string[] = []
     const teams = new TeamLinks({ agents, transport, log: (line) => logged.push(line) })
@@ -260,7 +277,7 @@ describe('agent mutation transitions', () => {
       await until(() => transport.frames.length > 0)
       teams.stop()
       await agents.close()
-      status.resolve([])
+      status.resolve({ edges: [] })
       await pass
       await new Promise((resolve) => setTimeout(resolve, 5))
     } finally {
@@ -300,13 +317,13 @@ describe('remote team claims', () => {
     const transport = heldTransport()
     const teams = new TeamLinks({ agents, transport, acceptFrom: ['mac'] })
     const lead = await stored(agents, 'Lead')
-    await teams.inbound('team.join', { gateway: 'mac', owner: 'tobias', agent: 'mac:M1', name: 'M1' }, lead.id)
+    await teams.inbound('team.join', { gateway: 'mac', owner: 'tobias', agent: 'mac:M1', name: 'M1' }, lead.id, 'op-1')
     const local = `win:${lead.id}`
     expect(agents.vouches({ id: 'mac:M1', lead: local }, 'mac')).toBe(true)
     expect(agents.vouches({ id: 'mac:M2', lead: local }, 'mac')).toBe(false)
     expect(agents.vouches({ id: 'mac:M1', lead: local }, 'evil')).toBe(false)
     expect(agents.vouches({ id: `win:${lead.id}` }, 'win')).toBe(false)
-    expect(agents.vouches({ id: 'pi:X', lead: 'mac:L9' }, 'pi')).toBe(true)
+    expect(agents.vouches({ id: 'pi:X', lead: 'mac:L9' }, 'pi')).toBe(false)
     expect(agents.vouches({ id: 'pi:X' }, 'pi')).toBe(true)
   })
 })

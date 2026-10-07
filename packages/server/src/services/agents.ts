@@ -8,7 +8,7 @@ import {
   type UpdateAgentRequest,
 } from '@workerdeck/protocol'
 import { parseRelayPeerId, type RelayAgentEntry } from '@workerdeck/relay-client'
-import type { AgentStore, StoredAgent } from './agent-store.ts'
+import { AGENT_SCHEMA, type AgentStore, type StoredAgent } from './agent-store.ts'
 
 export type AgentServiceOptions = {
   store: AgentStore
@@ -28,9 +28,20 @@ export type RemoteJoin = Required<Pick<StoredAgent, 'lead' | 'remoteLead'>>
 
 export type AgentMutation = (current: StoredAgent) => StoredAgent | AgentRefusal
 
-export type UpdateOptions = { joined?: RemoteJoin; onLeadChanged?: (previous: string | undefined) => void }
+export type UpdateOptions = {
+  joined?: RemoteJoin
+  onLeadChanged?: (previous: StoredAgent) => void
+  // `lead: null` also cancels a join in progress; its lead's acceptance, if any, is then withdrawn with a leave.
+  onJoinCancelled?: (lead: string, op: string) => void
+}
 
-type JoinReservation = { lead: string; name: string }
+// `restored`: read back from the store at hydrate, so no request in this process is waiting on it.
+type JoinReservation = { lead: string; name: string; op: string; restored?: boolean }
+
+export type RosterMember = { id: string; name: string }
+
+// Whether a cached, fresh roster of a lead on another gateway lists this member (`TeamLinks` holds the rosters).
+export type RosterCheck = (lead: string, member: string) => boolean
 
 const NAMES = [
   'Atlas',
@@ -95,8 +106,12 @@ export class AgentService {
   #agents = new Map<string, StoredAgent>()
   #joining = new Map<string, JoinReservation>()
   #retired = new Set<string>()
+  #frozen = new Set<string>()
   #queue: Promise<unknown> = Promise.resolve()
   #closed = false
+  #hydrated = false
+  #rosterCheck: RosterCheck = () => false
+  #listeners = new Set<() => void>()
 
   constructor(options: AgentServiceOptions) {
     this.#store = options.store
@@ -107,8 +122,53 @@ export class AgentService {
     this.#now = options.now ?? Date.now
   }
 
+  // Every hydrate normalizes the records to the current schema (idempotent, so an interrupted pass reruns to the same
+  // result) and writes what changed as one store change. A record from a newer schema is loaded but never written.
   async hydrate(): Promise<void> {
-    this.#agents = new Map((await this.#store.list()).map((agent) => [agent.id, agent]))
+    const stored = await this.#store.list()
+    const changed: StoredAgent[] = []
+    this.#frozen = new Set()
+    this.#joining = new Map()
+    const agents = new Map<string, StoredAgent>()
+    for (const agent of stored) {
+      if ((agent.schema ?? 0) > AGENT_SCHEMA) {
+        this.#frozen.add(agent.id)
+        agents.set(agent.id, agent)
+        continue
+      }
+      const next = this.#gateway === undefined ? agent : normalizeAgent(agent, this.#gateway, this.#now())
+      if (next !== agent) {
+        changed.push(next)
+      }
+      agents.set(next.id, next)
+      if (next.pendingJoin && this.#gateway !== undefined) {
+        this.#joining.set(next.id, { lead: next.pendingJoin.lead, name: next.name, op: next.pendingJoin.op, restored: true })
+      }
+    }
+    if (changed.length > 0) {
+      await this.#apply(changed, [])
+    }
+    this.#agents = agents
+    this.#hydrated = true
+  }
+
+  // Until the store is read, this gateway knows no agent, and must not answer another gateway as if it knew them all.
+  hydrated(): boolean {
+    return this.#hydrated
+  }
+
+  useRosters(check: RosterCheck): void {
+    this.#rosterCheck = check
+  }
+
+  // Called after every committed write; `TeamLinks` uses it to send a changed roster without waiting for its timer.
+  onWrite(listener: () => void): () => void {
+    this.#listeners.add(listener)
+    return () => this.#listeners.delete(listener)
+  }
+
+  frozen(id: string): boolean {
+    return this.#frozen.has(id)
   }
 
   close(): Promise<void> {
@@ -167,7 +227,7 @@ export class AgentService {
 
   relayAgent(sessionId: string): RelayAgentEntry | undefined {
     const agent = this.bySession(sessionId)
-    if (!agent) {
+    if (!agent || this.#frozen.has(agent.id)) {
       return undefined
     }
     const entry: RelayAgentEntry = { id: agent.id, name: agent.name }
@@ -184,9 +244,9 @@ export class AgentService {
     return entry
   }
 
-  // Whether this gateway's records allow a remote agent's claims: its id names the gateway it came from, and a claim to
-  // be a member of a lead here needs that lead's accepted entry. A claim to a lead on another gateway is that relay's
-  // assertion until the lead's roster exists (R3 workstream E).
+  // Whether this gateway's records allow a remote agent's claims: its id names the gateway it came from, a claim to be a
+  // member of a lead here needs that lead's accepted entry, and a claim to a lead on a third gateway needs that lead's
+  // fresh roster, held here because an agent of this gateway is bound to the same lead.
   vouches(ref: { id: string; lead?: string }, gateway: string): boolean {
     if (gateway === this.#gateway || parseRelayPeerId(ref.id)?.gateway !== gateway) {
       return false
@@ -199,7 +259,7 @@ export class AgentService {
       return false
     }
     if (lead.gateway !== this.#gateway) {
-      return true
+      return this.#rosterCheck(ref.lead, ref.id)
     }
     const record = this.#agents.get(lead.id)
     return record?.lead === undefined && acceptedRemote(record).some((member) => member.agent === ref.id)
@@ -215,8 +275,33 @@ export class AgentService {
     return agent ? (agent.config.sleepAfterMs ?? this.#sleepAfterMs) : undefined
   }
 
+  // The lead's members as its roster lists them: local members and accepted remote ones, qualified, ordered by id.
+  rosterMembers(leadId: string): RosterMember[] {
+    const lead = this.#agents.get(leadId)
+    if (!lead || lead.lead !== undefined || this.#gateway === undefined) {
+      return []
+    }
+    const local = this.members(leadId).map((member) => ({ id: `${this.#gateway}:${member.id}`, name: member.name }))
+    const remote = acceptedRemote(lead).map((member) => ({ id: member.agent, name: member.name ?? member.agent }))
+    return [...local, ...remote].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  }
+
+  rosterDigest(leadId: string): string {
+    return createHash('sha1')
+      .update(JSON.stringify(this.rosterMembers(leadId)))
+      .digest('hex')
+  }
+
   public(agent: StoredAgent): AgentInfo {
-    const { avatarSeed: _seed, avatarRecipe: _recipe, avatar: _avatar, ...info } = agent
+    const {
+      avatarSeed: _seed,
+      avatarRecipe: _recipe,
+      avatar: _avatar,
+      schema: _schema,
+      pendingJoin: _pending,
+      roster: _roster,
+      ...info
+    } = agent
     if (!this.#avatars) {
       return info
     }
@@ -238,6 +323,7 @@ export class AgentService {
     const at = this.#now()
     const agent: StoredAgent = {
       id,
+      schema: AGENT_SCHEMA,
       name,
       createdAt: at,
       updatedAt: at,
@@ -272,11 +358,12 @@ export class AgentService {
       }
       const next: StoredAgent = { ...agent }
       if (joined) {
-        if (this.#joining.get(agent.id)?.lead !== joined.lead) {
+        if (!this.#holdsJoin(agent.id, joined)) {
           return { status: 409, error: `${agent.name} is no longer joining that team` }
         }
         next.lead = joined.lead
         next.remoteLead = joined.remoteLead
+        delete next.pendingJoin
       } else if (next.lead !== undefined) {
         const refused = this.leadRefusal(next, next.lead)
         if (refused) {
@@ -292,6 +379,9 @@ export class AgentService {
       const current = this.#agents.get(id)
       if (!current) {
         return { status: 404, error: `no such agent: ${id}` }
+      }
+      if (this.#frozen.has(id)) {
+        return { status: 409, error: `${current.name} was written by a newer WorkerDeck; this one leaves it as it is` }
       }
       const next = mutate(current)
       if (isAgentRefusal(next) || next === current) {
@@ -338,6 +428,9 @@ export class AgentService {
     if (leadId === mover.id) {
       return { status: 409, error: 'an agent cannot lead its own team' }
     }
+    if ((mover.remoteMembers ?? []).some((member) => member.state === 'unconfirmed')) {
+      return { status: 409, error: `${mover.name} has team members waiting to be confirmed` }
+    }
     if (this.remoteGateway(leadId)) {
       if (this.hasMembers(mover.id)) {
         return { status: 409, error: `${mover.name} leads a team; teams are one level deep` }
@@ -371,28 +464,55 @@ export class AgentService {
     return this.#joining.get(id)?.name
   }
 
-  reserveJoin(mover: StoredAgent, lead: string): Promise<AgentRefusal | null> {
-    return this.#transition(() => {
+  joiningOp(id: string): string | undefined {
+    return this.#joining.get(id)?.op
+  }
+
+  // Joins read back from the store at hydrate: `TeamLinks` asks their leads whether they accepted and commits or drops.
+  restoredJoins(): Array<{ id: string; lead: string; op: string }> {
+    return [...this.#joining].flatMap(([id, join]) => (join.restored ? [{ id, lead: join.lead, op: join.op }] : []))
+  }
+
+  // One slot per agent, written to the store with the agent's record (a draft has none, and a crashed create has no
+  // agent to commit), so a restart cannot open a second join while the lead may have accepted the first.
+  reserveJoin(mover: StoredAgent, lead: string): Promise<{ op: string } | AgentRefusal> {
+    return this.#transition(async () => {
       if (this.#retired.has(mover.id)) {
         return { status: 404, error: `no such agent: ${mover.id}` }
+      }
+      if (this.#frozen.has(mover.id)) {
+        return { status: 409, error: `${mover.name} was written by a newer WorkerDeck; this one leaves it as it is` }
       }
       if (this.#joining.has(mover.id)) {
         return { status: 409, error: `${mover.name} is already joining a team` }
       }
-      const current = this.#agents.get(mover.id) ?? mover
+      const stored = this.#agents.get(mover.id)
+      const current = stored ?? mover
       const refused = this.leadRefusal(current, lead)
       if (refused) {
         return refused
       }
-      this.#joining.set(mover.id, { lead, name: current.name })
-      return null
+      const op = randomUUID()
+      if (stored) {
+        await this.#write({ ...stored, pendingJoin: { op, lead, at: this.#now() } })
+      }
+      this.#joining.set(mover.id, { lead, name: current.name, op })
+      return { op }
     })
   }
 
-  releaseJoin(id: string, lead: string): void {
-    if (this.#joining.get(id)?.lead === lead) {
-      this.#joining.delete(id)
+  releaseJoin(id: string, op: string): Promise<void> {
+    if (this.#joining.get(id)?.op !== op) {
+      return Promise.resolve()
     }
+    this.#joining.delete(id)
+    return this.#transition(async () => {
+      const current = this.#agents.get(id)
+      if (current?.pendingJoin?.op === op && !this.#frozen.has(id)) {
+        const { pendingJoin: _pending, ...rest } = current
+        await this.#write(rest)
+      }
+    }).catch(() => {})
   }
 
   pendingInvites(agent: StoredAgent): NonNullable<StoredAgent['remoteMembers']> {
@@ -403,9 +523,11 @@ export class AgentService {
   // A lead on another gateway is only ever written with the relay's answer in hand (`joined`), never from a bare patch.
   update(id: string, patch: UpdateAgentRequest, options: UpdateOptions = {}): Promise<StoredAgent | AgentRefusal> {
     const { joined } = options
-    let previous: string | undefined
+    let previous: StoredAgent | undefined
+    let cancelled: JoinReservation | undefined
     const updated = this.patch(id, (agent) => {
-      previous = agent.lead
+      previous = agent
+      cancelled = undefined
       const next: StoredAgent = { ...agent }
       if (patch.name !== undefined) {
         const name = readName(patch.name)
@@ -424,10 +546,12 @@ export class AgentService {
         }
         next.config = config
       }
-      if (patch.lead !== undefined && this.#joining.has(id) && joined === undefined) {
+      if (patch.lead !== undefined && patch.lead !== null && this.#joining.has(id) && joined === undefined) {
         return { status: 409, error: `${agent.name} is joining a team` }
       }
       if (patch.lead === null) {
+        cancelled = this.#joining.get(id)
+        delete next.pendingJoin
         delete next.lead
         delete next.remoteLead
       } else if (patch.lead !== undefined) {
@@ -436,7 +560,7 @@ export class AgentService {
         }
         const leadId = this.localId(patch.lead)
         if (this.remoteGateway(leadId)) {
-          if (joined?.lead !== leadId || this.#joining.get(id)?.lead !== leadId) {
+          if (joined?.lead !== leadId || !this.#holdsJoin(id, joined)) {
             return { status: 409, error: 'a lead on another gateway is joined through the relay' }
           }
           if (this.hasMembers(id)) {
@@ -444,6 +568,7 @@ export class AgentService {
           }
           next.lead = joined.lead
           next.remoteLead = joined.remoteLead
+          delete next.pendingJoin
         } else {
           const refused = this.leadRefusal(agent, leadId)
           if (refused) {
@@ -459,11 +584,17 @@ export class AgentService {
         }
         next.order = patch.order
       }
+      if (cancelled) {
+        this.#joining.delete(id)
+      }
       return next
     })
     return updated.then((result) => {
-      if (!isAgentRefusal(result) && result.lead !== previous) {
+      if (!isAgentRefusal(result) && previous && result.lead !== previous.lead) {
         options.onLeadChanged?.(previous)
+      }
+      if (!isAgentRefusal(result) && cancelled) {
+        options.onJoinCancelled?.(cancelled.lead, cancelled.op)
       }
       return result
     })
@@ -475,7 +606,10 @@ export class AgentService {
       if (!agent) {
         return { status: 404, error: `no such agent: ${id}` }
       }
-      const crew = this.members(id)
+      if (this.#frozen.has(id)) {
+        return { status: 409, error: `${agent.name} was written by a newer WorkerDeck; this one leaves it as it is` }
+      }
+      const crew = this.members(id).filter((member) => !this.#frozen.has(member.id))
       const retired = [agent, ...(members === 'retire' ? crew : [])]
       const at = this.#now()
       const released =
@@ -492,8 +626,20 @@ export class AgentService {
       for (const member of released) {
         this.#agents.set(member.id, member)
       }
+      this.#changed()
       return { retired, released }
     })
+  }
+
+  #holdsJoin(id: string, joined: RemoteJoin): boolean {
+    const join = this.#joining.get(id)
+    return join !== undefined && join.lead === joined.lead && join.op === joined.remoteLead.op
+  }
+
+  #changed(): void {
+    for (const listener of this.#listeners) {
+      listener()
+    }
   }
 
   #transition<T>(step: () => T | Promise<T>): Promise<T> {
@@ -508,9 +654,10 @@ export class AgentService {
   }
 
   async #write(agent: StoredAgent): Promise<StoredAgent> {
-    const stored = { ...agent, updatedAt: this.#now() }
+    const stored: StoredAgent = { ...agent, schema: AGENT_SCHEMA, updatedAt: this.#now() }
     await this.#apply([stored], [])
     this.#agents.set(stored.id, stored)
+    this.#changed()
     return stored
   }
 
@@ -542,6 +689,42 @@ export class AgentService {
       }
     }
   }
+}
+
+// The op both gateways derive for an edge stored before operation ids, without talking to each other.
+export function legacyOp(lead: string, member: string): string {
+  return `v1:${createHash('sha1').update(`${lead}>${member}`).digest('hex').slice(0, 32)}`
+}
+
+// Schema 2. Halves stored before operation ids get the derived op and wait, restricted and unpublished, until the other
+// gateway confirms them; a `remoteLead` an older binary left behind a local or cleared lead is dropped.
+export function normalizeAgent(agent: StoredAgent, gateway: string, now: number): StoredAgent {
+  const next: StoredAgent = { ...agent, schema: AGENT_SCHEMA }
+  const self = `${gateway}:${agent.id}`
+  const leadGateway = agent.lead === undefined ? undefined : parseRelayPeerId(agent.lead)?.gateway
+  if (leadGateway === undefined || leadGateway === gateway) {
+    delete next.remoteLead
+  } else if (agent.remoteLead?.op === undefined) {
+    next.remoteLead = {
+      name: agent.remoteLead?.name ?? agent.lead!,
+      ...(agent.remoteLead?.owner === undefined ? {} : { owner: agent.remoteLead.owner }),
+      state: 'unconfirmed',
+      since: agent.remoteLead?.since ?? now,
+      op: legacyOp(agent.lead!, self),
+    }
+  }
+  if (agent.remoteMembers?.some((member) => member.state === 'accepted' && member.op === undefined)) {
+    next.remoteMembers = agent.remoteMembers.map((member) =>
+      member.state === 'accepted' && member.op === undefined
+        ? { ...member, state: 'unconfirmed', op: legacyOp(self, member.agent) }
+        : member,
+    )
+  }
+  const pendingRemote = agent.pendingJoin && parseRelayPeerId(agent.pendingJoin.lead)?.gateway
+  if (agent.pendingJoin && (pendingRemote === undefined || pendingRemote === gateway)) {
+    delete next.pendingJoin
+  }
+  return JSON.stringify(next) === JSON.stringify(agent) ? agent : next
 }
 
 function acceptedRemote(agent: StoredAgent | undefined): NonNullable<StoredAgent['remoteMembers']> {

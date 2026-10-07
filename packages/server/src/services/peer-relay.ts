@@ -12,10 +12,11 @@ import {
   type RelayPeek,
   type RelayPeerRow,
   type RelayTeamOrigin,
-  type TeamEdge,
+  type InboundTeamStatusAnswer,
   type TeamFrameKind,
   type TeamResult,
-  type TeamStatusEdge,
+  type TeamStatusAnswer,
+  type TeamStatusBody,
 } from '@workerdeck/relay-client'
 import type { PeerService } from './peers.ts'
 
@@ -34,8 +35,8 @@ export type RelayLinkOptions = {
 }
 
 export type RelayTeamHandler = {
-  inbound(kind: TeamFrameKind, origin: RelayTeamOrigin, to: string): Promise<TeamResult>
-  inboundStatus(origin: { gateway: string; owner: string }, edges: TeamEdge[]): Promise<Array<Omit<TeamStatusEdge, 'from' | 'to'>>>
+  inbound(kind: TeamFrameKind, origin: RelayTeamOrigin, to: string, op?: string): Promise<TeamResult>
+  inboundStatus(origin: { gateway: string; owner: string }, body: TeamStatusBody): Promise<InboundTeamStatusAnswer>
   reconcile(): Promise<void>
 }
 
@@ -47,8 +48,8 @@ export type RelayLink = {
   status(): RelayLinkStatus
   // Why team frames cannot go out right now, or undefined when they can.
   teamsUnavailable(): string | undefined
-  team(kind: TeamFrameKind, from: string, to: string): Promise<TeamResult>
-  teamStatus(gateway: string, edges: TeamEdge[]): Promise<TeamStatusEdge[]>
+  team(kind: TeamFrameKind, from: string, to: string, op?: string): Promise<TeamResult>
+  teamStatus(gateway: string, body: TeamStatusBody): Promise<TeamStatusAnswer>
   nudge(): void
   // Hands the connection to the next module generation instead of closing it (hot reload).
   release(): void
@@ -175,8 +176,8 @@ export function createRelayLink(
     snapshot: () => peers.relayEntries(exposed, teamsAgreed()),
     peek: (origin, sessionId, recent) => peers.relayPeek(origin, sessionId, recent, exposed, options.gateway),
     send: (origin, sessionId, text) => peers.relaySend(origin, sessionId, text, exposed, options.gateway),
-    team: async (kind, origin, to) => (await teams?.()?.inbound(kind, origin, to)) ?? { ok: false, reason: 'no such agent' },
-    teamStatus: async (origin, edges) => (await teams?.()?.inboundStatus(origin, edges)) ?? [],
+    team: async (kind, origin, to, op) => (await teams?.()?.inbound(kind, origin, to, op)) ?? { ok: false, reason: 'no such agent' },
+    teamStatus: async (origin, body) => (await teams?.()?.inboundStatus(origin, body)) ?? { edges: [] },
     online: () => void teams?.()?.reconcile(),
   }
 
@@ -315,9 +316,8 @@ export function createRelayLink(
       return { gateway: options.gateway, ...(owner ? { owner } : {}), online, features: online ? connection!.features() : [] }
     },
     teamsUnavailable,
-    team: (kind, from, to) => (connection ? connection.team(kind, from, to) : Promise.reject(new Error(teamsUnavailable()))),
-    teamStatus: (gateway, edges) =>
-      connection ? connection.teamStatus(gateway, edges) : Promise.reject(new Error(teamsUnavailable())),
+    team: (kind, from, to, op) => (connection ? connection.team(kind, from, to, op) : Promise.reject(new Error(teamsUnavailable()))),
+    teamStatus: (gateway, body) => (connection ? connection.teamStatus(gateway, body) : Promise.reject(new Error(teamsUnavailable()))),
     nudge: () => connection?.nudge(),
     release: () => {
       if (connection && !closed) {

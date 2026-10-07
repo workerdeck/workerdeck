@@ -45,7 +45,7 @@ async function gateway(
   runners: PeerRunner[],
   expose?: RelayLinkOptions['expose'],
   agents: Record<string, AgentRef> = {},
-  teams: { accepts?: Record<string, string[]>; spans?: string[] } = {},
+  teams: { accepts?: Record<string, string[]>; spans?: string[]; rosters?: Record<string, string[]> } = {},
 ) {
   const key = await enrollGateway(stateDir, name)
   await relay.reload()
@@ -66,8 +66,11 @@ async function gateway(
         if (from === name || !ref.id.startsWith(`${from}:`)) {
           return false
         }
-        if (ref.lead === undefined || !ref.lead.startsWith(`${name}:`)) {
+        if (ref.lead === undefined) {
           return true
+        }
+        if (!ref.lead.startsWith(`${name}:`)) {
+          return teams.rosters?.[ref.lead]?.includes(ref.id) === true
         }
         const leadSession = Object.keys(agents).find((id) => agents[id]!.id === ref.lead!.slice(name.length + 1))
         return leadSession !== undefined && (teams.accepts?.[leadSession] ?? []).includes(ref.id)
@@ -80,7 +83,7 @@ async function gateway(
   }
   const handler = {
     inbound: async () => ({ ok: false, reason: 'no such agent' }),
-    inboundStatus: async () => [],
+    inboundStatus: async () => ({ edges: [] }),
     reconcile: async () => {},
   }
   const link: RelayLink = createRelayLink(
@@ -184,7 +187,7 @@ describe('peer relay link', () => {
       [memberRunner, new PeerRunner('wplain')],
       undefined,
       { member: { id: 'M', name: 'MagWin', lead: 'mac:L', team: 'AC-Lead' } },
-      { spans: ['member'] },
+      { spans: ['member'], rosters: { 'mac:L': ['win:M', 'pi:T'] } },
     )
     const pi = await gateway(
       relay,
@@ -193,7 +196,7 @@ describe('peer relay link', () => {
       [outsiderRunner, new PeerRunner('faker'), new PeerRunner('mate')],
       undefined,
       { faker: { id: 'F', name: 'Faker', lead: 'mac:L' }, mate: { id: 'T', name: 'Tee', lead: 'mac:L', team: 'AC-Lead' } },
-      { spans: ['faker', 'mate'] },
+      { spans: ['faker', 'mate'], rosters: { 'mac:L': ['win:M', 'pi:T'] } },
     )
     const ids = async (link: RelayLink, from: string) => (await link.directory.list(from)).map((row) => row.id).sort()
 
@@ -235,6 +238,66 @@ describe('peer relay link', () => {
     expect(await pi.directory.peek('faker', 'win:member')).toBeUndefined()
     expect(memberRunner.sent.map((sent) => sent.text)).toEqual(['thanks'])
     expect(outsiderRunner.sent).toEqual([])
+  })
+
+  it('refuses a teammate on a third gateway that the cached roster of the lead does not list, in every direction', async () => {
+    const { relay, stateDir } = await relayRig()
+    const mateRunner = new PeerRunner('mate')
+    const memberRunner = new PeerRunner('member')
+    await gateway(
+      relay,
+      stateDir,
+      'mac',
+      [new PeerRunner('lead')],
+      undefined,
+      { lead: { id: 'L', name: 'AC-Lead', leads: true } },
+      { accepts: { lead: ['win:M', 'pi:T'] } },
+    )
+    const win = await gateway(
+      relay,
+      stateDir,
+      'win',
+      [memberRunner],
+      undefined,
+      { member: { id: 'M', name: 'MagWin', lead: 'mac:L', team: 'AC-Lead' } },
+      { spans: ['member'], rosters: { 'mac:L': ['win:M'] } },
+    )
+    const pi = await gateway(
+      relay,
+      stateDir,
+      'pi',
+      [mateRunner],
+      undefined,
+      { mate: { id: 'T', name: 'Tee', lead: 'mac:L', team: 'AC-Lead' } },
+      { spans: ['mate'], rosters: { 'mac:L': ['win:M', 'pi:T'] } },
+    )
+    expect((await win.directory.list('member')).map((row) => row.id)).toEqual(['mac:lead'])
+    expect(await win.directory.peek('member', 'pi:mate')).toBeUndefined()
+    expect(await win.directory.send('member', 'pi:mate', 'hi')).toEqual({ delivered: false, reason: 'no such session: pi:mate' })
+    expect(await pi.directory.peek('mate', 'win:member')).toBeUndefined()
+    expect(await pi.directory.send('mate', 'win:member', 'hi')).toEqual({ delivered: false, reason: 'no such session: member' })
+    expect(memberRunner.sent).toEqual([])
+    expect(mateRunner.sent).toEqual([])
+  })
+
+  it('never publishes or answers for a withheld session, member or not', async () => {
+    const registry = new SessionRegistry()
+    const service = createPeerService({
+      refs: { registry },
+      projects: new ProjectInfoService({}),
+      teams: {
+        relayAgent: () => undefined,
+        spansGateways: () => true,
+        agentName: () => undefined,
+        vouches: () => true,
+        withheld: (id) => id === 'secret',
+      },
+    })
+    registry.register(new PeerRunner('secret', { title: 'Secret' }))
+    registry.register(new PeerRunner('open'))
+    expect((await service.relayEntries(undefined, true)).map((entry) => entry.id)).toEqual(['open'])
+    const origin = { gateway: 'pi', sessionId: 'pi:x', hops: [] }
+    expect(await service.relayPeek(origin, 'secret', 0, undefined, 'mac')).toBeUndefined()
   })
 
   it('says remote gateways are unavailable instead of failing when the relay is gone', async () => {
@@ -285,6 +348,9 @@ describe('peer relay link', () => {
     await new Promise((resolve) => setTimeout(resolve, 5))
     const second = createRelayLink({ url: relay.url, gateway: 'mac', key, teams: { acceptFrom: ['win'] } }, service, () => {})
     cleanups.push(() => second.close())
-    await until(() => (relay.status().gateways.find((row) => row.name === 'mac')?.connectedAt ?? connectedAt) !== connectedAt, 'a fresh dial')
+    await until(
+      () => (relay.status().gateways.find((row) => row.name === 'mac')?.connectedAt ?? connectedAt) !== connectedAt,
+      'a fresh dial',
+    )
   })
 })

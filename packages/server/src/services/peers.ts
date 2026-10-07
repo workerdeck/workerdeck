@@ -49,6 +49,8 @@ export type PeerAgentTeams = {
   spansGateways(sessionId: string): boolean
   agentName(agentId: string): string | undefined
   vouches(ref: { id: string; lead?: string }, gateway: string): boolean
+  // A session never published at all, not even as a plain one (its agent record is from a newer schema).
+  withheld?(sessionId: string): boolean
 }
 
 export type PeerServiceDeps = {
@@ -74,7 +76,12 @@ function relayable(
   teamsOn: boolean,
 ): boolean {
   const member = info.agent?.lead !== undefined
-  return info.status !== 'closed' && (!member || (teamsOn && teams?.spansGateways(info.id) === true)) && scopeMatches(exposed, info.scope)
+  return (
+    info.status !== 'closed' &&
+    teams?.withheld?.(info.id) !== true &&
+    (!member || (teamsOn && teams?.spansGateways(info.id) === true)) &&
+    scopeMatches(exposed, info.scope)
+  )
 }
 
 // The gateway's own re-check of the relay's team rule over the relay-stamped `origin.agent`, after checking that
@@ -280,7 +287,12 @@ export function createPeerService(deps: PeerServiceDeps): PeerService {
       return { delivered: false, reason: error instanceof Error ? error.message : String(error) }
     }
     inbound.set(sessionId, hops)
-    return { delivered: true, sessionId, name: target.agent?.name ?? target.title, queued: before === 'running' || before === 'awaiting_approval' }
+    return {
+      delivered: true,
+      sessionId,
+      name: target.agent?.name ?? target.title,
+      queued: before === 'running' || before === 'awaiting_approval',
+    }
   }
 
   const exposedInfo = async (

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentInfo, AgentResponse, GatewayMeta } from '@workerdeck/protocol'
 import { enrollGateway, startRelay, type Relay } from '@workerdeck/relay'
-import type { TeamEdge, TeamResult, TeamStatusEdge } from '@workerdeck/relay-client'
+import type { TeamEdge, TeamResult, TeamStatusBody, TeamStatusEdge } from '@workerdeck/relay-client'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { createFileAgentStore, createMemoryAgentStore, type StoredAgent } from '../src/services/agent-store.ts'
 import { AgentService } from '../src/services/agents.ts'
@@ -43,7 +43,11 @@ async function relayRig(): Promise<{ relay: Relay; stateDir: string }> {
   return { relay, stateDir }
 }
 
-type Gateway = { server: WorkerServer; base: string; call: <T>(path: string, method?: string, body?: unknown) => Promise<{ status: number; body: T }> }
+type Gateway = {
+  server: WorkerServer
+  base: string
+  call: <T>(path: string, method?: string, body?: unknown) => Promise<{ status: number; body: T }>
+}
 
 async function gateway(relay: Relay, stateDir: string, name: string, acceptFrom?: string[]): Promise<Gateway> {
   const key = await enrollGateway(stateDir, name)
@@ -131,7 +135,11 @@ describe('cross-gateway teams, same owner', () => {
     await published(relay, 'mac', 1)
     const member = await newAgent(win, 'Scout', `mac:${lead.agent.id}`)
 
-    const underMember = await win.call<{ error: string }>('/agents', 'POST', { name: 'Deep', config: { cwd: '/tmp' }, lead: member.agent.id })
+    const underMember = await win.call<{ error: string }>('/agents', 'POST', {
+      name: 'Deep',
+      config: { cwd: '/tmp' },
+      lead: member.agent.id,
+    })
     expect(underMember.body.error).toBe('Scout is a member of a team; teams are one level deep')
 
     const leadJoins = await mac.call<{ error: string }>(`/agents/${lead.agent.id}`, 'PATCH', { lead: `win:${winLead.agent.id}` })
@@ -144,7 +152,11 @@ describe('cross-gateway teams, same owner', () => {
     expect(pending.body.error).toBe('Solo has open team invitations; withdraw them first')
 
     await published(relay, 'win', 2)
-    const intoMember = await mac.call<{ error: string }>('/agents', 'POST', { name: 'Late', config: { cwd: '/tmp' }, lead: `win:${member.agent.id}` })
+    const intoMember = await mac.call<{ error: string }>('/agents', 'POST', {
+      name: 'Late',
+      config: { cwd: '/tmp' },
+      lead: `win:${member.agent.id}`,
+    })
     expect(intoMember.status).toBe(409)
   })
 
@@ -169,11 +181,19 @@ describe('cross-gateway teams, same owner', () => {
   it('names the relay identity in meta for the operator', async () => {
     const { relay, stateDir } = await relayRig()
     const mac = await gateway(relay, stateDir, 'mac')
-    expect((await mac.call<GatewayMeta>('/meta')).body.relay).toEqual({ gateway: 'mac', owner: 'operator', online: true, features: ['teams'] })
+    expect((await mac.call<GatewayMeta>('/meta')).body.relay).toEqual({
+      gateway: 'mac',
+      owner: 'operator',
+      online: true,
+      features: ['teams'],
+    })
   })
 })
 
-type FakeTransport = TeamTransport & { statusCalls: Array<{ gateway: string; edges: TeamEdge[] }>; answer: (edges: TeamEdge[]) => TeamStatusEdge[] }
+type FakeTransport = TeamTransport & {
+  statusCalls: Array<{ gateway: string } & TeamStatusBody>
+  answer: (edges: TeamEdge[]) => TeamStatusEdge[]
+}
 
 function fakeTransport(): FakeTransport & { down?: string } {
   const transport: FakeTransport & { down?: string } = {
@@ -183,16 +203,21 @@ function fakeTransport(): FakeTransport & { down?: string } {
     ready: () => transport.down,
     owner: () => 'tobias',
     team: async (): Promise<TeamResult> => ({ ok: true, leadName: 'AC-Lead' }),
-    teamStatus: async (gateway, edges) => {
-      transport.statusCalls.push({ gateway, edges })
-      return transport.answer(edges)
+    teamStatus: async (target, body) => {
+      transport.statusCalls.push({ gateway: target, ...body })
+      return { edges: transport.answer(body.edges) }
     },
     nudge: () => {},
   }
   return transport
 }
 
-async function memberRig(): Promise<{ agents: AgentService; teams: TeamLinks; transport: ReturnType<typeof fakeTransport>; member: StoredAgent }> {
+async function memberRig(): Promise<{
+  agents: AgentService
+  teams: TeamLinks
+  transport: ReturnType<typeof fakeTransport>
+  member: StoredAgent
+}> {
   const agents = new AgentService({ store: createMemoryAgentStore(), basePath: '/v1', gateway: 'win', now: () => 1_000 })
   await agents.hydrate()
   const transport = fakeTransport()
@@ -216,7 +241,7 @@ describe('team reconcile', () => {
     transport.answer = (edges) => edges.map((edge) => ({ ...edge, known: true, name: 'AC-Lead renamed' }))
     await teams.reconcile()
     expect(agents.get(member.id)?.remoteLead).toMatchObject({ state: 'joined', name: 'AC-Lead renamed' })
-    expect(transport.statusCalls.at(-1)).toEqual({ gateway: 'mac', edges: [{ from: member.id, to: 'mac:L1' }] })
+    expect(transport.statusCalls.at(-1)).toEqual({ gateway: 'mac', edges: [{ from: member.id, to: 'mac:L1', op: member.remoteLead!.op }] })
   })
 
   it('dissolves the edge only on an authoritative answer from the other gateway', async () => {
@@ -229,9 +254,16 @@ describe('team reconcile', () => {
 
   it('answers status for the edges it holds and only to the gateway on their other end', async () => {
     const { teams, member } = await memberRig()
-    expect(await teams.inboundStatus({ gateway: 'mac' }, [{ from: 'mac:L1', to: member.id }])).toEqual([{ known: true, name: 'Scout' }])
-    expect(await teams.inboundStatus({ gateway: 'mac' }, [{ from: 'mac:L2', to: member.id }])).toEqual([{ known: false }])
-    expect(await teams.inboundStatus({ gateway: 'pi' }, [{ from: 'mac:L1', to: member.id }])).toEqual([{ known: false }])
+    const op = member.remoteLead!.op
+    const ask = async (origin: string, from: string, asked: string | undefined = op) =>
+      (await teams.inboundStatus({ gateway: origin }, { edges: [{ from, to: member.id, op: asked }] })).edges
+    expect(await ask('mac', 'mac:L1')).toEqual([{ known: true, name: 'Scout' }])
+    expect(await ask('mac', 'mac:L2')).toEqual([{ known: false }])
+    expect(await ask('pi', 'mac:L1')).toEqual([{ known: false }])
+    expect(await ask('mac', 'mac:L1', 'an-earlier-join')).toEqual([{ known: false }])
+    expect((await teams.inboundStatus({ gateway: 'mac' }, { edges: [{ from: 'mac:L1', to: member.id }] })).edges).toEqual([
+      { known: false },
+    ])
   })
 
   it('refuses an inbound join to an agent that is itself joining a team (the cross race)', async () => {
@@ -243,7 +275,12 @@ describe('team reconcile', () => {
     const teams = new TeamLinks({ agents, transport, acceptFrom: ['mac'] })
     const mover = (await agents.create(agents.draft({ name: 'Scout' }) as StoredAgent)) as StoredAgent
     const joining = teams.join(mover, 'mac:L1', (joined) => agents.update(mover.id, { lead: 'mac:L1' }, { joined }))
-    const inbound = await teams.inbound('team.join', { gateway: 'mac', owner: 'tobias', agent: 'mac:L1', name: 'AC-Lead' }, mover.id)
+    const inbound = await teams.inbound(
+      'team.join',
+      { gateway: 'mac', owner: 'tobias', agent: 'mac:L1', name: 'AC-Lead' },
+      mover.id,
+      'op-1',
+    )
     expect(inbound).toEqual({ ok: false, reason: 'Scout is joining a team' })
     release({ ok: true, leadName: 'AC-Lead' })
     expect(await joining).toMatchObject({ lead: 'mac:L1' })
@@ -258,7 +295,11 @@ describe('team reconcile', () => {
     await teams.invite(lead, 'win:M1')
     now = 200
     const origin = { gateway: 'win', owner: 'tobias', agent: 'win:M1', name: 'Scout' }
-    expect(await teams.inbound('team.join', origin, lead.id)).toEqual({ ok: false, reason: 'AC-Lead has not invited this agent' })
+    expect(await teams.inbound('team.join', origin, lead.id, 'op-1')).toEqual({ ok: false, reason: 'AC-Lead has not invited this agent' })
+    expect(await teams.inbound('team.join', origin, lead.id)).toEqual({
+      ok: false,
+      reason: 'that gateway needs a newer WorkerDeck to join this team',
+    })
     await teams.reconcile()
     expect(agents.get(lead.id)?.remoteMembers).toEqual([])
   })

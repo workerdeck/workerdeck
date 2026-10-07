@@ -10,20 +10,22 @@ import {
   type RelayOp,
   type RelaySessionEntry,
   type RelayTeamOrigin,
-  type TeamEdge,
   type TeamFrameKind,
+  type TeamRoster,
+  type TeamStatusBody,
 } from '@workerdeck/relay-client'
 import { enrollGateway, enrollGatewayHash, readEnrollments, setGatewayOwner, writeKeyFile } from '../src/enrollment.ts'
 import { parseRules } from '../src/rules.ts'
 import { startRelay, type Relay } from '../src/relay.ts'
 import { projectForOtherOwner, sanitizeAgent, teamAllows, type TeamNode } from '../src/teams.ts'
 
-type TeamCall = { kind: TeamFrameKind; origin: RelayTeamOrigin; to: string }
+type TeamCall = { kind: TeamFrameKind; origin: RelayTeamOrigin; to: string; op?: string }
 
 type FakeGateway = {
   entries: RelaySessionEntry[]
   team: TeamCall[]
-  status: Array<{ origin: { gateway: string; owner: string }; edges: TeamEdge[] }>
+  status: Array<{ origin: { gateway: string; owner: string } } & TeamStatusBody>
+  rosters: TeamRoster[]
   host: RelayHost
 }
 
@@ -44,6 +46,7 @@ function fakeGateway(entries: RelaySessionEntry[]): FakeGateway {
     entries,
     team: [],
     status: [],
+    rosters: [],
     host: {
       snapshot: async () => gateway.entries,
       peek: async (_origin, to) => {
@@ -51,13 +54,20 @@ function fakeGateway(entries: RelaySessionEntry[]): FakeGateway {
         return found ? { ...found, pendingApprovals: [], recent: [] } : undefined
       },
       send: async (_origin, to) => ({ delivered: true, sessionId: to, queued: false }),
-      team: async (kind, origin, to) => {
-        gateway.team.push({ kind, origin, to })
+      team: async (kind, origin, to, op) => {
+        gateway.team.push({ kind, origin, to, ...(op === undefined ? {} : { op }) })
         return { ok: true, leadName: 'Lead' }
       },
-      teamStatus: async (origin, edges) => {
-        gateway.status.push({ origin, edges })
-        return edges.map(() => ({ known: true, name: 'Member' }))
+      teamStatus: async (origin, body) => {
+        gateway.status.push({ origin, ...body })
+        return {
+          edges: body.edges.map(() => ({ known: true, name: 'Member' })),
+          rosters: gateway.rosters,
+          seen: [
+            { lead: 'mac:L', epoch: 'e1', rev: 3 },
+            { lead: 'pi:M', epoch: 'e1', rev: 3 },
+          ],
+        }
       },
     },
   }
@@ -355,14 +365,58 @@ describe('team frames', () => {
     const pi = fakeGateway([entry('m', { cwd: '/ac/x', agent: { id: 'M', name: 'M', lead: 'mac:L' } }), entry('z', { cwd: '/elsewhere' })])
     const connMac = await attach(relay, stateDir, 'mac', mac)
     await attach(relay, stateDir, 'pi', pi)
-    const answer = await connMac.teamStatus('pi', [
-      { from: 'L', to: 'pi:M' },
-      { from: 'L', to: 'pi:Z' },
-      { from: 'L', to: 'mac:L' },
-      { from: 'pi:forged', to: 'pi:M' },
+    const answer = await connMac.teamStatus('pi', {
+      edges: [
+        { from: 'L', to: 'pi:M', op: 'o1' },
+        { from: 'L', to: 'pi:Z' },
+        { from: 'L', to: 'mac:L' },
+        { from: 'pi:forged', to: 'pi:M' },
+      ],
+    })
+    expect(answer.edges).toEqual([{ from: 'L', to: 'pi:M', op: 'o1', known: true, name: 'Member' }])
+    expect(pi.status).toEqual([
+      { origin: { gateway: 'mac', owner: 'operator' }, edges: [{ from: 'mac:L', to: 'M', op: 'o1' }], rosters: [], seen: [] },
     ])
-    expect(answer).toEqual([{ from: 'L', to: 'pi:M', known: true, name: 'Member' }])
-    expect(pi.status).toEqual([{ origin: { gateway: 'mac', owner: 'operator' }, edges: [{ from: 'mac:L', to: 'M' }] }])
-    await expect(connMac.teamStatus('gone', [{ from: 'L', to: 'gone:M' }])).rejects.toThrow(/unreachable/)
+    await expect(connMac.teamStatus('gone', { edges: [{ from: 'L', to: 'gone:M' }] })).rejects.toThrow(/unreachable/)
+  })
+
+  it('carries rosters only for the issuing gateway own leads, qualified, and seen only about the receiver', async () => {
+    const { stateDir, relay } = await setup({ rules: [{ from: '*', to: '*', allow: ['send', 'peek', 'team'] }] })
+    const mac = fakeGateway([entry('lead', { agent: { id: 'L', name: 'Lead', accepts: ['pi:M'] } })])
+    const pi = fakeGateway([entry('m', { agent: { id: 'M', name: 'M', lead: 'mac:L' } })])
+    pi.rosters = [
+      { lead: 'M', epoch: 'e', rev: 1, members: [{ id: 'X' }] },
+      { lead: 'mac:L', epoch: 'e', rev: 9, members: [{ id: 'pi:evil' }] },
+    ]
+    const connMac = await attach(relay, stateDir, 'mac', mac)
+    await attach(relay, stateDir, 'pi', pi)
+    const answer = await connMac.teamStatus('pi', {
+      edges: [{ from: 'L', to: 'pi:M', op: 'o1' }],
+      rosters: [
+        { lead: 'L', epoch: 'e1', rev: 2, members: [{ id: 'T', name: 'Teammate' }, { id: 'pi:M' }] },
+        { lead: 'pi:M', epoch: 'e1', rev: 2, members: [] },
+      ],
+      seen: [
+        { lead: 'pi:M', epoch: 'e1', rev: 1 },
+        { lead: 'mac:L', epoch: 'e1', rev: 1 },
+      ],
+    })
+    expect(pi.status[0]!.rosters).toEqual([
+      { lead: 'mac:L', epoch: 'e1', rev: 2, members: [{ id: 'mac:T', name: 'Teammate' }, { id: 'pi:M' }] },
+    ])
+    expect(pi.status[0]!.seen).toEqual([{ lead: 'pi:M', epoch: 'e1', rev: 1 }])
+    expect(answer.rosters).toEqual([{ lead: 'pi:M', epoch: 'e', rev: 1, members: [{ id: 'pi:X' }] }])
+    expect(answer.seen).toEqual([{ lead: 'mac:L', epoch: 'e1', rev: 3 }])
+  })
+
+  it('passes a join operation id through to the target gateway', async () => {
+    const { stateDir, relay } = await setup({ rules: [{ from: '*', to: '*', allow: ['send', 'peek', 'team'] }] })
+    const mac = fakeGateway([entry('lead', { agent: { id: 'L', name: 'Lead' } })])
+    const pi = fakeGateway([entry('m', { agent: { id: 'M', name: 'M' } })])
+    await attach(relay, stateDir, 'mac', mac)
+    const connPi = await attach(relay, stateDir, 'pi', pi)
+    await connPi.team('team.join', 'M', 'mac:L', 'op-1')
+    await connPi.team('team.leave', 'M', 'mac:L', 'x'.repeat(65))
+    expect(mac.team.map((call) => call.op)).toEqual(['op-1', undefined])
   })
 })

@@ -2,7 +2,17 @@ import { join } from 'node:path'
 import type { AgentInfo } from '@workerdeck/protocol'
 import { readJsonOrSync, writeJsonAtomicSync } from '../lib/atomic-file.ts'
 
-export type StoredAgent = AgentInfo & { avatarSeed: string; avatarRecipe?: unknown }
+// Store-only fields, stripped from every `AgentInfo`: `schema` marks the record layout (`AGENT_SCHEMA`), `pendingJoin` is a
+// remote join the lead may already have accepted, and `roster` versions the team this agent leads.
+export type StoredAgent = AgentInfo & {
+  avatarSeed: string
+  avatarRecipe?: unknown
+  schema?: number
+  pendingJoin?: { op: string; lead: string; at: number }
+  roster?: { epoch: string; rev: number; digest: string }
+}
+
+export const AGENT_SCHEMA = 2
 
 export type AgentStoreChanges = { saves: StoredAgent[]; deletes: string[] }
 

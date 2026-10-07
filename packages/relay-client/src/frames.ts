@@ -75,11 +75,35 @@ export type TeamFrameKind = (typeof TEAM_FRAMES)[number]
 
 export type RelayTeamOrigin = { gateway: string; owner: string; agent: string; name?: string }
 
-export type TeamEdge = { from: string; to: string }
+export const TEAM_OP_MAX_CHARS = 64
+export const TEAM_ROSTER_MAX_MEMBERS = 64
+// The relay carries at most 64 edges per status frame, and every lead whose roster goes along has an edge there.
+export const TEAM_STATUS_MAX_ROSTERS = 64
+
+// `op` names one join; a frame about another op than the one a gateway holds for the edge is stale.
+export type TeamEdge = { from: string; to: string; op?: string }
+
+// A lead's canonical member list, issued only by the lead's gateway. Within one epoch revisions only grow.
+export type TeamRoster = { lead: string; epoch: string; rev: number; members: Array<{ id: string; name?: string }> }
+
+// The roster revision a member's gateway holds for a lead, so a lead restored from a backup can tell it fell behind.
+export type TeamSeen = { lead: string; epoch: string; rev: number }
+
+export type TeamStatusBody = { edges: TeamEdge[]; rosters?: TeamRoster[]; seen?: TeamSeen[] }
 
 export type TeamResult = { ok: true; leadName?: string } | { ok: false; reason: string }
 
-export type TeamStatusEdge = { from: string; to: string; known: boolean; name?: string; session?: string }
+// `op` echoes the asked edge's op, so two questions about one pair (a binding and a rejoin) keep their own answers.
+export type TeamStatusEdge = { from: string; to: string; op?: string; known: boolean; name?: string; session?: string }
+
+export type TeamStatusAnswer = { edges: TeamStatusEdge[]; rosters?: TeamRoster[]; seen?: TeamSeen[] }
+
+// A row without `known` is no answer for that edge, which the asking gateway treats as unreachable.
+export type InboundTeamStatusAnswer = {
+  edges: Array<Partial<Omit<TeamStatusEdge, 'from' | 'to' | 'op'>>>
+  rosters?: TeamRoster[]
+  seen?: TeamSeen[]
+}
 
 export type RelayPeek = RelaySessionEntry & {
   checklistItems?: Array<{ text: string; status: string }>
@@ -109,13 +133,13 @@ export type ListRequest = { t: 'peer.list'; id: string; from: string }
 export type PeekRequest = { t: 'peer.peek'; id: string; from: string; to: RelayTarget; recent?: number }
 export type SendRequest = { t: 'peer.send'; id: string; from: string; to: RelayTarget; text: string; hops: string[] }
 
-export type TeamRequest = { t: TeamFrameKind; id: string; from: string; to: string }
-export type TeamStatusRequest = { t: 'team.status'; id: string; gateway: string; edges: TeamEdge[] }
+export type TeamRequest = { t: TeamFrameKind; id: string; from: string; to: string; op?: string }
+export type TeamStatusRequest = { t: 'team.status'; id: string; gateway: string } & TeamStatusBody
 
 export type InboundPeek = { t: 'peer.peek'; id: string; origin: RelayOrigin; to: string; recent?: number }
 export type InboundSend = { t: 'peer.send'; id: string; origin: RelayOrigin; to: string; text: string }
-export type InboundTeam = { t: TeamFrameKind; id: string; origin: RelayTeamOrigin; to: string }
-export type InboundTeamStatus = { t: 'team.status'; id: string; origin: { gateway: string; owner: string }; edges: TeamEdge[] }
+export type InboundTeam = { t: TeamFrameKind; id: string; origin: RelayTeamOrigin; to: string; op?: string }
+export type InboundTeamStatus = { t: 'team.status'; id: string; origin: { gateway: string; owner: string } } & TeamStatusBody
 
 export type ResponseFrame = { t: 'res'; id: string; ok: true; result: unknown } | { t: 'res'; id: string; ok: false; error: string }
 
@@ -187,4 +211,64 @@ export function parseRelayPeerId(id: string): RelayTarget | undefined {
   }
   const gateway = id.slice(0, at)
   return RELAY_GATEWAY_NAME.test(gateway) ? { gateway, id: id.slice(at + 1) } : undefined
+}
+
+export function readTeamOp(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 && value.length <= TEAM_OP_MAX_CHARS ? value : undefined
+}
+
+// Shape only, unless `issuer` names the gateway that sent them: the relay then qualifies every id with it and drops a
+// roster whose lead lives anywhere else, so a gateway can only issue rosters for its own leads.
+export function readTeamRosters(value: unknown, issuer?: string): TeamRoster[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const rosters: TeamRoster[] = []
+  for (const raw of value.slice(0, TEAM_STATUS_MAX_ROSTERS) as Array<Partial<Record<keyof TeamRoster, unknown>> | null>) {
+    if (
+      typeof raw?.lead !== 'string' ||
+      !raw.lead ||
+      readTeamOp(raw.epoch) === undefined ||
+      typeof raw.rev !== 'number' ||
+      !Number.isSafeInteger(raw.rev) ||
+      raw.rev < 0 ||
+      !Array.isArray(raw.members)
+    ) {
+      continue
+    }
+    const lead = issuer === undefined ? raw.lead : ownedId(issuer, raw.lead)
+    if (lead === undefined) {
+      continue
+    }
+    const members: TeamRoster['members'] = []
+    for (const member of raw.members.slice(0, TEAM_ROSTER_MAX_MEMBERS) as Array<{ id?: unknown; name?: unknown } | null>) {
+      if (typeof member?.id === 'string' && member.id) {
+        const id = issuer === undefined ? member.id : qualifyId(issuer, member.id)
+        members.push(typeof member.name === 'string' ? { id, name: member.name.slice(0, 64) } : { id })
+      }
+    }
+    rosters.push({ lead, epoch: raw.epoch as string, rev: raw.rev, members })
+  }
+  return rosters
+}
+
+export function readTeamSeen(value: unknown): TeamSeen[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return (value.slice(0, TEAM_STATUS_MAX_ROSTERS) as Array<Partial<Record<keyof TeamSeen, unknown>> | null>).flatMap((raw) =>
+    typeof raw?.lead === 'string' &&
+    parseRelayPeerId(raw.lead) !== undefined &&
+    readTeamOp(raw.epoch) !== undefined &&
+    typeof raw.rev === 'number' &&
+    Number.isSafeInteger(raw.rev) &&
+    raw.rev >= 0
+      ? [{ lead: raw.lead, epoch: raw.epoch as string, rev: raw.rev }]
+      : [],
+  )
+}
+
+function ownedId(gateway: string, id: string): string | undefined {
+  const owned = parseRelayPeerId(id)
+  return owned && owned.gateway !== gateway ? undefined : qualifyId(gateway, id)
 }

@@ -24,21 +24,25 @@ export type AgentConfig = {
   sleepAfterMs?: number
 }
 
+// `op` names the join this binding came from; `unconfirmed` is a half carried over from before operation ids, which
+// restricts like a member but reaches nobody until the lead's gateway confirms it.
 export type RemoteLead = {
   name: string
   owner?: string
-  state: 'joined' | 'unreachable'
+  state: 'joined' | 'unreachable' | 'unconfirmed'
   since: number
+  op?: string
 }
 
 export type RemoteMember = {
   agent: string
   name?: string
   owner?: string
-  state: 'invited' | 'accepted'
+  state: 'invited' | 'accepted' | 'unconfirmed'
   at: number
   expiresAt?: number
   unreachableSince?: number
+  op?: string
 }
 
 export type AgentInfo = {

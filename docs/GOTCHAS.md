@@ -1380,14 +1380,25 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   reload awaits close before the next generation hydrates, so an old generation cannot write over
   the new one's store. `TeamLinks.reconcile` never rejects (timer and relay welcome launch it
   unhandled) and a pass stops at its next step once `stop()` runs.
-- **A remote join is a reservation, not a lock.** `reserveJoin` runs `leadRefusal` and marks the
-  agent joining before the `team.join` frame; while it stands, the agent cannot change lead,
-  be anyone's local lead, be invited or accept a join, and `inboundStatus` answers `known` for it
-  even as an unsaved draft. The commit (`create(draft, joined)` or `update(.., { joined })`)
-  requires the reservation; retiring the agent drops it, so the commit is refused and `TeamLinks`
-  sends `team.leave` to withdraw the lead's acceptance. A crash between the lead's acceptance and
-  the commit leaves only the lead's half, which the next reconcile dissolves (persisted pending
-  joins are R3 workstream E).
+- **A remote join is a reservation, not a lock, and it has an op.** `reserveJoin` runs
+  `leadRefusal`, mints the join's `op` and marks the agent joining before the `team.join` frame;
+  for an existing agent it also writes `pendingJoin` to the store in the same transition (a draft
+  has no record: a crashed create leaves no agent, and the lead's half dissolves). While it stands,
+  the agent cannot change lead, be anyone's local lead, be invited or accept a join, and
+  `inboundStatus` answers `known` for that op even as an unsaved draft. The commit
+  (`create(draft, joined)` or `update(.., { joined })`) requires the reservation with the same op;
+  retiring the agent drops it, so the commit is refused and `TeamLinks` sends `team.leave` to
+  withdraw the lead's acceptance. A `pendingJoin` read back at hydrate is a restored reservation:
+  reconcile asks the lead for its op and commits on `known`, drops it on `known: false`, and waits
+  on silence. PATCH `lead: null` cancels any join (in flight or restored) and sends `team.leave`
+  for its op; a late acceptance then finds no reservation and is withdrawn. Status answers echo the
+  asked op and are matched on it, since a binding and a rejoin can name the same pair.
+- **Every edge carries the op of the join that made it** (`remoteLead.op` on the member,
+  `remoteMembers[].op` on the lead), and `team.leave`, `team.release` and every `team.status` edge
+  carry it too. Each side acts only on its own current op, so a late leave never removes a later
+  membership, and the lead's question about an op the member no longer holds is answered
+  `known: false`. The op is the member's consent: the member's gateway decides its own `lead`, and
+  nothing read from a lead (rosters included) ever sets it. A join frame without an op is refused.
 - **Teams are one level deep, enforced in one place.** `leadRefusal` refuses a lead joining a team,
   anything joining a member, and self-leading, as 409s whose `error` is drawn as the drop tooltip,
   so the strings are UI copy. A team is only "some agent has `lead` = me"; there is no team record.
@@ -1397,9 +1408,10 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   it to everyone), and only then does a member reach the relay (`reacher` in `peer-relay.ts`).
   Every remote team claim is checked against this gateway's records first
   (`AgentService.vouches`): the agent id must name the gateway the origin or row came from, and a
-  claim to be a member of a lead **here** needs that lead's accepted `remoteMembers` entry. A claim
-  to a lead on another gateway is taken on the relay's word until the lead's roster exists (R3
-  workstream E). The gateway applies this to inbound peeks and sends (`teamAdmits`, then
+  claim to be a member of a lead **here** needs that lead's accepted `remoteMembers` entry, and a
+  claim to a lead on a third gateway needs that lead's roster, cached by `TeamLinks` because an
+  agent here is bound to the same lead, listing the claimant and confirmed within `rosterFreshMs`
+  (60 s). Without a fresh roster teammates are denied while the member stays restricted. The gateway applies this to inbound peeks and sends (`teamAdmits`, then
   `teamReaches` over the origin and the qualified target, so a remote member cannot reach an
   outsider here either), to every remote row, and to peek answers. A peek answer travels through
   the relay unqualified, so both ends qualify it with the answering gateway (`qualifyEntry`,
@@ -1423,6 +1435,26 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   as holding its edge (the reservation above), so a lead-side reconcile racing the member's write
   is not answered "unknown".
   Leave, release and retire send a frame best-effort and never wait for the other side.
+- **The lead's gateway issues its roster; member gateways only cache it, in memory.** Members are
+  derived (local members plus accepted remote entries), never stored; `roster: { epoch, rev,
+  digest }` on the lead is bumped and persisted before a changed list is sent. Rosters ride
+  `team.status` both ways (the lead's request, its answer to a member gateway), and any write that
+  changes a spanning lead's list schedules a reconcile within `soonMs`. A member gateway takes only
+  rosters for leads of the gateway that sent them and bound to an agent here, refuses a lower
+  revision, takes an equal or higher one or a new epoch, and never an epoch it replaced. It reports
+  what it holds as `seen`; a lead behind a member's revision (a restored store) starts a new epoch.
+- **Agent records carry `schema` (2).** Every hydrate normalizes them deterministically and writes
+  the changes in one `apply`: halves from before ops get `legacyOp(lead, member)` and state
+  `unconfirmed` (restricted, and while its lead's `accepts` and roster leave it out, no gateway or
+  relay vouches for its claim, so it reaches nobody) until the first status
+  exchange where the other side holds the same op confirms them, or `known: false` dissolves them.
+  A conflicting migrated edge (a member that also leads, a lead that is also a member) is neither
+  asked about, answered for nor confirmed, through one `#eligible` test, so it stays unconfirmed
+  until the lead dissolves it and sends `team.release`. Before `hydrate` a gateway gives no status
+  answer (rows without `known`) and refuses team frames: an empty store must never answer "unknown",
+  which would dissolve every edge the other side holds. A record with a higher schema is loaded and never written,
+  reconciled or published, not even as a plain session (`PeerAgentTeams.withheld`). Rollback:
+  3.6.1 reads a remote `lead` as a member of a missing local lead (restricted).
 - **Same-owner acceptance is an invitation or `relay.teams.acceptFrom`.** `POST
   /agents/:id/remote-members` records a 10 min `invited` entry stamped with this gateway's owner;
   a join is accepted only when the origin's owner (stamped by the relay from enrollment) matches.
