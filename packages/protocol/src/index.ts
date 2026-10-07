@@ -1090,10 +1090,17 @@ export type GatewayRelayMeta = {
   features: string[]
 }
 
+export type GatewayAgentDefaults = {
+  owner?: string
+  sharing: Sharing
+  allowShared: boolean
+}
+
 export type GatewayMeta = {
   protocolVersion: number
   machineId?: string
   relay?: GatewayRelayMeta
+  agents?: GatewayAgentDefaults
 }
 
 export type HostDirEntry = {

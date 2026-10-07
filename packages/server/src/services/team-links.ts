@@ -197,16 +197,25 @@ export class TeamLinks {
       }
       const at = this.#now()
       const expected = owner ?? this.#ownerOf(current)
-      const invited: RemoteMember = { agent, owner: expected, state: 'invited', at, expiresAt: at + this.#inviteTtlMs }
+      const renewed = existing?.state === 'invited' && existing.owner === expected ? existing.invite : undefined
+      const invite = renewed ?? randomUUID()
+      const invited: RemoteMember = { agent, owner: expected, state: 'invited', at, expiresAt: at + this.#inviteTtlMs, invite }
       return { ...current, remoteMembers: [...members.filter((member) => member.agent !== agent), invited] }
     })
   }
 
-  async removeMember(lead: StoredAgent, agent: string): Promise<StoredAgent | AgentRefusal> {
+  // With `invite`, only that still-open invitation goes: a join that committed meanwhile, or a newer invitation, stays.
+  async removeMember(lead: StoredAgent, agent: string, invite?: string): Promise<StoredAgent | AgentRefusal> {
     let op: string | undefined
     const saved = await this.#agents.patch(lead.id, (current) => {
       const members = current.remoteMembers ?? []
       const entry = members.find((member) => member.agent === agent)
+      if (invite !== undefined) {
+        const refusal = withdrawRefusal(entry, invite)
+        if (refusal) {
+          return refusal
+        }
+      }
       if (!entry) {
         return { status: 404, error: `no such member: ${agent}` }
       }
@@ -770,4 +779,17 @@ export class TeamLinks {
       })
     }
   }
+}
+
+function withdrawRefusal(entry: RemoteMember | undefined, invite: string): AgentRefusal | undefined {
+  if (!entry) {
+    return { status: 409, error: 'that invitation is gone: it expired or was withdrawn' }
+  }
+  if (entry.state !== 'invited') {
+    return { status: 409, error: 'that agent already joined the team' }
+  }
+  if (entry.invite !== invite) {
+    return { status: 409, error: 'a newer invitation replaced that one' }
+  }
+  return undefined
 }

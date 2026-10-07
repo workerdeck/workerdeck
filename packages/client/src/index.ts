@@ -159,8 +159,14 @@ export class WorkerDeckClient {
   }
 
   // Lead side of a cross-gateway join: a 10 minute invitation for `agent` (`gateway:agentId`) to join this lead.
-  async inviteRemoteMember(id: string, agent: string): Promise<AgentResponse> {
-    return await this.#call('POST', this.#agent(id, '/remote-members'), { agent })
+  // `owner` is the invitee's, when it differs from the lead's: the join is refused unless it matches.
+  async inviteRemoteMember(id: string, agent: string, owner?: string): Promise<AgentResponse> {
+    return await this.#call('POST', this.#agent(id, '/remote-members'), owner === undefined ? { agent } : { agent, owner })
+  }
+
+  // Withdraws only that still-open invitation (409 once the agent joined or a newer invitation replaced it).
+  async withdrawInvitation(id: string, agent: string, invite: string): Promise<AgentResponse> {
+    return await this.#call('DELETE', this.#agent(id, `/remote-members/${encodeURIComponent(agent)}?invite=${encodeURIComponent(invite)}`))
   }
 
   async removeRemoteMember(id: string, agent: string): Promise<AgentResponse> {
@@ -435,5 +441,4 @@ export type { QueueHandleEvents } from './queue-handle.ts'
 export { apiUrl, isLoopbackHost } from './host-url.ts'
 export type { HostUrl } from './host-url.ts'
 export { hostAuth } from './host-auth.ts'
-export { runTeamMove } from './team-move.ts'
-export type { TeamMovePlan } from './team-move.ts'
+export { runTeamMove, teamMoveMessage, withdrawTeamInvitation, type TeamInvitation, type TeamMoveOutcome, type TeamMovePlan } from './team-move.ts'

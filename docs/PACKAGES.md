@@ -1122,6 +1122,16 @@ transports and needs none of it. Should a gateway ever mint short-lived WS ticke
 of `buildWsUrl` changes and callers do not. Its `buildWsUrl` builds the query through the same
 `sessionWsUrl` (`src/ws-url.ts`) that `openSocket` uses and only appends the key: it once dropped
 `truncateResults` and `imageRefs`, so every keyed gateway the dashboard added replayed in full.
+`runTeamMove` (`src/team-move.ts`) is the one drop-to-join for every host. It throws only before
+its first change; after that it returns a `TeamMoveOutcome`: `committed` (`yes`, `no`, or `unknown`
+when the join got no answer and may still commit), a kept adoption (never undone: retiring would
+end the session), the invitation it opened across gateways, and siblings whose `order` failed. A
+definite refusal (an HTTP answer below 500) withdraws its own invitation by the invitation's id
+(`withdrawInvitation`, a conditional `DELETE ?invite=`); an unknown join leaves it open, and the
+host offers `withdrawTeamInvitation` as the next action, which a committed join answers with 409.
+Across gateways the invitation carries the mover's owner (`plan.mover.owner`), else the lead's
+gateway expects its own owner and refuses the join; `plan.crossOwner` carries the person's
+confirmation on one gateway. `teamMoveMessage` is the sentence both hosts show.
 ## `packages/react`
 
 headless: `useClaudeSession`, the pure transcript reducer
@@ -1882,7 +1892,10 @@ draws as a row. `onTeamMove` makes cards draggable onto each other (`lib/team-dr
 middle of a card joins its team, a member's edges place the drop beside it, a member dropped on a
 top-level edge or empty space leaves. Joining renumbers the team densely (`TeamMove.siblings`).
 `teamDropRefusal` mirrors the gateway's `leadRefusal` wording so a refused hover says why; a
-rejected `onTeamMove` draws its message under the card for 5 s. `AgentHeading` is the panel title
+rejected `onTeamMove` draws its message under the card for 5 s. Two owners are a question, not a
+refusal: `crossOwnerDrop(dragged, lead, relays)` (owner from `info.owner`, else the row's relay
+`owner`, `rowOwner`) tells the host to confirm before it moves. A shared top-level agent
+(`AgentRef.shared`) draws a globe after its name; the owner shows only in the name's tooltip. `AgentHeading` is the panel title
 for an agent (avatar, name, LEAD or team, `conversation n` from `AgentRef.conversation`, the
 gateway's `pastSessions.length + 1`, sent from the second on). A card whose own state is
 `attention`, or a lead whose team's is, fills with `--row-attention` (the warning hue at the
@@ -2241,11 +2254,17 @@ uses hash history, so only `index.html` is ever requested.
 
 **Agents.** The header `+` is a split button: the main half opens `NewAgentDialog` (name, project,
 profile, permission mode, model, effort, brief, first prompt, the context-reset and sleep toggles,
-join a team; "One-off session instead" hands over to the session dialog). A blank name lets the
+join a team, Private or Shared; "One-off session instead" hands over to the session dialog). The
+sharing select defaults the way the gateway would (`newAgentSharing`: profile `defaults.sharing`,
+then `GatewayMeta.agents.sharing`) and is greyed when the gateway disallows sharing or a team is
+chosen; joining a lead of another owner needs a ticked "Join across owners" (`crossOwner`).
+`useHostMeta` reads each gateway's `/meta` once a minute for both `relays` and `agentDefaults`. A blank name lets the
 gateway pick one. `CwdField` and `EffortField` are shared with `RunForm`. Card verbs live in
 `SessionCardActions` (`rowActions`, so the dashboard redraws the clear / sleep / close icons
-itself), errors as toasts; drag to join is `onTeamMove` in `SessionsSidebar`, whose rejection the
-list draws under the card instead. `useAgentAvatars` fetches each avatar path once per page (a
+itself), errors as toasts; the `⋯` menu opens with the owner, and a top-level agent gets Share
+with other owners / Make private. Drag to join and the menu's Join both go through `teamMove` in
+`SessionsSidebar`: a cross-owner join asks first (`CrossOwnerDialog`), the outcome's message is
+drawn under the card, and an open invitation adds a toast with a Withdraw invitation action. `useAgentAvatars` fetches each avatar path once per page (a
 failure retries after 60 s); the session header draws `AgentHeading` for an agent.
 
 ## `packages/cli`

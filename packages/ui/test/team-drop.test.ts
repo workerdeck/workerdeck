@@ -36,7 +36,7 @@ describe('teamDropRefusal', () => {
     expect(teamDropRefusal(row('pip', {}), row('plain'))).toBe('only an agent can lead a team')
   })
 
-  it('allows a drop across gateways only when both dial a relay that routes teams, under one owner', () => {
+  it('allows a drop across gateways only when both dial a relay that routes teams', () => {
     const far = row('far', {}, { hostId: 'desk', hostName: 'Desk' })
     const relay = (gateway: string, over = {}) => ({ gateway, owner: 'tobias', online: true, features: ['teams'], ...over })
     const both = { mac: relay('sw-mac'), desk: relay('sw-desk') }
@@ -48,10 +48,18 @@ describe('teamDropRefusal', () => {
     expect(teamDropRefusal(row('pip', {}), far, { ...both, mac: relay('sw-mac', { features: [] }) })).toBe(
       'the relay does not route teams yet',
     )
-    expect(teamDropRefusal(row('pip', {}), far, { ...both, desk: relay('sw-desk', { owner: 'dan' }) })).toBe(
-      'pip belongs to another owner; it joins by invitation',
-    )
+    expect(teamDropRefusal(row('pip', {}), far, { ...both, desk: relay('sw-desk', { owner: 'dan' }) })).toBeUndefined()
     expect(joinDrop(row('pip', {}), far, both)).toMatchObject({ lead: { hostId: 'desk' }, order: 0 })
+  })
+
+  it('falls back to the relay owner for a gateway from before owners', () => {
+    const far = row('far', {}, { hostId: 'desk', hostName: 'Desk' })
+    const relays = {
+      mac: { gateway: 'sw-mac', owner: 'tobias', online: true, features: ['teams'] },
+      desk: { gateway: 'sw-desk', owner: 'dan', online: true, features: ['teams'] },
+    }
+    expect(crossOwnerDrop(row('pip', {}), far, relays)).toBe(true)
+    expect(crossOwnerDrop(row('pip', {}), far, { ...relays, desk: { ...relays.desk, owner: 'tobias' } })).toBe(false)
   })
 
   it('compares the agents owners, not their gateways', () => {
@@ -63,10 +71,12 @@ describe('teamDropRefusal', () => {
     const relays = { mac: relay('mini'), desk: { ...relay('desk'), owner: 'tobias', owners: ['tobias'] } }
     const toby = owned('toby', 'tobias', { hostId: 'desk', hostName: 'Desk' })
     expect(teamDropRefusal(owned('pip', 'tobias'), toby, relays)).toBeUndefined()
-    expect(teamDropRefusal(owned('nova', 'silkweave'), toby, relays)).toBe('nova belongs to another owner; it joins by invitation')
+    expect(teamDropRefusal(owned('nova', 'silkweave'), toby, relays)).toBeUndefined()
+    expect(crossOwnerDrop(owned('nova', 'silkweave'), toby, relays)).toBe(true)
+    expect(crossOwnerDrop(owned('pip', 'tobias'), toby, relays)).toBe(false)
     expect(crossOwnerDrop(owned('nova', 'silkweave'), owned('pip', 'tobias'))).toBe(true)
     expect(crossOwnerDrop(owned('nova', 'tobias'), owned('pip', 'tobias'))).toBe(false)
-    expect(crossOwnerDrop(owned('nova', 'silkweave'), toby)).toBe(false)
+    expect(crossOwnerDrop(owned('nova', 'silkweave'), null)).toBe(false)
   })
 })
 

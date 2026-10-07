@@ -1,11 +1,14 @@
 import * as vscode from 'vscode'
-import { ENGINE_CAPABILITIES, errorMessage } from '@workerdeck/protocol'
-import type { HostFileRoot, ModelOption, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, errorMessage, newAgentSharing } from '@workerdeck/protocol'
+import type { HostFileRoot, ModelOption, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo, Sharing } from '@workerdeck/protocol'
 import { clientFor } from './gateway.ts'
+import { agentDefaultsCached, relayOfCached } from './machine.ts'
 import type { HostStore } from './hosts.ts'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
 import { workspaceScope } from './workspace-scope.ts'
 import { BACK, CANCEL, showPick, type Answer } from './quick-input.ts'
+
+type NewAgentAnswers = { name?: string; brief?: string; sharing?: Sharing }
 
 type AdapterChoice = {
   host: WireHost
@@ -19,7 +22,7 @@ type CreateBody = {
   title?: string
   model?: string
   permissionMode?: PermissionMode
-  agent?: { name?: string; brief?: string }
+  agent?: NewAgentAnswers
 }
 
 export type NewSessionDeps = {
@@ -364,7 +367,7 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   const models = adapter.profile.models ?? []
   const noun = agent ? 'agent' : 'session'
   if (models.length === 0) {
-    const named = agent ? await askAgent() : undefined
+    const named = agent ? await askAgent(deps, adapter) : undefined
     if (named === CANCEL) {
       return CANCEL
     }
@@ -407,7 +410,7 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   if (picked === BACK) {
     return BACK
   }
-  const named = agent ? await askAgent() : undefined
+  const named = agent ? await askAgent(deps, adapter) : undefined
   if (named === CANCEL) {
     return CANCEL
   }
@@ -415,8 +418,9 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   return undefined
 }
 
-// Both answers are optional: a blank name lets the gateway suggest one, a blank brief means none.
-async function askAgent(): Promise<{ name?: string; brief?: string } | typeof CANCEL> {
+// Both answers are optional: a blank name lets the gateway suggest one, a blank brief means none. Sharing is asked
+// only where another owner could see the agent at all: a gateway on a relay that allows sharing.
+async function askAgent(deps: NewSessionDeps, adapter: AdapterChoice): Promise<NewAgentAnswers | typeof CANCEL> {
   const name = await vscode.window.showInputBox({
     title: 'New agent: name',
     prompt: 'Leave empty for a suggested name',
@@ -433,7 +437,27 @@ async function askAgent(): Promise<{ name?: string; brief?: string } | typeof CA
   if (brief === undefined) {
     return CANCEL
   }
-  return { name: name.trim() || undefined, brief: brief.trim() || undefined }
+  const answers = { name: name.trim() || undefined, brief: brief.trim() || undefined }
+  const host = deps.store.get(adapter.host.id)
+  const defaults = host ? agentDefaultsCached(host) : undefined
+  if (!host || !relayOfCached(host) || defaults?.allowShared === false) {
+    return answers
+  }
+  const fallback = newAgentSharing(defaults, adapter.profile)
+  const items: Array<vscode.QuickPickItem & { sharing: Sharing }> = [
+    { label: 'Private', detail: 'Invisible to other owners', sharing: 'private' },
+    { label: 'Shared', detail: 'Other owners see a card, and their shared agents can message this one', sharing: 'shared' },
+  ]
+  const sharing = await vscode.window.showQuickPick(
+    items
+      .map((item) => (item.sharing === fallback ? { ...item, description: 'default' } : item))
+      .sort((a, b) => Number(b.sharing === fallback) - Number(a.sharing === fallback)),
+    { title: 'New agent: other owners', ignoreFocusOut: true },
+  )
+  if (sharing === undefined) {
+    return CANCEL
+  }
+  return { ...answers, sharing: sharing.sharing }
 }
 
 function resolveMode(adapter: AdapterChoice, previous: SessionInfo | undefined): PermissionMode | undefined {
@@ -554,6 +578,7 @@ async function create(deps: NewSessionDeps, adapter: AdapterChoice, body: Create
               permissionMode: body.permissionMode,
               brief: body.agent.brief,
             },
+            ...(body.agent.sharing ? { sharing: body.agent.sharing } : {}),
           })
           if (!created.session) {
             throw new Error('the gateway created the agent without a session')

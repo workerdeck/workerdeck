@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { AGENT_SLEEP_AFTER_MS_DEFAULT, errorMessage, type SessionInfo, type SessionRow } from '@workerdeck/protocol'
+import {
+  AGENT_SLEEP_AFTER_MS_DEFAULT,
+  errorMessage,
+  newAgentOwner,
+  newAgentSharing,
+  type GatewayAgentDefaults,
+  type SessionInfo,
+  type SessionRow,
+  type Sharing,
+} from '@workerdeck/protocol'
 import {
   Button,
   Dialog,
@@ -27,12 +36,17 @@ import { clientFor } from '@/lib/hosts.ts'
 
 const NO_TEAM = 'none'
 const SLEEP_MINUTES = AGENT_SLEEP_AFTER_MS_DEFAULT / 60_000
+const SHARING_ITEMS = [
+  { value: 'private', label: 'Private' },
+  { value: 'shared', label: 'Shared' },
+]
 
 export interface NewAgentDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   sessions: SessionInfo[]
   leads: SessionRow[]
+  agentDefaults?: GatewayAgentDefaults
   target?: RunTarget
   gatewayName?: string
   onCreated: (sessionId: string) => void
@@ -44,6 +58,7 @@ export function NewAgentDialog({
   onOpenChange,
   sessions,
   leads,
+  agentDefaults,
   target = {},
   gatewayName,
   onCreated,
@@ -61,6 +76,7 @@ export function NewAgentDialog({
             key={`${target.hostId ?? ''}:${target.cwd ?? ''}`}
             sessions={sessions}
             leads={leads}
+            agentDefaults={agentDefaults}
             target={target}
             onCreated={onCreated}
             onCancel={() => onOpenChange(false)}
@@ -75,6 +91,7 @@ export function NewAgentDialog({
 function NewAgentForm({
   sessions,
   leads,
+  agentDefaults,
   target,
   onCreated,
   onCancel,
@@ -82,6 +99,7 @@ function NewAgentForm({
 }: {
   sessions: SessionInfo[]
   leads: SessionRow[]
+  agentDefaults?: GatewayAgentDefaults
   target: RunTarget
   onCreated: (sessionId: string) => void
   onCancel: () => void
@@ -94,8 +112,17 @@ function NewAgentForm({
   const [contextReset, setContextReset] = useState(true)
   const [sleeps, setSleeps] = useState(true)
   const [lead, setLead] = useState(NO_TEAM)
+  const [sharingChoice, setSharingChoice] = useState<Sharing>()
+  const [acrossOwners, setAcrossOwners] = useState(false)
   const [creating, setCreating] = useState(false)
   const trimmed = name.trim()
+  const profile = form.profiles.find((candidate) => candidate.name === form.profile)
+  const allowShared = agentDefaults?.allowShared !== false
+  const sharing = sharingChoice ?? newAgentSharing(agentDefaults, profile)
+  const leadRow = lead === NO_TEAM ? undefined : leads.find((row) => row.info.agent?.id === lead)
+  const owner = newAgentOwner(agentDefaults, profile)
+  const leadOwner = leadRow?.info.owner
+  const crossOwner = leadRow !== undefined && owner !== leadOwner
 
   const create = async () => {
     const fields = form.sessionFields({ prompt: form.prompt.trim() || undefined })
@@ -126,6 +153,8 @@ function NewAgentForm({
         },
         prompt: fields.prompt,
         lead: lead === NO_TEAM ? undefined : lead,
+        ...(sharingChoice && !leadRow ? { sharing: sharingChoice } : {}),
+        ...(crossOwner ? { crossOwner: true } : {}),
       })
       if (!created.session) {
         throw new Error('The gateway created the agent without a session')
@@ -204,6 +233,31 @@ function NewAgentForm({
             </Select>
           </label>
         ) : null}
+        {crossOwner ? (
+          <Toggle checked={acrossOwners} onChange={setAcrossOwners}>
+            Join across owners: this agent belongs to {owner ?? 'no owner'}, {leadRow?.info.agent?.name} to {leadOwner ?? 'no owner'}
+          </Toggle>
+        ) : null}
+        <label className="flex items-center gap-2 text-body-sm text-fg-2" title={sharingHint(allowShared, leadRow !== undefined)}>
+          <span>Other owners</span>
+          <Select
+            items={SHARING_ITEMS}
+            value={leadRow ? 'private' : sharing}
+            onValueChange={(value) => setSharingChoice(value === 'shared' ? 'shared' : 'private')}
+            disabled={!allowShared || leadRow !== undefined}
+          >
+            <SelectTrigger className="min-w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SHARING_ITEMS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  <SelectItemText>{item.label}</SelectItemText>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
       </div>
       <div className="mt-1 flex items-center gap-2 border-t border-border pt-3">
         <Button
@@ -218,7 +272,7 @@ function NewAgentForm({
         <Button variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button onClick={() => void create()} disabled={creating}>
+        <Button onClick={() => void create()} disabled={creating || (crossOwner && !acrossOwners)}>
           {creating ? <Spinner className="size-3.5 text-current" /> : <UserPlus className="size-4" />}
           {trimmed ? `Create ${trimmed}` : 'Create agent'}
         </Button>
@@ -234,4 +288,14 @@ function Toggle({ checked, onChange, children }: { checked: boolean; onChange: (
       {children}
     </label>
   )
+}
+
+function sharingHint(allowShared: boolean, member: boolean): string {
+  if (!allowShared) {
+    return 'This gateway shares no agents'
+  }
+  if (member) {
+    return 'A member follows its lead'
+  }
+  return 'Shared: other owners see a card and their shared agents can message this one. Private: invisible to them.'
 }

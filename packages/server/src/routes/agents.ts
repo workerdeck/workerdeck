@@ -272,7 +272,8 @@ async function remoteMembers(ctx: ServerContext, req: IncomingMessage, res: Serv
     outcome = await teams.invite(lead, body.agent, body.owner)
   } else {
     requireMethod(req, 'DELETE')
-    outcome = await teams.removeMember(lead, member)
+    const invite = new URL(req.url ?? '', 'http://x').searchParams.get('invite') ?? undefined
+    outcome = await teams.removeMember(lead, member, invite)
   }
   if (isAgentRefusal(outcome)) {
     fail(outcome.status, outcome.error)

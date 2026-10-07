@@ -1,9 +1,16 @@
 import { STATUS_LABEL_EMOJI_MAX, STATUS_LABEL_TEXT_MAX, errorMessage, type SessionInfo, type StatusLabelInput } from '@workerdeck/protocol'
 import * as vscode from 'vscode'
 import type { HostStore } from './hosts.ts'
-import { runTeamMove, type SessionHandle, type WorkerDeckClient } from '@workerdeck/client'
+import {
+  runTeamMove,
+  teamMoveMessage,
+  withdrawTeamInvitation,
+  type SessionHandle,
+  type TeamMovePlan,
+  type WorkerDeckClient,
+} from '@workerdeck/client'
 import { clientFor } from './gateway.ts'
-import { relayOfCached } from './machine.ts'
+import { agentDefaultsCached, relayOfCached } from './machine.ts'
 import type { SessionsModel } from './sessions-model.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import type { HostToSidebar, SidebarToHost, SurfaceTarget } from './bridge-protocol.ts'
@@ -300,8 +307,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
       detail: info.agent ? 'End this session; the agent stays and can be restarted' : 'Remove the session from the gateway',
       run: () => this.#deleteSession(hostId, sessionId),
     })
+    const name = info.agent?.name ?? info.title ?? sessionId.slice(0, 8)
     const picked = await vscode.window.showQuickPick(items, {
-      title: info.title ?? sessionId.slice(0, 8),
+      title: info.owner ? `${name} · owner ${info.owner}` : name,
       placeHolder: 'Session actions',
     })
     await picked?.run()
@@ -331,15 +339,12 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         detail: 'Join another agent as a team member',
         run: async () => {
           const target = await vscode.window.showQuickPick(
-            leads.map((lead) => ({ label: lead.agent!.name, description: lead.title, id: lead.agent!.id })),
+            leads.map((lead) => ({ label: lead.agent!.name, description: lead.title, session: lead })),
             { title: `Add ${agent?.name ?? info.title ?? 'session'} to a team`, placeHolder: 'Lead' },
           )
-          if (!target) {
-            return
+          if (target) {
+            await this.#moveIntoTeam({ hostId, sessionId: info.id }, { hostId, sessionId: target.session.id })
           }
-          await this.#agentCall(hostId, 'could not join the team', (client) =>
-            agent ? client.updateAgent(agent.id, { lead: target.id }) : client.createAgent({ adopt: info.id, lead: target.id }),
-          )
         },
       })
     }
@@ -355,6 +360,9 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
             }
           }),
       })
+    }
+    if (agent && agent.lead === undefined) {
+      items.push(this.#sharingItem(hostId, agent.id, agent.shared === true))
     }
     if (agent) {
       if (agent.avatar) {
@@ -410,14 +418,75 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     )
   }
 
+  #sharingItem(hostId: string, agentId: string, shared: boolean): vscode.QuickPickItem & { run: () => Promise<void> } {
+    if (shared) {
+      return {
+        label: '$(lock) Make private',
+        detail: 'Hide this agent from other owners',
+        run: () => this.#agentCall(hostId, 'could not change sharing', (client) => client.updateAgent(agentId, { sharing: 'private' })),
+      }
+    }
+    const host = this.#store.get(hostId)
+    const allowed = (host ? agentDefaultsCached(host)?.allowShared : undefined) !== false
+    return {
+      label: '$(globe) Share with other owners',
+      description: allowed ? undefined : 'turned off on this gateway',
+      detail: 'Other owners see a card and their shared agents can message this one',
+      run: async () => {
+        if (!allowed) {
+          void vscode.window.showInformationMessage('WorkerDeck: this gateway shares no agents (`--agent-sharing never`).')
+          return
+        }
+        await this.#agentCall(hostId, 'could not change sharing', (client) => client.updateAgent(agentId, { sharing: 'shared' }))
+      },
+    }
+  }
+
   async #teamMove(msg: Extract<SidebarToHost, { kind: 'wd-team-move' }>): Promise<void> {
-    const agentOn = (hostId: string, sessionId: string) => this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)?.agent?.id
     const leadHostId = msg.leadHostId ?? msg.hostId
-    const lead = msg.leadSessionId === null ? null : agentOn(leadHostId, msg.leadSessionId)
-    if (lead === undefined) {
+    await this.#moveIntoTeam(
+      { hostId: msg.hostId, sessionId: msg.sessionId },
+      msg.leadSessionId === null ? null : { hostId: leadHostId, sessionId: msg.leadSessionId },
+      { order: msg.order, siblings: msg.siblings },
+    )
+  }
+
+  // One path for a drag and the `Add to team` item: asks before a join across owners, then reports what the move left
+  // behind (a kept adoption, an open invitation, an unsaved order) with the one safe next action.
+  async #moveIntoTeam(
+    mover: { hostId: string; sessionId: string },
+    leadAt: { hostId: string; sessionId: string } | null,
+    placement: { order?: number; siblings?: Array<{ hostId?: string; sessionId: string; order: number }> } = {},
+  ): Promise<void> {
+    const sessionOn = (hostId: string, sessionId: string) => this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
+    const moverInfo = sessionOn(mover.hostId, mover.sessionId)
+    const leadInfo = leadAt === null ? null : sessionOn(leadAt.hostId, leadAt.sessionId)
+    const lead = leadInfo === null ? null : leadInfo?.agent?.id
+    if (!moverInfo || lead === undefined || leadInfo === undefined) {
       return
     }
-    const hostIds = new Set([msg.hostId, leadHostId, ...(msg.siblings ?? []).map((s) => s.hostId ?? msg.hostId)])
+    const moverOwner = this.#ownerOf(mover.hostId, moverInfo)
+    const leadOwner = leadAt && leadInfo ? this.#ownerOf(leadAt.hostId, leadInfo) : undefined
+    const crossOwner = leadInfo !== null && moverOwner !== leadOwner
+    if (crossOwner) {
+      const leadName = leadInfo.agent?.name ?? 'that lead'
+      const ok = await vscode.window.showWarningMessage(
+        `Join ${leadName}'s team across owners?`,
+        {
+          modal: true,
+          detail: `${moverInfo.agent?.name ?? moverInfo.title ?? 'This session'} belongs to ${moverOwner ?? 'no owner'}, ${leadName} to ${leadOwner ?? 'no owner'}. In one team they can message each other; shells, files and approvals stay on their own gateway.`,
+        },
+        'Join across owners',
+      )
+      if (ok !== 'Join across owners') {
+        return
+      }
+    }
+    const hostIds = new Set([
+      mover.hostId,
+      ...(leadAt ? [leadAt.hostId] : []),
+      ...(placement.siblings ?? []).map((s) => s.hostId ?? mover.hostId),
+    ])
     const clients = new Map<string, WorkerDeckClient>()
     for (const id of hostIds) {
       const host = this.#store.get(id)
@@ -426,28 +495,58 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
         clients.set(id, client)
       }
     }
+    const plan: TeamMovePlan = {
+      mover: { hostId: mover.hostId, sessionId: mover.sessionId, agentId: moverInfo.agent?.id, owner: moverOwner },
+      lead: lead && leadAt ? { hostId: leadAt.hostId, agentId: lead } : null,
+      order: placement.order,
+      siblings: (placement.siblings ?? []).flatMap((s) => {
+        const hostId = s.hostId ?? mover.hostId
+        const agentId = sessionOn(hostId, s.sessionId)?.agent?.id
+        return agentId ? [{ hostId, agentId, order: s.order }] : []
+      }),
+      ...(crossOwner ? { crossOwner: true as const } : {}),
+    }
+    const failure = lead ? 'could not join the team' : 'could not leave the team'
     try {
-      await runTeamMove(
-        {
-          mover: { hostId: msg.hostId, sessionId: msg.sessionId, agentId: agentOn(msg.hostId, msg.sessionId) },
-          lead: lead ? { hostId: leadHostId, agentId: lead } : null,
-          order: msg.order,
-          siblings: (msg.siblings ?? []).flatMap((s) => {
-            const hostId = s.hostId ?? msg.hostId
-            const agentId = agentOn(hostId, s.sessionId)
-            return agentId ? [{ hostId, agentId, order: s.order }] : []
-          }),
-        },
+      const outcome = await runTeamMove(
+        plan,
         (id) => clients.get(id),
         (id) => {
           const host = this.#store.get(id)
           return host ? relayOfCached(host) : undefined
         },
       )
+      await this.#model.refresh()
+      const message = teamMoveMessage(outcome)
+      const invitation = outcome.invitation?.state === 'open' ? outcome.invitation : undefined
+      if (!message) {
+        return
+      }
+      if (outcome.committed === 'yes' && !invitation) {
+        void vscode.window.showWarningMessage(`WorkerDeck: ${message}`)
+        return
+      }
+      const action = invitation ? 'Withdraw invitation' : undefined
+      const picked = await vscode.window.showErrorMessage(`WorkerDeck: ${message}`, ...(action ? [action] : []))
+      if (picked && invitation) {
+        try {
+          await withdrawTeamInvitation(invitation, (id) => clients.get(id))
+          void vscode.window.showInformationMessage('WorkerDeck: invitation withdrawn.')
+        } catch (err) {
+          void vscode.window.showErrorMessage(`WorkerDeck: could not withdraw the invitation - ${errorMessage(err)}`)
+        }
+        await this.#model.refresh()
+      }
     } catch (err) {
-      void vscode.window.showErrorMessage(`WorkerDeck: ${lead ? 'could not join the team' : 'could not leave the team'} - ${errorMessage(err)}`)
+      void vscode.window.showErrorMessage(`WorkerDeck: ${failure} - ${errorMessage(err)}`)
+      await this.#model.refresh()
     }
-    await this.#model.refresh()
+  }
+
+  // The session's own owner; a gateway from before owners has only its relay's.
+  #ownerOf(hostId: string, info: SessionInfo): string | undefined {
+    const host = this.#store.get(hostId)
+    return info.owner ?? (host ? relayOfCached(host)?.owner : undefined)
   }
 
   async #agentCall(hostId: string, failure: string, call: (client: WorkerDeckClient) => Promise<unknown>): Promise<void> {

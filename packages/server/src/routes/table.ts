@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { PROTOCOL_VERSION, type GatewayMeta } from '@workerdeck/protocol'
+import { PROTOCOL_VERSION, type GatewayAgentDefaults, type GatewayMeta } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { json, type Refusal } from '../lib/http.ts'
 import { machineId } from '../lib/machine-id.ts'
@@ -90,7 +90,9 @@ export function httpRoutes(ctx: ServerContext): HttpRoute[] {
       handler: (_, res, __, auth) =>
         json(res, 200, {
           protocolVersion: PROTOCOL_VERSION,
-          ...(ctx.auth.isOperator(auth) ? { machineId: machineId(), ...(ctx.relayStatus ? { relay: ctx.relayStatus() } : {}) } : {}),
+          ...(ctx.auth.isOperator(auth)
+            ? { machineId: machineId(), ...(ctx.relayStatus ? { relay: ctx.relayStatus() } : {}), agents: agentDefaults(ctx) }
+            : {}),
         } satisfies GatewayMeta),
     }),
     // Authenticated before the 404-when-unconfigured answer: an unauthenticated caller must not learn whether a
@@ -156,4 +158,14 @@ function firstMatch(routes: HttpRoute[], pathname: string, req: IncomingMessage)
 
 function pathWhere(test: (pathname: string) => boolean): (pathname: string) => string | undefined {
   return (pathname) => (test(pathname) ? pathname : undefined)
+}
+
+function agentDefaults(ctx: ServerContext): GatewayAgentDefaults {
+  const allowShared = ctx.options.agentSharing?.allowShared !== false
+  const owner = ctx.owners.defaultOwner()
+  return {
+    ...(owner === undefined ? {} : { owner }),
+    sharing: allowShared && ctx.options.agentSharing?.default === 'shared' ? 'shared' : 'private',
+    allowShared,
+  }
 }

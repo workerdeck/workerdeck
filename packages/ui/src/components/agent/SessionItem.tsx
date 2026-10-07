@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { Users } from 'lucide-react'
+import { Globe, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { projectLabel, projectName, projectSubpath, sessionLabel } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, SessionState, SessionTask, StepDisplay, SubagentDisplay } from '@workerdeck/protocol'
@@ -12,6 +12,8 @@ import { StepRow, sessionSteps } from './SessionSteps.tsx'
 import type { Step } from './SessionSteps.tsx'
 import { cn } from '../../lib/utils.ts'
 import { formatCost, formatRelativeTime, friendlyModel } from '../../lib/format.ts'
+
+const SHARED_TITLE = 'Shared with other owners'
 
 export type SelectModifiers = { meta: boolean; ctrl: boolean; alt: boolean }
 
@@ -183,6 +185,7 @@ export function SessionItem({
               }
             : undefined
         }
+        title={agent ? agentTitle(info) : undefined}
         className="min-w-0 shrink truncate text-body-sm font-medium tracking-[-0.005em] text-fg-1"
       >
         {label}
@@ -263,6 +266,11 @@ export function SessionItem({
             <div className="flex h-5 items-center gap-1.5 overflow-hidden">
               {nameLabel}
               {agent?.leads ? <LeadChip /> : null}
+              {agent?.shared ? (
+                <span title={SHARED_TITLE} aria-label={SHARED_TITLE} className="flex shrink-0 text-fg-4">
+                  <Globe className="size-3" />
+                </span>
+              ) : null}
               {agent ? <span className="w-max max-w-max min-w-0 grow basis-0 truncate text-label text-fg-4/70">{time}</span> : null}
               <span className="flex-1" />
               {unread}
@@ -418,4 +426,15 @@ function NameEditor({
 
 export function statusLine(label: SessionInfo['statusLabel']): string | undefined {
   return label ? (label.emoji ? `${label.emoji} ${label.text}` : label.text) : undefined
+}
+
+function agentTitle(info: SessionInfo): string {
+  const parts = [info.agent?.name ?? '']
+  if (info.owner) {
+    parts.push(`owner ${info.owner}`)
+  }
+  if (info.agent?.shared) {
+    parts.push(SHARED_TITLE.toLowerCase())
+  }
+  return parts.join(' · ')
 }

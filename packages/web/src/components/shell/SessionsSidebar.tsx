@@ -5,12 +5,13 @@ import {
   STATUS_LABEL_TEXT_MAX,
   filterRows,
   sessionLabel,
+  type HostRelays,
   type SessionRow,
   type SessionTask,
   type StatusLabelInput,
   errorMessage,
 } from '@workerdeck/protocol'
-import { runTeamMove, type WorkerDeckClient } from '@workerdeck/client'
+import { runTeamMove, teamMoveMessage, withdrawTeamInvitation, type TeamInvitation, type TeamMoveOutcome, type WorkerDeckClient } from '@workerdeck/client'
 import {
   AlertDialog,
   AlertDialogClose,
@@ -36,6 +37,8 @@ import {
   cn,
   toast,
   AvatarDialog,
+  crossOwnerDrop,
+  rowOwner,
   type GroupTarget,
 } from '@workerdeck/ui'
 import { ChevronDown, Layers, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
@@ -48,7 +51,7 @@ import { getSearchShown, setSearchShown } from '@/lib/sidebar.ts'
 import { useProjectIcons } from '@workerdeck/react'
 import { useSessionRows, useSessions } from '@/hooks/useSessions.ts'
 import { useAgentAvatars } from '@/hooks/useAgentAvatars.ts'
-import { useHostRelays } from '@/hooks/useHostRelays.ts'
+import { useHostMeta } from '@/hooks/useHostMeta.ts'
 import { useViewConfig } from '@/hooks/useViewConfig.ts'
 
 export function SessionsSidebar() {
@@ -60,7 +63,7 @@ export function SessionsSidebar() {
   const activeSubagentId = useSearch({ strict: false }).subagent
   const activeShellId = useSearch({ strict: false }).shell
   const { snapshots, refresh } = useSessions()
-  const relays = useHostRelays()
+  const { relays, agentDefaults } = useHostMeta()
   const rows = useSessionRows(snapshots)
   // `clientFor` is module scope and stable, so it is not a dependency that would re-fire the fetch.
   const projectIcons = useProjectIcons(rows, clientFor)
@@ -74,6 +77,7 @@ export function SessionsSidebar() {
   const [labeling, setLabeling] = useState<SessionRow>()
   const [avatarFor, setAvatarFor] = useState<SessionRow>()
   const [retiring, setRetiring] = useState<SessionRow>()
+  const [crossing, setCrossing] = useState<CrossOwnerQuestion>()
   // Kept after close so the dialog does not re-render against another gateway while it fades out.
   const [target, setTarget] = useState<Partial<GroupTarget>>({})
   const startCreate = (next: Partial<GroupTarget>) => {
@@ -155,26 +159,64 @@ export function SessionsSidebar() {
     }
   }
 
+  // Asks before a join between two owners' agents; resolves false when the person declines.
+  const confirmCrossOwner = (move: TeamMove) =>
+    !crossOwnerDrop(move.row, move.lead, relays) ? Promise.resolve(true) : new Promise<boolean>((resolve) => setCrossing({ move, resolve }))
+
+  const offerWithdraw = (invitation: TeamInvitation) =>
+    toast('The invitation is still open', {
+      duration: 15_000,
+      action: {
+        label: 'Withdraw invitation',
+        onClick: () =>
+          void withdrawTeamInvitation(invitation, clientFor)
+            .then(() => toast.success('Invitation withdrawn'))
+            .catch((e: unknown) => toast.error(errorMessage(e, 'Could not withdraw the invitation')))
+            .finally(() => void refresh()),
+      },
+    })
+
   // Rejects with the gateway's message, which the list draws under the card it was dropped on.
   const teamMove = async (move: TeamMove) => {
     const lead = move.lead?.info.agent?.id ?? null
+    if (!(await confirmCrossOwner(move))) {
+      return
+    }
+    const failure = lead ? 'Could not join the team' : 'Could not leave the team'
+    let outcome: TeamMoveOutcome
     try {
-      await runTeamMove(
+      outcome = await runTeamMove(
         {
-          mover: { hostId: move.row.hostId, sessionId: move.row.info.id, agentId: move.row.info.agent?.id },
+          mover: {
+            hostId: move.row.hostId,
+            sessionId: move.row.info.id,
+            agentId: move.row.info.agent?.id,
+            owner: rowOwner(move.row, relays),
+          },
           lead: lead && move.lead ? { hostId: move.lead.hostId, agentId: lead } : null,
           order: move.order,
           siblings: (move.siblings ?? []).flatMap(({ row, order }) =>
             row.info.agent ? [{ hostId: row.hostId, agentId: row.info.agent.id, order }] : [],
           ),
+          ...(crossOwnerDrop(move.row, move.lead, relays) ? { crossOwner: true as const } : {}),
         },
         clientFor,
         (hostId) => relays[hostId],
       )
     } catch (e) {
-      throw new Error(errorMessage(e, lead ? 'Could not join the team' : 'Could not leave the team'), { cause: e })
+      throw new Error(errorMessage(e, failure), { cause: e })
     } finally {
       void refresh()
+    }
+    const message = teamMoveMessage(outcome)
+    if (outcome.invitation?.state === 'open') {
+      offerWithdraw(outcome.invitation)
+    }
+    if (outcome.committed !== 'yes') {
+      throw new Error(message ?? failure)
+    }
+    if (message) {
+      toast.warning(message)
     }
   }
 
@@ -244,10 +286,13 @@ export function SessionsSidebar() {
         break
       }
       case 'join': {
-        const lead = action.lead.info.agent?.id
-        agentCall(row, 'Could not join the team', (client) =>
-          agent ? client.updateAgent(agent.id, { lead }) : client.createAgent({ adopt: row.info.id, lead }),
-        )
+        teamMove({ row, lead: action.lead }).catch((e: unknown) => toast.error(errorMessage(e, 'Could not join the team')))
+        break
+      }
+      case 'sharing': {
+        if (agent) {
+          agentCall(row, 'Could not change sharing', (client) => client.updateAgent(agent.id, { sharing: action.sharing }))
+        }
         break
       }
       case 'leave': {
@@ -407,7 +452,14 @@ export function SessionsSidebar() {
             onTeamMove={teamMove}
             relays={relays}
             avatars={avatars}
-            rowActions={(row) => <SessionCardActions row={row} rows={rows} onAction={(action) => onCardAction(row, action)} />}
+            rowActions={(row) => (
+              <SessionCardActions
+                row={row}
+                rows={rows}
+                allowShared={agentDefaults[row.hostId]?.allowShared !== false}
+                onAction={(action) => onCardAction(row, action)}
+              />
+            )}
             emptyState={
               <Empty icon={<Layers />} title="No sessions yet" description={<>Start an agent or a session from the buttons above.</>} />
             }
@@ -433,6 +485,7 @@ export function SessionsSidebar() {
         onOpenChange={setCreatingAgent}
         sessions={createSessions}
         leads={teamLeads(rows, createHostId)}
+        agentDefaults={createHostId ? agentDefaults[createHostId] : undefined}
         target={target}
         gatewayName={createGatewayName}
         onCreated={(id) => {
@@ -464,6 +517,15 @@ export function SessionsSidebar() {
         onRename={(row, name) => (row.info.agent ? renameAgent(row, name) : rename(row, name))}
       />
 
+      <CrossOwnerDialog
+        question={crossing}
+        relays={relays}
+        onAnswer={(yes) => {
+          crossing?.resolve(yes)
+          setCrossing(undefined)
+        }}
+      />
+
       <AlertDialog open={retiring !== undefined} onOpenChange={(next) => !next && setRetiring(undefined)}>
         <AlertDialogContent>
           <AlertDialogTitle>Retire {retiring?.info.agent?.name ?? 'this agent'}?</AlertDialogTitle>
@@ -490,6 +552,41 @@ export function SessionsSidebar() {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  )
+}
+
+type CrossOwnerQuestion = { move: TeamMove; resolve: (yes: boolean) => void }
+
+function CrossOwnerDialog({
+  question,
+  relays,
+  onAnswer,
+}: {
+  question?: CrossOwnerQuestion
+  relays: HostRelays
+  onAnswer: (yes: boolean) => void
+}) {
+  const move = question?.move
+  const mover = move ? (move.row.info.agent?.name ?? sessionLabel(move.row.info)) : ''
+  const lead = move?.lead?.info.agent?.name ?? 'that lead'
+  const moverOwner = move ? (rowOwner(move.row, relays) ?? 'no owner') : ''
+  const leadOwner = move?.lead ? (rowOwner(move.lead, relays) ?? 'no owner') : ''
+  return (
+    <AlertDialog open={question !== undefined} onOpenChange={(next) => !next && onAnswer(false)}>
+      <AlertDialogContent>
+        <AlertDialogTitle>Join {lead}&apos;s team across owners?</AlertDialogTitle>
+        <AlertDialogDescription>
+          {mover} belongs to {moverOwner}, {lead} to {leadOwner}. In one team they can message each other; shells, files and approvals stay
+          on their own gateway.
+        </AlertDialogDescription>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onAnswer(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => onAnswer(true)}>Join across owners</Button>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 

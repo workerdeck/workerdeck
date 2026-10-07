@@ -33,7 +33,7 @@ export const MenuItem: FunctionComponent<MenuPrimitive.Item.Props & { destructiv
     data-slot="menu-item"
     className={cn(
       'flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-body-sm outline-none select-none',
-      'data-highlighted:bg-surface-hover',
+      'data-highlighted:bg-surface-hover data-disabled:cursor-default data-disabled:opacity-50',
       destructive ? 'text-danger' : 'text-text',
       className,
     )}

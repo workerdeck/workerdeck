@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { GatewayRelayMeta } from '@workerdeck/protocol'
+import type { GatewayAgentDefaults, GatewayRelayMeta } from '@workerdeck/protocol'
 import { arch, homedir, hostname, platform } from 'node:os'
 import { clientFor } from './gateway.ts'
 import { isLoopbackHost, type GatewayHost, type HostStore } from './hosts.ts'
@@ -22,11 +22,16 @@ function localMachineId(): string {
 const known = new Map<string, { baseUrl: string; local: boolean }>()
 const inFlight = new Map<string, Promise<boolean>>()
 // The relay identity rides the same `/meta` read; a team spanning two configured gateways needs both.
-const relays = new Map<string, { baseUrl: string; relay?: GatewayRelayMeta }>()
+const relays = new Map<string, { baseUrl: string; relay?: GatewayRelayMeta; agents?: GatewayAgentDefaults }>()
 
 export function relayOfCached(host: GatewayHost): GatewayRelayMeta | undefined {
   const hit = relays.get(host.id)
   return hit?.baseUrl === host.baseUrl ? hit.relay : undefined
+}
+
+export function agentDefaultsCached(host: GatewayHost): GatewayAgentDefaults | undefined {
+  const hit = relays.get(host.id)
+  return hit?.baseUrl === host.baseUrl ? hit.agents : undefined
 }
 
 function remembered(host: GatewayHost): boolean | undefined {
@@ -47,10 +52,12 @@ export async function isLocalHost(store: HostStore, host: GatewayHost): Promise<
   return remembered(host) ?? (await refreshLocality(store, host))
 }
 
+// A loopback host is local without asking, but its relay identity still comes from `/meta`. A failed read forgets the
+// relay rather than keeping an online flag nobody can vouch for; the locality answer is remembered on its own.
 export async function refreshLocality(store: HostStore, host: GatewayHost): Promise<boolean> {
-  if (isLoopbackHost(host)) {
+  const loopback = isLoopbackHost(host)
+  if (loopback) {
     known.set(host.id, { baseUrl: host.baseUrl, local: true })
-    return true
   }
   const pending = inFlight.get(host.id)
   if (pending) {
@@ -60,14 +67,18 @@ export async function refreshLocality(store: HostStore, host: GatewayHost): Prom
     try {
       const client = await clientFor(store, host)
       const meta = await client?.meta()
-      relays.set(host.id, { baseUrl: host.baseUrl, relay: meta?.relay })
+      relays.set(host.id, { baseUrl: host.baseUrl, relay: meta?.relay, agents: meta?.agents })
+      if (loopback) {
+        return true
+      }
       // A gateway that predates `/meta`, or answers a non-operator principal, has no fingerprint to
       // match - which is the remote answer, the one that was always taken before.
       const local = meta?.machineId !== undefined && meta.machineId === localMachineId()
       known.set(host.id, { baseUrl: host.baseUrl, local })
       return local
     } catch {
-      return remembered(host) ?? false
+      relays.delete(host.id)
+      return loopback || (remembered(host) ?? false)
     } finally {
       inFlight.delete(host.id)
     }

@@ -15,7 +15,7 @@ export function dropZone(offsetY: number, height: number): DropZone {
 }
 
 // Mirrors the gateway's `leadRefusal`, so a drag can say no before it asks; the 409 stays the authority. Across
-// gateways both must dial a relay that routes teams, and both agents have one owner (another owner's needs an invitation).
+// gateways both must dial a relay that routes teams. Two owners are not a refusal but a question (`crossOwnerDrop`).
 export function teamDropRefusal(dragged: SessionRow, lead: SessionRow, relays: HostRelays = {}): string | undefined {
   const mover = dragged.info.agent
   const target = lead.info.agent
@@ -40,12 +40,7 @@ export function teamDropRefusal(dragged: SessionRow, lead: SessionRow, relays: H
   return undefined
 }
 
-function crossGatewayRefusal(
-  from: HostRelays[string],
-  to: HostRelays[string],
-  dragged: SessionRow,
-  lead: SessionRow,
-): string | undefined {
+function crossGatewayRefusal(from: HostRelays[string], to: HostRelays[string], dragged: SessionRow, lead: SessionRow): string | undefined {
   if (!from || !to) {
     return 'a team spans gateways only through a relay both gateways dial'
   }
@@ -60,20 +55,18 @@ function crossGatewayRefusal(
       return 'the relay does not route teams yet'
     }
   }
-  if (rowOwner(dragged, from) !== rowOwner(lead, to)) {
-    return `${dragged.info.agent?.name ?? 'that session'} belongs to another owner; it joins by invitation`
-  }
   return undefined
 }
 
 // The session's own owner; a gateway from before owners has only its relay's.
-function rowOwner(row: SessionRow, relay: HostRelays[string]): string | undefined {
-  return row.info.owner ?? relay?.owner
+export function rowOwner(row: SessionRow, relays: HostRelays = {}): string | undefined {
+  return row.info.owner ?? relays[row.hostId]?.owner
 }
 
-// A drop between two owners' agents on one gateway goes through only with the person's confirmation (`crossOwner`).
-export function crossOwnerDrop(dragged: SessionRow, lead: SessionRow): boolean {
-  return dragged.hostId === lead.hostId && dragged.info.owner !== lead.info.owner
+// A drop between two owners' agents goes through only with the person's confirmation: `crossOwner` on one gateway,
+// the mover's owner on the invitation across gateways. Leaving a team needs none.
+export function crossOwnerDrop(dragged: SessionRow, lead: SessionRow | null, relays: HostRelays = {}): boolean {
+  return lead !== null && rowOwner(dragged, relays) !== rowOwner(lead, relays)
 }
 
 // The move a drop over a member asks for: join (or reorder within) that member's team, at the member's place.

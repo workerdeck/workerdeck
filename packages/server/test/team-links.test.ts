@@ -115,6 +115,36 @@ describe('cross-gateway teams, same owner', () => {
     await published(relay, 'win', 1)
   })
 
+  it('withdraws an invitation only by its id, and never one the member already took', async () => {
+    const { relay, stateDir } = await relayRig()
+    const mac = await gateway(relay, stateDir, 'mac')
+    const win = await gateway(relay, stateDir, 'win')
+    const lead = await newAgent(mac, 'AC-Lead')
+    const member = await newAgent(win, 'AC-MagWin')
+    await published(relay, 'mac', 1)
+    const path = `/agents/${lead.agent.id}/remote-members`
+    const target = `win:${member.agent.id}`
+    const withdraw = (invite: string) => mac.call<{ error?: string }>(`${path}/${encodeURIComponent(target)}?invite=${invite}`, 'DELETE')
+
+    const first = (await mac.call<AgentResponse>(path, 'POST', { agent: target })).body.agent.remoteMembers?.[0]?.invite
+    expect(first).toEqual(expect.any(String))
+    const renewed = (await mac.call<AgentResponse>(path, 'POST', { agent: target })).body.agent.remoteMembers?.[0]?.invite
+    expect(renewed).toBe(first)
+    expect(await withdraw('other')).toEqual({ status: 409, body: { error: 'a newer invitation replaced that one' } })
+
+    expect((await win.call(`/agents/${member.agent.id}`, 'PATCH', { lead: `mac:${lead.agent.id}` })).status).toBe(200)
+    expect(await withdraw(first!)).toEqual({ status: 409, body: { error: 'that agent already joined the team' } })
+    expect((await agentOn(mac, lead.agent.id)).remoteMembers).toMatchObject([{ agent: target, state: 'accepted' }])
+
+    expect((await win.call(`/agents/${member.agent.id}`, 'PATCH', { lead: null })).status).toBe(200)
+    await until(async () => (await agentOn(mac, lead.agent.id)).remoteMembers?.length === 0, 'the lead drops the member')
+    const again = (await mac.call<AgentResponse>(path, 'POST', { agent: target })).body.agent.remoteMembers?.[0]?.invite
+    expect(again).not.toBe(first)
+    expect((await withdraw(again!)).status).toBe(200)
+    expect((await agentOn(mac, lead.agent.id)).remoteMembers ?? []).toEqual([])
+    expect(await withdraw(again!)).toEqual({ status: 409, body: { error: 'that invitation is gone: it expired or was withdrawn' } })
+  })
+
   it('accepts a same-owner join without an invitation from a gateway listed in acceptFrom', async () => {
     const { relay, stateDir } = await relayRig()
     const mac = await gateway(relay, stateDir, 'mac', ['win'])

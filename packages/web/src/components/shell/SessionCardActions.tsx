@@ -1,9 +1,11 @@
 import type { ReactNode, SyntheticEvent } from 'react'
-import type { SessionRow } from '@workerdeck/protocol'
+import type { SessionRow, Sharing } from '@workerdeck/protocol'
 import { Button, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, cn } from '@workerdeck/ui'
 import {
   BedDouble,
   Eraser,
+  Globe,
+  Lock,
   LogOut,
   MessageSquareText,
   MoreHorizontal,
@@ -27,6 +29,7 @@ export type CardAction =
   | { kind: 'adopt' }
   | { kind: 'join'; lead: SessionRow }
   | { kind: 'leave' }
+  | { kind: 'sharing'; sharing: Sharing }
   | { kind: 'dissolve' }
   | { kind: 'restart' }
   | { kind: 'retire' }
@@ -53,10 +56,12 @@ export function teamMembers(row: SessionRow, rows: SessionRow[]): SessionRow[] {
 export function SessionCardActions({
   row,
   rows,
+  allowShared = true,
   onAction,
 }: {
   row: SessionRow
   rows: SessionRow[]
+  allowShared?: boolean
   onAction: (action: CardAction) => void
 }) {
   const { info } = row
@@ -107,6 +112,7 @@ export function SessionCardActions({
           }
         />
         <MenuContent>
+          {info.owner ? <div className="px-2 pt-1.5 pb-1 text-label text-fg-4">Owner: {info.owner}</div> : null}
           <Item icon={<Pencil />} onClick={() => onAction({ kind: 'rename' })}>
             {agent ? 'Rename agent' : 'Rename session'}
           </Item>
@@ -144,6 +150,22 @@ export function SessionCardActions({
               Dissolve team
             </Item>
           ) : null}
+          {agent && agent.lead === undefined ? (
+            agent.shared ? (
+              <Item icon={<Lock />} onClick={() => onAction({ kind: 'sharing', sharing: 'private' })}>
+                Make private
+              </Item>
+            ) : (
+              <Item
+                icon={<Globe />}
+                disabled={!allowShared}
+                title={allowShared ? 'Other owners see a card and can message it' : 'This gateway shares no agents'}
+                onClick={() => onAction({ kind: 'sharing', sharing: 'shared' })}
+              >
+                Share with other owners
+              </Item>
+            )
+          ) : null}
           {agent ? (
             <>
               <Item icon={<RotateCcw />} onClick={() => onAction({ kind: 'restart' })}>
@@ -168,16 +190,20 @@ function stop(e: SyntheticEvent): void {
 function Item({
   icon,
   destructive,
+  disabled,
+  title,
   onClick,
   children,
 }: {
   icon: ReactNode
   destructive?: boolean
+  disabled?: boolean
+  title?: string
   onClick: () => void
   children: ReactNode
 }) {
   return (
-    <MenuItem destructive={destructive} onClick={onClick} className="[&_svg]:size-3.5 [&_svg]:shrink-0">
+    <MenuItem destructive={destructive} disabled={disabled} title={title} onClick={onClick} className="[&_svg]:size-3.5 [&_svg]:shrink-0">
       <span className={cn('flex', destructive ? 'text-danger' : 'text-fg-3')}>{icon}</span>
       {children}
     </MenuItem>

@@ -1,4 +1,4 @@
-import type { PermissionMode, SessionInfo } from './index.ts'
+import type { GatewayAgentDefaults, PermissionMode, ProfileInfo, SessionInfo } from './index.ts'
 
 export type AgentRef = {
   id: string
@@ -45,6 +45,7 @@ export type RemoteMember = {
   expiresAt?: number
   unreachableSince?: number
   op?: string
+  invite?: string
 }
 
 export const SHARINGS = ['private', 'shared'] as const
@@ -223,4 +224,16 @@ export function projectAccent(key: string): string {
     hash = Math.imul(hash ^ key.charCodeAt(i), 0x01000193)
   }
   return PROJECT_ACCENTS[(hash >>> 0) % PROJECT_ACCENTS.length]!
+}
+
+// What the gateway will stamp on a new agent that asks for nothing: the profile's choice, then the gateway's.
+export function newAgentOwner(defaults: GatewayAgentDefaults | undefined, profile: ProfileInfo | undefined): string | undefined {
+  return profile?.owner ?? defaults?.owner
+}
+
+export function newAgentSharing(defaults: GatewayAgentDefaults | undefined, profile: ProfileInfo | undefined): Sharing {
+  if (defaults?.allowShared === false) {
+    return 'private'
+  }
+  return (profile?.defaults?.sharing ?? defaults?.sharing) === 'shared' ? 'shared' : 'private'
 }

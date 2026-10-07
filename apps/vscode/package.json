@@ -790,6 +790,24 @@
             "order": 15,
             "description": "Whether agents get the context_reset tool, which clears their own conversation between turns and continues from a prompt they wrote.",
             "markdownDescription": "Whether agents get the `context_reset` tool: an agent clears its own conversation once its turn ends and continues from a prompt it wrote, for long unattended work. Rate-limited by the server. Passed to the server as `--agent-context-reset`."
+          },
+          "workerdeck.host.agentSharing": {
+            "type": "string",
+            "enum": [
+              "private",
+              "shared",
+              "never"
+            ],
+            "enumDescriptions": [
+              "New agents are invisible to other owners unless their profile or the New Agent dialog shares them.",
+              "New agents are shared unless their profile or the New Agent dialog keeps them private.",
+              "No agent is shared, whatever its profile or request says; agents stored as shared stop being published."
+            ],
+            "default": "private",
+            "scope": "machine",
+            "order": 16,
+            "description": "What a new agent's sharing defaults to: whether agents of other owners on the relay see it and can message it.",
+            "markdownDescription": "What a new agent's sharing defaults to. A **shared** top-level agent shows as a card to other owners on the relay, and their shared agents can message it; members, shells and files never leave. Passed to the server as `--agent-sharing` when not `private`."
           }
         }
       },

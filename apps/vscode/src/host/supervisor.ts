@@ -429,6 +429,9 @@ export class HostSupervisor implements vscode.Disposable {
     if (settings.agentContextReset !== 'off') {
       args.push('--agent-context-reset', settings.agentContextReset)
     }
+    if (settings.agentSharing !== 'private') {
+      args.push('--agent-sharing', settings.agentSharing)
+    }
     return args
   }
 
