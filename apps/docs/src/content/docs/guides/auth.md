@@ -83,13 +83,10 @@ explicit `Origin` check, not `SameSite` alone, is what actually defends an attac
 cross-site page. And note that none of this establishes *identity*: a shared secret is a door key.
 Put an identity-aware proxy in front if you need to know who is on the other end.
 
-## Compliance status: under review
+## Compliance status: settled
 
-We are still working through greenlighting the compliance and legal posture of this project -
-with our own legal/compliance specialists and, where appropriate, explicit approval from
-Anthropic (whose Agent SDK docs provide for previously-approved exceptions). Until that
-concludes, treat the guidance above as our good-faith reading, not a settled position, and do
-your own diligence.
+The compliance and legal review of this project is settled. Which credentials your deployment
+uses, and whether that use fits your provider's terms, stays the operator's responsibility.
 
 ## Red lines for contributors
 

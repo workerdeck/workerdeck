@@ -266,9 +266,8 @@ claude.ai login or subscription rate limits in their products. Set `ANTHROPIC_AP
 your own single-user use (the equivalent of running the CLI yourself) is the one case where those
 may be appropriate; the server allows it with a one-time notice, and every session reports its
 provenance. Whether OpenAI's terms restrict headless ChatGPT-subscription codex use the same way
-is unresolved, and we take the same posture there. **The compliance and legal posture of this
-project is still under review** - with our own specialists and, where appropriate, the providers
-- so do your own diligence.
+is unresolved, and we take the same posture there. **The compliance and legal review of this
+project is settled**; your own deployment's use of credentials stays your responsibility.
 [Full discussion](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
 
 **Red lines for contributors** (PRs crossing these are rejected): no provider OAuth flows or login
