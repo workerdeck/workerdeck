@@ -301,6 +301,11 @@
         "category": "WorkerDeck Host"
       },
       {
+        "command": "workerdeck.host.copyAuthKey",
+        "title": "Copy Auth Key",
+        "category": "WorkerDeck Host"
+      },
+      {
         "command": "workerdeck.host.showLog",
         "title": "Show Server Log",
         "category": "WorkerDeck Host"

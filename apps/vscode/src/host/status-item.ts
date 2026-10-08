@@ -91,6 +91,7 @@ export async function hostActions(state: HostState): Promise<void> {
           { label: '$(debug-restart) Restart Server', command: 'workerdeck.host.restart' },
           ...(readHostSettings().hotReload ? [{ label: '$(sync) Hot-Reload Server', command: 'workerdeck.host.reload' }] : []),
           { label: '$(globe) Open Dashboard in Browser', description: state.url, command: 'workerdeck.host.openDashboard' },
+          { label: '$(key) Copy Auth Key', command: 'workerdeck.host.copyAuthKey' },
         ]
       : [{ label: '$(play) Start Server', command: 'workerdeck.host.start' }]),
     // The badge counts every gateway, not just this machine's, so its menu has to reach them.

@@ -199,6 +199,16 @@ export class HostSupervisor implements vscode.Disposable {
     await vscode.env.openExternal(vscode.Uri.parse(state.url))
   }
 
+  async copyAuthKey(): Promise<void> {
+    const key = await this.#context.secrets.get(AUTH_KEY_SECRET)
+    if (!key) {
+      void vscode.window.showInformationMessage('WorkerDeck: this server has no auth key.')
+      return
+    }
+    await vscode.env.clipboard.writeText(key)
+    void vscode.window.setStatusBarMessage('$(key) WorkerDeck: auth key copied', 2000)
+  }
+
   async showLog(): Promise<void> {
     await this.#log.follow(logPath(readHostSettings().stateDir))
     this.#log.show()
@@ -476,10 +486,7 @@ export class HostSupervisor implements vscode.Disposable {
       )
       .then(async (answer) => {
         if (answer === 'Copy Auth Key') {
-          const key = await this.#context.secrets.get(AUTH_KEY_SECRET)
-          if (key) {
-            await vscode.env.clipboard.writeText(key)
-          }
+          await this.copyAuthKey()
         }
       })
   }

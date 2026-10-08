@@ -47,6 +47,7 @@ export function hostCommands({ extensionId, supervisor, require }: HostCommandDe
     'workerdeck.host.restart': () => require()?.restart(),
     'workerdeck.host.reload': () => require()?.hotReload(),
     'workerdeck.host.openDashboard': () => require()?.openDashboard(),
+    'workerdeck.host.copyAuthKey': () => require()?.copyAuthKey(),
     'workerdeck.host.showLog': () => require()?.showLog(),
     'workerdeck.host.actions': () => hostActions(supervisor?.state ?? { kind: 'disabled' }),
     'workerdeck.openSettings': () => vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${extensionId}`),
