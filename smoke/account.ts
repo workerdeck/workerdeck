@@ -85,7 +85,7 @@ async function main(): Promise<void> {
     check(profile.account?.kind === 'setup-token', 'profile.account reported', JSON.stringify(profile.account))
     const file = join(configDir, ACCOUNT_FILE)
     check((statSync(file).mode & 0o777) === 0o600, 'token file is 0600')
-    check(/^sk-ant-oat01-/.test((JSON.parse(readFileSync(file, 'utf8')) as { token: string }).token), 'token file holds an oat01 token')
+    check((JSON.parse(readFileSync(file, 'utf8')) as { token: string }).token.startsWith('sk-ant-oat01-'), 'token file holds an oat01 token')
 
     step('one turn on the token, with a bogus ANTHROPIC_API_KEY in the gateway env')
     const created = await fetch(`http://127.0.0.1:${port}/v1/sessions`, {

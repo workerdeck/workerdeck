@@ -1510,6 +1510,23 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   got `false` and cancelled the job. **Verified**: full serial `pnpm test` with new queue and
   notifier tests; the Box's live bypass job with a denied question (with its workaround).
 
+  **3.9.0** - **profile accounts and addressed thinking, released 2026-10-08** (tag `v3.9.0`). A
+  **minor**, protocol stays **1** (`ProfileInfo.account`/`connectors`, `ThinkingBlock.addressed` and
+  the account request types are all optional or new). **Connect account**: the gateway runs the
+  official `claude setup-token` in a PTY, relays its link and the pasted code, and keeps the token
+  per profile (0600 file, `CLAUDE_CODE_OAUTH_TOKEN` at runner build); routes, `accounts.canConnect`,
+  the `@workerdeck/server/accounts` subpath, `AccountConnectDialog`, the web profile card and the VS
+  Code edit QuickPick. `requireApiKey` refuses it, because a token session reports `apiKeySource:
+  'none'`. The auth red lines were reworded to sanction exactly this broker (Tobias, 2026-10-08).
+  Also: **summarized thinking** requested so replies Opus files as thinking reach the transcript,
+  **addressed thinking** drawn as a reply (plain thinking folds to one line, show/hide in web, VS
+  Code and iOS), agent SDK 0.3.293 with Haiku 5.5, `modelMenu` pickers, peer envelopes stripped from
+  stored-session previews, and VS Code **Copy Auth Key** for the Host Mode server. **Verified**: full
+  serial `pnpm test`; paid `smoke:account` (real token, a turn on it beating a bogus
+  `ANTHROPIC_API_KEY`, disconnect); the VS Code connect flow on `default` and the thinking display
+  by hand (Tobias). **Not verified**: Linux PTY for setup-token, whether the CLI's Bash tool passes
+  the token on to commands.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
