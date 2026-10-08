@@ -297,7 +297,8 @@ async function adoptSession(ctx: ServerContext, agents: AgentService, res: Serve
     body.owner === undefined && info.owner !== undefined ? info.owner : settledOwner(ctx.owners.resolve(config.profile, body.owner))
   const crossOwner = body.crossOwner === true
   const sharing = sharingFor(ctx, config.profile, body.sharing)
-  const draft = agents.draft({ name: body.name ?? info.title, config, lead: body.lead, owner, sharing, crossOwner })
+  const name = body.name ?? (typeof info.title === 'string' && info.title.trim() !== '' ? agents.freeName(info.title.trim()) : undefined)
+  const draft = agents.draft({ name, config, lead: body.lead, owner, sharing, crossOwner })
   if (isAgentRefusal(draft)) {
     fail(draft.status, draft.error)
   }

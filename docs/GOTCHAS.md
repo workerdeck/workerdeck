@@ -1515,6 +1515,11 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   `peerReaches` matches a missing owner with nobody. Profile and enrollment edits never move an
   existing agent; `PATCH /agents/:id { owner }` does, and only outside teams (no lead, members,
   invitations or pending join).
+- **Agent names are unique per gateway, ignoring case** (`AgentService.nameRefusal`, 409 on
+  create, adopt and rename, re-checked inside the create transition). Names address agents in `#`
+  mentions and `peers_send`, so a twin was unreachable by name. Adopt without a name takes the
+  session title through `freeName` ("Title 2") instead of refusing. Records from before the rule
+  may still share a name; nothing renames them.
 - **One peer rule, local and remote: `peerOps`** (`protocol/agents.ts`; `peerReaches` is its
   `list`), answered per operation (list, send, peek). The team rule, and sessions of different
   owners reach each other only through a team (lead and member, or teammates), or as two

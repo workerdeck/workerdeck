@@ -352,6 +352,10 @@ export class AgentService {
     if (typeof name !== 'string') {
       return name
     }
+    const taken = this.nameRefusal(name)
+    if (taken) {
+      return taken
+    }
     const id = randomUUID()
     const at = this.#now()
     const agent: StoredAgent = {
@@ -390,6 +394,10 @@ export class AgentService {
       }
       if (agent.sessionId !== undefined && this.bySession(agent.sessionId)) {
         return { status: 409, error: 'that session already belongs to an agent' }
+      }
+      const taken = this.nameRefusal(agent.name)
+      if (taken) {
+        return taken
       }
       const next: StoredAgent = { ...agent }
       if (joined) {
@@ -618,6 +626,10 @@ export class AgentService {
         if (typeof name !== 'string') {
           return name
         }
+        const taken = this.nameRefusal(name, agent.id)
+        if (taken) {
+          return taken
+        }
         next.name = name
       }
       if (patch.owner !== undefined && patch.owner !== agent.owner) {
@@ -773,6 +785,26 @@ export class AgentService {
     }
     for (const agent of saves) {
       await this.#store.save(agent)
+    }
+  }
+
+  // Names address agents (`#` mentions, `peers_send`), so two on one gateway would make one unreachable by name.
+  nameRefusal(name: string, self?: string): AgentRefusal | null {
+    const wanted = name.toLowerCase()
+    const holder = [...this.#agents.values()].find((agent) => agent.id !== self && agent.name.toLowerCase() === wanted)
+    return holder ? { status: 409, error: `an agent named ${holder.name} already exists on this gateway` } : null
+  }
+
+  freeName(base: string): string {
+    const taken = new Set([...this.#agents.values()].map((agent) => agent.name.toLowerCase()))
+    if (!taken.has(base.toLowerCase())) {
+      return base
+    }
+    for (let n = 2; ; n++) {
+      const name = `${base.slice(0, MAX_NAME - String(n).length - 1)} ${n}`
+      if (!taken.has(name.toLowerCase())) {
+        return name
+      }
     }
   }
 

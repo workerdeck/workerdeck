@@ -129,6 +129,17 @@ describe('agents', () => {
     expect(first.body.agent.name).not.toBe(second.body.agent.name)
   })
 
+  it('refuses a second agent of the same name, also on rename, ignoring case', async () => {
+    const { base } = await startGateway()
+    const atlas = await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })
+    const twin = await call<{ error: string }>(base, '/agents', 'POST', { name: 'atlas', config: { cwd: '/tmp/project' } })
+    expect(twin.status).toBe(409)
+    expect(twin.body.error).toMatch(/named Atlas already exists/)
+    const quill = await call<AgentResponse>(base, '/agents', 'POST', { name: 'Quill', config: { cwd: '/tmp/project' } })
+    expect((await call(base, `/agents/${quill.body.agent.id}`, 'PATCH', { name: 'ATLAS' })).status).toBe(409)
+    expect((await call(base, `/agents/${atlas.body.agent.id}`, 'PATCH', { name: 'atlas' })).status).toBe(200)
+  })
+
   it('refuses a session request the create ladder refuses', async () => {
     const { base } = await startGateway()
     const res = await call<{ error: string }>(base, '/agents', 'POST', { config: { cwd: '/etc' } })
