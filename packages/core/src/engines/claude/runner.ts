@@ -547,6 +547,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       resume: c.resume,
       forkSession: c.forkSession,
       effort: this.#effortRequest as EffortLevel | undefined,
+      thinking: { type: 'adaptive', display: 'summarized' },
       includePartialMessages: c.includePartialMessages ?? true,
       forwardSubagentText: true,
       canUseTool: this.#canUseTool,

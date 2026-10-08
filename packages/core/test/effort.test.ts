@@ -111,6 +111,11 @@ describe('claude reasoning effort', () => {
     expect(engine.applyFlagSettings).not.toHaveBeenCalled()
   })
 
+  it('asks for summarized thinking, so a reply the model files as thinking still reaches the transcript', async () => {
+    const { engine } = await startClaude()
+    expect(engine.options[0]?.thinking).toEqual({ type: 'adaptive', display: 'summarized' })
+  })
+
   it('starts on the configured default for the requested model', async () => {
     const { runner, engine } = await startClaude({ model: 'opus', effortDefaults: { opus: 'high' } })
     expect(engine.options[0]?.effort).toBe('high')

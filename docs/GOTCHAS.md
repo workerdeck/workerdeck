@@ -11,6 +11,14 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
 - The SDK version floats (`^0.3.x`) and its unions grow; protocol mirrors must stay assignable
   both ways (SDK to protocol for events, protocol to SDK for options). Unmodeled SDK messages pass
   through as `sdk_event`: extend the protocol first-class, don't parse payloads client-side.
+- **The runner asks for `thinking: { type: 'adaptive', display: 'summarized' }`.** Without it the
+  SDK returns thinking blocks with empty text, and Opus 5.5 (and Fable 5.x) files a few percent of
+  its user-facing lines as a second thinking block instead of a text block: a reply to a mid-turn
+  message, a "two decisions from you" question. With empty thinking those lines vanish from every
+  client and from the CLI's own jsonl; the interactive CLI shows them only because it requests
+  summaries (`showThinkingSummaries`). Measured 2026-10-08 over local transcripts: Opus 5 0% of
+  ~40k steps, Opus 5.5 3 to 5% since its release, in the SDK and the CLI alike. Haiku 4.5
+  accepts the option too. `extraOptions.thinking` still overrides it.
 - `total_cost_usd`/`num_turns` on result messages are cumulative **for the engine process**, not for
   the session: roll up last-seen within one process, never sum. `usage` is per-turn: sum
   input+output+cache_creation+cache_read.
