@@ -1942,9 +1942,15 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   host's `accounts.canConnect(principal, profile)`. One attempt per profile: a new connect cancels
   the old one, an attempt dies after 10 minutes, a failed complete closes it, and `close()` (also on
   hot reload) kills every child.
-- **Unverified**: whether a token session reports `apiKeySource: 'oauth'` (if so `requireApiKey`
-  refuses it, which is the intended reading), whether the CLI's Bash tool passes
-  `CLAUDE_CODE_OAUTH_TOKEN` on to commands, and Linux PTY behaviour (the spike ran on macOS).
+- **A token session reports `apiKeySource: 'none'`** (paid `smoke:account`, 2026-10-08, CLI
+  2.1.293), not `'oauth'`, so neither `requireApiKey` nor the subscription notice sees it. That is
+  why `requireApiKey` is enforced here instead: connect answers 403 and `accountSessionEnv` never
+  injects a stored token (disconnect still works, to clear a leftover one). The same smoke proved
+  the token beats a bogus `ANTHROPIC_API_KEY` once that is dropped.
+- **The sign-in host moves**: the CLI printed `https://claude.com/cai/oauth/authorize?...` where the
+  spike saw `claude.ai`. Match on `/oauth/authorize?`, never on the host.
+- **Unverified**: whether the CLI's Bash tool passes `CLAUDE_CODE_OAUTH_TOKEN` on to commands, and
+  Linux PTY behaviour (both runs were on macOS).
 
 ## Host filesystem (`/v1/fs/*`)
 

@@ -362,6 +362,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
 
   const accounts = new AccountService({
     options: options.accounts,
+    requireApiKey: options.requireApiKey,
     profiles,
     baseEnvFor: factory.baseSessionEnvFor,
     onChange: (profile) => availability.probe(profile),

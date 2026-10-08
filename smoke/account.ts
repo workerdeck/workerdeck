@@ -63,7 +63,7 @@ async function main(): Promise<void> {
       return
     }
     const attempt = (await started.json()) as ConnectAccountResponse
-    check(attempt.authorizeUrl.startsWith('https://claude.ai/oauth/authorize?'), 'the real sign-in link came back')
+    check(/^https:\/\/[a-z.]*claude\.(ai|com)\/.*oauth\/authorize\?/.test(attempt.authorizeUrl), 'the real sign-in link came back')
     console.log(`\n  Open this link, sign in, and paste the code it shows:\n\n  ${attempt.authorizeUrl}\n`)
     const rl = createInterface({ input: process.stdin, output: process.stdout })
     const code = (await rl.question('  code> ')).trim()

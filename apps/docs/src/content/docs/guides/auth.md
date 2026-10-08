@@ -69,6 +69,8 @@ and reads the token the command prints when it succeeds.
   `connected`, `connectedAt` and `expiresAt`. A connected profile's sessions drop
   `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from the gateway environment, which would
   otherwise outrank the token.
+- **`requireApiKey` wins.** A session on a connected token reports `apiKeySource: 'none'`, so with
+  `requireApiKey: true` the gateway refuses to connect an account and never injects a stored one.
 - **Disconnect** deletes the file. It does not revoke the token; revoke it at claude.ai.
 - **Scope.** The token can only make model requests: no claude.ai connectors, no Remote Control.
   Configure MCP servers on the gateway or the profile instead. `connectors: false` on a profile

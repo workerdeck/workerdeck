@@ -31,7 +31,9 @@ function fixture() {
   return { root, configDir, envOut: join(root, 'env.json') }
 }
 
-async function serve(options: { canManage?: boolean; canConnect?: (principal: unknown, profile: ProfileInfo) => boolean } = {}) {
+async function serve(
+  options: { canManage?: boolean; canConnect?: (principal: unknown, profile: ProfileInfo) => boolean; requireApiKey?: boolean } = {},
+) {
   const { root: dir, configDir, envOut } = fixture()
   const harness = fakeHarness()
   const profile: ProfileInfo = { name: 'tobias', configDir }
@@ -41,6 +43,7 @@ async function serve(options: { canManage?: boolean; canConnect?: (principal: un
     allowedConfigDirRoots: [dir],
     profileStore: createMemoryProfileStore([profile]),
     checkCredentials: false,
+    requireApiKey: options.requireApiKey,
     buildRunnerConfig: (req) => ({
       ...req,
       queryFn: harness.queryFn,
@@ -77,6 +80,13 @@ describe('account session env', () => {
     expect(env).toEqual({ PATH: '/bin', CLAUDE_CODE_OAUTH_TOKEN: 'sk-ant-oat01-abc', ENABLE_CLAUDEAI_MCP_SERVERS: 'false' })
     expect(statSync(join(configDir, ACCOUNT_FILE)).mode & 0o777).toBe(0o600)
     expect(accountSessionEnv({ name: 'p', engine: 'codex', configDir }, base)).toBe(base)
+  })
+
+  it('never injects the token under requireApiKey, since a token session reports apiKeySource none', () => {
+    const { configDir } = fixture()
+    const base = { ANTHROPIC_API_KEY: 'k' }
+    writeAccount(configDir, 'sk-ant-oat01-abc')
+    expect(accountSessionEnv({ name: 'p', configDir }, base, { requireApiKey: true })).toBe(base)
   })
 })
 
@@ -129,6 +139,14 @@ describe.skipIf(!hasPty)('account connect routes', () => {
     expect(((await rejected.json()) as { error: string }).error).toContain('not accepted')
     const again = await post('/account/complete', { attemptId: attempt.attemptId, code: 'good#abc' })
     expect(again.status).toBe(409)
+  })
+
+  it('refuses to connect under requireApiKey but still disconnects', async () => {
+    const { base, post } = await serve({ requireApiKey: true })
+    const refused = await post('/account/connect')
+    expect(refused.status).toBe(403)
+    expect(((await refused.json()) as { error: string }).error).toContain('requireApiKey')
+    expect((await fetch(base + '/account', { method: 'DELETE' })).status).toBe(200)
   })
 
   it('refuses a principal that may not manage profiles unless canConnect says so', async () => {

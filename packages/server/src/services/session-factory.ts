@@ -235,7 +235,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
   }
 
-  const sessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => accountSessionEnv(profile, baseSessionEnvFor(profile))
+  const sessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => accountSessionEnv(profile, baseSessionEnvFor(profile), { requireApiKey: deps.requireApiKey })
 
   const buildRunner = async (
     built: SessionRunnerConfig,
@@ -266,7 +266,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     if (profile) {
       // Read on every build and never stored: `env` is transient, so a parked record cannot carry the token to disk.
       const env = config.env ?? process.env
-      const withAccount = accountSessionEnv(profile, env)
+      const withAccount = accountSessionEnv(profile, env, { requireApiKey: deps.requireApiKey })
       if (withAccount !== env) {
         config.env = withAccount
       }

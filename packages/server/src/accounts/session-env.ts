@@ -4,11 +4,16 @@ import { CREDENTIAL_ENV_KEYS } from './setup-token.ts'
 import { readAccountToken } from './token-store.ts'
 
 // A connected profile's token must win over the gateway's own key or auth token, which the CLI would otherwise prefer.
-export function accountSessionEnv(profile: ProfileInfo, env: Record<string, string | undefined>): Record<string, string | undefined> {
+// A token session reports `apiKeySource: 'none'`, so `requireApiKey` can only hold if the token is never injected.
+export function accountSessionEnv(
+  profile: ProfileInfo,
+  env: Record<string, string | undefined>,
+  options: { requireApiKey?: boolean } = {},
+): Record<string, string | undefined> {
   if (engineOf(profile) !== 'claude') {
     return env
   }
-  const token = profile.configDir ? readAccountToken(profile.configDir) : undefined
+  const token = profile.configDir && !options.requireApiKey ? readAccountToken(profile.configDir) : undefined
   if (token === undefined && profile.connectors !== false) {
     return env
   }

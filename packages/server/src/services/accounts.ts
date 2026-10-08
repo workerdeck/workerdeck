@@ -26,6 +26,7 @@ type Outcome<T> = ({ ok: true } & T) | ({ ok: false } & Refusal)
 
 export type AccountServiceDeps = {
   options: AccountOptions | undefined
+  requireApiKey?: boolean
   profiles: ProfileService
   // The profile's own session env without any account token, so the CLI signs in against the profile's config dir.
   baseEnvFor: (profile: ProfileInfo) => Record<string, string | undefined>
@@ -67,6 +68,9 @@ export class AccountService {
   }
 
   async connect(profile: ProfileInfo): Promise<Outcome<ConnectAccountResponse>> {
+    if (this.#deps.requireApiKey) {
+      return { ok: false, status: 403, error: 'this server requires API-key auth (requireApiKey), so a Claude account cannot be connected' }
+    }
     const pty = this.#deps.options?.pty ?? (await loadPty())
     if (!pty) {
       return { ok: false, status: 501, error: 'connecting an account needs the optional @lydell/node-pty dependency' }
