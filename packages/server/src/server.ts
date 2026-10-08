@@ -296,7 +296,11 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     peers && options.relay
       ? createRelayLink(options.relay, peers, relayLog, () => teamLinks, {
           multiOwner: () => owners.multi(),
-          retain: (owner) => owners.retain(owner),
+          retainStamped: () => {
+            for (const owner of [...registry.list().map((info) => info.owner), ...agents.owners()]) {
+              owners.retain(owner)
+            }
+          },
           online: () => relayOwnersSettled(),
           ownersChanged: () => relayOwnersSettled(),
         })

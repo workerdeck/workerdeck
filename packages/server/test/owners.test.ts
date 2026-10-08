@@ -490,7 +490,11 @@ describe('a gateway of one configured owner on a relay without owners', () => {
     expect(owners.multi()).toBe(false)
     const link = createRelayLink({ url, gateway: 'mini', key: 'k' }, peers, () => {}, undefined, {
       multiOwner: () => owners.multi(),
-      retain: (owner) => owners.retain(owner),
+      retainStamped: () => {
+        for (const info of registry.list()) {
+          owners.retain(info.owner)
+        }
+      },
     })
     cleanups.push(() => link.close())
     await until(() => snapshots.length > 0, 'a snapshot')

@@ -42,6 +42,7 @@ export class SessionParkManager {
   #storeOps = new Map<string, Promise<void>>()
   #watches = new Map<string, () => void>()
   #closed = false
+  #renaming: Promise<void> | undefined
 
   constructor(options: SessionParkOptions) {
     this.#options = options
@@ -217,31 +218,55 @@ export class SessionParkManager {
     })
   }
 
-  // Live sessions get the owner on their runner and on the config a park will store; stored records are rewritten.
+  // No wake overlaps a rename: one in flight could register a runner built from the old record after the rewrite.
   async renameOwner(from: string, to: string): Promise<number> {
-    let renamed = 0
+    while (this.#renaming) {
+      await this.#renaming
+    }
+    const run = this.#renameOwner(from, to)
+    const gate = run.then(
+      () => {},
+      () => {},
+    )
+    this.#renaming = gate
+    try {
+      return await run
+    } finally {
+      if (this.#renaming === gate) {
+        this.#renaming = undefined
+      }
+    }
+  }
+
+  async #renameOwner(from: string, to: string): Promise<number> {
+    await Promise.allSettled([...this.#resuming.values()])
+    const renamed = new Set<string>()
     for (const [id, config] of this.#configs) {
       if (config.owner === from) {
         this.#configs.set(id, { ...config, owner: to })
         this.#options.registry.get(id)?.setOwner?.(to)
-        renamed += 1
+        renamed.add(id)
       }
     }
+    // Live sessions included: their recovery record must not bring the old owner back after a restart.
     for (const listed of await this.#options.store.list()) {
-      renamed += await this.#queue(listed.id, async () => {
+      const rewritten = await this.#queue(listed.id, async () => {
         const record = await this.#options.store.get(listed.id)
-        if (!record || this.#configs.has(listed.id) || (record.config.owner !== from && record.info.owner !== from)) {
-          return 0
+        if (!record || (record.config.owner !== from && record.info.owner !== from)) {
+          return false
         }
         await this.#options.store.save({
           ...record,
           info: record.info.owner === from ? { ...record.info, owner: to } : record.info,
           config: record.config.owner === from ? { ...record.config, owner: to } : record.config,
         })
-        return 1
+        return true
       })
+      if (rewritten) {
+        renamed.add(listed.id)
+      }
     }
-    return renamed
+    return renamed.size
   }
 
   // Dormant records only: a parked one replays its own log on wake, whose last label would win over the record's.
@@ -451,6 +476,9 @@ export class SessionParkManager {
   }
 
   async #resume(id: string): Promise<Runner | undefined> {
+    while (this.#renaming) {
+      await this.#renaming
+    }
     const inFlight = this.#resuming.get(id)
     if (inFlight) {
       return inFlight

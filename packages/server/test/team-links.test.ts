@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { AgentInfo, AgentResponse, GatewayMeta } from '@workerdeck/protocol'
-import { enrollGateway, startRelay, type Relay } from '@workerdeck/relay'
+import { enrollGateway, setGatewayOwner, startRelay, type Relay } from '@workerdeck/relay'
 import type { TeamEdge, TeamResult, TeamStatusBody, TeamStatusEdge } from '@workerdeck/relay-client'
 import { createWorkerServer, type WorkerServer } from '../src/index.ts'
 import { createFileAgentStore, createMemoryAgentStore, type StoredAgent } from '../src/services/agent-store.ts'
@@ -228,6 +228,23 @@ describe('cross-gateway teams, same owner', () => {
     expect((await mac.call(`/agents/${lead.agent.id}`, 'DELETE', {})).status).toBe(200)
     await until(async () => (await agentOn(win, first.agent.id)).lead === undefined, 'the member is released')
     expect((await agentOn(win, first.agent.id)).remoteLead).toBeUndefined()
+  })
+
+  it('never stamps the relay placeholder, even after a snapshot, and stamps the first named owner once', async () => {
+    const { relay, stateDir } = await relayRig()
+    const mac = await gateway(relay, stateDir, 'mac')
+    const first = await newAgent(mac, 'Early')
+    await published(relay, 'mac', 1)
+    const second = await newAgent(mac, 'Later')
+    expect(second.agent.owner).toBeUndefined()
+
+    await setGatewayOwner(stateDir, 'mac', 'tobias')
+    await relay.reload()
+    await until(async () => (await agentOn(mac, first.agent.id)).owner === 'tobias', 'the first named owner stamped')
+    expect((await agentOn(mac, second.agent.id)).owner).toBe('tobias')
+    const third = await mac.call<AgentResponse>('/agents', 'POST', { name: 'After', config: { cwd: '/tmp' } })
+    expect(third.status).toBe(201)
+    expect(third.body.agent.owner).toBe('tobias')
   })
 
   it('names the relay identity in meta for the operator', async () => {

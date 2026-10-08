@@ -52,7 +52,8 @@ export type RelayLinkStatus = {
 // `multiOwner`: this gateway runs sessions of several owners, which a relay without `owners` cannot tell apart.
 export type RelayLinkHooks = {
   multiOwner?(): boolean
-  retain?(owner: string | undefined): void
+  // Counts the owners records carry as stamped; never the decorated entries, whose owner may be a read-time placeholder.
+  retainStamped?(): void
   online?(): void
   ownersChanged?(): void
 }
@@ -208,9 +209,7 @@ export function createRelayLink(
         return []
       }
       const entries = await peers.relayEntries(exposed, teamsAgreed())
-      for (const entry of entries) {
-        hooks.retain?.(entry.owner)
-      }
+      hooks.retainStamped?.()
       return ownersBlocked() ? [] : entries
     },
     peek: async (origin, sessionId, recent) =>
