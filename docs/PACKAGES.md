@@ -754,6 +754,13 @@ and the WS `sleep` command: 501 without `runner.sleep`, 409 with the runner's ow
 is one more `onRegister` watcher, so a hot reload's evict detaches it; `ws.ts` re-arms it on every
 socket close beside `parking.onDetach`. Rules in `docs/GOTCHAS.md` §Engine sleep.
 
+**Profile accounts** live in `src/accounts/` (also published as the `@workerdeck/server/accounts`
+subpath for a host that wants the driver without the routes: `startClaudeSetupToken`, the token
+file helpers, `accountSessionEnv`) and `services/accounts.ts` (`AccountService`: guard, one attempt
+per profile, connect/complete/disconnect). Routes hang off `routes/profiles.ts` as
+`/profiles/:name/account{,/connect,/complete}`; the `accounts` server option carries `canConnect`,
+`claudeExecutable` and a `pty` override. Rules in `docs/GOTCHAS.md` §Profile accounts.
+
 **Owners** resolve in `services/owners.ts` (`OwnerService`: profile `owner`, the `owner` server
 option, the relay's sole enrolled owner; `multi()` when more than one is configured). The result is
 stamped on the runner config (durable host-only key `owner`) and on the agent record; nothing

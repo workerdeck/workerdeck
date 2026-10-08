@@ -106,10 +106,14 @@ Full checklist and the release ledger in `docs/RELEASING.md`. The short form:
 
 ## Auth red lines (non-negotiable)
 
-WorkerDeck implements NO model-provider auth: credentials are resolved by the official SDK/CLI
-from the operator's environment. Never add - and reject any PR that adds - claude.ai OAuth flows
-or login UI, subscription-token extraction/storage/forwarding, Claude Code client-identity
-spoofing, or multi-account pooling / rate-limit circumvention. Policy enforcement lives in
+WorkerDeck implements NO model-provider OAuth of its own: credentials are resolved by the official
+SDK/CLI. Never add - and reject any PR that adds - hand-rolled OAuth/PKCE against a provider,
+refresh-token custody, hand-written CLI credential files, Claude Code client-identity spoofing,
+or multi-account pooling / rate-limit circumvention. **One sanctioned broker (2026-10-08):** on an
+explicit user action the gateway may run the official `claude setup-token` in a PTY, show its
+URL, pass the pasted code, and keep the printed token for that profile only (0600 file, injected
+as `CLAUDE_CODE_OAUTH_TOKEN`, never in a response or log). Detail and the rules in the auth guide
+and `docs/GOTCHAS.md` § Profile accounts. Policy enforcement lives in
 configuration (`requireApiKey`, the one-time 'oauth' notice, `apiKeySource` on
 SessionInfo/system_init), never in tampering with the credential chain. **The same principle
 binds the Codex engine**: `codex login` (or `codex login --with-api-key`) is the operator's job

@@ -255,8 +255,11 @@ MCP server. It is a working app, not a snippet: `pnpm --filter @workerdeck/embed
 
 **WorkerDeck performs no model-provider authentication of its own - by design.** It spawns the
 official SDK or CLI, which resolves whatever credentials the *operator's* environment provides.
-It never implements a provider's OAuth flow, never reads, stores or proxies tokens, and never
-touches a credential store. `codex login` is likewise your job, in your own terminal.
+It never implements a provider's OAuth flow and never touches a CLI's credential store. The one
+broker it offers is opt-in and runs the official CLI: **Connect account** on a Claude profile runs
+`claude setup-token` for you, shows its sign-in link, passes back the code you paste, and keeps the
+long-lived token it prints for that profile only (a 0600 file, never in an API response or a log).
+`codex login` stays your job, in your own terminal.
 
 Our good-faith reading, not legal advice: **an API key (or Bedrock/Vertex) is the supported path**
 for anything that is a service - unattended runs, multi-user deployments, anything you expose to
@@ -265,15 +268,16 @@ claude.ai login or subscription rate limits in their products. Set `ANTHROPIC_AP
 `requireApiKey: true` to **fail closed** on subscription credentials. Your own subscription for
 your own single-user use (the equivalent of running the CLI yourself) is the one case where those
 may be appropriate; the server allows it with a one-time notice, and every session reports its
-provenance. Whether OpenAI's terms restrict headless ChatGPT-subscription codex use the same way
+provenance. A connected account is that same case: one person's own subscription on their own
+profile, never shared. Whether OpenAI's terms restrict headless ChatGPT-subscription codex use the same way
 is unresolved, and we take the same posture there. **The compliance and legal review of this
 project is settled**; your own deployment's use of credentials stays your responsibility.
 [Full discussion](https://workerdeck.github.io/workerdeck/docs/guides/auth/).
 
-**Red lines for contributors** (PRs crossing these are rejected): no provider OAuth flows or login
-UI, no extraction/storage/forwarding of subscription tokens, no spoofing of an official client's
-identity, no multi-account pooling or rate-limit circumvention. The auth layer stays 100%
-provider-owned code.
+**Red lines for contributors** (PRs crossing these are rejected): no hand-rolled provider OAuth
+or PKCE, no refresh-token custody, no hand-written CLI credential files, no extraction of tokens
+from a CLI's credential store, no spoofing of an official client's identity, no multi-account
+pooling or rate-limit circumvention. The OAuth itself stays 100% provider-owned code.
 
 ## Honest constraints
 

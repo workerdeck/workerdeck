@@ -51,6 +51,7 @@ export function ProfileList({
                 // row says so rather than offering buttons that answer 403.
                 profile.managed ? undefined : 'declared',
                 profile.available === false ? (profile.unavailableReason ?? 'unavailable') : undefined,
+                profile.accountExpiresAt ? 'account connected' : undefined,
                 profile.description ?? profile.configDir,
               ]
                 .filter(Boolean)

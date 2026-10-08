@@ -225,8 +225,10 @@ official CLI reads, via its own `CLAUDE_CONFIG_DIR` mechanism. Two consequences:
   needs credentials of its own. On macOS the CLI also keeps a Keychain copy per pinned
   directory, which a gateway running as a launchd agent reads, while ssh and cron read the file;
   using one directory from both stales the other copy, so give a service its own token
-  (below) or keep each directory to one of them. To set one up: run `CLAUDE_CONFIG_DIR=<dir> claude auth login` there, or
-  inject a long-lived `CLAUDE_CODE_OAUTH_TOKEN` via `buildRunnerConfig`. The server's
+  (below) or keep each directory to one of them. To set one up: run `CLAUDE_CONFIG_DIR=<dir> claude auth login` there,
+  use **Connect account** on a managed profile (the gateway runs `claude setup-token` for you; see
+  [Auth](/workerdeck/docs/guides/auth/#connect-a-claude-account-to-a-profile)), or inject a long-lived
+  `CLAUDE_CODE_OAUTH_TOKEN` via `buildRunnerConfig`. The server's
   `checkCredentials` option (on by default in the `workerdeck` CLI) probes each profile
   with `claude auth status` at startup and warns - never fails - when a profile looks
   logged out. Only the logged-in/logged-out verdict is read; no credential or account

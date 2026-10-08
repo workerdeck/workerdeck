@@ -3,6 +3,7 @@ import type { EngineAdapter, PeerDirectory } from '@workerdeck/core'
 import type { JobQueue } from '@workerdeck/queue'
 import type { PricingOverrides, ProfileEngine } from '@workerdeck/protocol'
 import type { SdkSessionLister, WorkerServerOptions } from './options.ts'
+import type { AccountService } from './services/accounts.ts'
 import type { AgentService } from './services/agents.ts'
 import type { RelayLinkStatus } from './services/peer-relay.ts'
 import type { TeamLinks } from './services/team-links.ts'
@@ -29,6 +30,7 @@ export type ServerContext = {
   listSdkSessions?: SdkSessionLister
 
   profiles: ProfileService
+  accounts: AccountService
   availability: AvailabilityTracker
   auth: AuthService
   factory: SessionFactory

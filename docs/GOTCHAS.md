@@ -1905,6 +1905,47 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   the stored job record, and the four policies a smuggled key used to defeat) and
   `queue/test/queue.test.ts`.
 
+## Profile accounts (`claude setup-token` broker, `ProfileInfo.account`)
+
+- **The CLI does the OAuth, we only relay.** `server/src/accounts/setup-token.ts` runs the official
+  `claude setup-token` under `@lydell/node-pty` (optional dep: absent, connect answers 501), shows
+  the URL it prints and writes back the pasted code. Never call Anthropic's authorize or token
+  endpoints ourselves, never present Claude Code's client id from our code, never write a
+  `.credentials.json`: those stay auth red lines.
+- **Parse the screen, not lines.** The CLI draws with cursor moves, so stripped of ANSI it loses
+  its spaces ("Pastecodehere"). `screenText` turns cursor moves into a space, the URL comes from a
+  regex (wide `cols: 400` so it never wraps) and the prompt from a whitespace-insensitive match.
+  The URL is ready only once the paste prompt is drawn.
+- **The code and its Enter must be two writes**, ~800 ms apart. In one write the CLI takes the pair
+  as a paste and the Enter never submits (the spike hung 37 s). The fake CLI in
+  `server/test/fixtures/fake-setup-token.mjs` models exactly that, so a regression fails the suite.
+- **Success exits 0 on its own**, ~2 s after Enter, with `sk-ant-oat01-...` (108 chars) on screen;
+  the driver takes the token at exit, or 1.5 s after first seeing it. A wrong code prints
+  `OAuth error ... Press Enter to retry.` and stays alive: we kill it and the user starts over.
+  Nothing is written to the credential store; the CLI does write `.claude.json` and `backups/`
+  into `CLAUDE_CONFIG_DIR` before sign-in.
+- **The raw PTY stream is never logged** and errors carry fixed strings only. The token lives in
+  `<configDir>/workerdeck-account.json` (0600, atomic write), never in `profiles.json`, a response,
+  an event or `session_info`; `ProfileInfo.account` is `{ kind, connectedAt, expiresAt }` read from
+  that file per response. `saveManaged` drops a client-sent `account`.
+- **Injection is in `buildRunner`, not `buildRunnerConfig`**: read afresh on every build, so a
+  reconnect reaches the next session and a woken one, and `env` is a transient host-only key, so a
+  parked record never carries the token to disk. A connected profile's session env drops
+  `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` (both outrank `CLAUDE_CODE_OAUTH_TOKEN` in the CLI
+  chain). `sessionEnvFor` adds it too, so the credential probe sees the token; the setup-token child
+  gets `baseSessionEnvFor` (no token, all three keys stripped, `BROWSER=true` so a server never
+  opens a browser).
+- **Scope**: the token is `user:inference` only. No claude.ai connectors, no Remote Control.
+  `ProfileInfo.connectors: false` sets `ENABLE_CLAUDEAI_MCP_SERVERS=false` for any login; the
+  inverse gotcha is that variable inherited from an operator's env silently disables them today.
+- **Guard order**: Claude engine, declared (403), `configDirGuard`, then `canManageProfiles` or the
+  host's `accounts.canConnect(principal, profile)`. One attempt per profile: a new connect cancels
+  the old one, an attempt dies after 10 minutes, a failed complete closes it, and `close()` (also on
+  hot reload) kills every child.
+- **Unverified**: whether a token session reports `apiKeySource: 'oauth'` (if so `requireApiKey`
+  refuses it, which is the intended reading), whether the CLI's Bash tool passes
+  `CLAUDE_CODE_OAUTH_TOKEN` on to commands, and Linux PTY behaviour (the spike ran on macOS).
+
 ## Host filesystem (`/v1/fs/*`)
 
 - **`cwdAllowed` is not the containment check for these routes.** It resolves `..` and compares

@@ -14,6 +14,11 @@
       "@workerdeck/source": "./src/index.ts",
       "types": "./build/index.d.mts",
       "default": "./build/index.mjs"
+    },
+    "./accounts": {
+      "@workerdeck/source": "./src/accounts/index.ts",
+      "types": "./build/accounts/index.d.mts",
+      "default": "./build/accounts/index.mjs"
     }
   },
   "scripts": {

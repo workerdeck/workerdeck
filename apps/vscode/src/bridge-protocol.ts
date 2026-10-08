@@ -27,6 +27,7 @@ export type WireProfile = {
   unavailableReason?: string
   defaultModel?: string
   defaultPermissionMode?: string
+  accountExpiresAt?: string
 }
 
 export type { ScopeRoot, WorkspaceScope }

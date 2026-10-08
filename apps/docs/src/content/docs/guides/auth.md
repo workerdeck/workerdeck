@@ -7,11 +7,11 @@ order: 8
 **WorkerDeck performs no Anthropic authentication of its own - by design.** It spawns the
 official Agent SDK, which spawns the official Claude Code CLI, which resolves whatever
 credentials the *operator's* environment provides: `ANTHROPIC_API_KEY`, Bedrock/Vertex platform
-auth, or the operator's own stored `claude login`. WorkerDeck never implements claude.ai
-OAuth, never reads, stores, or proxies tokens, and never touches `~/.claude` credentials. Which
-credentials your deployment uses - and whether that use complies with
-[Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) - is the operator's
-responsibility.
+auth, the operator's own stored `claude login`, or a profile's
+[connected account](#connect-a-claude-account-to-a-profile). WorkerDeck never implements claude.ai
+OAuth itself and never reads `~/.claude` credentials. Which credentials your deployment uses - and
+whether that use complies with [Anthropic's terms](https://www.anthropic.com/legal/consumer-terms) -
+is the operator's responsibility.
 
 ## Where we understand the lines to be
 
@@ -55,6 +55,40 @@ may run under anyone's account is multi-account pooling - exactly the red line b
 each person running under their own profile is just each person using their own account. The
 subscription notice logs per profile, and `apiKeySource` shows what each session actually used.
 
+## Connect a Claude account to a profile
+
+A managed Claude profile can carry its own long-lived token, so a person can sign their own
+profile in from the dashboard, VS Code or an embedding app without a terminal on the gateway
+host. **WorkerDeck does not do the OAuth**: it runs the official `claude setup-token` under a
+pseudo-terminal, shows you the sign-in link that command prints, passes back the code you paste,
+and reads the token the command prints when it succeeds.
+
+- **Custody.** The token is valid for a year and is stored only for that profile: a `0600` file
+  in the profile's config dir, injected into that profile's sessions as `CLAUDE_CODE_OAUTH_TOKEN`.
+  It never appears in an API response, an event, `session_info` or a log; clients see only
+  `connected`, `connectedAt` and `expiresAt`. A connected profile's sessions drop
+  `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from the gateway environment, which would
+  otherwise outrank the token.
+- **Disconnect** deletes the file. It does not revoke the token; revoke it at claude.ai.
+- **Scope.** The token can only make model requests: no claude.ai connectors, no Remote Control.
+  Configure MCP servers on the gateway or the profile instead. `connectors: false` on a profile
+  turns claude.ai connectors off explicitly for any login (`ENABLE_CLAUDEAI_MCP_SERVERS=false`).
+- **Who may connect.** `canManageProfiles` principals by default; an embedder can widen that per
+  profile with `accounts.canConnect(principal, profile)` (for example "the profile's own user").
+  Declared profiles cannot be connected: their credentials are configuration.
+- **Terms.** Anthropic documents the token for "CI pipelines, scripts, or other environments where
+  interactive browser login isn't available"
+  ([authentication](https://code.claude.com/docs/en/authentication)), and the
+  [Agent SDK overview](https://docs.claude.com/en/docs/agent-sdk/overview) says third-party
+  developers may not offer claude.ai login unless approved. Our reading: a self-hosted harness on
+  one person's own subscription is in scope, the same case as running the CLI yourself. That is
+  our reading, not legal advice; the call is the operator's. One token per person, never shared.
+
+The routes are `POST /profiles/:name/account/connect` (answers `{ attemptId, authorizeUrl }`),
+`POST /profiles/:name/account/complete` with `{ attemptId, code }`, and
+`DELETE /profiles/:name/account`; `@workerdeck/client` wraps them and `@workerdeck/ui` ships the
+dialog. One attempt per profile at a time; an attempt expires after ten minutes.
+
 ## Gateway auth is a separate thing entirely
 
 Everything above is about *Anthropic* credentials. Guarding the gateway itself - deciding who may
@@ -92,12 +126,13 @@ uses, and whether that use fits your provider's terms, stays the operator's resp
 
 PRs crossing these will be rejected:
 
-- no claude.ai OAuth flows or login UI,
-- no extraction/storage/forwarding of subscription tokens,
+- no hand-rolled claude.ai OAuth or PKCE (the one broker runs the official `claude setup-token`),
+- no refresh-token custody, no hand-written CLI credential files, no reading a CLI's credential
+  store,
 - no spoofing of Claude Code's client identity,
-- no multi-account pooling or rate-limit circumvention of any kind.
+- no multi-account pooling, token sharing across people, or rate-limit circumvention of any kind.
 
-The auth layer stays 100% Anthropic-owned code. Policy enforcement lives in configuration
+The OAuth stays 100% Anthropic-owned code. Policy enforcement lives in configuration
 (`requireApiKey`, the one-time notice, `apiKeySource` visibility), never in tampering with the
 credential chain.
 

@@ -1,6 +1,8 @@
 import type {
   AgentInfo,
   AgentResponse,
+  CompleteAccountRequest,
+  ConnectAccountResponse,
   CreateAgentRequest,
   RetireAgentRequest,
   UpdateAgentRequest,
@@ -257,6 +259,23 @@ export class WorkerDeckClient {
 
   async deleteProfile(name: string): Promise<void> {
     await this.#call('DELETE', `/profiles/${encodeURIComponent(name)}`)
+  }
+
+  async connectAccount(profile: string): Promise<ConnectAccountResponse> {
+    return await this.#call('POST', `/profiles/${encodeURIComponent(profile)}/account/connect`)
+  }
+
+  async completeAccount(profile: string, request: CompleteAccountRequest): Promise<ProfileInfo> {
+    return await this.#pick<SaveProfileResponse['profile']>(
+      'POST',
+      `/profiles/${encodeURIComponent(profile)}/account/complete`,
+      'profile',
+      request,
+    )
+  }
+
+  async disconnectAccount(profile: string): Promise<ProfileInfo> {
+    return await this.#pick<SaveProfileResponse['profile']>('DELETE', `/profiles/${encodeURIComponent(profile)}/account`, 'profile')
   }
 
   async listSdkSessions(params?: { dir?: string; limit?: number; offset?: number; profile?: string }): Promise<SdkSessionSummary[]> {

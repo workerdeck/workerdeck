@@ -186,6 +186,7 @@ export {
   type AgentHeadingProps,
 } from './components/agent/AgentAvatar.tsx'
 export { AvatarDialog, type AvatarDialogAgent, type AvatarDialogProps } from './components/agent/AvatarDialog.tsx'
+export { AccountConnectDialog, type AccountConnectDialogProps } from './components/agent/AccountConnectDialog.tsx'
 export { SessionStatusIcon } from './components/agent/SessionStatusIcon.tsx'
 export { EngineIcon, engineMark, vendorMarkClass, vendorTextClass } from './components/agent/EngineIcon.tsx'
 export {

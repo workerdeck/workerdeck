@@ -39,6 +39,7 @@ import { SessionNotifier } from './services/notifications.ts'
 import { SessionParkManager } from './services/parking.ts'
 import { ProducedFileStore } from './services/produced-files.ts'
 import { ProfileService, isEffortMap } from './services/profiles.ts'
+import { AccountService } from './services/accounts.ts'
 import { ProfileUsageTracker } from './services/profile-usage.ts'
 import { SpendLedger } from './services/spend-ledger.ts'
 import { createRelayLink } from './services/peer-relay.ts'
@@ -115,6 +116,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         return profileUsage.usage(name)
       },
       spend: (name) => spendLedger.spend(name),
+      account: (profile) => accounts.status(profile),
     },
   })
   for (const p of options.profiles ?? []) {
@@ -358,6 +360,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     onError: (error) => diagnose(error, 'availability-probe'),
   })
 
+  const accounts = new AccountService({
+    options: options.accounts,
+    profiles,
+    baseEnvFor: factory.baseSessionEnvFor,
+    onChange: (profile) => availability.probe(profile),
+  })
+
   const auth = createAuthService({ options, registry })
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES })
@@ -389,6 +398,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     adapterFor,
     listSdkSessions: options.listSdkSessions,
     profiles,
+    accounts,
     availability,
     auth,
     factory,
@@ -462,6 +472,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     diagnose,
     releaseDirectories: () => {
       teamLinks?.stop()
+      accounts.close()
       const agentWrites = agents.close()
       relay?.close()
       ownPeers = undefined

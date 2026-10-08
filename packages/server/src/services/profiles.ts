@@ -20,6 +20,7 @@ export type ProfileServiceOptions = {
     availability: (name: string) => EngineAvailability | undefined
     usage: (name: string) => ProfileInfo['usage'] | undefined
     spend?: (name: string) => ProfileInfo['spend'] | undefined
+    account?: (profile: ProfileInfo) => ProfileInfo['account'] | undefined
   }
 }
 
@@ -59,6 +60,9 @@ export class ProfileService {
     }
     if (p.owner !== undefined && !isOwnerName(p.owner)) {
       return `profile '${p.name}' owner must be 1 to 32 lowercase letters, digits or dashes`
+    }
+    if (p.connectors !== undefined && typeof p.connectors !== 'boolean') {
+      return `profile '${p.name}' connectors must be a boolean`
     }
     if (p.defaults?.sharing !== undefined && !isSharing(p.defaults.sharing)) {
       return `profile '${p.name}' defaults.sharing must be 'private' or 'shared'`
@@ -137,6 +141,10 @@ export class ProfileService {
     if (spend) {
       base.spend = spend
     }
+    const account = decorate.account?.(p)
+    if (account) {
+      base.account = account
+    }
     return base
   }
 
@@ -193,7 +201,7 @@ export class ProfileService {
   }
 
   async saveManaged(incoming: ProfileInfo): Promise<{ ok: true; profile: ProfileInfo } | ({ ok: false } & Refusal)> {
-    const { managed: _clientClaim, ...profile } = incoming
+    const { managed: _clientClaim, account: _derived, ...profile } = incoming
     const refused = this.configDirGuard(profile)
     if (refused) {
       return { ok: false, ...refused }

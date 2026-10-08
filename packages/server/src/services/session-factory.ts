@@ -22,6 +22,7 @@ import type { Refusal } from '../lib/http.ts'
 import { bypassDisabled, refusePermissionMode, type BypassOption } from '../lib/permissions.ts'
 import { checkScope, sameScope } from '../lib/scope.ts'
 import { cwdAllowed, engineOf, isProviderProfile } from '../lib/profile-env.ts'
+import { accountSessionEnv } from '../accounts/session-env.ts'
 import type { EngineRunnerContext, ShellAgentWriteOption } from '../options.ts'
 import type { BridgeHub } from './bridge.ts'
 import type { SessionParkManager } from './parking.ts'
@@ -226,13 +227,15 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     return env === base ? config : { ...config, env }
   }
 
-  const sessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => {
+  const baseSessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => {
     try {
       return buildRunnerConfig({ cwd: process.cwd(), profile: profile.name }).env ?? process.env
     } catch {
       return adapterFor(profile.engine).sessionEnv?.(profile, process.env) ?? process.env
     }
   }
+
+  const sessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => accountSessionEnv(profile, baseSessionEnvFor(profile))
 
   const buildRunner = async (
     built: SessionRunnerConfig,
@@ -260,6 +263,14 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     delete config.shells
     delete config.shellAgentWrite
     delete config.effortDefaults
+    if (profile) {
+      // Read on every build and never stored: `env` is transient, so a parked record cannot carry the token to disk.
+      const env = config.env ?? process.env
+      const withAccount = accountSessionEnv(profile, env)
+      if (withAccount !== env) {
+        config.env = withAccount
+      }
+    }
     const efforts = { ...deps.effortDefaults, ...profile?.defaults?.efforts }
     if (Object.keys(efforts).length > 0) {
       config.effortDefaults = efforts
@@ -379,6 +390,7 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     applyScope,
     checkCwd,
     buildRunnerConfig,
+    baseSessionEnvFor,
     sessionEnvFor,
     buildRunner,
     createRunner,

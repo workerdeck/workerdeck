@@ -134,6 +134,16 @@ async function edit(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeck
     ...(modes.length > 0
       ? [{ label: '$(shield) Default permission mode', description: profile.defaults?.permissionMode, action: 'mode' as const }]
       : []),
+    ...((profile.engine ?? 'claude') === 'claude'
+      ? [
+          {
+            label: profile.account ? '$(key) Reconnect Claude account' : '$(key) Connect Claude account',
+            description: profile.account ? accountLabel(profile.account) : undefined,
+            action: 'connect' as const,
+          },
+        ]
+      : []),
+    ...(profile.account ? [{ label: '$(debug-disconnect) Disconnect Claude account', action: 'disconnect' as const }] : []),
     { label: '$(trash) Delete profile', action: 'delete' as const },
   ]
   const picked = await showPick(actions, { title: `${profile.name} - ${host.name}`, placeHolder: unavailable(profile) })
@@ -142,6 +152,14 @@ async function edit(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeck
   }
   if (picked.action === 'delete') {
     await confirmDelete(deps, host, client, profile)
+    return
+  }
+  if (picked.action === 'connect') {
+    await connectAccount(deps, host, client, profile)
+    return
+  }
+  if (picked.action === 'disconnect') {
+    await confirmDisconnect(deps, host, client, profile)
     return
   }
   if (picked.action === 'description') {
@@ -210,6 +228,70 @@ async function confirmDelete(deps: ProfileFlowDeps, host: GatewayHost, client: W
   if (confirmed === 'Delete') {
     await apply(deps, host, () => client.deleteProfile(profile.name), `deleted ${profile.name}`)
   }
+}
+
+// The gateway runs the official `claude setup-token`; this side only opens its link and hands back the pasted code.
+async function connectAccount(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+  let attempt: Awaited<ReturnType<WorkerDeckClient['connectAccount']>>
+  try {
+    attempt = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `WorkerDeck: starting claude setup-token on ${host.name}` },
+      () => client.connectAccount(profile.name),
+    )
+  } catch (err) {
+    void vscode.window.showErrorMessage(`WorkerDeck: ${describe(err)}`)
+    return
+  }
+  const open = await vscode.window.showInformationMessage(
+    `Sign in to the Claude account for "${profile.name}"`,
+    {
+      modal: true,
+      detail:
+        'The sign-in page opens in your browser. Sign in with the account this profile belongs to, then copy the code it shows. ' +
+        'The resulting token is kept for this profile only, on the gateway.',
+    },
+    'Open sign-in page',
+  )
+  if (open !== 'Open sign-in page') {
+    return
+  }
+  await vscode.env.openExternal(vscode.Uri.parse(attempt.authorizeUrl, true))
+  const code = await showInput({
+    title: `${profile.name} - Claude sign-in code`,
+    prompt: 'Paste the code the sign-in page showed.',
+    password: true,
+    step: 1,
+    totalSteps: 1,
+    validate: (value) => (value.trim() === '' ? 'Paste the code first.' : undefined),
+  })
+  if (code === CANCEL || code === BACK) {
+    return
+  }
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `WorkerDeck: connecting ${profile.name}` },
+    () =>
+      apply(
+        deps,
+        host,
+        () => client.completeAccount(profile.name, { attemptId: attempt.attemptId, code: code.trim() }),
+        `connected ${profile.name}`,
+      ),
+  )
+}
+
+async function confirmDisconnect(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+  const confirmed = await vscode.window.showWarningMessage(
+    `Disconnect the Claude account from "${profile.name}"?`,
+    { modal: true, detail: 'The token is deleted from the gateway but stays valid until you revoke it at claude.ai.' },
+    'Disconnect',
+  )
+  if (confirmed === 'Disconnect') {
+    await apply(deps, host, () => client.disconnectAccount(profile.name), `disconnected ${profile.name}`)
+  }
+}
+
+function accountLabel(account: NonNullable<ProfileInfo['account']>): string {
+  return `connected, expires ${new Date(account.expiresAt).toLocaleDateString()}`
 }
 
 // A profile declared in the server's own config is deliberately immutable over the API: the operator's

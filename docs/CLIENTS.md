@@ -278,6 +278,12 @@ answers for itself if the directory is not there. And every write reports the ga
 credential probe back (`available` / `unavailableReason`), because "does the directory I just
 named have a login in it?" is the only question creating a profile really raises.
 
+A Claude profile's edit QuickPick also carries **Connect / Reconnect Claude account** and, when
+connected, **Disconnect**. Connect is native too: the gateway starts `claude setup-token`, a modal
+explains the step, `openExternal` opens the sign-in page, and a password input box takes the code.
+The row says `account connected`; the web draws the same through `@workerdeck/ui`'s
+`AccountConnectDialog` on the profile page.
+
 Host Mode runs the server **where the workspace is**, which `extensionKind` alone cannot express:
 a local window reports `UI` (having no remote host to be `Workspace` relative to), so the
 supervisor is refused only for the one host that really is the wrong machine - a UI-side copy

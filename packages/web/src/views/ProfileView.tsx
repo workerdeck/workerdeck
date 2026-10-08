@@ -6,9 +6,10 @@ import { useHosts } from '@/lib/hosts.ts'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { errorMessage, orderUsageWindows } from '@workerdeck/protocol'
 import { useAsync } from '@workerdeck/react'
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner, UsageMeters, toast } from '@workerdeck/ui'
-import { Code, Trash2 } from 'lucide-react'
-import { useMemo } from 'react'
+import { AccountConnectDialog, Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner, UsageMeters, toast } from '@workerdeck/ui'
+import type { ProfileAccount } from '@workerdeck/protocol'
+import { Code, KeyRound, Trash2, Unplug } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { openInVsCode } from './ProfilesView.tsx'
 
 function Chips({ items, empty }: { items: string[]; empty: string }) {
@@ -26,6 +27,22 @@ function Chips({ items, empty }: { items: string[]; empty: string }) {
   )
 }
 
+const EXPIRY_WARNING_MS = 30 * 24 * 60 * 60 * 1000
+
+function AccountRow({ account }: { account: ProfileAccount | undefined }) {
+  if (!account) {
+    return <span className="text-fg-4">not connected - the config dir&apos;s own login or the gateway environment</span>
+  }
+  const expires = new Date(account.expiresAt)
+  const soon = expires.getTime() - Date.now() < EXPIRY_WARNING_MS
+  return (
+    <span className={soon ? 'text-warning' : undefined}>
+      connected {new Date(account.connectedAt).toLocaleDateString()}, {soon ? 'expires soon: ' : 'expires '}
+      {expires.toLocaleDateString()}
+    </span>
+  )
+}
+
 export function ProfileView() {
   const { profileName } = useParams({ from: '/profiles/$profileName' })
   const navigate = useNavigate()
@@ -39,6 +56,17 @@ export function ProfileView() {
   const profile = detail?.profile
   const config = detail?.config
   const usageWindows = useMemo(() => orderUsageWindows(profile?.usage), [profile?.usage])
+  const [connecting, setConnecting] = useState(false)
+
+  const disconnect = async () => {
+    try {
+      const saved = await client()!.disconnectAccount(profileName)
+      loaded.setData({ ...detail!, profile: saved })
+      toast.success('Account disconnected. Revoke the token at claude.ai if you no longer need it.')
+    } catch (e) {
+      toast.error(errorMessage(e, 'Disconnect failed'))
+    }
+  }
 
   const remove = async () => {
     try {
@@ -157,6 +185,31 @@ export function ProfileView() {
               </Card>
             ) : null}
 
+            {(profile.engine ?? 'claude') === 'claude' && profile.managed ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Claude account</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <DetailRow label="Account">
+                    <AccountRow account={profile.account} />
+                  </DetailRow>
+                  <div className="flex justify-end gap-2">
+                    {profile.account ? (
+                      <Button variant="outline" size="xs" onClick={() => void disconnect()}>
+                        <Unplug className="size-3" />
+                        Disconnect
+                      </Button>
+                    ) : null}
+                    <Button variant="outline" size="xs" onClick={() => setConnecting(true)}>
+                      <KeyRound className="size-3" />
+                      {profile.account ? 'Reconnect' : 'Connect account'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
             {profile.engine === 'provider' ? null : (
               <Card>
                 <CardHeader>
@@ -221,6 +274,15 @@ export function ProfileView() {
           </>
         ) : null}
       </DetailBody>
+      <AccountConnectDialog
+        client={client()}
+        profile={connecting ? profileName : undefined}
+        onClose={() => setConnecting(false)}
+        onConnected={(saved) => {
+          loaded.setData({ ...detail!, profile: saved })
+          toast.success(`Account connected to '${profileName}'`)
+        }}
+      />
     </div>
   )
 }

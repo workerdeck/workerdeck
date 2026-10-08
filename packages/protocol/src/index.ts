@@ -648,6 +648,14 @@ export type ProfileInfo = {
   usage?: ProfileUsage
   spend?: ProfileSpend
   managed?: boolean
+  account?: ProfileAccount
+  connectors?: boolean
+}
+
+export type ProfileAccount = {
+  kind: 'setup-token'
+  connectedAt: string
+  expiresAt: string
 }
 
 export type ProfileConfigSnapshot = {
@@ -1160,6 +1168,8 @@ export type WriteHostFileResponse = {
 }
 
 export type SaveProfileResponse = { profile: ProfileInfo }
+export type ConnectAccountResponse = { attemptId: string; authorizeUrl: string; expiresAt: string }
+export type CompleteAccountRequest = { attemptId: string; code: string }
 export type GetProfileResponse = { profile: ProfileInfo; config: ProfileConfigSnapshot }
 export type ErrorResponse = { error: string }
 

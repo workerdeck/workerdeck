@@ -11,6 +11,7 @@ import type {
   SessionInfo,
   Sharing,
 } from '@workerdeck/protocol'
+import type { AccountOptions } from './services/accounts.ts'
 import type { BridgeHub, BridgeHubOptions } from './services/bridge.ts'
 import type { AgentContextResetOptions } from './services/context-resets.ts'
 import type { SessionNotificationOptions } from './services/notifications.ts'
@@ -70,6 +71,8 @@ export type WorkerServerOptions = {
   // Draws agent avatars. Without one, `AgentInfo.avatar` is absent and clients draw their engine tile.
   avatars?: AvatarProvider
   allowedConfigDirRoots?: string[]
+  // Connecting a Claude account to a managed profile through the official `claude setup-token`.
+  accounts?: AccountOptions
   buildRunnerConfig?: (req: CreateSessionRequest) => SessionRunnerConfig
   basePath?: string
   fallback?: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>

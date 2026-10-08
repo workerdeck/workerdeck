@@ -67,6 +67,7 @@ export class ProfilesModel implements vscode.Disposable {
           unavailableReason: profile.unavailableReason,
           defaultModel: profile.defaults?.model,
           defaultPermissionMode: profile.defaults?.permissionMode,
+          accountExpiresAt: profile.account?.expiresAt,
         })
       }
     }
