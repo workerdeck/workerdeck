@@ -182,6 +182,7 @@ export type SessionVitals = {
   capabilities: TranscriptState['capabilities']
   model: string | undefined
   models: ModelOption[]
+  defaultModel?: string
   effort: TranscriptState['effort']
   efforts: readonly string[]
   permissionMode: TranscriptState['permissionMode']
@@ -404,6 +405,7 @@ export function SessionPanel({
     capabilities: state.capabilities,
     model: vitalsModel,
     models,
+    defaultModel: state.defaultModel,
     effort: state.effort,
     efforts,
     permissionMode: state.permissionMode,
@@ -539,6 +541,7 @@ export function SessionPanel({
         <ModelSelect
           models={models}
           model={effectiveModel}
+          defaultModel={state.defaultModel}
           onModelChange={setModel}
           disabled={ended}
           className={controlsInStatus ? 'h-5' : undefined}

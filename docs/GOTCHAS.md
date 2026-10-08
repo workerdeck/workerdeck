@@ -58,11 +58,20 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   reports no grouping, then re-sorted into `FAMILY_ORDER = ['fable', 'opus', 'sonnet', 'haiku']`
   (unknown family sorts last). A derived name is used only when unambiguous: two rows of one family
   need the CLI's own names to tell apart.
+- **Pickers open on `modelMenu` (`protocol/src/model-menu.ts`), never on the raw list.** The
+  short list is the default model first (tagged, never a separate "Default" row), then the newest
+  model of every other line; "More models" lists everything. A line is the display name with its
+  version stripped (`modelLine`: "Opus 4.7" and "Opus 5.5" are `opus`, "GPT-5.6 Terra" is
+  `gpt terra`), and catalogs list each line newest first. Only an unknown default (cold server,
+  no session yet) brings back an explicit "Profile default" row. Picking the default row sends the
+  model unset, so it keeps following the profile. VS Code (`apps/vscode/src/model-pick.ts`) and
+  `ModelSelect` (web, webview) share the rule; iOS does not have it yet.
 - Model availability is purely a function of the pinned SDK version. Since 0.3.284
   `supportedModels()` also lists the older versions (back to Opus 4.6 and Sonnet 4.6), so
   `core/src/engines/claude/catalog.ts` is its shaped output, whole, with no hand-kept rows; the
   catalog test replays the raw extraction to hold that. Taking a new SDK release is the only way a
-  new model reaches us. An absent `supportsEffort` with no levels means no effort (0.3.284 reports
+  new model reaches us (0.3.293 brought Haiku 5.5 as `haiku`, Haiku 4.5 moved to its dated id,
+  and Fable 5.1 to the alias `fable`). An absent `supportsEffort` with no levels means no effort (0.3.284 reports
   Haiku that way), not the engine default. `pnpm-workspace.yaml` sets `minimumReleaseAge: 0` (confirmed) since pnpm's exclude
   list can't express codex's platform binaries.
 - **Two model-list truths coexist; keep both.** The live `capabilities` event is the in-session

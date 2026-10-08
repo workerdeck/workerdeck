@@ -19,6 +19,7 @@ export type PickOptions<T extends vscode.QuickPickItem> = {
   step?: number
   totalSteps?: number
   freeText?: (value: string) => T | undefined
+  back?: boolean
 }
 
 export const CANCEL = Symbol('cancel')
@@ -85,7 +86,7 @@ export function showPick<T extends vscode.QuickPickItem>(items: readonly T[], op
     pick.totalSteps = options.totalSteps
     pick.ignoreFocusOut = true
     pick.items = [...items]
-    if ((options.step ?? 1) > 1) {
+    if ((options.step ?? 1) > 1 || options.back) {
       pick.buttons = [vscode.QuickInputButtons.Back]
     }
 

@@ -7,6 +7,7 @@ import type { AnySurface } from './session-surface.ts'
 import type { SessionEditorTab } from './session-tab.ts'
 import type { SelectOptions, SidebarProvider } from './sidebar.ts'
 import { currentModel, modelLabel } from './status-bar.ts'
+import { pickModel } from './model-pick.ts'
 import type { SurfaceRegistry } from './surfaces.ts'
 import { hostActions } from './host/status-item.ts'
 import type { HostSupervisor } from './host/supervisor.ts'
@@ -134,19 +135,19 @@ export async function pickCommand(surface: AnySurface): Promise<void> {
 
 async function selectModel(surface: AnySurface): Promise<void> {
   const vitals = surface.vitals
-  const current = currentModel(vitals)
-  const items = (vitals?.models ?? []).map((m) => ({
-    label: m.displayName,
-    description: m.value === current?.value ? 'current' : undefined,
-    detail: m.description ?? m.resolvedModel ?? m.value,
-    value: m.value,
-  }))
-  const picked = await pickFromVitals(items, 'WorkerDeck: no models to switch to yet.', {
+  const models = vitals?.models ?? []
+  if (models.length === 0) {
+    void vscode.window.showInformationMessage('WorkerDeck: no models to switch to yet.')
+    return
+  }
+  const picked = await pickModel(models, {
     title: 'WorkerDeck: model',
     placeHolder: modelLabel(vitals),
+    defaultModel: vitals?.defaultModel,
+    current: currentModel(vitals)?.value,
   })
-  if (picked) {
-    surface.setModel(picked.value)
+  if (typeof picked === 'object' && picked.model) {
+    surface.setModel(picked.model.value)
   }
 }
 

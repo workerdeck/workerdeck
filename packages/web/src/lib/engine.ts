@@ -5,6 +5,7 @@ export type EngineFormOptions = {
   capabilities: EngineCapabilities
   modes: readonly PermissionMode[]
   models: ModelOption[]
+  defaultModel?: string
   mode: PermissionMode
   model: string
   // Empty means hide the control.
@@ -44,6 +45,7 @@ export function engineFormOptions(profile: ProfileInfo | undefined, mode: Permis
       },
       ...rows,
     ],
+    defaultModel: defaultHint,
     mode: safeMode,
     model: safeModel,
     reasoningEfforts: (matched ? matched.reasoningEfforts : undefined) ?? capabilities.reasoningEfforts ?? [],

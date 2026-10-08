@@ -182,7 +182,7 @@ function NewAgentForm({
         </label>
         <label className="flex min-w-0 flex-col gap-1">
           <span className="text-label font-medium text-fg-3">Model</span>
-          <ModelPicker value={engine.model} onChange={form.setModel} models={engine.models} className="min-w-40" />
+          <ModelPicker value={engine.model} onChange={form.setModel} models={engine.models} defaultModel={engine.defaultModel} className="min-w-40" />
         </label>
         <EffortField form={form} />
       </div>

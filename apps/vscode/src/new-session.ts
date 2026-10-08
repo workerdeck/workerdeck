@@ -1,12 +1,13 @@
 import * as vscode from 'vscode'
 import { ENGINE_CAPABILITIES, errorMessage, newAgentSharing } from '@workerdeck/protocol'
-import type { HostFileRoot, ModelOption, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo, Sharing } from '@workerdeck/protocol'
+import type { HostFileRoot, PermissionMode, ProfileInfo, SdkSessionSummary, SessionInfo, Sharing } from '@workerdeck/protocol'
 import { clientFor } from './gateway.ts'
 import { agentDefaultsCached, relayOfCached } from './machine.ts'
 import type { HostStore } from './hosts.ts'
 import type { SidebarState, WireHost } from './bridge-protocol.ts'
 import { workspaceScope } from './workspace-scope.ts'
 import { BACK, CANCEL, showPick, type Answer } from './quick-input.ts'
+import { pickModel } from './model-pick.ts'
 
 type NewAgentAnswers = { name?: string; brief?: string; sharing?: Sharing }
 
@@ -375,32 +376,15 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
     return undefined
   }
 
-  // Only the last session's OWN model preselects a catalog row: "unset" is a different
-  // request from "this id", the gateway filling an unset model from the profile.
-  const preferred = previous?.model
-  const isPreferred = (m: ModelOption) => preferred !== undefined && (m.value === preferred || m.resolvedModel === preferred)
-  // `value: undefined` is the sentinel row protocol assigns to clients - catalogs never carry one, and without it
-  // the profile's own default is unreachable.
-  type ModelItem = vscode.QuickPickItem & { value?: string }
-  const fallbackRow: ModelItem = {
-    label: 'Profile default',
-    description: previous?.model === undefined ? 'default' : undefined,
-    detail: adapter.profile.defaultModel ?? "whatever the profile's engine is configured for",
-    value: undefined,
-  }
-  const items: ModelItem[] = [
-    ...models.map((m) => ({
-      label: m.displayName,
-      description: isPreferred(m) ? 'last used' : undefined,
-      detail: m.description ?? m.resolvedModel,
-      value: m.value,
-    })),
-    fallbackRow,
-  ]
-  const picked = await showPick(items, {
+  // Only the last session's OWN model preselects a row: "unset" is a different request from "this id", the gateway
+  // filling an unset model from the profile, so picking the default row keeps it unset.
+  const picked = await pickModel(models, {
     title: `New ${noun}: model`,
     placeHolder: `Model for this ${noun} - permission mode: ${modeLabel(mode)}`,
-    activeItem: items[models.findIndex(isPreferred)] ?? fallbackRow,
+    defaultModel: adapter.profile.defaultModel,
+    current: previous?.model,
+    currentTag: 'last used',
+    unset: { label: 'Profile default', detail: "whatever the profile's engine is configured for" },
     step: 3,
     totalSteps: 3,
   })
@@ -414,7 +398,7 @@ async function pickModelAndCreate(deps: NewSessionDeps, adapter: AdapterChoice, 
   if (named === CANCEL) {
     return CANCEL
   }
-  await create(deps, adapter, { cwd, model: picked.value, permissionMode: mode, agent: named })
+  await create(deps, adapter, { cwd, model: picked.isDefault ? undefined : picked.model?.value, permissionMode: mode, agent: named })
   return undefined
 }
 

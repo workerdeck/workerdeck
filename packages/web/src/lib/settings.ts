@@ -8,7 +8,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { value: 'fable', displayName: 'Fable', description: 'Fable 5.1 · For your toughest challenges' },
   { value: 'opus', displayName: 'Opus', description: 'Opus 5.5 · For complex work and everyday tasks' },
   { value: 'sonnet', displayName: 'Sonnet', description: 'Sonnet 5.5 · Most efficient for simpler tasks' },
-  { value: 'haiku', displayName: 'Haiku', description: 'Haiku 4.5 · Fastest for quick answers' },
+  { value: 'haiku', displayName: 'Haiku', description: 'Haiku 5.5 · Fastest for quick answers' },
 ]
 
 export type DefaultsKind = 'session' | 'job'
