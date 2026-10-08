@@ -1,15 +1,15 @@
 import type { ModelCatalog } from '../adapter.ts'
 
 export const CLAUDE_CATALOG: ModelCatalog = {
-  provenance: 'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.284 (Claude Code CLI), extracted 2026-09-29',
+  provenance: 'supportedModels() of @anthropic-ai/claude-agent-sdk 0.3.293 (Claude Code CLI), extracted 2026-10-08',
   models: [
     {
-      value: 'claude-fable-5-1',
+      value: 'fable',
       resolvedModel: 'claude-fable-5-1',
       displayName: 'Fable 5.1',
       description: 'For your toughest challenges',
-      primary: true,
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      primary: true,
     },
     {
       value: 'claude-fable-5',
@@ -23,8 +23,8 @@ export const CLAUDE_CATALOG: ModelCatalog = {
       resolvedModel: 'claude-opus-5-5',
       displayName: 'Opus 5.5',
       description: 'For complex work and everyday tasks',
-      primary: true,
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      primary: true,
     },
     {
       value: 'claude-opus-5',
@@ -59,8 +59,8 @@ export const CLAUDE_CATALOG: ModelCatalog = {
       resolvedModel: 'claude-sonnet-5-5',
       displayName: 'Sonnet 5.5',
       description: 'Most efficient for simpler tasks',
-      primary: true,
       reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      primary: true,
     },
     {
       value: 'claude-sonnet-5',
@@ -78,10 +78,17 @@ export const CLAUDE_CATALOG: ModelCatalog = {
     },
     {
       value: 'haiku',
+      resolvedModel: 'claude-haiku-5-5',
+      displayName: 'Haiku 5.5',
+      description: 'Fastest for quick answers',
+      reasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+      primary: true,
+    },
+    {
+      value: 'claude-haiku-4-5-20251001',
       resolvedModel: 'claude-haiku-4-5-20251001',
       displayName: 'Haiku 4.5',
       description: 'Fastest for quick answers',
-      primary: true,
       reasoningEfforts: [],
     },
   ],

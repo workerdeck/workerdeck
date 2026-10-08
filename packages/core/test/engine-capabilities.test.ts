@@ -94,14 +94,14 @@ describe('model catalogs', () => {
     }
   })
 
-  // The raw `supportedModels()` extraction the claude catalog was generated from (2026-09-29,
-  // SDK 0.3.284), replayed through the live shaping rules.
+  // The raw `supportedModels()` extraction the claude catalog was generated from (2026-10-08,
+  // SDK 0.3.293), replayed through the live shaping rules.
   const RAW_CLAUDE: SdkModelInfo[] = [
     {
       value: 'default',
-      resolvedModel: 'claude-opus-5-5',
+      resolvedModel: 'claude-fable-5',
       displayName: 'Default (recommended)',
-      description: 'Opus 5.5 · Best for everyday, complex tasks',
+      description: 'Fable 5',
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
@@ -112,7 +112,7 @@ describe('model catalogs', () => {
       supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
     {
-      value: 'claude-fable-5-1',
+      value: 'fable',
       resolvedModel: 'claude-fable-5-1',
       displayName: 'Fable 5.1',
       description: 'For your toughest challenges',
@@ -127,6 +127,13 @@ describe('model catalogs', () => {
     },
     {
       value: 'haiku',
+      resolvedModel: 'claude-haiku-5-5',
+      displayName: 'Haiku 5.5',
+      description: 'Fastest for quick answers',
+      supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    },
+    {
+      value: 'claude-haiku-4-5-20251001',
       resolvedModel: 'claude-haiku-4-5-20251001',
       displayName: 'Haiku 4.5',
       description: 'Fastest for quick answers',
@@ -189,7 +196,7 @@ describe('model catalogs', () => {
 
   it('claude catalog marks exactly one primary row per family', () => {
     const primaries = CLAUDE_CATALOG.models.filter((m) => m.primary)
-    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5.5', 'Sonnet 5.5', 'Haiku 4.5'])
+    expect(primaries.map((m) => m.displayName)).toEqual(['Fable 5.1', 'Opus 5.5', 'Sonnet 5.5', 'Haiku 5.5'])
   })
 
   it('codex catalog drops the internal auto-review row and keeps efforts open', () => {
