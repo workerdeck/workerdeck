@@ -1530,6 +1530,20 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   by hand (Tobias). **Not verified**: Linux PTY for setup-token, whether the CLI's Bash tool passes
   the token on to commands.
 
+  **3.10.0** - **codex sign-in and Bun hosts, released 2026-10-08** (tag `v3.10.0`). A **minor**,
+  protocol stays **1** (`userCode`, an optional `code`, `CompleteAccountResponse` and
+  `accountExpiry` are additive). **Codex connect**: the gateway runs the official `codex login
+  --device-auth` under the profile's own `codexHome`, relays its link and one-time code, and
+  long-polls `complete` (`awaitAccount`); disconnect is `codex logout`. **Expiry warning** for
+  setup-tokens (`expiring` inside 30 days, then `expired`, checked every 12 h). **Bun hosts**:
+  node-pty never execs under Bun, so `loadPty` uses `Bun.spawn({ terminal })` there (account connect
+  and shells), and `PtyModule`/`PtyChild` are exported; found by the Silkweave Box. Also: the CLI
+  guard counts running shells and background tasks, and duplicate agent names are refused.
+  **Verified**: full serial `pnpm test`, `smoke:codex --canary` 10/10, the Box's setup-token through
+  Bun's PTY, the real `claude setup-token` URL under Bun 1.4.2, a real codex sign-in to the end from
+  the dashboard on a private gateway (Tobias; profile available, codex's own `auth.json`). **Not
+  verified**: Linux PTY, keyring-mode `CODEX_HOME`s, `codex logout` from the dialog.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
