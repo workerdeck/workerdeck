@@ -39,7 +39,7 @@
       }
     },
     {
-      "files": ["packages/core/src/lib/tty-text.ts"],
+      "files": ["packages/core/src/lib/tty-text.ts", "packages/server/src/accounts/setup-token.ts"],
       "rules": {
         "no-control-regex": "off"
       }

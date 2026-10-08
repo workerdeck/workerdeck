@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 import { writeFileSync } from 'node:fs'
 
-const out = (text) => process.stdout.write(text)
-const right = (text) => text.replaceAll(' ', '\x1b[1C')
+function out(text) {
+  process.stdout.write(text)
+}
+
+function right(text) {
+  return text.replaceAll(' ', '\x1b[1C')
+}
+
 if (process.env.FAKE_ENV_OUT) {
   writeFileSync(process.env.FAKE_ENV_OUT, JSON.stringify({ args: process.argv.slice(2), env: process.env }))
 }

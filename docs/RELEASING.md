@@ -1510,8 +1510,11 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   got `false` and cancelled the job. **Verified**: full serial `pnpm test` with new queue and
   notifier tests; the Box's live bypass job with a denied question (with its workaround).
 
-  **3.9.0** - **profile accounts and addressed thinking, released 2026-10-08** (tag `v3.9.0`). A
-  **minor**, protocol stays **1** (`ProfileInfo.account`/`connectors`, `ThinkingBlock.addressed` and
+  **3.9.1** - **profile accounts and addressed thinking, released 2026-10-08** (tag `v3.9.1`).
+  **`v3.9.0` is a pushed but never-published tag**: its CI gate failed on `pnpm lint` (control
+  characters in the setup-token screen parser, a module-level arrow in the test fixture), which the
+  local run missed because its output was filtered instead of read by exit code. Never publish it.
+  Content-wise a **minor** over 3.8.2, protocol stays **1** (`ProfileInfo.account`/`connectors`, `ThinkingBlock.addressed` and
   the account request types are all optional or new). **Connect account**: the gateway runs the
   official `claude setup-token` in a PTY, relays its link and the pasted code, and keeps the token
   per profile (0600 file, `CLAUDE_CODE_OAUTH_TOKEN` at runner build); routes, `accounts.canConnect`,

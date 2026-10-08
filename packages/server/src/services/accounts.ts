@@ -133,7 +133,7 @@ export class AccountService {
   }
 
   close(): void {
-    for (const name of [...this.#attempts.keys()]) {
+    for (const name of Array.from(this.#attempts.keys())) {
       this.cancel(name)
     }
   }
