@@ -1987,8 +1987,10 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
 - **A profile without its own `codexHome` is refused**: signing it in would log in the gateway
   operator's own `~/.codex`. The login child gets `OPENAI_API_KEY` / `CODEX_API_KEY` and the
   gateway secrets stripped. The fake CLI is `server/test/fixtures/fake-codex-login.mjs`.
-- **Unverified**: a real sign-in to the end (the spike stopped at the code), keyring-mode
-  `CODEX_HOME`s, and whether `codex logout` exits non-zero when nobody is signed in.
+- **Verified 2026-10-08** on a private gateway: a real sign-in to the end from the dashboard (codex
+  wrote a 0600 `auth.json`, the profile turned available), then `DELETE .../account` (200, `auth.json`
+  gone, profile unavailable); a second sign-out with nobody signed in also answers 200 (`codex logout`
+  exits 0). **Unverified**: keyring-mode `CODEX_HOME`s, Linux.
 
 ## Host filesystem (`/v1/fs/*`)
 
