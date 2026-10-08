@@ -3,7 +3,9 @@ import { modelLine, modelMenu } from '@workerdeck/protocol'
 import { CLAUDE_CATALOG } from '../src/engines/claude/catalog.ts'
 import { CODEX_CATALOG } from '../src/engines/codex/catalog.ts'
 
-const names = (rows: { displayName: string }[]) => rows.map((m) => m.displayName)
+function names(rows: { displayName: string }[]): string[] {
+  return rows.map((m) => m.displayName)
+}
 
 describe('modelMenu', () => {
   it('opens on the default, then the newest of every other line', () => {
