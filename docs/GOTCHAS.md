@@ -1949,8 +1949,34 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   the token beats a bogus `ANTHROPIC_API_KEY` once that is dropped.
 - **The sign-in host moves**: the CLI printed `https://claude.com/cai/oauth/authorize?...` where the
   spike saw `claude.ai`. Match on `/oauth/authorize?`, never on the host.
+- **Expiry** is one protocol rule, `accountExpiry` (`expiring` inside 30 days, then `expired`), so
+  web, VS Code and the gateway agree. The gateway logs once per profile per state at listen and
+  every 12 h (`AccountService.watchExpiry`), and an expired token short-circuits the availability
+  probe to `available: false` with a "reconnect" reason (`verdictFor`), so `requireAvailableProfile`
+  refuses new sessions instead of letting them fail on auth. The token is still injected; we never
+  fall back to another login silently.
 - **Unverified**: whether the CLI's Bash tool passes `CLAUDE_CODE_OAUTH_TOKEN` on to commands, and
   Linux PTY behaviour (both runs were on macOS).
+
+### Codex device login (`codex login --device-auth`)
+
+- **No PTY.** Unlike `claude setup-token`, codex (0.158.0 bundled, 0.161.0) prints the link
+  (`https://auth.openai.com/codex/device`) and the one-time code (`XXXX-XXXXX`, 15 minutes) on plain
+  pipes and then waits; `server/src/accounts/codex-device.ts` spawns it with `stdio` pipes and
+  `NO_COLOR=1`. The code is taken after the words "one-time code", never by line position.
+- **codex owns the result.** Exit 0 means signed in; codex wrote its own `auth.json` (or keyring
+  entry) under `CODEX_HOME`. We never read it: the profile's state is `ProfileInfo.available`
+  from `codex login status`, re-probed (awaited) before `complete` answers. No `ProfileInfo.account`
+  for codex. Sign out is `codex logout`.
+- **Waiting is the client's loop.** There is no code to paste, so `complete` with `{ attemptId }`
+  alone waits up to 25 s (`codexWaitMs`) and answers `{ pending: true }`; a second call while one
+  waits is a 409, so a client must not run two loops (the ui dialog keeps its callbacks in a ref
+  for that reason). A closed dialog leaves the child running until a new connect or the 15 min TTL.
+- **A profile without its own `codexHome` is refused**: signing it in would log in the gateway
+  operator's own `~/.codex`. The login child gets `OPENAI_API_KEY` / `CODEX_API_KEY` and the
+  gateway secrets stripped. The fake CLI is `server/test/fixtures/fake-codex-login.mjs`.
+- **Unverified**: a real sign-in to the end (the spike stopped at the code), keyring-mode
+  `CODEX_HOME`s, and whether `codex logout` exits non-zero when nobody is signed in.
 
 ## Host filesystem (`/v1/fs/*`)
 

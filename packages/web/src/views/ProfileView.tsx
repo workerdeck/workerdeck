@@ -7,7 +7,7 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { errorMessage, orderUsageWindows } from '@workerdeck/protocol'
 import { useAsync } from '@workerdeck/react'
 import { AccountConnectDialog, Badge, Button, Card, CardContent, CardHeader, CardTitle, Spinner, UsageMeters, toast } from '@workerdeck/ui'
-import type { ProfileAccount } from '@workerdeck/protocol'
+import { accountExpiry, type ProfileAccount } from '@workerdeck/protocol'
 import { Code, KeyRound, Trash2, Unplug } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { openInVsCode } from './ProfilesView.tsx'
@@ -27,20 +27,28 @@ function Chips({ items, empty }: { items: string[]; empty: string }) {
   )
 }
 
-const EXPIRY_WARNING_MS = 30 * 24 * 60 * 60 * 1000
-
 function AccountRow({ account }: { account: ProfileAccount | undefined }) {
   if (!account) {
     return <span className="text-fg-4">not connected - the config dir&apos;s own login or the gateway environment</span>
   }
-  const expires = new Date(account.expiresAt)
-  const soon = expires.getTime() - Date.now() < EXPIRY_WARNING_MS
+  const expires = new Date(account.expiresAt).toLocaleDateString()
+  const state = accountExpiry(account)
+  if (state === 'expired') {
+    return <span className="text-danger">expired {expires} - reconnect to keep using this profile</span>
+  }
   return (
-    <span className={soon ? 'text-warning' : undefined}>
-      connected {new Date(account.connectedAt).toLocaleDateString()}, {soon ? 'expires soon: ' : 'expires '}
-      {expires.toLocaleDateString()}
+    <span className={state === 'expiring' ? 'text-warning' : undefined}>
+      connected {new Date(account.connectedAt).toLocaleDateString()}, {state === 'expiring' ? 'expires soon: ' : 'expires '}
+      {expires}
     </span>
   )
+}
+
+function CodexLoginRow({ available }: { available: boolean | undefined }) {
+  if (available === true) {
+    return <span>signed in (per codex login status)</span>
+  }
+  return available === false ? <span className="text-fg-4">not signed in</span> : <span className="text-fg-4">not checked yet</span>
 }
 
 export function ProfileView() {
@@ -57,12 +65,16 @@ export function ProfileView() {
   const config = detail?.config
   const usageWindows = useMemo(() => orderUsageWindows(profile?.usage), [profile?.usage])
   const [connecting, setConnecting] = useState(false)
+  const engine = profile?.engine ?? 'claude'
+  const codex = engine === 'codex'
 
   const disconnect = async () => {
     try {
       const saved = await client()!.disconnectAccount(profileName)
       loaded.setData({ ...detail!, profile: saved })
-      toast.success('Account disconnected. Revoke the token at claude.ai if you no longer need it.')
+      toast.success(
+        codex ? 'Signed out of codex for this profile.' : 'Account disconnected. Revoke the token at claude.ai if you no longer need it.',
+      )
     } catch (e) {
       toast.error(errorMessage(e, 'Disconnect failed'))
     }
@@ -185,7 +197,32 @@ export function ProfileView() {
               </Card>
             ) : null}
 
-            {(profile.engine ?? 'claude') === 'claude' && profile.managed ? (
+            {engine === 'codex' && profile.managed && profile.codexHome ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>ChatGPT account</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <DetailRow label="Account">
+                    <CodexLoginRow available={profile.available} />
+                  </DetailRow>
+                  <div className="flex justify-end gap-2">
+                    {profile.available === true ? (
+                      <Button variant="outline" size="xs" onClick={() => void disconnect()}>
+                        <Unplug className="size-3" />
+                        Sign out
+                      </Button>
+                    ) : null}
+                    <Button variant="outline" size="xs" onClick={() => setConnecting(true)}>
+                      <KeyRound className="size-3" />
+                      {profile.available === true ? 'Sign in again' : 'Sign in'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {engine === 'claude' && profile.managed ? (
               <Card>
                 <CardHeader>
                   <CardTitle>Claude account</CardTitle>
@@ -277,6 +314,7 @@ export function ProfileView() {
       <AccountConnectDialog
         client={client()}
         profile={connecting ? profileName : undefined}
+        engine={codex ? 'codex' : 'claude'}
         onClose={() => setConnecting(false)}
         onConnected={(saved) => {
           loaded.setData({ ...detail!, profile: saved })

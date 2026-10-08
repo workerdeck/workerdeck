@@ -348,7 +348,10 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     bridge,
     agentBrief: (sessionId) => agents.briefFor(sessionId),
     avatar: avatarChanges
-      ? { directory: avatarDirectoryHandle(() => ownAvatarChanges), isAgent: (sessionId) => sessionId !== undefined && agents.bySession(sessionId) !== undefined }
+      ? {
+          directory: avatarDirectoryHandle(() => ownAvatarChanges),
+          isAgent: (sessionId) => sessionId !== undefined && agents.bySession(sessionId) !== undefined,
+        }
       : undefined,
   })
 
@@ -357,6 +360,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     requireAvailableProfile: options.requireAvailableProfile,
     adapterFor,
     sessionEnvFor: factory.sessionEnvFor,
+    verdictFor: (profile) => accounts.expiredVerdict(profile),
     onError: (error) => diagnose(error, 'availability-probe'),
   })
 
@@ -507,6 +511,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
         server.once('error', reject)
         server.listen(port, host, () => {
           availability.preflight(profiles.all())
+          accounts.watchExpiry(() => profiles.all())
           const address = server.address()
           resolve({ port: typeof address === 'object' && address ? address.port : port })
         })

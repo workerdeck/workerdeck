@@ -1168,8 +1168,9 @@ export type WriteHostFileResponse = {
 }
 
 export type SaveProfileResponse = { profile: ProfileInfo }
-export type ConnectAccountResponse = { attemptId: string; authorizeUrl: string; expiresAt: string }
-export type CompleteAccountRequest = { attemptId: string; code: string }
+export type ConnectAccountResponse = { attemptId: string; authorizeUrl: string; expiresAt: string; userCode?: string }
+export type CompleteAccountRequest = { attemptId: string; code?: string }
+export type CompleteAccountResponse = { profile: ProfileInfo; pending?: boolean }
 export type GetProfileResponse = { profile: ProfileInfo; config: ProfileConfigSnapshot }
 export type ErrorResponse = { error: string }
 
@@ -1285,6 +1286,7 @@ export type GetJobResponse = { job: JobInfo }
 export type ListJobsResponse = { jobs: JobInfo[] }
 export type QueueStatsResponse = { stats: QueueStats }
 
+export * from './accounts.ts'
 export * from './agents.ts'
 export * from './checklist.ts'
 export * from './errors.ts'

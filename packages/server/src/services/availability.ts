@@ -11,6 +11,8 @@ export type AvailabilityTrackerOptions = {
   requireAvailableProfile?: boolean
   adapterFor: (engine: ProfileEngine | undefined) => EngineAdapter
   sessionEnvFor: (profile: ProfileInfo) => Record<string, string | undefined>
+  // A verdict that needs no CLI probe, such as a connected account token past its expiry.
+  verdictFor?: (profile: ProfileInfo) => EngineAvailability | undefined
   onError?: (error: unknown) => void
 }
 
@@ -27,10 +29,10 @@ export class AvailabilityTracker {
     return this.#verdicts.get(name)?.verdict
   }
 
-  probe(profile: ProfileInfo): void {
+  probe(profile: ProfileInfo): Promise<void> {
     const { checkCredentials, adapterFor, sessionEnvFor } = this.#opts
     if (!checkCredentials) {
-      return
+      return Promise.resolve()
     }
     const conf = checkCredentials === true ? {} : checkCredentials
     // Mark in-flight immediately so concurrent GET /profiles don't re-spawn.
@@ -43,16 +45,19 @@ export class AvailabilityTracker {
       engineOf(profile) !== 'claude'
         ? undefined
         : (conf.probe ?? (conf.timeoutMs !== undefined ? (env) => checkClaudeAuth(env, { timeoutMs: conf.timeoutMs }) : undefined))
-    const run: Promise<EngineAvailability> = claudeProbe
-      ? claudeProbe(sessionEnvFor(profile)).then((status): EngineAvailability =>
-          status === 'logged_in'
-            ? { available: true }
-            : status === 'logged_out'
-              ? { available: false, reason: 'no usable Claude credentials for this profile' }
-              : { available: 'unknown' },
-        )
-      : adapter.checkAvailability(profile, sessionEnvFor(profile))
-    void run
+    const known = this.#opts.verdictFor?.(profile)
+    const run: Promise<EngineAvailability> = known
+      ? Promise.resolve(known)
+      : claudeProbe
+        ? claudeProbe(sessionEnvFor(profile)).then((status): EngineAvailability =>
+            status === 'logged_in'
+              ? { available: true }
+              : status === 'logged_out'
+                ? { available: false, reason: 'no usable Claude credentials for this profile' }
+                : { available: 'unknown' },
+          )
+        : adapter.checkAvailability(profile, sessionEnvFor(profile))
+    return run
       .then((verdict) => {
         this.#verdicts.set(profile.name, { verdict, at: Date.now() })
         if (verdict.available === false && !this.#warned.has(profile.name)) {
@@ -84,7 +89,7 @@ export class AvailabilityTracker {
 
   preflight(profiles: ProfileInfo[]): void {
     for (const profile of profiles) {
-      this.probe(profile)
+      void this.probe(profile)
     }
   }
 
@@ -96,7 +101,7 @@ export class AvailabilityTracker {
     for (const profile of profiles) {
       const cached = this.#verdicts.get(profile.name)
       if (!cached || now - cached.at > AVAILABILITY_TTL_MS) {
-        this.probe(profile)
+        void this.probe(profile)
       }
     }
   }

@@ -2,6 +2,7 @@ import type {
   AgentInfo,
   AgentResponse,
   CompleteAccountRequest,
+  CompleteAccountResponse,
   ConnectAccountResponse,
   CreateAgentRequest,
   RetireAgentRequest,
@@ -193,7 +194,11 @@ export class WorkerDeckClient {
   }
 
   async agentAvatarPreview(id: string, seed: string): Promise<Blob> {
-    const res = await this.#callRaw(this.agentAvatarPreviewUrl(id, seed), { headers: { ...this.#options.headers } }, 'avatar preview request failed')
+    const res = await this.#callRaw(
+      this.agentAvatarPreviewUrl(id, seed),
+      { headers: { ...this.#options.headers } },
+      'avatar preview request failed',
+    )
     return await res.blob()
   }
 
@@ -272,6 +277,11 @@ export class WorkerDeckClient {
       'profile',
       request,
     )
+  }
+
+  // One wait on a device-code sign-in (codex): answers `pending` until the user finishes in the browser, so call it in a loop.
+  async awaitAccount(profile: string, attemptId: string): Promise<CompleteAccountResponse> {
+    return await this.#call('POST', `/profiles/${encodeURIComponent(profile)}/account/complete`, { attemptId })
   }
 
   async disconnectAccount(profile: string): Promise<ProfileInfo> {
@@ -460,4 +470,11 @@ export type { QueueHandleEvents } from './queue-handle.ts'
 export { apiUrl, isLoopbackHost } from './host-url.ts'
 export type { HostUrl } from './host-url.ts'
 export { hostAuth } from './host-auth.ts'
-export { runTeamMove, teamMoveMessage, withdrawTeamInvitation, type TeamInvitation, type TeamMoveOutcome, type TeamMovePlan } from './team-move.ts'
+export {
+  runTeamMove,
+  teamMoveMessage,
+  withdrawTeamInvitation,
+  type TeamInvitation,
+  type TeamMoveOutcome,
+  type TeamMovePlan,
+} from './team-move.ts'

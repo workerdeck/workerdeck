@@ -116,8 +116,10 @@ as `CLAUDE_CODE_OAUTH_TOKEN`, never in a response or log). Detail and the rules 
 and `docs/GOTCHAS.md` § Profile accounts. Policy enforcement lives in
 configuration (`requireApiKey`, the one-time 'oauth' notice, `apiKeySource` on
 SessionInfo/system_init), never in tampering with the credential chain. **The same principle
-binds the Codex engine**: `codex login` (or `codex login --with-api-key`) is the operator's job
-in their own terminal; WorkerDeck never invokes it, never reads `auth.json`, and never wires an
+binds the Codex engine**: `codex login` is the operator's job, with **one sanctioned broker
+(2026-10-08)**: on an explicit user action the gateway may run the official `codex login
+--device-auth` under a profile's own `codexHome`, relay its link and one-time code (output parsed, never logged), and run
+`codex logout` to sign out. WorkerDeck never reads `auth.json`, never runs `--with-api-key`, and never wires an
 API key into the child or over the app-server's account RPCs - the operator's session env is
 passed through whole, but no env key is a credential route on this surface (`CODEX_API_KEY` is
 read only by `codex exec`, which we no longer ship; the canary pins that), so availability

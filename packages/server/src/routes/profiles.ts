@@ -1,5 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { CompleteAccountRequest, ProfileInfo, UpdateProfileRequest } from '@workerdeck/protocol'
+import type {
+  CompleteAccountRequest,
+  CompleteAccountResponse,
+  ConnectAccountResponse,
+  ProfileInfo,
+  UpdateProfileRequest,
+} from '@workerdeck/protocol'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import { readProfileConfig } from '../lib/profile-env.ts'
 import type { AuthContext } from '../services/auth.ts'
@@ -84,7 +90,7 @@ async function handleAccount(
   requireMethod(req, sub === 'account' ? 'DELETE' : 'POST')
   refuseWith(await accounts.guard(auth, profile))
   if (sub === 'account') {
-    accounts.disconnect(profile)
+    await accounts.disconnect(profile)
     json(res, 200, { profile: profiles.forResponse(profile) })
     return
   }
@@ -93,18 +99,21 @@ async function handleAccount(
     if (!started.ok) {
       fail(started.status, started.error)
     }
-    json(res, 200, { attemptId: started.attemptId, authorizeUrl: started.authorizeUrl, expiresAt: started.expiresAt })
+    const { ok: _ok, ...response } = started
+    json(res, 200, response satisfies ConnectAccountResponse)
     return
   }
   const body = (await readJsonBody(req, ctx.maxBodyBytes)) as Partial<CompleteAccountRequest>
-  if (typeof body.attemptId !== 'string' || typeof body.code !== 'string' || body.code.trim() === '' || body.code.length > 1024) {
-    fail(400, 'attemptId and code are required')
+  const code = typeof body.code === 'string' ? body.code.trim() : undefined
+  if (typeof body.attemptId !== 'string' || (body.code !== undefined && (!code || code.length > 1024))) {
+    fail(400, 'attemptId is required, and code when given must be non-empty')
   }
-  const done = await accounts.complete(profile, body.attemptId, body.code)
+  const done = await accounts.complete(profile, body.attemptId, code)
   if (!done.ok) {
     fail(done.status, done.error)
   }
-  json(res, 200, { profile: profiles.forResponse(profile) })
+  const response: CompleteAccountResponse = { profile: profiles.forResponse(profile), ...(done.pending ? { pending: true } : {}) }
+  json(res, 200, response)
 }
 
 function refuseWith(refused: { status: number; error: string } | null): void {

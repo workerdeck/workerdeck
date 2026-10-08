@@ -1,6 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { errorMessage, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
+import { accountExpiry, errorMessage, type ProfileEngine, type ProfileInfo } from '@workerdeck/protocol'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import * as vscode from 'vscode'
 import { clientFor } from './gateway.ts'
@@ -134,16 +134,7 @@ async function edit(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeck
     ...(modes.length > 0
       ? [{ label: '$(shield) Default permission mode', description: profile.defaults?.permissionMode, action: 'mode' as const }]
       : []),
-    ...((profile.engine ?? 'claude') === 'claude'
-      ? [
-          {
-            label: profile.account ? '$(key) Reconnect Claude account' : '$(key) Connect Claude account',
-            description: profile.account ? accountLabel(profile.account) : undefined,
-            action: 'connect' as const,
-          },
-        ]
-      : []),
-    ...(profile.account ? [{ label: '$(debug-disconnect) Disconnect Claude account', action: 'disconnect' as const }] : []),
+    ...accountActions(profile),
     { label: '$(trash) Delete profile', action: 'delete' as const },
   ]
   const picked = await showPick(actions, { title: `${profile.name} - ${host.name}`, placeHolder: unavailable(profile) })
@@ -230,8 +221,89 @@ async function confirmDelete(deps: ProfileFlowDeps, host: GatewayHost, client: W
   }
 }
 
+function accountActions(profile: ProfileInfo): { label: string; description?: string; action: 'connect' | 'disconnect' }[] {
+  const engine = profile.engine ?? 'claude'
+  if (engine === 'codex') {
+    if (!profile.codexHome) {
+      return []
+    }
+    const signedIn = profile.available === true
+    return [
+      { label: signedIn ? '$(key) Sign in to ChatGPT again' : '$(key) Sign in to ChatGPT', action: 'connect' },
+      ...(signedIn ? [{ label: '$(debug-disconnect) Sign out of codex', action: 'disconnect' as const }] : []),
+    ]
+  }
+  if (engine !== 'claude') {
+    return []
+  }
+  return [
+    {
+      label: profile.account ? '$(key) Reconnect Claude account' : '$(key) Connect Claude account',
+      description: profile.account ? accountLabel(profile.account) : undefined,
+      action: 'connect',
+    },
+    ...(profile.account ? [{ label: '$(debug-disconnect) Disconnect Claude account', action: 'disconnect' as const }] : []),
+  ]
+}
+
+// The gateway runs the official `codex login --device-auth`; this side shows its link and code and waits for codex to exit.
+async function connectCodex(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+  let attempt: Awaited<ReturnType<WorkerDeckClient['connectAccount']>>
+  try {
+    attempt = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `WorkerDeck: starting codex login on ${host.name}` },
+      () => client.connectAccount(profile.name),
+    )
+  } catch (err) {
+    void vscode.window.showErrorMessage(`WorkerDeck: ${describe(err)}`)
+    return
+  }
+  const userCode = attempt.userCode ?? ''
+  const open = await vscode.window.showInformationMessage(
+    `Sign in to ChatGPT for "${profile.name}" with code ${userCode}`,
+    {
+      modal: true,
+      detail:
+        `The sign-in page opens in your browser; the code ${userCode} is copied to the clipboard. Enter it there and sign in with the ` +
+        "account this profile belongs to. codex keeps the login in the profile's CODEX_HOME on the gateway.",
+    },
+    'Open sign-in page',
+  )
+  if (open !== 'Open sign-in page') {
+    return
+  }
+  await vscode.env.clipboard.writeText(userCode)
+  await vscode.env.openExternal(vscode.Uri.parse(attempt.authorizeUrl, true))
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `WorkerDeck: waiting for the ChatGPT sign-in for ${profile.name} (code ${userCode})`,
+      cancellable: true,
+    },
+    (_progress, token) =>
+      apply(
+        deps,
+        host,
+        async () => {
+          while (!token.isCancellationRequested) {
+            const answer = await client.awaitAccount(profile.name, attempt.attemptId)
+            if (!answer.pending) {
+              return answer.profile
+            }
+          }
+          throw new Error('sign-in wait cancelled')
+        },
+        `signed in ${profile.name}`,
+      ),
+  )
+}
+
 // The gateway runs the official `claude setup-token`; this side only opens its link and hands back the pasted code.
 async function connectAccount(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+  if (profile.engine === 'codex') {
+    await connectCodex(deps, host, client, profile)
+    return
+  }
   let attempt: Awaited<ReturnType<WorkerDeckClient['connectAccount']>>
   try {
     attempt = await vscode.window.withProgress(
@@ -280,6 +352,17 @@ async function connectAccount(deps: ProfileFlowDeps, host: GatewayHost, client: 
 }
 
 async function confirmDisconnect(deps: ProfileFlowDeps, host: GatewayHost, client: WorkerDeckClient, profile: ProfileInfo): Promise<void> {
+  if (profile.engine === 'codex') {
+    const out = await vscode.window.showWarningMessage(
+      `Sign out of codex for "${profile.name}"?`,
+      { modal: true, detail: "Runs codex logout under this profile's CODEX_HOME on the gateway." },
+      'Sign out',
+    )
+    if (out === 'Sign out') {
+      await apply(deps, host, () => client.disconnectAccount(profile.name), `signed out ${profile.name}`)
+    }
+    return
+  }
   const confirmed = await vscode.window.showWarningMessage(
     `Disconnect the Claude account from "${profile.name}"?`,
     { modal: true, detail: 'The token is deleted from the gateway but stays valid until you revoke it at claude.ai.' },
@@ -291,7 +374,12 @@ async function confirmDisconnect(deps: ProfileFlowDeps, host: GatewayHost, clien
 }
 
 function accountLabel(account: NonNullable<ProfileInfo['account']>): string {
-  return `connected, expires ${new Date(account.expiresAt).toLocaleDateString()}`
+  const expires = new Date(account.expiresAt).toLocaleDateString()
+  const state = accountExpiry(account)
+  if (state === 'expired') {
+    return `$(warning) expired ${expires}, reconnect`
+  }
+  return state === 'expiring' ? `$(warning) expires soon: ${expires}` : `connected, expires ${expires}`
 }
 
 // A profile declared in the server's own config is deliberately immutable over the API: the operator's

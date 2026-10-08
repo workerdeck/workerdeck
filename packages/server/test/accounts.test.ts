@@ -1,16 +1,17 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ConnectAccountResponse, ProfileInfo } from '@workerdeck/protocol'
+import { accountExpiry, type CompleteAccountResponse, type ConnectAccountResponse, type ProfileInfo } from '@workerdeck/protocol'
 import { createMemoryProfileStore, createWorkerServer, type WorkerServer } from '../src/index.ts'
-import { ACCOUNT_FILE, accountSessionEnv, findAuthorizeUrl, screenText, writeAccount } from '../src/accounts/index.ts'
+import { ACCOUNT_FILE, accountSessionEnv, findAuthorizeUrl, parseDeviceLogin, screenText, writeAccount } from '../src/accounts/index.ts'
 import { loadPty } from '../src/services/shell-env.ts'
 import { fakeHarness } from './helpers.ts'
 
 const FAKE_TOKEN = ['sk-ant-oat01', 'FAKE_token-123'].join('-')
 const FAKE_CLI = fileURLToPath(new URL('./fixtures/fake-setup-token.mjs', import.meta.url))
+const FAKE_CODEX = fileURLToPath(new URL('./fixtures/fake-codex-login.mjs', import.meta.url))
 const hasPty = (await loadPty()) !== null
 
 let running: WorkerServer | undefined
@@ -32,9 +33,15 @@ function fixture() {
 }
 
 async function serve(
-  options: { canManage?: boolean; canConnect?: (principal: unknown, profile: ProfileInfo) => boolean; requireApiKey?: boolean } = {},
+  options: {
+    canManage?: boolean
+    canConnect?: (principal: unknown, profile: ProfileInfo) => boolean
+    requireApiKey?: boolean
+    setup?: (configDir: string) => void
+  } = {},
 ) {
   const { root: dir, configDir, envOut } = fixture()
+  options.setup?.(configDir)
   const harness = fakeHarness()
   const profile: ProfileInfo = { name: 'tobias', configDir }
   running = createWorkerServer({
@@ -42,7 +49,7 @@ async function serve(
     allowedCwdRoots: ['/tmp'],
     allowedConfigDirRoots: [dir],
     profileStore: createMemoryProfileStore([profile]),
-    checkCredentials: false,
+    checkCredentials: options.setup ? { probe: async () => 'logged_in' } : false,
     requireApiKey: options.requireApiKey,
     buildRunnerConfig: (req) => ({
       ...req,
@@ -157,5 +164,102 @@ describe.skipIf(!hasPty)('account connect routes', () => {
 
     const allowed = await serve({ canManage: false, canConnect: (principal) => (principal as { user?: string }).user === 'tobias' })
     expect((await allowed.post('/account/connect')).status).toBe(200)
+  })
+})
+
+describe('codex device login', () => {
+  it('parses the device link and one-time code from the real output shape', () => {
+    const raw =
+      '1. Open this link in your browser\n   \x1b[94mhttps://auth.openai.com/codex/device\x1b[0m\n\n' +
+      '2. Enter this one-time code \x1b[90m(expires in 15 minutes)\x1b[0m\n   \x1b[94mKUIE-STXVW\x1b[0m\n'
+    expect(parseDeviceLogin(raw)).toEqual({ verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'KUIE-STXVW' })
+    expect(parseDeviceLogin(raw.slice(0, 80))).toBeUndefined()
+  })
+
+  async function serveCodex() {
+    const root = mkdtempSync(join(tmpdir(), 'wd-codex-accounts-'))
+    roots.push(root)
+    const codexHome = join(root, 'dan')
+    mkdirSync(codexHome)
+    const envOut = join(root, 'env.json')
+    running = createWorkerServer({
+      authenticate: () => ({ canManageProfiles: true }),
+      allowedCwdRoots: ['/tmp'],
+      allowedConfigDirRoots: [root],
+      profileStore: createMemoryProfileStore([{ name: 'dan', engine: 'codex', codexHome }]),
+      checkCredentials: false,
+      buildRunnerConfig: (req) => ({
+        ...req,
+        env: { PATH: process.env.PATH, OPENAI_API_KEY: 'sk-openai', FAKE_ENV_OUT: envOut, WORKERDECK_AUTH_KEY: 'gw' },
+      }),
+      accounts: { codexExecutable: FAKE_CODEX, codexWaitMs: 300 },
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const base = `http://127.0.0.1:${port}/v1/profiles/dan`
+    const post = (path: string, body?: unknown) =>
+      fetch(base + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    return { base, post, codexHome, envOut }
+  }
+
+  it('relays the device code, answers pending until codex exits, then signs out through codex', async () => {
+    const { base, post, codexHome, envOut } = await serveCodex()
+    const started = await post('/account/connect')
+    expect(started.status).toBe(200)
+    const attempt = (await started.json()) as ConnectAccountResponse
+    expect(attempt).toMatchObject({ authorizeUrl: 'https://auth.openai.com/codex/device', userCode: 'KUIE-STXVW' })
+
+    const spawned = JSON.parse(readFileSync(envOut, 'utf8')) as { args: string[]; env: Record<string, string> }
+    expect(spawned.args).toEqual(['login', '--device-auth'])
+    expect(spawned.env.CODEX_HOME).toBe(codexHome)
+    expect(spawned.env.OPENAI_API_KEY).toBeUndefined()
+    expect(spawned.env.WORKERDECK_AUTH_KEY).toBeUndefined()
+
+    const waiting = (await (await post('/account/complete', { attemptId: attempt.attemptId })).json()) as CompleteAccountResponse
+    expect(waiting.pending).toBe(true)
+
+    writeFileSync(join(codexHome, 'approve'), '')
+    const done = await post('/account/complete', { attemptId: attempt.attemptId })
+    expect(done.status).toBe(200)
+    expect(((await done.json()) as CompleteAccountResponse).pending).toBeUndefined()
+    expect(readFileSync(join(codexHome, 'fake-login'), 'utf8')).toBe('ok')
+    expect((await post('/account/complete', { attemptId: attempt.attemptId })).status).toBe(409)
+
+    expect((await fetch(base + '/account', { method: 'DELETE' })).status).toBe(200)
+    expect(() => statSync(join(codexHome, 'fake-login'))).toThrow()
+  })
+
+  it('reports a failed device login and closes the attempt', async () => {
+    const { post, codexHome } = await serveCodex()
+    const attempt = (await (await post('/account/connect')).json()) as ConnectAccountResponse
+    writeFileSync(join(codexHome, 'deny'), '')
+    const failed = await post('/account/complete', { attemptId: attempt.attemptId })
+    expect(failed.status).toBe(400)
+    expect(((await failed.json()) as { error: string }).error).toContain('did not complete')
+    expect((await post('/account/complete', { attemptId: attempt.attemptId })).status).toBe(409)
+  })
+})
+
+describe('account expiry', () => {
+  it('names the expiry state and marks an expired token unavailable', async () => {
+    const now = Date.parse('2026-10-08T00:00:00Z')
+    const day = 24 * 60 * 60 * 1000
+    const account = (left: number) => ({
+      kind: 'setup-token' as const,
+      connectedAt: '2026-01-01',
+      expiresAt: new Date(now + left).toISOString(),
+    })
+    expect(accountExpiry(account(60 * day), now)).toBe('valid')
+    expect(accountExpiry(account(10 * day), now)).toBe('expiring')
+    expect(accountExpiry(account(-day), now)).toBe('expired')
+
+    const { port } = await serve({ setup: (configDir) => writeAccount(configDir, 'sk-ant-oat01-old', new Date(Date.now() - 400 * day)) })
+    const listed = async () =>
+      ((await fetch(`http://127.0.0.1:${port}/v1/profiles`).then((r) => r.json())) as { profiles: ProfileInfo[] }).profiles[0]
+    await expect.poll(async () => (await listed())?.available).toBe(false)
+    expect((await listed())?.unavailableReason).toContain('expired')
   })
 })

@@ -1,3 +1,12 @@
+export {
+  CodexLoginError,
+  codexLoginEnv,
+  codexLogout,
+  parseDeviceLogin,
+  startCodexDeviceLogin,
+  type CodexDeviceLogin,
+  type CodexDeviceLoginOptions,
+} from './codex-device.ts'
 export { accountSessionEnv } from './session-env.ts'
 export {
   CREDENTIAL_ENV_KEYS,

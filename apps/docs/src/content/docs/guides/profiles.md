@@ -28,7 +28,8 @@ A profile also selects which **engine** runs the session. `engine: 'claude'` (th
 what everything above describes) is Claude Code via the Agent SDK. `engine: 'codex'` is OpenAI
 Codex - the local codex binary driven over its `app-server` JSON-RPC surface - the direct
 structural sibling: a local agent binary with sessions, sandboxing and resume, resolving its own
-credentials from the operator's environment (`codex login` in your own terminal; the optional
+credentials from the operator's environment (`codex login` in your own terminal, or **Sign in**
+on a managed profile, which runs `codex login --device-auth` for you; the optional
 `codexHome` pins a CODEX_HOME the way `configDir` pins a config dir). `engine: 'provider'` runs
 the model-agnostic engine - no config directory, no CLI process; the server builds it through
 the `createEngineRunner` hook, which is where the operator resolves the model and its credentials.

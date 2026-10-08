@@ -259,7 +259,8 @@ It never implements a provider's OAuth flow and never touches a CLI's credential
 broker it offers is opt-in and runs the official CLI: **Connect account** on a Claude profile runs
 `claude setup-token` for you, shows its sign-in link, passes back the code you paste, and keeps the
 long-lived token it prints for that profile only (a 0600 file, never in an API response or a log).
-`codex login` stays your job, in your own terminal.
+**Sign in** on a codex profile with its own `codexHome` runs `codex login --device-auth` and shows
+its link and one-time code; codex keeps that login itself, and WorkerDeck never reads it.
 
 Our good-faith reading, not legal advice: **an API key (or Bedrock/Vertex) is the supported path**
 for anything that is a service - unattended runs, multi-user deployments, anything you expose to

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { errorMessage, type ConnectAccountResponse, type ProfileInfo } from '@workerdeck/protocol'
 import { ExternalLink } from 'lucide-react'
@@ -15,13 +15,15 @@ export interface AccountConnectDialogProps {
   onConnected?: (profile: ProfileInfo) => void
   // Hosts that cannot follow a plain link (a webview, a native shell) open the sign-in page themselves.
   onOpenUrl?: (url: string) => void
+  engine?: 'claude' | 'codex'
 }
 
-export function AccountConnectDialog({ client, profile, onClose, onConnected, onOpenUrl }: AccountConnectDialogProps) {
+export function AccountConnectDialog({ client, profile, onClose, onConnected, onOpenUrl, engine = 'claude' }: AccountConnectDialogProps) {
+  const account = engine === 'codex' ? 'a ChatGPT account' : 'a Claude account'
   return (
     <Dialog open={profile !== undefined && client !== undefined} onOpenChange={(next) => !next && onClose()}>
       <DialogContent size="sm">
-        <DialogHeader title={`Connect a Claude account to ${profile ?? 'profile'}`} />
+        <DialogHeader title={`Connect ${account} to ${profile ?? 'profile'}`} />
         <DialogBody>
           {profile && client ? (
             <AccountConnectFlow
@@ -31,6 +33,7 @@ export function AccountConnectDialog({ client, profile, onClose, onConnected, on
               onClose={onClose}
               onConnected={onConnected}
               onOpenUrl={onOpenUrl}
+              engine={engine}
             />
           ) : null}
         </DialogBody>
@@ -45,9 +48,10 @@ interface AccountConnectFlowProps {
   onClose: () => void
   onConnected?: (profile: ProfileInfo) => void
   onOpenUrl?: (url: string) => void
+  engine: 'claude' | 'codex'
 }
 
-function AccountConnectFlow({ client, profile, onClose, onConnected, onOpenUrl }: AccountConnectFlowProps) {
+function AccountConnectFlow({ client, profile, onClose, onConnected, onOpenUrl, engine }: AccountConnectFlowProps) {
   const [generation, setGeneration] = useState(0)
   const [attempt, setAttempt] = useState<ConnectAccountResponse>()
   const [opened, setOpened] = useState(false)
@@ -69,6 +73,48 @@ function AccountConnectFlow({ client, profile, onClose, onConnected, onOpenUrl }
       alive = false
     }
   }, [client, profile, generation])
+
+  const openSignIn = (url: string) => {
+    setOpened(true)
+    if (onOpenUrl) {
+      onOpenUrl(url)
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  const settled = useRef({ onConnected, onClose })
+  settled.current = { onConnected, onClose }
+  const userCode = attempt?.userCode
+  const attemptId = attempt?.attemptId
+  useEffect(() => {
+    if (!userCode || !attemptId) {
+      return
+    }
+    const life = { alive: true }
+    const wait = async (): Promise<void> => {
+      for (;;) {
+        const answer = await client.awaitAccount(profile, attemptId)
+        if (!life.alive) {
+          return
+        }
+        if (!answer.pending) {
+          settled.current.onConnected?.(answer.profile)
+          settled.current.onClose()
+          return
+        }
+      }
+    }
+    void wait().catch((e: unknown) => {
+      if (life.alive) {
+        setAttempt(undefined)
+        setError(errorMessage(e, 'The account could not be connected'))
+      }
+    })
+    return () => {
+      life.alive = false
+    }
+  }, [client, profile, userCode, attemptId])
 
   const submit = () => {
     if (!attempt || code.trim() === '') {
@@ -103,7 +149,38 @@ function AccountConnectFlow({ client, profile, onClose, onConnected, onOpenUrl }
     ) : (
       <div className="flex items-center gap-2 text-label text-fg-4">
         <Spinner className="size-4" />
-        Starting claude setup-token on the gateway
+        Starting {engine === 'codex' ? 'codex login' : 'claude setup-token'} on the gateway
+      </div>
+    )
+  }
+
+  if (attempt.userCode) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-label text-fg-3">1. Open the sign-in page and sign in with the ChatGPT account this profile belongs to.</p>
+        <div>
+          <Button type="button" variant={opened ? 'outline' : 'default'} onClick={() => openSignIn(attempt.authorizeUrl)}>
+            <ExternalLink className="size-3" />
+            Open sign-in page
+          </Button>
+        </div>
+        <p className="text-label text-fg-3">2. Enter this one-time code there:</p>
+        <code className="select-all self-start rounded-md border border-border px-3 py-1.5 font-mono text-body tracking-widest">
+          {attempt.userCode}
+        </code>
+        <div className="flex items-center gap-2 text-label text-fg-4">
+          <Spinner className="size-3" />
+          Waiting for the sign-in to finish
+        </div>
+        <p className="text-label text-fg-4">
+          codex keeps the login in this profile&apos;s CODEX_HOME on the gateway; WorkerDeck never reads it. Only enter the code if you
+          started this sign-in yourself.
+        </p>
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
       </div>
     )
   }
@@ -120,18 +197,7 @@ function AccountConnectFlow({ client, profile, onClose, onConnected, onOpenUrl }
         1. Open the sign-in page and sign in with the Claude account this profile belongs to. It shows a code when you are done.
       </p>
       <div>
-        <Button
-          type="button"
-          variant={opened ? 'outline' : 'default'}
-          onClick={() => {
-            setOpened(true)
-            if (onOpenUrl) {
-              onOpenUrl(attempt.authorizeUrl)
-            } else {
-              window.open(attempt.authorizeUrl, '_blank', 'noopener,noreferrer')
-            }
-          }}
-        >
+        <Button type="button" variant={opened ? 'outline' : 'default'} onClick={() => openSignIn(attempt.authorizeUrl)}>
           <ExternalLink className="size-3" />
           Open sign-in page
         </Button>

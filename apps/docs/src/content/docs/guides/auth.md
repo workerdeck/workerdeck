@@ -72,6 +72,8 @@ and reads the token the command prints when it succeeds.
 - **`requireApiKey` wins.** A session on a connected token reports `apiKeySource: 'none'`, so with
   `requireApiKey: true` the gateway refuses to connect an account and never injects a stored one.
 - **Disconnect** deletes the file. It does not revoke the token; revoke it at claude.ai.
+- **Expiry.** 30 days before the year is up the profile card shows "expires soon" and the gateway
+  logs a line; once it has passed, the profile reports unavailable with a "reconnect" reason.
 - **Scope.** The token can only make model requests: no claude.ai connectors, no Remote Control.
   Configure MCP servers on the gateway or the profile instead. `connectors: false` on a profile
   turns claude.ai connectors off explicitly for any login (`ENABLE_CLAUDEAI_MCP_SERVERS=false`).
@@ -90,6 +92,21 @@ The routes are `POST /profiles/:name/account/connect` (answers `{ attemptId, aut
 `POST /profiles/:name/account/complete` with `{ attemptId, code }`, and
 `DELETE /profiles/:name/account`; `@workerdeck/client` wraps them and `@workerdeck/ui` ships the
 dialog. One attempt per profile at a time; an attempt expires after ten minutes.
+
+## Sign a codex profile in to ChatGPT
+
+A managed codex profile with its own `codexHome` can be signed in the same way. WorkerDeck runs
+the official `codex login --device-auth` with that `CODEX_HOME`, shows you the link and the
+one-time code it prints, and waits for codex to exit. **codex does the sign-in and keeps the
+login in its own store**; WorkerDeck never reads `auth.json`, never holds a token, and learns the
+outcome only from the exit code and `codex login status`. Sign out runs `codex logout`.
+
+The same routes carry it: connect answers `{ attemptId, authorizeUrl, userCode }`, and
+`complete` with `{ attemptId }` alone waits up to 25 seconds, answering `{ pending: true }` until
+the sign-in finishes (`client.awaitAccount` in a loop). An attempt lives 15 minutes, as long as
+the code. `requireApiKey` refuses it too. Whether OpenAI's terms allow headless use of a ChatGPT
+subscription is unresolved; the posture is the Claude one: one person's own account on their own
+profile, never shared.
 
 ## Gateway auth is a separate thing entirely
 
@@ -128,7 +145,8 @@ uses, and whether that use fits your provider's terms, stays the operator's resp
 
 PRs crossing these will be rejected:
 
-- no hand-rolled claude.ai OAuth or PKCE (the one broker runs the official `claude setup-token`),
+- no hand-rolled OAuth or PKCE against any provider (the two brokers run the official
+  `claude setup-token` and `codex login --device-auth`),
 - no refresh-token custody, no hand-written CLI credential files, no reading a CLI's credential
   store,
 - no spoofing of Claude Code's client identity,
