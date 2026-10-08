@@ -537,6 +537,42 @@ export class AgentService {
     })
   }
 
+  // A rename, not a transfer: whole teams move together, but an edge to another gateway stored the old owner there.
+  renameOwner(from: string, to: string): Promise<{ renamed: number } | AgentRefusal> {
+    return this.#transition(async () => {
+      const stamped = [...this.#agents.values()].filter((agent) => agent.owner === from)
+      const linked = stamped.filter(
+        (agent) =>
+          agent.remoteLead !== undefined ||
+          (agent.remoteMembers ?? []).length > 0 ||
+          agent.pendingJoin !== undefined ||
+          this.#joining.has(agent.id) ||
+          this.#frozen.has(agent.id),
+      )
+      if (linked.length > 0) {
+        return {
+          status: 409,
+          error: `${linked.map((agent) => agent.name).join(', ')} hold a team edge to another gateway under ${from}; leave those teams first`,
+        }
+      }
+      if (stamped.length === 0) {
+        return { renamed: 0 }
+      }
+      const at = this.#now()
+      const renamed = stamped.map((agent) => ({ ...agent, owner: to, schema: AGENT_SCHEMA, updatedAt: at }))
+      await this.#apply(renamed, [])
+      for (const agent of renamed) {
+        this.#agents.set(agent.id, agent)
+      }
+      this.#changed()
+      return { renamed: renamed.length }
+    })
+  }
+
+  owners(): Array<string | undefined> {
+    return [...this.#agents.values()].map((agent) => agent.owner)
+  }
+
   // Why an agent's owner cannot move now: every edge it holds was agreed under the owner it has.
   transferRefusal(agent: StoredAgent): AgentRefusal | null {
     const edges =

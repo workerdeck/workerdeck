@@ -1101,6 +1101,8 @@ export type GatewayRelayMeta = {
   gateway: string
   owner?: string
   owners?: string[]
+  // The relay enrolled this gateway without naming an owner; `owner` is its placeholder.
+  ownersDefaulted?: true
   online: boolean
   features: string[]
 }
@@ -1168,6 +1170,8 @@ export type WriteHostFileResponse = {
 }
 
 export type SaveProfileResponse = { profile: ProfileInfo }
+export type RenameOwnerRequest = { from: string; to: string }
+export type RenameOwnerResponse = { agents: number; sessions: number }
 export type ConnectAccountResponse = { attemptId: string; authorizeUrl: string; expiresAt: string; userCode?: string }
 export type CompleteAccountRequest = { attemptId: string; code?: string }
 export type CompleteAccountResponse = { profile: ProfileInfo; pending?: boolean }

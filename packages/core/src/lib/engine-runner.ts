@@ -50,6 +50,10 @@ export abstract class EngineRunner<C extends EngineRunnerConfig> {
     })
   }
 
+  setOwner(owner: string | undefined): void {
+    this.config = { ...this.config, owner }
+  }
+
   // Called from the base constructor, before the subclass's own fields exist: the hooks may only close over them.
   protected coreHooks(): RunnerCoreHooks {
     return {}

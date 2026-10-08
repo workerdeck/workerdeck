@@ -127,7 +127,13 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   }
 
   let relayOwners: () => string[] = () => []
-  const owners = new OwnerService({ owner: options.owner, profiles: () => profiles.all(), relayOwners: () => relayOwners() })
+  let relayDefaulted = (): boolean => false
+  const owners = new OwnerService({
+    owner: options.owner,
+    profiles: () => profiles.all(),
+    relayOwners: () => relayOwners(),
+    relayDefaulted: () => relayDefaulted(),
+  })
   const stampOwners = (): Promise<unknown> =>
     agents.stampOwners((agent) => owners.forProfile(agent.config.profile)).catch((error: unknown) => diagnose(error, 'owners'))
 
@@ -148,7 +154,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const projects = new ProjectInfoService({
     decorate: (info) => {
       const decorated = agents.decorate(shells ? shells.decorate(info) : info)
-      const owner = decorated.owner ?? owners.forProfile(decorated.profile)
+      const owner = decorated.owner ?? owners.ownerFor(decorated.profile)
       return owner === undefined || owner === decorated.owner ? decorated : { ...decorated, owner }
     },
   })
@@ -277,19 +283,22 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   // closed, which is the hot-reload handover: a carried runner then reaches whichever generation installed last.
   const relayLog = options.relay?.log ?? ((message: string) => diagnose(new Error(message), 'relay'))
   let teamLinks: TeamLinks | undefined
+  const relayOwnersSettled = (): void => {
+    const status = relay?.status()
+    const enrolled = status?.ownersDefaulted ? [] : (status?.owners ?? [])
+    const unclaimable = [...owners.local()].filter((owner) => enrolled.length > 0 && !enrolled.includes(owner))
+    if (unclaimable.length > 0) {
+      relayLog(`relay: enrolled for ${enrolled.join(', ')}, so sessions of ${unclaimable.join(', ')} stay off the relay`)
+    }
+    void stampOwners()
+  }
   const relay =
     peers && options.relay
       ? createRelayLink(options.relay, peers, relayLog, () => teamLinks, {
           multiOwner: () => owners.multi(),
           retain: (owner) => owners.retain(owner),
-          online: () => {
-            const enrolled = relay?.status().owners ?? []
-            const unclaimable = [...owners.local()].filter((owner) => enrolled.length > 0 && !enrolled.includes(owner))
-            if (unclaimable.length > 0) {
-              relayLog(`relay: enrolled for ${enrolled.join(', ')}, so sessions of ${unclaimable.join(', ')} stay off the relay`)
-            }
-            void stampOwners()
-          },
+          online: () => relayOwnersSettled(),
+          ownersChanged: () => relayOwnersSettled(),
         })
       : undefined
   if (relay) {
@@ -298,6 +307,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
       const status = relay.status()
       return status.owners ?? (status.online && status.owner !== undefined ? [status.owner] : [])
     }
+    relayDefaulted = () => relay.status().ownersDefaulted === true
     teamLinks = new TeamLinks({
       agents,
       owners,

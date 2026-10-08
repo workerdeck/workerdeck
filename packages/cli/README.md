@@ -93,6 +93,17 @@ safe. `--allow-parked` and `--allow-queued` are you asserting that the `SessionS
 `QueueAdapter` respectively are durable; they're separate decisions. Point `--url` at any instance
 and authenticate with `--token` or `--header name=value`.
 
+## Owner rename
+
+```bash
+npx workerdeck owners rename operator tobias
+```
+
+Moves every agent and session stamped `operator` to `tobias` on a running gateway, whole teams
+included. `tobias` must be an owner the gateway already knows (config, a profile or the relay
+enrollment). Refused while an agent of the old owner holds a team edge to another gateway. Same
+`--url` / `--token` / `--header` as the guard.
+
 ## Credentials
 
 WorkerDeck implements **no Anthropic auth**. The official SDK/CLI resolves credentials from the

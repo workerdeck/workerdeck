@@ -12,6 +12,7 @@ const HELP = `workerdeck - run a workerdeck instance: session gateway + dashboar
 Usage
   workerdeck [options]
   workerdeck guard [options]     check whether it is safe to restart an instance
+  workerdeck owners rename <from> <to>   move agents and sessions to another owner
   workerdeck reload [options]    hot-reload a gateway started with --hot-reload
   workerdeck relay <command>     run or manage a cross-gateway peer relay (relay --help)
 
@@ -197,6 +198,11 @@ async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'relay') {
     const { runRelayCli } = await import('@workerdeck/relay')
     return await runRelayCli(argv.slice(1))
+  }
+
+  if (argv[0] === 'owners') {
+    const { runOwners } = await import('./lib/owners.ts')
+    return await runOwners(argv.slice(1))
   }
 
   if (argv[0] === 'guard') {

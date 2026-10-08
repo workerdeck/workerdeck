@@ -40,10 +40,22 @@ export type RelayTeamHandler = {
   reconcile(): Promise<void>
 }
 
-export type RelayLinkStatus = { gateway: string; owner?: string; owners?: string[]; online: boolean; features: string[] }
+export type RelayLinkStatus = {
+  gateway: string
+  owner?: string
+  owners?: string[]
+  ownersDefaulted?: true
+  online: boolean
+  features: string[]
+}
 
 // `multiOwner`: this gateway runs sessions of several owners, which a relay without `owners` cannot tell apart.
-export type RelayLinkHooks = { multiOwner?(): boolean; retain?(owner: string | undefined): void; online?(): void }
+export type RelayLinkHooks = {
+  multiOwner?(): boolean
+  retain?(owner: string | undefined): void
+  online?(): void
+  ownersChanged?(): void
+}
 
 export type RelayLink = {
   directory: PeerDirectory
@@ -219,6 +231,10 @@ export function createRelayLink(
       hooks.online?.()
       void teams?.()?.reconcile()
     },
+    ownersChanged: () => {
+      hooks.ownersChanged?.()
+      void teams?.()?.reconcile()
+    },
   }
 
   const carried = slots[CARRIED]
@@ -244,7 +260,7 @@ export function createRelayLink(
             key,
             ca,
             allow: options.expose?.allow,
-            features: teams ? ['teams', 'owners'] : ['owners'],
+            features: teams ? ['teams', 'owners', 'owners-live'] : ['owners', 'owners-live'],
             log,
           },
           host,
@@ -391,6 +407,7 @@ export function createRelayLink(
         gateway: options.gateway,
         ...(owner ? { owner } : {}),
         ...(owners.length > 0 ? { owners } : {}),
+        ...(connection?.ownersDefaulted() ? { ownersDefaulted: true as const } : {}),
         online,
         features: online ? connection!.features() : [],
       }

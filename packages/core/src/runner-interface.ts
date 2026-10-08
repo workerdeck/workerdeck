@@ -119,6 +119,8 @@ export interface Runner {
   setPermissionMode(mode: PermissionMode): Promise<void>
   setModel(model?: string): Promise<void>
   setEffort?(effort?: string): Promise<void>
+  // An owner rename on the gateway, never a transfer: the session keeps everything else.
+  setOwner?(owner: string | undefined): void
   settleExecution?(executionId: string, result: ToolExecutionResult): boolean
   park?(): RunnerSnapshot | undefined
   snapshot?(): RunnerSnapshot | undefined

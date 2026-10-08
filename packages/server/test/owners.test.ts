@@ -121,6 +121,35 @@ describe('OwnerService', () => {
     expect(enrolledOnly.multi()).toBe(true)
   })
 
+  it('never stamps a relay-defaulted owner, but reads it while nothing else names one', () => {
+    let defaulted = true
+    let relay = ['operator']
+    const list: ProfileInfo[] = []
+    const owners = new OwnerService({ profiles: () => list, relayOwners: () => relay, relayDefaulted: () => defaulted })
+    expect(owners.forProfile(undefined)).toBeUndefined()
+    expect(owners.ownerFor(undefined)).toBe('operator')
+    expect(owners.multi()).toBe(false)
+    expect(owners.known('operator')).toBe(false)
+
+    list.push({ name: 'p', owner: 'tobias' })
+    expect(owners.multi()).toBe(false)
+    expect(owners.ownerFor(undefined)).toBe('tobias')
+
+    defaulted = false
+    relay = ['tobias']
+    expect(owners.forProfile(undefined)).toBe('tobias')
+  })
+
+  it('forgets a renamed-away owner once the records are rebuilt', () => {
+    const owners = new OwnerService({ profiles: () => [] })
+    owners.retain('operator')
+    owners.retain('tobias')
+    expect(owners.multi()).toBe(true)
+    owners.rebuildRetained(['tobias', undefined])
+    expect(owners.multi()).toBe(false)
+    expect(owners.forProfile(undefined)).toBe('tobias')
+  })
+
   it('rejects a malformed gateway owner at startup', () => {
     expect(() => service('Silk Weave')).toThrow(/owner/)
   })
@@ -197,6 +226,29 @@ describe('owners on a shared gateway', () => {
   })
 })
 
+describe('owner rename', () => {
+  it('moves agents, whole teams and live sessions, and refuses an unknown target', async () => {
+    const gw = await sharedGateway()
+    const lead = await gw.call<AgentResponse>('/agents', 'POST', { name: 'Lead', config: { cwd: '/tmp', profile: 'ruli' } })
+    const pip = await gw.call<AgentResponse>('/agents', 'POST', { name: 'Pip', config: { cwd: '/tmp', profile: 'ruli' } })
+    expect((await gw.call(`/agents/${pip.body.agent.id}`, 'PATCH', { lead: lead.body.agent.id })).status).toBe(200)
+    const loose = await gw.call<{ session: SessionInfo }>('/sessions', 'POST', { cwd: '/tmp', profile: 'ruli' })
+
+    expect((await gw.call<{ error: string }>('/owners/rename', 'POST', { from: 'ruli', to: 'eve' })).status).toBe(409)
+    expect((await gw.call('/owners/rename', 'POST', { from: 'ruli', to: 'Not Valid' })).status).toBe(400)
+
+    const renamed = await gw.call<{ agents: number; sessions: number }>('/owners/rename', 'POST', { from: 'ruli', to: 'tobias' })
+    expect(renamed.status).toBe(200)
+    expect(renamed.body.agents).toBe(2)
+    expect(renamed.body.sessions).toBeGreaterThanOrEqual(1)
+    expect((await gw.call<AgentResponse>(`/agents/${pip.body.agent.id}`)).body.agent).toMatchObject({
+      owner: 'tobias',
+      lead: lead.body.agent.id,
+    })
+    expect((await gw.call<{ session: SessionInfo }>(`/sessions/${loose.body.session.id}`)).body.session.owner).toBe('tobias')
+  })
+})
+
 describe('peers between owners on one gateway', () => {
   function rig(multiOwner: boolean) {
     const registry = new SessionRegistry()
@@ -267,6 +319,20 @@ describe('agent records', () => {
     expect(await agents.update('inviter', { owner: 'dan' })).toMatchObject({ status: 409 })
     expect(await agents.update('joiner', { owner: 'dan' })).toMatchObject({ status: 409 })
     expect(await agents.update('free', { owner: 'dan' })).toMatchObject({ owner: 'dan' })
+  })
+
+  it('renames nothing while an agent of the old owner holds an edge to another gateway', async () => {
+    const agents = await service([
+      record('inviter', { owner: 'operator', remoteMembers: [{ agent: 'pi:M', state: 'invited', at: 1 }] }),
+      record('free', { owner: 'operator' }),
+      record('other', { owner: 'ruli' }),
+    ])
+    expect(await agents.renameOwner('operator', 'tobias')).toMatchObject({ status: 409, error: expect.stringMatching(/^inviter hold/) })
+    expect(agents.get('free')?.owner).toBe('operator')
+
+    const clean = await service([record('free', { owner: 'operator' }), record('other', { owner: 'ruli' })])
+    expect(await clean.renameOwner('operator', 'tobias')).toEqual({ renamed: 1 })
+    expect(clean.owners().sort()).toEqual(['ruli', 'tobias'])
   })
 })
 

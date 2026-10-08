@@ -766,7 +766,9 @@ server option carries `canConnect`, `claudeExecutable`, `codexExecutable`, `code
 **Owners** resolve in `services/owners.ts` (`OwnerService`: profile `owner`, the `owner` server
 option, the relay's sole enrolled owner; `multi()` when more than one is configured). The result is
 stamped on the runner config (durable host-only key `owner`) and on the agent record; nothing
-re-resolves a stamped owner.
+re-resolves a stamped owner. A relay-defaulted owner is read (`ownerFor`, `defaultOwner`) but
+never stamped (`forProfile`, `stampOwner`). `routes/owners.ts` is the operator-only
+`POST /owners/rename`, over `AgentService.renameOwner` and `SessionParkManager.renameOwner`.
 
 **Agents** live in `services/agents.ts` (`AgentService`: the in-memory index over an `AgentStore`,
 the decorator, the one-level team rule, name suggestions), `services/agent-store.ts` (memory and

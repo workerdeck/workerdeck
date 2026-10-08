@@ -3,6 +3,8 @@ import type {
   AgentResponse,
   CompleteAccountRequest,
   CompleteAccountResponse,
+  RenameOwnerRequest,
+  RenameOwnerResponse,
   ConnectAccountResponse,
   CreateAgentRequest,
   RetireAgentRequest,
@@ -286,6 +288,11 @@ export class WorkerDeckClient {
 
   async disconnectAccount(profile: string): Promise<ProfileInfo> {
     return await this.#pick<SaveProfileResponse['profile']>('DELETE', `/profiles/${encodeURIComponent(profile)}/account`, 'profile')
+  }
+
+  // Operator-only: moves every agent and session stamped `from` to `to` on this gateway.
+  async renameOwner(request: RenameOwnerRequest): Promise<RenameOwnerResponse> {
+    return await this.#call('POST', '/owners/rename', request)
   }
 
   async listSdkSessions(params?: { dir?: string; limit?: number; offset?: number; profile?: string }): Promise<SdkSessionSummary[]> {

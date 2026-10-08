@@ -5,15 +5,17 @@ export type OwnerServiceOptions = {
   profiles: () => readonly ProfileInfo[]
   // The owners the relay enrolled this gateway with, once it said so.
   relayOwners?: () => readonly string[]
+  // The relay enrolled this gateway without an owner, so its one owner is a placeholder, never stamped.
+  relayDefaulted?: () => boolean
 }
 
-// Resolves whom a new session or agent answers to. Every answer is stamped where it lands, never resolved again.
-// Whether the gateway holds several owners counts what config names now, every owner a record here still carries and
-// every owner the relay ever enrolled it with, so a profile edit or a reconnect never makes it look single.
+// Two answers: `stampOwner`/`forProfile` (what a new record is stamped with, explicit owners only) and
+// `defaultOwner`/`ownerFor` (read time, which may fall back to a relay-defaulted placeholder). Rules in GOTCHAS § owners.
 export class OwnerService {
   #owner: string | undefined
   #profiles: () => readonly ProfileInfo[]
   #relayOwners: () => readonly string[]
+  #relayDefaulted: () => boolean
   #retained = new Set<string>()
   #enrolled = new Set<string>()
 
@@ -24,6 +26,7 @@ export class OwnerService {
     this.#owner = options.owner
     this.#profiles = options.profiles
     this.#relayOwners = options.relayOwners ?? (() => [])
+    this.#relayDefaulted = options.relayDefaulted ?? (() => false)
   }
 
   local(): Set<string> {
@@ -45,24 +48,29 @@ export class OwnerService {
     }
   }
 
-  multi(): boolean {
-    const owners = this.local()
-    for (const owner of [...this.#retained, ...this.#enrolledNow(), ...this.#enrolled]) {
-      owners.add(owner)
+  // Replaces what records carry, after a rename moved every record off an owner.
+  rebuildRetained(owners: Iterable<string | undefined>): void {
+    this.#retained.clear()
+    for (const owner of owners) {
+      this.retain(owner)
     }
-    return owners.size > 1
   }
 
-  // The configured default, else the one owner this gateway has at all (config, records and enrollments together).
-  defaultOwner(): string | undefined {
+  multi(): boolean {
+    return this.#all().size > 1
+  }
+
+  // The configured default, else the one explicit owner this gateway has (config, records and enrollments together).
+  stampOwner(): string | undefined {
     if (this.#owner !== undefined) {
       return this.#owner
     }
-    const owners = this.local()
-    for (const owner of [...this.#retained, ...this.#enrolledNow(), ...this.#enrolled]) {
-      owners.add(owner)
-    }
+    const owners = this.#all()
     return owners.size === 1 ? [...owners][0] : undefined
+  }
+
+  defaultOwner(): string | undefined {
+    return this.stampOwner() ?? (this.#all().size === 0 ? this.#placeholder() : undefined)
   }
 
   known(owner: string): boolean {
@@ -70,13 +78,35 @@ export class OwnerService {
   }
 
   forProfile(name: string | undefined): string | undefined {
-    const profile = name === undefined ? undefined : this.#profiles().find((candidate) => candidate.name === name)
-    const owner = profile?.owner ?? this.defaultOwner()
+    const owner = this.#profile(name)?.owner ?? this.stampOwner()
     this.retain(owner)
     return owner
   }
 
+  ownerFor(name: string | undefined): string | undefined {
+    return this.#profile(name)?.owner ?? this.defaultOwner()
+  }
+
+  #profile(name: string | undefined): ProfileInfo | undefined {
+    return name === undefined ? undefined : this.#profiles().find((candidate) => candidate.name === name)
+  }
+
+  #all(): Set<string> {
+    const owners = this.local()
+    for (const owner of [...this.#retained, ...this.#enrolledNow(), ...this.#enrolled]) {
+      owners.add(owner)
+    }
+    return owners
+  }
+
+  #placeholder(): string | undefined {
+    return this.#relayDefaulted() ? this.#relayOwners()[0] : undefined
+  }
+
   #enrolledNow(): readonly string[] {
+    if (this.#relayDefaulted()) {
+      return []
+    }
     const relay = this.#relayOwners()
     for (const owner of relay) {
       this.#enrolled.add(owner)

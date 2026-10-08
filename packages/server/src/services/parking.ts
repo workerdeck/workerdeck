@@ -217,6 +217,33 @@ export class SessionParkManager {
     })
   }
 
+  // Live sessions get the owner on their runner and on the config a park will store; stored records are rewritten.
+  async renameOwner(from: string, to: string): Promise<number> {
+    let renamed = 0
+    for (const [id, config] of this.#configs) {
+      if (config.owner === from) {
+        this.#configs.set(id, { ...config, owner: to })
+        this.#options.registry.get(id)?.setOwner?.(to)
+        renamed += 1
+      }
+    }
+    for (const listed of await this.#options.store.list()) {
+      renamed += await this.#queue(listed.id, async () => {
+        const record = await this.#options.store.get(listed.id)
+        if (!record || this.#configs.has(listed.id) || (record.config.owner !== from && record.info.owner !== from)) {
+          return 0
+        }
+        await this.#options.store.save({
+          ...record,
+          info: record.info.owner === from ? { ...record.info, owner: to } : record.info,
+          config: record.config.owner === from ? { ...record.config, owner: to } : record.config,
+        })
+        return 1
+      })
+    }
+    return renamed
+  }
+
   // Dormant records only: a parked one replays its own log on wake, whose last label would win over the record's.
   relabel(id: string, input: StatusLabelInput | null): Promise<SessionInfo | undefined | 'parked'> {
     return this.#queue(id, async () => {

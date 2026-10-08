@@ -9,6 +9,7 @@ import { handleAgents } from './agents.ts'
 import { handleExecutionResult } from './executions.ts'
 import { handleHostFiles } from './fs.ts'
 import { handleJobs } from './jobs.ts'
+import { handleOwnerRename } from './owners.ts'
 import { handleProfiles } from './profiles.ts'
 import { handleSdkSessions } from './sdk-sessions.ts'
 import { handleSessions } from './sessions.ts'
@@ -71,6 +72,11 @@ export function httpRoutes(ctx: ServerContext): HttpRoute[] {
       match: pathWhere(under('/agents')),
       auth: 'operator',
       handler: (req, res, pathname, auth) => handleAgents(ctx, req, res, pathname, auth),
+    }),
+    route({
+      match: pathWhere((pathname) => pathname === base + '/owners/rename'),
+      auth: 'operator',
+      handler: (req, res) => handleOwnerRename(ctx, req, res),
     }),
     route({
       match: pathWhere((pathname) => pathname.startsWith(base + '/executions/')),

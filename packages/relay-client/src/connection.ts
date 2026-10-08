@@ -38,6 +38,7 @@ export type RelayHost = {
   team?(kind: TeamFrameKind, origin: RelayTeamOrigin, agentId: string, op?: string): Promise<TeamResult>
   teamStatus?(origin: { gateway: string; owner: string }, body: TeamStatusBody): Promise<InboundTeamStatusAnswer>
   online?(): void
+  ownersChanged?(): void
 }
 
 export type RelayConnectOptions = {
@@ -69,6 +70,8 @@ export type RelayConnection = {
   owner(): string | undefined
   // The owners the relay lets this gateway claim; empty from a relay without `owners`.
   owners(): string[]
+  // The relay enrolled this gateway without an owner, so `owner()` is its placeholder.
+  ownersDefaulted(): boolean
   nudge(): void
   setHost(host: RelayHost): void
   close(): void
@@ -90,6 +93,11 @@ const TERMINAL_CLOSES: ReadonlyMap<number, string> = new Map([
   [RELAY_CLOSE.badHello, 'the relay refused the hello frame'],
   [RELAY_CLOSE.ownersRequired, 'the relay enrolled this gateway with several owners, which needs a newer WorkerDeck'],
 ])
+
+function linkAge(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  return seconds < 120 ? `${seconds}s` : seconds < 7200 ? `${Math.round(seconds / 60)}m` : `${Math.round(seconds / 3600)}h`
+}
 
 export function connectRelay(options: RelayConnectOptions, initialHost: RelayHost): RelayConnection {
   const tickMs = options.tickMs ?? 2_000
@@ -119,6 +127,9 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
   let agreed: RelayFeature[] = []
   let ownOwner: string | undefined
   let ownOwners: string[] = []
+  let ownDefaulted = false
+  let onlineAt = 0
+  let silent = false
   const pending = new Map<string, Pending>()
 
   const sendFrame = (frame: GatewayFrame): void => {
@@ -241,6 +252,12 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     }
   }
 
+  const readOwners = (frame: { [key: string]: unknown }): void => {
+    ownOwner = typeof frame.owner === 'string' ? frame.owner : undefined
+    ownOwners = Array.isArray(frame.owners) ? frame.owners.filter((owner): owner is string => typeof owner === 'string') : []
+    ownDefaulted = frame.defaulted === true
+  }
+
   const onFrame = (raw: RawData): void => {
     lastHeard = Date.now()
     const frame = decodeFrame(Array.isArray(raw) ? Buffer.concat(raw) : raw instanceof ArrayBuffer ? Buffer.from(raw) : raw)
@@ -254,8 +271,8 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
         }
         state = 'online'
         agreed = Array.isArray(frame.features) ? ownFeatures.filter((feature) => (frame.features as unknown[]).includes(feature)) : []
-        ownOwner = typeof frame.owner === 'string' ? frame.owner : undefined
-        ownOwners = Array.isArray(frame.owners) ? frame.owners.filter((owner): owner is string => typeof owner === 'string') : []
+        readOwners(frame)
+        onlineAt = Date.now()
         attempt = 0
         lastTerminal = undefined
         log(`relay: connected to ${options.url} as ${options.gateway}`)
@@ -264,6 +281,16 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
         tickTimer = setInterval(() => void tick(), tickMs)
         digestTimer = setInterval(() => sendFrame(publisher.digest()), digestMs)
         host.online?.()
+        return
+      }
+      case 'owners': {
+        if (state !== 'online') {
+          return
+        }
+        readOwners(frame)
+        log(`relay: owners now ${ownOwners.join(', ') || ownOwner || 'none'}${ownDefaulted ? ' (relay default)' : ''}`)
+        host.ownersChanged?.()
+        void publishSnapshot().catch(() => {})
         return
       }
       case 'registry.resync': {
@@ -332,8 +359,12 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
       }
       lastTerminal = code
     } else if (wasOnline) {
-      log(`relay: connection lost (${code}${reason ? ` ${reason}` : ''}); reconnecting`)
+      const why = silent ? ' after no traffic from the relay' : reason ? ` ${reason}` : ''
+      log(
+        `relay: connection lost (${code}${why}) after ${linkAge(Date.now() - onlineAt)} online, at ${new Date().toISOString()}; reconnecting`,
+      )
     }
+    silent = false
     scheduleReconnect()
   }
 
@@ -357,6 +388,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
       })
       heartbeatTimer = setInterval(() => {
         if (Date.now() - lastHeard > heartbeatMs * 2 + 1_000) {
+          silent = true
           ws.terminate()
           return
         }
@@ -429,6 +461,7 @@ export function connectRelay(options: RelayConnectOptions, initialHost: RelayHos
     features: () => (state === 'online' ? [...agreed] : []),
     owner: () => ownOwner,
     owners: () => (state === 'online' ? [...ownOwners] : []),
+    ownersDefaulted: () => state === 'online' && ownDefaulted,
     nudge: () => void tick(),
     setHost: (next) => {
       host = next

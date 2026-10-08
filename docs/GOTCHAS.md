@@ -1520,6 +1520,23 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   mentions and `peers_send`, so a twin was unreachable by name. Adopt without a name takes the
   session title through `freeName` ("Title 2") instead of refusing. Records from before the rule
   may still share a name; nothing renames them.
+- **A relay-defaulted owner is read, never stamped.** A gateway enrolled without an owner gets the
+  relay's placeholder (`operator`) with `defaulted: true` on `welcome`/`owners`. `OwnerService`
+  keeps it out of the enrolled set and out of `multi()`: `stampOwner`/`forProfile` (create, adopt,
+  `stampOwners`, session-factory) answer only explicit owners and may leave a record unstamped;
+  `defaultOwner`/`ownerFor` (`decorate`, meta, peers, team links) fall back to the placeholder while
+  nothing else names an owner. So on the wire nothing changes, and the first explicit enrollment
+  stamps every unstamped agent once (`stampOwners` on `online` and on `ownersChanged`). This is the
+  laptop incident of 2026-10-08: 10 agents persisted `owner: operator` and could no longer team
+  with MAGWIN's `tobias`.
+- **Renaming an owner is `POST /owners/rename { from, to }`** (operator; CLI `workerdeck owners
+  rename`). A rename, not a transfer: whole teams move together, live sessions get
+  `Runner.setOwner` plus parking's live config, and stored records are rewritten in place. `to`
+  must be `known`. Refused (409, nothing written) while an agent of `from` holds an edge to another
+  gateway (`remoteLead`, `remoteMembers`, `pendingJoin`, a join in flight, or frozen): the other
+  side stored `from` for it. The retained owner set is rebuilt afterwards so a renamed-away owner
+  stops making the gateway look multi. A profile still naming `from` keeps stamping new sessions
+  with it; that is configuration, edit it. Never hand-edit `agents.json` under a running gateway.
 - **One peer rule, local and remote: `peerOps`** (`protocol/agents.ts`; `peerReaches` is its
   `list`), answered per operation (list, send, peek). The team rule, and sessions of different
   owners reach each other only through a team (lead and member, or teammates), or as two
@@ -1634,6 +1651,16 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   carries the answering agent's owner, stamped by the relay like `TeamResult.owner` (a claim the
   target may not make falls back to its published entry, never through), so a join recovered
   after a restart stores `remoteLead.owner` too and is refused for an unprompted mover across owners.
+- **An owner change reaches a connected gateway** (`relay owner` / `relay owners`, then reload). A
+  gateway that negotiated `owners-live` gets an `owners` frame (`owner`, `owners`, `defaulted`),
+  calls `host.ownersChanged`, restamps and republishes; one that did not is closed with
+  `ownersChanged` (4413, not terminal) and reconnects into the new `welcome`. Before this a
+  connected gateway kept its old owner until it happened to reconnect.
+- **Link drops log their cause.** The relay-client's "connection lost" line carries the close
+  code, "after no traffic from the relay" when the heartbeat (2 x `heartbeatMs` + 1 s) terminated
+  it, the link's uptime and a timestamp: an event-loop stall on either side looks like a 1006.
+  Caddy closes proxied websockets on every config reload unless the route sets
+  `stream_close_delay`.
 - **The relay is trusted; the gateway checks stop other gateways, not the relay** (R3.7
   decision 1). The relay carries roster, owner and origin assertions faithfully, and every
   gateway-side check (`vouches`, rosters, accepts, owner fits) catches a claim *another gateway*

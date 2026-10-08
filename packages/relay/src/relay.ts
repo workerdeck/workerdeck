@@ -25,6 +25,7 @@ import {
   type InboundSend,
   type InboundTeam,
   type InboundTeamStatus,
+  type OwnersFacts,
   type RelayFeature,
   type RelayFrame,
   type RelayOp,
@@ -91,6 +92,7 @@ export type Relay = {
 type Gateway = {
   name: string
   owners: string[]
+  defaulted: boolean
   socket: WebSocket
   ops: Set<RelayOp>
   features: Set<RelayFeature>
@@ -129,6 +131,10 @@ function readEntries(value: unknown): RelaySessionEntry[] | undefined {
       typeof entry === 'object' && entry !== null && typeof entry.id === 'string' && entry.id.length > 0 && typeof entry.cwd === 'string',
   )
   return entries.length === value.length ? entries : undefined
+}
+
+function ownersFacts(owners: string[], defaulted: boolean): OwnersFacts {
+  return { owner: owners[0], owners, ...(defaulted ? { defaulted: true as const } : {}) }
 }
 
 export async function startRelay(options: RelayOptions): Promise<Relay> {
@@ -186,9 +192,18 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
         drop(gateway, RELAY_CLOSE.revoked, 'revoked')
         continue
       }
-      gateway.owners = ownersOf(enrollments.gateways[gateway.name], defaultOwner)
-      if (gateway.owners.length > 1 && !gateway.features.has('owners')) {
+      const owners = enrolledOwners(gateway.name)
+      const defaulted = ownersDefaulted(gateway.name)
+      const changed = defaulted !== gateway.defaulted || owners.join(',') !== gateway.owners.join(',')
+      gateway.owners = owners
+      gateway.defaulted = defaulted
+      if (owners.length > 1 && !gateway.features.has('owners')) {
         drop(gateway, RELAY_CLOSE.ownersRequired, 'several owners need a gateway that names them')
+      } else if (changed && gateway.features.has('owners-live')) {
+        log(`relay: ${gateway.name} owners now ${owners.join(', ')}${defaulted ? ' (default)' : ''}`)
+        send(gateway.socket, { t: 'owners', ...ownersFacts(owners, defaulted) })
+      } else if (changed) {
+        drop(gateway, RELAY_CLOSE.ownersChanged, 'owners changed')
       }
     }
   }
@@ -201,6 +216,10 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
   }
 
   const enrolledOwners = (name: string): string[] => ownersOf(enrollments.gateways[name], defaultOwner)
+  const ownersDefaulted = (name: string): boolean => {
+    const enrollment = enrollments.gateways[name]
+    return enrollment?.owners === undefined && enrollment?.owner === undefined
+  }
 
   // Which owner a frame about `agent` speaks for: its published entry's, else the claim, which must be enrolled.
   const claimOwner = (gateway: Gateway, agent: string, claimed: unknown): string | undefined => {
@@ -577,9 +596,11 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     if (previous) {
       drop(previous, RELAY_CLOSE.replaced, 'replaced by a newer connection')
     }
+    const defaulted = ownersDefaulted(name)
     const gateway: Gateway = {
       name,
       owners,
+      defaulted,
       socket,
       ops: new Set(Array.isArray(ceiling) ? ceiling.filter(isRelayOp) : []),
       features: new Set(features),
@@ -591,7 +612,7 @@ export async function startRelay(options: RelayOptions): Promise<Relay> {
     }
     gateways.set(name, gateway)
     log(`relay: ${name} online`)
-    send(socket, { t: 'welcome', relayVersion: RELAY_WIRE_VERSION, features: [...RELAY_FEATURES], owner: owners[0], owners })
+    send(socket, { t: 'welcome', relayVersion: RELAY_WIRE_VERSION, features: [...RELAY_FEATURES], ...ownersFacts(owners, defaulted) })
     return gateway
   }
 

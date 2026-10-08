@@ -8,7 +8,8 @@ export const RELAY_ALL_OPS = [...RELAY_OPS, ...RELAY_GRANTED_OPS] as const
 export type RelayOp = (typeof RELAY_ALL_OPS)[number]
 
 // `owners`: entries and team frames carry their own owner, checked against the gateway's enrolled set.
-export const RELAY_FEATURES = ['teams', 'owners'] as const
+// `owners-live`: an owner change at the relay reaches a connected gateway as an `owners` frame instead of a reconnect.
+export const RELAY_FEATURES = ['teams', 'owners', 'owners-live'] as const
 export type RelayFeature = (typeof RELAY_FEATURES)[number]
 
 export const RELAY_OWNER_NAME = OWNER_NAME
@@ -21,6 +22,7 @@ export const RELAY_CLOSE = {
   replaced: 4409,
   timeout: 4408,
   ownersRequired: 4412,
+  ownersChanged: 4413,
 } as const
 
 export const RELAY_FRAME_MAX_BYTES = 4 * 1024 * 1024
@@ -126,7 +128,10 @@ export type HelloFrame = {
   ceiling: { ops: RelayOp[] }
   features?: RelayFeature[]
 }
-export type WelcomeFrame = { t: 'welcome'; relayVersion: number; features?: RelayFeature[]; owner?: string; owners?: string[] }
+// `defaulted`: the enrollment names no owner, so `owner` is the relay's placeholder and nothing should be stamped with it.
+export type OwnersFacts = { owner?: string; owners?: string[]; defaulted?: true }
+export type WelcomeFrame = { t: 'welcome'; relayVersion: number; features?: RelayFeature[] } & OwnersFacts
+export type OwnersFrame = { t: 'owners' } & OwnersFacts
 export type SnapshotFrame = { t: 'registry.snapshot'; seq: number; entries: RelaySessionEntry[] }
 export type DeltaFrame = { t: 'registry.delta'; seq: number; upsert: RelaySessionEntry[]; remove: string[] }
 export type DigestFrame = { t: 'registry.digest'; seq: number; count: number; hash: string }
@@ -158,7 +163,15 @@ export type GatewayFrame =
   | TeamStatusRequest
   | ResponseFrame
 
-export type RelayFrame = WelcomeFrame | ResyncFrame | InboundPeek | InboundSend | InboundTeam | InboundTeamStatus | ResponseFrame
+export type RelayFrame =
+  | WelcomeFrame
+  | OwnersFrame
+  | ResyncFrame
+  | InboundPeek
+  | InboundSend
+  | InboundTeam
+  | InboundTeamStatus
+  | ResponseFrame
 
 export function encodeFrame(frame: GatewayFrame | RelayFrame): string {
   return JSON.stringify(frame)

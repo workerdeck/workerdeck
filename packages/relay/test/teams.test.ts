@@ -677,3 +677,37 @@ describe('enrollment with several owners', () => {
     expect(Object.keys(file.gateways)).toEqual(['ok'])
   })
 })
+
+describe('owner changes reach a connected gateway', () => {
+  const SAME_ONLY = { rules: [{ from: '*', to: '*', allow: ['send', 'peek', 'team'] }] }
+
+  it('marks a defaulted enrollment and pushes a named owner as an owners frame', async () => {
+    const { stateDir, relay } = await setup(SAME_ONLY)
+    const gateway = fakeGateway([entry('p')])
+    let changes = 0
+    gateway.host.ownersChanged = () => {
+      changes += 1
+    }
+    const connection = await attach(relay, stateDir, 'mac', gateway, { features: ['teams', 'owners', 'owners-live'] })
+    expect(connection.owner()).toBe('operator')
+    expect(connection.ownersDefaulted()).toBe(true)
+
+    await setGatewayOwner(stateDir, 'mac', 'tobias')
+    await relay.reload()
+    await until(() => connection.owner() === 'tobias', 'the owners frame')
+    expect(connection.ownersDefaulted()).toBe(false)
+    expect(connection.owners()).toEqual(['tobias'])
+    expect(changes).toBe(1)
+    expect(connection.state()).toBe('online')
+  })
+
+  it('closes a gateway without owners-live so it reconnects under the new owner', async () => {
+    const { stateDir, relay } = await setup(SAME_ONLY)
+    const connection = await attach(relay, stateDir, 'pi', fakeGateway([entry('p')]), { features: ['teams', 'owners'] })
+    expect(connection.ownersDefaulted()).toBe(true)
+    await setGatewayOwner(stateDir, 'pi', 'tobias')
+    await relay.reload()
+    await until(() => connection.state() === 'online' && connection.owner() === 'tobias', 'the reconnect')
+    expect(connection.ownersDefaulted()).toBe(false)
+  })
+})
