@@ -4,7 +4,8 @@ import { screenText } from './setup-token.ts'
 
 const CODEX_CREDENTIAL_ENV_KEYS: readonly string[] = ['OPENAI_API_KEY', 'CODEX_API_KEY']
 const URL_PATTERN = /https:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/g
-const USER_CODE_PATTERN = /\b[A-Z0-9]{4,}-[A-Z0-9]{4,}\b/
+// The trailing whitespace is required: output arrives in chunks, and a code cut at a chunk end still looks whole.
+const USER_CODE_PATTERN = /\b([A-Z0-9]{4,}-[A-Z0-9]{4,})(?=\s)/
 
 export type CodexDeviceLoginOptions = {
   executable: string
@@ -49,7 +50,7 @@ export function parseDeviceLogin(text: string): { verificationUrl: string; userC
   const plain = screenText(text)
   const verificationUrl = plain.match(URL_PATTERN)?.find((url) => url.includes('/device'))
   const prompt = plain.search(/one-time code/i)
-  const userCode = prompt >= 0 ? plain.slice(prompt).match(USER_CODE_PATTERN)?.[0] : undefined
+  const userCode = prompt >= 0 ? plain.slice(prompt).match(USER_CODE_PATTERN)?.[1] : undefined
   return verificationUrl && userCode ? { verificationUrl, userCode } : undefined
 }
 

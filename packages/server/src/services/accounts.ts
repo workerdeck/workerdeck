@@ -176,20 +176,24 @@ export class AccountService {
     }
   }
 
-  async disconnect(profile: ProfileInfo): Promise<boolean> {
+  async disconnect(profile: ProfileInfo): Promise<Outcome<{ existed: boolean }>> {
     this.cancel(profile.name)
-    const codex = engineOf(profile) === 'codex'
-    let existed: boolean
-    if (codex) {
+    if (engineOf(profile) === 'codex') {
       const executable = this.#deps.options?.codexExecutable ?? resolveBundledCodexExecutable()
-      existed = executable ? await codexLogout({ executable, env: this.#deps.baseEnvFor(profile), codexHome: profile.codexHome }) : false
-    } else {
-      existed = profile.configDir ? deleteAccount(profile.configDir) : false
+      if (!executable) {
+        return { ok: false, status: 501, error: 'the codex executable could not be found' }
+      }
+      const signedOut = await codexLogout({ executable, env: this.#deps.baseEnvFor(profile), codexHome: profile.codexHome })
+      await this.#deps.onChange(profile)
+      return signedOut
+        ? { ok: true, existed: true }
+        : { ok: false, status: 502, error: 'codex logout did not succeed; the profile may still be signed in' }
     }
-    if (existed || codex) {
+    const existed = profile.configDir ? deleteAccount(profile.configDir) : false
+    if (existed) {
       await this.#deps.onChange(profile)
     }
-    return existed
+    return { ok: true, existed }
   }
 
   expiredVerdict(profile: ProfileInfo): EngineAvailability | undefined {

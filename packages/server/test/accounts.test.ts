@@ -174,6 +174,10 @@ describe('codex device login', () => {
       '2. Enter this one-time code \x1b[90m(expires in 15 minutes)\x1b[0m\n   \x1b[94mKUIE-STXVW\x1b[0m\n'
     expect(parseDeviceLogin(raw)).toEqual({ verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'KUIE-STXVW' })
     expect(parseDeviceLogin(raw.slice(0, 80))).toBeUndefined()
+    const cut = raw.indexOf('STXVW') + 4
+    expect(parseDeviceLogin(raw.slice(0, cut))).toBeUndefined()
+    expect(parseDeviceLogin(raw.slice(0, cut + 1))).toBeUndefined()
+    expect(parseDeviceLogin(raw.slice(0, cut + 1) + '\n')?.userCode).toBe('KUIE-STXVW')
   })
 
   async function serveCodex() {
@@ -230,6 +234,9 @@ describe('codex device login', () => {
 
     expect((await fetch(base + '/account', { method: 'DELETE' })).status).toBe(200)
     expect(() => statSync(join(codexHome, 'fake-login'))).toThrow()
+    const again = await fetch(base + '/account', { method: 'DELETE' })
+    expect(again.status).toBe(502)
+    expect(((await again.json()) as { error: string }).error).toContain('codex logout did not succeed')
   })
 
   it('reports a failed device login and closes the attempt', async () => {

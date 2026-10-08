@@ -90,7 +90,10 @@ async function handleAccount(
   requireMethod(req, sub === 'account' ? 'DELETE' : 'POST')
   refuseWith(await accounts.guard(auth, profile))
   if (sub === 'account') {
-    await accounts.disconnect(profile)
+    const removed = await accounts.disconnect(profile)
+    if (!removed.ok) {
+      fail(removed.status, removed.error)
+    }
     json(res, 200, { profile: profiles.forResponse(profile) })
     return
   }

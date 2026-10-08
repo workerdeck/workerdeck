@@ -1968,11 +1968,14 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
 - **No PTY.** Unlike `claude setup-token`, codex (0.158.0 bundled, 0.161.0) prints the link
   (`https://auth.openai.com/codex/device`) and the one-time code (`XXXX-XXXXX`, 15 minutes) on plain
   pipes and then waits; `server/src/accounts/codex-device.ts` spawns it with `stdio` pipes and
-  `NO_COLOR=1`. The code is taken after the words "one-time code", never by line position.
+  `NO_COLOR=1`. The code is taken after the words "one-time code", never by line position, and
+  only once whitespace follows it: output arrives in chunks, and `KUIE-STXV` at a chunk end
+  matches the pattern too (WD-Review B1).
 - **codex owns the result.** Exit 0 means signed in; codex wrote its own `auth.json` (or keyring
   entry) under `CODEX_HOME`. We never read it: the profile's state is `ProfileInfo.available`
   from `codex login status`, re-probed (awaited) before `complete` answers. No `ProfileInfo.account`
-  for codex. Sign out is `codex logout`.
+  for codex. Sign out is `codex logout`; a non-zero exit, timeout or missing binary answers 502
+  (never a 200 "signed out" while the login may still work).
 - **Waiting is the client's loop.** There is no code to paste, so `complete` with `{ attemptId }`
   alone waits up to 25 s (`codexWaitMs`) and answers `{ pending: true }`; a second call while one
   waits is a 409, so a client must not run two loops (the ui dialog keeps its callbacks in a ref
