@@ -273,6 +273,31 @@ public enum TerminalPlanner {
     return lines
   }
 
+  /// A thought is one ellipsised line until pressed, the port of web `ThinkingRow`.
+  static func planThinking(
+    id: String, text: String, metrics: TerminalMetrics, expansion: TerminalExpansion,
+    nested: Bool, inOpen: Bool
+  ) -> [TermLine] {
+    let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let first = body.components(separatedBy: "\n").first ?? ""
+    let cols = metrics.columns(gutter: 2, extra: nested ? nestedIndentCells * metrics.cell : 0)
+    let clipped = TerminalCells.clipped(first, cols: cols)
+    let key = ExpansionKey.thinking(id)
+    let expandable = clipped != body
+    let open = expandable && expansion.isOpen(key)
+    let press: TermPress? = expandable ? .toggle(key) : nil
+    guard open else {
+      return [
+        TermLine(
+          gutter: TermGlyph.thinking, gutterTone: .dim, text: clipped, tone: .dim, italic: true,
+          nested: nested, press: press, inOpen: inOpen)
+      ]
+    }
+    return wrapBody(
+      body, metrics: metrics, gutter: TermGlyph.thinking, gutterTone: .dim, tone: .dim,
+      italic: true, nested: nested, press: press, inOpen: true)
+  }
+
   // MARK: - Items
 
   static func plan(
@@ -313,10 +338,9 @@ public enum TerminalPlanner {
         text, metrics: metrics, gutter: TermGlyph.bullet, gutterTone: .fg, nested: nested,
         inOpen: inOpen)
 
-    case .thinking(_, let text, _):
-      return wrapBody(
-        text, metrics: metrics, gutter: TermGlyph.thinking, gutterTone: .dim, tone: .dim,
-        italic: true, nested: nested, inOpen: inOpen)
+    case .thinking(let id, let text, _):
+      return planThinking(
+        id: id, text: text, metrics: metrics, expansion: expansion, nested: nested, inOpen: inOpen)
 
     case .toolCall(let call):
       return planToolCall(

@@ -60,6 +60,7 @@ import { assertEffort, effortDefaultFor } from '../../lib/effort.ts'
 import { sessionTools } from '../../lib/session-tools.ts'
 import { agentResetFields } from '../../lib/context-reset.ts'
 import { shellToolNeedsCard, shellToolOf, shellWriteToolOf } from '../../lib/shells.ts'
+import { AddressedThinking, apiMessageId } from './addressed-thinking.ts'
 import { CLAUDE_CATALOG } from './catalog.ts'
 import { SubagentTracker } from './subagents.ts'
 import { tailTaskOutput, taskOutputRoots } from './task-output.ts'
@@ -100,6 +101,7 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
   #effort: string | null | undefined
   #turnOverWhileBlocked = false
   #subagents = new SubagentTracker()
+  #addressed = new AddressedThinking()
   #outputTails = new ToolOutputTails((body) => this.core.emit(body))
   #numTurns: number | undefined
   #input = new InputQueue()
@@ -521,13 +523,15 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
           uuid: m.uuid,
         })
       } else if (m.type === 'assistant') {
-        this.core.emit({
-          type: 'assistant_message',
-          message: toApiMessage(m.message),
-          parentToolUseId: m.parent_tool_use_id,
-          replay: true,
-          uuid: m.uuid,
-        })
+        this.core.emit(
+          this.#addressed.stamp(apiMessageId(m.message), {
+            type: 'assistant_message',
+            message: toApiMessage(m.message),
+            parentToolUseId: m.parent_tool_use_id,
+            replay: true,
+            uuid: m.uuid,
+          }),
+        )
       }
     }
   }
@@ -654,7 +658,8 @@ export class SessionRunner extends EngineRunner<SessionRunnerConfig> implements 
       void this.#fetchContextUsage()
       return
     }
-    const normalized = normalizeSdkMessage(msg)
+    const sdkBody = normalizeSdkMessage(msg)
+    const normalized = sdkBody && this.#addressed.stamp(msg.type === 'assistant' ? apiMessageId(msg.message) : undefined, sdkBody)
     const body = normalized?.type === 'conversation_reset' ? { ...normalized, ...this.#takeAgentReset() } : normalized
     if (body) {
       this.core.emit(body)

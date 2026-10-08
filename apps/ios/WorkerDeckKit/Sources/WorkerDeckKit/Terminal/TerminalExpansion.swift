@@ -35,6 +35,8 @@ public enum ExpansionKey: Hashable, Sendable {
   /// record is what the press fetches and what a kill names, and the row it is
   /// drawn in is an event-log detail.
   case shell(String)
+  /// One thinking row, by its item id: one line closed, the whole thought open.
+  case thinking(String)
 }
 
 extension ExpansionKey: CustomStringConvertible {
@@ -47,6 +49,7 @@ extension ExpansionKey: CustomStringConvertible {
     case .call(let id): return "call:\(id)"
     case .brief(let id): return "brief:\(id)"
     case .shell(let id): return "shell:\(id)"
+    case .thinking(let id): return "thinking:\(id)"
     }
   }
 }
@@ -190,7 +193,7 @@ public struct TerminalExpansion: Equatable, Sendable {
   private mutating func close(_ key: ExpansionKey, subtree: Set<ExpansionKey>) {
     var closing: Set<ExpansionKey> = [key]
     switch key {
-    case .call, .brief, .shell: break
+    case .call, .brief, .shell, .thinking: break
     case .run, .task: closing.formUnion(subtree)
     }
     open.subtract(closing)
@@ -410,6 +413,7 @@ func expansionKeys(of block: TerminalBlock, calls: [BlockCall]) -> Set<Expansion
   switch block {
   case .item(let leaf):
     if case .shell(let item) = leaf.item { keys.insert(.shell(item.shell.id)) }
+    if case .thinking(let id, _, _) = leaf.item { keys.insert(.thinking(id)) }
   case .run(let run):
     if let key = run.expansionKey { keys.insert(key) }
   case .task(let task):
@@ -420,6 +424,7 @@ func expansionKeys(of block: TerminalBlock, calls: [BlockCall]) -> Set<Expansion
     if taskBrief(task.task) != nil { keys.insert(.brief(task.task.id)) }
     for child in task.children {
       if case .run(let run) = child, let key = run.expansionKey { keys.insert(key) }
+      if case .item(let leaf) = child, case .thinking(let id, _, _) = leaf.item { keys.insert(.thinking(id)) }
     }
   }
   for drawn in calls where drawn.drawsResult { keys.insert(.call(drawn.call.id)) }

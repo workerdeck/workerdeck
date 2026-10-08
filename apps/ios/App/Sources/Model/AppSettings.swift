@@ -165,11 +165,18 @@ final class AppSettings {
     didSet { defaults.set(catchUpMode, forKey: Self.catchUpKey) }
   }
 
+  /// Thinking rows in the transcript, folded to one line. Lines the model wrote to the reader as
+  /// thinking are drawn as replies and never hidden.
+  var showThinking: Bool {
+    didSet { defaults.set(showThinking, forKey: Self.thinkingKey) }
+  }
+
   private let defaults: UserDefaults
 
   private static let variantKey = "bi.atomic.workerdeck.ios.transcriptVariant"
   private static let fontKey = "bi.atomic.workerdeck.ios.transcriptFont"
   private static let catchUpKey = "bi.atomic.workerdeck.ios.catchUpMode"
+  private static let thinkingKey = "bi.atomic.workerdeck.ios.showThinking"
   private static let approveLockKey = "bi.atomic.workerdeck.ios.approveWhileLocked"
   private static let pushEnabledKey = "bi.atomic.workerdeck.ios.pushEnabled"
   private static let pushEventsKey = "bi.atomic.workerdeck.ios.pushEvents"
@@ -184,6 +191,7 @@ final class AppSettings {
     transcriptFont =
       defaults.string(forKey: Self.fontKey).flatMap(TranscriptFont.init(rawValue:)) ?? .regular
     catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true
+    showThinking = defaults.object(forKey: Self.thinkingKey) as? Bool ?? true
     approveWhileLocked =
       defaults.string(forKey: Self.approveLockKey).flatMap(ApproveWhileLocked.init(rawValue:)) ?? .unlockedOnly
     pushEnabled = defaults.object(forKey: Self.pushEnabledKey) as? Bool ?? true
@@ -211,6 +219,10 @@ private struct TranscriptFontKey: EnvironmentKey {
   static let defaultValue: TranscriptFont = .regular
 }
 
+private struct ShowThinkingKey: EnvironmentKey {
+  static let defaultValue = true
+}
+
 extension EnvironmentValues {
   var transcriptVariant: TranscriptVariant {
     get { self[TranscriptVariantKey.self] }
@@ -220,6 +232,11 @@ extension EnvironmentValues {
   var transcriptFont: TranscriptFont {
     get { self[TranscriptFontKey.self] }
     set { self[TranscriptFontKey.self] = newValue }
+  }
+
+  var showThinking: Bool {
+    get { self[ShowThinkingKey.self] }
+    set { self[ShowThinkingKey.self] = newValue }
   }
 }
 
@@ -244,6 +261,7 @@ extension View {
   func transcriptPreferences(_ settings: AppSettings) -> some View {
     environment(\.transcriptVariant, settings.transcriptVariant)
       .environment(\.transcriptFont, settings.transcriptFont)
+      .environment(\.showThinking, settings.showThinking)
       .fontDesign(settings.transcriptFont.design)
   }
 }

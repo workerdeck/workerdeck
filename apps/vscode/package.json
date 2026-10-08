@@ -494,6 +494,12 @@
             "description": "When you reopen a session, mark where you left off with a bar counting the rows that arrived since, and fade what you already read. Turn this off if you switch between sessions constantly and the marker is just noise.",
             "order": 3
           },
+          "workerdeck.showThinking": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show the model's thinking in the transcript, folded to one line until you press it. Lines the model wrote to you as thinking always show.",
+            "order": 3
+          },
           "workerdeck.fontSize": {
             "type": "number",
             "default": 0,

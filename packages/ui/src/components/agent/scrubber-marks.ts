@@ -172,7 +172,7 @@ export function buildMarks(
       marks.push({ kind: 'shell', itemIndex: index })
     } else if (toolCallFailed(item) && outcomes.has(index)) {
       marks.push({ kind: 'toolFailed', itemIndex: index })
-    } else if (item.kind === 'assistant_text' && parentOf(item) === frameParentId) {
+    } else if ((item.kind === 'assistant_text' || (item.kind === 'thinking' && item.addressed)) && parentOf(item) === frameParentId) {
       if (frameParentId !== undefined) {
         marks.push({ kind: 'turn', itemIndex: index })
         return

@@ -23,6 +23,7 @@ struct TranscriptListView: View {
   var jumpToRecap: Int = 0
 
   @Environment(\.transcriptVariant) private var variant
+  @Environment(\.showThinking) private var showThinking
 
   @State private var expanded: Set<String> = []
   @State private var isNearBottom = true
@@ -39,10 +40,12 @@ struct TranscriptListView: View {
             if let catchUp, catchUp.at == index {
               RecapDivider(label: catchUp.label).id(Self.recapAnchor)
             }
-            TranscriptItemView(item: item, isExpanded: expansion(item.rowID))
-              .id(item.rowID)
+            if showThinking || item.kind != .thinking {
+              TranscriptItemView(item: item, isExpanded: expansion(item.rowID))
+                .id(item.rowID)
               // Already read, at the web client's own 45%.
-              .opacity(catchUp.map { index < $0.at ? 0.45 : 1 } ?? 1)
+                .opacity(catchUp.map { index < $0.at ? 0.45 : 1 } ?? 1)
+            }
           }
           Color.clear
             .frame(height: 1)

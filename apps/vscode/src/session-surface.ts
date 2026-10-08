@@ -9,6 +9,7 @@ import { clientFor } from './gateway.ts'
 import { WebviewTransportHost } from './webview-transports.ts'
 import {
   catchUpMode,
+  showThinking,
   panelFontSize,
   terminalActionLabels,
   terminalAffordances,
@@ -112,6 +113,7 @@ export abstract class SessionSurface<V extends WebviewSurface> extends WebviewHo
       'data-affordances': terminalAffordances() ? 'on' : 'off',
       'data-action-labels': terminalActionLabels() ? 'on' : 'off',
       'data-catch-up': catchUpMode() ? 'on' : 'off',
+      'data-thinking': showThinking() ? 'show' : 'hide',
     }
   }
 

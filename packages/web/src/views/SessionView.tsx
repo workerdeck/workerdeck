@@ -20,7 +20,7 @@ import { SessionWorkspace } from '@workerdeck/ui/workspace'
 import { Trash2 } from 'lucide-react'
 import type { WorkerDeckClient } from '@workerdeck/client'
 import { clientFor, useHosts } from '@/lib/hosts.ts'
-import { getActionStyle, getCatchUp, getFontSize, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
+import { getActionStyle, getCatchUp, getFontSize, getThinking, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
 import { useMarkSeen, unseenSince } from '@/hooks/useUnseen.ts'
 import { nudgeSessions, useSessionRows, useSessions } from '@/hooks/useSessions.ts'
@@ -62,6 +62,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   const [unseen] = useState(() => (getCatchUp() === 'on' ? unseenSince(hostId, sessionId) : undefined))
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
+  const [thinking] = useState(getThinking)
   const [actionStyle] = useState(getActionStyle)
   const [panelFontSize] = useState(getFontSize)
   // Read once: the workspace owns the live value, and re-seeding mid-session would yank the splitter out from under a drag.
@@ -90,7 +91,14 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
   const rows = useSessionRows(snapshots)
   const agentRow = rows.find((row) => row.hostId === hostId && row.info.id === sessionId && row.info.agent)
   const avatars = useAgentAvatars(rows)
-  const peerAvatars = useMemo(() => peerAvatarsOf(rows.filter((row) => row.hostId === hostId), avatars), [rows, avatars, hostId])
+  const peerAvatars = useMemo(
+    () =>
+      peerAvatarsOf(
+        rows.filter((row) => row.hostId === hostId),
+        avatars,
+      ),
+    [rows, avatars, hostId],
+  )
   const polled = useMemo(
     () => snapshots.find((s) => s.host.id === hostId)?.sessions.find((s) => s.id === sessionId),
     [snapshots, hostId, sessionId],
@@ -119,6 +127,7 @@ function SessionViewInner({ hostId, sessionId, client }: { hostId: string; sessi
       peerAvatars={peerAvatars}
       transcriptVariant={variant}
       transcriptFont={font}
+      hideThinking={thinking === 'hide'}
       affordances={{ labels: actionStyle === 'labeled' }}
       fontSize={panelFontSize}
       openSubagent={subagent ? { toolUseId: subagent, nonce: sn ?? 0 } : undefined}

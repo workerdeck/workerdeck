@@ -3,6 +3,7 @@ import {
   PEER_MENTION_MAX,
   type ApiMessage,
   peerDeliveredPrefix,
+  proseText,
   teamRole,
   transcriptProse,
   type MessageOrigin,
@@ -359,13 +360,12 @@ export function recentLines(events: readonly SessionEvent[], limit: number): str
   return lines
 }
 
-function textOf(content: string | Array<{ type: string; text?: string }>): string {
+function textOf(content: ApiMessage['content']): string {
   if (typeof content === 'string') {
     return content.trim()
   }
   return content
-    .filter((block) => block.type === 'text' && typeof block.text === 'string')
-    .map((block) => block.text!.trim())
+    .map((block) => proseText(block)?.trim())
     .filter(Boolean)
     .join('\n')
 }

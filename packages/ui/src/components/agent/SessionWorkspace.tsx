@@ -24,6 +24,7 @@ export interface SessionWorkspaceProps {
   peerAvatars?: SessionPanelProps['peerAvatars']
   onToggleBookmark?: SessionPanelProps['onToggleBookmark']
   stickyPrompt?: SessionPanelProps['stickyPrompt']
+  hideThinking?: SessionPanelProps['hideThinking']
   openSubagent?: SessionPanelProps['openSubagent']
   reveal?: SessionPanelProps['reveal']
   subagents?: SessionPanelProps['subagents']
@@ -62,6 +63,7 @@ export function SessionWorkspace({
   peerAvatars,
   onToggleBookmark,
   stickyPrompt,
+  hideThinking,
   openSubagent,
   reveal,
   subagents,
@@ -226,6 +228,7 @@ export function SessionWorkspace({
             peerAvatars={peerAvatars}
             onToggleBookmark={onToggleBookmark}
             stickyPrompt={stickyPrompt}
+            hideThinking={hideThinking}
             openSubagent={openSubagent}
             reveal={reveal}
             subagents={subagents}

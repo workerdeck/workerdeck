@@ -81,6 +81,7 @@ export interface TranscriptProps {
   lineHeight?: number
   affordances?: TerminalAffordances | boolean
   stickyPrompt?: boolean
+  hideThinking?: boolean
   scrubber?: boolean
   bookmarks?: readonly string[]
   // Folded peer slugs, so a `#Name` this client can name draws as a token.
@@ -107,6 +108,7 @@ export function Transcript({
   lineHeight,
   affordances,
   stickyPrompt = false,
+  hideThinking = false,
   scrubber,
   bookmarks,
   sessionNames,
@@ -136,13 +138,16 @@ export function Transcript({
     [frame, frameTask, items],
   )
   const rows = useMemo<TranscriptRow[]>(() => {
-    const fold = (from: number, to: number) => terminalBlocks(items.slice(from, to), from, terminal)
+    const fold = (from: number, to: number) => {
+      const blocks = terminalBlocks(items.slice(from, to), from, terminal)
+      return hideThinking ? blocks.filter((block) => !('item' in block && block.item.kind === 'thinking' && !block.item.addressed)) : blocks
+    }
     const lead: TranscriptRow[] = brief ? [{ key: 'brief' as const, text: brief }] : []
     if (boundary === undefined || !recap) {
       return [...lead, ...fold(0, items.length)]
     }
     return [...fold(0, boundary), { key: 'recap' as const, line: recap }, ...fold(boundary, items.length)]
-  }, [items, boundary, recap, terminal, brief])
+  }, [items, boundary, recap, terminal, brief, hideThinking])
   const skillNames = useMemo(() => state.skills?.map((skill) => skill.name), [state.skills])
   return (
     <TranscriptVariantProvider value={variant}>

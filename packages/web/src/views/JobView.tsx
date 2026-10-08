@@ -10,7 +10,7 @@ import { JOB_STATUS_META } from '@/components/shell/JobsSidebar.tsx'
 import { client } from '@/lib/client.ts'
 import { primaryHost } from '@/lib/hosts.ts'
 import { getRail, setRail } from '@/lib/rail.ts'
-import { getActionStyle, getFontSize, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
+import { getActionStyle, getFontSize, getThinking, getTranscriptFont, getTranscriptVariant } from '@/lib/settings.ts'
 import { useJobs } from '@/hooks/useJobs.ts'
 import { useSessions } from '@/hooks/useSessions.ts'
 
@@ -44,6 +44,7 @@ export function JobView() {
 
   const [variant] = useState(getTranscriptVariant)
   const [font] = useState(getTranscriptFont)
+  const [thinking] = useState(getThinking)
   const [actionStyle] = useState(getActionStyle)
   const [panelFontSize] = useState(getFontSize)
   // Read once: re-seeding mid-view would yank the splitter out from under a drag.
@@ -80,6 +81,7 @@ export function JobView() {
       readOnly
       transcriptVariant={variant}
       transcriptFont={font}
+      hideThinking={thinking === 'hide'}
       affordances={{ labels: actionStyle === 'labeled' }}
       fontSize={panelFontSize}
       scrubber

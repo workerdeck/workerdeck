@@ -85,7 +85,7 @@ final class TerminalTranscriptModel {
   ///   this model never sees, and only the caller that sliced the frame has it.
   func update(
     items: [TranscriptItem], metrics: TerminalMetrics, pendingApprovals: Int = 0,
-    frameTask: ToolCallItem? = nil
+    frameTask: ToolCallItem? = nil, hideThinking: Bool = false
   ) {
     let metricsChanged = metrics != self.metrics
     let recapChanged = pendingApprovals != self.pendingApprovals
@@ -110,7 +110,7 @@ final class TerminalTranscriptModel {
     // saying so is the noise catch-up exists to save them.
     let rows = TerminalRows.build(
       items: items, recapAt: label == nil ? nil : recapAt, recapLabel: label ?? "",
-      frameTask: frameTask)
+      frameTask: frameTask, hideThinking: hideThinking)
     // Nothing to do when neither the content nor the cell moved - this is called
     // from a view update, which fires for reasons that are not either.
     if !metricsChanged && !recapChanged && rows == self.rows { return }

@@ -299,7 +299,7 @@ public enum ContentBlock: Sendable, Equatable {
 
 extension ContentBlock: Decodable {
   private enum CodingKeys: String, CodingKey {
-    case type, text, thinking, id, name, input
+    case type, text, thinking, addressed, id, name, input
     case toolUseId = "tool_use_id"
     case content
     case isError = "is_error"
@@ -316,7 +316,11 @@ extension ContentBlock: Decodable {
         self = .text(try container.decode(String.self, forKey: .text))
       case "thinking":
         // Encrypted thinking arrives signature-only: `thinking` may be absent or ''.
-        self = .thinking(try container.decodeIfPresent(String.self, forKey: .thinking) ?? "")
+        let thinking = try container.decodeIfPresent(String.self, forKey: .thinking) ?? ""
+        // Written to the reader (the engine's `addressed` stamp), so it is drawn and counted as a reply.
+        let addressed = try container.decodeIfPresent(Bool.self, forKey: .addressed) ?? false
+        self = addressed && !thinking.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          ? .text(thinking.trimmingCharacters(in: .whitespacesAndNewlines)) : .thinking(thinking)
       case "tool_use":
         self = .toolUse(
           id: try container.decode(String.self, forKey: .id),

@@ -21,6 +21,7 @@ const terminalMetrics = {
 }
 const affordances = root.dataset.affordances === 'off' ? false : { labels: root.dataset.actionLabels === 'on' }
 const catchUp = root.dataset.catchUp !== 'off'
+const hideThinking = root.dataset.thinking === 'hide'
 const panelFontSize = Number(root.dataset.panelFontSize) || undefined
 
 createRoot(root).render(
@@ -29,6 +30,7 @@ createRoot(root).render(
       bridge={bridge}
       variant={variant}
       catchUp={catchUp}
+      hideThinking={hideThinking}
       terminalMetrics={terminalMetrics}
       affordances={affordances}
       fontSize={panelFontSize}

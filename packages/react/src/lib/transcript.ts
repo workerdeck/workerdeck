@@ -45,7 +45,7 @@ export type TranscriptItem =
       streaming: boolean
       parentToolUseId: string | null
     }
-  | { kind: 'thinking'; id: string; text: string; parentToolUseId: string | null }
+  | { kind: 'thinking'; id: string; text: string; parentToolUseId: string | null; addressed?: true }
   | {
       kind: 'tool_call'
       id: string
@@ -601,6 +601,7 @@ export function applyEvent(state: TranscriptState, event: SessionEvent): Transcr
             id,
             text,
             parentToolUseId: event.parentToolUseId,
+            ...((block as { addressed?: true }).addressed && { addressed: true }),
           })
         } else if (block.type === 'tool_use') {
           const toolUse = block as { id: string; name: string; input: unknown }

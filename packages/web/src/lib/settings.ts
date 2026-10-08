@@ -71,3 +71,15 @@ export function getActionStyle(): ActionStyle {
 export function setActionStyle(style: ActionStyle): void {
   writePref(ACTION_STYLE_KEY, style)
 }
+
+export type ThinkingPref = 'show' | 'hide'
+
+const THINKING_KEY = 'workerdeck.thinking'
+
+export function getThinking(): ThinkingPref {
+  return readPref(THINKING_KEY) === 'hide' ? 'hide' : 'show'
+}
+
+export function setThinking(mode: ThinkingPref): void {
+  writePref(THINKING_KEY, mode)
+}

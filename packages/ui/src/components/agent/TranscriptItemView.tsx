@@ -12,7 +12,7 @@ import { ToolCallCard } from './ToolCallCard.tsx'
 import { Row } from '../terminal/row.tsx'
 import { TerminalItemView } from '../terminal/TerminalTranscript.tsx'
 import { ViewableImage } from './image-viewer.tsx'
-import { peerLabel, useTicker } from '../terminal/items.tsx'
+import { addressedText, peerLabel, useTicker } from '../terminal/items.tsx'
 import { canBackground, elapsedLabel, liveTailLines, toolBusy } from '../terminal/live-tool.ts'
 import { ShellItemActions, useShellActions, useVerifyRunning } from './shell-actions.tsx'
 import { BackgroundAction, BookmarkAction, CopyAction, WithActions } from '../terminal/affordances.tsx'
@@ -107,6 +107,9 @@ export function TranscriptItemView({
       )
     }
     case 'thinking': {
+      if (item.addressed) {
+        return <TranscriptItemView item={addressedText(item)} />
+      }
       return <Reasoning isStreaming={item.id === 'streaming-thinking'}>{item.text}</Reasoning>
     }
     case 'tool_call': {

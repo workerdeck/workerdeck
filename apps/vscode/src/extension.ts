@@ -442,6 +442,7 @@ export function activate(context: vscode.ExtensionContext): void {
         e.affectsConfiguration('workerdeck.fontFamily') ||
         e.affectsConfiguration('workerdeck.transcriptVariant') ||
         e.affectsConfiguration('workerdeck.catchUpMode') ||
+        e.affectsConfiguration('workerdeck.showThinking') ||
         e.affectsConfiguration('workerdeck.terminal') ||
         e.affectsConfiguration('workerdeck.actionStyle') ||
         e.affectsConfiguration('editor.fontSize') ||

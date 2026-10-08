@@ -191,6 +191,28 @@ describe('transcript reducer', () => {
     expect(done.items[0]).toMatchObject({ kind: 'thinking', id: 'a1-0', text: 'Hmm, ok.' })
   })
 
+  it('carries the engine addressed stamp onto the thinking item', () => {
+    seq = 0
+    const state = run(initialTranscriptState, [
+      {
+        type: 'assistant_message',
+        message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'reasoning' }] },
+        parentToolUseId: null,
+        uuid: 'a1',
+      },
+      {
+        type: 'assistant_message',
+        message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'Two decisions from you.', addressed: true }] },
+        parentToolUseId: null,
+        uuid: 'a2',
+      },
+    ])
+    expect(state.items).toEqual([
+      { kind: 'thinking', id: 'a1-0', text: 'reasoning', parentToolUseId: null },
+      { kind: 'thinking', id: 'a2-0', text: 'Two decisions from you.', parentToolUseId: null, addressed: true },
+    ])
+  })
+
   it('keeps streamed thinking when the full message ships a signature-only block', () => {
     seq = 0
     const state = run(initialTranscriptState, [

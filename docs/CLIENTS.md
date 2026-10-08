@@ -41,7 +41,7 @@ editor's own cell**: `terminalMetrics` is resolved host-side from `editor.fontSi
 multiplier, else pixels - rounded, because a fractional cell puts every other row on a
 half-pixel), overridable per `workerdeck.terminal.fontSize`/`.lineHeight`, so the panel, the
 editor and the integrated terminal draw at one size. Everything the first paint needs is
-stamped on `#root` - variant, cell, affordances - and a change to any of them, or to
+stamped on `#root` - variant, cell, affordances, `workerdeck.showThinking` (`hideThinking`) - and a change to any of them, or to
 the two `editor.*` keys, re-renders the panel through the same `reloadWebview()` the dev
 reloader uses. The webview repoints `--cw-font-mono` at `--vscode-editor-font-family`
 unconditionally, which is what makes "the agent panel is in my editor font" true under a theme

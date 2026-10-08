@@ -28,6 +28,7 @@ export function App({
   bridge,
   variant,
   catchUp,
+  hideThinking,
   terminalMetrics,
   affordances,
   fontSize,
@@ -35,6 +36,7 @@ export function App({
   bridge: Bridge
   variant: TranscriptVariant
   catchUp: boolean
+  hideThinking: boolean
   terminalMetrics: TerminalMetrics
   affordances: TerminalAffordances | boolean
   fontSize?: number
@@ -164,6 +166,7 @@ export function App({
         openSubagent={openSubagent}
         reveal={reveal}
         stickyPrompt
+        hideThinking={hideThinking}
         panelSurface="external"
         controlsSurface="external"
         focusComposerOnClick

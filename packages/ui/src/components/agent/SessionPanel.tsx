@@ -121,6 +121,7 @@ export interface SessionPanelProps {
   subagents?: SubagentInfo[]
   shells?: ShellInfo[]
   stickyPrompt?: boolean
+  hideThinking?: boolean
   transcriptFont?: TranscriptFont
   controlsSurface?: 'internal' | 'external' | 'status'
   onControls?: (controls: SessionControls | undefined) => void
@@ -228,6 +229,7 @@ export function SessionPanel({
   openShell,
   onShellChange,
   stickyPrompt = false,
+  hideThinking = false,
   controlsSurface = 'internal',
   onControls,
   focusComposerOnClick = false,
@@ -694,6 +696,7 @@ export function SessionPanel({
                   {...cell}
                   affordances={affordances}
                   stickyPrompt={stickyPrompt}
+                  hideThinking={hideThinking}
                   scrubber={scrubber}
                   bookmarks={bookmarks}
                   replaying={replaying}

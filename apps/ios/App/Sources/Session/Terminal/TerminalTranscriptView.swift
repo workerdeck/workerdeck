@@ -97,6 +97,7 @@ struct TerminalTranscriptView: View {
   /// session (the preview harness), and the press is then a no-op - which is
   /// correct there, since nothing truncated a replay nobody asked for.
   @Environment(\.toolResultFetcher) private var fetchToolResult
+  @Environment(\.showThinking) private var showThinking
   /// How a row's image boxes get their bytes. Nil outside a live session, and
   /// the boxes then rest on their placeholder - correct there, since nothing
   /// refs a replay nobody asked for.
@@ -262,7 +263,7 @@ struct TerminalTranscriptView: View {
         let visible = frame.map { subagentItems(items, parentToolUseId: $0) } ?? items
         model.update(
           items: visible, metrics: metrics, pendingApprovals: pendingApprovals.count,
-          frameTask: frame.flatMap { subagentTask(items, id: $0) })
+          frameTask: frame.flatMap { subagentTask(items, id: $0) }, hideThinking: !showThinking)
         // What the bar above the composer is drawn from - including "the fold
         // spliced no seam", which is how a boundary with nothing after it stops
         // claiming there is something to jump to.

@@ -5,15 +5,18 @@ import {
   getActionStyle,
   getFontSize,
   getCatchUp,
+  getThinking,
   getTranscriptFont,
   getTranscriptVariant,
   setActionStyle,
   setFontSize,
   setCatchUp,
+  setThinking,
   setTranscriptFont,
   setTranscriptVariant,
   type ActionStyle,
   type CatchUp,
+  type ThinkingPref,
 } from '@/lib/settings.ts'
 
 // Reads its stored value on open rather than tracking it live: the panel stamps these at mount, and reshaping every
@@ -119,6 +122,23 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   ]}
                   read={getActionStyle}
                   write={setActionStyle}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-body-sm text-fg-2">
+                  Thinking
+                  <span className="block text-label text-fg-4">
+                    The model's reasoning, folded to one line. Lines it meant for you always show.
+                  </span>
+                </span>
+                <PrefSelect<ThinkingPref>
+                  label="Thinking"
+                  options={[
+                    { value: 'show', label: 'Show' },
+                    { value: 'hide', label: 'Hide' },
+                  ]}
+                  read={getThinking}
+                  write={setThinking}
                 />
               </div>
             </Section>

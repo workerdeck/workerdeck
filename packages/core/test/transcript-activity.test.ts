@@ -147,6 +147,12 @@ describe('transcriptProse', () => {
     expect(transcriptProse(message)).toBe(1)
   })
 
+  it('counts addressed thinking as prose and plain thinking not at all', () => {
+    expect(transcriptProse(assistant([{ type: 'thinking', thinking: 'reasoning' }]))).toBe(0)
+    expect(transcriptProse(assistant([{ type: 'thinking', thinking: 'Two decisions from you.', addressed: true }]))).toBe(1)
+    expect(transcriptProse(assistant([{ type: 'thinking', thinking: ' ', addressed: true }]))).toBe(0)
+  })
+
   it('scores a tool-only turn zero, so a tool-looping session shows no badge at all', () => {
     expect(
       transcriptProse(

@@ -141,8 +141,16 @@ public struct TerminalRows: Equatable, Sendable {
   ///   boundary-free - so the brief leads whichever path builds the rows.)
   public static func build(
     items: [TranscriptItem], recapAt boundary: Int? = nil, recapLabel: String = "",
-    fold: Bool = true, frameTask: ToolCallItem? = nil
+    fold: Bool = true, frameTask: ToolCallItem? = nil, hideThinking: Bool = false
   ) -> TerminalRows {
+    let blocks = { (slice: [TranscriptItem], offset: Int) -> [TranscriptRow] in
+      terminalBlocks(slice, offset: offset, fold: fold)
+        .filter { block in
+          guard hideThinking, case .item(let leaf) = block, case .thinking = leaf.item else { return true }
+          return false
+        }
+        .map(TranscriptRow.block)
+    }
     // Only when the agent's own stream carries no brief. A **foreground** Task
     // forwards one as a real nested user item, which is already the frame's
     // first row; a **background** agent forwards nothing (measured: eight of
@@ -155,12 +163,10 @@ public struct TerminalRows: Equatable, Sendable {
       ? []
       : frameTask.flatMap { task in taskBrief(task).map { [.brief(id: task.id, text: $0)] } } ?? []
     guard let boundary, boundary > 0, boundary < items.count else {
-      return TerminalRows(
-        rows: lead + terminalBlocks(items, fold: fold).map(TranscriptRow.block))
+      return TerminalRows(rows: lead + blocks(items, 0))
     }
-    let before = terminalBlocks(Array(items[..<boundary]), fold: fold).map(TranscriptRow.block)
-    let after = terminalBlocks(Array(items[boundary...]), offset: boundary, fold: fold)
-      .map(TranscriptRow.block)
+    let before = blocks(Array(items[..<boundary]), 0)
+    let after = blocks(Array(items[boundary...]), boundary)
     return TerminalRows(rows: lead + before + [.recap(label: recapLabel)] + after)
   }
 

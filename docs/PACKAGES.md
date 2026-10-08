@@ -1546,6 +1546,12 @@ silence. That was the single biggest source of transcript verbosity, ahead of ro
 The open-state guard remains what it was: the whole of a
 hundred-thousand-character result lands in *one* virtual row, and the virtualizer mounts rows, so
 it cannot help with what is inside a single one.
+**Thinking folds to one line** (`ThinkingRow`, `term-clip-1`, press to open), so its computed
+height is one line by the no-expanded-branch rule below; there is deliberately no "expanded by
+default" mode, which would be that branch. `hideThinking` drops plain thinking rows after
+`terminalBlocks` (never from `items`, whose indexes the catch-up seam and bookmarks address). A
+thinking item with `addressed` draws as an `AssistantRow`, is never folded or hidden, and counts
+as a reply on the scrubber.
 **Row heights are computed, not estimated** (`terminal/height.ts`): one line height and one cell
 make a row's height derivable from its item, so `estimateSize` is exact and the scrollbar stops
 growing as rows mount. Measured 99-100% pixel-exact on real content; the calculator returns

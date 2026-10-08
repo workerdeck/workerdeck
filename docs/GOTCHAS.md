@@ -19,6 +19,13 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   summaries (`showThinkingSummaries`). Measured 2026-10-08 over local transcripts: Opus 5 0% of
   ~40k steps, Opus 5.5 3 to 5% since its release, in the SDK and the CLI alike. Haiku 4.5
   accepts the option too. `extraOptions.thinking` still overrides it.
+- **Those user-facing lines are found by position, never by wording.** The SDK sends one content
+  block per `assistant_message`, all sharing the API `message.id`; a thinking block whose previous
+  block in the same id was also thinking is the reader's. `AddressedThinking` (claude engine, live
+  and history replay) stamps it `ThinkingBlock.addressed`, `proseText` counts it as prose (unread,
+  peer peeks), and every client draws it as a reply that the thinking fold and hide never touch.
+  A single block with several paragraphs is reasoning, however it reads. Checked 2026-10-08: 5 of
+  5 second-in-pair blocks with text were written to the user. iOS decodes it straight to `.text`.
 - `total_cost_usd`/`num_turns` on result messages are cumulative **for the engine process**, not for
   the session: roll up last-seen within one process, never sum. `usage` is per-turn: sum
   input+output+cache_creation+cache_read.

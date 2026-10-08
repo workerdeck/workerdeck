@@ -8,6 +8,10 @@ export function transcriptVariant(): 'terminal' | 'cards' {
   return vscode.workspace.getConfiguration('workerdeck').get<'terminal' | 'cards'>('transcriptVariant') === 'cards' ? 'cards' : 'terminal'
 }
 
+export function showThinking(): boolean {
+  return vscode.workspace.getConfiguration('workerdeck').get<boolean>('showThinking') !== false
+}
+
 export function catchUpMode(): boolean {
   return vscode.workspace.getConfiguration('workerdeck').get<boolean>('catchUpMode') !== false
 }

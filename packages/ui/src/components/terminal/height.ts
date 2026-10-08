@@ -628,7 +628,7 @@ export function itemHeight(item: TranscriptItem, m: CellMetrics): ComputedHeight
       return markdownHeight(item.text, m, extraPx)
     }
     case 'thinking': {
-      return rowH(item.text, m, { extraPx })
+      return item.addressed ? markdownHeight(item.text.trim(), m, extraPx) : { px: m.line + extraPx, exact: true }
     }
     case 'tool_call': {
       // A closed peer send is exactly one ellipsised row, whatever the message's length.

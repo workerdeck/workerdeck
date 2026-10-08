@@ -82,7 +82,7 @@ function markBody(first: Mark | undefined, items: readonly TranscriptItem[], ski
     const turn = first.turnIndex === undefined ? undefined : items[first.turnIndex]
     return (
       <>
-        {item?.kind === 'assistant_text' ? (
+        {item?.kind === 'assistant_text' || (item?.kind === 'thinking' && item.addressed) ? (
           <div className={skin.excerptClass} data-tone={skin.text}>
             {skin.answerGlyph ? <span data-tone={skin.glyph}>{skin.answerGlyph}</span> : null}
             {item.text}

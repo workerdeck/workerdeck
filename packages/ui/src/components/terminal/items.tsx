@@ -166,11 +166,25 @@ export function AssistantRow({ item }: { item: Extract<TranscriptItem, { kind: '
   )
 }
 
+export function addressedText(item: Extract<TranscriptItem, { kind: 'thinking' }>): Extract<TranscriptItem, { kind: 'assistant_text' }> {
+  return { kind: 'assistant_text', id: item.id, text: item.text.trim(), streaming: false, parentToolUseId: item.parentToolUseId }
+}
+
 export function ThinkingRow({ item }: { item: Extract<TranscriptItem, { kind: 'thinking' }> }) {
+  const [open, setOpen] = useState(false)
+  const reveal = useRevealOnOpen(open)
+  if (item.addressed) {
+    return <AssistantRow item={addressedText(item)} />
+  }
+  const text = item.text.trim()
   return (
-    <Row glyph="✻" glyphTone="dim" tone="dim">
-      <span className="term-em">{item.text}</span>
-    </Row>
+    <div ref={reveal} className={open ? 'term-open' : undefined}>
+      <Pressable onPress={() => setOpen((v) => !v)} expanded={open}>
+        <Row glyph="✻" glyphTone="dim" tone="dim">
+          <span className={open ? 'term-em' : 'term-em term-clip-1'}>{open ? text : text.split('\n', 1)[0]}</span>
+        </Row>
+      </Pressable>
+    </div>
   )
 }
 

@@ -9,7 +9,8 @@ export type SessionStatus = 'starting' | 'running' | 'awaiting_approval' | 'idle
 export type PermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto'
 
 export type TextBlock = { type: 'text'; text: string }
-export type ThinkingBlock = { type: 'thinking'; thinking: string }
+// `addressed`: a thinking block written to the reader, not reasoning (GOTCHAS § Claude engine).
+export type ThinkingBlock = { type: 'thinking'; thinking: string; addressed?: true }
 export type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: unknown }
 export type ToolResultBlock = {
   type: 'tool_result'
@@ -929,7 +930,7 @@ export function transcriptProse(body: SessionEventBody): number {
       if (typeof content === 'string') {
         return content.trim() === '' ? 0 : 1
       }
-      return content.filter((block) => block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '').length
+      return content.filter((block) => proseText(block) !== undefined).length
     }
     case 'turn_result': {
       return body.isError ? 1 : 0
@@ -942,6 +943,11 @@ export function transcriptProse(body: SessionEventBody): number {
       return 0
     }
   }
+}
+
+export function proseText(block: ContentBlock): string | undefined {
+  const text = block.type === 'text' ? block.text : block.type === 'thinking' && block.addressed ? block.thinking : undefined
+  return typeof text === 'string' && text.trim() !== '' ? text : undefined
 }
 
 export function transcriptContent(body: SessionEventBody): boolean {
