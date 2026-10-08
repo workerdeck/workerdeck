@@ -447,7 +447,8 @@ With `createFileSessionStore()` the boundary survives the process too: `hydrate(
 floor (`parking.expiredGraceMs`, default 60s) under any deadline that passed during the outage,
 since nothing could have been delivered while the process was down. What durability does *not*
 cover is a turn in flight at the moment of the restart; `workerdeck guard` (`packages/cli`) is
-the other half, refusing the restart while any session is mid-turn, awaiting an approval, or
+the other half, refusing the restart while any session is mid-turn, awaiting an approval, holds a
+running shell or background task, or
 (unless `--allow-parked`) parked without a durable store behind it.
 
 ## Session self-report (`session_info`)

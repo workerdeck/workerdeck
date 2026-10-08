@@ -23,6 +23,13 @@ type Verdict = {
   parked?: number
 }
 
+type GuardSession = {
+  id: string
+  status: string
+  shells?: { status: string; label: string }[]
+  subagents?: { status: string }[]
+}
+
 class GuardError extends Error {}
 
 export async function runGuard(argv: string[]): Promise<number> {
@@ -130,13 +137,24 @@ export async function runGuard(argv: string[]): Promise<number> {
     if (!Array.isArray(listed)) {
       return { error: `GET ${base}/sessions returned no session list`, reasons: [], notes: [] }
     }
-    const all = listed as { id: string; status: string }[]
+    const all = listed as GuardSession[]
 
     const reasons: string[] = []
     // Worth printing, but never worth blocking a deploy over.
     const notes: string[] = []
-    for (const session of all.filter((s) => BUSY_STATUSES.has(s.status))) {
-      reasons.push(`session ${session.id} is ${session.status}`)
+    for (const session of all) {
+      if (BUSY_STATUSES.has(session.status)) {
+        reasons.push(`session ${session.id} is ${session.status}`)
+      }
+      // A shell or a background task outlives the turn that started it, and a restart kills both.
+      const shells = (session.shells ?? []).filter((shell) => shell.status === 'running')
+      if (shells.length > 0) {
+        reasons.push(`session ${session.id} has ${shells.length} running shell(s): ${shells.map((shell) => shell.label).join(', ')}`)
+      }
+      const tasks = (session.subagents ?? []).filter((task) => task.status === 'running')
+      if (tasks.length > 0 && !BUSY_STATUSES.has(session.status)) {
+        reasons.push(`session ${session.id} has ${tasks.length} background task(s) running`)
+      }
     }
     const parked = all.filter((s) => s.status === 'parked')
     if (parked.length > 0 && !values['allow-parked']) {

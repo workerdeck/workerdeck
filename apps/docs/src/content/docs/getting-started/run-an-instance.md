@@ -238,7 +238,8 @@ by a library it imported.
 npx workerdeck guard --wait 300 --allow-parked && systemctl restart workerdeck
 ```
 
-Exits `0` when a restart is safe, `1` while a session is mid-turn, awaiting an approval, or parked
+Exits `0` when a restart is safe, `1` while a session is mid-turn, awaiting an approval, holds a
+running shell or background task, or is parked
 without durability behind it, and `2` when it couldn't tell - never treating "couldn't tell" as
 safe. Details, including `--allow-queued` and authenticating against a custom `authenticate` hook,
 are in [Deployment](/workerdeck/docs/guides/deployment/#restarts-parked-sessions-and-the-deploy-guard).

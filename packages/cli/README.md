@@ -86,7 +86,8 @@ finding a credential the browser can actually present. There's a fuller example 
 npx workerdeck guard --wait 300 --allow-parked && systemctl restart workerdeck
 ```
 
-Exits `0` when a restart is safe, `1` while a session is mid-turn, awaiting an approval, or parked
+Exits `0` when a restart is safe, `1` while a session is mid-turn, awaiting an approval, holds a
+running shell or background task, or is parked
 without durability behind it, and `2` when it couldn't tell - never treating "couldn't tell" as
 safe. `--allow-parked` and `--allow-queued` are you asserting that the `SessionStore` and the
 `QueueAdapter` respectively are durable; they're separate decisions. Point `--url` at any instance

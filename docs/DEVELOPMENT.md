@@ -139,8 +139,9 @@ these, and **only with Tobias's approval**. The procedure, run before any reload
    as not paused yet. A peer message wakes an idle session too, so tell paused agents to send
    nothing to each other (not even an ack) until the restart is over.
 4. **Remote decks first.** Upgrade and restart them per gitignored `_docs/CONSUMERS.md`; their
-   `npm run restart` runs `workerdeck guard` first, which counts turns but not shells (open
-   follow-up), so step 2 still applies there.
+   `npm run restart` runs `workerdeck guard` first, which counts turns, running shells and
+   background tasks (from 3.10; older decks count turns only). A process an agent started outside
+   both (a plain `nohup`) is invisible to it, so step 2 still applies there.
 5. **Re-run `peers_list` immediately before reporting**; every session must be idle. Members of
    other teams are not in your list (`teamReaches`), so for them you have only their lead's word;
    say so.
