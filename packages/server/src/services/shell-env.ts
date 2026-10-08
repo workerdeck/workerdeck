@@ -1,5 +1,6 @@
 import { withoutGatewaySecrets } from '@workerdeck/core'
 import { SHELL_COLS, SHELL_MAX_COLS, SHELL_MAX_ROWS, SHELL_MIN_COLS, SHELL_MIN_ROWS, SHELL_ROWS } from '@workerdeck/protocol'
+import { bunRuntime, createBunPty } from './bun-pty.ts'
 import type { PtyChild, PtyModule, ShellSize } from './shell-types.ts'
 
 const TERM = 'xterm-256color'
@@ -11,6 +12,11 @@ let ptyModule: PtyModule | null | undefined
 
 export async function loadPty(): Promise<PtyModule | null> {
   if (ptyModule !== undefined) {
+    return ptyModule
+  }
+  const bun = bunRuntime()
+  if (bun) {
+    ptyModule = createBunPty(bun)
     return ptyModule
   }
   try {

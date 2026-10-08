@@ -1960,6 +1960,10 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   probe to `available: false` with a "reconnect" reason (`verdictFor`), so `requireAvailableProfile`
   refuses new sessions instead of letting them fail on auth. The token is still injected; we never
   fall back to another login silently.
+- **node-pty is dead under Bun** (1.2.0-beta.15, Bun 1.4.2): the module loads, but its spawn-helper
+  never execs, so nothing fires and connect times out on "no sign-in link". `loadPty` hands a Bun
+  host `Bun.spawn({ terminal })` behind the same `PtyModule` seam (`services/bun-pty.ts`), which
+  covers shells too. Found by the Silkweave Box, which runs the gateway in-process on Bun.
 - **Unverified**: whether the CLI's Bash tool passes `CLAUDE_CODE_OAUTH_TOKEN` on to commands, and
   Linux PTY behaviour (both runs were on macOS).
 
