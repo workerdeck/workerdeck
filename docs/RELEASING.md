@@ -1581,7 +1581,9 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
-  the staged-publish paragraph below before touching anything; it has cost two sessions now.
+  the staged-publish paragraph below before touching anything; it has cost two sessions now. The
+  quickest tell: the package's npm page, Versions tab, lists the version as **Validating** (seen
+  for `@workerdeck/core@3.12.0`, still validating 15+ minutes after a green publish).
 - publish: yes - npm `@workerdeck` org, always through pnpm. Push a `v<x.y.z>` tag:
   `.github/workflows/publish.yml` runs `pnpm publish -r` under npm trusted publishing (OIDC, no
   NPM_TOKEN, automatic provenance), re-running the full CI gate, refusing a tag that disagrees
