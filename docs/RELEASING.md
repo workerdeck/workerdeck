@@ -1578,6 +1578,14 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   15/15 on 0.162.1 plus a negative control (without `allowedTools` codex prompts). **Not
   verified**: a full paid `smoke:codex` run, the Box's integration.
 
+  **3.12.1** - **republish of 3.12.0, released 2026-10-10** (tag `v3.12.1`). A **patch** with no
+  code change. 3.12.0's publish was green and 11 of 12 packages went live, but
+  `@workerdeck/core@3.12.0` stayed **Validating** on npm (version document 404, `latest` still
+  3.11.1) for 45+ minutes, against the usual five. A version number can never be published again,
+  even after an unpublish, so the way out is a new number for every package (the CLI pins exact
+  versions). If a 3.12.1 package hangs the same way, the hold is content-triggered: open an npm
+  support ticket rather than bumping again.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

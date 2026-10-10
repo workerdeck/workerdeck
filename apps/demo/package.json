@@ -1,6 +1,6 @@
 {
   "name": "@workerdeck/demo",
-  "version": "3.12.0",
+  "version": "3.12.1",
   "private": true,
   "type": "module",
   "description": "Interactive, scripted tour of WorkerDeck inside a VS Code shell. Real @workerdeck/ui panels over a scripted in-browser gateway; no model, no server.",
