@@ -1557,6 +1557,13 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   **Verified**: full `pnpm test`, shell links in VS Code and the transcript (Tobias). **Not
   verified**: group folding by hand, the mini relay on `owners-live` (needs its upgrade).
 
+  **3.11.1** - **codex 0.162.1 and patched advisories, released 2026-10-10** (tag `v3.11.1`). A
+  **patch**, protocol stays **1**. The CLI ships `@openai/codex ~0.162.1` and core's optional peer
+  admits `<0.163.0` (app-server schema diff from 0.158 additive). Dependabot: 13 of 15 advisories
+  cleared through overrides in `pnpm-workspace.yaml` (none in a shipped runtime path); braces and
+  http-cache-semantics have no patch. **Verified**: paid `smoke:codex` 34/34 and the canary 10/10
+  against 0.162.1, full `pnpm test`, docs build.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
