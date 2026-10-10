@@ -13,6 +13,8 @@ import {
   subsetSummary,
   teamSummary,
   toggleTeamCollapsed,
+  isGroupCollapsed,
+  toggleGroupCollapsed,
 } from '@workerdeck/protocol'
 import type {
   HostRelays,
@@ -159,6 +161,8 @@ export function SessionBrowser({
           onRename={(name) => group.custom && drag.rename(group.custom, name)}
           onRemove={() => group.custom && drag.remove(group.custom)}
           dragProps={drag.header(group)}
+          collapsed={isGroupCollapsed(config, group)}
+          onToggleCollapsed={() => onConfigChange(toggleGroupCollapsed(config, group))}
         />
       )
     }
@@ -265,12 +269,12 @@ export function SessionBrowser({
               className={cn('flex flex-col gap-1 rounded-md', draggable && drag.isOver(`group:${group.key}`) && 'bg-row-hover/50')}
             >
               {heading(group)}
-              {custom && group.custom !== undefined && group.rows.length === 0 ? (
+              {custom && isGroupCollapsed(config, group) ? null : custom && group.custom !== undefined && group.rows.length === 0 ? (
                 <div className="mx-1 rounded-md border border-dashed border-border px-2 py-2 text-center text-label text-fg-4">
                   Drag sessions here
                 </div>
               ) : null}
-              {group.earlier && !config.earlierOpen
+              {(group.earlier && !config.earlierOpen) || (custom && isGroupCollapsed(config, group))
                 ? null
                 : group.rows.map((row) => {
                     const item = (member: SessionRow, variant: 'card' | 'member', extra: Partial<SessionRowItemProps> = {}) => (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent, HTMLAttributes, ReactNode } from 'react'
-import { GripVertical, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, GripVertical, Image as ImageIcon, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   addCustomGroup,
   moveCustomGroup,
@@ -11,6 +11,7 @@ import {
   sessionKey,
   styleCustomGroup,
   customGroupColor,
+  groupSummary,
   PROJECT_ACCENTS,
 } from '@workerdeck/protocol'
 import type { CustomGroup, HostRelays, SessionGroup, SessionRow } from '@workerdeck/protocol'
@@ -233,6 +234,8 @@ export function CustomGroupHeader({
   onRemove,
   onStyle,
   dragProps,
+  collapsed = false,
+  onToggleCollapsed,
 }: {
   group: SessionGroup
   // The stored group, for its colour and image; absent for the ungrouped bucket.
@@ -243,27 +246,50 @@ export function CustomGroupHeader({
   onRemove: () => void
   onStyle?: (look: { color?: string | null; icon?: string | null }) => void
   dragProps: HTMLAttributes<HTMLDivElement>
+  collapsed?: boolean
+  onToggleCollapsed?: () => void
 }) {
   if (editing) {
     return <GroupNameInput initial={group.label ?? ''} onRename={onRename} onDone={() => onEditingChange(false)} />
   }
 
   const custom = group.custom !== undefined
+  const summary = collapsed ? foldedSummary(group) : undefined
   return (
     <GroupHeading
       {...dragProps}
       label={group.label ?? ''}
       count={group.rows.length}
+      after={
+        summary ? <span className={cn('truncate', summary.attention ? 'text-warning' : 'text-fg-4/70')}>{summary.text}</span> : undefined
+      }
       caps={!custom}
       className={cn('group/heading', custom && 'cursor-grab')}
       onDoubleClick={custom ? () => onEditingChange(true) : undefined}
       leading={
-        custom ? (
-          <>
-            <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" />
-            {look ? <GroupBadge group={look} onStyle={onStyle} /> : null}
-          </>
-        ) : undefined
+        <>
+          {onToggleCollapsed ? (
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? `Expand ${group.label ?? 'group'}` : `Collapse ${group.label ?? 'group'}`}
+              className="-mr-1 -ml-1 grid size-4 place-items-center rounded-sm text-fg-4 hover:text-fg-1"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleCollapsed()
+              }}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              {collapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+            </button>
+          ) : null}
+          {custom ? (
+            <>
+              <GripVertical className="-mr-1.5 -ml-1.5 size-3 opacity-0 group-hover/heading:opacity-60" />
+              {look ? <GroupBadge group={look} onStyle={onStyle} /> : null}
+            </>
+          ) : null}
+        </>
       }
       actions={
         custom ? (
@@ -313,9 +339,20 @@ function GroupNameInput({ initial, onRename, onDone }: { initial: string; onRena
   )
 }
 
+function foldedSummary(group: SessionGroup): { text: string; attention: number } | undefined {
+  const summary = groupSummary(group)
+  const parts = [
+    summary.attention ? `${summary.attention} need${summary.attention === 1 ? 's' : ''} you` : undefined,
+    summary.working ? `${summary.working} working` : undefined,
+    summary.unseen ? `${summary.unseen} unread` : undefined,
+  ].filter(Boolean)
+  return parts.length ? { text: parts.join(' · '), attention: summary.attention } : undefined
+}
+
 export function GroupHeading({
   label,
   count,
+  after,
   leading,
   actions,
   caps = true,
@@ -324,6 +361,7 @@ export function GroupHeading({
 }: {
   label: ReactNode
   count: number
+  after?: ReactNode
   leading?: ReactNode
   actions?: ReactNode
   // Off for a name the operator typed, which keeps its own case.
@@ -334,6 +372,7 @@ export function GroupHeading({
       {leading}
       <span className={cn('min-w-0 truncate', caps ? 'uppercase tracking-wide' : 'text-fg-3')}>{label}</span>
       <span className="text-fg-4/70">{count}</span>
+      {after}
       {actions ? (
         <span className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity group-hover/heading:opacity-100 focus-within:opacity-100">
           {actions}

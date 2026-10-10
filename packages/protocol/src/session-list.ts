@@ -88,6 +88,8 @@ export type ViewConfig = {
   customGroups?: CustomGroup[]
   // `teamKey` values: the teams this client draws folded. A viewing preference, never sent to the gateway.
   collapsedTeams?: string[]
+  // `SessionGroup.key` values: the custom groups this client draws folded. A viewing preference too.
+  collapsedGroups?: string[]
   earlierOpen?: boolean
 }
 
@@ -470,6 +472,27 @@ export function toggleTeamCollapsed(config: ViewConfig, row: SessionRow): ViewCo
   }
   const held = config.collapsedTeams ?? []
   return { ...config, collapsedTeams: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
+}
+
+export function isGroupCollapsed(config: ViewConfig, group: Pick<SessionGroup, 'key'>): boolean {
+  return (config.collapsedGroups ?? []).includes(group.key)
+}
+
+export function toggleGroupCollapsed(config: ViewConfig, group: Pick<SessionGroup, 'key'>): ViewConfig {
+  const held = config.collapsedGroups ?? []
+  return { ...config, collapsedGroups: held.includes(group.key) ? held.filter((k) => k !== group.key) : [...held, group.key] }
+}
+
+export type GroupSummary = { sessions: number; working: number; attention: number; unseen: number }
+
+export function groupSummary(group: Pick<SessionGroup, 'rows'>): GroupSummary {
+  const all = group.rows.flatMap((row) => [row, ...(row.members ?? [])])
+  return {
+    sessions: all.length,
+    working: all.filter((row) => row.state === 'working').length,
+    attention: all.filter((row) => row.state === 'attention').length,
+    unseen: all.reduce((sum, row) => sum + row.unseen, 0),
+  }
 }
 
 export type TeamSummary = { members: number; working: number; attention: number; unseen: number }

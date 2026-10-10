@@ -31,6 +31,9 @@ import {
   subsetSummary,
   teamSummary,
   toggleTeamCollapsed,
+  groupSummary,
+  isGroupCollapsed,
+  toggleGroupCollapsed,
   visibleShells,
 } from '@workerdeck/protocol'
 import type { SessionInfo, SessionRow, ShellInfo, SubagentInfo, ViewConfig, WorkspaceScope } from '@workerdeck/protocol'
@@ -590,5 +593,18 @@ describe('agent teams in the list', () => {
     expect(isTeamCollapsed(folded, unit)).toBe(true)
     expect(isTeamCollapsed(toggleTeamCollapsed(folded, unit), unit)).toBe(false)
     expect(teamSummary(unit)).toEqual({ members: 2, working: 1, attention: 1, unseen: 0 })
+  })
+})
+
+describe('custom group collapse', () => {
+  it('toggles per group key and sums every session, members included, for the folded header', () => {
+    const lead = row({ state: 'working', unseen: 2, members: [row({ state: 'attention' }), row({ state: 'working', unseen: 1 })] })
+    const group = { key: 'custom:g1', rows: [lead, row({ state: 'idle' })] }
+    const folded = toggleGroupCollapsed(DEFAULT_VIEW_CONFIG, group)
+    expect(folded.collapsedGroups).toEqual(['custom:g1'])
+    expect(isGroupCollapsed(folded, group)).toBe(true)
+    expect(isGroupCollapsed(folded, { key: 'custom:ungrouped' })).toBe(false)
+    expect(isGroupCollapsed(toggleGroupCollapsed(folded, group), group)).toBe(false)
+    expect(groupSummary(group)).toEqual({ sessions: 4, working: 2, attention: 1, unseen: 3 })
   })
 })
