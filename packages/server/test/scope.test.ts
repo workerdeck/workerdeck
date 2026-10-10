@@ -21,7 +21,7 @@ afterEach(async () => {
   await running?.close()
   running = undefined
   while (tempDirs.length) {
-    rmSync(tempDirs.pop()!, { recursive: true, force: true })
+    rmSync(tempDirs.pop()!, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
   }
 })
 

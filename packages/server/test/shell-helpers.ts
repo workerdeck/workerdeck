@@ -50,7 +50,7 @@ export function shellFixture(prefix: string) {
     await running?.close()
     running = undefined
     while (dirs.length) {
-      rmSync(dirs.pop()!, { recursive: true, force: true })
+      rmSync(dirs.pop()!, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
     }
   }
   return { tempDir, startServer, startShellServer, cleanup, server: () => running! }
@@ -78,7 +78,7 @@ export function registryFixture(prefix: string) {
       await registry.flush()
     }
     while (dirs.length) {
-      rmSync(dirs.pop()!, { recursive: true, force: true })
+      rmSync(dirs.pop()!, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
     }
   }
   return { tempDir, track, makeRegistry, runner, cleanup }
