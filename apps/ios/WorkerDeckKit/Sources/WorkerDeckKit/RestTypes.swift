@@ -38,6 +38,8 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
   /// worse than buttons that aren't there.
   public let mcpServerActions: Bool
   public let sessionMcpServers: Bool
+  // 'all' | 'mcp' | 'none': which allowedTools/disallowedTools names the engine honours. Absent reads as 'all'.
+  public let toolFilters: String
   public let slashCommands: Bool
   /// The `clear_context` session command is honored - offer the "Clear
   /// context" verb. Absent reads as false: hidden, never a button the server
@@ -71,7 +73,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     defaultPermissionMode: PermissionMode, resume: Bool, resumeBackfill: Bool,
     listSessions: Bool, contextUsage: Bool, rateLimits: Bool, mcpStatus: Bool,
     mcpServerActions: Bool = false,
-    sessionMcpServers: Bool, slashCommands: Bool, clearContext: Bool = false,
+    sessionMcpServers: Bool, toolFilters: String = "all", slashCommands: Bool, clearContext: Bool = false,
     skillsList: Bool = false,
     settingSources: Bool, budgets: Bool,
     attachments: [String], reasoningEfforts: [String]? = nil, vfs: Bool,
@@ -89,6 +91,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     self.mcpStatus = mcpStatus
     self.mcpServerActions = mcpServerActions
     self.sessionMcpServers = sessionMcpServers
+    self.toolFilters = toolFilters
     self.slashCommands = slashCommands
     self.clearContext = clearContext
     self.skillsList = skillsList
@@ -121,6 +124,7 @@ public struct EngineCapabilities: Codable, Sendable, Equatable {
     mcpStatus = try c.decode(Bool.self, forKey: .mcpStatus)
     mcpServerActions = try c.decode(Bool.self, forKey: .mcpServerActions)
     sessionMcpServers = try c.decode(Bool.self, forKey: .sessionMcpServers)
+    toolFilters = try c.decodeIfPresent(String.self, forKey: .toolFilters) ?? "all"
     slashCommands = try c.decode(Bool.self, forKey: .slashCommands)
     clearContext = try c.decodeIfPresent(Bool.self, forKey: .clearContext) ?? false
     skillsList = try c.decode(Bool.self, forKey: .skillsList)
@@ -176,7 +180,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     // `mcpServer/startupStatus/updated` notification, which the runner tracks.
     // No per-server action exists on this transport, hence read-only.
     contextUsage: true, rateLimits: true, mcpStatus: true, mcpServerActions: false,
-    sessionMcpServers: false,
+    sessionMcpServers: true, toolFilters: "mcp",
     // No command-listing RPC exists on the app-server surface at all; but
     // `skills/list` does, and `skills/changed` says when to re-read it.
     slashCommands: false, clearContext: true, skillsList: true, settingSources: false,
@@ -193,7 +197,7 @@ public let engineCapabilities: [ProfileEngine: EngineCapabilities] = [
     // Host-wired MCP: the runner reports what the host assembled the session
     // from, so this engine can always answer - but never act on a connection.
     contextUsage: false, rateLimits: false, mcpStatus: true, mcpServerActions: false,
-    sessionMcpServers: false,
+    sessionMcpServers: false, toolFilters: "none",
     slashCommands: false, clearContext: true, skillsList: false, settingSources: false,
     budgets: false,
     attachments: ["image", "pdf", "text"], vfs: true, streaming: "token"

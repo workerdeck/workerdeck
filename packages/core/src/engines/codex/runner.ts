@@ -51,6 +51,7 @@ import {
 } from './items.ts'
 import { JsonRpcError } from './jsonrpc.ts'
 import { mcpServerInfo, type McpStartupStatus } from './mcp.ts'
+import { codexMcpServers, undeclaredFilterServers } from './mcp-config.ts'
 import {
   SHELL_WRITE_GATE_MODES,
   modePolicy,
@@ -728,6 +729,10 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     if (dynamic.length) {
       options.dynamicTools = dynamic.map((spec) => ({ type: 'function', ...spec }))
     }
+    const mcpServers = codexMcpServers(this.config, await this.#configuredMcpServers(connection))
+    if (mcpServers) {
+      options.config = { mcp_servers: mcpServers }
+    }
     const resuming = this.#resumableThreadId()
     const { result, lostThread } = await this.#resumeOrStart(connection, resuming, options)
     if (typeof result?.thread?.id === 'string') {
@@ -752,6 +757,18 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
         turns: Array.isArray(result?.thread?.turns) ? result.thread.turns : [],
         partial: typeof result?.turnsBackwardsCursor === 'string',
       }
+    }
+  }
+
+  async #configuredMcpServers(connection: AppServerConnection): Promise<Set<string>> {
+    if (undeclaredFilterServers(this.config).length === 0) {
+      return new Set()
+    }
+    try {
+      const result = (await connection.request('mcpServerStatus/list', {})) as AppServerMcpServerStatusResponse
+      return new Set((result?.data ?? []).map((server) => server.name))
+    } catch {
+      return new Set()
     }
   }
 
@@ -808,8 +825,15 @@ export class CodexRunner extends EngineRunner<CodexRunnerConfig> implements Runn
     let scratch: AppServerConnection | undefined
     try {
       const connection = live ?? (scratch = await this.#openScratchConnection())
-      const result = (await connection.request('mcpServerStatus/list', {})) as AppServerMcpServerStatusResponse
-      return (result?.data ?? []).map((server) => mcpServerInfo(server, this.#mcpStatus.get(server.name)))
+      const threadId = live && this.#threadLoaded ? this.#sdkSessionId : undefined
+      const result = (await connection.request('mcpServerStatus/list', threadId ? { threadId } : {})) as AppServerMcpServerStatusResponse
+      const servers = (result?.data ?? []).map((server) => mcpServerInfo(server, this.#mcpStatus.get(server.name)))
+      if (threadId) {
+        return servers
+      }
+      const listed = new Set(servers.map((server) => server.name))
+      const declared = Object.keys(this.config.mcpServers ?? {}).filter((name) => !listed.has(name))
+      return [...servers, ...declared.map((name) => ({ name, status: 'pending' }))]
     } catch {
       return undefined
     } finally {

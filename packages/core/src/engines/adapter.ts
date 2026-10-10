@@ -1,4 +1,4 @@
-import type { EngineCapabilities, ModelOption, ProfileEngine, ProfileInfo, SdkSessionSummary } from '@workerdeck/protocol'
+import type { CreateSessionRequest, EngineCapabilities, ModelOption, ProfileEngine, ProfileInfo, SdkSessionSummary } from '@workerdeck/protocol'
 import type { EngineRunnerConfig, Runner, RunnerSnapshot } from '../runner-interface.ts'
 
 export type EngineAvailability = { available: true } | { available: false; reason: string } | { available: 'unknown' }
@@ -21,6 +21,8 @@ export interface EngineAdapter<C extends EngineRunnerConfig = EngineRunnerConfig
   readonly catalog: ModelCatalog
   checkAvailability(profile: ProfileInfo, env: Record<string, string | undefined>): Promise<EngineAvailability>
   createRunner(request: EngineRunnerRequest<C>): Runner | Promise<Runner>
+  // Engine-specific create checks the capability record cannot express; the gateway answers a 400 with the message.
+  refuseRequest?(request: CreateSessionRequest): string | null
   // Returns `base` itself when the profile needs nothing pinned, so a caller can leave an unset env unset.
   sessionEnv?(profile: ProfileInfo, base: Record<string, string | undefined>): Record<string, string | undefined>
   listSessions?(options: {

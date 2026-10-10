@@ -505,7 +505,9 @@ complete child env always - a spawn env *replaces*, never merges; and the `AppSe
 `engines/codex/types.ts` must cover what the binary emits, because an unmapped item is
 **invisible**, not merely unstyled; and `skills/list`'s per-skill `path` is kept in a private
 name-to-path map so a `$name` mention in the user text becomes a `{ type: 'skill', name, path }`
-input item on `turn/start`, one per distinct listed skill, the text left in place), and `AiSdkRunner`
+input item on `turn/start`, one per distinct listed skill, the text left in place; request
+`mcpServers` and `mcp__` tool filters become `thread/start`'s per-thread `config.mcp_servers` via
+the pure `codex/mcp-config.ts`, GOTCHAS §Codex), and `AiSdkRunner`
 (provider, over AI SDK v7, built by the host's `createEngineRunner` hook - its adapter is a
 pseudo-adapter). The
 **model list clients see is shaped here**, not by each UI: catalogs apply
@@ -647,7 +649,9 @@ request plus `epoch`, `pricing`, `env`, `instructions`, `defaultApprovalTimeoutM
 `createRunner` on its own config (`claudeAdapter` on `SessionRunnerConfig`, `codexAdapter` on
 `CodexAdapterConfig`), so no adapter casts. The optional `sessionEnv(profile, base)` hook is
 where an engine pins its profile into the child env (the claude adapter's `CLAUDE_CONFIG_DIR`,
-`engines/claude/session-env.ts`).
+`engines/claude/session-env.ts`). The optional `refuseRequest(request)` hook carries create checks
+a capability record cannot express (codex: SSE MCP servers and server names); the gateway's
+`checkEngineGrants` answers its message as a 400 after the capability-driven grants.
 
 The codex engine is split by concern: `codex/runner.ts` keeps the connection, the thread and turn
 lifecycle, steering, notifications routing and the server-request door; `codex/policy.ts` is the

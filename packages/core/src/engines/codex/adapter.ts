@@ -5,6 +5,7 @@ import { ENGINE_CAPABILITIES, type ProfileInfo, type SdkSessionSummary } from '@
 import type { EngineAdapter, EngineAvailability } from '../adapter.ts'
 import { CodexRunner, type CodexRunnerConfig } from './runner.ts'
 import { CODEX_CATALOG } from './catalog.ts'
+import { refuseCodexMcpServers } from './mcp-config.ts'
 import { composeInstructions } from '../../lib/instructions.ts'
 import { codexChildEnv, INITIALIZE_PARAMS } from './connect.ts'
 import { connectAppServer } from './process.ts'
@@ -177,6 +178,7 @@ export const codexAdapter: EngineAdapter<CodexAdapterConfig> = {
   capabilities: ENGINE_CAPABILITIES.codex,
   catalog: CODEX_CATALOG,
   checkAvailability: (profile, env) => checkCodexAvailability(profile, env),
+  refuseRequest: (request) => refuseCodexMcpServers(request.mcpServers),
   createRunner({ config, profile, restore, id }) {
     if (restore) {
       throw new Error('the codex engine cannot rebuild a parked session')

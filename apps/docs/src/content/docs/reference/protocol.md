@@ -114,7 +114,10 @@ must decide it before the attach, not after.
   provider engine) has no host directory to name, and for it `allowedCwdRoots` is not the
   boundary. The gateway rejects fields the chosen engine's capability record forswears rather
   than accepting them into a silent no-op; `forkSession` is honoured only where
-  `EngineCapabilities.forkSession` is true (the claude engine).
+  `EngineCapabilities.forkSession` is true (the claude engine). `mcpServers` is accepted where
+  `sessionMcpServers` is true (claude, and codex for stdio and `http`, never `sse`), and
+  `allowedTools`/`disallowedTools` as far as `toolFilters` says: `'all'` (claude), `'mcp'` (codex,
+  `mcp__<server>__<tool>` or `mcp__<server>` only) or `'none'` (provider, refused).
 - `SessionInfo` - server id (≠ `sdkSessionId`), status, cwd, `profile`, `engine` and its
   `capabilities` record, model, permission mode, `canBypassPermissions` (fixed at creation: the
   CLI refuses to *switch into* bypass unless the process was spawned for it, so a picker can

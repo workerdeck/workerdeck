@@ -2,6 +2,7 @@
 // pnpm smoke:codex --canary    # the free drift canaries only (network, no tokens)
 // pnpm smoke:codex --clear     # the clear scenario alone, two turns
 // pnpm smoke:codex --steer     # the mid-turn steer scenario alone, one short turn
+// pnpm smoke:codex --mcp       # the per-session MCP server scenario alone, one short turn
 //
 // Everything a fake cannot validate about the Codex engine, and any change to `CodexRunner`'s spawn options,
 // handshake or event mapping requires a run (`docs/GOTCHAS.md` §Codex engine).
@@ -13,6 +14,7 @@ import { execFile } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { CodexRunner, connectAppServer, resolveBundledCodexExecutable } from '@workerdeck/core'
 import type { PermissionRequest, SessionEvent } from '@workerdeck/protocol'
@@ -22,6 +24,8 @@ const MODEL = process.argv.find((a) => !a.startsWith('-') && a.includes('gpt')) 
 const CANARY_ONLY = process.argv.includes('--canary')
 const CLEAR_ONLY = process.argv.includes('--clear')
 const STEER_ONLY = process.argv.includes('--steer')
+const MCP_ONLY = process.argv.includes('--mcp')
+const MCP_STUB = fileURLToPath(new URL('./lib/mcp-stub.mjs', import.meta.url))
 
 const execFileP = promisify(execFile)
 
@@ -326,6 +330,57 @@ async function canaries(): Promise<void> {
   }
 
   await threadItemUnionCanary()
+  await sessionMcpCanary()
+}
+
+// What the runner's per-session MCP servers rest on: a `thread/start` config override is per thread (two threads in one
+// child each see only their own server) and `disabled_tools` filters the inventory.
+async function sessionMcpCanary(): Promise<void> {
+  if (!codexBin) {
+    return
+  }
+  const cwd = mkdtempSync(join(tmpdir(), 'codex-smoke-mcp-'))
+  const connection = connectAppServer({ executable: codexBin, env: scratchEnv() })
+  const server = (name: string, extra: Record<string, unknown> = {}) => ({ command: process.execPath, args: [MCP_STUB, name], ...extra })
+  try {
+    await connection.request('initialize', {
+      clientInfo: { name: 'workerdeck-smoke', title: 'smoke', version: '0' },
+      capabilities: { experimentalApi: true },
+    })
+    connection.notify('initialized')
+    const start = async (config: unknown) =>
+      ((await connection.request('thread/start', { cwd, ephemeral: true, config })) as { thread: { id: string } }).thread.id
+    const one = await start({ mcp_servers: { alpha: server('alpha', { disabled_tools: ['alpha_other'] }) } })
+    const two = await start({ mcp_servers: { beta: server('beta') } })
+    const inventory = async (threadId: string): Promise<string> => {
+      const result = (await connection.request('mcpServerStatus/list', { threadId })) as {
+        data?: Array<{ name: string; tools?: Record<string, unknown> }>
+      }
+      return (result.data ?? [])
+        .map(
+          (s) =>
+            `${s.name}:${Object.keys(s.tools ?? {})
+              .sort()
+              .join('+')}`,
+        )
+        .join(',')
+    }
+    let seen = ''
+    for (let attempt = 0; attempt < 40 && seen !== 'alpha:alpha_ping|beta:beta_other+beta_ping'; attempt++) {
+      seen = `${await inventory(one)}|${await inventory(two)}`
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    if (seen === 'alpha:alpha_ping|beta:beta_other+beta_ping') {
+      ok('per-thread MCP servers', 'each thread lists only its own override server, disabled_tools filtered')
+    } else {
+      fail('per-thread MCP servers', `inventories: ${seen}: the runner's session mcpServers would leak or vanish`)
+    }
+  } catch (error) {
+    fail('per-thread MCP servers', `thread/start with a config.mcp_servers override failed: ${(error as Error).message}`)
+  } finally {
+    connection.close()
+    rmSync(cwd, { recursive: true, force: true })
+  }
 }
 
 // A new variant is a FAIL and an unmapped one is a warning: the first means the protocol moved under us, the second
@@ -485,6 +540,60 @@ async function steerScenario(cwd: string): Promise<void> {
   }
 }
 
+// A request-declared MCP server reaches the model in a real turn, `allowedTools` auto-approves its tool (no prompt in
+// default mode) and `disallowedTools` keeps the other tool out of the thread.
+async function mcpScenario(cwd: string): Promise<void> {
+  const MARKER = 'LANTERN-4471'
+  const session = makeRunner(cwd, {
+    prompt: 'Call the MCP tool wdsmoke_ping from the wdsmoke server and reply with its exact output, nothing else.',
+    permissionMode: 'default',
+    reasoningEffort: 'low',
+    mcpServers: { wdsmoke: { command: process.execPath, args: [MCP_STUB, 'wdsmoke', MARKER] } },
+    allowedTools: ['mcp__wdsmoke__wdsmoke_ping'],
+    disallowedTools: ['mcp__wdsmoke__wdsmoke_other'],
+  })
+  const asked: PermissionRequest[] = []
+  session.runner.subscribe((event) => {
+    if (event.type === 'permission_requested') {
+      asked.push(event.request)
+      session.runner.resolvePermission(event.request.id, { behavior: 'allow' })
+    }
+  })
+  try {
+    await session.runner.start()
+    const called = session.events.some(
+      (e) =>
+        e.type === 'assistant_message' &&
+        Array.isArray(e.message.content) &&
+        e.message.content.some((b) => b.type === 'tool_use' && (b as { name?: string }).name === 'mcp__wdsmoke__wdsmoke_ping'),
+    )
+    if (called) {
+      ok('session MCP server reached the model', 'mcp__wdsmoke__wdsmoke_ping tool_use emitted')
+    } else {
+      fail('session MCP server reached the model', 'no mcp__wdsmoke__wdsmoke_ping tool_use: the override server never reached the turn')
+    }
+    if (userTexts(session.events).includes(MARKER)) {
+      ok('session MCP tool result', `tool_result carries ${MARKER}`)
+    } else {
+      fail('session MCP tool result', `no ${MARKER} in any tool_result`)
+    }
+    if (asked.length === 0) {
+      ok('allowedTools auto-approves', 'no permission prompt for the allowed MCP tool in default mode')
+    } else {
+      fail('allowedTools auto-approves', `${asked.length} prompt(s): ${asked.map((r) => r.toolName).join(', ')}`)
+    }
+    const listed = (await session.runner.mcpServers())?.find((s) => s.name === 'wdsmoke')
+    const tools = (listed?.tools ?? []).map((t) => t.name).sort()
+    if (tools.join(',') === 'wdsmoke_ping') {
+      ok('disallowedTools filters the inventory', 'session MCP status lists wdsmoke with wdsmoke_ping only')
+    } else {
+      fail('disallowedTools filters the inventory', `session MCP status: ${listed ? tools.join(',') || '(no tools)' : 'wdsmoke missing'}`)
+    }
+  } finally {
+    session.runner.close()
+  }
+}
+
 async function clearScenario(cwd: string): Promise<void> {
   // A timeout in here used to leave the codex children running, which kept the process alive long past the failure
   // it was trying to report.
@@ -632,6 +741,10 @@ async function paid(): Promise<void> {
     }
     if (STEER_ONLY) {
       await steerScenario(cwd)
+      return
+    }
+    if (MCP_ONLY) {
+      await mcpScenario(cwd)
       return
     }
     // Turn 1: a real command execution, mapped through CodexRunner.
@@ -883,6 +996,8 @@ async function paid(): Promise<void> {
     vision.runner.close()
 
     await steerScenario(cwd)
+
+    await mcpScenario(cwd)
 
     await clearScenario(cwd)
   } finally {

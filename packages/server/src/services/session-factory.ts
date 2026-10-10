@@ -77,6 +77,15 @@ const ENGINE_GRANTS: readonly EngineGrant[] = [
       `profile '${name}' runs the ${engine} engine, whose MCP servers are declared outside the session request - a request cannot add its own`,
   },
   {
+    refuses: (req, caps) => caps.toolFilters === 'none' && (!!req.allowedTools?.length || !!req.disallowedTools?.length),
+    error: (engine) => `the ${engine} engine does not honor allowedTools/disallowedTools`,
+  },
+  {
+    refuses: (req, caps) =>
+      caps.toolFilters === 'mcp' && [...(req.allowedTools ?? []), ...(req.disallowedTools ?? [])].some((name) => !name.startsWith('mcp__')),
+    error: (engine) => `the ${engine} engine honors allowedTools/disallowedTools only for MCP tools (mcp__<server>__<tool>)`,
+  },
+  {
     refuses: (req, caps) => !caps.budgets && (req.maxTurns !== undefined || req.maxBudgetUsd !== undefined),
     error: (engine) => `the ${engine} engine does not honor maxTurns/maxBudgetUsd`,
   },
@@ -130,10 +139,14 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
   }
 
   const checkEngineGrants = (req: CreateSessionRequest, profile: ProfileInfo | undefined): string | null => {
-    const caps = adapterFor(profile?.engine).capabilities
-    const grant = ENGINE_GRANTS.find((candidate) => candidate.refuses(req, caps))
+    const adapter = adapterFor(profile?.engine)
+    const grant = ENGINE_GRANTS.find((candidate) => candidate.refuses(req, adapter.capabilities))
     if (grant) {
       return grant.error(engineOf(profile), profile?.name ?? 'default')
+    }
+    const refused = adapter.refuseRequest?.(req)
+    if (refused) {
+      return refused
     }
     if (!profile || !isProviderProfile(profile)) {
       return null
@@ -235,7 +248,8 @@ export function createSessionFactory(deps: SessionFactoryDeps) {
     }
   }
 
-  const sessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> => accountSessionEnv(profile, baseSessionEnvFor(profile), { requireApiKey: deps.requireApiKey })
+  const sessionEnvFor = (profile: ProfileInfo): Record<string, string | undefined> =>
+    accountSessionEnv(profile, baseSessionEnvFor(profile), { requireApiKey: deps.requireApiKey })
 
   const buildRunner = async (
     built: SessionRunnerConfig,

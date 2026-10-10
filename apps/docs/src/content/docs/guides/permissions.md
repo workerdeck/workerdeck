@@ -66,8 +66,11 @@ Two modes have extra conditions the CLI enforces:
 
 ## Tool allowlists and cwd clamping
 
-Sessions can be constrained with `allowedTools` / `disallowedTools` on `CreateSessionRequest`,
-and the server clamps where sessions may run with `allowedCwdRoots`. Use `buildRunnerConfig` on
+Sessions can be constrained with `allowedTools` / `disallowedTools` on `CreateSessionRequest`
+(`allowedTools` auto-approves the named tools, `disallowedTools` removes them). How far an engine
+honours them is `EngineCapabilities.toolFilters`: every name on claude, only MCP tool names
+(`mcp__<server>__<tool>`, or `mcp__<server>` for the whole server) on codex, none on a provider
+profile; the gateway refuses what the engine cannot honour rather than ignoring it. The server clamps where sessions may run with `allowedCwdRoots`. Use `buildRunnerConfig` on
 the server to enforce policy regardless of what clients request - see
 [Embedding the UI](/workerdeck/docs/guides/embedding/).
 

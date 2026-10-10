@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
-import { CodexRunner, CODEX_CATALOG } from '@workerdeck/core'
+import { CodexRunner, CODEX_CATALOG, codexAdapter } from '@workerdeck/core'
 import type { EngineAdapter, EngineAvailability, SessionRunnerConfig } from '@workerdeck/core'
 import type { AppServerConnection } from '@workerdeck/core'
 import { ENGINE_CAPABILITIES, type ProfileInfo, type ServerFrame } from '@workerdeck/protocol'
@@ -32,6 +32,7 @@ function fakeCodexAdapter(options: {
     engine: 'codex',
     capabilities: ENGINE_CAPABILITIES.codex,
     catalog: CODEX_CATALOG,
+    refuseRequest: codexAdapter.refuseRequest,
     checkAvailability: async () => {
       probeCalls += 1
       return options.probe?.() ?? { available: 'unknown' }
@@ -298,9 +299,21 @@ describe('codex engine over the gateway', () => {
       status: 400,
       error: expect.stringMatching(/not supported by profile 'codex'/),
     })
-    expect(await create({ mcpServers: { x: { type: 'http', url: 'https://x' } } })).toMatchObject({
+    expect(await create({ mcpServers: { x: { type: 'sse', url: 'https://x' } } })).toMatchObject({
       status: 400,
-      error: expect.stringMatching(/declared outside the session request/),
+      error: expect.stringMatching(/no SSE MCP transport/),
+    })
+    expect(await create({ mcpServers: { 'two words': { command: 'node' } } })).toMatchObject({
+      status: 400,
+      error: expect.stringMatching(/MCP server names/),
+    })
+    expect(await create({ allowedTools: ['Bash'] })).toMatchObject({
+      status: 400,
+      error: expect.stringMatching(/only for MCP tools/),
+    })
+    expect(await create({ disallowedTools: ['mcp__x__y', 'Read'] })).toMatchObject({
+      status: 400,
+      error: expect.stringMatching(/only for MCP tools/),
     })
     expect(await create({ maxTurns: 3 })).toMatchObject({
       status: 400,
@@ -314,6 +327,32 @@ describe('codex engine over the gateway', () => {
       status: 400,
       error: expect.stringMatching(/fork/),
     })
+  })
+
+  it('passes request MCP servers and MCP tool filters through to the codex runner', async () => {
+    const configs: SessionRunnerConfig[] = []
+    const { adapter } = fakeCodexAdapter({ onCreate: (config) => configs.push(config) })
+    running = createWorkerServer({
+      allowUnauthenticated: true,
+      allowedCwdRoots: ['/tmp'],
+      profiles: [codexProfile()],
+      engines: { codex: adapter },
+    })
+    const { port } = await running.listen(0, '127.0.0.1')
+    const mcpServers = { sales: { type: 'http', url: 'https://box.example/mcp', headers: { 'x-toolset': 'sales' } } }
+    const res = await fetch(`http://127.0.0.1:${port}/v1/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/tmp/p',
+        profile: 'codex',
+        mcpServers,
+        allowedTools: ['mcp__sales__find'],
+        disallowedTools: ['mcp__sales__drop'],
+      }),
+    })
+    expect(res.status).toBe(201)
+    expect(configs[0]).toMatchObject({ mcpServers, allowedTools: ['mcp__sales__find'], disallowedTools: ['mcp__sales__drop'] })
   })
 
   it('415s the attachment kinds the codex record forswears, at upload', async () => {

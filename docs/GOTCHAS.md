@@ -431,9 +431,24 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   a thread no turn ever reached is started over instead (next bullet). `turn/completed(status:
   failed)` and a rejected `turn/start` land the same way. Codex has no instructions surface
   (`session.instructions` on a codex profile is refused at startup; codex reads the cwd's
-  AGENTS.md), no per-session MCP (`CODEX_HOME`'s config.toml owns servers; `/mcp` 501s), and image +
+  AGENTS.md), no per-server MCP actions (`/mcp/:name` 501s), and image +
   text attachments only (images as `localImage` host temp-file paths, text inlined; a PDF has no
   representation and 415s).
+- **Per-session MCP servers ride `thread/start`'s `config.mcp_servers` override** (and
+  `thread/resume`'s, so a reconnect or dormant wake re-declares them). Measured on 0.158 and
+  0.162.1: the override is per thread (two threads in one child each see only their own servers),
+  merges with `CODEX_HOME/config.toml`, and stdio + streamable HTTP work; there is no SSE
+  transport, so a codex create with `type: 'sse'` is refused, as is a server name outside
+  `[A-Za-z0-9_-]` (codex starts one with a space but lists no tools for it). Tool filters map
+  faithfully: an `allowedTools` `mcp__s__t` becomes `tools.t.approval_mode: 'approve'` (a bare
+  `mcp__s`: `default_tools_approval_mode`), which is what claude's "auto-allow, still visible"
+  means (paid smoke: no `CodexMcpElicitation` with it, one without); `disallowedTools` becomes
+  `disabled_tools`, or drops/`enabled: false` for a whole server. Non-MCP names are refused at
+  create (`EngineCapabilities.toolFilters: 'mcp'`). **A filter-only entry for a server codex does
+  not know fails `thread/start` with "invalid transport"**, so for filters naming a server the
+  request does not declare, the runner first asks `mcpServerStatus/list {}` which config.toml
+  servers exist and drops the rest. `/sessions/:id/mcp` passes `threadId` once the thread is open,
+  else the override servers are missing; before that the declared ones list as `pending`.
 - **`thread/start` materializes nothing; the rollout is written on the first turn.** Measured
   against the operator's binary on 2026-09-21: `thread/start` answers with an id at once, but
   `$CODEX_HOME/sessions/` gets no file until a turn runs, and `thread/resume` on such an id from

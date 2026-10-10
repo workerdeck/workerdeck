@@ -223,6 +223,86 @@ describe('CodexRunner: skills and MCP servers', () => {
     expect(peer.closed()).toBe(1)
   })
 
+  it('declares request MCP servers on thread/start as per-thread config overrides', async () => {
+    const peer = scriptedPeer()
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({
+      cwd: '/tmp/p',
+      prompt: 'go',
+      mcpServers: { sales: { type: 'http', url: 'https://box/mcp', headers: { 'x-toolset': 'sales' } } },
+      disallowedTools: ['mcp__sales__drop'],
+      connectFn: peer.connectFn,
+    })
+    await runner.start()
+
+    expect(peer.requests.find((r) => r.method === 'thread/start')?.params).toMatchObject({
+      config: { mcp_servers: { sales: { url: 'https://box/mcp', http_headers: { 'x-toolset': 'sales' }, disabled_tools: ['drop'] } } },
+    })
+    expect(peer.requests.some((r) => r.method === 'mcpServerStatus/list')).toBe(false)
+  })
+
+  it('re-declares them on thread/resume, so a reconnect keeps the toolset', async () => {
+    const peer = scriptedPeer()
+    peer.respond('thread/resume', () => ({ thread: { id: 'prior', turns: [] } }))
+    const runner = new CodexRunner({ cwd: '/tmp/p', resume: 'prior', mcpServers: { a: { command: 'node' } }, connectFn: peer.connectFn })
+    await runner.start()
+
+    expect(peer.requests.find((r) => r.method === 'thread/resume')?.params).toMatchObject({
+      threadId: 'prior',
+      config: { mcp_servers: { a: { command: 'node' } } },
+    })
+  })
+
+  it('filters a config.toml server only after codex lists it, dropping names it does not know', async () => {
+    const peer = scriptedPeer()
+    peer.respond('mcpServerStatus/list', () => ({ data: [{ name: 'gamma', tools: {} }] }))
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({
+      cwd: '/tmp/p',
+      prompt: 'go',
+      disallowedTools: ['mcp__gamma__other', 'mcp__delta'],
+      connectFn: peer.connectFn,
+    })
+    await runner.start()
+
+    const listed = peer.requests.findIndex((r) => r.method === 'mcpServerStatus/list')
+    const started = peer.requests.findIndex((r) => r.method === 'thread/start')
+    expect(listed).toBeGreaterThanOrEqual(0)
+    expect(listed).toBeLessThan(started)
+    expect((peer.requests[started]!.params as { config?: unknown }).config).toEqual({
+      mcp_servers: { gamma: { disabled_tools: ['other'] } },
+    })
+  })
+
+  it('asks for the thread MCP status once a thread is open, and lists declared servers as pending before', async () => {
+    const peer = scriptedPeer()
+    const statusParams: unknown[] = []
+    peer.respond('mcpServerStatus/list', (params) => {
+      statusParams.push(params)
+      return {
+        data: [
+          { name: 'gamma', tools: {} },
+          ...(params && (params as { threadId?: string }).threadId ? [{ name: 'a', tools: { ping: { name: 'ping' } } }] : []),
+        ],
+      }
+    })
+    scriptTurn(peer, (emit, turnId) => {
+      emit('turn/completed', { threadId: 'thread-1', turn: { id: turnId, status: 'completed' } })
+    })
+    const runner = new CodexRunner({ cwd: '/tmp/p', mcpServers: { a: { command: 'node' } }, connectFn: peer.connectFn })
+
+    expect((await runner.mcpServers())?.map((s) => `${s.name}:${s.status}`)).toEqual(['gamma:pending', 'a:pending'])
+
+    runner.sendMessage('go')
+    await vi.waitFor(() => expect(peer.requests.some((r) => r.method === 'turn/start')).toBe(true))
+    expect((await runner.mcpServers())?.map((s) => `${s.name}:${s.status}`)).toEqual(['gamma:pending', 'a:connected'])
+    expect(statusParams.at(-1)).toEqual({ threadId: 'thread-1' })
+  })
+
   it('reports no MCP servers once the session is closed', async () => {
     const peer = scriptedPeer()
     const runner = new CodexRunner({ cwd: '/tmp/p', connectFn: peer.connectFn })

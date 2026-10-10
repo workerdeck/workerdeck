@@ -1564,6 +1564,20 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   http-cache-semantics have no patch. **Verified**: paid `smoke:codex` 34/34 and the canary 10/10
   against 0.162.1, full `pnpm test`, docs build.
 
+  **3.12.0** - **codex per-session MCP servers and honest tool filters, released 2026-10-10** (tag
+  `v3.12.0`). A **minor**, protocol stays **1** (`EngineCapabilities.toolFilters` is additive; iOS
+  decodes it if present). Asked by SW-Box for per-run toolsets. Codex sessions take
+  `CreateSessionRequest.mcpServers` (stdio and `http`; `sse` and names outside `[A-Za-z0-9_-]`
+  refused through the new `EngineAdapter.refuseRequest`) as `thread/start`/`thread/resume`'s
+  per-thread `config.mcp_servers`, and `codex.sessionMcpServers` is now `true`. `mcp__` tool
+  filters map to codex's per-tool `approval_mode: 'approve'` (allow) and `disabled_tools` (deny).
+  **Behaviour change**: `allowedTools`/`disallowedTools` were silently ignored on codex and
+  provider; now the gateway refuses what an engine cannot honour (`toolFilters: 'all' | 'mcp' |
+  'none'`). `/sessions/:id/mcp` on codex reports the thread's own servers. **Verified**: full
+  `pnpm test`, `smoke:codex --canary` 11/11 (new per-thread MCP canary), paid `smoke:codex --mcp`
+  15/15 on 0.162.1 plus a negative control (without `allowedTools` codex prompts). **Not
+  verified**: a full paid `smoke:codex` run, the Box's integration.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read

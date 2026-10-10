@@ -503,6 +503,8 @@ export type EngineCapabilities = {
   mcpStatus: boolean
   mcpServerActions: boolean
   sessionMcpServers: boolean
+  // Which `allowedTools`/`disallowedTools` entries the engine honours: every name, only `mcp__` names, or none.
+  toolFilters: 'all' | 'mcp' | 'none'
   slashCommands: boolean
   clearContext?: boolean
   skillsList: boolean
@@ -532,6 +534,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     mcpStatus: true,
     mcpServerActions: true,
     sessionMcpServers: true,
+    toolFilters: 'all',
     slashCommands: true,
     clearContext: true,
     skillsList: false,
@@ -558,7 +561,8 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     rateLimits: true,
     mcpStatus: true,
     mcpServerActions: false,
-    sessionMcpServers: false,
+    sessionMcpServers: true,
+    toolFilters: 'mcp',
     slashCommands: false,
     clearContext: true,
     skillsList: true,
@@ -585,6 +589,7 @@ export const ENGINE_CAPABILITIES: Record<ProfileEngine, EngineCapabilities> = {
     mcpStatus: true,
     mcpServerActions: false,
     sessionMcpServers: false,
+    toolFilters: 'none',
     slashCommands: false,
     clearContext: true,
     skillsList: false,
