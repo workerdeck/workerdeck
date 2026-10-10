@@ -1537,6 +1537,10 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   side stored `from` for it. The retained owner set is rebuilt afterwards so a renamed-away owner
   stops making the gateway look multi. A profile still naming `from` keeps stamping new sessions
   with it; that is configuration, edit it. Never hand-edit `agents.json` under a running gateway.
+  Parking's rename rewrites live sessions' stored records too (else a restart restores `from`),
+  and no wake overlaps it: it awaits wakes in flight, and a wake asked for meanwhile waits on
+  `#renaming`, because a runner factory still building from the old record would register `from`
+  after the rewrite (`parking-rename.test.ts`).
 - **One peer rule, local and remote: `peerOps`** (`protocol/agents.ts`; `peerReaches` is its
   `list`), answered per operation (list, send, peek). The team rule, and sessions of different
   owners reach each other only through a team (lead and member, or teammates), or as two

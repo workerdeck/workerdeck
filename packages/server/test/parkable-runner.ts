@@ -162,6 +162,9 @@ export class ParkableRunner implements Runner {
   }
 
   async start(): Promise<void> {}
+  setOwner(owner: string | undefined): void {
+    this.#config = { ...this.#config, owner }
+  }
   info(): SessionInfo {
     return {
       id: this.id,
@@ -173,6 +176,7 @@ export class ParkableRunner implements Runner {
       lastSeq: this.#seq,
       pendingPermissionCount: 0,
       scope: this.#config.scope,
+      owner: this.#config.owner,
       meta: this.#config.meta,
       title: typeof this.#config.meta?.title === 'string' ? this.#config.meta.title : undefined,
     }
