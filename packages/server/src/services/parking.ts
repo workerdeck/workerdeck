@@ -249,6 +249,7 @@ export class SessionParkManager {
       }
     }
     // Live sessions included: their recovery record must not bring the old owner back after a restart.
+    await Promise.all(this.#storeOps.values())
     for (const listed of await this.#options.store.list()) {
       const rewritten = await this.#queue(listed.id, async () => {
         const record = await this.#options.store.get(listed.id)

@@ -51,6 +51,40 @@ describe('owner rename against parking', () => {
     expect(owners(await store.get('s1'))).toEqual({ info: 'tobias', config: 'tobias' })
   })
 
+  it('waits for a first recovery save still in flight, which the store does not list yet', async () => {
+    const store = new MemorySessionStore()
+    let release!: () => void
+    const saveGate = new Promise<void>((resolve) => (release = resolve))
+    let saving = false
+    const save = store.save.bind(store)
+    store.save = async (record) => {
+      if (!saving) {
+        saving = true
+        await saveGate
+      }
+      return save(record)
+    }
+    const registry = new SessionRegistry()
+    const parking = new SessionParkManager({
+      registry,
+      store,
+      rebuild: async (r) => restored(r),
+      attachedCount: () => 0,
+      persistLive: true,
+    })
+    const runner = new ParkableRunner('s1', config)
+    registry.register(runner)
+    parking.remember(runner.id, config)
+    parking.touch(runner)
+    await expect.poll(() => saving).toBe(true)
+
+    const rename = parking.renameOwner('ruli', 'tobias')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    release()
+    expect(await rename).toBe(1)
+    expect(owners(await store.get('s1'))).toEqual({ info: 'tobias', config: 'tobias' })
+  })
+
   it('holds a rename behind a wake whose runner factory is still building from the old record', async () => {
     const record = await liveRecord()
     let release!: () => void
