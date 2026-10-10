@@ -16,6 +16,7 @@ import { addressedText, peerLabel, useTicker } from '../terminal/items.tsx'
 import { canBackground, elapsedLabel, liveTailLines, toolBusy } from '../terminal/live-tool.ts'
 import { ShellItemActions, useShellActions, useVerifyRunning } from './shell-actions.tsx'
 import { BackgroundAction, BookmarkAction, CopyAction, WithActions } from '../terminal/affordances.tsx'
+import { UrlText } from '../terminal/url-text.tsx'
 import { shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from '../terminal/shell-row.ts'
 
 function TurnResultRow({ item }: { item: Extract<TranscriptItem, { kind: 'turn_result' }> }) {
@@ -209,7 +210,7 @@ function ShellCard({ item }: { item: ShellItem }) {
         </div>
         {lines.length > 0 ? (
           <pre className="overflow-x-auto border-t border-border px-3 py-2 font-mono text-label whitespace-pre-wrap text-fg-2">
-            {lines.join('\n')}
+            <UrlText text={lines.join('\n')} />
           </pre>
         ) : null}
         {footer ? <div className="px-3 pb-2 text-label text-fg-4">{footer}</div> : null}

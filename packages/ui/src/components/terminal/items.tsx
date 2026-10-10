@@ -22,6 +22,7 @@ import { todoLine, todoPreview, type TodoPreview, type TodoStatus } from './todo
 import { ShellItemActions, useShellActions, useVerifyRunning } from '../agent/shell-actions.tsx'
 import { SHELL_GLYPH, shellBodyLines, shellFailed, shellFooterText, shellLabel, shellStatusText } from './shell-row.ts'
 import { type ToolCallItem } from './blocks.ts'
+import { UrlText } from './url-text.tsx'
 import { Band, Blank, Ink, Row, type Tone } from './row.tsx'
 
 export const PROMPT_GLYPH = '❯'
@@ -524,7 +525,7 @@ export function ShellRow({ item }: { item: ShellItem }) {
         </Pressable>
         {lines.map((line, index) => (
           <Row key={index} tone={failed ? 'red' : 'dim'}>
-            {line || ' '}
+            {line ? <UrlText text={line} /> : ' '}
           </Row>
         ))}
         {footer || busy ? <Row tone="faint">{busy ? '… fetching the full output' : footer}</Row> : null}
