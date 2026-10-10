@@ -154,7 +154,7 @@ export function SessionBrowser({
       return (
         <CustomGroupHeader
           group={group}
-          look={config.customGroups?.find((custom) => custom.id === group.custom)}
+          look={config.customGroups?.find((stored) => stored.id === group.custom)}
           onStyle={(look) => group.custom && drag.style(group.custom, look)}
           editing={group.custom !== undefined && editingGroup === group.custom}
           onEditingChange={(editing) => setEditingGroup(editing ? group.custom : undefined)}

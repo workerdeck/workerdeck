@@ -239,7 +239,7 @@ export class SessionParkManager {
   }
 
   async #renameOwner(from: string, to: string): Promise<number> {
-    await Promise.allSettled([...this.#resuming.values()])
+    await Promise.allSettled(this.#resuming.values())
     const renamed = new Set<string>()
     for (const [id, config] of this.#configs) {
       if (config.owner === from) {
