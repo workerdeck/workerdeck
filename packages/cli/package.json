@@ -30,7 +30,7 @@
   "dependencies": {
     "@monkeyart/composer": "^0.3.0",
     "@monkeyart/packs": "^0.3.0",
-    "@openai/codex": "~0.158.0",
+    "@openai/codex": "~0.160.1",
     "@workerdeck/relay": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/web": "workspace:*"
@@ -40,12 +40,12 @@
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.2",
     "@types/node": "^26.6.1",
-    "@types/ws": "^8.18.1",
+    "@types/ws": "^8.18.2",
     "@workerdeck/protocol": "workspace:*",
     "rimraf": "^6.1.3",
     "tsdown": "^0.22.14",
     "vitest": "^4.1.11",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "author": "Tobias Strebitzer",
   "repository": {

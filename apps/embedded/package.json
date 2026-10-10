@@ -42,7 +42,7 @@
     "@workerdeck/sandbox": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/ui": "workspace:*",
-    "ai": "^7.0.106",
+    "ai": "^7.0.130",
     "concurrently": "^10.0.5",
     "cors": "^2.8.6",
     "express": "^5.2.1",
