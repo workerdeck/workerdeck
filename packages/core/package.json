@@ -31,7 +31,7 @@
     "ai": "^7.0.106"
   },
   "peerDependencies": {
-    "@openai/codex": ">=0.149.0 <0.159.0"
+    "@openai/codex": ">=0.149.0 <0.163.0"
   },
   "peerDependenciesMeta": {
     "@openai/codex": {
@@ -40,7 +40,7 @@
   },
   "devDependencies": {
     "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.31.0",
-    "@openai/codex": "~0.158.0",
+    "@openai/codex": "~0.162.1",
     "@types/node": "^26.6.1",
     "rimraf": "^6.1.3",
     "tsdown": "^0.22.14",

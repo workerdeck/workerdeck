@@ -30,7 +30,7 @@
   "dependencies": {
     "@monkeyart/composer": "^0.3.0",
     "@monkeyart/packs": "^0.3.0",
-    "@openai/codex": "~0.158.0",
+    "@openai/codex": "~0.162.1",
     "@workerdeck/relay": "workspace:*",
     "@workerdeck/server": "workspace:*",
     "@workerdeck/web": "workspace:*"
