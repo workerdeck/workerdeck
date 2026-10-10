@@ -1544,6 +1544,19 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   the dashboard on a private gateway (Tobias; profile available, codex's own `auth.json`). **Not
   verified**: Linux PTY, keyring-mode `CODEX_HOME`s, `codex logout` from the dialog.
 
+  **3.11.0** - **owner stamps, shell links and folding groups, released 2026-10-10** (tag
+  `v3.11.0`). A **minor**, protocol stays **1** (`owners`/`defaulted` frames ride the negotiated
+  `owners-live` relay feature; `ViewConfig.collapsedGroups` is a client preference). **Owners**: a
+  relay-defaulted owner (`operator`) is read, never stamped, so the first explicit enrollment stamps
+  once; an owner change reaches a connected gateway live; `POST /owners/rename` + `workerdeck owners
+  rename` moves agents, live sessions and stored records (WD-Review's A1 to A3 closed, parking
+  races pinned in `parking-rename.test.ts`). **Links**: cmd+click (ctrl elsewhere) opens URLs in
+  the xterm shell view through a dependency-free link provider, URLs in a transcript shell row's
+  output are plain links, and the VS Code webview routes http(s) links to `openExternal`. **Custom
+  groups fold** with a chevron; a folded header says who needs you, is working or unread.
+  **Verified**: full `pnpm test`, shell links in VS Code and the transcript (Tobias). **Not
+  verified**: group folding by hand, the mini relay on `owners-live` (needs its upgrade).
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
