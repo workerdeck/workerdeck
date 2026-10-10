@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FitAddon } from '@xterm/addon-fit'
-import type { ITheme, Terminal as XTerm } from '@xterm/xterm'
+import type { IDisposable, ILink, ITheme, Terminal as XTerm } from '@xterm/xterm'
 import { useShellTerminal } from '@workerdeck/react'
 import type { SessionHandle } from '@workerdeck/client'
 import type { ShellInfo } from '@workerdeck/protocol'
+import { findUrls, isOpenGesture } from '../../lib/terminal-links.ts'
 import { cn } from '../../lib/utils.ts'
 import { Spinner } from '../ui/Spinner.tsx'
 
@@ -12,11 +13,12 @@ export interface ShellTerminalProps {
   shellId: string | undefined
   onEnded?: (reason: string) => void
   onShell?: (shell: ShellInfo) => void
+  onOpenUrl?: (url: string) => boolean | void
   fontSize?: number
   className?: string
 }
 
-export function ShellTerminal({ handle, shellId, onEnded, onShell, fontSize, className }: ShellTerminalProps) {
+export function ShellTerminal({ handle, shellId, onEnded, onShell, onOpenUrl, fontSize, className }: ShellTerminalProps) {
   const host = useRef<HTMLDivElement>(null)
   const term = useRef<XTerm | null>(null)
   const fit = useRef<FitAddon | null>(null)
@@ -25,6 +27,8 @@ export function ShellTerminal({ handle, shellId, onEnded, onShell, fontSize, cla
   const theme = useDocumentTheme()
   const onShellRef = useRef(onShell)
   onShellRef.current = onShell
+  const openUrlRef = useRef(onOpenUrl)
+  openUrlRef.current = onOpenUrl
 
   const shell = useShellTerminal(handle, shellId, {
     onData: (data) => term.current?.write(data),
@@ -53,9 +57,19 @@ export function ShellTerminal({ handle, shellId, onEnded, onShell, fontSize, cla
 
   useEffect(() => {
     let disposed = false
+    let links: IDisposable | undefined
     void loadXterm().then(({ Terminal, FitAddon: Fit }) => {
       if (disposed || !host.current) {
         return
+      }
+      const openLink = (event: MouseEvent, url: string) => {
+        if (!isOpenGesture(event, isMac())) {
+          return
+        }
+        event.preventDefault()
+        if (!openUrlRef.current?.(url)) {
+          window.open(url, '_blank', 'noopener,noreferrer')
+        }
       }
       const instance = new Terminal({
         allowProposedApi: true,
@@ -66,10 +80,12 @@ export function ShellTerminal({ handle, shellId, onEnded, onShell, fontSize, cla
         fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
         theme: xtermTheme(document.documentElement.getAttribute('data-theme')),
         scrollback: 5000,
+        linkHandler: { activate: openLink, allowNonHttpProtocols: false },
       })
       const addon = new Fit()
       instance.loadAddon(addon)
       instance.open(host.current)
+      links = instance.registerLinkProvider(urlLinkProvider(instance, openLink))
       addon.fit()
       instance.onData((data) => shellRef.current.write(data))
       instance.onResize(({ cols, rows }) => shellRef.current.resize({ cols, rows }))
@@ -81,6 +97,7 @@ export function ShellTerminal({ handle, shellId, onEnded, onShell, fontSize, cla
       disposed = true
       attached.current = false
       shellRef.current.detach()
+      links?.dispose()
       term.current?.dispose()
       term.current = null
       fit.current = null
@@ -135,6 +152,42 @@ export function ShellTerminal({ handle, shellId, onEnded, onShell, fontSize, cla
       )}
     </div>
   )
+}
+
+function urlLinkProvider(instance: XTerm, activate: (event: MouseEvent, url: string) => void) {
+  return {
+    provideLinks(y: number, callback: (links: ILink[] | undefined) => void) {
+      const line = instance.buffer.active.getLine(y - 1)
+      if (!line) {
+        return callback(undefined)
+      }
+      let text = ''
+      const columns: number[] = []
+      for (let x = 0; x < line.length; x++) {
+        const cell = line.getCell(x)
+        if (!cell || cell.getWidth() === 0) {
+          continue
+        }
+        const chars = cell.getChars() || ' '
+        text += chars
+        for (let i = 0; i < chars.length; i++) {
+          columns.push(x)
+        }
+      }
+      const links = findUrls(text).map(
+        ({ url, start, end }): ILink => ({
+          text: url,
+          range: { start: { x: columns[start]! + 1, y }, end: { x: columns[end - 1]! + 1, y } },
+          activate,
+        }),
+      )
+      callback(links.length > 0 ? links : undefined)
+    },
+  }
+}
+
+function isMac(): boolean {
+  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 }
 
 function useDocumentTheme(): string | null {

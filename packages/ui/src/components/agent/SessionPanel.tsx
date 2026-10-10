@@ -680,7 +680,13 @@ export function SessionPanel({
             />
           ) : null}
           {framedShellId !== undefined ? (
-            <ShellTerminal key={framedShellId} handle={handle} shellId={framedShellId} fontSize={cell.fontSize} />
+            <ShellTerminal
+              key={framedShellId}
+              handle={handle}
+              shellId={framedShellId}
+              onOpenUrl={onLinkClick}
+              fontSize={cell.fontSize}
+            />
           ) : (
             <BookmarkProvider value={bookmarkHandle}>
               <TaskControlProvider value={taskControl}>

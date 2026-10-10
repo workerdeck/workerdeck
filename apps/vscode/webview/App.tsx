@@ -123,6 +123,16 @@ export function App({
   )
 
   const page = useRef<HTMLDivElement>(null)
+  const openUrl = useCallback(
+    (href: string) => {
+      if (!/^https?:\/\//i.test(href)) {
+        return false
+      }
+      bridge.post({ kind: 'wd-open-url', url: href })
+      return true
+    },
+    [bridge],
+  )
   const openPath = useCallback((hit: PathHit) => bridge.post({ kind: 'wd-open-path', path: hit.path, line: hit.line }), [bridge])
   usePathLinks({ container: page, onOpen: openPath, enabled: shown !== undefined && client !== undefined })
 
@@ -163,6 +173,7 @@ export function App({
         peerAvatars={peerAvatars}
         onToggleBookmark={toggleBookmark}
         onOpenFile={(path, line) => bridge.post({ kind: 'wd-open-path', path, line })}
+        onLinkClick={openUrl}
         openSubagent={openSubagent}
         reveal={reveal}
         stickyPrompt
