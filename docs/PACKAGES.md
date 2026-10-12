@@ -2448,7 +2448,8 @@ can be read side by side until iOS moves onto the core:
 | `rows.rs` | `Terminal/TerminalBlocks.swift` + `TerminalRows.build`: recap boundary, brief rows, sub-agent frames, `hideThinking` |
 | `planner.rs` | `Terminal/TerminalPlanner.swift` (every expansion, press and frame branch, image boxes), plus `TerminalMetrics`, `TermFmt`, `ResultPreview`, `LiveTool` |
 | `expansion.rs` | `Terminal/TerminalExpansion.swift`: `ExpansionKey`, `TermPress`, open/full/pending |
-| `controller/session.rs` | `SessionHandle.swift` as a sans-IO state machine: socket events and commands in, `Open`/`Send`/`Close`/`WakeAt` effects and app signals out; backoff, outbox and close-after-drain as Swift has them |
+| `controller/session.rs` | The session connection as a sans-IO state machine: socket events and commands in, `Open`/`Send`/`Close`/`WakeAt` effects and app signals out; backoff, outbox, close-after-drain, acked prompts and `resync`, one rule set with the TS client (`plans/CONNECTION-PARITY.md`). `Close` means the host reports nothing more from that socket |
+| `controller/live.rs` | `LiveSession`, the one session object: the connection, the reducer (attach seed, hydration), the replay hold over a buffered state, the seq index and `TranscriptView`, with connection state (`connecting`/`unreachable` before any open), a stale-attach resync (react's `staleAttach`), replayed running shells verified once, and one merged `WakeAt`. Effects are drained after every call; a burst of frames costs one view update |
 | `controller/` | `TranscriptView` (the app's `TerminalTranscriptModel`: presses return effects such as `FetchResult` / `OpenSubagent` instead of calling closures), `ReplayHold`, `TranscriptSeqIndex`, `StickyPrompt`, `TranscriptScrollGeometry` |
 | `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `fmt`; ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
 | `rest.rs` | the REST/wire records the view models read (`SessionInfo`, `AgentInfo`, ...), serde camelCase, unknown fields ignored |
@@ -2457,8 +2458,7 @@ can be read side by side until iOS moves onto the core:
 | `book.rs` | `Terminal/TerminalHeightBook.swift` + `TerminalPlanCache`; 256 or more misses plan in parallel |
 | `vt.rs` | `Terminal/VTScreen.swift` + `VTTypes.swift`; parsing is the `vte` crate, dispatch mirrors the Swift handlers |
 
-**Still missing**: wiring the session connection to `TranscriptView` and the reducer (one session
-object), the shell session, the scrubber, and the app-side view models (`CreateSessionModel`,
+**Still missing**: subagent frame views on `LiveSession`, the shell session, the scrubber, and the app-side view models (`CreateSessionModel`,
 prompt completion, unread). The plan, with its
 phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
 

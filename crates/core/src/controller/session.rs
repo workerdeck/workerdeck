@@ -36,6 +36,7 @@ pub fn chunk(data: &str, max: usize) -> Vec<&str> {
 pub enum Effect {
     Open { after_seq: i64 },
     Send { id: u64, text: String },
+    // Close the current socket and report nothing more from it: no frames, no `closed`, no `send_done`.
     Close,
     WakeAt(f64),
 }
@@ -359,6 +360,19 @@ impl SessionConnection {
         self.in_flight = None;
         self.close_after_flush = false;
         self.finish();
+    }
+
+    // Starts the log over from seq 0 on a fresh socket, for an attach whose log is not the one `last_seq` was numbered in.
+    pub fn resync(&mut self) {
+        self.last_seq = 0;
+        match self.phase {
+            Phase::Connected | Phase::Connecting => {
+                self.effects.push(Effect::Close);
+                self.in_flight = None;
+                self.connect();
+            }
+            Phase::Waiting { .. } | Phase::Finished => {}
+        }
     }
 
     pub fn reconnect_now(&mut self) {

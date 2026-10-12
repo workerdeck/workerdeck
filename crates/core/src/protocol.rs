@@ -266,6 +266,7 @@ pub struct UserMessage {
     pub content: Vec<ContentBlock>,
     pub parent_tool_use_id: Option<String>,
     pub synthetic: Option<bool>,
+    pub replay: bool,
     pub uuid: Option<String>,
     pub attachments: Option<Arc<Value>>,
     pub origin: Option<Arc<Value>>,
@@ -437,6 +438,8 @@ struct RawEvent<'a> {
     uuid: LStr,
     #[serde(default)]
     synthetic: LBool,
+    #[serde(default)]
+    replay: LBool,
     #[serde(rename = "sdkSessionId", default)]
     sdk_session_id: LStr,
     #[serde(default)]
@@ -696,6 +699,7 @@ fn decode_body(ty: &str, raw: RawEvent) -> Option<Body> {
                 content,
                 parent_tool_use_id: raw.parent_tool_use_id.0,
                 synthetic: raw.synthetic.0,
+                replay: raw.replay.0 == Some(true),
                 uuid: raw.uuid.0,
                 attachments: object(raw.attachments),
                 origin: object(raw.origin),

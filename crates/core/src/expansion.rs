@@ -80,6 +80,10 @@ impl TerminalExpansion {
         self.pending.insert(call_id.to_owned())
     }
 
+    pub fn abandon_fetch(&mut self, call_id: &str) -> bool {
+        self.pending.remove(call_id)
+    }
+
     pub fn finish_fetch(&mut self, call_id: &str) {
         if self.pending.remove(call_id) {
             self.full.insert(call_id.to_owned());

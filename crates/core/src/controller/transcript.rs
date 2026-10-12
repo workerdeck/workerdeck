@@ -169,6 +169,13 @@ impl TranscriptView {
         }
     }
 
+    // The fetch failed: the row goes back to its head, and a later press may try again.
+    pub fn fetch_failed(&mut self, call_id: &str) {
+        if self.expansion.abandon_fetch(call_id) {
+            self.remeasure();
+        }
+    }
+
     pub fn expand_everything(&mut self) {
         self.expansion = TerminalExpansion::everything(&self.rows.rows);
         self.remeasure();
