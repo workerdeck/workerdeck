@@ -1,0 +1,23 @@
+{
+  "cwd": "/work/acme",
+  "effort": "high",
+  "engineAsleep": true,
+  "items": [],
+  "lastSeq": 9,
+  "model": "claude-sonnet-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "acceptEdits",
+  "rateLimits": {
+    "five_hour": {
+      "rateLimitType": "five_hour",
+      "resetsAt": 1760010000,
+      "status": "allowed",
+      "utilization": 0.4
+    }
+  },
+  "rateLimitsUpdatedAt": 1760000000000,
+  "sdkSessionId": "sdk-conformance",
+  "status": "idle",
+  "subscriptionType": "max",
+  "totalCostUsd": 0
+}

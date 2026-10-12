@@ -15,10 +15,7 @@ impl Default for PlanCache {
 
 impl PlanCache {
     pub fn new() -> Self {
-        PlanCache {
-            entries: HashMap::new(),
-            epoch: None,
-        }
+        PlanCache { entries: HashMap::new(), epoch: None }
     }
 
     fn begin_epoch(&mut self, metrics: Metrics) {
@@ -47,10 +44,7 @@ pub struct HeightBook {
 
 impl HeightBook {
     pub fn empty() -> Self {
-        HeightBook {
-            heights: Vec::new(),
-            offsets: vec![0.0],
-        }
+        HeightBook { heights: Vec::new(), offsets: vec![0.0] }
     }
 
     pub fn new(rows: &TerminalRows, metrics: &Metrics, cache: Option<&mut PlanCache>) -> Self {
@@ -71,11 +65,7 @@ impl HeightBook {
     }
 
     pub fn offset(&self, index: usize) -> f64 {
-        if index < self.offsets.len() {
-            self.offsets[index]
-        } else {
-            self.total_height()
-        }
+        if index < self.offsets.len() { self.offsets[index] } else { self.total_height() }
     }
 }
 
@@ -107,12 +97,7 @@ fn line_counts(rows: &TerminalRows, metrics: &Metrics, mut cache: Option<&mut Pl
             let handles: Vec<_> = misses
                 .chunks(chunk)
                 .map(|slice| {
-                    scope.spawn(move || {
-                        slice
-                            .iter()
-                            .map(|&i| (i, planner::plan(&rows.rows[i], metrics).len()))
-                            .collect::<Vec<_>>()
-                    })
+                    scope.spawn(move || slice.iter().map(|&i| (i, planner::plan(&rows.rows[i], metrics).len())).collect::<Vec<_>>())
                 })
                 .collect();
             handles.into_iter().map(|h| h.join().unwrap()).collect()

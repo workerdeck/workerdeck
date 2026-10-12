@@ -1,0 +1,36 @@
+{
+  "costUsd": 0.002,
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "u-16",
+      "kind": "user",
+      "text": "Go."
+    },
+    {
+      "costUsd": 0.002,
+      "durationMs": 300,
+      "errors": [
+        "overloaded"
+      ],
+      "id": "turn-4",
+      "isError": true,
+      "kind": "turn_result",
+      "subtype": "error_during_execution",
+      "totalCostUsd": 0.002
+    },
+    {
+      "id": "err-5",
+      "kind": "notice",
+      "level": "error",
+      "text": "The engine stopped."
+    }
+  ],
+  "lastSeq": 6,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "idle",
+  "totalCostUsd": 0.002
+}

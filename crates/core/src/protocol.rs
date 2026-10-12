@@ -41,6 +41,18 @@ impl SessionStatus {
             _ => return None,
         })
     }
+
+    pub fn raw(self) -> &'static str {
+        match self {
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::AwaitingApproval => "awaiting_approval",
+            Self::Idle => "idle",
+            Self::Parked => "parked",
+            Self::Failed => "failed",
+            Self::Closed => "closed",
+        }
+    }
 }
 
 pub struct ContextUsage {
@@ -138,16 +150,8 @@ pub struct TurnResult {
 }
 
 pub enum Body {
-    SystemInit {
-        model: String,
-        cwd: String,
-        sdk_session_id: String,
-        permission_mode: String,
-    },
-    StatusChanged {
-        status: SessionStatus,
-        detail: Option<String>,
-    },
+    SystemInit { model: String, cwd: String, sdk_session_id: String, permission_mode: String },
+    StatusChanged { status: SessionStatus, detail: Option<String> },
     ContextUsage(ContextUsage),
     UserMessage(UserMessage),
     AssistantMessage(AssistantMessage),
@@ -408,17 +412,9 @@ fn decode_body(ty: &str, raw: RawEvent) -> Option<Body> {
                 "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto" => {}
                 _ => return None,
             }
-            Some(Body::SystemInit {
-                model: raw.model.0?,
-                cwd: raw.cwd.0?,
-                sdk_session_id: raw.sdk_session_id.0?,
-                permission_mode: mode,
-            })
+            Some(Body::SystemInit { model: raw.model.0?, cwd: raw.cwd.0?, sdk_session_id: raw.sdk_session_id.0?, permission_mode: mode })
         }
-        "status_changed" => Some(Body::StatusChanged {
-            status: SessionStatus::parse(raw.status.0.as_deref()?)?,
-            detail: raw.detail.0,
-        }),
+        "status_changed" => Some(Body::StatusChanged { status: SessionStatus::parse(raw.status.0.as_deref()?)?, detail: raw.detail.0 }),
         "context_usage" => {
             let u: RawUsage = serde_json::from_str(raw.usage?.get()).ok()?;
             Some(Body::ContextUsage(ContextUsage {
@@ -440,11 +436,7 @@ fn decode_body(ty: &str, raw: RawEvent) -> Option<Body> {
         }
         "assistant_message" => {
             let content = decode_message(raw.message?)?;
-            Some(Body::AssistantMessage(AssistantMessage {
-                content,
-                parent_tool_use_id: raw.parent_tool_use_id.0,
-                uuid: raw.uuid.0?,
-            }))
+            Some(Body::AssistantMessage(AssistantMessage { content, parent_tool_use_id: raw.parent_tool_use_id.0, uuid: raw.uuid.0? }))
         }
         "stream_delta" => {
             let body: RawStreamBody = serde_json::from_str(raw.event?.get()).ok()?;
@@ -510,11 +502,7 @@ fn decode_block(b: RawBlock) -> Option<ContentBlock> {
                 Some(ContentBlock::Thinking(thinking))
             }
         }
-        "tool_use" => Some(ContentBlock::ToolUse {
-            id: b.id.0?,
-            name: b.name.0?,
-            input: Arc::new(b.input.unwrap_or(Value::Null)),
-        }),
+        "tool_use" => Some(ContentBlock::ToolUse { id: b.id.0?, name: b.name.0?, input: Arc::new(b.input.unwrap_or(Value::Null)) }),
         "tool_result" => {
             let content = match b.content {
                 None => None,

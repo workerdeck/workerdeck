@@ -5,11 +5,7 @@ pub enum Block {
     List(Vec<ListItem>),
     Blockquote(String),
     ThematicBreak,
-    Code {
-        language: Option<String>,
-        text: String,
-        closed: bool,
-    },
+    Code { language: Option<String>, text: String, closed: bool },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,12 +103,7 @@ impl Fence {
             return None;
         }
         let language = info.split(' ').find(|s| !s.is_empty()).map(|s| s.to_lowercase());
-        Some(Fence {
-            marker,
-            length: run,
-            indent,
-            language,
-        })
+        Some(Fence { marker, length: run, indent, language })
     }
 
     fn closes(&self, line: &str) -> bool {
@@ -293,11 +284,7 @@ pub fn parse(text: &str) -> Vec<Block> {
     for line in split_lines(text) {
         if let Some(open) = &fence {
             if open.closes(line) {
-                blocks.push(Block::Code {
-                    language: open.language.clone(),
-                    text: code.join("\n"),
-                    closed: true,
-                });
+                blocks.push(Block::Code { language: open.language.clone(), text: code.join("\n"), closed: true });
                 code.clear();
                 fence = None;
             } else {
@@ -372,11 +359,7 @@ pub fn parse(text: &str) -> Vec<Block> {
     }
 
     if let Some(open) = fence {
-        blocks.push(Block::Code {
-            language: open.language,
-            text: code.join("\n"),
-            closed: false,
-        });
+        blocks.push(Block::Code { language: open.language, text: code.join("\n"), closed: false });
     } else {
         flush_prose!();
         flush_list!();

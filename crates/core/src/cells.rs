@@ -138,11 +138,7 @@ pub fn is_plain_ascii(s: &str) -> bool {
 }
 
 pub fn gcount(s: &str) -> usize {
-    if s.is_ascii() && !s.contains("\r\n") {
-        s.len()
-    } else {
-        s.graphemes(true).count()
-    }
+    if s.is_ascii() && !s.contains("\r\n") { s.len() } else { s.graphemes(true).count() }
 }
 
 pub fn gprefix(s: &str, n: usize) -> &str {
@@ -188,11 +184,7 @@ impl<'a> Iterator for Clusters<'a> {
 }
 
 fn clusters(line: &str, ascii: bool) -> Clusters<'_> {
-    if ascii {
-        Clusters::Ascii { len: line.len(), at: 0 }
-    } else {
-        Clusters::Graphemes(line.grapheme_indices(true))
-    }
+    if ascii { Clusters::Ascii { len: line.len(), at: 0 } } else { Clusters::Graphemes(line.grapheme_indices(true)) }
 }
 
 fn is_number_cluster(s: &str) -> bool {
@@ -215,13 +207,7 @@ fn tokenize(line: &str, tokens: &mut Vec<Token>) {
             let index = $index;
             if word_width > 0 || word_start < index {
                 if word_start < index {
-                    tokens.push(Token {
-                        space: false,
-                        width: word_width,
-                        exact: word_exact,
-                        start: word_start,
-                        end: index,
-                    });
+                    tokens.push(Token { space: false, width: word_width, exact: word_exact, start: word_start, end: index });
                 }
                 word_width = 0;
                 word_exact = true;
@@ -253,13 +239,7 @@ fn tokenize(line: &str, tokens: &mut Vec<Token>) {
                     break;
                 }
             }
-            tokens.push(Token {
-                space: true,
-                width,
-                exact: true,
-                start: s,
-                end: cursor_end,
-            });
+            tokens.push(Token { space: true, width, exact: true, start: s, end: cursor_end });
             column += width;
             word_start = cursor_end;
             continue;
@@ -268,13 +248,7 @@ fn tokenize(line: &str, tokens: &mut Vec<Token>) {
         let (cells, exact) = if ascii { (1, true) } else { cluster_cells(&line[s..e]) };
         if cells > 1 {
             flush_word!(s);
-            tokens.push(Token {
-                space: false,
-                width: cells,
-                exact,
-                start: s,
-                end: e,
-            });
+            tokens.push(Token { space: false, width: cells, exact, start: s, end: e });
             column += cells;
             word_start = e;
             continue;
@@ -290,13 +264,7 @@ fn tokenize(line: &str, tokens: &mut Vec<Token>) {
                 None => false,
             };
             if !follows_digit {
-                tokens.push(Token {
-                    space: false,
-                    width: word_width,
-                    exact: word_exact,
-                    start: word_start,
-                    end: e,
-                });
+                tokens.push(Token { space: false, width: word_width, exact: word_exact, start: word_start, end: e });
                 word_width = 0;
                 word_exact = true;
                 word_start = e;

@@ -1,9 +1,6 @@
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let dir = args
-        .get(1)
-        .cloned()
-        .unwrap_or_else(|| concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures").into());
+    let dir = args.get(1).cloned().unwrap_or_else(|| concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures").into());
     let session = format!("{dir}/session.jsonl");
     let shell = format!("{dir}/shell.txt");
     match args.get(2).map(String::as_str) {

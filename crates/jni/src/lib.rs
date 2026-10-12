@@ -11,9 +11,7 @@ fn engine<'a>(handle: jlong) -> Option<&'a mut Engine> {
 }
 
 fn bytes_out(env: &mut JNIEnv, bytes: &[u8]) -> jbyteArray {
-    env.byte_array_from_slice(bytes)
-        .map(|a| a.into_raw())
-        .unwrap_or(std::ptr::null_mut())
+    env.byte_array_from_slice(bytes).map(|a| a.into_raw()).unwrap_or(std::ptr::null_mut())
 }
 
 #[unsafe(no_mangle)]

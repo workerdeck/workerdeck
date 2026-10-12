@@ -4,6 +4,7 @@ pub mod cells;
 pub mod engine;
 pub mod markdown;
 pub mod planner;
+pub mod projection;
 pub mod protocol;
 pub mod rows;
 pub mod transcript;

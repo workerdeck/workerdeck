@@ -101,19 +101,10 @@ fn push_leaf(out: &mut Vec<Row>, item: &Item, index: usize) {
             previous.indices.push(index);
             return;
         }
-        out.push(Row::Run(RunBlock {
-            key: format!("run:{}", call.id),
-            run: vec![call.clone()],
-            indices: vec![index],
-            index,
-        }));
+        out.push(Row::Run(RunBlock { key: format!("run:{}", call.id), run: vec![call.clone()], indices: vec![index], index }));
         return;
     }
-    out.push(Row::Item(ItemBlock {
-        key: item_key(item),
-        item: item.clone(),
-        index,
-    }));
+    out.push(Row::Item(ItemBlock { key: item_key(item), item: item.clone(), index }));
 }
 
 pub fn terminal_blocks(items: &[Item], offset: usize) -> Vec<Row> {
@@ -133,10 +124,7 @@ pub fn terminal_blocks(items: &[Item], offset: usize) -> Vec<Row> {
         if !top_level.contains(&**parent) {
             continue;
         }
-        children_of
-            .entry(parent.clone())
-            .or_default()
-            .push((item.clone(), offset + position));
+        children_of.entry(parent.clone()).or_default().push((item.clone(), offset + position));
     }
 
     let mut out: Vec<Row> = Vec::with_capacity(items.len());
@@ -159,11 +147,7 @@ pub fn terminal_blocks(items: &[Item], offset: usize) -> Vec<Row> {
                 .map(|b| match b {
                     Row::Item(l) => Leaf::Item(l),
                     Row::Run(l) => Leaf::Run(l),
-                    Row::Task(l) => Leaf::Item(ItemBlock {
-                        key: l.key,
-                        item: Item::ToolCall(l.task),
-                        index: l.index,
-                    }),
+                    Row::Task(l) => Leaf::Item(ItemBlock { key: l.key, item: Item::ToolCall(l.task), index: l.index }),
                 })
                 .collect();
             out.push(Row::Task(TaskBlock {
@@ -203,24 +187,12 @@ impl TerminalRows {
                 Row::Task(task) => {
                     for (ordinal, &child) in task.child_indices.iter().enumerate() {
                         absorbed.insert(child, row_index);
-                        positions.insert(
-                            child,
-                            RowPosition {
-                                ordinal,
-                                count: task.child_indices.len(),
-                            },
-                        );
+                        positions.insert(child, RowPosition { ordinal, count: task.child_indices.len() });
                     }
                 }
                 Row::Run(run) if run.run.len() > 1 => {
                     for (ordinal, &member) in run.indices.iter().enumerate() {
-                        positions.insert(
-                            member,
-                            RowPosition {
-                                ordinal,
-                                count: run.run.len(),
-                            },
-                        );
+                        positions.insert(member, RowPosition { ordinal, count: run.run.len() });
                     }
                 }
                 _ => {}
@@ -231,13 +203,7 @@ impl TerminalRows {
         for (i, row) in rows.iter().enumerate().rev() {
             starts[i] = row.index();
         }
-        TerminalRows {
-            rows,
-            absorbed,
-            positions,
-            starts,
-            answerable,
-        }
+        TerminalRows { rows, absorbed, positions, starts, answerable }
     }
 
     pub fn build(items: &[Item]) -> Self {

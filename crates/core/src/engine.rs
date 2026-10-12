@@ -25,12 +25,7 @@ impl Engine {
         Engine {
             state: TranscriptState::default(),
             cache: PlanCache::new(),
-            metrics: Metrics {
-                cell: cell_px,
-                line: line_px,
-                width: width_px,
-                font_size: 32.0,
-            },
+            metrics: Metrics { cell: cell_px, line: line_px, width: width_px, font_size: 32.0 },
             vt: VtScreen::new(cols, vt_rows, 1000),
             rows: TerminalRows::build(&[]),
             book: HeightBook::empty(),
@@ -186,9 +181,7 @@ pub struct ByteWriter {
 
 impl ByteWriter {
     pub fn new() -> Self {
-        ByteWriter {
-            bytes: Vec::with_capacity(16 * 1024),
-        }
+        ByteWriter { bytes: Vec::with_capacity(16 * 1024) }
     }
     pub fn u8(&mut self, v: u8) {
         self.bytes.push(v);

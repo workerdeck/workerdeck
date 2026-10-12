@@ -76,6 +76,7 @@ as its own `rust` job. The toolchain is pinned in `rust-toolchain.toml` (1.98, w
 
 ```sh
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+pnpm fixtures:golden                          # TS reducer -> crates/core/tests/conformance; --check in CI
 node crates/bench/fixtures/gen.mjs            # synthetic, deterministic: session.jsonl + shell.txt (gitignored)
 cargo run --release -p wd-native-bench        # the workloads, as JSON; `-- <dir> dump|dump-vt` for the cross-checks
 ANDROID_NDK_HOME=~/Library/Android/android-ndk-r30 cargo ndk -t arm64-v8a -t x86_64 build -p wd-native-jni --release

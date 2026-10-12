@@ -238,12 +238,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
     let seq = event.seq;
 
     match event.body {
-        Body::SystemInit {
-            model,
-            cwd,
-            sdk_session_id,
-            permission_mode,
-        } => {
+        Body::SystemInit { model, cwd, sdk_session_id, permission_mode } => {
             state.model = Some(model);
             state.cwd = Some(cwd);
             state.sdk_session_id = Some(sdk_session_id);
@@ -271,11 +266,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
                                 && *call.id == *result.tool_use_id
                             {
                                 let updated = Arc::make_mut(call);
-                                updated.status = if is_error {
-                                    ToolCallStatus::Failed
-                                } else {
-                                    ToolCallStatus::Settled
-                                };
+                                updated.status = if is_error { ToolCallStatus::Failed } else { ToolCallStatus::Settled };
                                 updated.live_tail = None;
                                 updated.result = Some(ToolCallResult {
                                     text: text.clone(),
@@ -293,16 +284,8 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
                             None => Str::from(format!("user-{seq}")),
                         };
                         if let Some((stream, body)) = match_local_command_output(text.trim()) {
-                            let level = if stream == "stderr" {
-                                NoticeLevel::Error
-                            } else {
-                                NoticeLevel::Info
-                            };
-                            let item = Item::Notice {
-                                id,
-                                level,
-                                text: Str::from(body.trim()),
-                            };
+                            let level = if stream == "stderr" { NoticeLevel::Error } else { NoticeLevel::Info };
+                            let item = Item::Notice { id, level, text: Str::from(body.trim()) };
                             upsert(&mut state.items, item);
                         } else if text.trim_start().starts_with(LOCAL_COMMAND_CAVEAT) {
                             // TODO(P2): the deferred `!` flush.
@@ -342,20 +325,12 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
                         upsert(&mut state.items, item);
                     }
                     ContentBlock::Thinking(thinking) => {
-                        let text: Str = if thinking.is_empty() {
-                            streamed_thinking.clone()
-                        } else {
-                            Str::from(thinking)
-                        };
+                        let text: Str = if thinking.is_empty() { streamed_thinking.clone() } else { Str::from(thinking) };
                         streamed_thinking = Str::from("");
                         if text.trim().is_empty() {
                             continue;
                         }
-                        let item = Item::Thinking {
-                            id: id(),
-                            text,
-                            parent_tool_use_id: parent_str.clone(),
-                        };
+                        let item = Item::Thinking { id: id(), text, parent_tool_use_id: parent_str.clone() };
                         upsert(&mut state.items, item);
                     }
                     ContentBlock::ToolUse { id: tool_id, name, input } => {
@@ -386,12 +361,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
                     let id = stream_id(STREAMING_ID, parent);
                     let existing = streamed_text(&state.items, ItemKind::AssistantText, &id);
                     let text = concat(&existing, payload.text.as_deref().unwrap_or(""));
-                    let item = Item::AssistantText {
-                        id: Str::from(id),
-                        text,
-                        streaming: true,
-                        parent_tool_use_id: parent.map(Str::from),
-                    };
+                    let item = Item::AssistantText { id: Str::from(id), text, streaming: true, parent_tool_use_id: parent.map(Str::from) };
                     upsert(&mut state.items, item);
                 }
                 Some("thinking_delta") => {
@@ -401,11 +371,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
                     if text.trim().is_empty() {
                         return;
                     }
-                    let item = Item::Thinking {
-                        id: Str::from(id),
-                        text,
-                        parent_tool_use_id: parent.map(Str::from),
-                    };
+                    let item = Item::Thinking { id: Str::from(id), text, parent_tool_use_id: parent.map(Str::from) };
                     upsert(&mut state.items, item);
                 }
                 _ => {}
@@ -416,12 +382,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
             state.cost_usd = payload.cost_usd.or(state.cost_usd);
             for item in state.items.iter_mut() {
                 match item {
-                    Item::AssistantText {
-                        id,
-                        text,
-                        parent_tool_use_id,
-                        ..
-                    } if is_streaming(id, STREAMING_ID) => {
+                    Item::AssistantText { id, text, parent_tool_use_id, .. } if is_streaming(id, STREAMING_ID) => {
                         let suffix = parent_tool_use_id.as_ref().map(|p| format!("-{p}")).unwrap_or_default();
                         *item = Item::AssistantText {
                             id: Str::from(format!("text-{seq}{suffix}")),
@@ -430,11 +391,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
                             parent_tool_use_id: parent_tool_use_id.clone(),
                         };
                     }
-                    Item::Thinking {
-                        id,
-                        text,
-                        parent_tool_use_id,
-                    } if is_streaming(id, STREAMING_THINKING_ID) => {
+                    Item::Thinking { id, text, parent_tool_use_id } if is_streaming(id, STREAMING_THINKING_ID) => {
                         let suffix = parent_tool_use_id.as_ref().map(|p| format!("-{p}")).unwrap_or_default();
                         *item = Item::Thinking {
                             id: Str::from(format!("thinking-{seq}{suffix}")),

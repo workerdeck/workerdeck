@@ -149,7 +149,8 @@ carries critical information must reach `docs/` before it is removed, not instea
 
 ## Rust (`crates/`)
 
-- **rustfmt** formats, at `max_width = 140` (`rustfmt.toml`) for the same reason oxfmt does.
+- **rustfmt** formats, at `max_width = 140` with `use_small_heuristics = "Max"` (`rustfmt.toml`), for
+  the same reason oxfmt runs at 140: struct patterns, calls and signatures stay on one line.
 - **clippy** at `-D warnings` in CI (`cargo clippy --all-targets -- -D warnings`); the workspace
   lints table turns on `clippy::all`. Fix the lint rather than `#[allow]` it, unless the allow
   names why on the same line.

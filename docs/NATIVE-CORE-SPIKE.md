@@ -98,5 +98,8 @@ from full `Foundation`: 37 MB of ICU data. An Essentials-only build floors at 11
    (the height book already caches line counts) removes most of it in either language.
 2. The iOS app pays the same Swift costs: the 2 to 3 s session open on a phone measured by
    `AttachReplayBenchTests` matches the replay numbers here, so a Rust core speeds up iOS too.
-3. The reducers already disagreed: on this fixture the TypeScript reducer ends with 730 items, the
-   Swift kit and the Rust port with 705. Conformance has to be defined before more is ported.
+3. An apparent reducer disagreement (TypeScript 730 items, Swift and Rust 705) was a measurement
+   artifact: the bench reports items after the replay prefix (51,563 of 53,563 frames), where
+   TypeScript also has 705; over the whole file all three have 730. What it did show is that
+   "mirror by convention" cannot tell drift from a miscount, which is why the conformance goldens
+   exist (`docs/PACKAGES.md` § `crates/`).

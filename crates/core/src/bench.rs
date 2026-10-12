@@ -54,11 +54,7 @@ fn percentiles(values: &[f64]) -> J {
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let at = |p: f64| {
-        if sorted.is_empty() {
-            0.0
-        } else {
-            round1(sorted[(sorted.len() - 1).min((sorted.len() as f64 * p) as usize)])
-        }
+        if sorted.is_empty() { 0.0 } else { round1(sorted[(sorted.len() - 1).min((sorted.len() as f64 * p) as usize)]) }
     };
     let mut m = BTreeMap::new();
     m.insert("p50", J::Num(at(0.5)));

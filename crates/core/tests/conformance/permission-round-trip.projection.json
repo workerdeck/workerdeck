@@ -1,0 +1,36 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "u-19",
+      "kind": "user",
+      "text": "Delete the build folder."
+    },
+    {
+      "id": "toolu_rm",
+      "input": {
+        "command": "rm -rf build"
+      },
+      "kind": "tool_call",
+      "name": "Bash",
+      "status": "running",
+      "ts": 1760000003000
+    }
+  ],
+  "lastSeq": 7,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [
+    {
+      "id": "req-2",
+      "input": {
+        "command": "ls"
+      },
+      "toolName": "Bash",
+      "toolUseId": "toolu_ls2"
+    }
+  ],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "running",
+  "totalCostUsd": 0
+}

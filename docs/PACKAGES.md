@@ -2436,6 +2436,22 @@ file items, attachments, peer rows, TodoWrite, diffs, images, expansion states, 
 flush, custom tool titles, VT resize and key encoding, and every view model. The plan, with its
 phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
 
+**Conformance goldens** replace "mirror by convention" for the reducer. `conformance/corpus.ts`
+authors event sequences with the demo's tape helpers (`apps/demo/src/stage/tape.ts`), and
+`pnpm fixtures:golden` folds each through the TypeScript reducer and writes
+`crates/core/tests/conformance/<case>.events.jsonl` (the `ServerFrame`s) plus
+`<case>.projection.json`. The projection is `projectTranscript` (`packages/react/src/lib/
+transcript-projection.ts`, not exported from the package): the whole `TranscriptState` with keys
+sorted and `null`/`undefined` dropped, minus the catalog (`capabilities`, `session`, `models`,
+`commands`, `skills`), which pickers read through their own mirrors rather than the transcript.
+It is deliberately broad; prune a field only with a reason, since a hidden field is drift that
+passes. `crates/core/tests/conformance.rs` replays each case through `Engine`, projects with
+`wd_native::projection::project` and diffs structurally (numbers compare by value). Its `PENDING`
+list names the cases the port cannot pass yet and fails when one starts passing, so the list only
+shrinks. CI runs `pnpm fixtures:golden --check`, so a reducer change that moves a golden fails
+until the goldens are regenerated, and the `rust` job then shows what the port must follow. Case
+ids come from the tape's running counter, so inserting a case renumbers the ones after it: append.
+
 **The engine's binary wire** (core to Kotlin, little-endian, no version byte yet):
 
 - Transcript snapshot: `u32 items, u32 rows, u32 totalLines, u32 lineCount`, then per line

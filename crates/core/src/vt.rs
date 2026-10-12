@@ -49,11 +49,7 @@ impl Cell {
     }
 }
 
-const BLANK: Cell = Cell {
-    text: CellText::None,
-    style: STYLE_DEFAULT,
-    continuation: false,
-};
+const BLANK: Cell = Cell { text: CellText::None, style: STYLE_DEFAULT, continuation: false };
 const STYLE_DEFAULT: Style = Style {
     fg: Color::Default,
     bg: Color::Default,
@@ -367,12 +363,7 @@ impl VtScreen {
             focus_reporting: false,
             buffer: Buffer::new(cols, rows, &BLANK),
             inactive: None,
-            scrollback: LineRing {
-                capacity: scrollback_limit,
-                storage: Vec::new(),
-                start: 0,
-                count: 0,
-            },
+            scrollback: LineRing { capacity: scrollback_limit, storage: Vec::new(), start: 0, count: 0 },
             style: Style::default(),
             origin_mode: false,
             autowrap: true,
@@ -525,11 +516,7 @@ impl VtScreen {
     }
 
     fn reported_row(&self) -> usize {
-        (if self.origin_mode {
-            self.buffer.cursor_row - self.buffer.scroll_top
-        } else {
-            self.buffer.cursor_row
-        }) + 1
+        (if self.origin_mode { self.buffer.cursor_row - self.buffer.scroll_top } else { self.buffer.cursor_row }) + 1
     }
 
     fn csi(&mut self, private: u8, intermediates: &[u8], action: char) {
@@ -789,19 +776,11 @@ impl VtScreen {
         match p[start] {
             5 => {
                 *index = start + 1;
-                if *index < p.len() {
-                    Some(Color::Indexed(clamp(p[*index])))
-                } else {
-                    None
-                }
+                if *index < p.len() { Some(Color::Indexed(clamp(p[*index]))) } else { None }
             }
             2 => {
                 *index = start + 3;
-                if *index < p.len() {
-                    Some(Color::Rgb(clamp(p[start + 1]), clamp(p[start + 2]), clamp(p[start + 3])))
-                } else {
-                    None
-                }
+                if *index < p.len() { Some(Color::Rgb(clamp(p[start + 1]), clamp(p[start + 2]), clamp(p[start + 3]))) } else { None }
             }
             _ => {
                 *index = start;
@@ -863,17 +842,9 @@ impl VtScreen {
         self.sever_wide(row, col + width);
         let style = self.style;
         self.last_printed = Some((text.clone(), width));
-        self.buffer.grid[row][col] = Cell {
-            text,
-            style,
-            continuation: false,
-        };
+        self.buffer.grid[row][col] = Cell { text, style, continuation: false };
         if width == 2 {
-            self.buffer.grid[row][col + 1] = Cell {
-                text: CellText::None,
-                style,
-                continuation: true,
-            };
+            self.buffer.grid[row][col + 1] = Cell { text: CellText::None, style, continuation: true };
         }
         if col + width >= cols {
             self.buffer.cursor_col = cols - 1;
@@ -886,11 +857,7 @@ impl VtScreen {
 
     fn attach(&mut self, c: char) {
         let row = self.buffer.cursor_row;
-        let mut col = if self.buffer.pending_wrap {
-            self.buffer.cursor_col as isize
-        } else {
-            self.buffer.cursor_col as isize - 1
-        };
+        let mut col = if self.buffer.pending_wrap { self.buffer.cursor_col as isize } else { self.buffer.cursor_col as isize - 1 };
         if col < 0 {
             return;
         }
@@ -946,11 +913,7 @@ impl VtScreen {
 
     fn set_cursor(&mut self, col: isize, row: isize, keep_col: bool) {
         let top = if self.origin_mode { self.buffer.scroll_top } else { 0 } as isize;
-        let bottom = if self.origin_mode {
-            self.buffer.scroll_bottom
-        } else {
-            self.rows - 1
-        } as isize;
+        let bottom = if self.origin_mode { self.buffer.scroll_bottom } else { self.rows - 1 } as isize;
         let c = if keep_col { self.buffer.cursor_col as isize } else { col };
         self.move_cursor(c, (row + top).max(top).min(bottom));
     }
@@ -964,11 +927,7 @@ impl VtScreen {
 
     fn cursor_down(&mut self, count: usize) {
         let b = &self.buffer;
-        let limit = if b.cursor_row <= b.scroll_bottom {
-            b.scroll_bottom
-        } else {
-            self.rows - 1
-        };
+        let limit = if b.cursor_row <= b.scroll_bottom { b.scroll_bottom } else { self.rows - 1 };
         let target = (b.cursor_row + count).min(limit);
         self.move_cursor(b.cursor_col as isize, target as isize);
     }
@@ -1055,14 +1014,7 @@ impl VtScreen {
     }
 
     fn erase_cell(&self) -> Cell {
-        Cell {
-            text: CellText::None,
-            style: Style {
-                bg: self.style.bg,
-                ..Style::default()
-            },
-            continuation: false,
-        }
+        Cell { text: CellText::None, style: Style { bg: self.style.bg, ..Style::default() }, continuation: false }
     }
 
     fn blank_line(&self) -> Vec<Cell> {
@@ -1228,11 +1180,7 @@ impl VtScreen {
     }
 
     fn alignment_test(&mut self) {
-        let cell = Cell {
-            text: CellText::Char('E'),
-            style: Style::default(),
-            continuation: false,
-        };
+        let cell = Cell { text: CellText::Char('E'), style: Style::default(), continuation: false };
         for row in 0..self.rows {
             self.buffer.grid[row] = vec![cell.clone(); self.cols];
         }
@@ -1338,11 +1286,7 @@ impl vte::Perform for VtScreen {
     }
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
-        let Some(code) = params
-            .first()
-            .and_then(|p| std::str::from_utf8(p).ok())
-            .and_then(|s| s.parse::<i64>().ok())
-        else {
+        let Some(code) = params.first().and_then(|p| std::str::from_utf8(p).ok()).and_then(|s| s.parse::<i64>().ok()) else {
             return;
         };
         if params.len() < 2 {

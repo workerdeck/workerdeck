@@ -274,11 +274,7 @@ fn json_text(value: &Value) -> String {
         Value::Bool(b) => if *b { "true" } else { "false" }.into(),
         Value::Number(n) => {
             let v = n.as_f64().unwrap_or(0.0);
-            if v == v.round() && v.abs() < 1e15 {
-                (v as i64).to_string()
-            } else {
-                v.to_string()
-            }
+            if v == v.round() && v.abs() < 1e15 { (v as i64).to_string() } else { v.to_string() }
         }
         Value::String(s) => quoted(s),
         Value::Array(items) => format!("[{}]", items.iter().map(json_text).collect::<Vec<_>>().join(",")),
@@ -347,11 +343,7 @@ pub fn collapsed(lines: &[&str], cols: usize, total_chars: Option<i64>) -> (Vec<
         return (shown, Some(more));
     }
     let hidden = lines.len() - shown.len();
-    let more = if hidden > 0 {
-        Some(format!("… +{} line{}", hidden, if hidden == 1 { "" } else { "s" }))
-    } else {
-        None
-    };
+    let more = if hidden > 0 { Some(format!("… +{} line{}", hidden, if hidden == 1 { "" } else { "s" })) } else { None };
     (shown, more)
 }
 
@@ -411,11 +403,7 @@ fn run_summary(items: &[std::sync::Arc<ToolCall>], busy: bool) -> String {
     }
     order.sort_by(|a, b| if a.1 == b.1 { a.0.cmp(&b.0) } else { b.1.cmp(&a.1) });
     let breakdown: Vec<String> = order.iter().map(|(f, c)| format!("{c} {f}")).collect();
-    format!(
-        "{verb}{total} tool{} · {}{tail}",
-        if total == 1 { "" } else { "s" },
-        breakdown.join(", ")
-    )
+    format!("{verb}{total} tool{} · {}{tail}", if total == 1 { "" } else { "s" }, breakdown.join(", "))
 }
 
 fn trimmed_non_empty(v: Option<&Value>) -> Option<String> {
@@ -436,17 +424,9 @@ fn task_summary(task: &ToolCall, children: &[Item]) -> String {
     };
     let label = format!("{}({identity})", task.name);
     if calls == 0 {
-        return if busy {
-            format!("{label} · working…")
-        } else {
-            format!("{label} · done")
-        };
+        return if busy { format!("{label} · working…") } else { format!("{label} · done") };
     }
-    format!(
-        "{label} · {calls} tool{}{}",
-        if calls == 1 { "" } else { "s" },
-        if busy { "…" } else { "" }
-    )
+    format!("{label} · {calls} tool{}{}", if calls == 1 { "" } else { "s" }, if busy { "…" } else { "" })
 }
 
 pub fn tool_tone(call: &ToolCall) -> Tone {
@@ -521,11 +501,7 @@ fn plan_run(block: &RunBlock, m: &Metrics) -> Vec<TermLine> {
     let busy = run.iter().any(|c| call_busy(c));
     let failed = run.last().is_some_and(|c| call_failed(c));
     let nested = run[0].parent_tool_use_id.is_some();
-    let started = run
-        .iter()
-        .filter(|c| call_busy(c))
-        .filter_map(|c| c.ts)
-        .fold(None, |a: Option<f64>, t| Some(a.map_or(t, |a| a.min(t))));
+    let started = run.iter().filter(|c| call_busy(c)).filter_map(|c| c.ts).fold(None, |a: Option<f64>, t| Some(a.map_or(t, |a| a.min(t))));
     let mut lines = reserve_elapsed(
         wrap_body(
             &run_summary(run, busy),
@@ -608,38 +584,16 @@ fn plan_item(item: &Item, m: &Metrics) -> Vec<TermLine> {
         Item::AssistantText { text, .. } => plan_markdown(text, m, glyph::BULLET, Tone::Fg, nested),
         Item::Thinking { text, .. } => plan_thinking(text, m, nested),
         Item::ToolCall(call) => plan_tool_call(call, m),
-        Item::TurnResult {
-            subtype,
-            is_error,
-            duration_ms,
-            total_cost_usd,
-            cost_usd,
-            errors,
-            ..
-        } => {
+        Item::TurnResult { subtype, is_error, duration_ms, total_cost_usd, cost_usd, errors, .. } => {
             let head = format!(
                 "{} · {} · {}",
                 if *is_error { &**subtype } else { "done" },
                 fmt_duration(*duration_ms),
                 fmt_cost(Some(cost_usd.unwrap_or(*total_cost_usd)))
             );
-            let mut lines = wrap_body(
-                &head,
-                m,
-                &Wrap {
-                    tone: if *is_error { Tone::Red } else { Tone::Faint },
-                    ..Wrap::default()
-                },
-            );
+            let mut lines = wrap_body(&head, m, &Wrap { tone: if *is_error { Tone::Red } else { Tone::Faint }, ..Wrap::default() });
             for message in errors.iter().flat_map(|e| e.iter()) {
-                lines.extend(wrap_body(
-                    message,
-                    m,
-                    &Wrap {
-                        tone: Tone::Red,
-                        ..Wrap::default()
-                    },
-                ));
+                lines.extend(wrap_body(message, m, &Wrap { tone: Tone::Red, ..Wrap::default() }));
             }
             lines
         }
@@ -714,14 +668,7 @@ fn plan_tool_call(call: &ToolCall, m: &Metrics) -> Vec<TermLine> {
         lines.extend(wrap_body(
             &more,
             m,
-            &Wrap {
-                tone: Tone::Faint,
-                columns: 3,
-                indent: 1,
-                band: Band::Output,
-                nested,
-                ..Wrap::default()
-            },
+            &Wrap { tone: Tone::Faint, columns: 3, indent: 1, band: Band::Output, nested, ..Wrap::default() },
         ));
     }
     lines
@@ -745,44 +692,13 @@ fn plan_markdown(source: &str, m: &Metrics, gutter: &'static str, gutter_tone: T
 
     for block in markdown::parse(source) {
         match block {
-            Block::Prose(text) => emit(
-                inline_body(
-                    &text,
-                    m,
-                    &Wrap {
-                        tone: Tone::Fg,
-                        nested,
-                        ..Wrap::default()
-                    },
-                ),
-                &mut lines,
-            ),
-            Block::Heading(_, text) => emit(
-                inline_body(
-                    &text,
-                    m,
-                    &Wrap {
-                        tone: Tone::Bright,
-                        bold: true,
-                        nested,
-                        ..Wrap::default()
-                    },
-                ),
-                &mut lines,
-            ),
-            Block::Blockquote(text) => emit(
-                inline_body(
-                    &text,
-                    m,
-                    &Wrap {
-                        tone: Tone::Dim,
-                        indent: 1,
-                        nested,
-                        ..Wrap::default()
-                    },
-                ),
-                &mut lines,
-            ),
+            Block::Prose(text) => emit(inline_body(&text, m, &Wrap { tone: Tone::Fg, nested, ..Wrap::default() }), &mut lines),
+            Block::Heading(_, text) => {
+                emit(inline_body(&text, m, &Wrap { tone: Tone::Bright, bold: true, nested, ..Wrap::default() }), &mut lines)
+            }
+            Block::Blockquote(text) => {
+                emit(inline_body(&text, m, &Wrap { tone: Tone::Dim, indent: 1, nested, ..Wrap::default() }), &mut lines)
+            }
             Block::ThematicBreak => {
                 let mut line = TermLine::plain(String::new(), Tone::Faint);
                 line.nested = nested;
@@ -794,13 +710,7 @@ fn plan_markdown(source: &str, m: &Metrics, gutter: &'static str, gutter_tone: T
                     produced.extend(wrap_body(
                         if line.is_empty() { " " } else { line },
                         m,
-                        &Wrap {
-                            tone: Tone::Dim,
-                            indent: 1,
-                            band: Band::Output,
-                            nested,
-                            ..Wrap::default()
-                        },
+                        &Wrap { tone: Tone::Dim, indent: 1, band: Band::Output, nested, ..Wrap::default() },
                     ));
                 }
                 if produced.is_empty() {
@@ -845,15 +755,7 @@ fn plan_list(items: &[ListItem], m: &Metrics, nested: bool) -> Vec<TermLine> {
         lines.extend(inline_body(
             &item.text,
             m,
-            &Wrap {
-                tone: Tone::Fg,
-                columns: gutter_cells,
-                indent,
-                gutter: marker,
-                gutter_tone: Tone::Faint,
-                nested,
-                ..Wrap::default()
-            },
+            &Wrap { tone: Tone::Fg, columns: gutter_cells, indent, gutter: marker, gutter_tone: Tone::Faint, nested, ..Wrap::default() },
         ));
     }
     lines
