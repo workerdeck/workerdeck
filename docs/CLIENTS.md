@@ -1286,6 +1286,25 @@ Live tool rows mirror the web (`Terminal/LiveTool.swift`): `tool_output` sets `l
 group (`Default` plus the running model's levels) that sends `set_effort`. The group is hidden while
 the effort is unknown, so a gateway too old to know `set_effort` is never sent one.
 
+**Agents and teams** (Agent Teams phase 5). The kit mirrors `AgentRef`, `AgentInfo`,
+`StatusLabel`, `SessionInfo.agent`/`owner`/`statusLabel`, `GatewayMeta`, the `/agents` routes and
+`/meta` (`Agents.swift`), and ports the team half of the list view model into `SessionList.swift`:
+`groupRows` builds team units (members under their lead in team order, `teamState` placing a team
+by its most urgent state, a context lead when a filter matches only a member, cross-gateway leads
+through `relayHostsOf`), the trailing Earlier fold, `collapsedTeams`/`earlierOpen` and
+`teamLeads`/`teamMembers`; `AgentTeamsTests` is the port of the TS block. `clearFilters` keeps the
+fold state on both sides: what a reader folded is layout, not a filter. The app draws agents with
+`AgentCardView` (44pt avatar card, 32pt member row on a tree line, a team tray that folds the team)
+and `AgentAvatarView` (pixelated, busy strip sliced from `avatar-busy.png` by `x-frame-durations`
+and stepped in a `TimelineView`, desaturated asleep, a dashed engine tile with no picture);
+`AgentAvatarLoader` caches per gateway and avatar path. A card whose session or team needs an
+answer is tinted orange. Verbs follow the web menu (rename, status, avatar, make agent, add to
+team, leave, dissolve, sharing, new conversation, retire), from the `···`, a long press, and
+swipes (leading rename and new conversation). New agent reuses the New session form with an
+agent section (name, team, sharing, brief). Team moves are **same-gateway only** on the phone;
+cross-gateway invitations stay on the web and VS Code, and drag-to-team is out. `UIPREVIEW=teams`
+draws every state from canned rows.
+
 ## `apps/demo`
 
 **The interactive tour**: a VS Code window drawn in React (from the WorkerDeck Figma file,

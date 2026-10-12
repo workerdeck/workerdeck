@@ -168,6 +168,9 @@ struct SessionRowView: View {
     if let model = friendlyModel(session.model) {
       parts.append(Text(model).foregroundStyle(modelTint))
     }
+    if let status = statusLine(session.statusLabel) {
+      parts.append(Text(status).foregroundStyle(.secondary))
+    }
     if let project {
       // Glyph then name, as one part: they are one reading, so they clip
       // together rather than the picture holding a slot its text already lost.

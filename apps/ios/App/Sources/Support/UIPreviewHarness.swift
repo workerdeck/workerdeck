@@ -40,6 +40,7 @@ enum UIPreview: String {
   case projects
   case sessions
   case shell
+  case teams
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
@@ -47,6 +48,120 @@ enum UIPreview: String {
 }
 
 /// The grid, fed a stream with no socket behind it.
+private struct TeamsPreview: View {
+  private static let hostId = UUID().uuidString
+  private static var now: Double { Date().timeIntervalSince1970 * 1000 }
+
+  private static func row(
+    _ id: String, agent: AgentRef?, status: SessionStatus = .idle, pending: Int = 0,
+    unseen: Int = 0, label: String? = nil, title: String? = nil, model: String = "claude-opus-5",
+    asleep: Bool = false
+  ) -> SessionRow {
+    let info = SessionInfo(
+      id: id, status: status, cwd: "/Users/you/projects/workerdeck", model: model, createdAt: 0,
+      lastSeq: 0, pendingPermissionCount: pending, title: title,
+      lastActivityAt: now - 6 * 60 * 1000,
+      contextUsage: ContextReading(totalTokens: 60_000, maxTokens: 200_000, percentage: 30),
+      engineAsleep: asleep ? true : nil, agent: agent,
+      statusLabel: label.map { StatusLabel(text: $0, setAt: 0) })
+    return SessionRow(
+      hostId: hostId, hostName: "mini", local: true, adapter: "claude", state: sessionState(info),
+      info: info, unseen: unseen)
+  }
+
+  private static var rows: [SessionRow] {
+    [
+      row("lead", agent: AgentRef(id: "A", name: "WD-Lead", avatar: "/a", leads: true, conversation: 4),
+          status: .running, unseen: 2, label: "cutting 3.13.0"),
+      row("m1", agent: AgentRef(id: "B", name: "WD-Review", avatar: "/b", lead: "A", team: "WD-Lead", order: 0),
+          pending: 1, label: "needs your call"),
+      row("m2", agent: AgentRef(id: "C", name: "WD-MonkeyArt", avatar: "/c", lead: "A", team: "WD-Lead", order: 1),
+          status: .running, unseen: 1),
+      row("m3", agent: AgentRef(id: "D", name: "WD-Docs", avatar: "/d", lead: "A", team: "WD-Lead", order: 2),
+          asleep: true),
+      row("solo", agent: AgentRef(id: "E", name: "BOX-Lead", avatar: "/e", shared: true),
+          label: "🧪 smoke green"),
+      row("plain", agent: nil, status: .awaitingApproval, pending: 1, title: "Fix the relay drop", model: "gpt-6-sol"),
+      row("old", agent: nil, status: .closed, title: "Old one-off"),
+    ]
+  }
+
+  private static func picture(_ seed: Int) -> AgentAvatarFrames {
+    let hues: [CGFloat] = [0.08, 0.55, 0.33, 0.75, 0.95]
+    let image = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 16)).image { ctx in
+      UIColor(hue: hues[seed % hues.count], saturation: 0.5, brightness: 0.85, alpha: 1).setFill()
+      ctx.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
+      UIColor(white: 0.15, alpha: 1).setFill()
+      ctx.fill(CGRect(x: 4, y: 6, width: 2, height: 2))
+      ctx.fill(CGRect(x: 10, y: 6, width: 2, height: 2))
+      ctx.fill(CGRect(x: 5, y: 11, width: 6, height: 1))
+    }
+    return AgentAvatarFrames(still: image, busy: [], durations: [])
+  }
+
+  @State private var config = ViewConfig(groupBy: .none)
+
+  var body: some View {
+    NavigationStack {
+      List {
+        ForEach(groupRows(Self.rows, config: config)) { group in
+          Section {
+            if !group.earlier || config.earlierOpen {
+              ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
+                card(row, index: index)
+                if !isTeamCollapsed(config, row) {
+                  ForEach(Array((row.members ?? []).enumerated()), id: \.element.id) { offset, member in
+                    AgentCardView(
+                      row: member, frames: Self.picture(offset + 1), member: true, onOpen: {},
+                      menu: { Button("Leave team") {} })
+                    .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(
+                      ZStack {
+                        if ListAttention.needsYou(member) { ListAttention.background }
+                        TeamTreeLine()
+                      })
+                  }
+                }
+              }
+            }
+          } header: {
+            if group.earlier {
+              Button("Earlier \(group.rows.count)") { config.earlierOpen.toggle() }
+            }
+          }
+        }
+      }
+      .listStyle(.plain)
+      .navigationTitle("Sessions")
+      .navigationBarTitleDisplayMode(.inline)
+    }
+  }
+
+  @ViewBuilder
+  private func card(_ row: SessionRow, index: Int) -> some View {
+    if row.info.agent != nil {
+      let collapsed = isTeamCollapsed(config, row)
+      let members = row.members ?? []
+      AgentCardView(
+        row: row, frames: index == 0 ? Self.picture(0) : Self.picture(4),
+        badgeState: collapsed ? row.teamState : nil,
+        teamUnseen: collapsed ? teamSummary(row).unseen : 0,
+        tray: members.isEmpty
+          ? nil : TeamTray(members: members.count, collapsed: collapsed) {
+            config = toggleTeamCollapsed(config, row)
+          },
+        onOpen: {}, menu: { Button("New conversation") {} })
+      .listRowInsets(AgentCardView<EmptyView>.insets(member: false, hasSteps: false))
+      .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
+    } else {
+      SessionCardView(row: row, onOpen: {}, menu: { Button("Close") {} })
+        .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: false))
+        .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
+    }
+  }
+}
+
 private struct ShellGridPreview: View {
   @State private var screen = VTScreen(cols: 52, rows: 26)
   @State private var revision = 0
@@ -1041,6 +1156,9 @@ struct UIPreviewHarness: View {
 
     case .sessions:
       SessionsPreview()
+
+    case .teams:
+      TeamsPreview()
 
     case .shell:
       // The shell drill-in's grid, which is otherwise only reachable with a

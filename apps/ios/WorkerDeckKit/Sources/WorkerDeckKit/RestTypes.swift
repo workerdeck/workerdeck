@@ -660,6 +660,9 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// The engine child is stopped while the session stays live and listed; the
   /// next message resumes it. Absent = awake.
   public let engineAsleep: Bool?
+  public let agent: AgentRef?
+  public let owner: String?
+  public let statusLabel: StatusLabel?
 
   public var resolvedEngine: ProfileEngine { engine ?? .claude }
   /// The record to render from: the runner-reported copy when present, else the
@@ -682,7 +685,8 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
     scope: [String: String]? = nil,
     project: ProjectInfo? = nil, contextUsage: ContextReading? = nil,
-    shells: [ShellInfo]? = nil, engineAsleep: Bool? = nil
+    shells: [ShellInfo]? = nil, engineAsleep: Bool? = nil, agent: AgentRef? = nil,
+    owner: String? = nil, statusLabel: StatusLabel? = nil
   ) {
     self.id = id
     self.sdkSessionId = sdkSessionId
@@ -716,6 +720,9 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.contextUsage = contextUsage
     self.shells = shells
     self.engineAsleep = engineAsleep
+    self.agent = agent
+    self.owner = owner
+    self.statusLabel = statusLabel
   }
 }
 
@@ -1084,19 +1091,37 @@ public struct UpdateSessionRequest: Encodable, Sendable {
     case clear
   }
 
-  public let title: TitleEdit?
-
-  public init(title: TitleEdit?) {
-    self.title = title
+  public enum StatusEdit: Sendable {
+    case set(text: String, emoji: String?)
+    case clear
   }
 
-  private enum CodingKeys: String, CodingKey { case title }
+  public let title: TitleEdit?
+  public let statusLabel: StatusEdit?
+
+  public init(title: TitleEdit? = nil, statusLabel: StatusEdit? = nil) {
+    self.title = title
+    self.statusLabel = statusLabel
+  }
+
+  private enum CodingKeys: String, CodingKey { case title, statusLabel }
+
+  private struct StatusInput: Encodable {
+    let text: String
+    let emoji: String?
+  }
 
   public func encode(to encoder: any Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     switch title {
     case .set(let value): try container.encode(value, forKey: .title)
     case .clear: try container.encodeNil(forKey: .title)
+    case nil: break
+    }
+    switch statusLabel {
+    case .set(let text, let emoji):
+      try container.encode(StatusInput(text: text, emoji: emoji), forKey: .statusLabel)
+    case .clear: try container.encodeNil(forKey: .statusLabel)
     case nil: break
     }
   }

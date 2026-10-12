@@ -203,12 +203,15 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
   public var subagents: StepDisplay
   public var shells: StepDisplay
   public var tasks: StepDisplay
+  public var collapsedTeams: [String]
+  public var earlierOpen: Bool
 
   public init(
     search: String = "", gateways: [String] = [], adapters: [String] = [],
     states: [SessionState] = [], projects: [String] = [], scoped: Bool = true,
     groupBy: GroupBy = .state, sortBy: SortBy = .recent,
-    subagents: StepDisplay = .active, shells: StepDisplay = .active, tasks: StepDisplay = .active
+    subagents: StepDisplay = .active, shells: StepDisplay = .active, tasks: StepDisplay = .active,
+    collapsedTeams: [String] = [], earlierOpen: Bool = false
   ) {
     self.search = search
     self.gateways = gateways
@@ -221,6 +224,8 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     self.subagents = subagents
     self.shells = shells
     self.tasks = tasks
+    self.collapsedTeams = collapsedTeams
+    self.earlierOpen = earlierOpen
   }
 
   /// Mirror of `DEFAULT_VIEW_CONFIG`.
@@ -254,6 +259,8 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     subagents = try Self.display(c, .subagents)
     shells = try Self.display(c, .shells)
     tasks = try Self.display(c, .tasks)
+    collapsedTeams = (try? c.decodeIfPresent([String].self, forKey: .collapsedTeams)) ?? []
+    earlierOpen = (try? c.decodeIfPresent(Bool.self, forKey: .earlierOpen)) ?? false
   }
 
   private static func display(
@@ -265,7 +272,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
 
   private enum CodingKeys: String, CodingKey {
     case search, gateways, adapters, states, projects, scoped, groupBy, sortBy, subagents, shells,
-      tasks
+      tasks, collapsedTeams, earlierOpen
   }
 }
 
@@ -313,13 +320,17 @@ public struct SessionRow: Sendable, Equatable, Identifiable {
   /// Transcript rows since this session was last on screen. 0 = nothing new (or
   /// never visited, which is not the same as unread).
   public var unseen: Int
+  public var members: [SessionRow]?
+  public var teamState: SessionState?
+  public var context: Bool
 
   /// Session ids are unique per gateway, not globally.
   public var id: String { "\(hostId):\(info.id)" }
 
   public init(
     hostId: String, hostName: String, local: Bool, adapter: String, state: SessionState,
-    info: SessionInfo, unseen: Int
+    info: SessionInfo, unseen: Int, members: [SessionRow]? = nil, teamState: SessionState? = nil,
+    context: Bool = false
   ) {
     self.hostId = hostId
     self.hostName = hostName
@@ -328,6 +339,9 @@ public struct SessionRow: Sendable, Equatable, Identifiable {
     self.state = state
     self.info = info
     self.unseen = unseen
+    self.members = members
+    self.teamState = teamState
+    self.context = context
   }
 }
 
@@ -335,13 +349,15 @@ public struct SessionGroup: Sendable, Equatable, Identifiable {
   public var key: String
   public var label: String?
   public var rows: [SessionRow]
+  public var earlier: Bool
 
   public var id: String { key }
 
-  public init(key: String, label: String? = nil, rows: [SessionRow]) {
+  public init(key: String, label: String? = nil, rows: [SessionRow], earlier: Bool = false) {
     self.key = key
     self.label = label
     self.rows = rows
+    self.earlier = earlier
   }
 }
 
@@ -487,6 +503,7 @@ public func isJobRun(_ info: SessionInfo) -> Bool {
 private func matchesSearch(_ row: SessionRow, needle: String) -> Bool {
   if needle.isEmpty { return true }
   return sessionLabel(row.info).lowercased().contains(needle)
+    || (row.info.agent?.name.lowercased().contains(needle) ?? false)
     || row.info.cwd.lowercased().contains(needle)
     // The declared project name: the whole point of it is that a person knows
     // the repo as "WorkerDeck", not by whatever the folder happens to be
@@ -558,16 +575,20 @@ private func facetKey(_ row: SessionRow, _ facet: Facet) -> String {
   switch facet {
   case .gateway: return row.hostId
   case .adapter: return row.adapter
-  case .state: return row.state.rawValue
+  case .state: return unitState(row).rawValue
   case .project: return projectKey(row)
   }
+}
+
+private func unitState(_ row: SessionRow) -> SessionState {
+  row.teamState ?? row.state
 }
 
 private func facetLabel(_ row: SessionRow, _ facet: Facet, multiGateway: Bool = false) -> String {
   switch facet {
   case .gateway: return row.hostName
   case .adapter: return row.adapter
-  case .state: return row.state.label
+  case .state: return unitState(row).label
   case .project:
     return multiGateway ? "\(row.hostName) \(projectLabel(row.info))" : projectLabel(row.info)
   }
@@ -576,7 +597,7 @@ private func facetLabel(_ row: SessionRow, _ facet: Facet, multiGateway: Bool = 
 /// Comparable rank for a facet: states run worst-first (attention before ended),
 /// project groups by gateway then project, the rest alphabetically by label.
 private func facetRank(_ row: SessionRow, _ facet: Facet, multiGateway: Bool = false) -> String {
-  if facet == .state { return String(SessionState.order.firstIndex(of: row.state) ?? 0) }
+  if facet == .state { return String(SessionState.order.firstIndex(of: unitState(row)) ?? 0) }
   if facet == .project && multiGateway {
     return "\(row.hostName.lowercased())\u{0}\(projectLabel(row.info).lowercased())"
   }
@@ -624,18 +645,22 @@ private func stableSorted(_ rows: [SessionRow], sortBy: SortBy) -> [SessionRow] 
     .map(\.element)
 }
 
-/// The list as rendered: filtered, grouped, and sorted within each group. Groups
-/// themselves come out in the sort's own order - grouping by state and sorting
-/// by name should still put "Needs attention" first, so groups are ordered by
-/// their facet rank, never by the row sort.
-/// `gatewayCount` defaults to the gateways among `rows`; pass the unfiltered
-/// count so a filter never renames a project heading.
-public func groupRows(_ rows: [SessionRow], config: ViewConfig, gatewayCount: Int? = nil)
-  -> [SessionGroup]
-{
-  let sorted = stableSorted(rows, sortBy: config.sortBy)
+// `all` is the unfiltered list: a member matched by a filter pulls its lead in from there as a context row.
+// `relayHosts` maps a relay gateway name to this client's host id for it (`relayHostsOf`), so a member whose lead
+// lives on another configured gateway still draws under that lead. `gatewayCount` defaults to the gateways among
+// `rows`; pass the unfiltered count so a filter never renames a project heading.
+public func groupRows(
+  _ rows: [SessionRow], config: ViewConfig, gatewayCount: Int? = nil, all: [SessionRow]? = nil,
+  relayHosts: [String: String] = [:]
+) -> [SessionGroup] {
+  let units = stableSorted(
+    teamUnits(rows, all: all ?? rows, relayHosts: relayHosts), sortBy: config.sortBy)
+  let earlier = config.groupBy == .state ? [] : units.filter(isEarlier)
+  let sorted = earlier.isEmpty ? units : units.filter { !isEarlier($0) }
+  let trailing =
+    earlier.isEmpty ? [] : [SessionGroup(key: "earlier", label: "Earlier", rows: earlier, earlier: true)]
   guard let facet = config.groupBy.facet else {
-    return sorted.isEmpty ? [] : [SessionGroup(key: "all", rows: sorted)]
+    return (sorted.isEmpty ? [] : [SessionGroup(key: "all", rows: sorted)]) + trailing
   }
   let multiGateway = (gatewayCount ?? Set(rows.map(\.hostId)).count) > 1
   var order: [String] = []
@@ -652,17 +677,155 @@ public func groupRows(_ rows: [SessionRow], config: ViewConfig, gatewayCount: In
       built[key]?.rows.append(row)
     }
   }
-  return order.enumerated()
+  let groups = order.enumerated()
     .sorted { a, b in
       guard let ra = built[a.element]?.rank, let rb = built[b.element]?.rank else {
         return a.offset < b.offset
       }
       return ra == rb ? a.offset < b.offset : ra < rb
     }
-    .compactMap { entry in
+    .compactMap { entry -> SessionGroup? in
       guard let group = built[entry.element] else { return nil }
       return SessionGroup(key: entry.element, label: group.label, rows: group.rows)
     }
+  return groups + trailing
+}
+
+// MARK: - Teams
+
+public func teamKey(_ row: SessionRow) -> String? {
+  row.info.agent.map { "\(row.hostId):\($0.id)" }
+}
+
+public func relayHostsOf(_ relays: [String: GatewayRelayMeta?]) -> [String: String] {
+  var hosts: [String: String] = [:]
+  for (hostId, relay) in relays {
+    if let relay { hosts[relay.gateway] = hostId }
+  }
+  return hosts
+}
+
+private func leadKeyOf(_ row: SessionRow, relayHosts: [String: String]) -> String? {
+  guard let agent = row.info.agent, let lead = agent.lead else { return nil }
+  guard let gateway = agent.leadGateway else { return "\(row.hostId):\(lead)" }
+  guard let host = relayHosts[gateway] else { return nil }
+  return "\(host):\(lead.dropFirst(gateway.count + 1))"
+}
+
+private func isEarlier(_ row: SessionRow) -> Bool {
+  row.info.agent == nil && row.state == .ended
+}
+
+// A member whose lead is not in the list at all (its session gone) stays top-level rather than vanish.
+private func teamUnits(_ rows: [SessionRow], all: [SessionRow], relayHosts: [String: String])
+  -> [SessionRow]
+{
+  var leads: [String: SessionRow] = [:]
+  for row in all {
+    if let key = teamKey(row), row.info.agent?.lead == nil { leads[key] = row }
+  }
+  let shown = Set(rows.map(\.id))
+  var members: [String: [SessionRow]] = [:]
+  var leadOrder: [String] = []
+  var top: [SessionRow] = []
+  for row in rows {
+    if let lead = leadKeyOf(row, relayHosts: relayHosts), leads[lead] != nil {
+      if members[lead] == nil { leadOrder.append(lead) }
+      members[lead, default: []].append(row)
+    } else {
+      top.append(row)
+    }
+  }
+  for lead in leadOrder {
+    guard var leadRow = leads[lead], !shown.contains(leadRow.id) else { continue }
+    leadRow.context = true
+    top.append(leadRow)
+  }
+  return top.map { row in
+    guard let key = teamKey(row), let crew = members[key] else { return row }
+    var unit = row
+    let ordered = crew.enumerated().sorted { a, b in
+      let order = byTeamOrder(a.element, b.element)
+      return order == .orderedSame ? a.offset < b.offset : order == .orderedAscending
+    }.map(\.element)
+    unit.members = ordered
+    unit.teamState = teamState([row] + ordered)
+    return unit
+  }
+}
+
+private func byTeamOrder(_ a: SessionRow, _ b: SessionRow) -> ComparisonResult {
+  let ao = a.info.agent?.order ?? .greatestFiniteMagnitude
+  let bo = b.info.agent?.order ?? .greatestFiniteMagnitude
+  if ao != bo { return ao < bo ? .orderedAscending : .orderedDescending }
+  if a.info.createdAt != b.info.createdAt {
+    return a.info.createdAt < b.info.createdAt ? .orderedAscending : .orderedDescending
+  }
+  return .orderedSame
+}
+
+public func teamState(_ rows: [SessionRow]) -> SessionState {
+  var best = SessionState.order.count - 1
+  for row in rows {
+    best = min(best, SessionState.order.firstIndex(of: row.state) ?? best)
+  }
+  return SessionState.order[best]
+}
+
+public func isTeamCollapsed(_ config: ViewConfig, _ row: SessionRow) -> Bool {
+  guard let key = teamKey(row) else { return false }
+  return config.collapsedTeams.contains(key)
+}
+
+public func toggleTeamCollapsed(_ config: ViewConfig, _ row: SessionRow) -> ViewConfig {
+  guard let key = teamKey(row) else { return config }
+  var next = config
+  if next.collapsedTeams.contains(key) {
+    next.collapsedTeams.removeAll { $0 == key }
+  } else {
+    next.collapsedTeams.append(key)
+  }
+  return next
+}
+
+public struct TeamSummary: Sendable, Equatable {
+  public var members: Int
+  public var working: Int
+  public var attention: Int
+  public var unseen: Int
+
+  public init(members: Int, working: Int, attention: Int, unseen: Int) {
+    self.members = members
+    self.working = working
+    self.attention = attention
+    self.unseen = unseen
+  }
+}
+
+public func teamSummary(_ lead: SessionRow) -> TeamSummary {
+  let members = lead.members ?? []
+  return TeamSummary(
+    members: members.count,
+    working: members.filter { $0.state == .working }.count,
+    attention: members.filter { $0.state == .attention }.count,
+    unseen: members.reduce(0) { $0 + $1.unseen })
+}
+
+// Top-level agents on the row's gateway that could take it as a member: leads first, then solo agents.
+public func teamLeads(_ rows: [SessionRow], for row: SessionRow) -> [SessionRow] {
+  let agent = row.info.agent
+  guard agent?.lead == nil, agent?.isLead != true else { return [] }
+  let open = rows.filter { other in
+    guard let candidate = other.info.agent else { return false }
+    return other.hostId == row.hostId && other.info.id != row.info.id && candidate.lead == nil
+      && candidate.id != agent?.id
+  }
+  return open.filter { $0.info.agent?.isLead == true } + open.filter { $0.info.agent?.isLead != true }
+}
+
+public func teamMembers(_ row: SessionRow, in rows: [SessionRow]) -> [SessionRow] {
+  guard let id = row.info.agent?.id else { return [] }
+  return rows.filter { $0.hostId == row.hostId && $0.info.agent?.lead == id }
 }
 
 // MARK: - Subset summary
@@ -725,6 +888,8 @@ public func clearFilters(_ config: ViewConfig) -> ViewConfig {
   next.subagents = config.subagents
   next.shells = config.shells
   next.tasks = config.tasks
+  next.collapsedTeams = config.collapsedTeams
+  next.earlierOpen = config.earlierOpen
   return next
 }
 

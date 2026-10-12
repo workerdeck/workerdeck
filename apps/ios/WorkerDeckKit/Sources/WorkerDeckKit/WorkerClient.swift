@@ -393,6 +393,61 @@ public struct WorkerClient: Sendable {
     try await call("GET", "/sessions/\(Self.encodeComponent(sessionId))/project/icon")
   }
 
+  // MARK: - Agents
+
+  public func meta() async throws -> GatewayMeta {
+    try decode(GatewayMeta.self, from: try await call("GET", "/meta"))
+  }
+
+  // Operator-only: a gateway without agents, or a scoped caller, answers 404.
+  public func listAgents() async throws -> [AgentInfo] {
+    try decode(AgentsResponse.self, from: try await call("GET", "/agents")).agents
+  }
+
+  @discardableResult
+  public func createAgent(_ request: CreateAgentRequest) async throws -> AgentResponse {
+    try decode(AgentResponse.self, from: try await call("POST", "/agents", body: request))
+  }
+
+  @discardableResult
+  public func updateAgent(id: String, _ patch: UpdateAgentRequest) async throws -> AgentResponse {
+    try decode(AgentResponse.self, from: try await call("PATCH", Self.agentPath(id), body: patch))
+  }
+
+  @discardableResult
+  public func restartAgent(id: String, prompt: String? = nil) async throws -> AgentResponse {
+    let body = prompt.map { ["prompt": $0] } ?? [:]
+    return try decode(
+      AgentResponse.self, from: try await call("POST", Self.agentPath(id, "/restart"), body: body))
+  }
+
+  @discardableResult
+  public func retireAgent(id: String, _ request: RetireAgentRequest = RetireAgentRequest())
+    async throws -> RetireAgentResponse
+  {
+    try decode(
+      RetireAgentResponse.self, from: try await call("DELETE", Self.agentPath(id), body: request))
+  }
+
+  @discardableResult
+  public func changeAgentAvatar(id: String, seed: String? = nil) async throws -> AgentResponse {
+    let body = seed.map { ["seed": $0] } ?? [:]
+    return try decode(
+      AgentResponse.self, from: try await call("POST", Self.agentPath(id, "/avatar"), body: body))
+  }
+
+  // `durations` is set on the busy strip only: one entry per frame, frames laid out left to right.
+  public func agentAvatar(id: String, busy: Bool = false) async throws -> AgentAvatarImage {
+    let path = Self.agentPath(id, busy ? "/avatar-busy.png" : "/avatar.png")
+    let (data, response) = try await callRaw("GET", path)
+    return AgentAvatarImage(
+      data: data, durations: frameDurations(response.value(forHTTPHeaderField: "x-frame-durations")))
+  }
+
+  static func agentPath(_ id: String, _ suffix: String = "") -> String {
+    "/agents/\(encodeComponent(id))\(suffix)"
+  }
+
   // MARK: - Live attach
 
   /// Open a live connection to a session's event stream.
@@ -519,6 +574,12 @@ public struct WorkerClient: Sendable {
   private func call(_ method: String, _ path: String, body: (any Encodable)? = nil) async throws
     -> Data
   {
+    try await callRaw(method, path, body: body).0
+  }
+
+  private func callRaw(_ method: String, _ path: String, body: (any Encodable)? = nil) async throws
+    -> (Data, HTTPURLResponse)
+  {
     var request = URLRequest(url: try makeURL(path))
     request.httpMethod = method
     if let body {
@@ -531,7 +592,7 @@ public struct WorkerClient: Sendable {
     guard (200..<300).contains(status) else {
       throw Self.error(from: data, status: status, summary: "\(method) \(path)")
     }
-    return data
+    return (data, response as? HTTPURLResponse ?? HTTPURLResponse())
   }
 
   private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {

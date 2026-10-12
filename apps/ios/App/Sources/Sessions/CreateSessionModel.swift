@@ -33,6 +33,12 @@ final class CreateSessionModel {
   /// '' = the engine's default. Only sent when the capability record offers it.
   var reasoningEffort: String = ""
 
+  let agent: AgentSeed?
+  var agentName = ""
+  var brief = ""
+  var lead: String?
+  var sharing: AgentSharing = .private
+
   private(set) var profiles: [ProfileInfo] = []
   /// Set when `/profiles` 404s - a server predating profiles, not an error.
   private(set) var profilesUnavailable = false
@@ -45,6 +51,9 @@ final class CreateSessionModel {
   init(seed: CreateSessionSeed, client: WorkerClient) {
     cwd = seed.cwd
     resume = seed.resume ?? ""
+    agent = seed.agent
+    lead = seed.agent?.lead
+    sharing = seed.agent?.sharing ?? .private
     // Resuming defaults to continuing, not forking - forking is the deliberate
     // choice ("keep the original intact"), so it stays opt-in.
     self.client = client
@@ -190,6 +199,34 @@ final class CreateSessionModel {
       errorMessage = SessionListModel.describe(error)
       return nil
     }
+  }
+
+  func submitAgent() async -> AgentResponse? {
+    isSubmitting = true
+    defer { isSubmitting = false }
+    do {
+      let response = try await client.createAgent(buildAgentRequest())
+      errorMessage = nil
+      return response
+    } catch {
+      errorMessage = SessionListModel.describe(error)
+      return nil
+    }
+  }
+
+  func buildAgentRequest() -> CreateAgentRequest {
+    let session = buildRequest()
+    let trimmedName = agentName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedBrief = brief.trimmingCharacters(in: .whitespacesAndNewlines)
+    return CreateAgentRequest(
+      name: trimmedName.isEmpty ? nil : trimmedName,
+      config: AgentConfig(
+        cwd: session.cwd, profile: session.profile, model: session.model,
+        reasoningEffort: session.reasoningEffort, permissionMode: session.permissionMode,
+        brief: trimmedBrief.isEmpty ? nil : trimmedBrief),
+      prompt: session.prompt,
+      lead: lead,
+      sharing: lead == nil && agent?.allowShared == true ? sharing : nil)
   }
 
   func buildRequest() -> CreateSessionRequest {

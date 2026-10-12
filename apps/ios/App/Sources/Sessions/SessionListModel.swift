@@ -54,6 +54,9 @@ final class SessionListModel {
   /// in the list - see `ProjectIconLoader`. Held here because this is where the
   /// per-gateway clients live and where new rows arrive.
   let projectIcons = ProjectIconLoader()
+  let agentAvatars = AgentAvatarLoader()
+  private(set) var metas: [UUID: GatewayMeta] = [:]
+  var actionError: String?
 
   private let hostStore: HostStore
   private let unread: UnreadModel
@@ -133,8 +136,34 @@ final class SessionListModel {
     }
     hasLoaded = true
     ensureProjectIcons()
+    ensureAgentAvatars()
     await syncAppBadge()
+    await ensureMetas()
   }
+
+  private func ensureAgentAvatars() {
+    for (hostId, snapshot) in snapshots {
+      let client = context(for: hostId)?.client
+      for info in snapshot.sessions where info.agent != nil {
+        agentAvatars.ensure(hostId: hostId.uuidString, agent: info.agent, client: client)
+      }
+    }
+  }
+
+  private func ensureMetas() async {
+    for host in hostStore.hosts where metas[host.id] == nil && snapshots[host.id]?.probe == .connected {
+      guard let client = context(for: host.id)?.client,
+        let meta = try? await client.meta()
+      else { continue }
+      metas[host.id] = meta
+    }
+  }
+
+  var relayHosts: [String: String] {
+    relayHostsOf(Dictionary(uniqueKeysWithValues: metas.map { ($0.key.uuidString, $0.value.relay) }))
+  }
+
+  func agentDefaults(for hostId: UUID) -> GatewayAgentDefaults? { metas[hostId]?.agents }
 
   /// Ask for any project icon this list needs and does not have.
   ///
@@ -221,7 +250,9 @@ final class SessionListModel {
   var filtered: [SessionRow] { filterRows(rows, config: config, scope: nil) }
 
   var groups: [SessionGroup] {
-    groupRows(filtered, config: config, gatewayCount: Set(rows.map(\.hostId)).count)
+    groupRows(
+      filtered, config: config, gatewayCount: Set(rows.map(\.hostId)).count, all: rows,
+      relayHosts: relayHosts)
   }
 
   /// The one "you are seeing a subset" signal - nil when nothing is hidden.
@@ -341,6 +372,123 @@ final class SessionListModel {
     } catch {
       snapshots[hostId, default: HostSnapshot()].probe = .failed(Self.describe(error))
     }
+  }
+
+  // MARK: - Agents
+
+  func setStatus(_ row: SessionRow, to text: String) async {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    await agentAct(on: row, "Could not set the status") {
+      _ = try await $0.updateSession(
+        id: row.info.id,
+        UpdateSessionRequest(statusLabel: trimmed.isEmpty ? .clear : .set(text: trimmed, emoji: nil)))
+    }
+  }
+
+  func renameAgent(_ row: SessionRow, to name: String) async {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let agent = row.info.agent, !trimmed.isEmpty, trimmed != agent.name else { return }
+    await agentAct(on: row, "Rename failed") {
+      _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(name: trimmed))
+    }
+  }
+
+  func changeAvatar(_ row: SessionRow) async {
+    guard let agent = row.info.agent else { return }
+    await agentAct(on: row, "Could not change the avatar") {
+      _ = try await $0.changeAgentAvatar(id: agent.id)
+    }
+  }
+
+  func makeAgent(_ row: SessionRow) async {
+    await agentAct(on: row, "Could not make an agent") {
+      _ = try await $0.createAgent(CreateAgentRequest(adopt: row.info.id))
+    }
+  }
+
+  // Owners differ only when both rows name one; the gateway refuses a cross-owner join without `crossOwner`.
+  func crossesOwners(_ row: SessionRow, into lead: SessionRow) -> Bool {
+    guard let mine = row.info.owner, let theirs = lead.info.owner else { return false }
+    return mine != theirs
+  }
+
+  func join(_ row: SessionRow, lead: SessionRow, crossOwner: Bool = false) async {
+    guard let leadId = lead.info.agent?.id else { return }
+    let crossing = crossOwner ? true : nil
+    await agentAct(on: row, "Could not join the team") { client in
+      if let agent = row.info.agent {
+        try await client.updateAgent(
+          id: agent.id, UpdateAgentRequest(lead: .join(leadId), crossOwner: crossing))
+      } else {
+        try await client.createAgent(
+          CreateAgentRequest(lead: leadId, adopt: row.info.id, crossOwner: crossing))
+      }
+    }
+  }
+
+  func leave(_ row: SessionRow) async {
+    guard let agent = row.info.agent else { return }
+    await agentAct(on: row, "Could not leave the team") {
+      _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(lead: .leave))
+    }
+  }
+
+  func dissolve(_ row: SessionRow) async {
+    let members = teamMembers(row, in: rows).compactMap(\.info.agent?.id)
+    await agentAct(on: row, "Could not dissolve the team") { client in
+      for id in members {
+        try await client.updateAgent(id: id, UpdateAgentRequest(lead: .leave))
+      }
+    }
+  }
+
+  func setSharing(_ row: SessionRow, _ sharing: AgentSharing) async {
+    guard let agent = row.info.agent else { return }
+    await agentAct(on: row, "Could not change sharing") {
+      _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(sharing: sharing))
+    }
+  }
+
+  func restart(_ row: SessionRow) async -> SessionInfo? {
+    guard let agent = row.info.agent else { return nil }
+    var started: SessionInfo?
+    await agentAct(on: row, "Could not start a new conversation") {
+      started = try await $0.restartAgent(id: agent.id).session
+    }
+    return started
+  }
+
+  func retire(_ row: SessionRow) async {
+    guard let agent = row.info.agent else { return }
+    await agentAct(on: row, "Could not retire the agent") {
+      _ = try await $0.retireAgent(id: agent.id)
+    }
+  }
+
+  func agentSeed(for hostId: UUID, lead: SessionRow? = nil) -> AgentSeed {
+    let leads = rows.filter {
+      $0.hostId == hostId.uuidString && $0.info.agent != nil && $0.info.agent?.lead == nil
+    }
+    .sorted { ($0.info.agent?.isLead == true ? 0 : 1) < ($1.info.agent?.isLead == true ? 0 : 1) }
+    .compactMap { row in row.info.agent.map { AgentSeed.Lead(id: $0.id, name: $0.name) } }
+    let defaults = agentDefaults(for: hostId)
+    return AgentSeed(
+      leads: leads, lead: lead?.info.agent?.id, allowShared: defaults?.allowShared ?? false,
+      sharing: defaults?.sharing ?? .private)
+  }
+
+  private func agentAct(
+    on row: SessionRow, _ failure: String, _ body: (WorkerClient) async throws -> Void
+  ) async {
+    guard let hostId = UUID(uuidString: row.hostId),
+      let client = context(for: hostId)?.client
+    else { return }
+    do {
+      try await body(client)
+    } catch {
+      actionError = "\(failure): \(Self.describe(error))"
+    }
+    await refresh()
   }
 
   static func describe(_ error: any Error) -> String {

@@ -24,7 +24,9 @@ struct SessionStatusIcon: View {
 
   private var status: SessionStatus { session.status }
   private var pendingCount: Int { session.pendingPermissionCount }
-  private var state: SessionState { sessionState(session) }
+  var state: SessionState?
+
+  private var shown: SessionState { state ?? sessionState(session) }
 
   var body: some View {
     icon
@@ -34,12 +36,12 @@ struct SessionStatusIcon: View {
 
   @ViewBuilder
   private var icon: some View {
-    if state == .attention {
+    if shown == .attention {
       // The one state that is about the reader, so it is the one that moves.
       Image(systemName: "bell.badge.fill")
         .foregroundStyle(.orange)
         .symbolEffect(.pulse)
-    } else if state == .working {
+    } else if shown == .working {
       // `text-info`, not the system's grey: working is the state the eye is
       // scanning for, and an untinted spinner is the quietest thing on the row.
       ProgressView()
@@ -76,10 +78,10 @@ struct SessionStatusIcon: View {
     // A background agent working past its turn is the case the status cannot
     // name: "Idle" would be a lie to a screen reader too, not just to the eye.
     let running = runningSubagents(session).count
-    if state == .working, status != .running, status != .starting, running > 0 {
+    if shown == .working, status != .running, status != .starting, running > 0 {
       return "Working - \(running) sub-agent\(running == 1 ? "" : "s")"
     }
-    if session.engineAsleep == true, state != .working {
+    if session.engineAsleep == true, shown != .working {
       return "Asleep, wakes on your next message"
     }
     return status.label

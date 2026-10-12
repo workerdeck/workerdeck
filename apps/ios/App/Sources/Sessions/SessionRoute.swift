@@ -56,4 +56,17 @@ struct CreateSessionSeed: Hashable {
   var cwd: String = ""
   /// SDK session id to resume (`CreateSessionRequest.resume`).
   var resume: String?
+  var agent: AgentSeed?
+}
+
+struct AgentSeed: Hashable {
+  struct Lead: Hashable, Identifiable {
+    let id: String
+    let name: String
+  }
+
+  var leads: [Lead] = []
+  var lead: String?
+  var allowShared = false
+  var sharing: AgentSharing = .private
 }

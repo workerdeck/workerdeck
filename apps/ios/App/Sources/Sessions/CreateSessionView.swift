@@ -17,10 +17,16 @@ struct CreateSessionView: View {
   @State private var showAdvanced = false
   @State private var sheet: Sheet?
   private let onCreated: (SessionInfo) -> Void
+  private let onAgentCreated: (AgentResponse) -> Void
 
-  init(seed: CreateSessionSeed, client: WorkerClient, onCreated: @escaping (SessionInfo) -> Void) {
+  init(
+    seed: CreateSessionSeed, client: WorkerClient,
+    onAgentCreated: @escaping (AgentResponse) -> Void = { _ in },
+    onCreated: @escaping (SessionInfo) -> Void
+  ) {
     _model = State(initialValue: CreateSessionModel(seed: seed, client: client))
     self.onCreated = onCreated
+    self.onAgentCreated = onAgentCreated
   }
 
   var body: some View {
@@ -32,6 +38,10 @@ struct CreateSessionView: View {
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
         }
+      }
+
+      if let agent = model.agent {
+        agentSection(agent, model: model)
       }
 
       Section {
@@ -115,6 +125,7 @@ struct CreateSessionView: View {
         Text("Optional. Slash commands work here too, e.g. `/wrapup`.")
       }
 
+      if model.agent == nil {
       Section {
         DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
           // Sections the capability record forswears are hidden, not disabled:
@@ -165,17 +176,23 @@ struct CreateSessionView: View {
           }
         }
       }
+      }
     }
-    .navigationTitle(model.resume.isEmpty ? "New session" : "Resume session")
+    .navigationTitle(
+      model.agent != nil ? "New agent" : model.resume.isEmpty ? "New session" : "Resume session")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
         if model.isSubmitting {
           ProgressView()
         } else {
-          Button("Start") {
+          Button(model.agent != nil ? "Create" : "Start") {
             Task {
-              if let info = await model.submit() { onCreated(info) }
+              if model.agent != nil {
+                if let response = await model.submitAgent() { onAgentCreated(response) }
+              } else if let info = await model.submit() {
+                onCreated(info)
+              }
             }
           }
           .disabled(!model.canSubmit)
@@ -221,6 +238,44 @@ struct CreateSessionView: View {
 /// tab draws, but scoped to this form: the cwd field's directory (blank lists
 /// the whole store) and the chosen profile's engine store. Picking one fills
 /// the id field (and adopts the thread's directory); both stay editable.
+extension CreateSessionView {
+  @ViewBuilder
+  fileprivate func agentSection(_ agent: AgentSeed, model: CreateSessionModel) -> some View {
+    @Bindable var model = model
+    Section {
+      TextField("Name (the gateway suggests one)", text: $model.agentName)
+        .textInputAutocapitalization(.words)
+        .autocorrectionDisabled()
+      if !agent.leads.isEmpty {
+        Picker("Team", selection: $model.lead) {
+          Text("None").tag(String?.none)
+          ForEach(agent.leads) { lead in
+            Text(lead.name).tag(Optional(lead.id))
+          }
+        }
+      }
+      if agent.allowShared, model.lead == nil {
+        Picker("Sharing", selection: $model.sharing) {
+          Text("Private").tag(AgentSharing.private)
+          Text("Shared").tag(AgentSharing.shared)
+        }
+      }
+    } header: {
+      Text("Agent")
+    } footer: {
+      Text("An agent keeps its name, avatar and team across conversations.")
+    }
+    Section {
+      TextField("Who this agent is and what it works on", text: $model.brief, axis: .vertical)
+        .lineLimit(3...8)
+    } header: {
+      Text("Brief")
+    } footer: {
+      Text("Optional. Given to the agent as standing instructions in every conversation.")
+    }
+  }
+}
+
 private struct StoredSessionPickerView: View {
   let model: CreateSessionModel
 

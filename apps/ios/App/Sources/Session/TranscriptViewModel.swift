@@ -467,6 +467,7 @@ final class TranscriptViewModel {
   // MARK: - Derived
 
   var title: String {
+    if let agent = session?.agent { return agent.name }
     if let title = session?.title, !title.isEmpty { return title }
     if let cwd = state.cwd ?? session?.cwd { return Fmt.lastComponent(cwd) }
     return "Session"

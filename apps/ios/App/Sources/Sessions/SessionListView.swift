@@ -23,6 +23,15 @@ struct SessionListView: View {
   /// so an editable label inside one fights the tap that opens the session.
   @State private var pendingRename: SessionRow?
   @State private var renameText = ""
+  @State private var pendingStatus: SessionRow?
+  @State private var statusText = ""
+  @State private var pendingRetire: SessionRow?
+  @State private var pendingCrossing: Crossing?
+
+  private struct Crossing {
+    let row: SessionRow
+    let lead: SessionRow
+  }
   /// The search bar is shown on request, like the dashboard's; closing it
   /// clears the query, so a hidden search can never be what empties the list.
   @State private var searchOpen = false
@@ -118,12 +127,19 @@ struct SessionListView: View {
         SessionView(
           sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
           focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal, openShell: shell)
+        .environment(model?.agentAvatars ?? AgentAvatarLoader())
       } else {
         missingHost
       }
     case .create(let hostId, let seed):
       if let context = model?.context(for: hostId) {
-        CreateSessionView(seed: seed, client: context.client) { info in
+        CreateSessionView(
+          seed: seed, client: context.client,
+          onAgentCreated: { response in
+            if let cwd = response.agent.config.cwd { context.rememberCwd(cwd) }
+            path = response.session.map { [.session(hostId: hostId, sessionId: $0.id)] } ?? []
+          }
+        ) { info in
           context.rememberCwd(info.cwd)
           // Replace the create step so Back from the session lands on the list.
           path = [.session(hostId: hostId, sessionId: info.id)]
@@ -211,14 +227,18 @@ struct SessionListView: View {
       Text("The run is terminated on the server. Its transcript is no longer attachable.")
     }
     .alert(
-      "Rename session",
+      pendingRename?.info.agent != nil ? "Rename agent" : "Rename session",
       isPresented: Binding(
         get: { pendingRename != nil }, set: { if !$0 { pendingRename = nil } })
     ) {
       TextField("Name", text: $renameText)
       Button("Save") {
         if let row = pendingRename {
-          Task { await model.rename(row, to: renameText) }
+          if row.info.agent != nil {
+            Task { await model.renameAgent(row, to: renameText) }
+          } else {
+            Task { await model.rename(row, to: renameText) }
+          }
         }
         pendingRename = nil
       }
@@ -227,7 +247,67 @@ struct SessionListView: View {
       // Said out loud because it is not obvious: this is a gateway edit, so the
       // name lands on every client, and clearing it is how you get the derived
       // one back.
-      Text("The name is stored on the gateway, so every client sees it. Leave it empty to go back to the derived name.")
+      Text(
+        pendingRename?.info.agent != nil
+          ? "The agent keeps this name across conversations, on every client."
+          : "The name is stored on the gateway, so every client sees it. Leave it empty to go back to the derived name.")
+    }
+    .alert(
+      "Status",
+      isPresented: Binding(get: { pendingStatus != nil }, set: { if !$0 { pendingStatus = nil } })
+    ) {
+      TextField("What it is doing", text: $statusText)
+      Button("Save") {
+        if let row = pendingStatus {
+          Task { await model.setStatus(row, to: statusText) }
+        }
+        pendingStatus = nil
+      }
+      Button("Cancel", role: .cancel) { pendingStatus = nil }
+    } message: {
+      Text("A short line under the name, on every client. Leave it empty to clear it.")
+    }
+    .confirmationDialog(
+      "Retire \(pendingRetire?.info.agent?.name ?? "this agent")?",
+      isPresented: Binding(get: { pendingRetire != nil }, set: { if !$0 { pendingRetire = nil } }),
+      titleVisibility: .visible
+    ) {
+      Button("Retire", role: .destructive) {
+        if let row = pendingRetire {
+          Task { await model.retire(row) }
+        }
+        pendingRetire = nil
+      }
+      Button("Cancel", role: .cancel) { pendingRetire = nil }
+    } message: {
+      Text(
+        "The agent and its session end. "
+          + (pendingRetire?.info.agent?.isLead == true
+            ? "Its members are released and stay as agents. " : "")
+          + "Past conversations stay resumable from the engine's store.")
+    }
+    .alert(
+      "Join another owner's team?",
+      isPresented: Binding(get: { pendingCrossing != nil }, set: { if !$0 { pendingCrossing = nil } })
+    ) {
+      Button("Join") {
+        if let crossing = pendingCrossing {
+          Task { await model.join(crossing.row, lead: crossing.lead, crossOwner: true) }
+        }
+        pendingCrossing = nil
+      }
+      Button("Cancel", role: .cancel) { pendingCrossing = nil }
+    } message: {
+      Text(
+        "\(pendingCrossing?.lead.info.agent?.name ?? "This lead") belongs to \(pendingCrossing?.lead.info.owner ?? "another owner"). Its team will be able to message and read this agent.")
+    }
+    .alert(
+      "Something went wrong",
+      isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })
+    ) {
+      Button("OK", role: .cancel) { model.actionError = nil }
+    } message: {
+      Text(model.actionError ?? "")
     }
   }
 
@@ -262,54 +342,15 @@ struct SessionListView: View {
       }
       ForEach(model.groups) { group in
         Section {
-          ForEach(group.rows) { row in
-            if let route = sessionRoute(for: row) {
-              SessionCardView(
-                row: row,
-                onOpen: { path.append(route) },
-                // Grouped by project, the section header already names the gateway.
-                hostName: showsHostNames(model) && model.config.groupBy != .project
-                  ? row.hostName : nil,
-                projectImage: projectImage(for: row, model: model),
-                // Grouped by project, the section header already names it.
-                showsProject: model.config.groupBy != .project,
-                menu: { rowActions(for: row, model: model) })
-              // Two different actions wearing one gesture. Closing a *live*
-              // session terminates a run someone may be relying on, so it asks
-              // first; removing an already-closed one only drops a finished
-              // record off the list, and a confirmation for that is noise.
-              .swipeActions(edge: .trailing) {
-                if row.info.status == .closed {
-                  Button(role: .destructive) {
-                    Task { await model.close(row) }
-                  } label: {
-                    Label("Remove", systemImage: "trash")
-                  }
-                } else {
-                  Button(role: .destructive) { pendingClose = row } label: {
-                    Label("Close", systemImage: "xmark.circle")
-                  }
-                }
-              }
-              // Renaming is a leading swipe and a context menu, not a
-              // destructive-edge action: it is the one thing here that is safe.
-              .swipeActions(edge: .leading) {
-                Button {
-                  renameText = row.info.title ?? ""
-                  pendingRename = row
-                } label: {
-                  Label("Rename", systemImage: "pencil")
-                }
-                .tint(.accentColor)
-              }
-              .contextMenu { rowActions(for: row, model: model) }
-              .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps(for: row, model: model).isEmpty))
-              .listRowSeparator(steps(for: row, model: model).isEmpty ? .automatic : .hidden, edges: .bottom)
-              stepRows(for: row, model: model)
+          if !group.earlier || model.config.earlierOpen {
+            ForEach(group.rows) { row in
+              unit(row, model: model)
             }
           }
         } header: {
-          if let label = group.label {
+          if group.earlier {
+            earlierHeader(group, model: model)
+          } else if let label = group.label {
             Text(label)
           }
         }
@@ -321,17 +362,200 @@ struct SessionListView: View {
     .refreshable { await model.refresh() }
   }
 
+  @ViewBuilder
+  private func unit(_ row: SessionRow, model: SessionListModel) -> some View {
+    if let route = sessionRoute(for: row) {
+      if row.info.agent != nil {
+        let members = row.members ?? []
+        let collapsed = isTeamCollapsed(model.config, row)
+        AgentCardView(
+          row: row, frames: model.agentAvatars.frames(hostId: row.hostId, agent: row.info.agent),
+          badgeState: collapsed ? row.teamState : nil,
+          teamUnseen: collapsed ? teamSummary(row).unseen : 0,
+          tray: members.isEmpty
+            ? nil
+            : TeamTray(members: members.count, collapsed: collapsed) {
+              model.config = toggleTeamCollapsed(model.config, row)
+            },
+          onOpen: { path.append(route) },
+          menu: { rowActions(for: row, model: model) })
+        .opacity(row.context ? 0.5 : 1)
+        .modifier(rowChrome(row, model: model))
+        .contextMenu { rowActions(for: row, model: model) }
+        .listRowInsets(
+          AgentCardView<EmptyView>.insets(member: false, hasSteps: !steps(for: row, model: model).isEmpty))
+        .listRowBackground(
+          ListAttention.needsYou(row, badgeState: collapsed ? row.teamState : nil)
+            ? ListAttention.background : nil)
+        stepRows(for: row, model: model)
+        if !collapsed {
+          ForEach(members) { member in
+            memberUnit(member, model: model)
+          }
+        }
+      } else {
+        SessionCardView(
+          row: row,
+          onOpen: { path.append(route) },
+          // Grouped by project, the section header already names the gateway.
+          hostName: showsHostNames(model) && model.config.groupBy != .project
+            ? row.hostName : nil,
+          projectImage: projectImage(for: row, model: model),
+          // Grouped by project, the section header already names it.
+          showsProject: model.config.groupBy != .project,
+          menu: { rowActions(for: row, model: model) })
+        .modifier(rowChrome(row, model: model))
+        .contextMenu { rowActions(for: row, model: model) }
+        .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps(for: row, model: model).isEmpty))
+        .listRowSeparator(steps(for: row, model: model).isEmpty ? .automatic : .hidden, edges: .bottom)
+        .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
+        stepRows(for: row, model: model)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func memberUnit(_ row: SessionRow, model: SessionListModel) -> some View {
+    if let route = sessionRoute(for: row) {
+      AgentCardView(
+        row: row, frames: model.agentAvatars.frames(hostId: row.hostId, agent: row.info.agent),
+        member: true,
+        onOpen: { path.append(route) },
+        menu: { rowActions(for: row, model: model) })
+      .modifier(rowChrome(row, model: model))
+        .contextMenu { rowActions(for: row, model: model) }
+      .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
+      .listRowSeparator(.hidden)
+      .listRowBackground(
+        ZStack {
+          if ListAttention.needsYou(row) { ListAttention.background }
+          TeamTreeLine()
+        })
+    }
+  }
+
+  private func earlierHeader(_ group: SessionGroup, model: SessionListModel) -> some View {
+    Button {
+      model.config.earlierOpen.toggle()
+    } label: {
+      HStack(spacing: 4) {
+        Image(systemName: model.config.earlierOpen ? "chevron.down" : "chevron.right")
+          .font(.caption2.weight(.semibold))
+        Text(group.label ?? "Earlier")
+        Text("\(group.rows.count)").monospacedDigit().foregroundStyle(.tertiary)
+        Spacer(minLength: 0)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func rowChrome(_ row: SessionRow, model: SessionListModel) -> RowChrome {
+    RowChrome(
+      row: row,
+      onClose: {
+        if row.info.status == .closed {
+          Task { await model.close(row) }
+        } else {
+          pendingClose = row
+        }
+      },
+      onRename: { beginRename(row) },
+      onRestart: row.info.agent == nil ? nil : { Task { _ = await model.restart(row) } })
+  }
+
+  private func beginRename(_ row: SessionRow) {
+    renameText = row.info.agent?.name ?? row.info.title ?? ""
+    pendingRename = row
+  }
+
   // Every non-navigating thing a row can do, in one builder, because the row
   // offers three ways in and they must not drift apart: the card's persistent
   // `···`, a long press, and (for the destructive half) a trailing swipe. Close
   // and Remove are the same gesture wearing two meanings - see the swipe.
   @ViewBuilder
   private func rowActions(for row: SessionRow, model: SessionListModel) -> some View {
+    let agent = row.info.agent
+    if let owner = row.info.owner {
+      Text("Owner: \(owner)")
+    }
     Button {
-      renameText = row.info.title ?? ""
-      pendingRename = row
+      beginRename(row)
     } label: {
-      Label("Rename", systemImage: "pencil")
+      Label(agent != nil ? "Rename agent" : "Rename session", systemImage: "pencil")
+    }
+    Button {
+      statusText = row.info.statusLabel?.text ?? ""
+      pendingStatus = row
+    } label: {
+      Label(row.info.statusLabel != nil ? "Change status" : "Set status", systemImage: "text.bubble")
+    }
+    if agent?.avatar != nil {
+      Button {
+        Task { await model.changeAvatar(row) }
+      } label: {
+        Label("Change avatar", systemImage: "face.smiling")
+      }
+    }
+    Divider()
+    if agent == nil {
+      Button {
+        Task { await model.makeAgent(row) }
+      } label: {
+        Label("Make agent", systemImage: "person.badge.plus")
+      }
+    }
+    let leads = teamLeads(model.rows, for: row)
+    if !leads.isEmpty {
+      Menu {
+        ForEach(leads) { lead in
+          Button(lead.info.agent?.name ?? sessionLabel(lead.info)) {
+            if model.crossesOwners(row, into: lead) {
+              pendingCrossing = Crossing(row: row, lead: lead)
+            } else {
+              Task { await model.join(row, lead: lead) }
+            }
+          }
+        }
+      } label: {
+        Label("Add to team", systemImage: "person.2")
+      }
+    }
+    if let agent, agent.lead != nil {
+      Button {
+        Task { await model.leave(row) }
+      } label: {
+        Label("Leave \(agent.team ?? "team")", systemImage: "rectangle.portrait.and.arrow.right")
+      }
+    }
+    if agent?.isLead == true {
+      Button {
+        Task { await model.dissolve(row) }
+      } label: {
+        Label("Dissolve team", systemImage: "person.2.slash")
+      }
+    }
+    if let agent, agent.lead == nil, let hostId = UUID(uuidString: row.hostId) {
+      if agent.shared == true {
+        Button {
+          Task { await model.setSharing(row, .private) }
+        } label: {
+          Label("Make private", systemImage: "lock")
+        }
+      } else if model.agentDefaults(for: hostId)?.allowShared == true {
+        Button {
+          Task { await model.setSharing(row, .shared) }
+        } label: {
+          Label("Share with other owners", systemImage: "globe")
+        }
+      }
+    }
+    if agent != nil {
+      Button {
+        Task { _ = await model.restart(row) }
+      } label: {
+        Label("New conversation", systemImage: "arrow.counterclockwise")
+      }
     }
     if row.info.resolvedCapabilities.engineSleep, row.info.status == .idle,
       row.info.engineAsleep != true
@@ -342,6 +566,7 @@ struct SessionListView: View {
         Label("Sleep", systemImage: "moon.zzz")
       }
     }
+    Divider()
     if row.info.status == .closed {
       Button(role: .destructive) {
         Task { await model.close(row) }
@@ -351,6 +576,11 @@ struct SessionListView: View {
     } else {
       Button(role: .destructive) { pendingClose = row } label: {
         Label("Close", systemImage: "xmark.circle")
+      }
+    }
+    if agent != nil {
+      Button(role: .destructive) { pendingRetire = row } label: {
+        Label("Retire agent…", systemImage: "person.badge.minus")
       }
     }
   }
@@ -558,21 +788,30 @@ struct SessionListView: View {
   /// than one host the + is a menu naming them.
   @ViewBuilder
   private var addButton: some View {
-    if hosts.hosts.count == 1, let host = hosts.hosts.first {
-      Button {
-        path.append(.create(hostId: host.id, seed: seed(for: host)))
-      } label: {
-        Label("New session", systemImage: "plus")
-      }
-    } else {
-      Menu {
-        ForEach(hosts.hosts) { host in
-          Button(host.displayName) {
+    Menu {
+      ForEach(hosts.hosts) { host in
+        Section(hosts.hosts.count > 1 ? host.displayName : "") {
+          Button {
             path.append(.create(hostId: host.id, seed: seed(for: host)))
+          } label: {
+            Label("New session", systemImage: "bubble.left")
+          }
+          if model?.agentDefaults(for: host.id) != nil {
+            Button {
+              var agentSeed = seed(for: host)
+              agentSeed.agent = model?.agentSeed(for: host.id)
+              path.append(.create(hostId: host.id, seed: agentSeed))
+            } label: {
+              Label("New agent", systemImage: "person.crop.square")
+            }
           }
         }
-      } label: {
-        Label("New session", systemImage: "plus")
+      }
+    } label: {
+      Label("New", systemImage: "plus")
+    } primaryAction: {
+      if hosts.hosts.count == 1, let host = hosts.hosts.first {
+        path.append(.create(hostId: host.id, seed: seed(for: host)))
       }
     }
   }
@@ -612,5 +851,37 @@ private struct SessionSearch: ViewModifier {
     }
     // A query persisted from an earlier launch must stay visible.
     .onAppear { if !text.isEmpty { open = true } }
+  }
+}
+
+private struct RowChrome: ViewModifier {
+  let row: SessionRow
+  let onClose: () -> Void
+  let onRename: () -> Void
+  let onRestart: (() -> Void)?
+
+  func body(content: Content) -> some View {
+    content
+      .swipeActions(edge: .trailing) {
+        Button(role: .destructive, action: onClose) {
+          if row.info.status == .closed {
+            Label("Remove", systemImage: "trash")
+          } else {
+            Label("Close", systemImage: "xmark.circle")
+          }
+        }
+      }
+      .swipeActions(edge: .leading) {
+        Button(action: onRename) {
+          Label("Rename", systemImage: "pencil")
+        }
+        .tint(.accentColor)
+        if let onRestart {
+          Button(action: onRestart) {
+            Label("New conversation", systemImage: "arrow.counterclockwise")
+          }
+          .tint(.indigo)
+        }
+      }
   }
 }

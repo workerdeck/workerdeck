@@ -28,6 +28,7 @@ struct SessionView: View {
   @Environment(UnreadModel.self) private var unread
   @Environment(AppSettings.self) private var settings
   @Environment(BookmarkModel.self) private var bookmarks
+  @Environment(AgentAvatarLoader.self) private var avatars
 
   /// The gateway this session belongs to - the watermark key's first half.
   private let client: WorkerClient
@@ -1103,6 +1104,16 @@ struct SessionView: View {
   /// becomes stop). What is left is what you reach for rarely.
   @ToolbarContentBuilder
   private var toolbarMenu: some ToolbarContent {
+    if let session = vm.session, session.agent != nil {
+      ToolbarItem(placement: .principal) {
+        AgentHeadingView(
+          info: session, frames: avatars.frames(hostId: hostId.uuidString, agent: session.agent)
+        )
+        .task(id: session.agent?.avatar) {
+          avatars.ensure(hostId: hostId.uuidString, agent: session.agent, client: client)
+        }
+      }
+    }
     // Only once the cwd is known - the browser is rooted at it, so there is
     // nothing to open before then.
     if vm.hostFiles != nil {
