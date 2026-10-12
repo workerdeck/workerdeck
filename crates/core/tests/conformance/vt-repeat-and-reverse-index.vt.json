@@ -1,0 +1,6 @@
+{
+  "name": "repeat-and-reverse-index",
+  "cols": 10,
+  "rows": 4,
+  "input": "x\u001b[5b\u001b[1;1H\u001bMtop\r\n\u001bDnext"
+}

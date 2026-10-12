@@ -54,6 +54,37 @@ function delta(text: string, parent: string | null = null, kind: 'text' | 'think
   )
 }
 
+function assistant(uuid: string, content: unknown[], parent: string | null = null): Beat {
+  return beat(
+    event({ type: 'assistant_message', message: { role: 'assistant', content }, parentToolUseId: parent, uuid } as SessionEventBody),
+  )
+}
+
+function userText(uuid: string, content: unknown, extra: Record<string, unknown> = {}): Beat {
+  return beat(
+    event({ type: 'user_message', message: { role: 'user', content }, parentToolUseId: null, uuid, ...extra } as SessionEventBody),
+  )
+}
+
+function toolResult(uuid: string, block: Record<string, unknown>, extra: Record<string, unknown> = {}): Beat {
+  return userText(uuid, [{ type: 'tool_result', ...block }], { synthetic: true, ...extra })
+}
+
+const SHELL = {
+  id: 'sh_abc',
+  sessionId: 's1',
+  ordinal: 3,
+  command: 'npm test',
+  label: 'npm test',
+  cwd: '/tmp/p',
+  owner: 'user',
+  status: 'running',
+  startedAt: 1000,
+  bytes: 12,
+  cols: 120,
+  rows: 40,
+}
+
 export const CORPUS: Case[] = [
   {
     name: 'basic-turn',
@@ -212,6 +243,272 @@ export const CORPUS: Case[] = [
       rateLimit({ status: 'allowed', rateLimitType: 'five_hour', resetsAt: 1_760_010_000, utilization: 0.4 }),
       event({ type: 'engine_sleep', asleep: true }),
       status('idle'),
+    ),
+  },
+  {
+    name: 'thinking-streamed-then-superseded',
+    tape: beat(
+      init(),
+      user('Think first.'),
+      delta('Weighing ', null, 'thinking'),
+      delta('the options.', null, 'thinking'),
+      assistant('th-1', [
+        { type: 'thinking', thinking: 'Weighing the options, fully.' },
+        { type: 'text', text: 'Option B.' },
+      ]),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'thinking-signature-only-keeps-stream',
+    tape: beat(init(), delta('Weighing it.', null, 'thinking'), assistant('th-2', [{ type: 'thinking', thinking: '', signature: 'Eu8E' }])),
+  },
+  {
+    name: 'thinking-empty-dropped',
+    tape: beat(
+      init(),
+      assistant('th-3', [{ type: 'thinking', thinking: '', signature: 'Eu8E' }]),
+      delta('   ', null, 'thinking'),
+      assistant('th-4', [{ type: 'text', text: 'Done.' }]),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'thinking-addressed',
+    tape: beat(
+      init(),
+      assistant('th-5', [{ type: 'thinking', thinking: 'reasoning' }]),
+      assistant('th-6', [{ type: 'thinking', thinking: 'Two decisions from you.', addressed: true }]),
+    ),
+  },
+  {
+    name: 'cost-is-cumulative',
+    tape: beat(
+      init(),
+      user('One.'),
+      turnEnd({ totalCostUsd: 0.1 }),
+      user('Two.'),
+      event({ type: 'turn_result', subtype: 'success', isError: false, durationMs: 10, numTurns: 1, totalCostUsd: 0.25, costUsd: 0.15 }),
+    ),
+  },
+  {
+    name: 'user-uuid-dedupe',
+    tape: beat(
+      init(),
+      userText('dup-1', 'earlier prompt'),
+      assistant('dup-a', [{ type: 'text', text: 'earlier reply' }]),
+      userText('dup-1', 'earlier prompt'),
+    ),
+  },
+  {
+    name: 'file-delivered',
+    tape: beat(init(), event({ type: 'file_delivered', path: '/SUMMARY.md', bytes: 42, description: 'the summary' })),
+  },
+  {
+    name: 'local-command-synthetic-and-caveat',
+    tape: beat(
+      init(),
+      userText('lc-1', '<local-command-stdout>$ ls\nREADME.md</local-command-stdout>', { synthetic: true }),
+      userText(
+        'mix-1',
+        [
+          {
+            type: 'text',
+            text:
+              '<local-command-caveat>Caveat: generated</local-command-caveat>\n' +
+              '<local-command-stdout>$ ls\nREADME.md</local-command-stdout>\n' +
+              '<local-command-stderr>$ nope\nnot found</local-command-stderr>',
+          },
+          { type: 'text', text: 'what did that print?' },
+        ],
+        { synthetic: true },
+      ),
+      userText('syn-1', 'a synthetic nudge the user never typed', { synthetic: true }),
+    ),
+  },
+  {
+    name: 'slash-command-text',
+    tape: beat(
+      init(),
+      userText(
+        'cmd-1',
+        '<command-message>wrapup</command-message>\n<command-name>/dev:wrapup</command-name>\n<command-args>(commit only)</command-args>',
+      ),
+      userText('cmd-2', 'compare <a> and <b>'),
+    ),
+  },
+  {
+    name: 'attachments',
+    tape: beat(
+      init(),
+      userText('att-1', 'what is this?', { attachments: [{ id: 'att-a', name: 'shot.png', mediaType: 'image/png', bytes: 1024 }] }),
+      userText('att-2', '', { attachments: [{ id: 'att-b', name: 'notes.pdf', mediaType: 'application/pdf', bytes: 2048 }] }),
+    ),
+  },
+  {
+    name: 'catalog-and-produced-files',
+    tape: beat(
+      event({ type: 'capabilities', models: [], commands: [{ name: 'compact', description: 'Compact' }], defaultModel: 'claude-opus-5-5' }),
+      init(),
+      event({ type: 'file_produced', path: '/work/acme/out.png', fileId: 'f1', mediaType: 'image/png', bytes: 512 }),
+      event({ type: 'file_produced', path: '/work/acme/out.png', fileId: 'f1', mediaType: 'image/png', bytes: 512 }),
+      event({ type: 'tool_titles', titles: { mcp__acme__deploy: 'Deploy' } }),
+    ),
+  },
+  {
+    name: 'reset-stacks-and-keeps-approvals',
+    tape: beat(
+      init(),
+      user('First.'),
+      ask({ id: 'req-9', toolName: 'Bash', input: { command: 'ls' }, toolUseId: 'toolu_x' }),
+      event({ type: 'conversation_reset' }),
+      user('Second.'),
+      event({ type: 'conversation_reset', sdkSessionId: 'sdk-third' }),
+    ),
+  },
+  {
+    name: 'execution-states',
+    tape: beat(
+      init(),
+      assistant('ex-a1', [{ type: 'tool_use', id: 'ex-1', name: 'eval_script', input: { script: '1+1' } }]),
+      event({ type: 'execution_dispatched', executionId: 'ex-1', toolName: 'eval_script', backend: 'browser' }),
+      event({ type: 'execution_result', executionId: 'ex-1', output: { type: 'json', value: { n: 2 } }, logs: ['[log] hi'] }),
+      assistant('ex-a2', [{ type: 'tool_use', id: 'ex-2', name: 'eval_script', input: { script: 'wait()' } }]),
+      event({ type: 'execution_dispatched', executionId: 'ex-2', toolName: 'eval_script', backend: 'remote', deferred: true }),
+      assistant('ex-a3', [{ type: 'tool_use', id: 'ex-3', name: 'eval_script', input: { script: 'loop()' } }]),
+      event({ type: 'execution_dispatched', executionId: 'ex-3', toolName: 'eval_script', backend: 'browser' }),
+      event({ type: 'execution_failed', executionId: 'ex-3', reason: 'timeout', error: 'guest exceeded its deadline' }),
+      event({ type: 'execution_result', executionId: 'ex-unknown', output: { type: 'text', value: 'ignored' } }),
+    ),
+  },
+  {
+    name: 'tool-result-patch',
+    tape: beat(
+      init(),
+      tool('toolu_edit', 'Edit', { file_path: '/repo/a.ts', old_string: 'a', new_string: 'b' }),
+      toolResult(
+        'r-edit',
+        { tool_use_id: 'toolu_edit', content: 'updated' },
+        {
+          patch: {
+            path: '/repo/a.ts',
+            kind: 'update',
+            hunks: [{ oldStart: 4, oldLines: 1, newStart: 4, newLines: 1, lines: ['-a', '+b'] }],
+          },
+        },
+      ),
+    ),
+  },
+  {
+    name: 'subagents-streaming-apart',
+    tape: beat(
+      init(),
+      user('Two agents.'),
+      tool('toolu_a', 'Task', { description: 'A' }),
+      tool('toolu_b', 'Task', { description: 'B' }),
+      delta('parent says', null),
+      delta('agent A says', 'toolu_a'),
+      delta('agent B says', 'toolu_b'),
+      say('A is done.', { parent: 'toolu_a' }),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'tool-output-live-tail',
+    tape: beat(
+      init(),
+      tool('toolu_bash', 'Bash', { command: 'pip install torch' }),
+      event({ type: 'tool_output', toolUseId: 'toolu_bash', tail: 'Downloading torch' }),
+      event({ type: 'tool_output', toolUseId: 'toolu_nobody', tail: 'ignored' }),
+      tool('toolu_bash2', 'Bash', { command: 'sleep 1' }),
+      event({ type: 'tool_output', toolUseId: 'toolu_bash2', tail: 'still going' }),
+      toolResult('r-bash2', { tool_use_id: 'toolu_bash2', content: 'ok' }),
+      event({ type: 'tool_output', toolUseId: 'toolu_bash2', tail: 'late' }),
+    ),
+  },
+  {
+    name: 'tool-result-truncated-and-images',
+    tape: beat(
+      init(),
+      tool('toolu_big', 'Bash', { command: 'cat big.log' }),
+      toolResult('r-big', { tool_use_id: 'toolu_big', content: 'first part of the log', truncated: true, total_chars: 120000 }),
+      tool('toolu_shot', 'mcp__browser__screenshot', {}),
+      toolResult('r-shot', {
+        tool_use_id: 'toolu_shot',
+        content: [
+          { type: 'text', text: 'looked at the screenshot' },
+          { type: 'image_ref', part_index: 1, media_type: 'image/png', bytes: 340000 },
+        ],
+      }),
+    ),
+  },
+  {
+    name: 'shell-row',
+    tape: beat(
+      init(),
+      userText('sh-row', '<local-command-stdout>$ npm test\nrunning</local-command-stdout>', { synthetic: true, shell: SHELL }),
+      userText('sh-row', '<local-command-stdout>$ npm test\nall good\n[exit 0]</local-command-stdout>', {
+        synthetic: true,
+        shell: { ...SHELL, status: 'exited', exitCode: 0, endReason: 'exit', endedAt: 2000 },
+      }),
+    ),
+  },
+  {
+    name: 'ignored-events',
+    tape: beat(
+      init(),
+      event({ type: 'sdk_event', payload: { type: 'hook_started' } }),
+      event({ type: 'session_closed', reason: 'client' }),
+      event({ type: 'stream_delta', event: { type: 'message_start' }, parentToolUseId: null, uuid: 'ms-1' } as SessionEventBody),
+    ),
+  },
+  {
+    name: 'markdown-blocks',
+    tape: beat(
+      init(),
+      user('Summarise.'),
+      say(
+        [
+          '# Summary',
+          '',
+          'The fix has **three** parts, see `transcript.ts` and the [docs](https://example.com/docs).',
+          '',
+          '## Steps',
+          '',
+          '1. Read the *reducer*.',
+          '2. Port the ~~old~~ new planner.',
+          '   - nested bullet with `code`',
+          '- a plain bullet',
+          '',
+          '> A quoted line that is long enough to wrap across more than one terminal line at this width, surely.',
+          '',
+          '```ts',
+          'export function plan(row: Row): Line[] {',
+          '  return []',
+          '}',
+          '```',
+          '',
+          '| Area | State |',
+          '| --- | --- |',
+          '| VT | done |',
+          '| Planner | partial |',
+          '',
+          '---',
+          'Escaped \\*not emphasis\\* and a_snake_case_name.',
+        ].join('\n'),
+      ),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'wrapping-wide-text',
+    tape: beat(
+      init(),
+      user(`${'A long prompt that keeps going '.repeat(8)}end.`),
+      say(`漢字かな交じり文 ${'界'.repeat(70)} then emoji 🙂👍🏽 and a URL https://example.com/${'segment/'.repeat(20)}end`),
+      tool('toolu_long', 'Bash', { command: `echo ${'x'.repeat(300)}` }),
+      result('toolu_long', Array.from({ length: 30 }, (_, index) => `output line ${index + 1}`).join('\n')),
+      turnEnd(),
     ),
   },
 ]

@@ -1,0 +1,6 @@
+{
+  "name": "wide-combining-emoji",
+  "cols": 12,
+  "rows": 4,
+  "input": "漢字かな\r\né café\r\n🙂 ok 👍🏽\r\n界界界界界界界"
+}

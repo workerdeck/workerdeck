@@ -1,0 +1,6 @@
+{
+  "name": "reset",
+  "cols": 10,
+  "rows": 3,
+  "input": "\u001b[31mgone\u001bcfresh"
+}

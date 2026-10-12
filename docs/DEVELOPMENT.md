@@ -77,13 +77,16 @@ as its own `rust` job. The toolchain is pinned in `rust-toolchain.toml` (1.98, w
 ```sh
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 pnpm fixtures:golden                          # TS reducer -> crates/core/tests/conformance; --check in CI
+(cd apps/ios/WorkerDeckKit && WD_CONFORMANCE_WRITE=1 swift test --filter Conformance)  # kit -> planner + VT goldens
 node crates/bench/fixtures/gen.mjs            # synthetic, deterministic: session.jsonl + shell.txt (gitignored)
 cargo run --release -p wd-native-bench        # the workloads, as JSON; `-- <dir> dump|dump-vt` for the cross-checks
 ANDROID_NDK_HOME=~/Library/Android/android-ndk-r30 cargo ndk -t arm64-v8a -t x86_64 build -p wd-native-jni --release
 ```
 
 Android needs `cargo install cargo-ndk` and an NDK (r30 locally; CI uses the runner's
-`ANDROID_NDK_LATEST_HOME`). The stripped arm64 `libwdcore.so` is about 0.7 MB. The fixtures are
+`ANDROID_NDK_LATEST_HOME`). The stripped arm64 `libwdcore.so` is about 0.7 MB, and its `LOAD`
+segments are 16 KB aligned (NDK r28 and later default to it), which Google Play requires of every
+native library; check with `llvm-readelf -lW` (alignment `0x4000`) after any linker-flag change. The fixtures are
 synthetic by rule: never real transcripts in the repo.
 
 ## Hot reload (`--hot-reload`)

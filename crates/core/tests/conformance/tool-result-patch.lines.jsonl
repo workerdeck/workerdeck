@@ -1,0 +1,3 @@
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"green","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Edit(/repo/a.ts)","tone":"fg"}
+{"band":"diffRemove","bold":false,"columns":4,"gutter":"4 -","gutterTone":"diffNumber","inOpen":false,"indent":2,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"a","tone":"diffRemove"}
+{"band":"diffAdd","bold":false,"columns":4,"gutter":"4 +","gutterTone":"diffNumber","inOpen":false,"indent":2,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"b","tone":"diffAdd"}

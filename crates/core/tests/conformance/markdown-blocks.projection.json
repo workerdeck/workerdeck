@@ -1,0 +1,31 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "u-43",
+      "kind": "user",
+      "text": "Summarise."
+    },
+    {
+      "id": "a-44-0",
+      "kind": "assistant_text",
+      "streaming": false,
+      "text": "# Summary\n\nThe fix has **three** parts, see `transcript.ts` and the [docs](https://example.com/docs).\n\n## Steps\n\n1. Read the *reducer*.\n2. Port the ~~old~~ new planner.\n   - nested bullet with `code`\n- a plain bullet\n\n> A quoted line that is long enough to wrap across more than one terminal line at this width, surely.\n\n```ts\nexport function plan(row: Row): Line[] {\n  return []\n}\n```\n\n| Area | State |\n| --- | --- |\n| VT | done |\n| Planner | partial |\n\n---\nEscaped \\*not emphasis\\* and a_snake_case_name."
+    },
+    {
+      "durationMs": 42000,
+      "id": "turn-5",
+      "isError": false,
+      "kind": "turn_result",
+      "subtype": "success",
+      "totalCostUsd": 0.12
+    }
+  ],
+  "lastSeq": 6,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "idle",
+  "totalCostUsd": 0.12
+}

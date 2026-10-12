@@ -1,0 +1,7 @@
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"$ ls","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"README.md","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"$ ls","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"README.md","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"$ nope","tone":"red"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"not found","tone":"red"}
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"what did that print?","tone":"fg"}

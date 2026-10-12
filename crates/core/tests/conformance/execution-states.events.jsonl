@@ -1,0 +1,11 @@
+{"type":"event","event":{"type":"system_init","sdkSessionId":"sdk-conformance","model":"claude-opus-5-5","cwd":"/work/acme","apiKeySource":"ANTHROPIC_API_KEY","tools":["Task","Bash","Read","Edit"],"skills":[],"slashCommands":["compact","clear"],"permissionMode":"default","claudeCodeVersion":"2.1.60","mcpServers":[],"seq":1,"ts":1760000000000}}
+{"type":"event","event":{"type":"status_changed","status":"running","seq":2,"ts":1760000000000}}
+{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"ex-1","name":"eval_script","input":{"script":"1+1"}}]},"parentToolUseId":null,"uuid":"ex-a1","seq":3,"ts":1760000000000}}
+{"type":"event","event":{"type":"execution_dispatched","executionId":"ex-1","toolName":"eval_script","backend":"browser","seq":4,"ts":1760000000000}}
+{"type":"event","event":{"type":"execution_result","executionId":"ex-1","output":{"type":"json","value":{"n":2}},"logs":["[log] hi"],"seq":5,"ts":1760000000000}}
+{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"ex-2","name":"eval_script","input":{"script":"wait()"}}]},"parentToolUseId":null,"uuid":"ex-a2","seq":6,"ts":1760000000000}}
+{"type":"event","event":{"type":"execution_dispatched","executionId":"ex-2","toolName":"eval_script","backend":"remote","deferred":true,"seq":7,"ts":1760000000000}}
+{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"ex-3","name":"eval_script","input":{"script":"loop()"}}]},"parentToolUseId":null,"uuid":"ex-a3","seq":8,"ts":1760000000000}}
+{"type":"event","event":{"type":"execution_dispatched","executionId":"ex-3","toolName":"eval_script","backend":"browser","seq":9,"ts":1760000000000}}
+{"type":"event","event":{"type":"execution_failed","executionId":"ex-3","reason":"timeout","error":"guest exceeded its deadline","seq":10,"ts":1760000000000}}
+{"type":"event","event":{"type":"execution_result","executionId":"ex-unknown","output":{"type":"text","value":"ignored"},"seq":11,"ts":1760000000000}}

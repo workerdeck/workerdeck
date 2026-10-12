@@ -7,6 +7,7 @@ import type { SessionEvent } from '@workerdeck/protocol'
 import { projectTranscript } from '../packages/react/src/lib/transcript-projection.ts'
 import { applyEvent, initialTranscriptState } from '../packages/react/src/lib/transcript.ts'
 import { CORPUS, DUPLICATES, type Case } from './corpus.ts'
+import { VT_CORPUS } from './vt-corpus.ts'
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'crates', 'core', 'tests', 'conformance')
 const EPOCH = 1_760_000_000_000
@@ -33,6 +34,8 @@ function render(entry: Case): Map<string, string> {
   ])
 }
 
+const OWNED = /(\.events\.jsonl|\.projection\.json|\.vt\.json)$/
+
 const check = process.argv.includes('--check')
 const wanted = new Map<string, string>()
 for (const entry of CORPUS) {
@@ -40,8 +43,11 @@ for (const entry of CORPUS) {
     wanted.set(file, body)
   }
 }
+for (const entry of VT_CORPUS) {
+  wanted.set(`vt-${entry.name}.vt.json`, `${JSON.stringify(entry, null, 2)}\n`)
+}
 
-const existing = existsSync(OUT) ? readdirSync(OUT).filter((file) => file.endsWith('.jsonl') || file.endsWith('.json')) : []
+const existing = existsSync(OUT) ? readdirSync(OUT).filter((file) => OWNED.test(file)) : []
 const stale = [...wanted]
   .filter(([file, body]) => !existsSync(join(OUT, file)) || readFileSync(join(OUT, file), 'utf8') !== body)
   .map(([file]) => file)
@@ -54,7 +60,7 @@ if (check) {
     )
     process.exit(1)
   }
-  process.stdout.write(`${CORPUS.length} conformance cases up to date\n`)
+  process.stdout.write(`${CORPUS.length + VT_CORPUS.length} conformance cases up to date\n`)
 } else {
   mkdirSync(OUT, { recursive: true })
   for (const file of orphans) {
@@ -63,5 +69,5 @@ if (check) {
   for (const file of stale) {
     writeFileSync(join(OUT, file), wanted.get(file)!)
   }
-  process.stdout.write(`${CORPUS.length} cases, ${stale.length} files written, ${orphans.length} removed\n`)
+  process.stdout.write(`${CORPUS.length + VT_CORPUS.length} cases, ${stale.length} files written, ${orphans.length} removed\n`)
 }

@@ -470,7 +470,8 @@ pub fn inline(text: &str) -> Styled {
         if c == '~' && next == Some('~') && toggle(STRIKE, &['~', '~'], &mut i, &mut intent, &plain, &mut run_start, &mut runs) {
             continue;
         }
-        if (c == '*' || c == '_') && toggle(EM, &[c], &mut i, &mut intent, &plain, &mut run_start, &mut runs) {
+        let intraword = c == '_' && i > 0 && chars[i - 1].is_alphanumeric() && next.is_some_and(char::is_alphanumeric);
+        if (c == '*' || c == '_') && !intraword && toggle(EM, &[c], &mut i, &mut intent, &plain, &mut run_start, &mut runs) {
             continue;
         }
         if c == '['

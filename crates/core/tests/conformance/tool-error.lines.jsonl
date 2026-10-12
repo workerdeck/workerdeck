@@ -1,0 +1,6 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Run the build.","tone":"fg"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Bash(pnpm build)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"red","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"error TS2322: Type string is not assignable to ","tone":"red"}
+{"band":"output","bold":false,"columns":3,"gutter":"","gutterTone":"red","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"number.","tone":"red"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"The build fails on a type error.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

@@ -1,0 +1,6 @@
+{
+  "name": "alt-screen",
+  "cols": 12,
+  "rows": 3,
+  "input": "primary\r\nshell\u001b[?1049hALT SCREEN\u001b[2;1Hsecond\u001b[?1049lback"
+}

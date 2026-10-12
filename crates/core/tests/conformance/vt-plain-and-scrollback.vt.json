@@ -1,0 +1,6 @@
+{
+  "name": "plain-and-scrollback",
+  "cols": 20,
+  "rows": 4,
+  "input": "line 1\r\nline 2\r\nline 3\r\nline 4\r\nline 5\r\nline 6\r\nline 7\r\nline 8\r\nline 9\r\n$ "
+}

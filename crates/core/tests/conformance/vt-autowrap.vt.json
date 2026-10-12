@@ -1,0 +1,6 @@
+{
+  "name": "autowrap",
+  "cols": 8,
+  "rows": 4,
+  "input": "abcdefghijklmnopq\r\nend"
+}

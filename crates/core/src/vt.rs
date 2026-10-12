@@ -386,6 +386,10 @@ impl VtScreen {
         self.scrollback.count + self.rows
     }
 
+    pub fn cursor(&self) -> (usize, usize) {
+        (self.buffer.cursor_row, self.buffer.cursor_col)
+    }
+
     pub fn scrollback_count(&self) -> usize {
         self.scrollback.count
     }

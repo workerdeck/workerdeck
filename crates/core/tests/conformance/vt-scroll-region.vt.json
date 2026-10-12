@@ -1,0 +1,6 @@
+{
+  "name": "scroll-region",
+  "cols": 10,
+  "rows": 6,
+  "input": "r 1\r\nr 2\r\nr 3\r\nr 4\r\nr 5\r\nr 6\u001b[2;4r\u001b[4;1H\nA\nB\u001b[r\u001b[6;1Hend"
+}

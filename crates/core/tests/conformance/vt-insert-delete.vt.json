@@ -1,0 +1,6 @@
+{
+  "name": "insert-delete",
+  "cols": 10,
+  "rows": 5,
+  "input": "L 1\r\nL 2\r\nL 3\r\nL 4\r\nL 5\u001b[2;1H\u001b[2L\u001b[5;1H\u001b[M\u001b[1;1H\u001b[2@>>\u001b[1;6H\u001b[2P\u001b[3;1H\u001b[3X"
+}

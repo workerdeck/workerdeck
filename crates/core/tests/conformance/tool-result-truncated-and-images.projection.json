@@ -1,0 +1,49 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "toolu_big",
+      "input": {
+        "command": "cat big.log"
+      },
+      "kind": "tool_call",
+      "name": "Bash",
+      "result": {
+        "isError": false,
+        "sourceSeq": 4,
+        "text": "first part of the log",
+        "totalChars": 120000,
+        "truncated": true
+      },
+      "status": "settled",
+      "ts": 1760000003000
+    },
+    {
+      "id": "toolu_shot",
+      "input": {},
+      "kind": "tool_call",
+      "name": "mcp__browser__screenshot",
+      "result": {
+        "images": [
+          {
+            "bytes": 340000,
+            "mediaType": "image/png",
+            "partIndex": 1,
+            "sourceSeq": 6
+          }
+        ],
+        "isError": false,
+        "text": "looked at the screenshot"
+      },
+      "status": "settled",
+      "ts": 1760000006000
+    }
+  ],
+  "lastSeq": 6,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "running",
+  "totalCostUsd": 0
+}

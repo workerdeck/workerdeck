@@ -1,0 +1,6 @@
+{
+  "name": "tabs",
+  "cols": 30,
+  "rows": 3,
+  "input": "a\tb\tc\r\n\u001b[3g\u001b[5G\u001bH\rx\ty\r\n\tz"
+}

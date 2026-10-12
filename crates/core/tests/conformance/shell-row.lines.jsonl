@@ -1,0 +1,2 @@
+{"band":"user","bold":false,"columns":2,"gutter":"$","gutterTone":"magenta","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"npm test · exit 0","tone":"fg"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"all good","tone":"dim"}

@@ -1,0 +1,6 @@
+{
+  "name": "sgr-colours",
+  "cols": 40,
+  "rows": 6,
+  "input": "\u001b[31mred\u001b[0m \u001b[1;32mbold green\u001b[22m plain-green\u001b[39m\r\n\u001b[38;5;208morange256\u001b[0m \u001b[48;5;24mbg24\u001b[0m\r\n\u001b[38;2;10;20;30mtruecolor\u001b[0m \u001b[48;2;200;100;50mtruebg\u001b[0m\r\n\u001b[2mdim\u001b[0m \u001b[3mitalic\u001b[0m \u001b[4munder\u001b[0m \u001b[7minverse\u001b[0m \u001b[9mstrike\u001b[0m \u001b[8mhidden\u001b[0m\r\n\u001b[91mbright\u001b[0m \u001b[38:2::1:2:3mcolon\u001b[0m"
+}

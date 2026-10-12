@@ -50,6 +50,38 @@ pub enum Band {
     Output,
 }
 
+impl Tone {
+    pub fn raw(self) -> &'static str {
+        match self {
+            Tone::Fg => "fg",
+            Tone::Bright => "bright",
+            Tone::Dim => "dim",
+            Tone::Faint => "faint",
+            Tone::Mark => "mark",
+            Tone::Blue => "blue",
+            Tone::Green => "green",
+            Tone::Red => "red",
+            Tone::Yellow => "yellow",
+            Tone::Magenta => "magenta",
+            Tone::Peer => "peer",
+            Tone::DiffAdd => "diffAdd",
+            Tone::DiffRemove => "diffRemove",
+            Tone::DiffContext => "diffContext",
+            Tone::DiffNumber => "diffNumber",
+        }
+    }
+}
+
+impl Band {
+    pub fn raw(self) -> &'static str {
+        match self {
+            Band::None => "none",
+            Band::User => "user",
+            Band::Output => "output",
+        }
+    }
+}
+
 pub mod glyph {
     pub const PROMPT: &str = "❯";
     pub const BULLET: &str = "●";

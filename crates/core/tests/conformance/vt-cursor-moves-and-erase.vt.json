@@ -1,0 +1,6 @@
+{
+  "name": "cursor-moves-and-erase",
+  "cols": 12,
+  "rows": 5,
+  "input": "row 1\r\nrow 2\r\nrow 3\r\nrow 4\r\nrow 5\u001b[2;3H\u001b7XY\u001b[5;1H\u001b8Z\u001b[3;1H\u001b[K\u001b[4;4H\u001b[1K\u001b[1;8H\u001b[J"
+}

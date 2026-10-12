@@ -1,0 +1,6 @@
+{
+  "name": "alt-screen-active",
+  "cols": 12,
+  "rows": 3,
+  "input": "before\u001b[?1049h\u001b[Hfull\u001b[?25l"
+}

@@ -1,0 +1,5 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Two agents.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"⠿","gutterTone":"mark","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":true,"runs":[],"text":"Task(A) · working…","tone":"green"}
+{"band":"none","bold":false,"columns":2,"gutter":"⠿","gutterTone":"mark","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":true,"runs":[],"text":"Task(B) · working…","tone":"green"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"parent says","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

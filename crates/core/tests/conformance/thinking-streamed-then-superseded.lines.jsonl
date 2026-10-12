@@ -1,0 +1,4 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Think first.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"✻","gutterTone":"dim","inOpen":false,"indent":0,"italic":true,"nested":false,"pulsing":false,"runs":[],"text":"Weighing the options, fully.","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Option B.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

@@ -1,0 +1,45 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "u-45",
+      "kind": "user",
+      "text": "A long prompt that keeps going A long prompt that keeps going A long prompt that keeps going A long prompt that keeps going A long prompt that keeps going A long prompt that keeps going A long prompt that keeps going A long prompt that keeps going end."
+    },
+    {
+      "id": "a-46-0",
+      "kind": "assistant_text",
+      "streaming": false,
+      "text": "漢字かな交じり文 界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界界 then emoji 🙂👍🏽 and a URL https://example.com/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/segment/end"
+    },
+    {
+      "id": "toolu_long",
+      "input": {
+        "command": "echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "kind": "tool_call",
+      "name": "Bash",
+      "result": {
+        "isError": false,
+        "text": "output line 1\noutput line 2\noutput line 3\noutput line 4\noutput line 5\noutput line 6\noutput line 7\noutput line 8\noutput line 9\noutput line 10\noutput line 11\noutput line 12\noutput line 13\noutput line 14\noutput line 15\noutput line 16\noutput line 17\noutput line 18\noutput line 19\noutput line 20\noutput line 21\noutput line 22\noutput line 23\noutput line 24\noutput line 25\noutput line 26\noutput line 27\noutput line 28\noutput line 29\noutput line 30"
+      },
+      "status": "settled",
+      "ts": 1760000006600
+    },
+    {
+      "durationMs": 42000,
+      "id": "turn-7",
+      "isError": false,
+      "kind": "turn_result",
+      "subtype": "success",
+      "totalCostUsd": 0.12
+    }
+  ],
+  "lastSeq": 8,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "idle",
+  "totalCostUsd": 0.12
+}

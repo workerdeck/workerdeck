@@ -1,0 +1,6 @@
+{
+  "name": "autowrap-off",
+  "cols": 8,
+  "rows": 3,
+  "input": "\u001b[?7labcdefghijklmn\u001b[?7h\r\nok"
+}

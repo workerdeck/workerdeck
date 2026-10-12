@@ -1,0 +1,35 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "sh-row",
+      "kind": "shell",
+      "shell": {
+        "bytes": 12,
+        "cols": 120,
+        "command": "npm test",
+        "cwd": "/tmp/p",
+        "endReason": "exit",
+        "endedAt": 2000,
+        "exitCode": 0,
+        "id": "sh_abc",
+        "label": "npm test",
+        "ordinal": 3,
+        "owner": "user",
+        "rows": 40,
+        "sessionId": "s1",
+        "startedAt": 1000,
+        "status": "exited"
+      },
+      "text": "all good",
+      "truncated": false
+    }
+  ],
+  "lastSeq": 4,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "running",
+  "totalCostUsd": 0
+}

@@ -1,0 +1,35 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "lc-1",
+      "kind": "notice",
+      "level": "info",
+      "text": "$ ls\nREADME.md"
+    },
+    {
+      "id": "mix-1#0",
+      "kind": "notice",
+      "level": "info",
+      "text": "$ ls\nREADME.md"
+    },
+    {
+      "id": "mix-1#1",
+      "kind": "notice",
+      "level": "error",
+      "text": "$ nope\nnot found"
+    },
+    {
+      "id": "mix-1",
+      "kind": "user",
+      "text": "what did that print?"
+    }
+  ],
+  "lastSeq": 5,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "running",
+  "totalCostUsd": 0
+}

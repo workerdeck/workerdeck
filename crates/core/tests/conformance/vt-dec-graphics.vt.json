@@ -1,0 +1,6 @@
+{
+  "name": "dec-graphics",
+  "cols": 12,
+  "rows": 3,
+  "input": "\u001b(0lqqk\r\nx  x\r\nmqqj\u001b(B ok"
+}

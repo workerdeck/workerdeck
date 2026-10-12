@@ -1,0 +1,6 @@
+{
+  "name": "title-and-bell",
+  "cols": 20,
+  "rows": 2,
+  "input": "\u001b]0;my title\u0007hi\u0007\u001b]2;second\u001b\\"
+}

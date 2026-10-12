@@ -1,0 +1,22 @@
+{
+  "cwd": "/work/acme",
+  "defaultModel": "claude-opus-5-5",
+  "items": [],
+  "lastSeq": 6,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "producedFiles": {
+    "/work/acme/out.png": {
+      "bytes": 512,
+      "fileId": "f1",
+      "mediaType": "image/png"
+    }
+  },
+  "sdkSessionId": "sdk-conformance",
+  "status": "running",
+  "toolTitles": {
+    "mcp__acme__deploy": "Deploy"
+  },
+  "totalCostUsd": 0
+}

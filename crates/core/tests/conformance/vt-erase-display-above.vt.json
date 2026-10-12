@@ -1,0 +1,6 @@
+{
+  "name": "erase-display-above",
+  "cols": 10,
+  "rows": 4,
+  "input": "ab 1\r\nab 2\r\nab 3\r\nab 4\u001b[3;2H\u001b[1J"
+}

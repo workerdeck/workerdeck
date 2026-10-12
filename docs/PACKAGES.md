@@ -2452,6 +2452,28 @@ shrinks. CI runs `pnpm fixtures:golden --check`, so a reducer change that moves 
 until the goldens are regenerated, and the `rust` job then shows what the port must follow. Case
 ids come from the tape's running counter, so inserting a case renumbers the ones after it: append.
 
+**The planner and the VT screen have no TypeScript counterpart** (the web has no line planner and
+draws shells with xterm.js), so their goldens are owned by the **Swift kit** until iOS moves onto
+the core. `ConformanceGoldenTests` in `WorkerDeckKit` plans every case's transcript into
+`<case>.lines.jsonl` (one JSON line per planned line: tones, gutter, text, inline runs as
+`[utf8Start, utf8Len, intent]`, columns, indent, band, flags) and feeds every
+`conformance/vt-corpus.ts` input (`vt-<case>.vt.json`) into a `VTScreen`, writing
+`vt-<case>.screen.json` (cursor, modes, title, bell count, every row as styled runs). With
+`WD_CONFORMANCE_WRITE=1` it rewrites them; without, it fails on any drift, so a kit change that
+moves a line shows up in `swift test`. CI cannot run Swift, so after adding a case or changing
+the kit, run `WD_CONFORMANCE_WRITE=1 swift test --filter Conformance` in `apps/ios/WorkerDeckKit`
+and commit the result; the Rust test `every_case_has_its_kit_golden` fails in CI when one is
+missing. Tap targets (`press`) and image boxes are not in the line goldens yet: the port has
+neither, and adding them now would mark every case pending and hide drift in what is ported.
+On the Mac the kit parses inline markdown with Apple's parser, so the line goldens follow
+CommonMark there (intraword `_` is literal, for instance); avoid an unclosed `**`, where Apple's
+parser keeps the markers and the portable one drops them.
+
+Known representational gap: the kit and the port decode an `addressed` thinking block as plain
+text, where the TypeScript reducer keeps a `thinking` item with `addressed: true`. The planned
+lines agree; the projection does not, so `thinking-addressed` is pending until the port follows
+TypeScript.
+
 **The engine's binary wire** (core to Kotlin, little-endian, no version byte yet):
 
 - Transcript snapshot: `u32 items, u32 rows, u32 totalLines, u32 lineCount`, then per line
