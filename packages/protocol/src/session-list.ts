@@ -657,5 +657,8 @@ export function clearFilters(config: ViewConfig): ViewConfig {
     shells: config.shells,
     tasks: config.tasks,
     customGroups: config.customGroups,
+    collapsedTeams: config.collapsedTeams,
+    collapsedGroups: config.collapsedGroups,
+    earlierOpen: config.earlierOpen,
   }
 }

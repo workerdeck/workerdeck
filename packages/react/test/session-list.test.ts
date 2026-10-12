@@ -234,6 +234,13 @@ describe('clearFilters', () => {
     expect(next.shells).toBe('all')
     expect(next.tasks).toBe('none')
   })
+
+  it('keeps what the reader folded, which is layout too', () => {
+    const next = clearFilters(config({ search: 'x', collapsedTeams: ['mac:A'], collapsedGroups: ['custom:g'], earlierOpen: true }))
+    expect(next.collapsedTeams).toEqual(['mac:A'])
+    expect(next.collapsedGroups).toEqual(['custom:g'])
+    expect(next.earlierOpen).toBe(true)
+  })
 })
 
 describe('filter engagement', () => {
