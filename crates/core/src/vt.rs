@@ -298,6 +298,34 @@ impl LineRing {
         self.start = 0;
         self.count = 0;
     }
+    fn pop_last(&mut self) -> Option<Vec<Cell>> {
+        if self.count == 0 {
+            return None;
+        }
+        self.count -= 1;
+        let slot = (self.start + self.count) % self.capacity;
+        Some(std::mem::take(&mut self.storage[slot]))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VtKey {
+    Char(char),
+    Enter,
+    Tab,
+    Backspace,
+    Escape,
+    Up,
+    Down,
+    Left,
+    Right,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Delete,
+    Function(u8),
+    Control(char),
 }
 
 const DEC_GRAPHICS: [char; 31] = [
@@ -419,6 +447,122 @@ impl VtScreen {
             self.dirty = false;
             self.revision += 1;
         }
+    }
+
+    pub fn resize(&mut self, cols: usize, rows: usize) {
+        let (cols, rows) = (cols.max(1), rows.max(1));
+        if cols == self.cols && rows == self.rows {
+            return;
+        }
+        let mut active = std::mem::replace(&mut self.buffer, Buffer::new(1, 1, &BLANK));
+        self.resize_buffer(&mut active, cols, rows, !self.alt_screen_active);
+        self.buffer = active;
+        if let Some(mut main) = self.inactive.take() {
+            self.resize_buffer(&mut main, cols, rows, true);
+            self.inactive = Some(main);
+        }
+        let mut stops = default_tab_stops(cols);
+        let kept = self.cols.min(cols);
+        stops[..kept].copy_from_slice(&self.tab_stops[..kept]);
+        self.tab_stops = stops;
+        self.cols = cols;
+        self.rows = rows;
+        self.revision += 1;
+    }
+
+    fn resize_buffer(&mut self, target: &mut Buffer, cols: usize, rows: usize, uses_scrollback: bool) {
+        for line in &mut target.grid {
+            if line.len() > cols {
+                if line[cols].continuation {
+                    line[cols - 1].text = CellText::None;
+                }
+                line.truncate(cols);
+            } else {
+                line.resize(cols, BLANK);
+            }
+        }
+        let mut excess = target.grid.len().saturating_sub(rows);
+        while excess > 0 {
+            if target.grid.len() - 1 > target.cursor_row {
+                target.grid.pop();
+            } else {
+                let line = target.grid.remove(0);
+                if uses_scrollback {
+                    self.scrollback.push(Self::trimmed(line));
+                }
+                target.cursor_row = target.cursor_row.saturating_sub(1);
+            }
+            excess -= 1;
+        }
+        while target.grid.len() < rows {
+            let restorable = uses_scrollback && target.cursor_row + 1 == target.grid.len();
+            match restorable.then(|| self.scrollback.pop_last()).flatten() {
+                Some(mut line) => {
+                    line.resize(cols, BLANK);
+                    target.grid.insert(0, line);
+                    target.cursor_row += 1;
+                }
+                None => target.grid.push(vec![BLANK; cols]),
+            }
+        }
+        target.scroll_top = 0;
+        target.scroll_bottom = rows - 1;
+        target.cursor_col = target.cursor_col.min(cols - 1);
+        target.cursor_row = target.cursor_row.min(rows - 1);
+        target.pending_wrap = false;
+        if let Some(saved) = &mut target.saved {
+            saved.col = saved.col.min(cols - 1);
+            saved.row = saved.row.min(rows - 1);
+        }
+    }
+
+    pub fn encode(&self, key: VtKey) -> String {
+        let arrow = if self.application_cursor_keys { "\u{1b}O" } else { "\u{1b}[" };
+        let control = |c: char| char::from_u32(c as u32).map(String::from).unwrap_or_default();
+        match key {
+            VtKey::Char(c) => c.to_string(),
+            VtKey::Enter => "\r".into(),
+            VtKey::Tab => "\t".into(),
+            VtKey::Backspace => "\u{7f}".into(),
+            VtKey::Escape => "\u{1b}".into(),
+            VtKey::Up => format!("{arrow}A"),
+            VtKey::Down => format!("{arrow}B"),
+            VtKey::Right => format!("{arrow}C"),
+            VtKey::Left => format!("{arrow}D"),
+            VtKey::Home => format!("{arrow}H"),
+            VtKey::End => format!("{arrow}F"),
+            VtKey::PageUp => "\u{1b}[5~".into(),
+            VtKey::PageDown => "\u{1b}[6~".into(),
+            VtKey::Delete => "\u{1b}[3~".into(),
+            VtKey::Function(n) => match n {
+                1 => "\u{1b}OP",
+                2 => "\u{1b}OQ",
+                3 => "\u{1b}OR",
+                4 => "\u{1b}OS",
+                5 => "\u{1b}[15~",
+                6 => "\u{1b}[17~",
+                7 => "\u{1b}[18~",
+                8 => "\u{1b}[19~",
+                9 => "\u{1b}[20~",
+                10 => "\u{1b}[21~",
+                11 => "\u{1b}[23~",
+                12 => "\u{1b}[24~",
+                _ => "",
+            }
+            .into(),
+            VtKey::Control(c) => match c as u32 {
+                0x61..=0x7A => control((c as u8 - 0x60) as char),
+                0x41..=0x5F => control((c as u8 - 0x40) as char),
+                0x40 | 0x20 => "\0".into(),
+                0x3F => "\u{7f}".into(),
+                _ => String::new(),
+            },
+        }
+    }
+
+    pub fn encode_paste(&self, text: &str) -> String {
+        let body = text.replace("\r\n", "\r").replace('\n', "\r");
+        if self.bracketed_paste { format!("\u{1b}[200~{body}\u{1b}[201~") } else { body }
     }
 
     pub fn take_responses(&mut self) -> String {
