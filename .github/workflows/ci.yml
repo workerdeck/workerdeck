@@ -27,3 +27,17 @@ jobs:
         with:
           name: workerdeck-vsix
           path: apps/vscode/workerdeck.vsix
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo install cargo-ndk --locked
+      - run: cargo ndk -t arm64-v8a build -p wd-native-jni --release
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}

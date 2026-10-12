@@ -50,3 +50,8 @@ xcuserdata/
 
 # Storybook static build (packages/ui). The catalog is dev-only and unpublished.
 storybook-static/
+
+# Rust (crates/)
+/target/
+/crates/bench/fixtures/session.jsonl
+/crates/bench/fixtures/shell.txt

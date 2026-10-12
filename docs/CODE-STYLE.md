@@ -147,6 +147,16 @@ carries critical information must reach `docs/` before it is removed, not instea
   and anything relying on lexical `this`.
 - **Keep function signatures on one line.** Width 140 makes this the default; don't hand-wrap.
 
+## Rust (`crates/`)
+
+- **rustfmt** formats, at `max_width = 140` (`rustfmt.toml`) for the same reason oxfmt does.
+- **clippy** at `-D warnings` in CI (`cargo clippy --all-targets -- -D warnings`); the workspace
+  lints table turns on `clippy::all`. Fix the lint rather than `#[allow]` it, unless the allow
+  names why on the same line.
+- The comment rule above applies unchanged, and **`///` and `//!` doc comments are the Rust
+  `/**`**: none, the crate map and the port notes live in `docs/PACKAGES.md` § `crates/`.
+- A port keeps the Swift kit's names (snake_cased), so a reader can hold the two side by side.
+
 ## Known formatter tradeoff
 
 Single-line braced guards (`if (!record) { continue }`) do not survive oxfmt - prettier

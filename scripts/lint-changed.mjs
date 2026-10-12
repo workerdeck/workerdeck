@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 const LINT_EXT = /\.(ts|tsx|mjs|js|jsx)$/
 // Every text file, because the em-dash backlog is mostly markdown and Swift, which oxlint
 // cannot see. One scan covers what four linters would not.
-const TEXT_EXT = /\.(ts|tsx|mjs|mts|js|jsx|md|swift|astro|css|html|json|ya?ml|sh|svg)$/
+const TEXT_EXT = /\.(ts|tsx|mjs|mts|js|jsx|md|swift|rs|toml|kts?|astro|css|html|json|ya?ml|sh|svg)$/
 const EM_DASH = '\u2014'
 const EN_DASH = '\u2013'
 const DASHES = [EM_DASH, EN_DASH]

@@ -2400,6 +2400,59 @@ forwarder hooked to `notifications.onNotification` in-process. It lives here and
 the forwarder does not exist. Environment is per device token, never a flag, and so is the
 `notify` event allowlist that decides which of the four notification types the forwarder sends
 that device (`DEFAULT_NOTIFY` = everything but `session_closed`) - `docs/GOTCHAS.md` §APNs.
+## `crates/` (Rust, native clients only)
+
+One Rust core for the native apps: Android over JNI now, iOS over a C ABI later, so Kotlin never
+becomes a third hand mirror of the protocol and the reducer. **TypeScript stays the source of
+truth** for the wire and the shared rules; the web, VS Code, the gateway and the relay never load
+Rust (V8 replays the spike fixture in 72 ms, so there is nothing to win there). Why Rust and not
+the Swift kit cross-compiled: `docs/NATIVE-CORE-SPIKE.md`.
+
+A Cargo workspace at the repo root (`Cargo.toml`, `rust-toolchain.toml`, `rustfmt.toml`), outside
+pnpm's globs and invisible to turbo:
+
+| Crate | Directory | What |
+| --- | --- | --- |
+| `wd-native` | `crates/core` | Pure, no FFI: decode, `apply_event`, rows, planner, markdown, height book, VT screen, `Engine` |
+| `wd-native-jni` | `crates/jni` | JNI shim, builds `libwdcore.so` for `bi.atomic.workerdeck.core.NativeCore` |
+| `wd-native-bench` | `crates/bench` | `wdbench`, the spike's workloads plus the `dump` / `dump-vt` cross-check modes |
+
+Every module in `wd-native` is a port of a `WorkerDeckKit` file and keeps its names, so the two
+can be read side by side until iOS moves onto the core:
+
+| Rust | Swift (`apps/ios/WorkerDeckKit/Sources/WorkerDeckKit`) |
+| --- | --- |
+| `protocol.rs` | `ProtocolTypes.swift`: unknown frame and event types, and modeled types with missing or mistyped required fields, decode to `Unknown` (the Swift `catch { .unknown }`); a scalar of the wrong shape reads as absent |
+| `transcript.rs` | `Transcript.swift` (`applyEvent`); text is `Arc<str>` so a row rebuild clones by refcount |
+| `rows.rs` | `Terminal/TerminalBlocks.swift` + `TerminalRows.build`, fold on, no recap boundary or brief rows yet |
+| `planner.rs` | `Terminal/TerminalPlanner.swift` with an empty expansion, plus `TerminalMetrics`, `TermFmt`, `ResultPreview`, `LiveTool` |
+| `markdown.rs` | `MarkdownBlocks.swift` and a portable inline parser (Apple's `AttributedString(markdown:)` is not available off Darwin, and differs on an unclosed `**`) |
+| `cells.rs` | `Terminal/TerminalCells.swift`: extended graphemes, the plain-ASCII fast path, the word wrapper |
+| `book.rs` | `Terminal/TerminalHeightBook.swift` + `TerminalPlanCache`; 256 or more misses plan in parallel |
+| `vt.rs` | `Terminal/VTScreen.swift` + `VTTypes.swift`; parsing is the `vte` crate, dispatch mirrors the Swift handlers |
+
+**The port covers what the spike fixture exercises and no more.** Missing: shell, compaction and
+file items, attachments, peer rows, TodoWrite, diffs, images, expansion states, the deferred `!`
+flush, custom tool titles, VT resize and key encoding, and every view model. The plan, with its
+phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
+
+**The engine's binary wire** (core to Kotlin, little-endian, no version byte yet):
+
+- Transcript snapshot: `u32 items, u32 rows, u32 totalLines, u32 lineCount`, then per line
+  `u8 tone, u8 gutterTone, u8 flags (1 bold, 2 italic, 4 nested), u8 indent, u16+bytes gutter,
+  u32+bytes text, u16 runCount`, runs of `(u32 byteStart, u32 byteLen, u8 intent)` with intent
+  bits 1 em, 2 strong, 4 code, 32 strike. Tones in order: fg, bright, dim, faint, mark, blue,
+  green, red, yellow, magenta, peer, diffAdd, diffRemove, diffContext, diffNumber.
+- VT snapshot: `u16 cols, u16 rows`, then per row `u16 runCount`, runs of `u32 fg, u32 bg`
+  (0 default, `0x01000000|index`, `0x02rrggbb`), `u8 attrs` (1 bold, 2 dim, 4 italic,
+  8 underline, 16 inverse, 32 strike), `u32+bytes text`.
+
+**JNI surface** (`external fun`s on `object NativeCore`): `create(widthPx, cellPx,
+linePx): Long`, `ingest(handle, batch: ByteArray): Int` (newline-separated `ServerFrame`s),
+`layout(handle)`, `snapshot(handle, maxLines): ByteArray`, `vtFeed(handle, utf8)`,
+`vtSnapshot(handle): ByteArray`, `bench(fixtureDir): String`, `destroy(handle)`. The handle is a
+boxed `Engine`; one engine per session, owned by one thread.
+
 ## `apps/docs`
 
 Astro site → Pages via `docs.yml`. `examples` - dev entries with root-level deps

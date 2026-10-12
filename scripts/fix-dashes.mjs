@@ -6,7 +6,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const TEXT_EXT = /\.(ts|tsx|mjs|mts|js|jsx|md|swift|astro|css|html|json|ya?ml|sh|svg)$/
+const TEXT_EXT = /\.(ts|tsx|mjs|mts|js|jsx|md|swift|rs|toml|kts?|astro|css|html|json|ya?ml|sh|svg)$/
 // The two characters the sweep hunts for, so this file always trips its own check.
 const EM_DASH = '—' // wd-em-dash-ok
 const EN_DASH = '–' // wd-em-dash-ok

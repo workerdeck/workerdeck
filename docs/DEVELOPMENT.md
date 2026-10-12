@@ -68,6 +68,23 @@ In-package imports use explicit `.ts` extensions. Releases go through **pnpm onl
 `npm publish` would ship `workspace:*` verbatim; see the packaging section of `docs/GOTCHAS.md`
 before touching versioning or the publish workflow.
 
+## Rust (`crates/`)
+
+A Cargo workspace at the repo root, outside pnpm and turbo: `pnpm test` never runs it, CI runs it
+as its own `rust` job. The toolchain is pinned in `rust-toolchain.toml` (1.98, with `rustfmt`,
+`clippy` and the two Android targets), so `rustup` installs it on the first `cargo` call.
+
+```sh
+cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+node crates/bench/fixtures/gen.mjs            # synthetic, deterministic: session.jsonl + shell.txt (gitignored)
+cargo run --release -p wd-native-bench        # the workloads, as JSON; `-- <dir> dump|dump-vt` for the cross-checks
+ANDROID_NDK_HOME=~/Library/Android/android-ndk-r30 cargo ndk -t arm64-v8a -t x86_64 build -p wd-native-jni --release
+```
+
+Android needs `cargo install cargo-ndk` and an NDK (r30 locally; CI uses the runner's
+`ANDROID_NDK_LATEST_HOME`). The stripped arm64 `libwdcore.so` is about 0.7 MB. The fixtures are
+synthetic by rule: never real transcripts in the repo.
+
 ## Hot reload (`--hot-reload`)
 
 Restarting the gateway kills every engine child with it, and dormancy brings a session back
