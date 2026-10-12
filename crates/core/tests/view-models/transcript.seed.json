@@ -1,0 +1,414 @@
+{
+  "input": {
+    "fn": "transcriptScript",
+    "calls": [
+      [
+        [
+          [
+            "seed",
+            {
+              "id": "s1",
+              "status": "running",
+              "cwd": "/work/snapshot",
+              "createdAt": 1760000000000,
+              "lastSeq": 9,
+              "pendingPermissionCount": 0,
+              "engine": "codex",
+              "model": "gpt-6-sol",
+              "effort": "high",
+              "permissionMode": "acceptEdits",
+              "sdkSessionId": "sdk-snapshot",
+              "totalCostUsd": 4.5,
+              "costUsd": 1.25,
+              "usageByModel": {
+                "gpt-6-sol": {
+                  "input": 10,
+                  "output": 20,
+                  "cacheWrite5m": 0,
+                  "cacheWrite1h": 0,
+                  "cacheRead": 5
+                }
+              },
+              "engineAsleep": true
+            }
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            "seed",
+            {
+              "id": "s1",
+              "status": "running",
+              "cwd": "/work/snapshot",
+              "createdAt": 1760000000000,
+              "lastSeq": 9,
+              "pendingPermissionCount": 0,
+              "engine": "codex",
+              "model": "gpt-6-sol",
+              "effort": "high",
+              "permissionMode": "acceptEdits",
+              "sdkSessionId": "sdk-snapshot",
+              "totalCostUsd": 4.5,
+              "costUsd": 1.25,
+              "usageByModel": {
+                "gpt-6-sol": {
+                  "input": 10,
+                  "output": 20,
+                  "cacheWrite5m": 0,
+                  "cacheWrite1h": 0,
+                  "cacheRead": 5
+                }
+              },
+              "engineAsleep": true
+            }
+          ],
+          [
+            "events",
+            "basic-turn"
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            "events",
+            "basic-turn"
+          ],
+          [
+            "seed",
+            {
+              "id": "s1",
+              "status": "running",
+              "cwd": "/work/snapshot",
+              "createdAt": 1760000000000,
+              "lastSeq": 9,
+              "pendingPermissionCount": 0,
+              "engine": "codex",
+              "model": "gpt-6-sol",
+              "effort": "high",
+              "permissionMode": "acceptEdits",
+              "sdkSessionId": "sdk-snapshot",
+              "totalCostUsd": 4.5,
+              "costUsd": 1.25,
+              "usageByModel": {
+                "gpt-6-sol": {
+                  "input": 10,
+                  "output": 20,
+                  "cacheWrite5m": 0,
+                  "cacheWrite1h": 0,
+                  "cacheRead": 5
+                }
+              },
+              "engineAsleep": true
+            }
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            "effort",
+            null
+          ],
+          [
+            "seed",
+            {
+              "id": "s1",
+              "status": "running",
+              "cwd": "/work/snapshot",
+              "createdAt": 1760000000000,
+              "lastSeq": 9,
+              "pendingPermissionCount": 0,
+              "engine": "codex",
+              "model": "gpt-6-sol",
+              "effort": "high",
+              "permissionMode": "acceptEdits",
+              "sdkSessionId": "sdk-snapshot",
+              "totalCostUsd": 4.5,
+              "costUsd": 1.25,
+              "usageByModel": {
+                "gpt-6-sol": {
+                  "input": 10,
+                  "output": 20,
+                  "cacheWrite5m": 0,
+                  "cacheWrite1h": 0,
+                  "cacheRead": 5
+                }
+              },
+              "engineAsleep": true
+            }
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            "effort",
+            "low"
+          ],
+          [
+            "seed",
+            {
+              "id": "s1",
+              "status": "running",
+              "cwd": "/work/snapshot",
+              "createdAt": 1760000000000,
+              "lastSeq": 9,
+              "pendingPermissionCount": 0,
+              "engine": "codex",
+              "model": "gpt-6-sol",
+              "effort": "high",
+              "permissionMode": "acceptEdits",
+              "sdkSessionId": "sdk-snapshot",
+              "totalCostUsd": 4.5,
+              "costUsd": 1.25,
+              "usageByModel": {
+                "gpt-6-sol": {
+                  "input": 10,
+                  "output": 20,
+                  "cacheWrite5m": 0,
+                  "cacheWrite1h": 0,
+                  "cacheRead": 5
+                }
+              },
+              "engineAsleep": true
+            }
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            "seed",
+            {
+              "id": "s2",
+              "status": "idle",
+              "cwd": "/work/alpha",
+              "createdAt": 1760000000000,
+              "lastSeq": 0,
+              "pendingPermissionCount": 0
+            }
+          ]
+        ]
+      ]
+    ]
+  },
+  "output": [
+    {
+      "costUsd": 1.25,
+      "cwd": "/work/snapshot",
+      "effort": "high",
+      "engine": "codex",
+      "engineAsleep": true,
+      "items": [],
+      "lastSeq": 0,
+      "model": "gpt-6-sol",
+      "pendingApprovals": [],
+      "permissionMode": "acceptEdits",
+      "sdkSessionId": "sdk-snapshot",
+      "status": "running",
+      "totalCostUsd": 4.5,
+      "usageByModel": {
+        "gpt-6-sol": {
+          "cacheRead": 5,
+          "cacheWrite1h": 0,
+          "cacheWrite5m": 0,
+          "input": 10,
+          "output": 20
+        }
+      }
+    },
+    {
+      "contextUsage": {
+        "categories": [],
+        "maxTokens": 200000,
+        "percentage": 12,
+        "totalTokens": 24000
+      },
+      "costUsd": 1.25,
+      "cwd": "/work/acme",
+      "effort": "high",
+      "engine": "codex",
+      "engineAsleep": true,
+      "items": [
+        {
+          "id": "u-1",
+          "kind": "user",
+          "text": "Read the config and tell me the port."
+        },
+        {
+          "id": "t-2-0",
+          "kind": "thinking",
+          "text": "The port lives in the config file."
+        },
+        {
+          "id": "toolu_read",
+          "input": {
+            "file_path": "/work/acme/config.json"
+          },
+          "kind": "tool_call",
+          "name": "Read",
+          "result": {
+            "isError": false,
+            "text": "{\n  \"port\": 8080\n}"
+          },
+          "status": "settled",
+          "ts": 1760000003000
+        },
+        {
+          "id": "a-4-0",
+          "kind": "assistant_text",
+          "streaming": false,
+          "text": "The server listens on **8080**."
+        },
+        {
+          "durationMs": 4200,
+          "id": "turn-14",
+          "isError": false,
+          "kind": "turn_result",
+          "subtype": "success",
+          "totalCostUsd": 0.03
+        }
+      ],
+      "lastSeq": 15,
+      "model": "claude-opus-5-5",
+      "pendingApprovals": [],
+      "permissionMode": "default",
+      "sdkSessionId": "sdk-conformance",
+      "status": "idle",
+      "totalCostUsd": 0.03,
+      "usageByModel": {
+        "gpt-6-sol": {
+          "cacheRead": 5,
+          "cacheWrite1h": 0,
+          "cacheWrite5m": 0,
+          "input": 10,
+          "output": 20
+        }
+      }
+    },
+    {
+      "contextUsage": {
+        "categories": [],
+        "maxTokens": 200000,
+        "percentage": 12,
+        "totalTokens": 24000
+      },
+      "costUsd": 1.25,
+      "cwd": "/work/acme",
+      "effort": "high",
+      "engine": "codex",
+      "items": [
+        {
+          "id": "u-1",
+          "kind": "user",
+          "text": "Read the config and tell me the port."
+        },
+        {
+          "id": "t-2-0",
+          "kind": "thinking",
+          "text": "The port lives in the config file."
+        },
+        {
+          "id": "toolu_read",
+          "input": {
+            "file_path": "/work/acme/config.json"
+          },
+          "kind": "tool_call",
+          "name": "Read",
+          "result": {
+            "isError": false,
+            "text": "{\n  \"port\": 8080\n}"
+          },
+          "status": "settled",
+          "ts": 1760000003000
+        },
+        {
+          "id": "a-4-0",
+          "kind": "assistant_text",
+          "streaming": false,
+          "text": "The server listens on **8080**."
+        },
+        {
+          "durationMs": 4200,
+          "id": "turn-14",
+          "isError": false,
+          "kind": "turn_result",
+          "subtype": "success",
+          "totalCostUsd": 0.03
+        }
+      ],
+      "lastSeq": 15,
+      "model": "claude-opus-5-5",
+      "pendingApprovals": [],
+      "permissionMode": "default",
+      "sdkSessionId": "sdk-conformance",
+      "status": "idle",
+      "totalCostUsd": 0.03,
+      "usageByModel": {
+        "gpt-6-sol": {
+          "cacheRead": 5,
+          "cacheWrite1h": 0,
+          "cacheWrite5m": 0,
+          "input": 10,
+          "output": 20
+        }
+      }
+    },
+    {
+      "costUsd": 1.25,
+      "cwd": "/work/snapshot",
+      "engine": "codex",
+      "items": [],
+      "lastSeq": 1,
+      "model": "gpt-6-sol",
+      "pendingApprovals": [],
+      "permissionMode": "acceptEdits",
+      "sdkSessionId": "sdk-snapshot",
+      "status": "starting",
+      "totalCostUsd": 4.5,
+      "usageByModel": {
+        "gpt-6-sol": {
+          "cacheRead": 5,
+          "cacheWrite1h": 0,
+          "cacheWrite5m": 0,
+          "input": 10,
+          "output": 20
+        }
+      }
+    },
+    {
+      "costUsd": 1.25,
+      "cwd": "/work/snapshot",
+      "effort": "low",
+      "engine": "codex",
+      "items": [],
+      "lastSeq": 1,
+      "model": "gpt-6-sol",
+      "pendingApprovals": [],
+      "permissionMode": "acceptEdits",
+      "sdkSessionId": "sdk-snapshot",
+      "status": "starting",
+      "totalCostUsd": 4.5,
+      "usageByModel": {
+        "gpt-6-sol": {
+          "cacheRead": 5,
+          "cacheWrite1h": 0,
+          "cacheWrite5m": 0,
+          "input": 10,
+          "output": 20
+        }
+      }
+    },
+    {
+      "cwd": "/work/alpha",
+      "items": [],
+      "lastSeq": 0,
+      "pendingApprovals": [],
+      "status": "idle",
+      "totalCostUsd": 0
+    }
+  ]
+}

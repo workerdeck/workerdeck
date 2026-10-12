@@ -2,6 +2,10 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use wd_native::projection::project;
+use wd_native::protocol::{Frame, decode_frame};
+use wd_native::transcript::{TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info};
 use wd_native::rest::{AgentInfo, ByModel, ChecklistItem, Entries, ModelOption, SessionInfo, SubagentInfo, TokenUsage};
 use wd_native::vm::session_list::{self as sl, CustomGroup, SessionRow, ViewConfig};
 use wd_native::vm::status_label::StatusLabelRead;
@@ -306,6 +310,43 @@ fn status_label_fn(fn_name: &str, a: &Args) -> Value {
     }
 }
 
+fn transcript_fn(fn_name: &str, a: &Args) -> Value {
+    assert_eq!(fn_name, "transcriptScript", "transcript.{fn_name} has no Rust binding");
+    let mut state = TranscriptState::default();
+    let apply = |state: &mut TranscriptState, line: &[u8]| {
+        if let Some(Frame::Event(event)) = decode_frame(line) {
+            apply_event(state, event);
+        }
+    };
+    for op in a.raw(0).as_array().unwrap() {
+        let op = op.as_array().unwrap();
+        let text = |index: usize| op[index].as_str().unwrap().to_owned();
+        match op[0].as_str().unwrap() {
+            "events" => {
+                let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/conformance/{}.events.jsonl", text(1)));
+                for line in std::fs::read(path).unwrap().split(|&b| b == b'\n').filter(|line| !line.is_empty()) {
+                    apply(&mut state, line);
+                }
+            }
+            "effort" => {
+                let frame = json!({"type": "event", "event": {"type": "effort_changed", "effort": op[1], "seq": state.last_seq + 1, "ts": 1}});
+                apply(&mut state, frame.to_string().as_bytes());
+            }
+            "seed" => seed_from_session_info(&mut state, &serde_json::from_value(op[1].clone()).unwrap()),
+            "hydrateResult" => {
+                hydrate_tool_result(&mut state, &text(1), &text(2));
+            }
+            "hydrateShell" => {
+                hydrate_shell_row(&mut state, &text(1), (!op[2].is_null()).then(|| Arc::new(op[2].clone())));
+            }
+            _ => {
+                hydrate_shell_output(&mut state, &text(1), &text(2));
+            }
+        }
+    }
+    project(&state)
+}
+
 fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
     let a = Args(args);
     match module {
@@ -319,6 +360,7 @@ fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
         "tool-titles" => tool_titles_fn(fn_name, &a),
         "model-menu" => model_menu_fn(fn_name, &a),
         "status-label" => status_label_fn(fn_name, &a),
+        "transcript" => transcript_fn(fn_name, &a),
         _ => panic!("unknown view-model module {module}"),
     }
 }

@@ -171,7 +171,7 @@ pub enum SessionStatus {
 }
 
 impl SessionStatus {
-    fn parse(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         Some(match s {
             "starting" => Self::Starting,
             "running" => Self::Running,
@@ -197,6 +197,7 @@ impl SessionStatus {
     }
 }
 
+#[derive(Clone)]
 pub struct ContextUsage {
     pub total_tokens: i64,
     pub max_tokens: i64,

@@ -1,4 +1,5 @@
 use crate::protocol::{Body, ContentBlock, ContextUsage, Event, SessionStatus, ToolResultContent};
+use crate::rest::{EngineCapabilities, ProfileEngine, SessionInfo};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -198,13 +199,14 @@ pub struct ProducedFile {
     pub bytes: Option<f64>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct TranscriptState {
     pub status: Option<SessionStatus>,
     pub status_detail: Option<String>,
     pub engine_asleep: bool,
     pub model: Option<String>,
-    pub effort: Option<String>,
+    // Outer `None` is "never said"; `Some(None)` is an effort explicitly cleared, which a seed must not overwrite.
+    pub effort: Option<Option<String>>,
     pub cwd: Option<String>,
     pub sdk_session_id: Option<String>,
     pub models: Option<Arc<Value>>,
@@ -225,6 +227,101 @@ pub struct TranscriptState {
     pub cost_usd: Option<f64>,
     pub usage_by_model: Option<Arc<Value>>,
     pub last_seq: i64,
+    pub engine: Option<ProfileEngine>,
+    pub capabilities: Option<EngineCapabilities>,
+    pub session: Option<Arc<SessionInfo>>,
+}
+
+// The attach snapshot under the replayed events: with held state (a reconnect) the held status stands, since any
+// change since is a `status_changed` in the replay span. Spend comes from the snapshot when the log has none, because
+// a dormant wake starts a fresh log that no longer knows what the session cost.
+pub fn seed_from_session_info(state: &mut TranscriptState, info: &SessionInfo) {
+    let fresh = state.last_seq == 0;
+    if fresh {
+        state.status = SessionStatus::parse(&serde_json::to_value(info.status).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default());
+        state.engine_asleep = info.engine_asleep == Some(true);
+    }
+    state.engine = info.engine.or(state.engine);
+    if state.model.is_none() {
+        state.model = info.model.clone();
+    }
+    if state.effort.is_none() {
+        state.effort = info.effort.clone();
+    }
+    if state.permission_mode.is_none() {
+        state.permission_mode = info.permission_mode.and_then(|mode| serde_json::to_value(mode).ok()?.as_str().map(str::to_owned));
+    }
+    if state.cwd.is_none() {
+        state.cwd = Some(info.cwd.clone());
+    }
+    if state.sdk_session_id.is_none() {
+        state.sdk_session_id = info.sdk_session_id.clone();
+    }
+    state.capabilities = info.capabilities.clone();
+    if state.total_cost_usd == 0.0 {
+        state.total_cost_usd = info.total_cost_usd.unwrap_or(0.0);
+    }
+    state.cost_usd = state.cost_usd.or(info.cost_usd);
+    if state.usage_by_model.is_none() {
+        state.usage_by_model = info.usage_by_model.as_ref().and_then(|by| serde_json::to_value(by).ok()).map(Arc::new);
+    }
+    state.session = Some(Arc::new(info.clone()));
+}
+
+// Replaces a truncated head with the full text; the images survive, since their refs carry their own seq.
+pub fn hydrate_tool_result(state: &mut TranscriptState, tool_use_id: &str, text: &str) -> bool {
+    let mut changed = false;
+    for item in &mut state.items {
+        if let Item::ToolCall(call) = item
+            && &*call.id == tool_use_id
+            && let Some(result) = call.result.as_ref().filter(|result| result.truncated)
+        {
+            let result = ToolCallResult {
+                text: text.into(),
+                is_error: result.is_error,
+                truncated: false,
+                total_chars: None,
+                source_seq: None,
+                images: result.images.clone(),
+            };
+            let mut next = (**call).clone();
+            next.result = Some(result);
+            *call = Arc::new(next);
+            changed = true;
+        }
+    }
+    changed
+}
+
+// `shell` None is the 404: the record was swept or belongs to a gateway generation this one cannot answer for.
+pub fn hydrate_shell_row(state: &mut TranscriptState, shell_id: &str, shell: Option<Arc<Value>>) -> bool {
+    let Some(item) = find_shell(&mut state.items, shell_id) else { return false };
+    let mut next = (**item).clone();
+    match shell {
+        Some(shell) => {
+            next.shell = shell;
+            next.missing = false;
+        }
+        None => next.missing = true,
+    }
+    *item = Arc::new(next);
+    true
+}
+
+pub fn hydrate_shell_output(state: &mut TranscriptState, shell_id: &str, text: &str) -> bool {
+    let Some(item) = find_shell(&mut state.items, shell_id) else { return false };
+    let mut next = (**item).clone();
+    next.expanded = Some(text.into());
+    next.missing = false;
+    *item = Arc::new(next);
+    true
+}
+
+fn find_shell<'a>(items: &'a mut [Item], shell_id: &str) -> Option<&'a mut Arc<ShellItem>> {
+    items.iter_mut().find_map(|item| match item {
+        Item::Shell(shell) if shell.shell.get("id").and_then(Value::as_str) == Some(shell_id) => Some(shell),
+        _ => None,
+    })
 }
 
 fn set<V>(entries: &mut Vec<(String, V)>, key: String, value: V) {
@@ -462,7 +559,7 @@ pub fn apply_event(state: &mut TranscriptState, event: Event) {
                 state.model = model;
             }
         }
-        Body::EffortChanged(effort) => state.effort = effort,
+        Body::EffortChanged(effort) => state.effort = Some(effort),
         Body::PermissionModeChanged(mode) => state.permission_mode = Some(mode),
         Body::ContextUsage(usage) => state.context_usage = Some(usage),
         Body::RateLimit(info) => {

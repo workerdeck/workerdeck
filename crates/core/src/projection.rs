@@ -7,7 +7,7 @@ pub fn project(state: &TranscriptState) -> Value {
     put(&mut out, "statusDetail", state.status_detail.as_deref().map(Value::from));
     put(&mut out, "engineAsleep", state.engine_asleep.then_some(Value::Bool(true)));
     put(&mut out, "model", state.model.as_deref().map(Value::from));
-    put(&mut out, "effort", state.effort.as_deref().map(Value::from));
+    put(&mut out, "effort", state.effort.clone().flatten().map(Value::from));
     put(&mut out, "cwd", state.cwd.as_deref().map(Value::from));
     put(&mut out, "sdkSessionId", state.sdk_session_id.as_deref().map(Value::from));
     put(&mut out, "checklist", state.checklist.as_ref().and_then(|items| canonical(&Value::Array(items.clone()))));
@@ -56,6 +56,7 @@ pub fn project(state: &TranscriptState) -> Value {
     put(&mut out, "costUsd", state.cost_usd.map(Value::from));
     put(&mut out, "usageByModel", state.usage_by_model.as_deref().and_then(canonical));
     out.insert("lastSeq".into(), json!(state.last_seq));
+    put(&mut out, "engine", state.engine.and_then(|engine| serde_json::to_value(engine).ok()));
     Value::Object(out)
 }
 

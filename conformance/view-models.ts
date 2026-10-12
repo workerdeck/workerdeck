@@ -958,6 +958,68 @@ const STATUS_LABEL: VmCase[] = [
   },
 ]
 
+const SNAPSHOT = info('s1', {
+  status: 'running',
+  cwd: '/work/snapshot',
+  engine: 'codex',
+  model: 'gpt-6-sol',
+  effort: 'high',
+  permissionMode: 'acceptEdits',
+  sdkSessionId: 'sdk-snapshot',
+  totalCostUsd: 4.5,
+  costUsd: 1.25,
+  usageByModel: { 'gpt-6-sol': { input: 10, output: 20, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 5 } },
+  engineAsleep: true,
+  lastSeq: 9,
+})
+
+const SHELL_RECORD: ShellInfo = {
+  id: 'sh_abc',
+  sessionId: 's1',
+  ordinal: 3,
+  command: 'npm test',
+  label: 'npm test',
+  cwd: '/work/acme',
+  status: 'exited',
+  exitCode: 0,
+  endReason: 'exit',
+  startedAt: T0,
+  endedAt: T0 + 2000,
+  owner: 'user',
+  bytes: 120,
+  cols: 120,
+  rows: 40,
+}
+
+const TRANSCRIPT: VmCase[] = [
+  {
+    module: 'transcript',
+    name: 'seed',
+    fn: 'transcriptScript',
+    calls: [
+      [[['seed', SNAPSHOT]]],
+      [[['seed', SNAPSHOT], ['events', 'basic-turn']]],
+      [[['events', 'basic-turn'], ['seed', SNAPSHOT]]],
+      [[['effort', null], ['seed', SNAPSHOT]]],
+      [[['effort', 'low'], ['seed', SNAPSHOT]]],
+      [[['seed', info('s2', { status: 'idle' })]]],
+    ],
+  },
+  {
+    module: 'transcript',
+    name: 'hydrate',
+    fn: 'transcriptScript',
+    calls: [
+      [[['events', 'tool-result-truncated-and-images'], ['hydrateResult', 'toolu_big', 'the whole log']]],
+      [[['events', 'tool-result-truncated-and-images'], ['hydrateResult', 'toolu_shot', 'not truncated, untouched']]],
+      [[['events', 'shell-running'], ['hydrateShell', 'sh_abc', SHELL_RECORD]]],
+      [[['events', 'shell-running'], ['hydrateShell', 'sh_abc', null]]],
+      [[['events', 'shell-running'], ['hydrateShell', 'sh_abc', null], ['hydrateShellOutput', 'sh_abc', 'listening on :5173\nready']]],
+      [[['events', 'shell-running'], ['hydrateShellOutput', 'sh_nope', 'nothing']]],
+    ],
+  },
+]
+
 export const VM_CORPUS: VmCase[] = [
   ...SESSION_LIST,
   ...AGENTS,
@@ -969,4 +1031,5 @@ export const VM_CORPUS: VmCase[] = [
   ...TOOL_TITLES,
   ...MODEL_MENU,
   ...STATUS_LABEL,
+  ...TRANSCRIPT,
 ]

@@ -1,4 +1,4 @@
-import type { SessionEventBody } from '@workerdeck/protocol'
+import type { SessionEvent, SessionEventBody } from '@workerdeck/protocol'
 
 import {
   ask,
@@ -637,3 +637,25 @@ export const CORPUS: Case[] = [
 ]
 
 export const DUPLICATES = new Set(['duplicate-seq-replay'])
+
+const EPOCH = 1_760_000_000_000
+
+export function eventsOf(entry: Case): SessionEvent[] {
+  const events: SessionEvent[] = []
+  let ts = EPOCH
+  for (const cue of entry.tape) {
+    ts += cue.gap
+    if ('event' in cue) {
+      events.push({ ...cue.event, seq: events.length + 1, ts } as SessionEvent)
+    }
+  }
+  return DUPLICATES.has(entry.name) ? [...events, ...events] : events
+}
+
+export function caseEvents(name: string): SessionEvent[] {
+  const entry = CORPUS.find((candidate) => candidate.name === name)
+  if (!entry) {
+    throw new Error(`no conformance case ${name}`)
+  }
+  return eventsOf(entry)
+}

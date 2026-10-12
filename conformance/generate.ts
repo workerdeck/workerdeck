@@ -2,29 +2,13 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import type { SessionEvent } from '@workerdeck/protocol'
-
 import { recapLine, summarizeSince } from '../packages/react/src/lib/recap.ts'
 import { projectTranscript } from '../packages/react/src/lib/transcript-projection.ts'
 import { applyEvent, initialTranscriptState } from '../packages/react/src/lib/transcript.ts'
-import { CORPUS, DUPLICATES, type Case } from './corpus.ts'
+import { CORPUS, eventsOf, type Case } from './corpus.ts'
 import { VT_CORPUS } from './vt-corpus.ts'
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'crates', 'core', 'tests', 'conformance')
-const EPOCH = 1_760_000_000_000
-
-function eventsOf(entry: Case): SessionEvent[] {
-  const events: SessionEvent[] = []
-  let ts = EPOCH
-  for (const cue of entry.tape) {
-    ts += cue.gap
-    if ('event' in cue) {
-      events.push({ ...cue.event, seq: events.length + 1, ts } as SessionEvent)
-    }
-  }
-  return DUPLICATES.has(entry.name) ? [...events, ...events] : events
-}
-
 function render(entry: Case): Map<string, string> {
   const events = eventsOf(entry)
   const state = events.reduce(applyEvent, initialTranscriptState)

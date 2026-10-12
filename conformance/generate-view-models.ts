@@ -5,6 +5,17 @@ import { fileURLToPath } from 'node:url'
 import * as protocol from '@workerdeck/protocol'
 import type { CustomGroup, SessionTask, ViewConfig, Watermark } from '@workerdeck/protocol'
 
+import {
+  applyEvent,
+  hydrateShellOutput,
+  hydrateShellRow,
+  hydrateToolResult,
+  initialTranscriptState,
+  seedFromSessionInfo,
+  type TranscriptState,
+} from '../packages/react/src/lib/transcript.ts'
+import { projectTranscript } from '../packages/react/src/lib/transcript-projection.ts'
+import { caseEvents } from './corpus.ts'
 import { VM_CORPUS } from './view-models.ts'
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'crates', 'core', 'tests', 'view-models')
@@ -56,6 +67,28 @@ function watermarkScript(initial: Record<string, Watermark>, ops: unknown[][]) {
   return { results, writes, marks: marks.all() }
 }
 
+// One reducer story: replays a conformance case's events, seeds an attach snapshot, hydrates. The Rust side reads the
+// same events from the conformance goldens, so a case name is all a call carries.
+function transcriptScript(ops: unknown[][]) {
+  let state: TranscriptState = initialTranscriptState
+  for (const [op, a, b] of ops) {
+    if (op === 'events') {
+      state = caseEvents(a as string).reduce(applyEvent, state)
+    } else if (op === 'effort') {
+      state = applyEvent(state, { type: 'effort_changed', effort: a as string | null, seq: state.lastSeq + 1, ts: 1 } as protocol.SessionEvent)
+    } else if (op === 'seed') {
+      state = seedFromSessionInfo(state, a as protocol.SessionInfo)
+    } else if (op === 'hydrateResult') {
+      state = hydrateToolResult(state, a as string, b as string)
+    } else if (op === 'hydrateShell') {
+      state = hydrateShellRow(state, a as string, (b ?? undefined) as protocol.ShellInfo | undefined)
+    } else {
+      state = hydrateShellOutput(state, a as string, b as string)
+    }
+  }
+  return projectTranscript(state)
+}
+
 function taskScript(info: Parameters<typeof protocol.sessionTasks>[0]) {
   const tasks: SessionTask[] = protocol.sessionTasks(info)
   const summary = protocol.taskSummary(tasks)
@@ -73,6 +106,7 @@ const FNS: Record<string, Fn> = {
   filterEngagement,
   watermarkScript,
   taskScript,
+  transcriptScript,
   defaultPricing: () => protocol.DEFAULT_PRICING,
   meteredCostOf: (byModel: protocol.ByModel) => protocol.meteredCost(protocol.costOfByModel(byModel)),
   pricingAge: (now: number, asOf?: string) => ({ days: protocol.pricingAgeDays(now, asOf), note: protocol.pricingAgeNote(now, asOf) ?? null }),
