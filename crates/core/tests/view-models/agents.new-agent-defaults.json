@@ -1,0 +1,91 @@
+{
+  "input": {
+    "fn": "newAgentDefaults",
+    "calls": [
+      [
+        null,
+        null
+      ],
+      [
+        {
+          "owner": "tobias",
+          "sharing": "shared",
+          "allowShared": true
+        },
+        null
+      ],
+      [
+        {
+          "owner": "tobias",
+          "sharing": "shared",
+          "allowShared": false
+        },
+        {
+          "name": "p",
+          "owner": "dan",
+          "defaults": {
+            "sharing": "shared"
+          }
+        }
+      ],
+      [
+        {
+          "sharing": "private",
+          "allowShared": true,
+          "multiOwner": true
+        },
+        {
+          "name": "p",
+          "defaults": {
+            "sharing": "shared"
+          }
+        }
+      ],
+      [
+        {
+          "sharing": "shared",
+          "allowShared": true
+        },
+        {
+          "name": "p",
+          "defaults": {
+            "sharing": "private"
+          }
+        }
+      ],
+      [
+        null,
+        {
+          "name": "p",
+          "owner": "ruli"
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "owner": null,
+      "sharing": "private"
+    },
+    {
+      "owner": "tobias",
+      "sharing": "shared"
+    },
+    {
+      "owner": "dan",
+      "sharing": "private"
+    },
+    {
+      "owner": null,
+      "sharing": "shared"
+    },
+    {
+      "owner": null,
+      "sharing": "private"
+    },
+    {
+      "owner": "ruli",
+      "sharing": "private"
+    }
+  ]
+}

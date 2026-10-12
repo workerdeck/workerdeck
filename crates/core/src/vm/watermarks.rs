@@ -1,0 +1,95 @@
+use crate::rest::Entries;
+use serde::{Deserialize, Serialize};
+
+const MAX_AGE_MS: f64 = 30.0 * 24.0 * 60.0 * 60.0 * 1000.0;
+const TOUCH_MS: f64 = 60_000.0;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Watermark {
+    pub item_count: f64,
+    pub activity: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prose: Option<f64>,
+    pub turns: f64,
+    pub seen_at: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Seen {
+    #[serde(default)]
+    pub item_count: Option<f64>,
+    #[serde(default)]
+    pub activity: Option<f64>,
+    #[serde(default)]
+    pub prose: Option<f64>,
+    #[serde(default)]
+    pub turns: Option<f64>,
+}
+
+pub fn watermark_key(host_id: &str, session_id: &str) -> String {
+    format!("{host_id}:{session_id}")
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Watermarks {
+    marks: Entries<Watermark>,
+}
+
+impl Watermarks {
+    pub fn new(stored: Entries<Watermark>) -> Self {
+        Watermarks { marks: stored }
+    }
+
+    pub fn get(&self, host_id: &str, session_id: &str) -> Option<&Watermark> {
+        self.marks.get(&watermark_key(host_id, session_id))
+    }
+
+    pub fn all(&self) -> &Entries<Watermark> {
+        &self.marks
+    }
+
+    pub fn mark(&mut self, host_id: &str, session_id: &str, seen: &Seen, now: f64) -> bool {
+        let id = watermark_key(host_id, session_id);
+        let previous = self.marks.get(&id);
+        let held = |pick: fn(&Watermark) -> f64| previous.map(pick).unwrap_or(0.0);
+        let next = Watermark {
+            item_count: held(|m| m.item_count).max(seen.item_count.unwrap_or(0.0)),
+            activity: held(|m| m.activity).max(seen.activity.unwrap_or(0.0)),
+            prose: match seen.prose {
+                None => previous.and_then(|m| m.prose),
+                Some(prose) => Some(previous.and_then(|m| m.prose).unwrap_or(0.0).max(prose)),
+            },
+            turns: held(|m| m.turns).max(seen.turns.unwrap_or(0.0)),
+            seen_at: now,
+        };
+        if let Some(previous) = previous
+            && previous.item_count == next.item_count
+            && previous.activity == next.activity
+            && previous.prose == next.prose
+            && previous.turns == next.turns
+            && next.seen_at - previous.seen_at < TOUCH_MS
+        {
+            return false;
+        }
+        self.marks.set(id, next);
+        let cutoff = now - MAX_AGE_MS;
+        self.marks.0.retain(|(_, mark)| mark.seen_at >= cutoff);
+        true
+    }
+
+    pub fn forget(&mut self, host_id: &str, session_id: &str) -> bool {
+        let id = watermark_key(host_id, session_id);
+        let before = self.marks.len();
+        self.marks.0.retain(|(key, _)| *key != id);
+        self.marks.len() != before
+    }
+}
+
+pub fn unseen_count(mark: Option<&Watermark>, prose_count: Option<f64>) -> f64 {
+    match (mark, prose_count) {
+        (Some(mark), Some(count)) => (count - mark.prose.unwrap_or(count)).max(0.0),
+        _ => 0.0,
+    }
+}

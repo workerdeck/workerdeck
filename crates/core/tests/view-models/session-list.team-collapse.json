@@ -1,0 +1,233 @@
+{
+  "input": {
+    "fn": "toggleTeamCollapsed",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
+            "id": "s-lead-0001",
+            "status": "idle",
+            "cwd": "/work/workerdeck",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "WD-Lead",
+            "project": {
+              "name": "WorkerDeck",
+              "root": "/work/workerdeck",
+              "shortcode": "WD"
+            },
+            "agent": {
+              "id": "ag-lead",
+              "name": "WD-Lead",
+              "leads": true,
+              "avatar": "monkey:12"
+            },
+            "owner": "tobias",
+            "lastActivityAt": 1760000005000,
+            "proseCount": 12,
+            "numTurns": 4,
+            "model": "opus",
+            "effort": null,
+            "permissionMode": "default",
+            "statusLabel": {
+              "text": "Reviewing the port",
+              "emoji": "🦀",
+              "setAt": 1760000004000
+            },
+            "contextUsage": {
+              "totalTokens": 52000,
+              "maxTokens": 200000,
+              "percentage": 26
+            },
+            "usageByModel": {
+              "claude-opus-5-5": {
+                "input": 1200,
+                "output": 800,
+                "cacheWrite5m": 0,
+                "cacheWrite1h": 0,
+                "cacheRead": 40000
+              }
+            }
+          },
+          "unseen": 10
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "collapsedTeams": [
+            "mac:ag-lead",
+            "box:ag-x"
+          ]
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
+            "id": "s-lead-0001",
+            "status": "idle",
+            "cwd": "/work/workerdeck",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "WD-Lead",
+            "project": {
+              "name": "WorkerDeck",
+              "root": "/work/workerdeck",
+              "shortcode": "WD"
+            },
+            "agent": {
+              "id": "ag-lead",
+              "name": "WD-Lead",
+              "leads": true,
+              "avatar": "monkey:12"
+            },
+            "owner": "tobias",
+            "lastActivityAt": 1760000005000,
+            "proseCount": 12,
+            "numTurns": 4,
+            "model": "opus",
+            "effort": null,
+            "permissionMode": "default",
+            "statusLabel": {
+              "text": "Reviewing the port",
+              "emoji": "🦀",
+              "setAt": 1760000004000
+            },
+            "contextUsage": {
+              "totalTokens": 52000,
+              "maxTokens": 200000,
+              "percentage": 26
+            },
+            "usageByModel": {
+              "claude-opus-5-5": {
+                "input": 1200,
+                "output": 800,
+                "cacheWrite5m": 0,
+                "cacheWrite1h": 0,
+                "cacheRead": 40000
+              }
+            }
+          },
+          "unseen": 10
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "ended",
+          "info": {
+            "id": "s-solo-0004",
+            "status": "closed",
+            "cwd": "/work/api",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "Fix login bug",
+            "project": {
+              "name": "api",
+              "root": "/work/api"
+            },
+            "lastActivityAt": 1760000009000
+          },
+          "unseen": 0
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "collapsedTeams": [
+        "mac:ag-lead"
+      ]
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "collapsedTeams": [
+        "box:ag-x"
+      ]
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "input": {
+    "fn": "toggleGroupCollapsed",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "key": "custom:g-core"
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "collapsedGroups": [
+            "custom:g-core",
+            "custom:g-ops"
+          ]
+        },
+        {
+          "key": "custom:g-core"
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "collapsedGroups": [
+        "custom:g-core"
+      ]
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": true,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active",
+      "collapsedGroups": [
+        "custom:g-ops"
+      ]
+    }
+  ]
+}

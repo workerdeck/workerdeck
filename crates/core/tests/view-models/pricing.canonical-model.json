@@ -1,0 +1,73 @@
+{
+  "input": {
+    "fn": "canonicalModel",
+    "calls": [
+      [
+        "claude-opus-4-7[1m]"
+      ],
+      [
+        "claude-sonnet-4-5-20250929"
+      ],
+      [
+        "claude-sonnet-4-5@20250929"
+      ],
+      [
+        "anthropic/claude-opus-4-6"
+      ],
+      [
+        "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      ],
+      [
+        "anthropic.claude-opus-4-5-v2:1"
+      ],
+      [
+        "eu.west.anthropic.anthropic.x"
+      ],
+      [
+        "Bedrock.Anthropic.Claude-Opus-5"
+      ],
+      [
+        "claude-opus-4-7-1m"
+      ],
+      [
+        "GPT-5.6-Sol"
+      ],
+      [
+        "openai/gpt-6-luna"
+      ],
+      [
+        "a[x[y]"
+      ],
+      [
+        "model]"
+      ],
+      [
+        ""
+      ],
+      [
+        "anthropic."
+      ],
+      [
+        "9us.anthropic.claude"
+      ]
+    ]
+  },
+  "output": [
+    "claude-opus-4-7",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-5",
+    "claude-opus-4-6",
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-5",
+    "x",
+    "claude-opus-5",
+    "claude-opus-4-7-1m",
+    "gpt-5.6-sol",
+    "gpt-6-luna",
+    "a",
+    "model]",
+    "",
+    "",
+    "9us.anthropic.claude"
+  ]
+}

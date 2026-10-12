@@ -1,0 +1,114 @@
+{
+  "input": {
+    "fn": "orderUsageWindows",
+    "calls": [
+      [
+        {
+          "seven_day_sonnet": {
+            "info": {
+              "status": "allowed",
+              "utilization": 0.31,
+              "resetsAt": 1760086400000
+            },
+            "updatedAt": 1760000000000
+          },
+          "five_hour": {
+            "info": {
+              "status": "allowed",
+              "utilization": 0.72,
+              "rateLimitType": "five_hour",
+              "resetsAt": 1760003600000
+            },
+            "updatedAt": 1759999000000
+          },
+          "seven_day_opus": {
+            "info": {
+              "status": "allowed_warning",
+              "utilization": 0.9
+            },
+            "updatedAt": 1760000000000,
+            "inferredReset": true
+          },
+          "seven_day": {
+            "info": {
+              "status": "allowed",
+              "utilization": 0.44,
+              "isUsingOverage": false
+            },
+            "updatedAt": 1760000000000
+          },
+          "overage": {
+            "info": {
+              "status": "rejected"
+            },
+            "updatedAt": 1760000000000
+          },
+          "seven_day_oauth-apps": {
+            "info": {
+              "status": "allowed",
+              "utilization": 0
+            },
+            "updatedAt": 1760000000000
+          }
+        }
+      ],
+      [
+        null
+      ],
+      [
+        {}
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "key": "five_hour",
+        "info": {
+          "status": "allowed",
+          "utilization": 0.72,
+          "rateLimitType": "five_hour",
+          "resetsAt": 1760003600000
+        },
+        "updatedAt": 1759999000000
+      },
+      {
+        "key": "seven_day",
+        "info": {
+          "status": "allowed",
+          "utilization": 0.44,
+          "isUsingOverage": false
+        },
+        "updatedAt": 1760000000000
+      },
+      {
+        "key": "seven_day_oauth-apps",
+        "info": {
+          "status": "allowed",
+          "utilization": 0
+        },
+        "updatedAt": 1760000000000
+      },
+      {
+        "key": "seven_day_opus",
+        "info": {
+          "status": "allowed_warning",
+          "utilization": 0.9
+        },
+        "updatedAt": 1760000000000,
+        "inferredReset": true
+      },
+      {
+        "key": "seven_day_sonnet",
+        "info": {
+          "status": "allowed",
+          "utilization": 0.31,
+          "resetsAt": 1760086400000
+        },
+        "updatedAt": 1760000000000
+      }
+    ],
+    [],
+    []
+  ]
+}

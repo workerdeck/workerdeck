@@ -1,0 +1,201 @@
+{
+  "input": {
+    "fn": "defaultPricing",
+    "calls": [
+      []
+    ]
+  },
+  "output": [
+    {
+      "claude-fable-5-1": {
+        "input": 10,
+        "output": 50,
+        "cacheWrite5m": 12.5,
+        "cacheWrite1h": 20,
+        "cacheRead": 0.25
+      },
+      "claude-fable-5": {
+        "input": 10,
+        "output": 50,
+        "cacheWrite5m": 12.5,
+        "cacheWrite1h": 20,
+        "cacheRead": 1
+      },
+      "claude-mythos-5-1": {
+        "input": 10,
+        "output": 50,
+        "cacheWrite5m": 12.5,
+        "cacheWrite1h": 20,
+        "cacheRead": 0.25
+      },
+      "claude-mythos-5": {
+        "input": 10,
+        "output": 50,
+        "cacheWrite5m": 12.5,
+        "cacheWrite1h": 20,
+        "cacheRead": 1
+      },
+      "claude-opus-5-5": {
+        "input": 4,
+        "output": 20,
+        "cacheWrite5m": 5,
+        "cacheWrite1h": 8,
+        "cacheRead": 0.2
+      },
+      "claude-opus-5": {
+        "input": 5,
+        "output": 25,
+        "cacheWrite5m": 6.25,
+        "cacheWrite1h": 10,
+        "cacheRead": 0.5
+      },
+      "claude-opus-4-8": {
+        "input": 5,
+        "output": 25,
+        "cacheWrite5m": 6.25,
+        "cacheWrite1h": 10,
+        "cacheRead": 0.5
+      },
+      "claude-opus-4-7": {
+        "input": 5,
+        "output": 25,
+        "cacheWrite5m": 6.25,
+        "cacheWrite1h": 10,
+        "cacheRead": 0.5
+      },
+      "claude-opus-4-6": {
+        "input": 5,
+        "output": 25,
+        "cacheWrite5m": 6.25,
+        "cacheWrite1h": 10,
+        "cacheRead": 0.5
+      },
+      "claude-opus-4-5": {
+        "input": 5,
+        "output": 25,
+        "cacheWrite5m": 6.25,
+        "cacheWrite1h": 10,
+        "cacheRead": 0.5
+      },
+      "claude-sonnet-5-5": {
+        "input": 2,
+        "output": 10,
+        "cacheWrite5m": 2.5,
+        "cacheWrite1h": 4,
+        "cacheRead": 0.1
+      },
+      "claude-sonnet-5": {
+        "input": 2,
+        "output": 10,
+        "cacheWrite5m": 2.5,
+        "cacheWrite1h": 4,
+        "cacheRead": 0.2
+      },
+      "claude-sonnet-4-6": {
+        "input": 3,
+        "output": 15,
+        "cacheWrite5m": 3.75,
+        "cacheWrite1h": 6,
+        "cacheRead": 0.30000000000000004
+      },
+      "claude-sonnet-4-5": {
+        "input": 3,
+        "output": 15,
+        "cacheWrite5m": 3.75,
+        "cacheWrite1h": 6,
+        "cacheRead": 0.30000000000000004
+      },
+      "claude-haiku-5-5": {
+        "input": 0.1,
+        "output": 0.5,
+        "cacheWrite5m": 0.125,
+        "cacheWrite1h": 0.2,
+        "cacheRead": 0.010000000000000002
+      },
+      "claude-haiku-4-5": {
+        "input": 1,
+        "output": 5,
+        "cacheWrite5m": 1.25,
+        "cacheWrite1h": 2,
+        "cacheRead": 0.1
+      },
+      "gpt-6-astra": {
+        "input": 10,
+        "output": 50,
+        "cacheWrite5m": 10,
+        "cacheWrite1h": 10,
+        "cacheRead": 1
+      },
+      "gpt-6-sol": {
+        "input": 2,
+        "output": 10,
+        "cacheWrite5m": 2,
+        "cacheWrite1h": 2,
+        "cacheRead": 0.2
+      },
+      "gpt-6-luna": {
+        "input": 0.1,
+        "output": 0.5,
+        "cacheWrite5m": 0.1,
+        "cacheWrite1h": 0.1,
+        "cacheRead": 0.01
+      },
+      "gpt-5.6-sol": {
+        "input": 4,
+        "output": 20,
+        "cacheWrite5m": 4,
+        "cacheWrite1h": 4,
+        "cacheRead": 0.4
+      },
+      "gpt-5.6-terra": {
+        "input": 2,
+        "output": 12,
+        "cacheWrite5m": 2,
+        "cacheWrite1h": 2,
+        "cacheRead": 0.2
+      },
+      "gpt-5.6-luna": {
+        "input": 0.2,
+        "output": 1.2,
+        "cacheWrite5m": 0.2,
+        "cacheWrite1h": 0.2,
+        "cacheRead": 0.02
+      },
+      "gpt-5.5": {
+        "input": 5,
+        "output": 30,
+        "cacheWrite5m": 5,
+        "cacheWrite1h": 5,
+        "cacheRead": 0.5
+      },
+      "gpt-5.4": {
+        "input": 2.5,
+        "output": 15,
+        "cacheWrite5m": 2.5,
+        "cacheWrite1h": 2.5,
+        "cacheRead": 0.25
+      },
+      "gpt-5.2": {
+        "input": 1.75,
+        "output": 14,
+        "cacheWrite5m": 1.75,
+        "cacheWrite1h": 1.75,
+        "cacheRead": 0.175
+      },
+      "gpt-5.1": {
+        "input": 1.25,
+        "output": 10,
+        "cacheWrite5m": 1.25,
+        "cacheWrite1h": 1.25,
+        "cacheRead": 0.125
+      },
+      "gpt-5": {
+        "input": 1.25,
+        "output": 10,
+        "cacheWrite5m": 1.25,
+        "cacheWrite1h": 1.25,
+        "cacheRead": 0.125
+      }
+    }
+  ]
+}

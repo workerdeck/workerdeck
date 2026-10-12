@@ -1,0 +1,25 @@
+{
+  "input": {
+    "fn": "isPeerSendTool",
+    "calls": [
+      [
+        "peers_send"
+      ],
+      [
+        "mcp__workerdeck__peers_send"
+      ],
+      [
+        "peers_list"
+      ],
+      [
+        ""
+      ]
+    ]
+  },
+  "output": [
+    true,
+    true,
+    false,
+    false
+  ]
+}

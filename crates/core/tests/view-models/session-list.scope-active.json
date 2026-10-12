@@ -1,0 +1,82 @@
+{
+  "input": {
+    "fn": "scopeActive",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "label": "workerdeck",
+          "roots": [
+            {
+              "path": "/work/workerdeck/"
+            },
+            {
+              "hostId": "BOX",
+              "path": "C:\\work\\api"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        null
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": false,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "label": "workerdeck",
+          "roots": [
+            {
+              "path": "/work/workerdeck/"
+            },
+            {
+              "hostId": "BOX",
+              "path": "C:\\work\\api"
+            }
+          ]
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false,
+    false
+  ]
+}

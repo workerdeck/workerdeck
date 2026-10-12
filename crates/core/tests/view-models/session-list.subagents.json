@@ -1,0 +1,145 @@
+{
+  "input": {
+    "fn": "visibleSubagents",
+    "calls": [
+      [
+        {
+          "id": "s-codex-0006",
+          "status": "idle",
+          "cwd": "/work/api/src",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "title": "api refactor",
+          "engine": "codex",
+          "project": {
+            "name": "api",
+            "root": "/work/api"
+          },
+          "subagents": [
+            {
+              "toolUseId": "tu-1",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 4,
+              "agentType": "Explore",
+              "description": "find the auth check"
+            },
+            {
+              "toolUseId": "tu-2",
+              "status": "done",
+              "startedAt": 1760000000000,
+              "toolCount": 2,
+              "description": "write tests"
+            }
+          ],
+          "lastActivityAt": 1760000003000,
+          "proseCount": 2
+        },
+        "all"
+      ],
+      [
+        {
+          "id": "s-codex-0006",
+          "status": "idle",
+          "cwd": "/work/api/src",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "title": "api refactor",
+          "engine": "codex",
+          "project": {
+            "name": "api",
+            "root": "/work/api"
+          },
+          "subagents": [
+            {
+              "toolUseId": "tu-1",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 4,
+              "agentType": "Explore",
+              "description": "find the auth check"
+            },
+            {
+              "toolUseId": "tu-2",
+              "status": "done",
+              "startedAt": 1760000000000,
+              "toolCount": 2,
+              "description": "write tests"
+            }
+          ],
+          "lastActivityAt": 1760000003000,
+          "proseCount": 2
+        },
+        "active"
+      ],
+      [
+        {
+          "id": "s-codex-0006",
+          "status": "idle",
+          "cwd": "/work/api/src",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "title": "api refactor",
+          "engine": "codex",
+          "project": {
+            "name": "api",
+            "root": "/work/api"
+          },
+          "subagents": [
+            {
+              "toolUseId": "tu-1",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 4,
+              "agentType": "Explore",
+              "description": "find the auth check"
+            },
+            {
+              "toolUseId": "tu-2",
+              "status": "done",
+              "startedAt": 1760000000000,
+              "toolCount": 2,
+              "description": "write tests"
+            }
+          ],
+          "lastActivityAt": 1760000003000,
+          "proseCount": 2
+        },
+        "none"
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "toolUseId": "tu-1",
+        "status": "running",
+        "startedAt": 1760000000000,
+        "toolCount": 4,
+        "agentType": "Explore",
+        "description": "find the auth check"
+      },
+      {
+        "toolUseId": "tu-2",
+        "status": "done",
+        "startedAt": 1760000000000,
+        "toolCount": 2,
+        "description": "write tests"
+      }
+    ],
+    [
+      {
+        "toolUseId": "tu-1",
+        "status": "running",
+        "startedAt": 1760000000000,
+        "toolCount": 4,
+        "agentType": "Explore",
+        "description": "find the auth check"
+      }
+    ],
+    []
+  ]
+}

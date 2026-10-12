@@ -1,0 +1,114 @@
+{
+  "input": {
+    "fn": "parseTodoWriteInput",
+    "calls": [
+      [
+        {
+          "todos": [
+            {
+              "content": " Read ",
+              "status": "completed",
+              "activeForm": "Reading"
+            },
+            {
+              "content": "Port",
+              "status": "in_progress",
+              "activeForm": " Porting "
+            },
+            {
+              "content": "Ship",
+              "status": "pending"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "todos": [
+            {
+              "content": "Port",
+              "status": "in_progress",
+              "activeForm": "   "
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "todos": []
+        }
+      ],
+      [
+        {
+          "todos": [
+            {
+              "content": "Port",
+              "status": "blocked"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "todos": [
+            {
+              "content": "   ",
+              "status": "pending"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "todos": [
+            {
+              "content": "ok",
+              "status": "pending"
+            },
+            "junk"
+          ]
+        }
+      ],
+      [
+        {
+          "todos": "nope"
+        }
+      ],
+      [
+        null
+      ],
+      [
+        {}
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "status": "completed",
+        "text": "Read"
+      },
+      {
+        "status": "in_progress",
+        "text": "Porting"
+      },
+      {
+        "status": "pending",
+        "text": "Ship"
+      }
+    ],
+    [
+      {
+        "status": "in_progress",
+        "text": "Port"
+      }
+    ],
+    [],
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+  ]
+}

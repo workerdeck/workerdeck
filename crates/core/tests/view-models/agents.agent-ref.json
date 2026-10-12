@@ -1,0 +1,127 @@
+{
+  "input": {
+    "fn": "agentRef",
+    "calls": [
+      [
+        {
+          "id": "ag-1",
+          "name": "AG-1",
+          "createdAt": 1760000000000,
+          "updatedAt": 1760000000000,
+          "pastSessions": [
+            "s1",
+            "s2"
+          ],
+          "config": {},
+          "avatar": "monkey:3",
+          "sharing": "shared",
+          "order": 4
+        },
+        {}
+      ],
+      [
+        {
+          "id": "ag-2",
+          "name": "AG-2",
+          "createdAt": 1760000000000,
+          "updatedAt": 1760000000000,
+          "pastSessions": [],
+          "config": {},
+          "lead": "ag-1",
+          "sharing": "shared",
+          "order": 0
+        },
+        {
+          "leadName": "Lead",
+          "leadGateway": "mini"
+        }
+      ],
+      [
+        {
+          "id": "ag-3",
+          "name": "AG-3",
+          "createdAt": 1760000000000,
+          "updatedAt": 1760000000000,
+          "pastSessions": [],
+          "config": {},
+          "lead": "ag-1"
+        },
+        {
+          "leadName": "Lead"
+        }
+      ],
+      [
+        {
+          "id": "ag-4",
+          "name": "AG-4",
+          "createdAt": 1760000000000,
+          "updatedAt": 1760000000000,
+          "pastSessions": [],
+          "config": {},
+          "sharing": "private",
+          "owner": "dan"
+        },
+        {
+          "leads": true,
+          "leadName": "ignored"
+        }
+      ],
+      [
+        {
+          "id": "ag-5",
+          "name": "AG-5",
+          "createdAt": 1760000000000,
+          "updatedAt": 1760000000000,
+          "pastSessions": [],
+          "config": {
+            "model": "opus",
+            "permissionMode": "plan"
+          },
+          "remoteMembers": [
+            {
+              "agent": "x",
+              "state": "invited",
+              "at": 1760000000000
+            }
+          ]
+        },
+        {
+          "leads": false
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "id": "ag-1",
+      "name": "AG-1",
+      "avatar": "monkey:3",
+      "shared": true,
+      "conversation": 3,
+      "order": 4
+    },
+    {
+      "id": "ag-2",
+      "name": "AG-2",
+      "lead": "ag-1",
+      "leadGateway": "mini",
+      "team": "Lead",
+      "order": 0
+    },
+    {
+      "id": "ag-3",
+      "name": "AG-3",
+      "lead": "ag-1",
+      "team": "Lead"
+    },
+    {
+      "id": "ag-4",
+      "name": "AG-4",
+      "leads": true
+    },
+    {
+      "id": "ag-5",
+      "name": "AG-5"
+    }
+  ]
+}

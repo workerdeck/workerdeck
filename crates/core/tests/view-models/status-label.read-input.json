@@ -1,0 +1,100 @@
+{
+  "input": {
+    "fn": "readStatusLabelInput",
+    "calls": [
+      [
+        null
+      ],
+      [],
+      [
+        "text"
+      ],
+      [
+        []
+      ],
+      [
+        {
+          "text": 5
+        }
+      ],
+      [
+        {
+          "text": "ok",
+          "emoji": 3
+        }
+      ],
+      [
+        {
+          "text": "   "
+        }
+      ],
+      [
+        {
+          "text": "  Porting \n the   list "
+        }
+      ],
+      [
+        {
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ],
+      [
+        {
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ],
+      [
+        {
+          "text": "Shipping",
+          "emoji": " 🚀 "
+        }
+      ],
+      [
+        {
+          "text": "Shipping",
+          "emoji": "   "
+        }
+      ],
+      [
+        {
+          "text": "Shipping",
+          "emoji": "🦀🦀🦀🦀🦀🦀🦀🦀🦀"
+        }
+      ],
+      [
+        {
+          "text": "Shipping",
+          "emoji": "🦀🦀🦀🦀🦀🦀🦀🦀"
+        }
+      ]
+    ]
+  },
+  "output": [
+    null,
+    "statusLabel must be an object or null",
+    "statusLabel must be an object or null",
+    "statusLabel.text must be a string",
+    "statusLabel.text must be a string",
+    "statusLabel.emoji must be a string",
+    null,
+    {
+      "text": "Porting the list"
+    },
+    {
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "statusLabel.text is longer than 80 characters",
+    {
+      "text": "Shipping",
+      "emoji": "🚀"
+    },
+    {
+      "text": "Shipping"
+    },
+    "statusLabel.emoji is longer than 16 characters",
+    {
+      "text": "Shipping",
+      "emoji": "🦀🦀🦀🦀🦀🦀🦀🦀"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "input": {
+    "fn": "unknownBasisModels",
+    "calls": [
+      [
+        {
+          "claude-opus-5-5": {
+            "input": 1000000,
+            "output": 200000,
+            "cacheWrite5m": 50000,
+            "cacheWrite1h": 10000,
+            "cacheRead": 3000000
+          },
+          "claude-sonnet-4-5-20250929": {
+            "input": 12345,
+            "output": 678,
+            "cacheWrite5m": 0,
+            "cacheWrite1h": 0,
+            "cacheRead": 99999,
+            "costBasis": "list"
+          },
+          "mystery-model": {
+            "input": 500,
+            "output": 20,
+            "cacheWrite5m": 0,
+            "cacheWrite1h": 0,
+            "cacheRead": 0,
+            "costBasis": "unknown"
+          },
+          "us.anthropic.claude-haiku-4-5-20251001-v1:0": {
+            "input": 777,
+            "output": 333,
+            "cacheWrite5m": 11,
+            "cacheWrite1h": 0,
+            "cacheRead": 5,
+            "costBasis": "managed"
+          }
+        }
+      ]
+    ]
+  },
+  "output": [
+    [
+      "mystery-model"
+    ]
+  ]
+}

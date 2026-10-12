@@ -1,0 +1,83 @@
+{
+  "input": {
+    "fn": "addTokenUsage",
+    "calls": [
+      [
+        {
+          "input": 1000000,
+          "output": 200000,
+          "cacheWrite5m": 50000,
+          "cacheWrite1h": 10000,
+          "cacheRead": 3000000
+        },
+        {
+          "input": 1000000,
+          "output": 200000,
+          "cacheWrite5m": 50000,
+          "cacheWrite1h": 10000,
+          "cacheRead": 3000000
+        }
+      ],
+      [
+        {
+          "input": 1000000,
+          "output": 200000,
+          "cacheWrite5m": 50000,
+          "cacheWrite1h": 10000,
+          "cacheRead": 3000000,
+          "costBasis": "list"
+        },
+        {
+          "input": 1000000,
+          "output": 200000,
+          "cacheWrite5m": 50000,
+          "cacheWrite1h": 10000,
+          "cacheRead": 3000000,
+          "costBasis": "unknown"
+        }
+      ],
+      [
+        {
+          "input": 1000000,
+          "output": 200000,
+          "cacheWrite5m": 50000,
+          "cacheWrite1h": 10000,
+          "cacheRead": 3000000,
+          "costBasis": "managed"
+        },
+        {
+          "input": 1000000,
+          "output": 200000,
+          "cacheWrite5m": 50000,
+          "cacheWrite1h": 10000,
+          "cacheRead": 3000000
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "input": 2000000,
+      "output": 400000,
+      "cacheWrite5m": 100000,
+      "cacheWrite1h": 20000,
+      "cacheRead": 6000000
+    },
+    {
+      "input": 2000000,
+      "output": 400000,
+      "cacheWrite5m": 100000,
+      "cacheWrite1h": 20000,
+      "cacheRead": 6000000,
+      "costBasis": "unknown"
+    },
+    {
+      "input": 2000000,
+      "output": 400000,
+      "cacheWrite5m": 100000,
+      "cacheWrite1h": 20000,
+      "cacheRead": 6000000,
+      "costBasis": "managed"
+    }
+  ]
+}

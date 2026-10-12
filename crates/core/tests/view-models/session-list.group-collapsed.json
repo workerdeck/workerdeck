@@ -1,0 +1,50 @@
+{
+  "input": {
+    "fn": "isGroupCollapsed",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active",
+          "collapsedGroups": [
+            "custom:g-core"
+          ]
+        },
+        {
+          "key": "custom:g-core"
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "key": "custom:g-core"
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false
+  ]
+}

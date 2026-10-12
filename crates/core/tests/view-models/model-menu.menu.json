@@ -1,0 +1,713 @@
+{
+  "input": {
+    "fn": "modelMenu",
+    "calls": [
+      [
+        [
+          {
+            "value": "default",
+            "displayName": "Default (recommended)"
+          },
+          {
+            "value": "opus",
+            "resolvedModel": "claude-opus-5-5",
+            "displayName": "Opus 5.5",
+            "description": "Most capable"
+          },
+          {
+            "value": "claude-opus-4-7",
+            "displayName": "Opus 4.7"
+          },
+          {
+            "value": "claude-fable-5-1",
+            "displayName": "Fable 5.1",
+            "primary": true
+          },
+          {
+            "value": "sonnet",
+            "resolvedModel": "claude-sonnet-5-5[1m]",
+            "displayName": "Sonnet 5.5",
+            "reasoningEfforts": [
+              "low",
+              "high"
+            ]
+          },
+          {
+            "value": "claude-sonnet-4-6",
+            "displayName": "Sonnet 4.6"
+          },
+          {
+            "value": "gpt-6-astra",
+            "displayName": "GPT-6 Astra"
+          },
+          {
+            "value": "gpt-5.6-astra",
+            "displayName": "GPT-5.6 Astra"
+          },
+          {
+            "value": "gpt-5.6-sol",
+            "displayName": "GPT-5.6 Sol"
+          },
+          {
+            "value": "claude-haiku-4-5-20251001",
+            "displayName": "Haiku 4-5 (2025-10-01)"
+          }
+        ]
+      ],
+      [
+        [
+          {
+            "value": "default",
+            "displayName": "Default (recommended)"
+          },
+          {
+            "value": "opus",
+            "resolvedModel": "claude-opus-5-5",
+            "displayName": "Opus 5.5",
+            "description": "Most capable"
+          },
+          {
+            "value": "claude-opus-4-7",
+            "displayName": "Opus 4.7"
+          },
+          {
+            "value": "claude-fable-5-1",
+            "displayName": "Fable 5.1",
+            "primary": true
+          },
+          {
+            "value": "sonnet",
+            "resolvedModel": "claude-sonnet-5-5[1m]",
+            "displayName": "Sonnet 5.5",
+            "reasoningEfforts": [
+              "low",
+              "high"
+            ]
+          },
+          {
+            "value": "claude-sonnet-4-6",
+            "displayName": "Sonnet 4.6"
+          },
+          {
+            "value": "gpt-6-astra",
+            "displayName": "GPT-6 Astra"
+          },
+          {
+            "value": "gpt-5.6-astra",
+            "displayName": "GPT-5.6 Astra"
+          },
+          {
+            "value": "gpt-5.6-sol",
+            "displayName": "GPT-5.6 Sol"
+          },
+          {
+            "value": "claude-haiku-4-5-20251001",
+            "displayName": "Haiku 4-5 (2025-10-01)"
+          }
+        ],
+        "claude-opus-4-7"
+      ],
+      [
+        [
+          {
+            "value": "default",
+            "displayName": "Default (recommended)"
+          },
+          {
+            "value": "opus",
+            "resolvedModel": "claude-opus-5-5",
+            "displayName": "Opus 5.5",
+            "description": "Most capable"
+          },
+          {
+            "value": "claude-opus-4-7",
+            "displayName": "Opus 4.7"
+          },
+          {
+            "value": "claude-fable-5-1",
+            "displayName": "Fable 5.1",
+            "primary": true
+          },
+          {
+            "value": "sonnet",
+            "resolvedModel": "claude-sonnet-5-5[1m]",
+            "displayName": "Sonnet 5.5",
+            "reasoningEfforts": [
+              "low",
+              "high"
+            ]
+          },
+          {
+            "value": "claude-sonnet-4-6",
+            "displayName": "Sonnet 4.6"
+          },
+          {
+            "value": "gpt-6-astra",
+            "displayName": "GPT-6 Astra"
+          },
+          {
+            "value": "gpt-5.6-astra",
+            "displayName": "GPT-5.6 Astra"
+          },
+          {
+            "value": "gpt-5.6-sol",
+            "displayName": "GPT-5.6 Sol"
+          },
+          {
+            "value": "claude-haiku-4-5-20251001",
+            "displayName": "Haiku 4-5 (2025-10-01)"
+          }
+        ],
+        "claude-sonnet-5-5[1m]"
+      ],
+      [
+        [
+          {
+            "value": "default",
+            "displayName": "Default (recommended)"
+          },
+          {
+            "value": "opus",
+            "resolvedModel": "claude-opus-5-5",
+            "displayName": "Opus 5.5",
+            "description": "Most capable"
+          },
+          {
+            "value": "claude-opus-4-7",
+            "displayName": "Opus 4.7"
+          },
+          {
+            "value": "claude-fable-5-1",
+            "displayName": "Fable 5.1",
+            "primary": true
+          },
+          {
+            "value": "sonnet",
+            "resolvedModel": "claude-sonnet-5-5[1m]",
+            "displayName": "Sonnet 5.5",
+            "reasoningEfforts": [
+              "low",
+              "high"
+            ]
+          },
+          {
+            "value": "claude-sonnet-4-6",
+            "displayName": "Sonnet 4.6"
+          },
+          {
+            "value": "gpt-6-astra",
+            "displayName": "GPT-6 Astra"
+          },
+          {
+            "value": "gpt-5.6-astra",
+            "displayName": "GPT-5.6 Astra"
+          },
+          {
+            "value": "gpt-5.6-sol",
+            "displayName": "GPT-5.6 Sol"
+          },
+          {
+            "value": "claude-haiku-4-5-20251001",
+            "displayName": "Haiku 4-5 (2025-10-01)"
+          }
+        ],
+        "nonexistent"
+      ],
+      [
+        [
+          {
+            "value": "default",
+            "displayName": "Default (recommended)"
+          },
+          {
+            "value": "opus",
+            "resolvedModel": "claude-opus-5-5",
+            "displayName": "Opus 5.5",
+            "description": "Most capable"
+          },
+          {
+            "value": "claude-opus-4-7",
+            "displayName": "Opus 4.7"
+          },
+          {
+            "value": "claude-fable-5-1",
+            "displayName": "Fable 5.1",
+            "primary": true
+          },
+          {
+            "value": "sonnet",
+            "resolvedModel": "claude-sonnet-5-5[1m]",
+            "displayName": "Sonnet 5.5",
+            "reasoningEfforts": [
+              "low",
+              "high"
+            ]
+          },
+          {
+            "value": "claude-sonnet-4-6",
+            "displayName": "Sonnet 4.6"
+          },
+          {
+            "value": "gpt-6-astra",
+            "displayName": "GPT-6 Astra"
+          },
+          {
+            "value": "gpt-5.6-astra",
+            "displayName": "GPT-5.6 Astra"
+          },
+          {
+            "value": "gpt-5.6-sol",
+            "displayName": "GPT-5.6 Sol"
+          },
+          {
+            "value": "claude-haiku-4-5-20251001",
+            "displayName": "Haiku 4-5 (2025-10-01)"
+          }
+        ],
+        "opus"
+      ],
+      [
+        []
+      ]
+    ]
+  },
+  "output": [
+    {
+      "main": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "more": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "claude-sonnet-4-6",
+          "displayName": "Sonnet 4.6"
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-astra",
+          "displayName": "GPT-5.6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ]
+    },
+    {
+      "main": [
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "more": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "claude-sonnet-4-6",
+          "displayName": "Sonnet 4.6"
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-astra",
+          "displayName": "GPT-5.6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "defaultRow": {
+        "value": "claude-opus-4-7",
+        "displayName": "Opus 4.7"
+      }
+    },
+    {
+      "main": [
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "more": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "claude-sonnet-4-6",
+          "displayName": "Sonnet 4.6"
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-astra",
+          "displayName": "GPT-5.6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "defaultRow": {
+        "value": "sonnet",
+        "resolvedModel": "claude-sonnet-5-5[1m]",
+        "displayName": "Sonnet 5.5",
+        "reasoningEfforts": [
+          "low",
+          "high"
+        ]
+      }
+    },
+    {
+      "main": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "more": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "claude-sonnet-4-6",
+          "displayName": "Sonnet 4.6"
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-astra",
+          "displayName": "GPT-5.6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ]
+    },
+    {
+      "main": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "more": [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        {
+          "value": "claude-fable-5-1",
+          "displayName": "Fable 5.1",
+          "primary": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        {
+          "value": "claude-sonnet-4-6",
+          "displayName": "Sonnet 4.6"
+        },
+        {
+          "value": "gpt-6-astra",
+          "displayName": "GPT-6 Astra"
+        },
+        {
+          "value": "gpt-5.6-astra",
+          "displayName": "GPT-5.6 Astra"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "displayName": "GPT-5.6 Sol"
+        },
+        {
+          "value": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku 4-5 (2025-10-01)"
+        }
+      ],
+      "defaultRow": {
+        "value": "opus",
+        "resolvedModel": "claude-opus-5-5",
+        "displayName": "Opus 5.5",
+        "description": "Most capable"
+      }
+    },
+    {
+      "main": [],
+      "more": []
+    }
+  ]
+}

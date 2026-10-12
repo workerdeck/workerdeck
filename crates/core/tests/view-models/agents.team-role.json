@@ -1,0 +1,77 @@
+{
+  "input": {
+    "fn": "teamRole",
+    "calls": [
+      [
+        null
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ]
+    ]
+  },
+  "output": [
+    null,
+    "lead",
+    "member",
+    "member",
+    "member",
+    null,
+    null,
+    null,
+    "member"
+  ]
+}

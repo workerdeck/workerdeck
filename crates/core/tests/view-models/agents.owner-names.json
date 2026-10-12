@@ -1,0 +1,41 @@
+{
+  "input": {
+    "fn": "isOwnerName",
+    "calls": [
+      [
+        "tobias"
+      ],
+      [
+        "ruli-2"
+      ],
+      [
+        ""
+      ],
+      [
+        "Tobias"
+      ],
+      [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      [
+        "dan_x"
+      ],
+      [
+        "dän"
+      ]
+    ]
+  },
+  "output": [
+    true,
+    true,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false
+  ]
+}

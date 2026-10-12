@@ -1,0 +1,34 @@
+{
+  "input": {
+    "fn": "worseBasis",
+    "calls": [
+      [
+        null,
+        "list"
+      ],
+      [
+        "managed",
+        null
+      ],
+      [
+        "list",
+        "unknown"
+      ],
+      [
+        "unknown",
+        "managed"
+      ],
+      [
+        null,
+        null
+      ]
+    ]
+  },
+  "output": [
+    "list",
+    "managed",
+    "unknown",
+    "unknown",
+    null
+  ]
+}

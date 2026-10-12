@@ -1,0 +1,49 @@
+{
+  "input": {
+    "fn": "isAgentRecord",
+    "calls": [
+      [
+        {
+          "toolUseId": "a",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "agentType": "Explore"
+        }
+      ],
+      [
+        {
+          "toolUseId": "b",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "isAgent": true
+        }
+      ],
+      [
+        {
+          "toolUseId": "c",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "agentType": "   "
+        }
+      ],
+      [
+        {
+          "toolUseId": "d",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "description": "x"
+        }
+      ]
+    ]
+  },
+  "output": [
+    true,
+    true,
+    false,
+    false
+  ]
+}

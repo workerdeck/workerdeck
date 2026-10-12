@@ -1,0 +1,89 @@
+{
+  "input": {
+    "fn": "costOfByModel",
+    "calls": [
+      [
+        {
+          "claude-opus-5-5": {
+            "input": 1000000,
+            "output": 200000,
+            "cacheWrite5m": 50000,
+            "cacheWrite1h": 10000,
+            "cacheRead": 3000000
+          },
+          "claude-sonnet-4-5-20250929": {
+            "input": 12345,
+            "output": 678,
+            "cacheWrite5m": 0,
+            "cacheWrite1h": 0,
+            "cacheRead": 99999,
+            "costBasis": "list"
+          },
+          "mystery-model": {
+            "input": 500,
+            "output": 20,
+            "cacheWrite5m": 0,
+            "cacheWrite1h": 0,
+            "cacheRead": 0,
+            "costBasis": "unknown"
+          },
+          "us.anthropic.claude-haiku-4-5-20251001-v1:0": {
+            "input": 777,
+            "output": 333,
+            "cacheWrite5m": 11,
+            "cacheWrite1h": 0,
+            "cacheRead": 5,
+            "costBasis": "managed"
+          }
+        }
+      ],
+      [
+        {}
+      ],
+      [
+        {
+          "mystery-model": {
+            "input": 500,
+            "output": 20,
+            "cacheWrite5m": 0,
+            "cacheWrite1h": 0,
+            "cacheRead": 0,
+            "costBasis": "unknown"
+          }
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "input": 4.037035,
+      "output": 4.01017,
+      "cacheWrite": 0.33,
+      "cacheRead": 0.6299997,
+      "total": 9.007204699999999,
+      "unpriced": false,
+      "unpricedTokens": 1646,
+      "unpricedShare": 0.0003762571239691789
+    },
+    {
+      "input": 0,
+      "output": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0,
+      "total": 0,
+      "unpriced": false,
+      "unpricedTokens": 0,
+      "unpricedShare": 0
+    },
+    {
+      "input": 0,
+      "output": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0,
+      "total": 0,
+      "unpriced": true,
+      "unpricedTokens": 520,
+      "unpricedShare": 1
+    }
+  ]
+}

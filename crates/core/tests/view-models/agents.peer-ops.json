@@ -1,0 +1,7185 @@
+{
+  "input": {
+    "fn": "peerOps",
+    "calls": [
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias"
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M2",
+            "name": "Two",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M3",
+            "name": "Three",
+            "lead": "X"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "S",
+            "name": "Solo"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SM",
+            "name": "Shared member",
+            "shared": true,
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "tobias",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          }
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "default"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "bypassPermissions"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        false
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH",
+            "name": "Shared",
+            "shared": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "SH2",
+            "name": "Shared two",
+            "shared": true
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ],
+      [
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "L",
+            "name": "Lead",
+            "leads": true
+          }
+        },
+        {
+          "owner": "dan",
+          "agent": {
+            "id": "M1",
+            "name": "One",
+            "lead": "L"
+          },
+          "permissionMode": "dontAsk"
+        },
+        true
+      ]
+    ]
+  },
+  "output": [
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": false,
+      "send": false,
+      "peek": false
+    },
+    {
+      "list": true,
+      "send": false,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    },
+    {
+      "list": true,
+      "send": true,
+      "peek": true
+    }
+  ]
+}

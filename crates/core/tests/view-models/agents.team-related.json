@@ -1,0 +1,990 @@
+{
+  "input": {
+    "fn": "teamRelated",
+    "calls": [
+      [
+        null,
+        null
+      ],
+      [
+        null,
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        null,
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        null,
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        null,
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        null,
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        null,
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        null,
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        null,
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        null
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        null
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        null
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        null
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        null
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "S",
+          "name": "Solo"
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        null
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        null
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        null
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "M2",
+          "name": "Two",
+          "lead": "L"
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "M3",
+          "name": "Three",
+          "lead": "X"
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "S",
+          "name": "Solo"
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "SH",
+          "name": "Shared",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "SH2",
+          "name": "Shared two",
+          "shared": true
+        }
+      ],
+      [
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        },
+        {
+          "id": "SM",
+          "name": "Shared member",
+          "shared": true,
+          "lead": "L"
+        }
+      ]
+    ]
+  },
+  "output": [
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true
+  ]
+}

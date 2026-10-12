@@ -1,0 +1,44 @@
+{
+  "input": {
+    "fn": "subscriptionComparison",
+    "calls": [
+      [
+        120,
+        200
+      ],
+      [
+        0,
+        100
+      ],
+      [
+        50,
+        0
+      ],
+      [
+        -1,
+        100
+      ],
+      [
+        10,
+        -5
+      ]
+    ]
+  },
+  "output": [
+    {
+      "weeklyUsd": 120,
+      "monthlyUsd": 200,
+      "weeklyShareUsd": 46.15384615384616,
+      "ratio": 2.5999999999999996
+    },
+    {
+      "weeklyUsd": 0,
+      "monthlyUsd": 100,
+      "weeklyShareUsd": 23.07692307692308,
+      "ratio": 0
+    },
+    null,
+    null,
+    null
+  ]
+}

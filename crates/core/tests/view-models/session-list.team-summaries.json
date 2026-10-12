@@ -1,0 +1,191 @@
+{
+  "input": {
+    "fn": "teamSummary",
+    "calls": [
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "idle",
+          "info": {
+            "id": "s-lead-0001",
+            "status": "idle",
+            "cwd": "/work/workerdeck",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "WD-Lead",
+            "project": {
+              "name": "WorkerDeck",
+              "root": "/work/workerdeck",
+              "shortcode": "WD"
+            },
+            "agent": {
+              "id": "ag-lead",
+              "name": "WD-Lead",
+              "leads": true,
+              "avatar": "monkey:12"
+            },
+            "owner": "tobias",
+            "lastActivityAt": 1760000005000,
+            "proseCount": 12,
+            "numTurns": 4,
+            "model": "opus",
+            "effort": null,
+            "permissionMode": "default",
+            "statusLabel": {
+              "text": "Reviewing the port",
+              "emoji": "🦀",
+              "setAt": 1760000004000
+            },
+            "contextUsage": {
+              "totalTokens": 52000,
+              "maxTokens": 200000,
+              "percentage": 26
+            },
+            "usageByModel": {
+              "claude-opus-5-5": {
+                "input": 1200,
+                "output": 800,
+                "cacheWrite5m": 0,
+                "cacheWrite1h": 0,
+                "cacheRead": 40000
+              }
+            }
+          },
+          "unseen": 10,
+          "members": [
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "codex",
+              "state": "working",
+              "info": {
+                "id": "s-review-02",
+                "status": "running",
+                "cwd": "/work/workerdeck/packages/ui",
+                "createdAt": 1760000000100,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "WD-Review",
+                "project": {
+                  "name": "WorkerDeck",
+                  "root": "/work/workerdeck",
+                  "shortcode": "WD"
+                },
+                "agent": {
+                  "id": "ag-review",
+                  "name": "WD-Review",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 2
+                },
+                "lastActivityAt": 1760000007000,
+                "engine": "codex",
+                "proseCount": 3
+              },
+              "unseen": 1
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "attention",
+              "info": {
+                "id": "s-art-0003",
+                "status": "idle",
+                "cwd": "/work/workerdeck",
+                "createdAt": 1760000000200,
+                "lastSeq": 0,
+                "pendingPermissionCount": 1,
+                "title": "WD-Art",
+                "project": {
+                  "name": "WorkerDeck",
+                  "root": "/work/workerdeck",
+                  "shortcode": "WD"
+                },
+                "agent": {
+                  "id": "ag-art",
+                  "name": "WD-Art",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 1
+                },
+                "lastActivityAt": 1760000001000
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "box",
+              "hostName": "Build Box",
+              "local": false,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-remote-07",
+                "status": "idle",
+                "cwd": "/srv/magwin",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "AC-MagWin",
+                "agent": {
+                  "id": "ag-magwin",
+                  "name": "AC-MagWin",
+                  "lead": "mini:ag-lead",
+                  "leadGateway": "mini",
+                  "team": "WD-Lead",
+                  "order": 3
+                },
+                "lastActivityAt": 1760000006000
+              },
+              "unseen": 0
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "hostId": "mac",
+          "hostName": "Mac mini",
+          "local": true,
+          "adapter": "claude",
+          "state": "ended",
+          "info": {
+            "id": "s-solo-0004",
+            "status": "closed",
+            "cwd": "/work/api",
+            "createdAt": 1760000000000,
+            "lastSeq": 0,
+            "pendingPermissionCount": 0,
+            "title": "Fix login bug",
+            "project": {
+              "name": "api",
+              "root": "/work/api"
+            },
+            "lastActivityAt": 1760000009000
+          },
+          "unseen": 0
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "members": 3,
+      "working": 1,
+      "attention": 1,
+      "unseen": 1
+    },
+    {
+      "members": 0,
+      "working": 0,
+      "attention": 0,
+      "unseen": 0
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "input": {
+    "fn": "rateFor",
+    "calls": [
+      [
+        "claude-fable-5-1"
+      ],
+      [
+        "claude-opus-5-5[1m]"
+      ],
+      [
+        "gpt-5.2"
+      ],
+      [
+        "claude-haiku-5-5"
+      ],
+      [
+        "unknown-model"
+      ],
+      [
+        null
+      ],
+      [
+        ""
+      ]
+    ]
+  },
+  "output": [
+    {
+      "input": 10,
+      "output": 50,
+      "cacheWrite5m": 12.5,
+      "cacheWrite1h": 20,
+      "cacheRead": 0.25
+    },
+    {
+      "input": 4,
+      "output": 20,
+      "cacheWrite5m": 5,
+      "cacheWrite1h": 8,
+      "cacheRead": 0.2
+    },
+    {
+      "input": 1.75,
+      "output": 14,
+      "cacheWrite5m": 1.75,
+      "cacheWrite1h": 1.75,
+      "cacheRead": 0.175
+    },
+    {
+      "input": 0.1,
+      "output": 0.5,
+      "cacheWrite5m": 0.125,
+      "cacheWrite1h": 0.2,
+      "cacheRead": 0.010000000000000002
+    },
+    null,
+    null,
+    null
+  ]
+}

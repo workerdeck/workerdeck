@@ -1,0 +1,33 @@
+{
+  "input": {
+    "fn": "projectAccent",
+    "calls": [
+      [
+        "mac:/work/workerdeck"
+      ],
+      [
+        "box:C:/work/api"
+      ],
+      [
+        ""
+      ],
+      [
+        "group:g-core"
+      ],
+      [
+        "ünïcödé 🦀"
+      ],
+      [
+        "pi:"
+      ]
+    ]
+  },
+  "output": [
+    "#a85a6e",
+    "#497eae",
+    "#4f8f96",
+    "#8a6bb8",
+    "#a85a6e",
+    "#497eae"
+  ]
+}

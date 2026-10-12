@@ -1,0 +1,36 @@
+{
+  "input": {
+    "fn": "usageIsStale",
+    "calls": [
+      [
+        {
+          "updatedAt": 1760000000000
+        },
+        1760000900000
+      ],
+      [
+        {
+          "updatedAt": 1760000000000
+        },
+        1760000900001
+      ],
+      [
+        {
+          "updatedAt": 1760000000000,
+          "inferredReset": true
+        },
+        1760005940000
+      ],
+      [
+        {},
+        1760005940000
+      ]
+    ]
+  },
+  "output": [
+    false,
+    true,
+    false,
+    false
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "input": {
+    "fn": "peerMentionSlug",
+    "calls": [
+      [
+        "Fix login bug",
+        "s-1"
+      ],
+      [
+        "  --WD Review!!  ",
+        "s-2"
+      ],
+      [
+        null,
+        "1234567890abcdef"
+      ],
+      [
+        "",
+        "mini:abcdef0123456789"
+      ],
+      [
+        "!!!",
+        "abc"
+      ],
+      [
+        "Über Agent 日本語",
+        "x"
+      ],
+      [
+        "word word word word word word word word word word word word word word word word word word word word ",
+        "x"
+      ],
+      [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b",
+        "x"
+      ]
+    ]
+  },
+  "output": [
+    "Fix-login-bug",
+    "WD-Review",
+    "12345678",
+    "abcdef01",
+    "abc",
+    "Über-Agent-日本語",
+    "word-word-word-word-word-word-word-word-word-word-word-word-word",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+}

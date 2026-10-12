@@ -1,0 +1,139 @@
+{
+  "input": {
+    "fn": "clearFilters",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        }
+      ],
+      [
+        {
+          "search": "api",
+          "gateways": [
+            "mac"
+          ],
+          "adapters": [
+            "codex"
+          ],
+          "states": [
+            "idle"
+          ],
+          "projects": [
+            "mac:/work/api"
+          ],
+          "scoped": true,
+          "groupBy": "custom",
+          "sortBy": "name",
+          "subagents": "none",
+          "shells": "all",
+          "tasks": "none",
+          "customGroups": [
+            {
+              "id": "g-core",
+              "name": "Core",
+              "members": [
+                "mac:s-codex-0006",
+                "box:s-windows-8",
+                "mac:missing"
+              ],
+              "color": "#3f8f6b"
+            },
+            {
+              "id": "g-ops",
+              "name": "Ops",
+              "members": [
+                "mac:s-shells-09",
+                "mac:s-codex-0006"
+              ]
+            },
+            {
+              "id": "g-empty",
+              "name": "Empty",
+              "members": [],
+              "icon": "data:image/png;base64,AAAA"
+            }
+          ],
+          "collapsedTeams": [
+            "mac:ag-lead"
+          ],
+          "collapsedGroups": [
+            "custom:g-ops"
+          ],
+          "earlierOpen": true
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": false,
+      "groupBy": "state",
+      "sortBy": "recent",
+      "subagents": "active",
+      "shells": "active",
+      "tasks": "active"
+    },
+    {
+      "search": "",
+      "gateways": [],
+      "adapters": [],
+      "states": [],
+      "projects": [],
+      "scoped": false,
+      "groupBy": "custom",
+      "sortBy": "name",
+      "subagents": "none",
+      "shells": "all",
+      "tasks": "none",
+      "customGroups": [
+        {
+          "id": "g-core",
+          "name": "Core",
+          "members": [
+            "mac:s-codex-0006",
+            "box:s-windows-8",
+            "mac:missing"
+          ],
+          "color": "#3f8f6b"
+        },
+        {
+          "id": "g-ops",
+          "name": "Ops",
+          "members": [
+            "mac:s-shells-09",
+            "mac:s-codex-0006"
+          ]
+        },
+        {
+          "id": "g-empty",
+          "name": "Empty",
+          "members": [],
+          "icon": "data:image/png;base64,AAAA"
+        }
+      ],
+      "collapsedTeams": [
+        "mac:ag-lead"
+      ],
+      "collapsedGroups": [
+        "custom:g-ops"
+      ],
+      "earlierOpen": true
+    }
+  ]
+}

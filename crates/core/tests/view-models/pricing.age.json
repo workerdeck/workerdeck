@@ -1,0 +1,54 @@
+{
+  "input": {
+    "fn": "pricingAge",
+    "calls": [
+      [
+        1791460800000
+      ],
+      [
+        1799193600000
+      ],
+      [
+        1799280000000
+      ],
+      [
+        1803859200000,
+        "2026-02-28"
+      ],
+      [
+        1803859200000,
+        "not a date"
+      ],
+      [
+        1767225600000,
+        "2026-10-08"
+      ]
+    ]
+  },
+  "output": [
+    {
+      "days": 0,
+      "note": null
+    },
+    {
+      "days": 90,
+      "note": null
+    },
+    {
+      "days": 91,
+      "note": "This rate table is 91 days old, so check the vendor's current list prices before you trust the total."
+    },
+    {
+      "days": 366,
+      "note": "This rate table is 366 days old, so check the vendor's current list prices before you trust the total."
+    },
+    {
+      "days": 0,
+      "note": null
+    },
+    {
+      "days": -280,
+      "note": null
+    }
+  ]
+}

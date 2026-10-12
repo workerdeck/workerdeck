@@ -1,0 +1,88 @@
+{
+  "input": {
+    "fn": "sessionState",
+    "calls": [
+      [
+        {
+          "id": "a",
+          "status": "closed",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "subagents": [
+            {
+              "toolUseId": "x",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "id": "b",
+          "status": "failed",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 2
+        }
+      ],
+      [
+        {
+          "id": "c",
+          "status": "parked",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0
+        }
+      ],
+      [
+        {
+          "id": "d",
+          "status": "idle",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 0,
+          "subagents": [
+            {
+              "toolUseId": "x",
+              "status": "done",
+              "startedAt": 1760000000000,
+              "toolCount": 0
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "id": "e",
+          "status": "running",
+          "cwd": "/work/alpha",
+          "createdAt": 1760000000000,
+          "lastSeq": 0,
+          "pendingPermissionCount": 1,
+          "subagents": [
+            {
+              "toolUseId": "x",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0
+            }
+          ]
+        }
+      ]
+    ]
+  },
+  "output": [
+    "ended",
+    "attention",
+    "idle",
+    "idle",
+    "attention"
+  ]
+}

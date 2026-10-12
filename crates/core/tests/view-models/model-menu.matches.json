@@ -1,0 +1,81 @@
+{
+  "input": {
+    "fn": "modelMatches",
+    "calls": [
+      [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        "opus"
+      ],
+      [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        "opus[1m]"
+      ],
+      [
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5-5",
+          "displayName": "Opus 5.5",
+          "description": "Most capable"
+        },
+        "claude-opus-5-5"
+      ],
+      [
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        "claude-sonnet-5-5"
+      ],
+      [
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5-5[1m]",
+          "displayName": "Sonnet 5.5",
+          "reasoningEfforts": [
+            "low",
+            "high"
+          ]
+        },
+        "claude-sonnet-5-5[1m]"
+      ],
+      [
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        "claude-opus-4-7[1m]"
+      ],
+      [
+        {
+          "value": "claude-opus-4-7",
+          "displayName": "Opus 4.7"
+        },
+        "opus"
+      ]
+    ]
+  },
+  "output": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false
+  ]
+}

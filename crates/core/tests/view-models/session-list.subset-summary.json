@@ -1,0 +1,169 @@
+{
+  "input": {
+    "fn": "subsetSummary",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "label": "workerdeck",
+          "roots": [
+            {
+              "path": "/work/workerdeck/"
+            },
+            {
+              "hostId": "BOX",
+              "path": "C:\\work\\api"
+            }
+          ]
+        },
+        5,
+        5
+      ],
+      [
+        {
+          "search": "x",
+          "gateways": [
+            "mac"
+          ],
+          "adapters": [],
+          "states": [
+            "idle"
+          ],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "label": "workerdeck",
+          "roots": [
+            {
+              "path": "/work/workerdeck/"
+            },
+            {
+              "hostId": "BOX",
+              "path": "C:\\work\\api"
+            }
+          ]
+        },
+        2,
+        9
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [
+            "codex"
+          ],
+          "states": [],
+          "projects": [],
+          "scoped": false,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        {
+          "label": "workerdeck",
+          "roots": [
+            {
+              "path": "/work/workerdeck/"
+            },
+            {
+              "hostId": "BOX",
+              "path": "C:\\work\\api"
+            }
+          ]
+        },
+        2,
+        9
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [
+            "mac:/work/api"
+          ],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        null,
+        1,
+        9
+      ],
+      [
+        {
+          "search": "   ",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        },
+        null,
+        1,
+        9
+      ]
+    ]
+  },
+  "output": [
+    null,
+    {
+      "shown": 2,
+      "total": 9,
+      "causes": [
+        "workerdeck",
+        "2 filters",
+        "search"
+      ]
+    },
+    {
+      "shown": 2,
+      "total": 9,
+      "causes": [
+        "1 filter"
+      ]
+    },
+    {
+      "shown": 1,
+      "total": 9,
+      "causes": [
+        "1 filter"
+      ]
+    },
+    {
+      "shown": 1,
+      "total": 9,
+      "causes": []
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "input": {
+    "fn": "toolTitle",
+    "calls": [
+      [
+        "fs_read"
+      ],
+      [
+        "Bash"
+      ],
+      [
+        "mcp__workerdeck__peers_send"
+      ],
+      [
+        "custom",
+        {
+          "custom": "Custom tool"
+        }
+      ],
+      [
+        "fs_read",
+        {
+          "fs_read": "Reading carefully"
+        }
+      ],
+      [
+        "echo",
+        {
+          "echo": "echo"
+        }
+      ],
+      [
+        "x",
+        {
+          "x": "\u0000\u0007  \n"
+        }
+      ]
+    ]
+  },
+  "output": [
+    "Reading a file",
+    null,
+    "Messaging a peer session",
+    "Custom tool",
+    "Reading carefully",
+    null,
+    null
+  ]
+}

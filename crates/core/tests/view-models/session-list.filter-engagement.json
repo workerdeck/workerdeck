@@ -1,0 +1,131 @@
+{
+  "input": {
+    "fn": "filterEngagement",
+    "calls": [
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        }
+      ],
+      [
+        {
+          "search": " x ",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "active"
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [
+            "mac"
+          ],
+          "adapters": [],
+          "states": [],
+          "projects": [
+            "mac:/w"
+          ],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "all",
+          "shells": "active",
+          "tasks": "active"
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "none",
+          "tasks": "active"
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active"
+        }
+      ],
+      [
+        {
+          "search": "",
+          "gateways": [],
+          "adapters": [],
+          "states": [],
+          "projects": [],
+          "scoped": true,
+          "groupBy": "state",
+          "sortBy": "recent",
+          "subagents": "active",
+          "shells": "active",
+          "tasks": "all"
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "hasFacetFilter": false,
+      "facetFilterCount": 0,
+      "displayCustomized": false
+    },
+    {
+      "hasFacetFilter": true,
+      "facetFilterCount": 0,
+      "displayCustomized": false
+    },
+    {
+      "hasFacetFilter": true,
+      "facetFilterCount": 2,
+      "displayCustomized": true
+    },
+    {
+      "hasFacetFilter": false,
+      "facetFilterCount": 0,
+      "displayCustomized": true
+    },
+    {
+      "hasFacetFilter": false,
+      "facetFilterCount": 0,
+      "displayCustomized": false
+    },
+    {
+      "hasFacetFilter": false,
+      "facetFilterCount": 0,
+      "displayCustomized": true
+    }
+  ]
+}

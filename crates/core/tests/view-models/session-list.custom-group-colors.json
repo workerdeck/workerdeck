@@ -1,0 +1,42 @@
+{
+  "input": {
+    "fn": "customGroupColor",
+    "calls": [
+      [
+        {
+          "id": "g-core",
+          "name": "Core",
+          "members": [
+            "mac:s-codex-0006",
+            "box:s-windows-8",
+            "mac:missing"
+          ],
+          "color": "#3f8f6b"
+        }
+      ],
+      [
+        {
+          "id": "g-ops",
+          "name": "Ops",
+          "members": [
+            "mac:s-shells-09",
+            "mac:s-codex-0006"
+          ]
+        }
+      ],
+      [
+        {
+          "id": "g-empty",
+          "name": "Empty",
+          "members": [],
+          "icon": "data:image/png;base64,AAAA"
+        }
+      ]
+    ]
+  },
+  "output": [
+    "#3f8f6b",
+    "#7c8a3f",
+    "#b0794a"
+  ]
+}

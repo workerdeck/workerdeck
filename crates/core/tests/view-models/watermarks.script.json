@@ -1,0 +1,229 @@
+{
+  "input": {
+    "fn": "watermarkScript",
+    "calls": [
+      [
+        {
+          "mac:old": {
+            "itemCount": 1,
+            "activity": 1,
+            "turns": 1,
+            "seenAt": 1756544000000
+          },
+          "mac:legacy": {
+            "itemCount": 4,
+            "activity": 9,
+            "turns": 2,
+            "seenAt": 1759999999000
+          }
+        },
+        [
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 3,
+              "activity": 5,
+              "prose": 2,
+              "turns": 1
+            },
+            1760000000000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 3,
+              "activity": 5,
+              "prose": 2,
+              "turns": 1
+            },
+            1760000030000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "itemCount": 1,
+              "activity": 2
+            },
+            1760000030000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {},
+            1760000061000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "prose": 1
+            },
+            1760000062000
+          ],
+          [
+            "mark",
+            "mac",
+            "s1",
+            {
+              "prose": 4,
+              "turns": 3
+            },
+            1760000062500
+          ],
+          [
+            "mark",
+            "mac",
+            "legacy",
+            {
+              "activity": 9
+            },
+            1760000000000
+          ],
+          [
+            "mark",
+            "mac",
+            "legacy",
+            {
+              "prose": 0
+            },
+            1760000000010
+          ],
+          [
+            "forget",
+            "mac",
+            "nobody"
+          ],
+          [
+            "forget",
+            "mac",
+            "s1"
+          ],
+          [
+            "mark",
+            "box",
+            "s2",
+            {
+              "prose": 7
+            },
+            1762678400000
+          ]
+        ]
+      ]
+    ]
+  },
+  "output": [
+    {
+      "results": [
+        true,
+        false,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true
+      ],
+      "writes": [
+        {
+          "mac:legacy": {
+            "itemCount": 4,
+            "activity": 9,
+            "turns": 2,
+            "seenAt": 1759999999000
+          },
+          "mac:s1": {
+            "itemCount": 3,
+            "activity": 5,
+            "prose": 2,
+            "turns": 1,
+            "seenAt": 1760000000000
+          }
+        },
+        {
+          "mac:legacy": {
+            "itemCount": 4,
+            "activity": 9,
+            "turns": 2,
+            "seenAt": 1759999999000
+          },
+          "mac:s1": {
+            "itemCount": 3,
+            "activity": 5,
+            "prose": 2,
+            "turns": 1,
+            "seenAt": 1760000061000
+          }
+        },
+        {
+          "mac:legacy": {
+            "itemCount": 4,
+            "activity": 9,
+            "turns": 2,
+            "seenAt": 1759999999000
+          },
+          "mac:s1": {
+            "itemCount": 3,
+            "activity": 5,
+            "prose": 4,
+            "turns": 3,
+            "seenAt": 1760000062500
+          }
+        },
+        {
+          "mac:legacy": {
+            "itemCount": 4,
+            "activity": 9,
+            "prose": 0,
+            "turns": 2,
+            "seenAt": 1760000000010
+          },
+          "mac:s1": {
+            "itemCount": 3,
+            "activity": 5,
+            "prose": 4,
+            "turns": 3,
+            "seenAt": 1760000062500
+          }
+        },
+        {
+          "mac:legacy": {
+            "itemCount": 4,
+            "activity": 9,
+            "prose": 0,
+            "turns": 2,
+            "seenAt": 1760000000010
+          }
+        },
+        {
+          "box:s2": {
+            "itemCount": 0,
+            "activity": 0,
+            "prose": 7,
+            "turns": 0,
+            "seenAt": 1762678400000
+          }
+        }
+      ],
+      "marks": {
+        "box:s2": {
+          "itemCount": 0,
+          "activity": 0,
+          "prose": 7,
+          "turns": 0,
+          "seenAt": 1762678400000
+        }
+      }
+    }
+  ]
+}

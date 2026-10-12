@@ -1,0 +1,55 @@
+{
+  "input": {
+    "fn": "qualifyAgent",
+    "calls": [
+      [
+        null,
+        "mini"
+      ],
+      [
+        {
+          "id": "L",
+          "name": "Lead",
+          "leads": true
+        },
+        "mini"
+      ],
+      [
+        {
+          "id": "M1",
+          "name": "One",
+          "lead": "L"
+        },
+        "mini"
+      ],
+      [
+        {
+          "id": "box:M",
+          "name": "m",
+          "lead": "box:L",
+          "order": 2
+        },
+        "mini"
+      ]
+    ]
+  },
+  "output": [
+    null,
+    {
+      "id": "mini:L",
+      "name": "Lead",
+      "leads": true
+    },
+    {
+      "id": "mini:M1",
+      "name": "One",
+      "lead": "mini:L"
+    },
+    {
+      "id": "box:M",
+      "name": "m",
+      "lead": "box:L",
+      "order": 2
+    }
+  ]
+}

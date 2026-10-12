@@ -1,0 +1,60 @@
+{
+  "input": {
+    "fn": "subagentLabel",
+    "calls": [
+      [
+        {
+          "toolUseId": "a",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "agentType": "Explore",
+          "description": "find the auth check"
+        }
+      ],
+      [
+        {
+          "toolUseId": "b",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "agentType": "  Plan  "
+        }
+      ],
+      [
+        {
+          "toolUseId": "c",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "description": " write tests "
+        }
+      ],
+      [
+        {
+          "toolUseId": "d",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0,
+          "agentType": "  ",
+          "description": ""
+        }
+      ],
+      [
+        {
+          "toolUseId": "e",
+          "status": "running",
+          "startedAt": 1760000000000,
+          "toolCount": 0
+        }
+      ]
+    ]
+  },
+  "output": [
+    "Explore · find the auth check",
+    "Plan",
+    "write tests",
+    "Sub-agent",
+    "Sub-agent"
+  ]
+}

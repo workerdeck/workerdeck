@@ -1,0 +1,49 @@
+{
+  "input": {
+    "fn": "isPeerMentionBody",
+    "calls": [
+      [
+        "astra"
+      ],
+      [
+        "-x"
+      ],
+      [
+        "_x"
+      ],
+      [
+        "x-_y"
+      ],
+      [
+        ""
+      ],
+      [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      [
+        "日本"
+      ],
+      [
+        "a.b"
+      ],
+      [
+        "9lives"
+      ]
+    ]
+  },
+  "output": [
+    true,
+    false,
+    false,
+    true,
+    false,
+    true,
+    false,
+    true,
+    false,
+    true
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "input": {
+    "fn": "relayHostsOf",
+    "calls": [
+      [
+        {
+          "mac": {
+            "gateway": "mini",
+            "owner": "tobias",
+            "online": true,
+            "features": [
+              "owners",
+              "teams"
+            ]
+          },
+          "pi": {
+            "gateway": "pibo",
+            "owners": [
+              "dan",
+              "ruli"
+            ],
+            "ownersDefaulted": true,
+            "online": false,
+            "features": []
+          }
+        }
+      ],
+      [
+        {}
+      ]
+    ]
+  },
+  "output": [
+    {
+      "mini": "mac",
+      "pibo": "pi"
+    },
+    {}
+  ]
+}

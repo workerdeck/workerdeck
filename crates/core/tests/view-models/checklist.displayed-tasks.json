@@ -1,0 +1,292 @@
+{
+  "input": {
+    "fn": "displayedTasks",
+    "calls": [
+      [
+        {
+          "checklist": [
+            {
+              "text": "Read the plan",
+              "status": "completed"
+            },
+            {
+              "text": "Port the session list",
+              "status": "in_progress"
+            },
+            {
+              "text": "Write goldens",
+              "status": "pending"
+            }
+          ],
+          "subagents": [
+            {
+              "toolUseId": "tu-run",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 3,
+              "description": "write tests",
+              "stoppable": true
+            },
+            {
+              "toolUseId": "tu-done",
+              "status": "done",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "description": "  ",
+              "stoppable": true
+            },
+            {
+              "toolUseId": "tu-fail",
+              "status": "failed",
+              "startedAt": 1760000000000,
+              "toolCount": 1,
+              "description": "deploy"
+            },
+            {
+              "toolUseId": "tu-agent",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "agentType": "Explore",
+              "description": "look around"
+            },
+            {
+              "toolUseId": "tu-codex",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "isAgent": true
+            },
+            {
+              "toolUseId": "tu-nostop",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "description": "background",
+              "stoppable": false
+            }
+          ]
+        },
+        "all"
+      ],
+      [
+        {
+          "checklist": [
+            {
+              "text": "Read the plan",
+              "status": "completed"
+            },
+            {
+              "text": "Port the session list",
+              "status": "in_progress"
+            },
+            {
+              "text": "Write goldens",
+              "status": "pending"
+            }
+          ],
+          "subagents": [
+            {
+              "toolUseId": "tu-run",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 3,
+              "description": "write tests",
+              "stoppable": true
+            },
+            {
+              "toolUseId": "tu-done",
+              "status": "done",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "description": "  ",
+              "stoppable": true
+            },
+            {
+              "toolUseId": "tu-fail",
+              "status": "failed",
+              "startedAt": 1760000000000,
+              "toolCount": 1,
+              "description": "deploy"
+            },
+            {
+              "toolUseId": "tu-agent",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "agentType": "Explore",
+              "description": "look around"
+            },
+            {
+              "toolUseId": "tu-codex",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "isAgent": true
+            },
+            {
+              "toolUseId": "tu-nostop",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "description": "background",
+              "stoppable": false
+            }
+          ]
+        },
+        "active"
+      ],
+      [
+        {
+          "checklist": [
+            {
+              "text": "Read the plan",
+              "status": "completed"
+            },
+            {
+              "text": "Port the session list",
+              "status": "in_progress"
+            },
+            {
+              "text": "Write goldens",
+              "status": "pending"
+            }
+          ],
+          "subagents": [
+            {
+              "toolUseId": "tu-run",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 3,
+              "description": "write tests",
+              "stoppable": true
+            },
+            {
+              "toolUseId": "tu-done",
+              "status": "done",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "description": "  ",
+              "stoppable": true
+            },
+            {
+              "toolUseId": "tu-fail",
+              "status": "failed",
+              "startedAt": 1760000000000,
+              "toolCount": 1,
+              "description": "deploy"
+            },
+            {
+              "toolUseId": "tu-agent",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "agentType": "Explore",
+              "description": "look around"
+            },
+            {
+              "toolUseId": "tu-codex",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "isAgent": true
+            },
+            {
+              "toolUseId": "tu-nostop",
+              "status": "running",
+              "startedAt": 1760000000000,
+              "toolCount": 0,
+              "description": "background",
+              "stoppable": false
+            }
+          ]
+        },
+        "none"
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "key": "checklist:0",
+        "label": "Read the plan",
+        "source": "checklist",
+        "state": "done"
+      },
+      {
+        "key": "checklist:1",
+        "label": "Port the session list",
+        "source": "checklist",
+        "state": "running"
+      },
+      {
+        "key": "checklist:2",
+        "label": "Write goldens",
+        "source": "checklist",
+        "state": "pending"
+      },
+      {
+        "key": "spawn:tu-run",
+        "label": "write tests",
+        "source": "spawn",
+        "state": "running",
+        "detail": "3",
+        "toolUseId": "tu-run",
+        "stoppable": true
+      },
+      {
+        "key": "spawn:tu-done",
+        "label": "Task",
+        "source": "spawn",
+        "state": "done",
+        "toolUseId": "tu-done"
+      },
+      {
+        "key": "spawn:tu-fail",
+        "label": "deploy",
+        "source": "spawn",
+        "state": "failed",
+        "detail": "1",
+        "toolUseId": "tu-fail"
+      },
+      {
+        "key": "spawn:tu-nostop",
+        "label": "background",
+        "source": "spawn",
+        "state": "running",
+        "toolUseId": "tu-nostop"
+      }
+    ],
+    [
+      {
+        "key": "checklist:1",
+        "label": "Port the session list",
+        "source": "checklist",
+        "state": "running"
+      },
+      {
+        "key": "checklist:2",
+        "label": "Write goldens",
+        "source": "checklist",
+        "state": "pending"
+      },
+      {
+        "key": "spawn:tu-run",
+        "label": "write tests",
+        "source": "spawn",
+        "state": "running",
+        "detail": "3",
+        "toolUseId": "tu-run",
+        "stoppable": true
+      },
+      {
+        "key": "spawn:tu-nostop",
+        "label": "background",
+        "source": "spawn",
+        "state": "running",
+        "toolUseId": "tu-nostop"
+      }
+    ],
+    []
+  ]
+}
