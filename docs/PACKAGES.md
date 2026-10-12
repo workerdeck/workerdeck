@@ -13,7 +13,7 @@ the Agent SDK. Dependency-free, browser-safe, depends
 on nothing and everything depends on it. Two helpers ride along because every client needs them to agree:
 `errorMessage(e, fallback?)` (an `Error`'s message, else the fallback, else `String(e)`) and
 `resolvePosix(target, cwd)` (a file link's normalized absolute path, or nothing for a relative one
-before the cwd is known; the dashboard's file links and the extension's both resolve through it). Breaking → bump `PROTOCOL_VERSION`, which is **1**:
+before the cwd is known; the dashboard's file links and the extension's both resolve through it). `chunkShellInput(data)` splits shell input into frames the gateway accepts (`SHELL_INPUT_MAX`, measured in UTF-8 bytes so it never undercounts the gateway's UTF-16 check, never inside a grapheme); `SessionHandle.writeShell` sends one `shell_input` per chunk, which is what lets a large paste reach a shell. iOS's `SessionHandle.chunk` is the same rule. Breaking → bump `PROTOCOL_VERSION`, which is **1**:
 it was collapsed from 7 before the public launch, the counter having been climbing through a
 period when every consumer was rebuilt from this repo anyway and nothing in the wild spoke an
 older one. **From the public launch it is locked** - after that a bump is a real promise to

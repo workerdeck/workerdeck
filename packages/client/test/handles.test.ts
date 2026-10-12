@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { chunkShellInput, SHELL_INPUT_MAX } from '@workerdeck/protocol'
 import { WorkerDeckClient, WorkerDeckError } from '../src/index.ts'
 
 // A socket the test drives by hand. The handles only ever touch onopen/onmessage/onclose/onerror,
@@ -244,6 +245,53 @@ describe('SessionHandle framing', () => {
     latest().deliver({ type: 'protocol_error', message: 'bad frame' })
 
     expect(seen).toEqual(['attached', 'toolCallRequest', 'canceled:e1:timeout', 'error:bad frame'])
+    handle.detach()
+  })
+})
+
+describe('shell input chunking', () => {
+  const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}'
+  const utf8 = (text: string) => Buffer.byteLength(text, 'utf8')
+
+  it('keeps input within the limit as one chunk', () => {
+    expect(chunkShellInput('ls -la\r')).toEqual(['ls -la\r'])
+    expect(chunkShellInput('')).toEqual([''])
+  })
+
+  it('splits a 10k paste into chunks that stay under the limit and rejoin exactly', () => {
+    const paste = 'abcdefghij'.repeat(1000)
+    const chunks = chunkShellInput(paste)
+    expect(chunks.length).toBe(3)
+    expect(chunks.join('')).toBe(paste)
+    expect(chunks.every((chunk) => utf8(chunk) <= SHELL_INPUT_MAX && chunk.length <= SHELL_INPUT_MAX)).toBe(true)
+  })
+
+  it('never splits a grapheme at the boundary', () => {
+    const paste = 'a'.repeat(SHELL_INPUT_MAX - 3) + family + 'b'.repeat(100)
+    const chunks = chunkShellInput(paste)
+    expect(chunks).toEqual(['a'.repeat(SHELL_INPUT_MAX - 3), family + 'b'.repeat(100)])
+  })
+
+  it('counts multibyte text in UTF-8 bytes', () => {
+    const paste = '\u00e9'.repeat(SHELL_INPUT_MAX)
+    const chunks = chunkShellInput(paste)
+    expect(chunks.map(utf8)).toEqual([SHELL_INPUT_MAX, SHELL_INPUT_MAX])
+    expect(chunks.join('')).toBe(paste)
+  })
+
+  it('sends a grapheme larger than the limit alone', () => {
+    expect(chunkShellInput('ab' + family + 'cd', 4)).toEqual(['ab', family, 'cd'])
+  })
+
+  it('writeShell sends one frame per chunk, in order', () => {
+    const handle = makeClient().attach('s1')
+    settle()
+    latest().accept()
+    const paste = 'x'.repeat(SHELL_INPUT_MAX * 2 + 10)
+    handle.writeShell('sh1', paste)
+    const frames = latest().sent.map((raw) => JSON.parse(raw) as { type: string; shellId: string; data: string })
+    expect(frames.map((frame) => frame.data.length)).toEqual([SHELL_INPUT_MAX, SHELL_INPUT_MAX, 10])
+    expect(frames.every((frame) => frame.type === 'shell_input' && frame.shellId === 'sh1')).toBe(true)
     handle.detach()
   })
 })

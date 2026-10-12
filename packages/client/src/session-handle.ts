@@ -8,6 +8,7 @@ import type {
   ToolCallRequestFrame,
   ToolExecutionOutput,
 } from '@workerdeck/protocol'
+import { chunkShellInput } from '@workerdeck/protocol'
 import { Emitter, reconnectDelay, type Listener } from './lib/emitter.ts'
 import type { WorkerDeckClient } from './index.ts'
 
@@ -97,7 +98,9 @@ export class SessionHandle {
   }
 
   writeShell(shellId: string, data: string): void {
-    this.#sendFrame({ type: 'shell_input', shellId, data })
+    for (const chunk of chunkShellInput(data)) {
+      this.#sendFrame({ type: 'shell_input', shellId, data: chunk })
+    }
   }
 
   resizeShell(shellId: string, size: { cols: number; rows: number }): void {

@@ -418,6 +418,39 @@ export const SHELL_MAX_COLS = 1000
 export const SHELL_MIN_ROWS = 1
 export const SHELL_MAX_ROWS = 500
 export const SHELL_INPUT_MAX = 4096
+
+// Measured in UTF-8 bytes, which never undercounts the gateway's UTF-16 limit.
+export function chunkShellInput(data: string, max = SHELL_INPUT_MAX): string[] {
+  if (data.length * 3 <= max || utf8Length(data) <= max) {
+    return [data]
+  }
+  const chunks: string[] = []
+  let current = ''
+  let bytes = 0
+  for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(data)) {
+    const width = utf8Length(segment)
+    if (bytes + width > max && current) {
+      chunks.push(current)
+      current = ''
+      bytes = 0
+    }
+    current += segment
+    bytes += width
+  }
+  if (current) {
+    chunks.push(current)
+  }
+  return chunks
+}
+
+function utf8Length(text: string): number {
+  let bytes = 0
+  for (const char of text) {
+    const code = char.codePointAt(0)!
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4
+  }
+  return bytes
+}
 export const SHELL_LABEL_MAX = 80
 export const SHELL_INLINE_LINES = 8
 export const SHELL_INTERACTIVE_NOTE = 'interactive output, no preview'
