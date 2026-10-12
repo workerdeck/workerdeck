@@ -1,14 +1,151 @@
-use serde::Deserialize;
+use crate::rest::{PermissionMode, SessionInfo, ShellInfo};
 use serde::de::{self, Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
+use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
+
+pub const PROTOCOL_VERSION: i64 = 1;
+pub const SHELL_INPUT_MAX: usize = 4096;
 
 pub enum Frame {
     Event(Event),
     ShellOutput { shell_id: String, data: String },
+    Attached(Box<AttachedFrame>),
+    ToolCallRequest(Box<ToolCallRequestFrame>),
+    ToolCallCanceled { execution_id: String, reason: String },
+    ProtocolError(String),
+    ShellAttached(Box<ShellAttachedFrame>),
+    ShellDetached { shell_id: String, reason: String },
     Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachedFrame {
+    pub protocol_version: i64,
+    pub session: SessionInfo,
+    pub replaying_from: i64,
+    #[serde(default)]
+    pub shell: Option<bool>,
+    #[serde(default)]
+    pub pricing_overrides: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolCallRequestFrame {
+    pub execution_id: String,
+    pub tool_name: String,
+    pub input: Value,
+    pub vfs_seed: Option<BTreeMap<String, String>>,
+    pub limits: Option<ToolCallLimits>,
+    pub expires_at: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallLimits {
+    #[serde(default)]
+    pub timeout_ms: Option<f64>,
+    #[serde(default)]
+    pub memory_limit_bytes: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellAttachedFrame {
+    pub shell_id: String,
+    pub shell: ShellInfo,
+    pub cols: i64,
+    pub rows: i64,
+    pub scrollback: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PermissionBehavior {
+    Allow,
+    Deny,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum ClientFrame {
+    UserMessage {
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        attachment_ids: Option<Vec<String>>,
+    },
+    PermissionDecision {
+        request_id: String,
+        behavior: PermissionBehavior,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        updated_input: Option<Map<String, Value>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        interrupt: Option<bool>,
+    },
+    Interrupt,
+    ClearContext,
+    Sleep,
+    BackgroundTask {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_use_id: Option<String>,
+    },
+    SetPermissionMode {
+        mode: PermissionMode,
+    },
+    SetModel {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+    },
+    SetEffort {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        effort: Option<String>,
+    },
+    ToolCallResult {
+        execution_id: String,
+        output: Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        logs: Option<Vec<String>>,
+    },
+    ToolCallError {
+        execution_id: String,
+        reason: String,
+        error: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        logs: Option<Vec<String>>,
+    },
+    ShellCommand {
+        command: String,
+    },
+    ShellAttach {
+        shell_id: String,
+        cols: u32,
+        rows: u32,
+    },
+    ShellInput {
+        shell_id: String,
+        data: String,
+    },
+    ShellResize {
+        shell_id: String,
+        cols: u32,
+        rows: u32,
+    },
+    ShellDetach {
+        shell_id: String,
+    },
+    Close,
+}
+
+impl ClientFrame {
+    pub fn encode(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
 }
 
 pub struct Event {
@@ -427,8 +564,70 @@ pub fn decode_frame(line: &[u8]) -> Option<Frame> {
             (Some(shell_id), Some(data)) => Some(Frame::ShellOutput { shell_id, data }),
             _ => Some(Frame::Unknown),
         },
-        _ => Some(Frame::Unknown),
+        _ => Some(decode_cold_frame(&ty, line).unwrap_or(Frame::Unknown)),
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawToolCallRequest<'a> {
+    execution_id: String,
+    tool_name: String,
+    #[serde(borrow, default)]
+    input: Option<&'a RawValue>,
+    #[serde(default)]
+    vfs_seed: Option<BTreeMap<String, String>>,
+    #[serde(default)]
+    limits: Option<ToolCallLimits>,
+    #[serde(default)]
+    expires_at: Option<f64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawCanceled {
+    execution_id: String,
+    reason: String,
+}
+
+#[derive(Deserialize)]
+struct RawProtocolError {
+    message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawShellDetached {
+    shell_id: String,
+    reason: String,
+}
+
+fn decode_cold_frame(ty: &str, line: &[u8]) -> Option<Frame> {
+    Some(match ty {
+        "attached" => Frame::Attached(Box::new(serde_json::from_slice(line).ok()?)),
+        "tool_call_request" => {
+            let raw: RawToolCallRequest = serde_json::from_slice(line).ok()?;
+            Frame::ToolCallRequest(Box::new(ToolCallRequestFrame {
+                execution_id: raw.execution_id,
+                tool_name: raw.tool_name,
+                input: serde_json::from_str(raw.input?.get()).ok()?,
+                vfs_seed: raw.vfs_seed,
+                limits: raw.limits,
+                expires_at: raw.expires_at,
+            }))
+        }
+        "tool_call_canceled" => {
+            let raw: RawCanceled = serde_json::from_slice(line).ok()?;
+            Frame::ToolCallCanceled { execution_id: raw.execution_id, reason: raw.reason }
+        }
+        "protocol_error" => Frame::ProtocolError(serde_json::from_slice::<RawProtocolError>(line).ok()?.message),
+        "shell_attached" => Frame::ShellAttached(Box::new(serde_json::from_slice(line).ok()?)),
+        "shell_detached" => {
+            let raw: RawShellDetached = serde_json::from_slice(line).ok()?;
+            Frame::ShellDetached { shell_id: raw.shell_id, reason: raw.reason }
+        }
+        _ => return None,
+    })
 }
 
 fn decode_event(json: &str) -> Option<Event> {

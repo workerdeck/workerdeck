@@ -2434,6 +2434,7 @@ can be read side by side until iOS moves onto the core:
 | `rows.rs` | `Terminal/TerminalBlocks.swift` + `TerminalRows.build`: recap boundary, brief rows, sub-agent frames, `hideThinking` |
 | `planner.rs` | `Terminal/TerminalPlanner.swift` (every expansion, press and frame branch, image boxes), plus `TerminalMetrics`, `TermFmt`, `ResultPreview`, `LiveTool` |
 | `expansion.rs` | `Terminal/TerminalExpansion.swift`: `ExpansionKey`, `TermPress`, open/full/pending |
+| `controller/session.rs` | `SessionHandle.swift` as a sans-IO state machine: socket events and commands in, `Open`/`Send`/`Close`/`WakeAt` effects and app signals out; backoff, outbox and close-after-drain as Swift has them |
 | `controller/` | `TranscriptView` (the app's `TerminalTranscriptModel`: presses return effects such as `FetchResult` / `OpenSubagent` instead of calling closures), `ReplayHold`, `TranscriptSeqIndex`, `StickyPrompt`, `TranscriptScrollGeometry` |
 | `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `fmt`; ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
 | `rest.rs` | the REST/wire records the view models read (`SessionInfo`, `AgentInfo`, ...), serde camelCase, unknown fields ignored |
@@ -2442,9 +2443,9 @@ can be read side by side until iOS moves onto the core:
 | `book.rs` | `Terminal/TerminalHeightBook.swift` + `TerminalPlanCache`; 256 or more misses plan in parallel |
 | `vt.rs` | `Terminal/VTScreen.swift` + `VTTypes.swift`; parsing is the `vte` crate, dispatch mirrors the Swift handlers |
 
-**Still missing**: VT resize and key encoding, the sans-IO session connection (in progress), the
-shell session, the scrubber, and the app-side view models (`CreateSessionModel`, prompt
-completion, unread). The plan, with its
+**Still missing**: wiring the session connection to `TranscriptView` and the reducer (one session
+object), the shell session, the scrubber, and the app-side view models (`CreateSessionModel`,
+prompt completion, unread). The plan, with its
 phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
 
 **Conformance goldens** replace "mirror by convention" for the reducer. `conformance/corpus.ts`
@@ -2489,7 +2490,9 @@ parser keeps the markers and the portable one drops them.
 `packages/protocol` functions and writes `crates/core/tests/view-models/<module>.<case>.json` as
 `{input: {fn, calls}, output}`; `--check` runs in CI. Recap goldens ride the transcript corpus
 (`<case>.recap.json`, every boundary). Numbers compare within 4 ulps (serde_json reads some
-decimals one ulp off).
+decimals one ulp off). Client frame encoding is pinned the same way: `pnpm fixtures:frames` drives
+the real `@workerdeck/client` session handle over a fake socket and writes
+`crates/core/tests/client-frames/commands.json`, which `tests/session.rs` replays.
 
 Known representational gap: the kit and the port decode an `addressed` thinking block as plain
 text, where the TypeScript reducer keeps a `thinking` item with `addressed: true`. The planned

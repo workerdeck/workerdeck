@@ -13,6 +13,7 @@
     "fix:dashes": "node scripts/fix-dashes.mjs",
     "fixtures:golden": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register conformance/generate.ts",
     "fixtures:vm": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register conformance/generate-view-models.ts",
+    "fixtures:frames": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register conformance/generate-client-frames.ts",
     "version:set": "pnpm --filter \"./packages/*\" --filter \"./apps/vscode\" --filter \"./apps/embedded\" --filter \"./apps/demo\" exec npm version --no-git-tag-version --force",
     "publish:all": "pnpm publish -r --access public",
     "test": "turbo run test",

@@ -20,6 +20,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm fixtures:golden --check
       - run: pnpm fixtures:vm --check
+      - run: pnpm fixtures:frames --check
       - run: pnpm test
       - run: pnpm build
       # Side-loadable VS Code extension - not on the Marketplace yet, so the CI

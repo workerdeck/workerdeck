@@ -1,0 +1,421 @@
+{
+  "protocolVersion": 1,
+  "shellInputMax": 4096,
+  "calls": [
+    {
+      "call": "send",
+      "args": [
+        "hello"
+      ],
+      "frames": [
+        {
+          "type": "user_message",
+          "text": "hello"
+        }
+      ]
+    },
+    {
+      "call": "send",
+      "args": [
+        "with pictures",
+        [
+          "att_1",
+          "att_2"
+        ]
+      ],
+      "frames": [
+        {
+          "type": "user_message",
+          "text": "with pictures",
+          "attachmentIds": [
+            "att_1",
+            "att_2"
+          ]
+        }
+      ]
+    },
+    {
+      "call": "send",
+      "args": [
+        "no pictures",
+        []
+      ],
+      "frames": [
+        {
+          "type": "user_message",
+          "text": "no pictures"
+        }
+      ]
+    },
+    {
+      "call": "approve",
+      "args": [
+        "r1"
+      ],
+      "frames": [
+        {
+          "type": "permission_decision",
+          "requestId": "r1",
+          "behavior": "allow"
+        }
+      ]
+    },
+    {
+      "call": "approve",
+      "args": [
+        "r2",
+        {
+          "command": "ls -la",
+          "nested": {
+            "list": [
+              1,
+              2.5,
+              "three"
+            ],
+            "flag": true,
+            "none": null
+          }
+        }
+      ],
+      "frames": [
+        {
+          "type": "permission_decision",
+          "requestId": "r2",
+          "behavior": "allow",
+          "updatedInput": {
+            "command": "ls -la",
+            "nested": {
+              "list": [
+                1,
+                2.5,
+                "three"
+              ],
+              "flag": true,
+              "none": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "call": "deny",
+      "args": [
+        "r3"
+      ],
+      "frames": [
+        {
+          "type": "permission_decision",
+          "requestId": "r3",
+          "behavior": "deny"
+        }
+      ]
+    },
+    {
+      "call": "deny",
+      "args": [
+        "r4",
+        "no"
+      ],
+      "frames": [
+        {
+          "type": "permission_decision",
+          "requestId": "r4",
+          "behavior": "deny",
+          "message": "no"
+        }
+      ]
+    },
+    {
+      "call": "deny",
+      "args": [
+        "r5",
+        "stop",
+        true
+      ],
+      "frames": [
+        {
+          "type": "permission_decision",
+          "requestId": "r5",
+          "behavior": "deny",
+          "message": "stop",
+          "interrupt": true
+        }
+      ]
+    },
+    {
+      "call": "interrupt",
+      "args": [],
+      "frames": [
+        {
+          "type": "interrupt"
+        }
+      ]
+    },
+    {
+      "call": "clearContext",
+      "args": [],
+      "frames": [
+        {
+          "type": "clear_context"
+        }
+      ]
+    },
+    {
+      "call": "sleep",
+      "args": [],
+      "frames": [
+        {
+          "type": "sleep"
+        }
+      ]
+    },
+    {
+      "call": "backgroundTask",
+      "args": [],
+      "frames": [
+        {
+          "type": "background_task"
+        }
+      ]
+    },
+    {
+      "call": "backgroundTask",
+      "args": [
+        "tu1"
+      ],
+      "frames": [
+        {
+          "type": "background_task",
+          "toolUseId": "tu1"
+        }
+      ]
+    },
+    {
+      "call": "runShell",
+      "args": [
+        "git status"
+      ],
+      "frames": [
+        {
+          "type": "shell_command",
+          "command": "git status"
+        }
+      ]
+    },
+    {
+      "call": "attachShell",
+      "args": [
+        "sh_1",
+        {
+          "cols": 80,
+          "rows": 24
+        }
+      ],
+      "frames": [
+        {
+          "type": "shell_attach",
+          "shellId": "sh_1",
+          "cols": 80,
+          "rows": 24
+        }
+      ]
+    },
+    {
+      "call": "writeShell",
+      "args": [
+        "sh_1",
+        "ls -la\r"
+      ],
+      "frames": [
+        {
+          "type": "shell_input",
+          "shellId": "sh_1",
+          "data": "ls -la\r"
+        }
+      ]
+    },
+    {
+      "call": "writeShell",
+      "args": [
+        "sh_1",
+        "café あ 😀"
+      ],
+      "frames": [
+        {
+          "type": "shell_input",
+          "shellId": "sh_1",
+          "data": "café あ 😀"
+        }
+      ]
+    },
+    {
+      "call": "resizeShell",
+      "args": [
+        "sh_1",
+        {
+          "cols": 100,
+          "rows": 30
+        }
+      ],
+      "frames": [
+        {
+          "type": "shell_resize",
+          "shellId": "sh_1",
+          "cols": 100,
+          "rows": 30
+        }
+      ]
+    },
+    {
+      "call": "detachShell",
+      "args": [
+        "sh_1"
+      ],
+      "frames": [
+        {
+          "type": "shell_detach",
+          "shellId": "sh_1"
+        }
+      ]
+    },
+    {
+      "call": "setPermissionMode",
+      "args": [
+        "default"
+      ],
+      "frames": [
+        {
+          "type": "set_permission_mode",
+          "mode": "default"
+        }
+      ]
+    },
+    {
+      "call": "setPermissionMode",
+      "args": [
+        "acceptEdits"
+      ],
+      "frames": [
+        {
+          "type": "set_permission_mode",
+          "mode": "acceptEdits"
+        }
+      ]
+    },
+    {
+      "call": "setPermissionMode",
+      "args": [
+        "bypassPermissions"
+      ],
+      "frames": [
+        {
+          "type": "set_permission_mode",
+          "mode": "bypassPermissions"
+        }
+      ]
+    },
+    {
+      "call": "setPermissionMode",
+      "args": [
+        "plan"
+      ],
+      "frames": [
+        {
+          "type": "set_permission_mode",
+          "mode": "plan"
+        }
+      ]
+    },
+    {
+      "call": "setPermissionMode",
+      "args": [
+        "dontAsk"
+      ],
+      "frames": [
+        {
+          "type": "set_permission_mode",
+          "mode": "dontAsk"
+        }
+      ]
+    },
+    {
+      "call": "setPermissionMode",
+      "args": [
+        "auto"
+      ],
+      "frames": [
+        {
+          "type": "set_permission_mode",
+          "mode": "auto"
+        }
+      ]
+    },
+    {
+      "call": "setModel",
+      "args": [
+        "opus"
+      ],
+      "frames": [
+        {
+          "type": "set_model",
+          "model": "opus"
+        }
+      ]
+    },
+    {
+      "call": "setModel",
+      "args": [],
+      "frames": [
+        {
+          "type": "set_model"
+        }
+      ]
+    },
+    {
+      "call": "setEffort",
+      "args": [
+        "xhigh"
+      ],
+      "frames": [
+        {
+          "type": "set_effort",
+          "effort": "xhigh"
+        }
+      ]
+    },
+    {
+      "call": "setEffort",
+      "args": [],
+      "frames": [
+        {
+          "type": "set_effort"
+        }
+      ]
+    },
+    {
+      "call": "sendToolCallError",
+      "args": [
+        "exec_1",
+        "unsupported",
+        "This client cannot execute bridged tool calls: it has no sandbox. Run the tool server-side, or attach a browser client to host it."
+      ],
+      "frames": [
+        {
+          "type": "tool_call_error",
+          "executionId": "exec_1",
+          "reason": "unsupported",
+          "error": "This client cannot execute bridged tool calls: it has no sandbox. Run the tool server-side, or attach a browser client to host it."
+        }
+      ]
+    },
+    {
+      "call": "closeSession",
+      "args": [],
+      "frames": [
+        {
+          "type": "close"
+        }
+      ]
+    }
+  ]
+}
