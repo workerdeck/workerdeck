@@ -523,6 +523,13 @@ fn a_multibyte_character_is_never_split() {
 }
 
 #[test]
+fn a_grapheme_cluster_is_never_split() {
+    let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466}";
+    let text = format!("ab{family}cd");
+    assert_eq!(chunk(&text, 4), ["ab", family, "cd"]);
+}
+
+#[test]
 fn one_oversized_character_still_goes() {
     assert_eq!(chunk("\u{3042}", 2), ["\u{3042}"]);
 }
@@ -605,7 +612,7 @@ fn client_frames_match_the_typescript_client() {
     assert_eq!(golden["protocolVersion"], PROTOCOL_VERSION);
     assert_eq!(golden["shellInputMax"], SHELL_INPUT_MAX);
     let calls = golden["calls"].as_array().unwrap();
-    assert_eq!(calls.len(), 31);
+    assert_eq!(calls.len(), 34);
     for entry in calls {
         let call = entry["call"].as_str().unwrap();
         let args = entry["args"].as_array().unwrap().as_slice();

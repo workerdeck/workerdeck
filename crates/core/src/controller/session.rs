@@ -4,6 +4,7 @@ use crate::protocol::{
 use crate::rest::PermissionMode;
 use serde_json::{Map, Value};
 use std::collections::VecDeque;
+use unicode_segmentation::UnicodeSegmentation;
 
 pub const TOOL_CALL_REFUSAL: &str =
     "This client cannot execute bridged tool calls: it has no sandbox. Run the tool server-side, or attach a browser client to host it.";
@@ -19,8 +20,8 @@ pub fn chunk(data: &str, max: usize) -> Vec<&str> {
     }
     let mut chunks = Vec::new();
     let mut start = 0;
-    for (index, character) in data.char_indices() {
-        if index + character.len_utf8() - start > max && index > start {
+    for (index, grapheme) in data.grapheme_indices(true) {
+        if index + grapheme.len() - start > max && index > start {
             chunks.push(&data[start..index]);
             start = index;
         }
