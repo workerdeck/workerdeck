@@ -249,6 +249,68 @@ describe('SessionHandle framing', () => {
   })
 })
 
+describe('SessionHandle prompt acks', () => {
+  const prompts = (socket: FakeSocket) =>
+    socket.sent.map((raw) => JSON.parse(raw) as { type: string; text: string; clientId?: string }).filter((f) => f.type === 'user_message')
+
+  function connected(acks: boolean) {
+    const handle = makeClient().attach('s1')
+    settle()
+    latest().accept()
+    latest().deliver({ type: 'attached', protocolVersion: 1, session: {}, replayingFrom: 0, ...(acks ? { acks: true } : {}) })
+    return handle
+  }
+
+  it('gives every prompt its own clientId', () => {
+    const handle = connected(true)
+    handle.send('one')
+    handle.send('two')
+    const [one, two] = prompts(latest())
+    expect(one!.clientId).toBeTruthy()
+    expect(one!.clientId).not.toBe(two!.clientId)
+    handle.detach()
+  })
+
+  it('resends an unacked prompt after a drop, before anything queued while down, and forgets an acked one', () => {
+    const handle = connected(true)
+    handle.send('acked')
+    handle.send('lost')
+    const [acked, lost] = prompts(latest())
+    latest().deliver({ type: 'ack', clientId: acked!.clientId })
+    latest().drop()
+    handle.send('while down')
+    vi.advanceTimersByTime(500)
+    latest().accept()
+    expect(prompts(latest()).map((f) => [f.text, f.clientId])).toEqual([
+      ['lost', lost!.clientId],
+      ['while down', expect.any(String)],
+    ])
+    handle.detach()
+  })
+
+  it('never resends to a gateway that does not ack', () => {
+    const handle = connected(false)
+    handle.send('once')
+    latest().drop()
+    vi.advanceTimersByTime(500)
+    latest().accept()
+    expect(prompts(latest())).toEqual([])
+    handle.detach()
+  })
+
+  it('never resends when the socket dropped before the gateway said it acks', () => {
+    const handle = makeClient().attach('s1')
+    settle()
+    latest().accept()
+    handle.send('once')
+    latest().drop()
+    vi.advanceTimersByTime(500)
+    latest().accept()
+    expect(prompts(latest())).toEqual([])
+    handle.detach()
+  })
+})
+
 describe('shell input chunking', () => {
   const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}'
   const utf8 = (text: string) => Buffer.byteLength(text, 'utf8')

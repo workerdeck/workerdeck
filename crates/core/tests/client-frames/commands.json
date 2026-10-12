@@ -10,7 +10,8 @@
       "frames": [
         {
           "type": "user_message",
-          "text": "hello"
+          "text": "hello",
+          "clientId": "nonce.1"
         }
       ]
     },
@@ -30,7 +31,8 @@
           "attachmentIds": [
             "att_1",
             "att_2"
-          ]
+          ],
+          "clientId": "nonce.1"
         }
       ]
     },
@@ -43,7 +45,8 @@
       "frames": [
         {
           "type": "user_message",
-          "text": "no pictures"
+          "text": "no pictures",
+          "clientId": "nonce.1"
         }
       ]
     },

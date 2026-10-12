@@ -1088,7 +1088,16 @@ running user shells only, persisted, listeners fired so the row redraws; `settle
 ## `packages/client`
 
 REST + WS client on platform `fetch`/`WebSocket`; zero runtime deps. Owns
-the WS frame surface, so new frames need `SessionHandle` methods/events here. A refused REST
+the WS frame surface, so new frames need `SessionHandle` methods/events here. **Prompts are acked** (`user_message.clientId`, `ack` frame, `AttachedFrame.acks`): `send` stamps
+a `clientId` (a per-handle random nonce plus a counter) and keeps the prompt until the gateway's `ack`; a drop
+before the ack resends it on the next socket, ahead of anything queued while down, and the gateway runs a repeated
+id once (`services/prompt-acks.ts`, bounded, per session). The resend happens **only to a gateway already seen
+advertising `acks`**: an older gateway would run it twice, so a prompt sent before the first `attached` of a
+connection that then drops counts as delivered. The ack is its own frame rather than an echo on the `user_message`
+event because a replay skips events below a `conversation_reset` and codex's `/clear` emits no echo, so an echo
+would leave those prompts unacked forever; a refused prompt is acked too, after its `protocol_error`. Other
+commands keep send-success semantics. The Rust connection (`crates/core/src/controller/session.rs`) keeps the same
+rule, pinned by `pnpm fixtures:frames`. A refused REST
 call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
 caller tell "this server has no such route" (404 - stop asking) from "that file was too big".
 `AttachOptions.truncateResults` + `client.toolResult(...)` are the client half of the truncating

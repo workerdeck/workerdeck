@@ -61,12 +61,22 @@ enum Phase {
     Finished,
 }
 
+struct Queued {
+    text: String,
+    client_id: Option<String>,
+}
+
 pub struct SessionConnection {
     last_seq: i64,
     reconnect: bool,
     phase: Phase,
     retries: u32,
-    outbox: VecDeque<String>,
+    outbox: VecDeque<Queued>,
+    unacked: VecDeque<Queued>,
+    acks: bool,
+    attached: bool,
+    nonce: String,
+    prompts: u64,
     in_flight: Option<u64>,
     next_send: u64,
     close_after_flush: bool,
@@ -75,13 +85,19 @@ pub struct SessionConnection {
 }
 
 impl SessionConnection {
-    pub fn new(after_seq: i64, reconnect: bool) -> Self {
+    // `nonce` is the host's randomness: unique per connection object, it prefixes every prompt's clientId.
+    pub fn new(after_seq: i64, reconnect: bool, nonce: String) -> Self {
         SessionConnection {
             last_seq: after_seq,
             reconnect,
             phase: Phase::Connecting,
             retries: 0,
             outbox: VecDeque::new(),
+            unacked: VecDeque::new(),
+            acks: false,
+            attached: false,
+            nonce,
+            prompts: 0,
             in_flight: None,
             next_send: 0,
             close_after_flush: false,
@@ -110,7 +126,7 @@ impl SessionConnection {
     }
 
     pub fn queued(&self) -> usize {
-        self.outbox.len()
+        self.outbox.len() + self.unacked.len()
     }
 
     pub fn take_effects(&mut self) -> Vec<Effect> {
@@ -128,6 +144,14 @@ impl SessionConnection {
         self.phase = Phase::Connected;
         self.retries = 0;
         self.in_flight = None;
+        self.attached = false;
+        if self.acks {
+            while let Some(prompt) = self.unacked.pop_back() {
+                self.outbox.push_front(prompt);
+            }
+        } else {
+            self.unacked.clear();
+        }
         self.signals.push(Signal::ConnectionChange(true));
         self.flush();
     }
@@ -167,9 +191,18 @@ impl SessionConnection {
         if !ok {
             return;
         }
-        self.outbox.pop_front();
+        if let Some(sent) = self.outbox.pop_front()
+            && sent.client_id.is_some()
+            && (self.acks || !self.attached)
+        {
+            self.unacked.push_back(sent);
+        }
         self.flush();
-        if self.close_after_flush && self.outbox.is_empty() && self.in_flight.is_none() {
+        self.close_when_drained();
+    }
+
+    fn close_when_drained(&mut self) {
+        if self.close_after_flush && self.outbox.is_empty() && self.in_flight.is_none() && self.unacked.is_empty() {
             self.close_after_flush = false;
             self.detach();
         }
@@ -188,11 +221,21 @@ impl SessionConnection {
                 }
             }
             Frame::Attached(attached) => {
+                self.acks = attached.acks == Some(true);
+                self.attached = true;
+                if !self.acks {
+                    self.unacked.clear();
+                }
                 let server_version = attached.protocol_version;
                 self.signals.push(Signal::Attached(attached));
                 if server_version != PROTOCOL_VERSION {
                     self.signals.push(Signal::ProtocolMismatch { server_version });
                 }
+                self.close_when_drained();
+            }
+            Frame::Ack { client_id } => {
+                self.unacked.retain(|prompt| prompt.client_id.as_deref() != Some(client_id.as_str()));
+                self.close_when_drained();
             }
             Frame::ToolCallRequest(request) => self.enqueue(ClientFrame::ToolCallError {
                 execution_id: request.execution_id,
@@ -210,7 +253,9 @@ impl SessionConnection {
 
     pub fn send(&mut self, text: String, attachment_ids: Vec<String>) {
         let attachment_ids = (!attachment_ids.is_empty()).then_some(attachment_ids);
-        self.enqueue(ClientFrame::UserMessage { text, attachment_ids });
+        self.prompts += 1;
+        let client_id = format!("{}.{}", self.nonce, self.prompts);
+        self.push(ClientFrame::UserMessage { text, attachment_ids, client_id: Some(client_id.clone()) }, Some(client_id));
     }
 
     pub fn approve(&mut self, request_id: String, updated_input: Option<Map<String, Value>>) {
@@ -306,6 +351,7 @@ impl SessionConnection {
             Phase::Waiting { .. } => {}
         }
         self.outbox.clear();
+        self.unacked.clear();
         self.in_flight = None;
         self.close_after_flush = false;
         self.finish();
@@ -333,10 +379,14 @@ impl SessionConnection {
     }
 
     fn enqueue(&mut self, frame: ClientFrame) {
+        self.push(frame, None);
+    }
+
+    fn push(&mut self, frame: ClientFrame, client_id: Option<String>) {
         if self.phase == Phase::Finished {
             return;
         }
-        self.outbox.push_back(frame.encode());
+        self.outbox.push_back(Queued { text: frame.encode(), client_id });
         self.flush();
     }
 
@@ -344,10 +394,10 @@ impl SessionConnection {
         if self.phase != Phase::Connected || self.in_flight.is_some() {
             return;
         }
-        let Some(text) = self.outbox.front() else { return };
+        let Some(queued) = self.outbox.front() else { return };
         let id = self.next_send;
         self.next_send += 1;
         self.in_flight = Some(id);
-        self.effects.push(Effect::Send { id, text: text.clone() });
+        self.effects.push(Effect::Send { id, text: queued.text.clone() });
     }
 }

@@ -374,6 +374,9 @@ export type SessionCommand =
       type: 'user_message'
       text: string
       attachmentIds?: string[]
+      // Unique per prompt from one client. A gateway that advertises `acks` answers it with an `ack` frame and runs a
+      // repeated id once, so a client may resend an unacked prompt after a reconnect.
+      clientId?: string
     }
   | {
       type: 'permission_decision'
@@ -418,6 +421,7 @@ export const SHELL_MAX_COLS = 1000
 export const SHELL_MIN_ROWS = 1
 export const SHELL_MAX_ROWS = 500
 export const SHELL_INPUT_MAX = 4096
+export const CLIENT_ID_MAX = 128
 
 // Measured in UTF-8 bytes, which never undercounts the gateway's UTF-16 limit.
 export function chunkShellInput(data: string, max = SHELL_INPUT_MAX): string[] {
@@ -488,6 +492,9 @@ export type AttachedFrame = {
   // `DEFAULT_PRICING` so what it prices for itself matches what this gateway priced. Additive, and an
   // older gateway omits it, which is the same thing as having no overrides.
   pricingOverrides?: PricingOverrides
+  // This gateway answers every `user_message` carrying a `clientId` with an `ack`. Additive; without it a client
+  // treats a sent prompt as delivered.
+  acks?: boolean
 }
 
 export type ToolCallRequestFrame = {
@@ -509,6 +516,8 @@ export type ServerFrame =
   | { type: 'shell_output'; shellId: string; data: string }
   | { type: 'shell_detached'; shellId: string; reason: string }
   | { type: 'protocol_error'; message: string }
+  // The prompt reached the gateway and was handled, run or refused; a refusal arrives as a `protocol_error` first.
+  | { type: 'ack'; clientId: string }
 
 export type ClientFrame = SessionCommand
 

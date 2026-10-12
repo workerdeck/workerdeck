@@ -19,6 +19,7 @@ pub enum Frame {
     ProtocolError(String),
     ShellAttached(Box<ShellAttachedFrame>),
     ShellDetached { shell_id: String, reason: String },
+    Ack { client_id: String },
     Unknown,
 }
 
@@ -32,6 +33,8 @@ pub struct AttachedFrame {
     pub shell: Option<bool>,
     #[serde(default)]
     pub pricing_overrides: Option<Value>,
+    #[serde(default)]
+    pub acks: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,6 +80,8 @@ pub enum ClientFrame {
         text: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         attachment_ids: Option<Vec<String>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        client_id: Option<String>,
     },
     PermissionDecision {
         request_id: String,
@@ -591,6 +596,12 @@ struct RawCanceled {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawAck {
+    client_id: String,
+}
+
+#[derive(Deserialize)]
 struct RawProtocolError {
     message: String,
 }
@@ -621,6 +632,7 @@ fn decode_cold_frame(ty: &str, line: &[u8]) -> Option<Frame> {
             Frame::ToolCallCanceled { execution_id: raw.execution_id, reason: raw.reason }
         }
         "protocol_error" => Frame::ProtocolError(serde_json::from_slice::<RawProtocolError>(line).ok()?.message),
+        "ack" => Frame::Ack { client_id: serde_json::from_slice::<RawAck>(line).ok()?.client_id },
         "shell_attached" => Frame::ShellAttached(Box::new(serde_json::from_slice(line).ok()?)),
         "shell_detached" => {
             let raw: RawShellDetached = serde_json::from_slice(line).ok()?;

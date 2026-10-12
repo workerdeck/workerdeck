@@ -58,7 +58,11 @@ async function framesFor([name, ...args]: Call): Promise<unknown[]> {
   const method = (handle as unknown as Record<string, (...rest: unknown[]) => void>)[name]
   method.apply(handle, args)
   handle.detach()
-  return sent.map((payload) => JSON.parse(payload) as unknown)
+  // A clientId is a random nonce plus a counter; the golden pins the counter and the Rust side is built with nonce "nonce".
+  return sent.map((payload) => {
+    const frame = JSON.parse(payload) as { clientId?: string }
+    return frame.clientId ? { ...frame, clientId: frame.clientId.replace(/^[^.]*/, 'nonce') } : frame
+  })
 }
 
 const calls = []

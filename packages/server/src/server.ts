@@ -34,6 +34,7 @@ import { AvailabilityTracker } from './services/availability.ts'
 import { EngineSleepTimers } from './services/engine-sleep.ts'
 import { ContextResetService } from './services/context-resets.ts'
 import { BridgeHub } from './services/bridge.ts'
+import { PromptAcks } from './services/prompt-acks.ts'
 import { createHostFileRoots } from './services/host-files.ts'
 import { SessionNotifier } from './services/notifications.ts'
 import { SessionParkManager } from './services/parking.ts'
@@ -431,6 +432,7 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
     engineSleep,
     peers: peers ? peerDirectoryHandle(() => ownPeers) : undefined,
     bridge,
+    promptAcks: new PromptAcks(),
     projects,
     queue,
     attachmentStore,

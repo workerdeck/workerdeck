@@ -18,7 +18,7 @@ struct Wire {
 impl Wire {
     fn new(after_seq: i64, reconnect: bool) -> Self {
         let mut wire = Wire {
-            conn: SessionConnection::new(after_seq, reconnect),
+            conn: SessionConnection::new(after_seq, reconnect, "nonce".into()),
             opens: Vec::new(),
             sent: Vec::new(),
             pending: Vec::new(),
@@ -204,7 +204,7 @@ fn flushes_queued_commands_in_order_on_open() {
     assert_eq!(
         wire.sent_json(),
         [
-            json!({"type": "user_message", "text": "first"}),
+            json!({"type": "user_message", "text": "first", "clientId": "nonce.1"}),
             json!({"type": "interrupt"}),
             json!({"type": "set_permission_mode", "mode": "acceptEdits"}),
         ]
@@ -215,7 +215,7 @@ fn flushes_queued_commands_in_order_on_open() {
 fn encodes_user_message_command_on_the_wire() {
     let mut wire = Wire::connected(0, false);
     wire.act(|c| c.send("hello".into(), Vec::new()));
-    assert_eq!(wire.sent_json(), [json!({"type": "user_message", "text": "hello"})]);
+    assert_eq!(wire.sent_json(), [json!({"type": "user_message", "text": "hello", "clientId": "nonce.1"})]);
 }
 
 #[test]
@@ -384,7 +384,8 @@ fn the_outbox_survives_a_reconnect_and_pops_only_on_success() {
     wire.open();
     wire.ack(true);
     wire.ack(true);
-    assert_eq!(wire.sent_json(), [json!({"type": "interrupt"}), json!({"type": "user_message", "text": "later"})]);
+    wire.push(&attached_frame(PROTOCOL_VERSION));
+    assert_eq!(wire.sent_json(), [json!({"type": "interrupt"}), json!({"type": "user_message", "text": "later", "clientId": "nonce.1"})]);
     assert_eq!(wire.conn.queued(), 0);
 }
 
@@ -399,6 +400,74 @@ fn a_late_ack_after_a_drop_still_pops() {
     wire.tick(0.5);
     wire.open();
     assert!(wire.pending.is_empty());
+}
+
+fn acking_gateway(wire: &mut Wire) {
+    let attached = attached_frame(PROTOCOL_VERSION).replace(r#""replayingFrom":0"#, r#""replayingFrom":0,"acks":true"#);
+    wire.push(&attached);
+}
+
+fn prompt_texts(wire: &Wire) -> Vec<String> {
+    wire.sent_json().iter().filter(|f| f["type"] == "user_message").map(|f| f["text"].as_str().unwrap().to_owned()).collect()
+}
+
+#[test]
+fn an_unacked_prompt_is_resent_after_a_reconnect_before_newer_input() {
+    let mut wire = Wire::connected(0, true);
+    acking_gateway(&mut wire);
+    wire.act(|c| c.send("acked".into(), Vec::new()));
+    wire.act(|c| c.send("lost".into(), Vec::new()));
+    wire.push(r#"{"type":"ack","clientId":"nonce.1"}"#);
+    assert_eq!(wire.conn.queued(), 1);
+    wire.drop_socket(0.0);
+    wire.act(|c| c.send("while down".into(), Vec::new()));
+    wire.tick(0.5);
+    wire.open();
+    assert_eq!(prompt_texts(&wire), ["acked", "lost", "lost", "while down"]);
+    assert_eq!(wire.sent_json()[2]["clientId"], "nonce.2");
+    wire.push(r#"{"type":"ack","clientId":"nonce.2"}"#);
+    wire.push(r#"{"type":"ack","clientId":"nonce.3"}"#);
+    assert_eq!(wire.conn.queued(), 0);
+}
+
+#[test]
+fn a_gateway_without_acks_never_gets_a_resend() {
+    let mut wire = Wire::connected(0, true);
+    wire.push(&attached_frame(PROTOCOL_VERSION));
+    wire.act(|c| c.send("once".into(), Vec::new()));
+    assert_eq!(wire.conn.queued(), 0);
+    wire.drop_socket(0.0);
+    wire.tick(0.5);
+    wire.open();
+    assert_eq!(prompt_texts(&wire), ["once"]);
+}
+
+#[test]
+fn a_drop_before_attached_never_resends() {
+    let mut wire = Wire::connected(0, true);
+    wire.act(|c| c.send("once".into(), Vec::new()));
+    wire.drop_socket(0.0);
+    wire.tick(0.5);
+    wire.open();
+    assert_eq!(prompt_texts(&wire), ["once"]);
+    assert_eq!(wire.conn.queued(), 0);
+}
+
+#[test]
+fn close_session_waits_for_the_last_prompt_ack() {
+    let mut wire = Wire::connected(0, true);
+    acking_gateway(&mut wire);
+    wire.act(|c| c.send("last words".into(), Vec::new()));
+    wire.act(|c| c.close_session());
+    assert!(!wire.has("finished"));
+    wire.push(r#"{"type":"ack","clientId":"nonce.1"}"#);
+    assert!(wire.has("finished"));
+    assert!(wire.socket_closed);
+}
+
+#[test]
+fn decodes_an_ack_frame() {
+    assert!(matches!(decode_frame(br#"{"type":"ack","clientId":"n.1"}"#), Some(Frame::Ack { client_id }) if client_id == "n.1"));
 }
 
 #[test]

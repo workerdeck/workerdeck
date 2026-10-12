@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http'
 import type { WebSocket } from 'ws'
 import { isSlashCommand, type Runner } from '@workerdeck/core'
-import { PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
+import { CLIENT_ID_MAX, PROTOCOL_VERSION, SHELL_COMMAND_MAX, type ClientFrame, type ServerFrame } from '@workerdeck/protocol'
 import type { ServerContext } from '../context.ts'
 import { bypassDisabled, permissionDecision, refuseJobInput, refusePermissionMode } from '../lib/permissions.ts'
 import { engineOf } from '../lib/profile-env.ts'
@@ -40,6 +40,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
     protocolVersion: PROTOCOL_VERSION,
     session: ctx.projects.withProject(runner.info()),
     replayingFrom: afterSeq,
+    acks: true,
     ...(shellPermitted(ctx.shells, runner, access.operator) ? { shell: true } : {}),
     ...(ctx.pricingOverrides ? { pricingOverrides: ctx.pricingOverrides } : {}),
   })
@@ -65,6 +66,7 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
   // design (the control request is experimental, and a missing usage reading is not an attach failure).
   void runner.refreshUsage?.().catch(() => {})
 
+  let prompts = Promise.resolve()
   ws.on('message', (data: Buffer) => {
     let frame: ClientFrame
     try {
@@ -73,11 +75,25 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
       send({ type: 'protocol_error', message: 'invalid JSON frame' })
       return
     }
-    handleCommand(ctx, frame, runner, access, client).catch((error: unknown) => {
+    const report = (error: unknown): void => {
       send({
         type: 'protocol_error',
         message: error instanceof Error ? error.message : 'command failed',
       })
+    }
+    if (frame?.type !== 'user_message') {
+      handleCommand(ctx, frame, runner, access, client).catch(report)
+      return
+    }
+    // Prompts run in arrival order: resolving mentions is async and must not let a later prompt overtake.
+    const clientId = typeof frame.clientId === 'string' && frame.clientId.length <= CLIENT_ID_MAX ? frame.clientId : undefined
+    prompts = prompts.then(async () => {
+      if (!clientId) {
+        await handleCommand(ctx, frame, runner, access, client).catch(report)
+        return
+      }
+      await ctx.promptAcks.run(runner.id, clientId, () => handleCommand(ctx, frame, runner, access, client)).catch(report)
+      send({ type: 'ack', clientId })
     })
   })
   ws.on('close', () => {

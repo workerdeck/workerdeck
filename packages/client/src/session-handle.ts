@@ -41,7 +41,12 @@ export class SessionHandle {
   #lastSeq: number
   #closed = false
   #retries = 0
-  #outbox: string[] = []
+  #outbox: Array<{ payload: string; clientId?: string }> = []
+  #unacked = new Map<string, string>()
+  #acks = false
+  #attachedHere = false
+  #prompts = 0
+  readonly #nonce = Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
   #connectTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(client: WorkerDeckClient, sessionId: string, options: AttachOptions = {}) {
@@ -62,11 +67,16 @@ export class SessionHandle {
   }
 
   send(text: string, attachmentIds?: string[]): void {
-    this.#sendFrame({
-      type: 'user_message',
-      text,
-      attachmentIds: attachmentIds?.length ? attachmentIds : undefined,
-    })
+    const clientId = `${this.#nonce}.${++this.#prompts}`
+    this.#sendFrame(
+      {
+        type: 'user_message',
+        text,
+        attachmentIds: attachmentIds?.length ? attachmentIds : undefined,
+        clientId,
+      },
+      clientId,
+    )
   }
 
   approve(requestId: string, updatedInput?: Record<string, unknown>): void {
@@ -156,13 +166,21 @@ export class SessionHandle {
     this.#ws = undefined
   }
 
-  #sendFrame(frame: ClientFrame): void {
+  #sendFrame(frame: ClientFrame, clientId?: string): void {
     const payload = JSON.stringify(frame)
     // readyState 1 === OPEN (avoid touching the WebSocket global; impl may be injected)
     if (this.#ws && this.#ws.readyState === 1) {
-      this.#ws.send(payload)
+      this.#transmit(this.#ws, payload, clientId)
     } else {
-      this.#outbox.push(payload)
+      this.#outbox.push({ payload, clientId })
+    }
+  }
+
+  // A prompt stays until the gateway acks it, so a drop before the ack resends it on the next socket.
+  #transmit(ws: WebSocket, payload: string, clientId: string | undefined): void {
+    ws.send(payload)
+    if (clientId && (this.#acks || !this.#attachedHere)) {
+      this.#unacked.set(clientId, payload)
     }
   }
 
@@ -175,13 +193,22 @@ export class SessionHandle {
     ws.onopen = () => {
       this.#retries = 0
       this.#events.emit('connectionChange', true)
-      for (const payload of this.#outbox.splice(0)) {
-        ws.send(payload)
+      // Only a gateway known to ack runs a resent prompt once; without that knowledge a sent prompt counts as delivered.
+      this.#attachedHere = false
+      const resend = this.#acks ? [...this.#unacked].map(([clientId, payload]) => ({ payload, clientId })) : []
+      this.#unacked.clear()
+      for (const { payload, clientId } of [...resend, ...this.#outbox.splice(0)]) {
+        this.#transmit(ws, payload, clientId)
       }
     }
     ws.onmessage = (msg: MessageEvent) => {
       const frame = JSON.parse(String(msg.data)) as ServerFrame
       if (frame.type === 'attached') {
+        this.#acks = frame.acks === true
+        this.#attachedHere = true
+        if (!this.#acks) {
+          this.#unacked.clear()
+        }
         this.#events.emit('attached', frame)
       } else if (frame.type === 'event') {
         if (frame.event.seq <= this.#lastSeq) {
@@ -205,6 +232,8 @@ export class SessionHandle {
         this.#events.emit('shellOutput', { shellId: frame.shellId, data: frame.data })
       } else if (frame.type === 'shell_detached') {
         this.#events.emit('shellDetached', { shellId: frame.shellId, reason: frame.reason })
+      } else if (frame.type === 'ack') {
+        this.#unacked.delete(frame.clientId)
       } else if (frame.type === 'protocol_error') {
         this.#events.emit('protocolError', frame.message)
       }
