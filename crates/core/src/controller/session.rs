@@ -75,6 +75,7 @@ pub struct SessionConnection {
     unacked: VecDeque<Queued>,
     acks: bool,
     attached: bool,
+    ever_connected: bool,
     nonce: String,
     prompts: u64,
     in_flight: Option<u64>,
@@ -96,6 +97,7 @@ impl SessionConnection {
             unacked: VecDeque::new(),
             acks: false,
             attached: false,
+            ever_connected: false,
             nonce,
             prompts: 0,
             in_flight: None,
@@ -112,6 +114,11 @@ impl SessionConnection {
 
     pub fn is_connected(&self) -> bool {
         self.phase == Phase::Connected
+    }
+
+    // False until a socket has opened once: a failing first attach never reached the gateway at all.
+    pub fn ever_connected(&self) -> bool {
+        self.ever_connected
     }
 
     pub fn is_finished(&self) -> bool {
@@ -142,6 +149,7 @@ impl SessionConnection {
             return;
         }
         self.phase = Phase::Connected;
+        self.ever_connected = true;
         self.retries = 0;
         self.in_flight = None;
         self.attached = false;
@@ -202,7 +210,7 @@ impl SessionConnection {
     }
 
     fn close_when_drained(&mut self) {
-        if self.close_after_flush && self.outbox.is_empty() && self.in_flight.is_none() && self.unacked.is_empty() {
+        if self.close_after_flush && self.outbox.is_empty() && self.in_flight.is_none() {
             self.close_after_flush = false;
             self.detach();
         }
@@ -231,12 +239,8 @@ impl SessionConnection {
                 if server_version != PROTOCOL_VERSION {
                     self.signals.push(Signal::ProtocolMismatch { server_version });
                 }
-                self.close_when_drained();
             }
-            Frame::Ack { client_id } => {
-                self.unacked.retain(|prompt| prompt.client_id.as_deref() != Some(client_id.as_str()));
-                self.close_when_drained();
-            }
+            Frame::Ack { client_id } => self.unacked.retain(|prompt| prompt.client_id.as_deref() != Some(client_id.as_str())),
             Frame::ToolCallRequest(request) => self.enqueue(ClientFrame::ToolCallError {
                 execution_id: request.execution_id,
                 reason: "unsupported".into(),

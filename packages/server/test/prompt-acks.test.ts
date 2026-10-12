@@ -81,6 +81,16 @@ describe('prompt acks', () => {
     ws.close()
   })
 
+  it('handles a close only after the prompts sent before it', async () => {
+    const { wsBase, session, runner } = await start()
+    const { ws, collector } = await attach(wsBase, session.id)
+    ws.send(JSON.stringify({ type: 'user_message', text: 'last words', clientId: 'c.1' }))
+    ws.send(JSON.stringify({ type: 'close' }))
+    await collector.waitFor((f) => f.type === 'event' && f.event.type === 'session_closed')
+    expect(runner.sent.map((sent) => sent.text)).toEqual(['last words'])
+    ws.close()
+  })
+
   it('keeps prompts in arrival order and sends no ack without a clientId', async () => {
     const { wsBase, session, runner } = await start()
     const { ws, collector } = await attach(wsBase, session.id)

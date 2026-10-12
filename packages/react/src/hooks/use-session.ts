@@ -39,7 +39,8 @@ function reduce(state: TranscriptState, action: TranscriptAction): TranscriptSta
   return action.type === 'attached' ? seedFromSessionInfo(state, action.session) : applyEvent(state, action)
 }
 
-export type ConnectionState = 'live' | 'reconnecting' | 'offline'
+// `connecting` and `unreachable` are the same two states before any socket of this attach has opened.
+export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline' | 'unreachable'
 
 // Three failed attempts is ~3.5s of backoff - past a blip; the iOS client hardcodes the same threshold.
 const OFFLINE_AFTER_ATTEMPTS = 3
@@ -113,7 +114,7 @@ export function useClaudeSession(
         ? readTranscriptCache(transcriptCacheKey(client, sessionId))
         : undefined) ?? initialTranscriptState,
   )
-  const [connection, setConnection] = useState<ConnectionState>('reconnecting')
+  const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [protocolMismatch, setProtocolMismatch] = useState<number | undefined>()
   const [shell, setShell] = useState(false)
   const [pricing, setPricing] = useState<PricingTable>(DEFAULT_PRICING)
@@ -172,9 +173,10 @@ export function useClaudeSession(
       setPricing(mergePricing(frame.pricingOverrides).pricing)
     })
     const offConn = handle.on('connectionChange', (open: boolean) => setConnection(open ? 'live' : 'reconnecting'))
-    const offRetry = handle.on('reconnectAttempt', (attempts: number) =>
-      setConnection(attempts >= OFFLINE_AFTER_ATTEMPTS ? 'offline' : 'reconnecting'),
-    )
+    const offRetry = handle.on('reconnectAttempt', (attempts: number) => {
+      const down = attempts >= OFFLINE_AFTER_ATTEMPTS
+      setConnection(handle.everConnected ? (down ? 'offline' : 'reconnecting') : down ? 'unreachable' : 'connecting')
+    })
     const offProtocolError = handle.on('protocolError', (message: string) => {
       optionsRef.current?.onProtocolError?.(message)
     })
@@ -187,7 +189,7 @@ export function useClaudeSession(
       handle.detach()
       handleRef.current = null
       setHandleState(undefined)
-      setConnection('reconnecting')
+      setConnection('connecting')
       setProtocolMismatch(undefined)
       setShell(false)
       setReplayTarget(undefined)

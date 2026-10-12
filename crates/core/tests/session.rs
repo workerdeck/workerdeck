@@ -454,15 +454,15 @@ fn a_drop_before_attached_never_resends() {
 }
 
 #[test]
-fn close_session_waits_for_the_last_prompt_ack() {
-    let mut wire = Wire::connected(0, true);
-    acking_gateway(&mut wire);
-    wire.act(|c| c.send("last words".into(), Vec::new()));
-    wire.act(|c| c.close_session());
-    assert!(!wire.has("finished"));
-    wire.push(r#"{"type":"ack","clientId":"nonce.1"}"#);
-    assert!(wire.has("finished"));
-    assert!(wire.socket_closed);
+fn ever_connected_flips_on_the_first_open_only() {
+    let mut wire = Wire::new(0, true);
+    wire.drop_socket(0.0);
+    assert!(!wire.conn.ever_connected());
+    assert!(!wire.has("connection false"));
+    wire.tick(0.5);
+    wire.open();
+    wire.drop_socket(1.0);
+    assert!(wire.conn.ever_connected());
 }
 
 #[test]

@@ -10,7 +10,7 @@ export type StatusPresentation = {
 
 export type StatusReadings = {
   status: SessionStatus
-  connection?: 'live' | 'reconnecting' | 'offline'
+  connection?: 'connecting' | 'live' | 'reconnecting' | 'offline' | 'unreachable'
 }
 
 const STATUS_META: Record<SessionStatus, StatusPresentation> = {
@@ -26,6 +26,12 @@ const STATUS_META: Record<SessionStatus, StatusPresentation> = {
 export function statusPresentation(vitals: StatusReadings | undefined): StatusPresentation {
   if (!vitals) {
     return { icon: 'hubot', label: 'Connecting…', severity: 'none' }
+  }
+  if (vitals.connection === 'unreachable') {
+    return { icon: 'debug-disconnect', label: 'Gateway unreachable', severity: 'error' }
+  }
+  if (vitals.connection === 'connecting') {
+    return { icon: 'sync~spin', label: 'Connecting…', severity: 'none' }
   }
   if (vitals.connection === 'offline') {
     return { icon: 'debug-disconnect', label: 'Offline', severity: 'error' }

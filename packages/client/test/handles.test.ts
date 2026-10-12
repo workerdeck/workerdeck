@@ -175,6 +175,34 @@ describe('SessionHandle reconnect', () => {
     handle.detach()
   })
 
+  it('never opens a second socket while one is still in its handshake', () => {
+    const handle = makeClient().attach('s1')
+    settle()
+    const attempts: number[] = []
+    handle.on('reconnectAttempt', (n) => attempts.push(n))
+    const before = FakeSocket.opened.length
+    handle.reconnectNow()
+    expect(FakeSocket.opened.length).toBe(before)
+    expect(attempts).toEqual([0])
+    handle.detach()
+  })
+
+  it('reports a disconnect only for a socket that opened, and remembers having connected', () => {
+    const handle = makeClient().attach('s1')
+    settle()
+    const changes: boolean[] = []
+    handle.on('connectionChange', (open) => changes.push(open))
+    latest().drop()
+    expect(changes).toEqual([])
+    expect(handle.everConnected).toBe(false)
+    vi.advanceTimersByTime(500)
+    latest().accept()
+    latest().drop()
+    expect(changes).toEqual([true, false])
+    expect(handle.everConnected).toBe(true)
+    handle.detach()
+  })
+
   it('is a no-op when reconnectNow is called on a live socket', () => {
     const handle = makeClient().attach('s1')
     settle()

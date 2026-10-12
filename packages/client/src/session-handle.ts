@@ -44,6 +44,7 @@ export class SessionHandle {
   #outbox: Array<{ payload: string; clientId?: string }> = []
   #unacked = new Map<string, string>()
   #acks = false
+  #everConnected = false
   #attachedHere = false
   #prompts = 0
   readonly #nonce = Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
@@ -60,6 +61,11 @@ export class SessionHandle {
 
   get lastSeq(): number {
     return this.#lastSeq
+  }
+
+  // False until a socket has opened once: a failing first attach never reached the gateway at all.
+  get everConnected(): boolean {
+    return this.#everConnected
   }
 
   on<K extends keyof SessionHandleEvents>(kind: K, listener: Listener<SessionHandleEvents[K]>): () => void {
@@ -150,12 +156,18 @@ export class SessionHandle {
     this.detach()
   }
 
+  // Skips the backoff wait only: a socket still in its handshake is left to finish, never doubled.
   reconnectNow(): void {
-    if (this.#closed || (this.#ws && this.#ws.readyState === 1)) {
+    const state = this.#ws?.readyState
+    if (this.#closed || state === 1) {
+      return
+    }
+    this.#retries = 0
+    this.#events.emit('reconnectAttempt', 0)
+    if (state === 0) {
       return
     }
     clearTimeout(this.#connectTimer)
-    this.#retries = 0
     this.#connect()
   }
 
@@ -190,7 +202,10 @@ export class SessionHandle {
     }
     const ws = this.#client.openSocket(this.sessionId, this.#lastSeq, this.#options.truncateResults, this.#options.imageRefs)
     this.#ws = ws
+    let opened = false
     ws.onopen = () => {
+      opened = true
+      this.#everConnected = true
       this.#retries = 0
       this.#events.emit('connectionChange', true)
       // Only a gateway known to ack runs a resent prompt once; without that knowledge a sent prompt counts as delivered.
@@ -239,7 +254,9 @@ export class SessionHandle {
       }
     }
     ws.onclose = () => {
-      this.#events.emit('connectionChange', false)
+      if (opened) {
+        this.#events.emit('connectionChange', false)
+      }
       if (this.#closed || !this.#options.reconnect) {
         return
       }

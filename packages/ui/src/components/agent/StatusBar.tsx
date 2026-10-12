@@ -32,6 +32,13 @@ export interface StatusBarProps {
   className?: string
 }
 
+const LINK_META: Record<Exclude<ConnectionState, 'live'>, { label: string; variant: 'neutral' | 'warning' | 'danger'; down: boolean }> = {
+  connecting: { label: 'Connecting…', variant: 'neutral', down: false },
+  reconnecting: { label: 'Reconnecting…', variant: 'warning', down: false },
+  offline: { label: 'Offline', variant: 'danger', down: true },
+  unreachable: { label: 'Gateway unreachable', variant: 'danger', down: true },
+}
+
 function useNow(intervalMs = 30_000): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -168,13 +175,13 @@ export function StatusBar({
             {meta.label}
           </Badge>
         ) : (
-          <Badge variant={link === 'offline' ? 'danger' : 'warning'} dot={false} className="items-baseline">
-            {link === 'offline' ? (
+          <Badge variant={LINK_META[link].variant} dot={false} className="items-baseline">
+            {LINK_META[link].down ? (
               <WifiOff className="size-3 self-center text-current" />
             ) : (
               <RefreshCw className="size-3 animate-spin self-center text-current" />
             )}
-            {link === 'offline' ? 'Offline' : 'Reconnecting…'}
+            {LINK_META[link].label}
           </Badge>
         )}
       </Slot>

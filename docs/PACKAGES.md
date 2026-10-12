@@ -1097,7 +1097,12 @@ connection that then drops counts as delivered. The ack is its own frame rather 
 event because a replay skips events below a `conversation_reset` and codex's `/clear` emits no echo, so an echo
 would leave those prompts unacked forever; a refused prompt is acked too, after its `protocol_error`. Other
 commands keep send-success semantics. The Rust connection (`crates/core/src/controller/session.rs`) keeps the same
-rule, pinned by `pnpm fixtures:frames`. A refused REST
+rule, pinned by `pnpm fixtures:frames`. `connectionChange(false)` fires only for a socket that opened, and `everConnected` stays
+false until one has, which is how react tells `connecting`/`unreachable` (never reached the gateway) from
+`reconnecting`/`offline`. `reconnectNow` only skips the backoff wait: during a handshake it resets the ladder and
+reports attempt 0, never opening a second socket. `closeSession` sends `close` and detaches at once, which loses
+nothing because a WebSocket sends queued frames before its close handshake; the gateway runs a `close` behind the
+prompts sent before it. A refused REST
 call throws `WorkerDeckError` (an `Error` subclass carrying `status`), which is what lets a
 caller tell "this server has no such route" (404 - stop asking) from "that file was too big".
 `AttachOptions.truncateResults` + `client.toolResult(...)` are the client half of the truncating

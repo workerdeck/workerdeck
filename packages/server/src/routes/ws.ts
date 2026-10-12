@@ -81,11 +81,15 @@ export function attachClient(ctx: ServerContext, ws: WebSocket, runner: Runner, 
         message: error instanceof Error ? error.message : 'command failed',
       })
     }
+    // Prompts run in arrival order, and a close waits behind them: resolving mentions is async.
+    if (frame?.type === 'close') {
+      prompts = prompts.then(() => handleCommand(ctx, frame, runner, access, client).catch(report))
+      return
+    }
     if (frame?.type !== 'user_message') {
       handleCommand(ctx, frame, runner, access, client).catch(report)
       return
     }
-    // Prompts run in arrival order: resolving mentions is async and must not let a later prompt overtake.
     const clientId = typeof frame.clientId === 'string' && frame.clientId.length <= CLIENT_ID_MAX ? frame.clientId : undefined
     prompts = prompts.then(async () => {
       if (!clientId) {
