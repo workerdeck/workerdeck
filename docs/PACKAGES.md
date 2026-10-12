@@ -2434,13 +2434,17 @@ can be read side by side until iOS moves onto the core:
 | `rows.rs` | `Terminal/TerminalBlocks.swift` + `TerminalRows.build`: recap boundary, brief rows, sub-agent frames, `hideThinking` |
 | `planner.rs` | `Terminal/TerminalPlanner.swift` (every expansion, press and frame branch, image boxes), plus `TerminalMetrics`, `TermFmt`, `ResultPreview`, `LiveTool` |
 | `expansion.rs` | `Terminal/TerminalExpansion.swift`: `ExpansionKey`, `TermPress`, open/full/pending |
+| `controller/` | `TranscriptView` (the app's `TerminalTranscriptModel`: presses return effects such as `FetchResult` / `OpenSubagent` instead of calling closures), `ReplayHold`, `TranscriptSeqIndex`, `StickyPrompt`, `TranscriptScrollGeometry` |
+| `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `fmt`; ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
+| `rest.rs` | the REST/wire records the view models read (`SessionInfo`, `AgentInfo`, ...), serde camelCase, unknown fields ignored |
 | `markdown.rs` | `MarkdownBlocks.swift` and a portable inline parser (Apple's `AttributedString(markdown:)` is not available off Darwin, and differs on an unclosed `**`) |
 | `cells.rs` | `Terminal/TerminalCells.swift`: extended graphemes, the plain-ASCII fast path, the word wrapper |
 | `book.rs` | `Terminal/TerminalHeightBook.swift` + `TerminalPlanCache`; 256 or more misses plan in parallel |
 | `vt.rs` | `Terminal/VTScreen.swift` + `VTTypes.swift`; parsing is the `vte` crate, dispatch mirrors the Swift handlers |
 
-**Still missing**: an expansion-aware height book, VT resize and key encoding, the transcript
-and session controllers, and the view models (in progress). The plan, with its
+**Still missing**: VT resize and key encoding, the sans-IO session connection (in progress), the
+shell session, the scrubber, and the app-side view models (`CreateSessionModel`, prompt
+completion, unread). The plan, with its
 phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
 
 **Conformance goldens** replace "mirror by convention" for the reducer. `conformance/corpus.ts`
@@ -2479,6 +2483,13 @@ frame's rows collapsed then fully open, after a `{"frame": id}` header).
 On the Mac the kit parses inline markdown with Apple's parser, so the line goldens follow
 CommonMark there (intraword `_` is literal, for instance); avoid an unclosed `**`, where Apple's
 parser keeps the markers and the portable one drops them.
+
+**View-model goldens** are TypeScript-owned like the reducer's: `pnpm fixtures:vm`
+(`conformance/generate-view-models.ts` over `conformance/view-models.ts`) runs the
+`packages/protocol` functions and writes `crates/core/tests/view-models/<module>.<case>.json` as
+`{input: {fn, calls}, output}`; `--check` runs in CI. Recap goldens ride the transcript corpus
+(`<case>.recap.json`, every boundary). Numbers compare within 4 ulps (serde_json reads some
+decimals one ulp off).
 
 Known representational gap: the kit and the port decode an `addressed` thinking block as plain
 text, where the TypeScript reducer keeps a `thinking` item with `addressed: true`. The planned
