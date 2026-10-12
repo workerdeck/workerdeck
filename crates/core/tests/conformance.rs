@@ -1,13 +1,22 @@
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use wd_native::Engine;
-use wd_native::planner::plan;
+use wd_native::expansion::TerminalExpansion;
+use wd_native::planner::{TermLine, plan_with};
 use wd_native::projection::project;
+use wd_native::rows::{BuildOptions, TerminalRows, parent_tool_use_id, subagent_items, subagent_task};
+use wd_native::transcript::Item;
 use wd_native::vt::{CellText, Color, VtScreen};
 
 const PROJECTION_PENDING: &[&str] = &[];
 
 const LINES_PENDING: &[&str] = &[];
+
+const OPEN_PENDING: &[&str] = &[];
+
+const FULL_PENDING: &[&str] = &[];
+
+const FRAMES_PENDING: &[&str] = &[];
 
 const SCREEN_PENDING: &[&str] = &[];
 
@@ -54,6 +63,7 @@ fn check(suffix: &str, pending: &[&str], want: impl Fn(&str) -> Value, got: impl
     let mut cases: Vec<String> = std::fs::read_dir(dir())
         .expect("goldens: run `pnpm fixtures:golden`")
         .filter_map(|entry| entry.ok()?.file_name().to_str()?.strip_suffix(suffix).map(str::to_owned))
+        .filter(|case| !case.contains('.'))
         .collect();
     cases.sort();
     assert!(!cases.is_empty(), "no {suffix} goldens");
@@ -91,44 +101,135 @@ fn reducer_matches_typescript_goldens() {
     );
 }
 
+fn encode(line: TermLine) -> Value {
+    let runs: Vec<Value> = line.attributed.unwrap_or_default().iter().map(|&(start, len, intent)| json!([start, len, intent])).collect();
+    let mut value = json!({
+        "tone": line.tone.raw(),
+        "gutterTone": line.gutter_tone.raw(),
+        "gutter": line.gutter,
+        "text": line.text,
+        "runs": runs,
+        "columns": line.columns,
+        "indent": line.indent,
+        "band": line.band.raw(),
+        "bold": line.bold,
+        "italic": line.italic,
+        "nested": line.nested,
+        "pulsing": line.pulsing,
+        "inOpen": line.in_open,
+    });
+    if let Some(since) = line.elapsed_since {
+        value["elapsedSince"] = json!(since);
+    }
+    if let Some(press) = line.press {
+        value["press"] = json!(press.to_string());
+    }
+    if let Some(image) = line.image {
+        value["image"] = json!({
+            "toolUseId": image.tool_use_id,
+            "sourceSeq": image.source_seq,
+            "partIndex": image.part_index,
+            "mediaType": image.media_type,
+            "bytes": image.bytes,
+            "lines": image.lines,
+        });
+    }
+    value
+}
+
+fn planned(rows: &TerminalRows, expansion: &TerminalExpansion, frame: Option<&str>, out: &mut Vec<Value>) {
+    let metrics = Engine::default().metrics;
+    for row in &rows.rows {
+        out.extend(plan_with(row, &metrics, expansion, frame).into_iter().map(encode));
+    }
+}
+
+fn jsonl(name: &str) -> Value {
+    let bytes = read(name);
+    Value::Array(bytes.split(|&b| b == b'\n').filter(|line| !line.is_empty()).map(json).collect())
+}
+
+fn items(case: &str) -> Vec<Item> {
+    replay(case).state.items
+}
+
+fn recap_rows(items: &[Item]) -> TerminalRows {
+    let recap_at = (items.len() >= 4).then_some(items.len() / 2);
+    TerminalRows::build_with(items, &BuildOptions { recap_at, recap_label: "conformance recap", ..BuildOptions::default() })
+}
+
 #[test]
 fn planner_matches_kit_goldens() {
-    let want = |case: &str| {
-        let bytes = read(&format!("{case}.lines.jsonl"));
-        Value::Array(bytes.split(|&b| b == b'\n').filter(|line| !line.is_empty()).map(json).collect())
-    };
-    check(".lines.jsonl", LINES_PENDING, want, |case| {
-        let mut engine = replay(case);
-        engine.layout();
-        let lines = engine.rows.rows.iter().flat_map(|row| plan(row, &engine.metrics));
-        Value::Array(
-            lines
-                .map(|line| {
-                    let runs: Vec<Value> =
-                        line.attributed.unwrap_or_default().iter().map(|&(start, len, intent)| json!([start, len, intent])).collect();
-                    let mut value = json!({
-                        "tone": line.tone.raw(),
-                        "gutterTone": line.gutter_tone.raw(),
-                        "gutter": line.gutter,
-                        "text": line.text,
-                        "runs": runs,
-                        "columns": line.columns,
-                        "indent": line.indent,
-                        "band": line.band.raw(),
-                        "bold": line.bold,
-                        "italic": line.italic,
-                        "nested": line.nested,
-                        "pulsing": line.pulsing,
-                        "inOpen": line.in_open,
-                    });
-                    if let Some(since) = line.elapsed_since {
-                        value["elapsedSince"] = json!(since);
-                    }
-                    value
-                })
-                .collect(),
-        )
-    });
+    check(
+        ".lines.jsonl",
+        LINES_PENDING,
+        |case| jsonl(&format!("{case}.lines.jsonl")),
+        |case| {
+            let mut out = Vec::new();
+            planned(&TerminalRows::build(&items(case)), &TerminalExpansion::default(), None, &mut out);
+            Value::Array(out)
+        },
+    );
+}
+
+#[test]
+fn open_rows_match_kit_goldens() {
+    check(
+        ".open.lines.jsonl",
+        OPEN_PENDING,
+        |case| jsonl(&format!("{case}.open.lines.jsonl")),
+        |case| {
+            let rows = recap_rows(&items(case));
+            let open = TerminalExpansion { open: TerminalExpansion::everything(&rows.rows).open, ..TerminalExpansion::default() };
+            let mut out = Vec::new();
+            planned(&rows, &open, None, &mut out);
+            Value::Array(out)
+        },
+    );
+}
+
+#[test]
+fn full_rows_match_kit_goldens() {
+    check(
+        ".full.lines.jsonl",
+        FULL_PENDING,
+        |case| jsonl(&format!("{case}.full.lines.jsonl")),
+        |case| {
+            let rows = recap_rows(&items(case));
+            let mut out = Vec::new();
+            planned(&rows, &TerminalExpansion::everything(&rows.rows), None, &mut out);
+            Value::Array(out)
+        },
+    );
+}
+
+#[test]
+fn subagent_frames_match_kit_goldens() {
+    check(
+        ".frames.lines.jsonl",
+        FRAMES_PENDING,
+        |case| jsonl(&format!("{case}.frames.lines.jsonl")),
+        |case| {
+            let items = items(case);
+            let mut seen: Vec<&str> = Vec::new();
+            let mut out = Vec::new();
+            for id in items.iter().filter_map(parent_tool_use_id) {
+                if seen.contains(&id) {
+                    continue;
+                }
+                seen.push(id);
+                let task = subagent_task(&items, id);
+                let rows = TerminalRows::build_with(
+                    &subagent_items(&items, id),
+                    &BuildOptions { frame_task: task.as_deref(), ..BuildOptions::default() },
+                );
+                out.push(json!({ "frame": id }));
+                planned(&rows, &TerminalExpansion::default(), Some(id), &mut out);
+                planned(&rows, &TerminalExpansion::everything(&rows.rows), Some(id), &mut out);
+            }
+            Value::Array(out)
+        },
+    );
 }
 
 fn color(color: Color) -> u32 {
@@ -207,12 +308,15 @@ fn every_case_has_its_kit_golden() {
         .iter()
         .filter_map(|name| {
             let wanted = match (name.strip_suffix(".events.jsonl"), name.strip_suffix(".vt.json")) {
-                (Some(case), _) => format!("{case}.lines.jsonl"),
-                (_, Some(case)) => format!("{case}.screen.json"),
+                (Some(case), _) => {
+                    vec![format!("{case}.lines.jsonl"), format!("{case}.open.lines.jsonl"), format!("{case}.full.lines.jsonl")]
+                }
+                (_, Some(case)) => vec![format!("{case}.screen.json")],
                 _ => return None,
             };
-            (!names.contains(&wanted)).then_some(wanted)
+            Some(wanted.into_iter().filter(|wanted| !names.contains(wanted)).collect::<Vec<_>>())
         })
+        .flatten()
         .collect();
     assert!(missing.is_empty(), "kit goldens missing, run WD_CONFORMANCE_WRITE=1 swift test --filter Conformance: {missing:?}");
 }

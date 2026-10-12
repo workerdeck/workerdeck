@@ -29,6 +29,21 @@ struct ConformanceGoldenTests {
     var pulsing: Bool
     var inOpen: Bool
     var elapsedSince: Double?
+    var press: String?
+    var image: Image?
+  }
+
+  private struct Image: Encodable {
+    var toolUseId: String
+    var sourceSeq: Int
+    var partIndex: Int
+    var mediaType: String
+    var bytes: Int
+    var lines: Int
+  }
+
+  private struct FrameHeader: Encodable {
+    var frame: String
   }
 
   private struct VTCase: Decodable {
@@ -101,6 +116,50 @@ struct ConformanceGoldenTests {
     }
   }
 
+  private static func press(_ press: TermPress?) -> String? {
+    switch press {
+    case nil: return nil
+    case .toggle(let key): return "toggle:\(key)"
+    case .expandFull(let id): return "expandFull:\(id)"
+    case .openSubagent(let id): return "openSubagent:\(id)"
+    case .killShell(let id): return "killShell:\(id)"
+    case .openShell(let id): return "openShell:\(id)"
+    }
+  }
+
+  private static func encode(_ line: TermLine) throws -> String {
+    let image = line.image.map {
+      Image(
+        toolUseId: $0.toolUseId, sourceSeq: $0.sourceSeq, partIndex: $0.partIndex,
+        mediaType: $0.mediaType, bytes: $0.bytes, lines: $0.lines)
+    }
+    return try encode(
+      Line(
+        tone: line.tone.rawValue, gutterTone: line.gutterTone.rawValue, gutter: line.gutter,
+        text: line.text, runs: runs(line), columns: line.columns, indent: line.indent,
+        band: line.band.rawValue, bold: line.bold, italic: line.italic, nested: line.nested,
+        pulsing: line.pulsing, inOpen: line.inOpen, elapsedSince: line.elapsedSince,
+        press: press(line.press), image: image)) + "\n"
+  }
+
+  private static func planned(
+    _ rows: TerminalRows, expansion: TerminalExpansion = TerminalExpansion(),
+    frameParentId: String? = nil
+  ) throws -> String {
+    var out = ""
+    for row in rows.rows {
+      for line in TerminalPlanner.plan(
+        row, metrics: metrics, expansion: expansion, frameParentId: frameParentId)
+      {
+        out += try encode(line)
+      }
+    }
+    return out
+  }
+
+  // Recap label and boundary for the open variant: halfway, so both sides of the seam fold.
+  static let recapLabel = "conformance recap"
+
   @Test func plannedLinesMatchTheGoldens() throws {
     let cases = try Self.files(".events.jsonl")
     #expect(!cases.isEmpty)
@@ -113,18 +172,29 @@ struct ConformanceGoldenTests {
           state = applyEvent(state, event)
         }
       }
-      var out = ""
-      for row in TerminalRows.build(items: state.items).rows {
-        for line in TerminalPlanner.plan(row, metrics: Self.metrics) {
-          out += try Self.encode(
-            Line(
-              tone: line.tone.rawValue, gutterTone: line.gutterTone.rawValue, gutter: line.gutter,
-              text: line.text, runs: Self.runs(line), columns: line.columns, indent: line.indent,
-              band: line.band.rawValue, bold: line.bold, italic: line.italic, nested: line.nested,
-              pulsing: line.pulsing, inOpen: line.inOpen, elapsedSince: line.elapsedSince)) + "\n"
-        }
+      let items = state.items
+      try Self.settle("\(name).lines.jsonl", try Self.planned(TerminalRows.build(items: items)))
+
+      let boundary = items.count >= 4 ? items.count / 2 : nil
+      let open = TerminalRows.build(items: items, recapAt: boundary, recapLabel: Self.recapLabel)
+      let everything = TerminalExpansion.everything(in: open)
+      try Self.settle(
+        "\(name).open.lines.jsonl",
+        try Self.planned(open, expansion: TerminalExpansion(open: everything.open)))
+      try Self.settle(
+        "\(name).full.lines.jsonl", try Self.planned(open, expansion: everything))
+
+      var frames = ""
+      let parents = items.compactMap { parentToolUseId(of: $0) }
+      var seen = Set<String>()
+      for id in parents where seen.insert(id).inserted {
+        let rows = TerminalRows.build(
+          items: subagentItems(items, parentToolUseId: id), frameTask: subagentTask(items, id: id))
+        frames += try Self.encode(FrameHeader(frame: id)) + "\n"
+        frames += try Self.planned(rows, frameParentId: id)
+        frames += try Self.planned(rows, expansion: .everything(in: rows), frameParentId: id)
       }
-      try Self.settle("\(name).lines.jsonl", out)
+      if !frames.isEmpty { try Self.settle("\(name).frames.lines.jsonl", frames) }
     }
   }
 

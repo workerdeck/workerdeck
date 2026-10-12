@@ -511,6 +511,129 @@ export const CORPUS: Case[] = [
       turnEnd(),
     ),
   },
+  {
+    name: 'peer-send',
+    tape: beat(
+      init(),
+      user('Tell the reviewer.'),
+      tool('toolu_peer1', 'mcp__workerdeck__peers_send', { to: 'WD-Review', message: 'Ready for review: **two** commits on `refactor/rust`.' }),
+      result('toolu_peer1', 'Delivered to WD-Review.'),
+      tool('toolu_peer2', 'peers_send', { to: 'WD-MonkeyArt', message: 'Avatars next.' }),
+      result('toolu_peer2', 'Delivered.'),
+      tool('toolu_after', 'Read', { file_path: `${CWD}/a.ts` }),
+      result('toolu_after', 'export const a = 1'),
+      say('Both told.'),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'todowrite-tool',
+    tape: beat(
+      init(),
+      user('Plan the work.'),
+      tool('toolu_todo', 'TodoWrite', {
+        todos: [
+          { content: 'Read the reducer', status: 'completed', activeForm: 'Reading the reducer' },
+          { content: 'Port the planner branches for expansion states', status: 'in_progress', activeForm: 'Porting the planner' },
+          { content: 'Regenerate the goldens', status: 'pending', activeForm: 'Regenerating' },
+        ],
+      }),
+      result('toolu_todo', 'Todos have been modified successfully.'),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'tool-runs',
+    tape: beat(
+      init(),
+      user('Look around.'),
+      tool('toolu_r1', 'Read', { file_path: `${CWD}/a.ts` }),
+      result('toolu_r1', Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join('\n')),
+      tool('toolu_r2', 'Grep', { pattern: 'applyEvent', path: CWD }),
+      result('toolu_r2', 'packages/react/src/lib/transcript.ts'),
+      tool('toolu_r3', 'Bash', { command: 'ls missing' }),
+      result('toolu_r3', 'ls: missing: No such file or directory', { isError: true }),
+      tool('toolu_r4', 'Glob', { pattern: '**/*.rs' }),
+      say('Found it.'),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'subagent-long-brief',
+    tape: beat(
+      init(),
+      user('Delegate.'),
+      tool('toolu_bg', 'Task', {
+        description: 'Audit the planner',
+        prompt: Array.from({ length: 9 }, (_, index) => `Step ${index + 1}: check the branch that plans case ${index + 1} and report any drift you find.`).join('\n'),
+      }),
+      think('Start with the run fold.', 'toolu_bg'),
+      tool('toolu_bg_r1', 'Read', { file_path: `${CWD}/planner.rs` }, 'toolu_bg'),
+      result('toolu_bg_r1', 'fn plan_run() {}', { parent: 'toolu_bg' }),
+      tool('toolu_bg_r2', 'Grep', { pattern: 'plan_task' }, 'toolu_bg'),
+      result('toolu_bg_r2', 'planner.rs:693', { parent: 'toolu_bg' }),
+      say('No drift in the run fold.', { parent: 'toolu_bg' }),
+      result('toolu_bg', 'No drift found.'),
+      say('The audit found nothing.'),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'diffs',
+    tape: beat(
+      init(),
+      tool('toolu_multi', 'Edit', { file_path: '/repo/b.ts', old_string: 'x', new_string: 'y' }),
+      toolResult(
+        'r-multi',
+        { tool_use_id: 'toolu_multi', content: 'updated' },
+        {
+          patch: {
+            path: '/repo/b.ts',
+            kind: 'update',
+            hunks: [
+              { oldStart: 2, oldLines: 3, newStart: 2, newLines: 4, lines: [' keep', '-old one', '+new one', '+added', ' tail'] },
+              { oldStart: 40, oldLines: 2, newStart: 41, newLines: 1, lines: ['-gone', ' stays'] },
+            ],
+          },
+        },
+      ),
+      tool('toolu_write', 'Write', { file_path: '/repo/new.ts', content: 'export {}' }),
+      toolResult(
+        'r-write',
+        { tool_use_id: 'toolu_write', content: 'created' },
+        { patch: { path: '/repo/new.ts', kind: 'add', hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 2, lines: ['+export {}', '+// end'] }] } },
+      ),
+    ),
+  },
+  {
+    name: 'long-thinking-and-result',
+    tape: beat(
+      init(),
+      user('Dig in.'),
+      think(`${'A thought that runs well past the width of one terminal line, '.repeat(4)}\nand a second paragraph.`),
+      tool('toolu_huge', 'Bash', { command: 'cat huge.txt' }),
+      result('toolu_huge', Array.from({ length: 120 }, (_, index) => `row ${index + 1} ${'data '.repeat(6)}`).join('\n')),
+      turnEnd(),
+    ),
+  },
+  {
+    name: 'shell-failed-long',
+    tape: beat(
+      init(),
+      userText(
+        'sh-fail',
+        `<local-command-stdout>$ make\n${Array.from({ length: 14 }, (_, index) => `step ${index + 1}`).join('\n')}\nmake: *** [all] Error 2\n[exit 2]</local-command-stdout>`,
+        { synthetic: true, shell: { ...SHELL, id: 'sh_fail', command: 'make', label: 'make', status: 'exited', exitCode: 2, endReason: 'exit', endedAt: 3000 } },
+      ),
+    ),
+  },
+  {
+    name: 'shell-running',
+    tape: beat(
+      init(),
+      userText('sh-live', '<local-command-stdout>$ npm run dev\nlistening on :5173</local-command-stdout>', { synthetic: true, shell: SHELL }),
+    ),
+  },
 ]
 
 export const DUPLICATES = new Set(['duplicate-seq-replay'])

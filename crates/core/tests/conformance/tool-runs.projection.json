@@ -1,0 +1,84 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "u-55",
+      "kind": "user",
+      "text": "Look around."
+    },
+    {
+      "id": "toolu_r1",
+      "input": {
+        "file_path": "/work/acme/a.ts"
+      },
+      "kind": "tool_call",
+      "name": "Read",
+      "result": {
+        "isError": false,
+        "text": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12"
+      },
+      "status": "settled",
+      "ts": 1760000003000
+    },
+    {
+      "id": "toolu_r2",
+      "input": {
+        "path": "/work/acme",
+        "pattern": "applyEvent"
+      },
+      "kind": "tool_call",
+      "name": "Grep",
+      "result": {
+        "isError": false,
+        "text": "packages/react/src/lib/transcript.ts"
+      },
+      "status": "settled",
+      "ts": 1760000006000
+    },
+    {
+      "id": "toolu_r3",
+      "input": {
+        "command": "ls missing"
+      },
+      "kind": "tool_call",
+      "name": "Bash",
+      "result": {
+        "isError": true,
+        "text": "ls: missing: No such file or directory"
+      },
+      "status": "failed",
+      "ts": 1760000009000
+    },
+    {
+      "id": "toolu_r4",
+      "input": {
+        "pattern": "**/*.rs"
+      },
+      "kind": "tool_call",
+      "name": "Glob",
+      "status": "running",
+      "ts": 1760000012000
+    },
+    {
+      "id": "a-60-0",
+      "kind": "assistant_text",
+      "streaming": false,
+      "text": "Found it."
+    },
+    {
+      "durationMs": 42000,
+      "id": "turn-12",
+      "isError": false,
+      "kind": "turn_result",
+      "subtype": "success",
+      "totalCostUsd": 0.12
+    }
+  ],
+  "lastSeq": 13,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "idle",
+  "totalCostUsd": 0.12
+}

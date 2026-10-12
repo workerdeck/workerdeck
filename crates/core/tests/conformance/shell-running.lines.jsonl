@@ -1,0 +1,3 @@
+{"band":"user","bold":false,"columns":2,"gutter":"$","gutterTone":"magenta","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"openShell:sh_abc","pulsing":true,"runs":[],"text":"npm test · running","tone":"fg"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_abc","pulsing":false,"runs":[],"text":"listening on :5173","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"killShell:sh_abc","pulsing":false,"runs":[],"text":"✕ kill","tone":"red"}

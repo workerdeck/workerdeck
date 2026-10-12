@@ -1,0 +1,88 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "toolu_multi",
+      "input": {
+        "file_path": "/repo/b.ts",
+        "new_string": "y",
+        "old_string": "x"
+      },
+      "kind": "tool_call",
+      "name": "Edit",
+      "patch": {
+        "hunks": [
+          {
+            "lines": [
+              " keep",
+              "-old one",
+              "+new one",
+              "+added",
+              " tail"
+            ],
+            "newLines": 4,
+            "newStart": 2,
+            "oldLines": 3,
+            "oldStart": 2
+          },
+          {
+            "lines": [
+              "-gone",
+              " stays"
+            ],
+            "newLines": 1,
+            "newStart": 41,
+            "oldLines": 2,
+            "oldStart": 40
+          }
+        ],
+        "kind": "update",
+        "path": "/repo/b.ts"
+      },
+      "result": {
+        "isError": false,
+        "text": "updated"
+      },
+      "status": "settled",
+      "ts": 1760000003000
+    },
+    {
+      "id": "toolu_write",
+      "input": {
+        "content": "export {}",
+        "file_path": "/repo/new.ts"
+      },
+      "kind": "tool_call",
+      "name": "Write",
+      "patch": {
+        "hunks": [
+          {
+            "lines": [
+              "+export {}",
+              "+// end"
+            ],
+            "newLines": 2,
+            "newStart": 1,
+            "oldLines": 0,
+            "oldStart": 0
+          }
+        ],
+        "kind": "add",
+        "path": "/repo/new.ts"
+      },
+      "result": {
+        "isError": false,
+        "text": "created"
+      },
+      "status": "settled",
+      "ts": 1760000006000
+    }
+  ],
+  "lastSeq": 6,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "running",
+  "totalCostUsd": 0
+}

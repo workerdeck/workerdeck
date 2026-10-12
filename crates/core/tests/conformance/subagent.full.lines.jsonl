@@ -1,0 +1,11 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Survey the tests.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"dim","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"openSubagent:toolu_task","pulsing":false,"runs":[],"text":"Task(Survey tests) · done","tone":"green"}
+{"band":"none","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":true,"indent":0,"italic":false,"nested":true,"press":"toggle:brief:toolu_task","pulsing":false,"runs":[],"text":"List the test files.","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":true,"indent":0,"italic":false,"nested":true,"pulsing":false,"runs":[],"text":"Looking at the tree.","tone":"fg"}
+{"band":"none","bold":false,"columns":0,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"※ conformance recap","tone":"faint"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"dim","inOpen":true,"indent":0,"italic":false,"nested":true,"press":"toggle:call:toolu_ls","pulsing":false,"runs":[],"text":"Bash(ls test)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":true,"indent":1,"italic":false,"nested":true,"press":"toggle:call:toolu_ls","pulsing":false,"runs":[],"text":"a.test.ts","tone":"dim"}
+{"band":"output","bold":false,"columns":3,"gutter":"","gutterTone":"dim","inOpen":true,"indent":1,"italic":false,"nested":true,"press":"toggle:call:toolu_ls","pulsing":false,"runs":[],"text":"b.test.ts","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":true,"pulsing":false,"runs":[],"text":"Two files.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"There are two test files.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

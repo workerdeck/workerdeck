@@ -26,12 +26,12 @@ impl PlanCache {
     }
 
     fn cached(&self, row: &Row) -> Option<usize> {
-        let (stored, lines) = self.entries.get(row.key())?;
+        let (stored, lines) = self.entries.get(&*row.key())?;
         if stored == row { Some(*lines) } else { None }
     }
 
     fn store(&mut self, row: &Row, lines: usize) {
-        self.entries.insert(row.key().to_owned(), (row.clone(), lines));
+        self.entries.insert(row.key().into_owned(), (row.clone(), lines));
     }
 }
 

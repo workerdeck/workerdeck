@@ -1,0 +1,7 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Tell the reviewer.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"↤","gutterTone":"peer","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_peer1","pulsing":false,"runs":[[0,5,2]],"text":"peer: ","tone":"peer"}
+{"band":"none","bold":false,"columns":2,"gutter":"↤","gutterTone":"peer","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_peer2","pulsing":false,"runs":[[0,5,2]],"text":"peer: ","tone":"peer"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_after","pulsing":false,"runs":[],"text":"Read(/work/acme/a.ts)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_after","pulsing":false,"runs":[],"text":"export const a = 1","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Both told.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

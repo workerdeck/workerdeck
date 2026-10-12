@@ -1,8 +1,8 @@
 {"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Read the config and tell me the port.","tone":"fg"}
 {"band":"none","bold":false,"columns":2,"gutter":"✻","gutterTone":"dim","inOpen":false,"indent":0,"italic":true,"nested":false,"pulsing":false,"runs":[],"text":"The port lives in the config file.","tone":"dim"}
-{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Read(/work/acme/config.json)","tone":"fg"}
-{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"{","tone":"dim"}
-{"band":"output","bold":false,"columns":3,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"  \"port\": 8080","tone":"dim"}
-{"band":"output","bold":false,"columns":3,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"}","tone":"dim"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_read","pulsing":false,"runs":[],"text":"Read(/work/acme/config.json)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_read","pulsing":false,"runs":[],"text":"{","tone":"dim"}
+{"band":"output","bold":false,"columns":3,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_read","pulsing":false,"runs":[],"text":"  \"port\": 8080","tone":"dim"}
+{"band":"output","bold":false,"columns":3,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_read","pulsing":false,"runs":[],"text":"}","tone":"dim"}
 {"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[[22,4,2]],"text":"The server listens on 8080.","tone":"fg"}
 {"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 4.2s · $0.03","tone":"faint"}

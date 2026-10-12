@@ -1,0 +1,9 @@
+{"band":"user","bold":false,"columns":2,"gutter":"$","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"make · exit 2","tone":"red"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 1","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 2","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 3","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 4","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 5","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 6","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 7","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:shell:sh_fail","pulsing":false,"runs":[],"text":"step 8","tone":"dim"}

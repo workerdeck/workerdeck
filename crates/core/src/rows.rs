@@ -1,4 +1,6 @@
+use crate::expansion::ExpansionKey;
 use crate::transcript::{Item, ItemKind, Str, ToolCall};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -33,36 +35,102 @@ pub struct TaskBlock {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Row {
+pub enum Block {
     Item(ItemBlock),
     Run(RunBlock),
     Task(TaskBlock),
 }
 
-impl Row {
+impl RunBlock {
+    pub fn expansion_key(&self) -> Option<ExpansionKey> {
+        if self.run.len() > 1 { self.run.first().map(|call| ExpansionKey::Run(call.id.to_string())) } else { None }
+    }
+}
+
+impl TaskBlock {
+    pub fn expansion_key(&self) -> ExpansionKey {
+        ExpansionKey::Task(self.task.id.to_string())
+    }
+}
+
+impl Leaf {
+    fn spacing(&self) -> Option<(ItemKind, bool)> {
+        match self {
+            Leaf::Item(b) => Some((b.item.kind(), is_peer_send_item(&b.item))),
+            Leaf::Run(b) => b.run.first().map(|c| (ItemKind::ToolCall, is_peer_send(c))),
+        }
+    }
+}
+
+impl Block {
     pub fn key(&self) -> &str {
         match self {
-            Row::Item(b) => &b.key,
-            Row::Run(b) => &b.key,
-            Row::Task(b) => &b.key,
+            Block::Item(b) => &b.key,
+            Block::Run(b) => &b.key,
+            Block::Task(b) => &b.key,
         }
     }
 
     pub fn index(&self) -> usize {
         match self {
-            Row::Item(b) => b.index,
-            Row::Run(b) => b.index,
-            Row::Task(b) => b.index,
+            Block::Item(b) => b.index,
+            Block::Run(b) => b.index,
+            Block::Task(b) => b.index,
         }
     }
 
-    fn spacing(&self) -> (ItemKind, bool) {
+    fn spacing(&self) -> Option<(ItemKind, bool)> {
         match self {
-            Row::Item(b) => (b.item.kind(), is_peer_send_item(&b.item)),
-            Row::Run(b) => (ItemKind::ToolCall, b.run.first().is_some_and(|c| is_peer_send(c))),
-            Row::Task(b) => (ItemKind::ToolCall, is_peer_send(&b.task)),
+            Block::Item(b) => Some((b.item.kind(), is_peer_send_item(&b.item))),
+            Block::Run(b) => b.run.first().map(|c| (ItemKind::ToolCall, is_peer_send(c))),
+            Block::Task(b) => Some((ItemKind::ToolCall, is_peer_send(&b.task))),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Row {
+    Block(Block),
+    Recap { label: String },
+    Brief { id: String, text: String },
+}
+
+impl Row {
+    pub fn key(&self) -> Cow<'_, str> {
+        match self {
+            Row::Block(block) => Cow::Borrowed(block.key()),
+            Row::Recap { .. } => Cow::Borrowed("recap"),
+            Row::Brief { id, .. } => Cow::Owned(format!("brief:{id}")),
+        }
+    }
+
+    pub fn recap_label(&self) -> Option<&str> {
+        match self {
+            Row::Recap { label } => Some(label),
+            _ => None,
+        }
+    }
+
+    fn spacing(&self) -> Option<(ItemKind, bool)> {
+        match self {
+            Row::Block(block) => block.spacing(),
+            Row::Recap { .. } | Row::Brief { .. } => None,
+        }
+    }
+}
+
+fn needs_blank(before: Option<(ItemKind, bool)>, after: Option<(ItemKind, bool)>) -> bool {
+    let (Some((bk, bp)), Some((ak, ap))) = (before, after) else {
+        return true;
+    };
+    if bp || ap {
+        return true;
+    }
+    !(bk == ItemKind::ToolCall && ak == ItemKind::ToolCall)
+}
+
+pub fn leaf_needs_blank(previous: &Leaf, next: &Leaf) -> bool {
+    needs_blank(previous.spacing(), next.spacing())
 }
 
 pub fn is_peer_send(call: &ToolCall) -> bool {
@@ -90,24 +158,31 @@ fn item_key(item: &Item) -> String {
     key
 }
 
-fn push_leaf(out: &mut Vec<Row>, item: &Item, index: usize) {
+fn push_leaf(out: &mut Vec<Block>, item: &Item, index: usize) {
     if let Item::ToolCall(call) = item
         && !is_peer_send(call)
     {
-        if let Some(Row::Run(previous)) = out.last_mut()
+        if let Some(Block::Run(previous)) = out.last_mut()
             && folds_together(&previous.run[0], call)
         {
             previous.run.push(call.clone());
             previous.indices.push(index);
             return;
         }
-        out.push(Row::Run(RunBlock { key: format!("run:{}", call.id), run: vec![call.clone()], indices: vec![index], index }));
+        out.push(Block::Run(RunBlock { key: format!("run:{}", call.id), run: vec![call.clone()], indices: vec![index], index }));
         return;
     }
-    out.push(Row::Item(ItemBlock { key: item_key(item), item: item.clone(), index }));
+    out.push(Block::Item(ItemBlock { key: item_key(item), item: item.clone(), index }));
 }
 
-pub fn terminal_blocks(items: &[Item], offset: usize) -> Vec<Row> {
+pub fn terminal_blocks(items: &[Item], offset: usize, fold: bool) -> Vec<Block> {
+    if !fold {
+        return items
+            .iter()
+            .enumerate()
+            .map(|(position, item)| Block::Item(ItemBlock { key: item_key(item), item: item.clone(), index: offset + position }))
+            .collect();
+    }
     let mut top_level: HashSet<&str> = HashSet::new();
     for item in items {
         if let Item::ToolCall(call) = item
@@ -127,7 +202,7 @@ pub fn terminal_blocks(items: &[Item], offset: usize) -> Vec<Row> {
         children_of.entry(parent.clone()).or_default().push((item.clone(), offset + position));
     }
 
-    let mut out: Vec<Row> = Vec::with_capacity(items.len());
+    let mut out: Vec<Block> = Vec::with_capacity(items.len());
     for (position, item) in items.iter().enumerate() {
         let index = offset + position;
         if let Some(parent) = item.parent_tool_use_id()
@@ -138,19 +213,19 @@ pub fn terminal_blocks(items: &[Item], offset: usize) -> Vec<Row> {
         if let Item::ToolCall(call) = item
             && let Some(children) = children_of.get(&call.id)
         {
-            let mut nested: Vec<Row> = Vec::new();
+            let mut nested: Vec<Block> = Vec::new();
             for (child, child_index) in children {
                 push_leaf(&mut nested, child, *child_index);
             }
             let leaves = nested
                 .into_iter()
                 .map(|b| match b {
-                    Row::Item(l) => Leaf::Item(l),
-                    Row::Run(l) => Leaf::Run(l),
-                    Row::Task(l) => Leaf::Item(ItemBlock { key: l.key, item: Item::ToolCall(l.task), index: l.index }),
+                    Block::Item(l) => Leaf::Item(l),
+                    Block::Run(l) => Leaf::Run(l),
+                    Block::Task(l) => Leaf::Item(ItemBlock { key: l.key, item: Item::ToolCall(l.task), index: l.index }),
                 })
                 .collect();
-            out.push(Row::Task(TaskBlock {
+            out.push(Block::Task(TaskBlock {
                 key: format!("task:{}", call.id),
                 task: call.clone(),
                 children: leaves,
@@ -164,18 +239,66 @@ pub fn terminal_blocks(items: &[Item], offset: usize) -> Vec<Row> {
     out
 }
 
+pub fn task_child_items(block: &TaskBlock) -> Vec<Item> {
+    block
+        .children
+        .iter()
+        .flat_map(|leaf| match leaf {
+            Leaf::Item(c) => vec![c.item.clone()],
+            Leaf::Run(c) => c.run.iter().map(|call| Item::ToolCall(call.clone())).collect(),
+        })
+        .collect()
+}
+
+pub fn task_brief(task: &ToolCall) -> Option<String> {
+    let text = task.input.get("prompt")?.as_str()?.trim();
+    if text.is_empty() { None } else { Some(text.to_owned()) }
+}
+
+pub fn parent_tool_use_id(item: &Item) -> Option<&str> {
+    item.parent_tool_use_id().map(|parent| &**parent)
+}
+
+pub fn subagent_items(items: &[Item], parent: &str) -> Vec<Item> {
+    items.iter().filter(|item| parent_tool_use_id(item) == Some(parent)).cloned().collect()
+}
+
+pub fn subagent_task(items: &[Item], id: &str) -> Option<Arc<ToolCall>> {
+    items.iter().find_map(|item| match item {
+        Item::ToolCall(call) if &*call.id == id => Some(call.clone()),
+        _ => None,
+    })
+}
+
+pub fn tool_call_item_index(items: &[Item], id: &str) -> Option<usize> {
+    items.iter().position(|item| matches!(item, Item::ToolCall(call) if &*call.id == id))
+}
+
+pub fn is_hidden_thinking(block: &Block) -> bool {
+    matches!(block, Block::Item(ItemBlock { item: Item::Thinking { addressed: false, .. }, .. }))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RowPosition {
     pub ordinal: usize,
     pub count: usize,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct BuildOptions<'a> {
+    pub recap_at: Option<usize>,
+    pub recap_label: &'a str,
+    pub no_fold: bool,
+    pub frame_task: Option<&'a ToolCall>,
+    pub hide_thinking: bool,
+}
+
 pub struct TerminalRows {
     pub rows: Vec<Row>,
-    pub absorbed: HashMap<usize, usize>,
-    pub positions: HashMap<usize, RowPosition>,
-    pub starts: Vec<usize>,
-    pub answerable: Vec<bool>,
+    absorbed: HashMap<usize, usize>,
+    positions: HashMap<usize, RowPosition>,
+    starts: Vec<usize>,
+    answerable: Vec<bool>,
 }
 
 impl TerminalRows {
@@ -184,13 +307,13 @@ impl TerminalRows {
         let mut positions = HashMap::new();
         for (row_index, row) in rows.iter().enumerate() {
             match row {
-                Row::Task(task) => {
+                Row::Block(Block::Task(task)) => {
                     for (ordinal, &child) in task.child_indices.iter().enumerate() {
                         absorbed.insert(child, row_index);
                         positions.insert(child, RowPosition { ordinal, count: task.child_indices.len() });
                     }
                 }
-                Row::Run(run) if run.run.len() > 1 => {
+                Row::Block(Block::Run(run)) if run.run.len() > 1 => {
                     for (ordinal, &member) in run.indices.iter().enumerate() {
                         positions.insert(member, RowPosition { ordinal, count: run.run.len() });
                     }
@@ -199,15 +322,49 @@ impl TerminalRows {
             }
         }
         let mut starts = vec![0usize; rows.len()];
-        let answerable = vec![true; rows.len()];
+        let mut answerable = vec![false; rows.len()];
+        let mut successor = usize::MAX;
         for (i, row) in rows.iter().enumerate().rev() {
-            starts[i] = row.index();
+            if let Row::Block(block) = row {
+                starts[i] = block.index();
+                answerable[i] = true;
+                successor = block.index();
+            } else {
+                starts[i] = successor;
+            }
         }
         TerminalRows { rows, absorbed, positions, starts, answerable }
     }
 
     pub fn build(items: &[Item]) -> Self {
-        TerminalRows::new(terminal_blocks(items, 0))
+        Self::build_with(items, &BuildOptions::default())
+    }
+
+    pub fn build_with(items: &[Item], options: &BuildOptions) -> Self {
+        let blocks = |slice: &[Item], offset: usize| -> Vec<Row> {
+            terminal_blocks(slice, offset, !options.no_fold)
+                .into_iter()
+                .filter(|block| !(options.hide_thinking && is_hidden_thinking(block)))
+                .map(Row::Block)
+                .collect()
+        };
+        let stream_has_brief = items.iter().any(|item| matches!(item, Item::User { .. }));
+        let mut rows: Vec<Row> = Vec::new();
+        if !stream_has_brief
+            && let Some(task) = options.frame_task
+            && let Some(text) = task_brief(task)
+        {
+            rows.push(Row::Brief { id: task.id.to_string(), text });
+        }
+        match options.recap_at {
+            Some(boundary) if boundary > 0 && boundary < items.len() => {
+                rows.extend(blocks(&items[..boundary], 0));
+                rows.push(Row::Recap { label: options.recap_label.to_owned() });
+                rows.extend(blocks(&items[boundary..], boundary));
+            }
+            _ => rows.extend(blocks(items, 0)),
+        }
+        TerminalRows::new(rows)
     }
 
     pub fn len(&self) -> usize {
@@ -218,15 +375,37 @@ impl TerminalRows {
         self.rows.is_empty()
     }
 
+    pub fn row_index_for_item(&self, item_index: usize) -> usize {
+        if let Some(&row) = self.absorbed.get(&item_index) {
+            return row;
+        }
+        let (mut low, mut high, mut best) = (0isize, self.rows.len() as isize - 1, 0usize);
+        while low <= high {
+            let mid = ((low + high) / 2) as usize;
+            if self.starts[mid] <= item_index {
+                if self.answerable[mid] {
+                    best = mid;
+                }
+                low = mid as isize + 1;
+            } else {
+                high = mid as isize - 1;
+            }
+        }
+        best
+    }
+
+    pub fn position(&self, item_index: usize) -> Option<RowPosition> {
+        self.positions.get(&item_index).copied()
+    }
+
+    pub fn recap_row(&self) -> Option<usize> {
+        self.rows.iter().position(|row| matches!(row, Row::Recap { .. }))
+    }
+
     pub fn gap_before(&self, index: usize) -> bool {
         if index == 0 || index >= self.rows.len() {
             return false;
         }
-        let (bk, bp) = self.rows[index - 1].spacing();
-        let (ak, ap) = self.rows[index].spacing();
-        if bp || ap {
-            return true;
-        }
-        !(bk == ItemKind::ToolCall && ak == ItemKind::ToolCall)
+        needs_blank(self.rows[index - 1].spacing(), self.rows[index].spacing())
     }
 }

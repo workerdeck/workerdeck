@@ -1,0 +1,5 @@
+{"band":"none","bold":false,"columns":2,"elapsedSince":1760000003000,"gutter":"⠿","gutterTone":"mark","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"toggle:run:toolu_bash","pulsing":true,"runs":[],"text":"Running 2 shell commands…","tone":"dim"}
+{"band":"none","bold":true,"columns":2,"elapsedSince":1760000003000,"gutter":"⠿","gutterTone":"blue","inOpen":true,"indent":0,"italic":false,"nested":false,"pulsing":true,"runs":[],"text":"Bash(pip install torch)","tone":"fg"}
+{"band":"none","bold":false,"columns":3,"gutter":"⎿","gutterTone":"faint","inOpen":true,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Downloading torch","tone":"faint"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"dim","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_bash2","pulsing":false,"runs":[],"text":"Bash(sleep 1)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":true,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_bash2","pulsing":false,"runs":[],"text":"ok","tone":"dim"}

@@ -1,0 +1,4 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Keep going.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"≡","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"context compacted · earlier turns summarised to fit ","tone":"faint"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"yellow","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"the window · 180.0k → 24.0k · automatic","tone":"faint"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Continuing after the summary.","tone":"fg"}

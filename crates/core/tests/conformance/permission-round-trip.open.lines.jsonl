@@ -1,0 +1,2 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Delete the build folder.","tone":"fg"}
+{"band":"none","bold":true,"columns":2,"elapsedSince":1760000003000,"gutter":"⠿","gutterTone":"blue","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":true,"runs":[],"text":"Bash(rm -rf build)","tone":"fg"}

@@ -1,2 +1,2 @@
-{"band":"none","bold":false,"columns":2,"elapsedSince":1760000003000,"gutter":"⠿","gutterTone":"mark","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":true,"runs":[],"text":"Running 2 shell commands…","tone":"dim"}
-{"band":"none","bold":false,"columns":3,"gutter":"⎿","gutterTone":"faint","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Downloading torch","tone":"faint"}
+{"band":"none","bold":false,"columns":2,"elapsedSince":1760000003000,"gutter":"⠿","gutterTone":"mark","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:run:toolu_bash","pulsing":true,"runs":[],"text":"Running 2 shell commands…","tone":"dim"}
+{"band":"none","bold":false,"columns":3,"gutter":"⎿","gutterTone":"faint","inOpen":false,"indent":1,"italic":false,"nested":false,"press":"toggle:run:toolu_bash","pulsing":false,"runs":[],"text":"Downloading torch","tone":"faint"}

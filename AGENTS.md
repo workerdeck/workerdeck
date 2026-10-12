@@ -52,7 +52,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | `apps/demo` | Interactive tour: a VS Code shell with the real `ui` panels over a scripted in-browser gateway. Private, static. |
 | `apps/ios` | Native iOS remote control (iOS 18+). `WorkerDeckKit/` hand-mirrors protocol + the reducer; `WorkerDeckActivity` + `Widgets/` are the Live Activity. |
 | `apps/docs` | Astro site → Pages. Keep in sync with README. |
-| `crates/` | Rust core for the **native** clients only (Android JNI now, iOS later): decode, reducer, planner, VT. Ports the Swift kit; TS stays the source of truth, checked by `pnpm fixtures:golden` goldens. Cargo, outside pnpm/turbo. |
+| `crates/` | Rust core shared by the **native** clients only (Android JNI now, iOS later): decode, reducer, planner, VT, and every piece of app logic both apps need (view models, controllers); Kotlin never mirrors Swift. Ports the Swift kit; TS stays the source of truth, checked by `pnpm fixtures:golden` goldens. Cargo, outside pnpm/turbo. |
 
 **Dependency direction:** `protocol ← core ← queue ← server ← cli`, `protocol ← relay-client ← {server, relay ← cli}`,
 `protocol ← client ← react ← ui ← web`, `sandbox` a leaf either side may use. `crates/` depends on nothing in the TS tree and nothing TS loads it. The browser side

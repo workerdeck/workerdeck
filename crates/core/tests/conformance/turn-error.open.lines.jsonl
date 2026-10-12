@@ -1,0 +1,4 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Go.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"error_during_execution · 300ms · <$0.01","tone":"red"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"overloaded","tone":"red"}
+{"band":"none","bold":false,"columns":2,"gutter":"!","gutterTone":"red","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"The engine stopped.","tone":"red"}

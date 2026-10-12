@@ -2,6 +2,7 @@ pub mod bench;
 pub mod book;
 pub mod cells;
 pub mod engine;
+pub mod expansion;
 pub mod markdown;
 pub mod planner;
 pub mod projection;

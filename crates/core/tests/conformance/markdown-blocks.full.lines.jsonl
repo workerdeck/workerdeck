@@ -1,0 +1,29 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Summarise.","tone":"fg"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Summary","tone":"bright"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[[12,5,2],[29,13,4]],"text":"The fix has three parts, see transcript.ts and the ","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"docs.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"none","bold":true,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Steps","tone":"bright"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"none","bold":false,"columns":3,"gutter":"1.","gutterTone":"faint","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[[9,7,1]],"text":"Read the reducer.","tone":"fg"}
+{"band":"none","bold":false,"columns":3,"gutter":"2.","gutterTone":"faint","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[[9,3,32]],"text":"Port the old new planner.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"-","gutterTone":"faint","inOpen":false,"indent":3,"italic":false,"nested":false,"pulsing":false,"runs":[[19,4,4]],"text":"nested bullet with code","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"-","gutterTone":"faint","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"a plain bullet","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"A quoted line that is long enough to wrap across ","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"more than one terminal line at this width, surely.","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"export function plan(row: Row): Line[] {","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"  return []","tone":"dim"}
+{"band":"output","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":1,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"}","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"| Area | State |","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"| --- | --- |","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"| VT | done |","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"| Planner | partial |","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"faint"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Escaped *not emphasis* and a_snake_case_name.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

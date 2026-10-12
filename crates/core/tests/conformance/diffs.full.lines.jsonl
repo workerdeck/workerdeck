@@ -1,0 +1,5 @@
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"mark","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"toggle:run:toolu_multi","pulsing":false,"runs":[],"text":"Ran 2 tools · 1 edit, 1 write","tone":"dim"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"green","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_multi","pulsing":false,"runs":[],"text":"Edit(/repo/b.ts)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":true,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_multi","pulsing":false,"runs":[],"text":"updated","tone":"dim"}
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"green","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_write","pulsing":false,"runs":[],"text":"Write(/repo/new.ts)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":true,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_write","pulsing":false,"runs":[],"text":"created","tone":"dim"}

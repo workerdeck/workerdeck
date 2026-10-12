@@ -2408,6 +2408,13 @@ truth** for the wire and the shared rules; the web, VS Code, the gateway and the
 Rust (V8 replays the spike fixture in 72 ms, so there is nothing to win there). Why Rust and not
 the Swift kit cross-compiled: `docs/NATIVE-CORE-SPIKE.md`.
 
+**One app, two shells.** iOS and Android are the same app, so everything that is not drawing or
+talking to the OS belongs here, not only the hot path: the transcript and session controllers
+(expansion, presses, replay hold, attach and reconnect as sans-IO state), the view models (session
+list, agents, pricing, usage, unread, watermarks), REST decode and request building. The platform
+keeps networking I/O, key storage, push, Live Activity / ongoing notification, widgets, pickers and
+all UI. Kotlin never carries logic iOS has in Swift: port it here first and point both apps at it.
+
 A Cargo workspace at the repo root (`Cargo.toml`, `rust-toolchain.toml`, `rustfmt.toml`), outside
 pnpm's globs and invisible to turbo:
 
@@ -2424,16 +2431,16 @@ can be read side by side until iOS moves onto the core:
 | --- | --- |
 | `protocol.rs` | `ProtocolTypes.swift`: unknown frame and event types, and modeled types with missing or mistyped required fields, decode to `Unknown` (the Swift `catch { .unknown }`); a scalar of the wrong shape reads as absent |
 | `transcript.rs` | `Transcript.swift` (`applyEvent`); text is `Arc<str>` so a row rebuild clones by refcount |
-| `rows.rs` | `Terminal/TerminalBlocks.swift` + `TerminalRows.build`, fold on, no recap boundary or brief rows yet |
-| `planner.rs` | `Terminal/TerminalPlanner.swift` with an empty expansion, plus `TerminalMetrics`, `TermFmt`, `ResultPreview`, `LiveTool` |
+| `rows.rs` | `Terminal/TerminalBlocks.swift` + `TerminalRows.build`: recap boundary, brief rows, sub-agent frames, `hideThinking` |
+| `planner.rs` | `Terminal/TerminalPlanner.swift` (every expansion, press and frame branch, image boxes), plus `TerminalMetrics`, `TermFmt`, `ResultPreview`, `LiveTool` |
+| `expansion.rs` | `Terminal/TerminalExpansion.swift`: `ExpansionKey`, `TermPress`, open/full/pending |
 | `markdown.rs` | `MarkdownBlocks.swift` and a portable inline parser (Apple's `AttributedString(markdown:)` is not available off Darwin, and differs on an unclosed `**`) |
 | `cells.rs` | `Terminal/TerminalCells.swift`: extended graphemes, the plain-ASCII fast path, the word wrapper |
 | `book.rs` | `Terminal/TerminalHeightBook.swift` + `TerminalPlanCache`; 256 or more misses plan in parallel |
 | `vt.rs` | `Terminal/VTScreen.swift` + `VTTypes.swift`; parsing is the `vte` crate, dispatch mirrors the Swift handlers |
 
-**The port covers what the spike fixture exercises and no more.** Missing: shell, compaction and
-file items, attachments, peer rows, TodoWrite, diffs, images, expansion states, the deferred `!`
-flush, custom tool titles, VT resize and key encoding, and every view model. The plan, with its
+**Still missing**: an expansion-aware height book, VT resize and key encoding, the transcript
+and session controllers, and the view models (in progress). The plan, with its
 phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
 
 **Conformance goldens** replace "mirror by convention" for the reducer. `conformance/corpus.ts`
@@ -2463,8 +2470,12 @@ the core. `ConformanceGoldenTests` in `WorkerDeckKit` plans every case's transcr
 moves a line shows up in `swift test`. CI cannot run Swift, so after adding a case or changing
 the kit, run `WD_CONFORMANCE_WRITE=1 swift test --filter Conformance` in `apps/ios/WorkerDeckKit`
 and commit the result; the Rust test `every_case_has_its_kit_golden` fails in CI when one is
-missing. Tap targets (`press`) and image boxes are not in the line goldens yet: the port has
-neither, and adding them now would mark every case pending and hide drift in what is ported.
+missing. Each line also carries its tap target (`press`, spelled `toggle:call:<id>`,
+`expandFull:<id>`, `openSubagent:<id>`, ...) and image box when it has one. Three more variants
+per case: `<case>.open.lines.jsonl` (recap at the halfway item, every expansion key open, no
+budgets lifted), `<case>.full.lines.jsonl` (`TerminalExpansion.everything`: budgets lifted,
+truncated results fetching) and, for cases with sub-agents, `<case>.frames.lines.jsonl` (each
+frame's rows collapsed then fully open, after a `{"frame": id}` header).
 On the Mac the kit parses inline markdown with Apple's parser, so the line goldens follow
 CommonMark there (intraword `_` is literal, for instance); avoid an unclosed `**`, where Apple's
 parser keeps the markers and the portable one drops them.

@@ -1,0 +1,5 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Look around.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"⠿","gutterTone":"mark","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:run:toolu_r1","pulsing":true,"runs":[],"text":"Running 4 tools · 1 glob, 1 grep, 1 read, 1 shell…","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"elapsedSince":1760000012000,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"press":"toggle:run:toolu_r1","pulsing":false,"runs":[],"text":"","tone":"dim"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Found it.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

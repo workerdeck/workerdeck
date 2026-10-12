@@ -1,0 +1,75 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "u-48",
+      "kind": "user",
+      "text": "Tell the reviewer."
+    },
+    {
+      "id": "toolu_peer1",
+      "input": {
+        "message": "Ready for review: **two** commits on `refactor/rust`.",
+        "to": "WD-Review"
+      },
+      "kind": "tool_call",
+      "name": "mcp__workerdeck__peers_send",
+      "result": {
+        "isError": false,
+        "text": "Delivered to WD-Review."
+      },
+      "status": "settled",
+      "ts": 1760000003000
+    },
+    {
+      "id": "toolu_peer2",
+      "input": {
+        "message": "Avatars next.",
+        "to": "WD-MonkeyArt"
+      },
+      "kind": "tool_call",
+      "name": "peers_send",
+      "result": {
+        "isError": false,
+        "text": "Delivered."
+      },
+      "status": "settled",
+      "ts": 1760000006000
+    },
+    {
+      "id": "toolu_after",
+      "input": {
+        "file_path": "/work/acme/a.ts"
+      },
+      "kind": "tool_call",
+      "name": "Read",
+      "result": {
+        "isError": false,
+        "text": "export const a = 1"
+      },
+      "status": "settled",
+      "ts": 1760000009000
+    },
+    {
+      "id": "a-52-0",
+      "kind": "assistant_text",
+      "streaming": false,
+      "text": "Both told."
+    },
+    {
+      "durationMs": 42000,
+      "id": "turn-11",
+      "isError": false,
+      "kind": "turn_result",
+      "subtype": "success",
+      "totalCostUsd": 0.12
+    }
+  ],
+  "lastSeq": 12,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "idle",
+  "totalCostUsd": 0.12
+}

@@ -1,0 +1,2 @@
+{"band":"none","bold":true,"columns":2,"gutter":"●","gutterTone":"green","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"toggle:call:toolu_edit","pulsing":false,"runs":[],"text":"Edit(/repo/a.ts)","tone":"fg"}
+{"band":"output","bold":false,"columns":3,"gutter":"⎿","gutterTone":"dim","inOpen":true,"indent":1,"italic":false,"nested":false,"press":"toggle:call:toolu_edit","pulsing":false,"runs":[],"text":"updated","tone":"dim"}

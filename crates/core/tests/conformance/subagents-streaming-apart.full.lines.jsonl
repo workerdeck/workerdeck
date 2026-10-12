@@ -1,0 +1,9 @@
+{"band":"user","bold":false,"columns":2,"gutter":"❯","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"Two agents.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"elapsedSince":1760000003000,"gutter":"⠿","gutterTone":"mark","inOpen":true,"indent":0,"italic":false,"nested":false,"press":"toggle:run:toolu_a","pulsing":true,"runs":[],"text":"Running 2 tools · 2 task…","tone":"dim"}
+{"band":"none","bold":true,"columns":2,"elapsedSince":1760000003000,"gutter":"⠿","gutterTone":"blue","inOpen":true,"indent":0,"italic":false,"nested":false,"pulsing":true,"runs":[],"text":"Task(A)","tone":"fg"}
+{"band":"none","bold":true,"columns":2,"elapsedSince":1760000006000,"gutter":"⠿","gutterTone":"blue","inOpen":true,"indent":0,"italic":false,"nested":false,"pulsing":true,"runs":[],"text":"Task(B)","tone":"fg"}
+{"band":"none","bold":false,"columns":0,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"※ conformance recap","tone":"faint"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"parent says","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":true,"pulsing":false,"runs":[],"text":"agent B says","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"●","gutterTone":"fg","inOpen":false,"indent":0,"italic":false,"nested":true,"pulsing":false,"runs":[],"text":"A is done.","tone":"fg"}
+{"band":"none","bold":false,"columns":2,"gutter":"","gutterTone":"dim","inOpen":false,"indent":0,"italic":false,"nested":false,"pulsing":false,"runs":[],"text":"done · 42.0s · $0.12","tone":"faint"}

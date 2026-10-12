@@ -1,0 +1,55 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "u-53",
+      "kind": "user",
+      "text": "Plan the work."
+    },
+    {
+      "id": "toolu_todo",
+      "input": {
+        "todos": [
+          {
+            "activeForm": "Reading the reducer",
+            "content": "Read the reducer",
+            "status": "completed"
+          },
+          {
+            "activeForm": "Porting the planner",
+            "content": "Port the planner branches for expansion states",
+            "status": "in_progress"
+          },
+          {
+            "activeForm": "Regenerating",
+            "content": "Regenerate the goldens",
+            "status": "pending"
+          }
+        ]
+      },
+      "kind": "tool_call",
+      "name": "TodoWrite",
+      "result": {
+        "isError": false,
+        "text": "Todos have been modified successfully."
+      },
+      "status": "settled",
+      "ts": 1760000003000
+    },
+    {
+      "durationMs": 42000,
+      "id": "turn-6",
+      "isError": false,
+      "kind": "turn_result",
+      "subtype": "success",
+      "totalCostUsd": 0.12
+    }
+  ],
+  "lastSeq": 7,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "idle",
+  "totalCostUsd": 0.12
+}

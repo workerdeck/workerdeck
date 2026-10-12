@@ -1,0 +1,35 @@
+{
+  "cwd": "/work/acme",
+  "items": [
+    {
+      "id": "sh-fail",
+      "kind": "shell",
+      "shell": {
+        "bytes": 12,
+        "cols": 120,
+        "command": "make",
+        "cwd": "/tmp/p",
+        "endReason": "exit",
+        "endedAt": 3000,
+        "exitCode": 2,
+        "id": "sh_fail",
+        "label": "make",
+        "ordinal": 3,
+        "owner": "user",
+        "rows": 40,
+        "sessionId": "s1",
+        "startedAt": 1000,
+        "status": "exited"
+      },
+      "text": "step 1\nstep 2\nstep 3\nstep 4\nstep 5\nstep 6\nstep 7\nstep 8\nstep 9\nstep 10\nstep 11\nstep 12\nstep 13\nstep 14\nmake: *** [all] Error 2",
+      "truncated": false
+    }
+  ],
+  "lastSeq": 3,
+  "model": "claude-opus-5-5",
+  "pendingApprovals": [],
+  "permissionMode": "default",
+  "sdkSessionId": "sdk-conformance",
+  "status": "running",
+  "totalCostUsd": 0
+}
