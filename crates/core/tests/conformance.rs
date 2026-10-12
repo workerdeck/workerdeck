@@ -6,6 +6,7 @@ use wd_native::planner::{TermLine, plan_with};
 use wd_native::projection::project;
 use wd_native::rows::{BuildOptions, TerminalRows, parent_tool_use_id, subagent_items, subagent_task};
 use wd_native::transcript::Item;
+use wd_native::vm::recap::{recap_line, summarize_since};
 use wd_native::vt::{CellText, Color, VtScreen};
 
 const PROJECTION_PENDING: &[&str] = &[];
@@ -319,4 +320,26 @@ fn every_case_has_its_kit_golden() {
         .flatten()
         .collect();
     assert!(missing.is_empty(), "kit goldens missing, run WD_CONFORMANCE_WRITE=1 swift test --filter Conformance: {missing:?}");
+}
+
+#[test]
+fn recap_matches_typescript_goldens() {
+    check(
+        ".recap.json",
+        &[],
+        |case| json(&read(&format!("{case}.recap.json"))),
+        |case| {
+            let engine = replay(case);
+            let items = &engine.state.items;
+            Value::Array(
+                (0..=items.len())
+                    .map(|boundary| {
+                        let pending = boundary % 3;
+                        let summary = summarize_since(items, pending, boundary);
+                        json!({ "boundary": boundary, "pending": pending, "summary": summary, "line": recap_line(&summary) })
+                    })
+                    .collect(),
+            )
+        },
+    );
 }

@@ -1,0 +1,77 @@
+[
+  {
+    "boundary": 0,
+    "pending": 0,
+    "summary": {
+      "turns": 2,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 0,
+      "any": true
+    },
+    "line": "2 turns"
+  },
+  {
+    "boundary": 1,
+    "pending": 1,
+    "summary": {
+      "turns": 2,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 1,
+      "any": true
+    },
+    "line": "2 turns · 1 approval waiting"
+  },
+  {
+    "boundary": 2,
+    "pending": 2,
+    "summary": {
+      "turns": 1,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 2,
+      "any": true
+    },
+    "line": "1 turn · 2 approvals waiting"
+  },
+  {
+    "boundary": 3,
+    "pending": 0,
+    "summary": {
+      "turns": 1,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 0,
+      "any": true
+    },
+    "line": "1 turn"
+  },
+  {
+    "boundary": 4,
+    "pending": 1,
+    "summary": {
+      "turns": 0,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 1,
+      "any": true
+    },
+    "line": "1 approval waiting"
+  }
+]

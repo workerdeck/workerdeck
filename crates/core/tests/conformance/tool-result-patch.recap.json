@@ -1,0 +1,34 @@
+[
+  {
+    "boundary": 0,
+    "pending": 0,
+    "summary": {
+      "turns": 0,
+      "replies": 0,
+      "tools": 1,
+      "toolNames": [
+        "Edit"
+      ],
+      "files": 0,
+      "errors": 0,
+      "pending": 0,
+      "any": true
+    },
+    "line": "1 tool call (Edit)"
+  },
+  {
+    "boundary": 1,
+    "pending": 1,
+    "summary": {
+      "turns": 0,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 1,
+      "any": true
+    },
+    "line": "1 approval waiting"
+  }
+]

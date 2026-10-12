@@ -1,0 +1,52 @@
+[
+  {
+    "boundary": 0,
+    "pending": 0,
+    "summary": {
+      "turns": 0,
+      "replies": 0,
+      "tools": 2,
+      "toolNames": [
+        "Bash",
+        "mcp__browser__screenshot"
+      ],
+      "files": 0,
+      "errors": 0,
+      "pending": 0,
+      "any": true
+    },
+    "line": "2 tool calls (Bash, mcp__browser__screenshot)"
+  },
+  {
+    "boundary": 1,
+    "pending": 1,
+    "summary": {
+      "turns": 0,
+      "replies": 0,
+      "tools": 1,
+      "toolNames": [
+        "mcp__browser__screenshot"
+      ],
+      "files": 0,
+      "errors": 0,
+      "pending": 1,
+      "any": true
+    },
+    "line": "1 tool call (mcp__browser__screenshot) · 1 approval waiting"
+  },
+  {
+    "boundary": 2,
+    "pending": 2,
+    "summary": {
+      "turns": 0,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 2,
+      "any": true
+    },
+    "line": "2 approvals waiting"
+  }
+]

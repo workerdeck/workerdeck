@@ -4,6 +4,7 @@ pub mod collate;
 pub mod model_menu;
 pub mod peer_mentions;
 pub mod pricing;
+pub mod recap;
 pub mod session_list;
 pub mod status_label;
 pub mod text;

@@ -1,0 +1,132 @@
+[
+  {
+    "boundary": 0,
+    "pending": 0,
+    "summary": {
+      "turns": 1,
+      "replies": 3,
+      "tools": 2,
+      "toolNames": [
+        "Bash",
+        "Task"
+      ],
+      "files": 0,
+      "errors": 0,
+      "pending": 0,
+      "any": true
+    },
+    "line": "1 turn · 2 tool calls (Bash, Task)"
+  },
+  {
+    "boundary": 1,
+    "pending": 1,
+    "summary": {
+      "turns": 1,
+      "replies": 3,
+      "tools": 2,
+      "toolNames": [
+        "Bash",
+        "Task"
+      ],
+      "files": 0,
+      "errors": 0,
+      "pending": 1,
+      "any": true
+    },
+    "line": "1 turn · 2 tool calls (Bash, Task) · 1 approval waiting"
+  },
+  {
+    "boundary": 2,
+    "pending": 2,
+    "summary": {
+      "turns": 1,
+      "replies": 3,
+      "tools": 1,
+      "toolNames": [
+        "Bash"
+      ],
+      "files": 0,
+      "errors": 0,
+      "pending": 2,
+      "any": true
+    },
+    "line": "1 turn · 1 tool call (Bash) · 2 approvals waiting"
+  },
+  {
+    "boundary": 3,
+    "pending": 0,
+    "summary": {
+      "turns": 1,
+      "replies": 2,
+      "tools": 1,
+      "toolNames": [
+        "Bash"
+      ],
+      "files": 0,
+      "errors": 0,
+      "pending": 0,
+      "any": true
+    },
+    "line": "1 turn · 1 tool call (Bash)"
+  },
+  {
+    "boundary": 4,
+    "pending": 1,
+    "summary": {
+      "turns": 1,
+      "replies": 2,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 1,
+      "any": true
+    },
+    "line": "1 turn · 1 approval waiting"
+  },
+  {
+    "boundary": 5,
+    "pending": 2,
+    "summary": {
+      "turns": 1,
+      "replies": 1,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 2,
+      "any": true
+    },
+    "line": "1 turn · 2 approvals waiting"
+  },
+  {
+    "boundary": 6,
+    "pending": 0,
+    "summary": {
+      "turns": 1,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 0,
+      "any": true
+    },
+    "line": "1 turn"
+  },
+  {
+    "boundary": 7,
+    "pending": 1,
+    "summary": {
+      "turns": 0,
+      "replies": 0,
+      "tools": 0,
+      "toolNames": [],
+      "files": 0,
+      "errors": 0,
+      "pending": 1,
+      "any": true
+    },
+    "line": "1 approval waiting"
+  }
+]
