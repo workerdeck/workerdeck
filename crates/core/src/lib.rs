@@ -1,6 +1,7 @@
 pub mod bench;
 pub mod book;
 pub mod cells;
+pub mod controller;
 pub mod engine;
 pub mod expansion;
 pub mod markdown;

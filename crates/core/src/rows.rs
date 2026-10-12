@@ -402,6 +402,17 @@ impl TerminalRows {
         self.rows.iter().position(|row| matches!(row, Row::Recap { .. }))
     }
 
+    pub fn prompt_rows(&self) -> Vec<usize> {
+        let is_prompt = |row: &Row| {
+            matches!(
+                row,
+                Row::Block(Block::Item(block))
+                    if matches!(&block.item, Item::User { parent_tool_use_id: None, origin: None, .. })
+            )
+        };
+        self.rows.iter().enumerate().filter(|(_, row)| is_prompt(row)).map(|(index, _)| index).collect()
+    }
+
     pub fn gap_before(&self, index: usize) -> bool {
         if index == 0 || index >= self.rows.len() {
             return false;
