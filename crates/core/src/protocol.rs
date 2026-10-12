@@ -113,7 +113,7 @@ pub struct ToolResultBlock {
 
 pub enum ContentBlock {
     Text(String),
-    Thinking(String),
+    Thinking { text: String, addressed: bool },
     ToolUse { id: String, name: String, input: Arc<Value> },
     ToolResult(ToolResultBlock),
     Unknown,
@@ -124,6 +124,10 @@ pub struct UserMessage {
     pub parent_tool_use_id: Option<String>,
     pub synthetic: Option<bool>,
     pub uuid: Option<String>,
+    pub attachments: Option<Arc<Value>>,
+    pub origin: Option<Arc<Value>>,
+    pub shell: Option<Arc<Value>>,
+    pub patch: Option<Arc<Value>>,
 }
 
 pub struct AssistantMessage {
@@ -147,6 +151,17 @@ pub struct TurnResult {
     pub total_cost_usd: f64,
     pub cost_usd: Option<f64>,
     pub errors: Option<Vec<String>>,
+    pub usage_by_model: Option<Arc<Value>>,
+}
+
+pub struct Compaction {
+    pub uuid: String,
+    pub parent_tool_use_id: Option<String>,
+    pub pending: Option<bool>,
+    pub trigger: Option<String>,
+    pub pre_tokens: Option<f64>,
+    pub post_tokens: Option<f64>,
+    pub error: Option<String>,
 }
 
 pub enum Body {
@@ -157,6 +172,28 @@ pub enum Body {
     AssistantMessage(AssistantMessage),
     StreamDelta(StreamDelta),
     TurnResult(TurnResult),
+    EngineSleep(bool),
+    Capabilities { models: Option<Arc<Value>>, commands: Option<Arc<Value>>, default_model: Option<String> },
+    Skills(Arc<Value>),
+    Checklist(Vec<Value>),
+    ToolTitles(Vec<(String, String)>),
+    FileProduced { path: String, file_id: String, media_type: Option<String>, bytes: Option<f64> },
+    ModelChanged(Option<String>),
+    EffortChanged(Option<String>),
+    PermissionModeChanged(String),
+    RateLimit(Arc<Value>),
+    PlanInfo(Option<String>),
+    ConversationReset { agent_reason: Option<String>, sdk_session_id: Option<String> },
+    ContextCompacted(Compaction),
+    PermissionRequested(Arc<Value>),
+    PermissionResolved(String),
+    ToolOutput { tool_use_id: String, tail: String },
+    ExecutionDispatched { execution_id: String, deferred: bool, backend: Option<String> },
+    ExecutionResult { execution_id: String, text: String, logs: Option<Vec<String>> },
+    ExecutionFailed { execution_id: String, text: String, logs: Option<Vec<String>> },
+    FileDelivered { path: String, bytes: f64, description: Option<String> },
+    SessionError(String),
+    SessionClosed(String),
     Unknown,
 }
 
@@ -291,6 +328,16 @@ struct RawEvent<'a> {
     cost_usd: LNum,
     #[serde(borrow, default)]
     errors: Option<&'a RawValue>,
+    #[serde(borrow, default)]
+    attachments: Option<&'a RawValue>,
+    #[serde(borrow, default)]
+    origin: Option<&'a RawValue>,
+    #[serde(borrow, default)]
+    shell: Option<&'a RawValue>,
+    #[serde(borrow, default)]
+    patch: Option<&'a RawValue>,
+    #[serde(rename = "usageByModel", borrow, default)]
+    usage_by_model: Option<&'a RawValue>,
 }
 
 #[derive(Deserialize)]
@@ -389,7 +436,13 @@ fn decode_event(json: &str) -> Option<Event> {
     let seq = raw.seq.0?;
     let ts = raw.ts.0?;
     let ty = raw.ty.0.clone()?;
-    let body = decode_body(&ty, raw).unwrap_or(Body::Unknown);
+    let body = match ty.as_str() {
+        "system_init" | "status_changed" | "context_usage" | "user_message" | "assistant_message" | "stream_delta" | "turn_result" => {
+            decode_body(&ty, raw)
+        }
+        _ => serde_json::from_str::<Value>(json).ok().and_then(|value| decode_cold(&ty, &value)),
+    }
+    .unwrap_or(Body::Unknown);
     Some(Event { seq, ts, body })
 }
 
@@ -432,6 +485,10 @@ fn decode_body(ty: &str, raw: RawEvent) -> Option<Body> {
                 parent_tool_use_id: raw.parent_tool_use_id.0,
                 synthetic: raw.synthetic.0,
                 uuid: raw.uuid.0,
+                attachments: object(raw.attachments),
+                origin: object(raw.origin),
+                shell: object(raw.shell),
+                patch: object(raw.patch),
             }))
         }
         "assistant_message" => {
@@ -466,6 +523,7 @@ fn decode_body(ty: &str, raw: RawEvent) -> Option<Body> {
                 total_cost_usd: raw.total_cost_usd.0?,
                 cost_usd: raw.cost_usd.0,
                 errors,
+                usage_by_model: object(raw.usage_by_model),
             }))
         }
         _ => Some(Body::Unknown),
@@ -492,16 +550,7 @@ fn decode_block(b: RawBlock) -> Option<ContentBlock> {
     let ty = b.ty.0?;
     match ty.as_str() {
         "text" => Some(ContentBlock::Text(b.text.0?)),
-        "thinking" => {
-            let thinking = b.thinking.0.unwrap_or_default();
-            let addressed = b.addressed.0.unwrap_or(false);
-            let trimmed = thinking.trim();
-            if addressed && !trimmed.is_empty() {
-                Some(ContentBlock::Text(trimmed.to_owned()))
-            } else {
-                Some(ContentBlock::Thinking(thinking))
-            }
-        }
+        "thinking" => Some(ContentBlock::Thinking { text: b.thinking.0.unwrap_or_default(), addressed: b.addressed.0 == Some(true) }),
         "tool_use" => Some(ContentBlock::ToolUse { id: b.id.0?, name: b.name.0?, input: Arc::new(b.input.unwrap_or(Value::Null)) }),
         "tool_result" => {
             let content = match b.content {
@@ -527,4 +576,93 @@ fn decode_block(b: RawBlock) -> Option<ContentBlock> {
         }
         _ => Some(ContentBlock::Unknown),
     }
+}
+
+fn object(raw: Option<&RawValue>) -> Option<Arc<Value>> {
+    match serde_json::from_str::<Value>(raw?.get()).ok()? {
+        Value::Null => None,
+        value => Some(Arc::new(value)),
+    }
+}
+
+fn text(value: &Value, key: &str) -> Option<String> {
+    value.get(key)?.as_str().map(str::to_owned)
+}
+
+fn present(value: &Value, key: &str) -> Option<Arc<Value>> {
+    match value.get(key)? {
+        Value::Null => None,
+        other => Some(Arc::new(other.clone())),
+    }
+}
+
+fn logs(value: &Value) -> Option<Vec<String>> {
+    value.get("logs")?.as_array()?.iter().map(|line| line.as_str().map(str::to_owned)).collect()
+}
+
+fn decode_cold(ty: &str, e: &Value) -> Option<Body> {
+    Some(match ty {
+        "engine_sleep" => Body::EngineSleep(e.get("asleep")?.as_bool()?),
+        "capabilities" => {
+            Body::Capabilities { models: present(e, "models"), commands: present(e, "commands"), default_model: text(e, "defaultModel") }
+        }
+        "skills" => Body::Skills(present(e, "skills")?),
+        "checklist" => Body::Checklist(e.get("items")?.as_array()?.clone()),
+        "tool_titles" => Body::ToolTitles(
+            e.get("titles")?.as_object()?.iter().filter_map(|(name, title)| Some((name.clone(), title.as_str()?.to_owned()))).collect(),
+        ),
+        "file_produced" => Body::FileProduced {
+            path: text(e, "path")?,
+            file_id: text(e, "fileId")?,
+            media_type: text(e, "mediaType"),
+            bytes: e.get("bytes").and_then(Value::as_f64),
+        },
+        "model_changed" => Body::ModelChanged(text(e, "model")),
+        "effort_changed" => Body::EffortChanged(text(e, "effort")),
+        "permission_mode_changed" => Body::PermissionModeChanged(text(e, "mode")?),
+        "rate_limit" => Body::RateLimit(present(e, "info")?),
+        "plan_info" => Body::PlanInfo(text(e, "subscriptionType")),
+        "conversation_reset" => Body::ConversationReset { agent_reason: text(e, "agentReason"), sdk_session_id: text(e, "sdkSessionId") },
+        "context_compacted" => Body::ContextCompacted(Compaction {
+            uuid: text(e, "uuid")?,
+            parent_tool_use_id: text(e, "parentToolUseId"),
+            pending: e.get("pending").and_then(Value::as_bool),
+            trigger: text(e, "trigger"),
+            pre_tokens: e.get("preTokens").and_then(Value::as_f64),
+            post_tokens: e.get("postTokens").and_then(Value::as_f64),
+            error: text(e, "error"),
+        }),
+        "permission_requested" => {
+            let request = present(e, "request")?;
+            request.get("id")?.as_str()?;
+            Body::PermissionRequested(request)
+        }
+        "permission_resolved" => Body::PermissionResolved(text(e, "requestId")?),
+        "tool_output" => Body::ToolOutput { tool_use_id: text(e, "toolUseId")?, tail: text(e, "tail")? },
+        "execution_dispatched" => Body::ExecutionDispatched {
+            execution_id: text(e, "executionId")?,
+            deferred: e.get("deferred").and_then(Value::as_bool) == Some(true),
+            backend: text(e, "backend"),
+        },
+        "execution_result" => {
+            let output = e.get("output")?;
+            let value = output.get("value").unwrap_or(&Value::Null);
+            let text = match (output.get("type").and_then(Value::as_str), value) {
+                (Some("text"), Value::String(s)) => s.clone(),
+                _ => serde_json::to_string(value).ok()?,
+            };
+            Body::ExecutionResult { execution_id: self::text(e, "executionId")?, text, logs: logs(e) }
+        }
+        "execution_failed" => Body::ExecutionFailed {
+            execution_id: text(e, "executionId")?,
+            text: format!("{}: {}", text(e, "reason")?, text(e, "error")?),
+            logs: logs(e),
+        },
+        "file_delivered" => {
+            Body::FileDelivered { path: text(e, "path")?, bytes: e.get("bytes")?.as_f64()?, description: text(e, "description") }
+        }
+        "session_error" => Body::SessionError(text(e, "message")?),
+        "session_closed" => Body::SessionClosed(text(e, "reason")?),
+        _ => Body::Unknown,
+    })
 }

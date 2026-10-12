@@ -5,44 +5,9 @@ use wd_native::planner::plan;
 use wd_native::projection::project;
 use wd_native::vt::{CellText, Color, VtScreen};
 
-const PROJECTION_PENDING: &[&str] = &[
-    "attachments",
-    "catalog-and-produced-files",
-    "checklist",
-    "compaction",
-    "conversation-reset",
-    "execution-states",
-    "file-delivered",
-    "ignored-events",
-    "local-command-synthetic-and-caveat",
-    "peer-message",
-    "permission-round-trip",
-    "reset-stacks-and-keeps-approvals",
-    "session-state",
-    "shell-row",
-    "slash-command-text",
-    "thinking-addressed",
-    "tool-output-live-tail",
-    "tool-result-patch",
-    "tool-result-truncated-and-images",
-    "turn-error",
-];
+const PROJECTION_PENDING: &[&str] = &[];
 
-const LINES_PENDING: &[&str] = &[
-    "attachments",
-    "compaction",
-    "conversation-reset",
-    "execution-states",
-    "file-delivered",
-    "ignored-events",
-    "local-command-synthetic-and-caveat",
-    "peer-message",
-    "reset-stacks-and-keeps-approvals",
-    "shell-row",
-    "tool-output-live-tail",
-    "tool-result-patch",
-    "turn-error",
-];
+const LINES_PENDING: &[&str] = &[];
 
 const SCREEN_PENDING: &[&str] = &[];
 

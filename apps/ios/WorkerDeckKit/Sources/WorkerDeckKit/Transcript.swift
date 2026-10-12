@@ -879,7 +879,7 @@ public func applyEvent(_ state: TranscriptState, _ event: SessionEvent) -> Trans
           items = upsert(
             items,
             .user(
-              id: id, text: text, attachments: payload.attachments,
+              id: id, text: slashCommandText(text) ?? text, attachments: payload.attachments,
               parentToolUseId: payload.parentToolUseId, origin: payload.origin))
         }
       default:
@@ -1081,6 +1081,19 @@ private func carriesCaveat(_ content: MessageContent) -> Bool {
     }
     return false
   }
+}
+
+private func slashCommandText(_ text: String) -> String? {
+  guard let name = tagBody(text, "command-name").map(trimmed), !name.isEmpty else { return nil }
+  guard let args = tagBody(text, "command-args").map(trimmed), !args.isEmpty else { return name }
+  return "\(name) \(args)"
+}
+
+private func tagBody(_ text: String, _ name: String) -> String? {
+  guard let open = text.range(of: "<\(name)>"),
+    let close = text.range(of: "</\(name)>", range: open.upperBound..<text.endIndex)
+  else { return nil }
+  return String(text[open.upperBound..<close.lowerBound])
 }
 
 /// JS-`trimStart()`-equivalent - only the leading side, so a prefix test matches.

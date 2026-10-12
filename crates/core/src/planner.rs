@@ -1,7 +1,7 @@
 use crate::cells;
 use crate::markdown::{self, Block, ListItem};
 use crate::rows::{Leaf, Row, RunBlock, TaskBlock};
-use crate::transcript::{Item, NoticeLevel, ToolCall, ToolCallStatus};
+use crate::transcript::{CompactionItem, Item, NoticeLevel, ShellItem, ToolCall, ToolCallStatus};
 use serde_json::Value;
 use std::borrow::Cow;
 
@@ -48,6 +48,8 @@ pub enum Band {
     None,
     User,
     Output,
+    DiffAdd,
+    DiffRemove,
 }
 
 impl Tone {
@@ -78,6 +80,8 @@ impl Band {
             Band::None => "none",
             Band::User => "user",
             Band::Output => "output",
+            Band::DiffAdd => "diffAdd",
+            Band::DiffRemove => "diffRemove",
         }
     }
 }
@@ -89,6 +93,13 @@ pub mod glyph {
     pub const THINKING: &str = "✻";
     pub const NOTICE: &str = "!";
     pub const PULSE_REST: &str = "⠿";
+    pub const FILE: &str = "⤓";
+    pub const PEER_IN: &str = "↦";
+    pub const COMPACTION: &str = "≡";
+    pub const COMPACTION_PENDING: &str = "⋯";
+    pub const HUNK_GAP: &str = "⋮";
+    pub const SHELL: &str = "$";
+    pub const KILL: &str = "✕";
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -255,6 +266,130 @@ pub fn fmt_duration(ms: f64) -> String {
     }
     let minutes = (seconds / 60.0) as i64;
     format!("{}m {}s", minutes, (seconds % 60.0).round() as i64)
+}
+
+pub fn fmt_bytes(count: f64) -> String {
+    if count >= 1024.0 * 1024.0 {
+        return format!("{:.1} MB", count / (1024.0 * 1024.0));
+    }
+    if count >= 1024.0 {
+        return format!("{:.1} KB", count / 1024.0);
+    }
+    format!("{} B", count as i64)
+}
+
+pub fn fmt_tokens(count: f64) -> String {
+    if count >= 1_000_000.0 {
+        return format!("{:.1}M", count / 1_000_000.0);
+    }
+    if count >= 1000.0 {
+        return format!("{:.1}k", count / 1000.0);
+    }
+    format!("{}", count as i64)
+}
+
+pub const COMPACTION_TEXT: &str = "context compacted · earlier turns summarised to fit the window";
+
+pub fn fmt_compaction(item: &CompactionItem) -> String {
+    if let Some(error) = &item.error {
+        return format!("context compaction failed · {error}");
+    }
+    if item.pending == Some(true) {
+        return "compacting context · summarising earlier turns to fit the window".into();
+    }
+    let mut parts = vec![COMPACTION_TEXT.to_owned()];
+    if let Some(pre) = item.pre_tokens {
+        parts.push(match item.post_tokens {
+            Some(post) => format!("{} → {}", fmt_tokens(pre), fmt_tokens(post)),
+            None => format!("from {}", fmt_tokens(pre)),
+        });
+    }
+    if item.trigger.as_deref() == Some("auto") {
+        parts.push("automatic".into());
+    }
+    parts.join(" · ")
+}
+
+pub fn peer_short_id(session_id: &str) -> String {
+    match session_id.find(':') {
+        Some(colon) if colon > 0 => format!("{}:{}", &session_id[..colon], cells::gprefix(&session_id[colon + 1..], 8)),
+        _ => cells::gprefix(session_id, 8).to_owned(),
+    }
+}
+
+pub fn peer_name(origin: &Value) -> String {
+    let text = |key: &str| origin.get(key).and_then(Value::as_str);
+    match (text("name"), text("hostId")) {
+        (Some(name), Some(host)) => format!("{name}@{host}"),
+        (Some(name), None) => name.to_owned(),
+        (None, _) => peer_short_id(text("sessionId").unwrap_or("")),
+    }
+}
+
+fn peer_styled(who: &str, text: &str) -> markdown::Styled {
+    let head = format!("{who}:");
+    let runs = vec![(0, head.len(), markdown::STRONG)];
+    markdown::Styled { plain: format!("{head} {text}"), runs }
+}
+
+pub const SHELL_INLINE_LINES: usize = 8;
+pub const SHELL_MISSING: &str = "output expired or not tracked by this gateway";
+
+pub mod shell {
+    use super::Value;
+    use crate::transcript::ShellItem;
+
+    fn text<'a>(shell: &'a Value, key: &str) -> Option<&'a str> {
+        shell.get(key).and_then(Value::as_str)
+    }
+
+    pub fn running(item: &ShellItem) -> bool {
+        text(&item.shell, "status") == Some("running")
+    }
+
+    pub fn exit_code(item: &ShellItem) -> Option<i64> {
+        item.shell.get("exitCode").and_then(Value::as_f64).map(|code| code as i64)
+    }
+
+    pub fn failed(item: &ShellItem) -> bool {
+        text(&item.shell, "status") == Some("exited") && exit_code(item) != Some(0)
+    }
+
+    pub fn label(item: &ShellItem) -> String {
+        match text(&item.shell, "label") {
+            Some(label) if !label.is_empty() => label.to_owned(),
+            _ => text(&item.shell, "command").unwrap_or("").split('\n').next().unwrap_or("").to_owned(),
+        }
+    }
+
+    pub fn status_text(item: &ShellItem) -> String {
+        if running(item) {
+            return "running".into();
+        }
+        if let Some(code) = exit_code(item) {
+            return format!("exit {code}");
+        }
+        match text(&item.shell, "endReason") {
+            Some("killed") => "killed",
+            Some("timeout") => "timed out",
+            Some("server_stopped") => "killed: the gateway stopped",
+            Some("server_restarted") => "ended: the gateway restarted, the process may still be running",
+            Some("spawn_failed") => "failed to start",
+            _ => "ended",
+        }
+        .into()
+    }
+
+    pub fn header_text(item: &ShellItem) -> String {
+        format!("{} · {}", label(item), status_text(item))
+    }
+
+    pub fn footer_text(item: &ShellItem) -> Option<&'static str> {
+        if item.missing {
+            return Some(super::SHELL_MISSING);
+        }
+        item.truncated.then_some("… more output - expand to fetch it")
+    }
 }
 
 pub fn fmt_grouped(count: i64) -> String {
@@ -601,20 +736,75 @@ fn plan_thinking(text: &str, m: &Metrics, nested: bool) -> Vec<TermLine> {
 fn plan_item(item: &Item, m: &Metrics) -> Vec<TermLine> {
     let nested = item.parent_tool_use_id().is_some();
     match item {
-        Item::User { text, .. } => wrap_body(
-            if text.is_empty() { " " } else { text },
-            m,
-            &Wrap {
-                gutter: Cow::Borrowed(glyph::PROMPT),
-                gutter_tone: Tone::Dim,
-                tone: Tone::Fg,
-                band: Band::User,
-                nested,
-                ..Wrap::default()
-            },
-        ),
+        Item::User { text, attachments, origin, .. } => {
+            let mut lines = Vec::new();
+            let band = if origin.is_some() { Band::None } else { Band::User };
+            let names: Vec<&str> =
+                attachments.as_deref().and_then(Value::as_array).into_iter().flatten().filter_map(|a| a.get("name")?.as_str()).collect();
+            if !names.is_empty() {
+                lines.extend(wrap_body(
+                    &names.join(", "),
+                    m,
+                    &Wrap {
+                        gutter: Cow::Borrowed(glyph::PROMPT),
+                        gutter_tone: Tone::Dim,
+                        tone: Tone::Dim,
+                        band,
+                        nested,
+                        ..Wrap::default()
+                    },
+                ));
+            }
+            if let Some(origin) = origin {
+                let styled = peer_styled(&peer_name(origin), if text.is_empty() { " " } else { text });
+                lines.extend(styled_body(
+                    &styled,
+                    m,
+                    &Wrap { gutter: Cow::Borrowed(glyph::PEER_IN), gutter_tone: Tone::Peer, tone: Tone::Peer, nested, ..Wrap::default() },
+                ));
+                return lines;
+            }
+            let gutter = if lines.is_empty() { glyph::PROMPT } else { "" };
+            lines.extend(wrap_body(
+                if text.is_empty() { " " } else { text },
+                m,
+                &Wrap {
+                    gutter: Cow::Borrowed(gutter),
+                    gutter_tone: Tone::Dim,
+                    tone: Tone::Fg,
+                    band: Band::User,
+                    nested,
+                    ..Wrap::default()
+                },
+            ));
+            lines
+        }
         Item::AssistantText { text, .. } => plan_markdown(text, m, glyph::BULLET, Tone::Fg, nested),
+        Item::Thinking { text, addressed: true, .. } => plan_markdown(text.trim(), m, glyph::BULLET, Tone::Fg, nested),
         Item::Thinking { text, .. } => plan_thinking(text, m, nested),
+        Item::FileDelivered { path, bytes, description, .. } => {
+            let mut body = format!("{path} · {}", fmt_bytes(*bytes));
+            if let Some(description) = description.as_deref().filter(|d| !d.is_empty()) {
+                body.push_str(" · ");
+                body.push_str(description);
+            }
+            wrap_body(&body, m, &Wrap { gutter: Cow::Borrowed(glyph::FILE), gutter_tone: Tone::Blue, tone: Tone::Dim, ..Wrap::default() })
+        }
+        Item::Compaction(item) => {
+            let failed = item.error.is_some();
+            wrap_body(
+                &fmt_compaction(item),
+                m,
+                &Wrap {
+                    gutter: Cow::Borrowed(if item.pending == Some(true) { glyph::COMPACTION_PENDING } else { glyph::COMPACTION }),
+                    gutter_tone: if failed { Tone::Red } else { Tone::Yellow },
+                    tone: if failed { Tone::Red } else { Tone::Faint },
+                    nested,
+                    ..Wrap::default()
+                },
+            )
+        }
+        Item::Shell(item) => plan_shell(item, m),
         Item::ToolCall(call) => plan_tool_call(call, m),
         Item::TurnResult { subtype, is_error, duration_ms, total_cost_usd, cost_usd, errors, .. } => {
             let head = format!(
@@ -642,6 +832,105 @@ fn plan_item(item: &Item, m: &Metrics) -> Vec<TermLine> {
     }
 }
 
+fn plan_shell(item: &ShellItem, m: &Metrics) -> Vec<TermLine> {
+    let running = shell::running(item);
+    let failed = shell::failed(item);
+    let mut lines = wrap_body(
+        &shell::header_text(item),
+        m,
+        &Wrap {
+            gutter: Cow::Borrowed(glyph::SHELL),
+            gutter_tone: if failed { Tone::Red } else { Tone::Magenta },
+            tone: if failed { Tone::Red } else { Tone::Fg },
+            band: Band::User,
+            pulsing: running,
+            ..Wrap::default()
+        },
+    );
+    let body: Vec<&str> = if item.text.is_empty() { Vec::new() } else { item.text.split('\n').collect() };
+    for line in body.iter().take(SHELL_INLINE_LINES) {
+        lines.extend(wrap_body(
+            if line.is_empty() { " " } else { line },
+            m,
+            &Wrap { tone: Tone::Dim, band: Band::Output, ..Wrap::default() },
+        ));
+    }
+    if let Some(footer) = shell::footer_text(item) {
+        lines.extend(wrap_body(footer, m, &Wrap { tone: Tone::Faint, ..Wrap::default() }));
+    }
+    if running {
+        lines.extend(wrap_body(&format!("{} kill", glyph::KILL), m, &Wrap { tone: Tone::Red, ..Wrap::default() }));
+    }
+    lines
+}
+
+pub fn plan_diff(patch: &Value, m: &Metrics, nested: bool) -> Vec<TermLine> {
+    let number = |hunk: &Value, key: &str| hunk.get(key).and_then(Value::as_f64).unwrap_or(0.0) as i64;
+    let hunks: &[Value] = patch.get("hunks").and_then(Value::as_array).map_or(&[], Vec::as_slice);
+    let numbered = hunks.iter().any(|hunk| number(hunk, "newStart") > 0);
+    let mut widest = 1;
+    if numbered {
+        for hunk in hunks {
+            widest =
+                widest.max(number(hunk, "newStart") + number(hunk, "newLines")).max(number(hunk, "oldStart") + number(hunk, "oldLines"));
+        }
+    }
+    let number_width = if numbered { widest.to_string().len() } else { 0 };
+    let columns = if numbered { number_width + 3 } else { 2 };
+    let mut lines = Vec::new();
+    for (index, hunk) in hunks.iter().enumerate() {
+        if index > 0 {
+            let mut gap = TermLine::plain(String::new(), Tone::Faint);
+            gap.gutter = Cow::Owned(format!("{} {}", " ".repeat(number_width), glyph::HUNK_GAP));
+            gap.gutter_tone = Tone::Faint;
+            gap.columns = columns;
+            gap.indent = 2;
+            gap.nested = nested;
+            lines.push(gap);
+        }
+        let mut old_number = number(hunk, "oldStart");
+        let mut new_number = number(hunk, "newStart");
+        for raw in hunk.get("lines").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+            let marker = raw.chars().next().unwrap_or(' ');
+            let body = &raw[marker.len_utf8().min(raw.len())..];
+            let (tone, band, shown) = match marker {
+                '+' => {
+                    new_number += 1;
+                    (Tone::DiffAdd, Band::DiffAdd, new_number - 1)
+                }
+                '-' => {
+                    old_number += 1;
+                    (Tone::DiffRemove, Band::DiffRemove, old_number - 1)
+                }
+                _ => {
+                    new_number += 1;
+                    old_number += 1;
+                    (Tone::DiffContext, Band::None, new_number - 1)
+                }
+            };
+            let gutter = if numbered { format!("{shown:>number_width$} {marker}") } else { marker.to_string() };
+            lines.extend(wrap_body(
+                if body.is_empty() { " " } else { body },
+                m,
+                &Wrap {
+                    gutter: Cow::Owned(gutter),
+                    gutter_tone: Tone::DiffNumber,
+                    tone,
+                    columns,
+                    indent: 2,
+                    band,
+                    nested,
+                    ..Wrap::default()
+                },
+            ));
+        }
+    }
+    if patch.get("truncated").and_then(Value::as_bool) == Some(true) {
+        lines.extend(wrap_body("… hunks omitted", m, &Wrap { tone: Tone::Faint, columns, indent: 2, nested, ..Wrap::default() }));
+    }
+    lines
+}
+
 fn plan_tool_call(call: &ToolCall, m: &Metrics) -> Vec<TermLine> {
     let nested = call.parent_tool_use_id.is_some();
     let busy = call_busy(call);
@@ -667,6 +956,11 @@ fn plan_tool_call(call: &ToolCall, m: &Metrics) -> Vec<TermLine> {
         m,
     );
     lines.extend(plan_live_tail(&tail_lines(call), m, nested));
+
+    if let Some(patch) = &call.patch {
+        lines.extend(plan_diff(patch, m, nested));
+        return lines;
+    }
 
     let Some(result) = &call.result else {
         return lines;
