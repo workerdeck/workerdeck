@@ -3,6 +3,7 @@ use std::path::Path;
 use wd_native::controller::live::{Changed, ConnectionState, Effect, LiveSession};
 use wd_native::controller::replay::STALL_SECONDS;
 use wd_native::controller::shell::ShellPhase;
+use wd_native::controller::transcript::{Navigation, TranscriptView, Update};
 use wd_native::expansion::TermPress;
 use wd_native::planner::Metrics;
 use wd_native::transcript::Item;
@@ -96,6 +97,7 @@ impl Host {
                 chrome: acc.chrome || c.chrome,
                 progress: acc.progress || c.progress,
                 shells: acc.shells || c.shells,
+                frames: acc.frames || c.frames,
             },
             _ => acc,
         })
@@ -436,4 +438,73 @@ fn kill_asks_the_platform_and_leaves_the_stream_alone() {
     host.live.kill_shell("sh_1");
     assert!(host.live.take_effects().contains(&Effect::KillShell { shell_id: "sh_1".into() }));
     assert!(host.live.shell("sh_1").unwrap().is_attached());
+}
+
+fn frame_rows(items: &[Item], task_id: &str) -> Vec<String> {
+    let frame_items = wd_native::rows::subagent_items(items, task_id);
+    let task = wd_native::rows::subagent_task(items, task_id);
+    let mut view = TranscriptView::new(METRICS, Some(task_id.into()));
+    view.update(Update {
+        items: &frame_items,
+        metrics: METRICS,
+        pending_approvals: 0,
+        frame_task: task.as_deref(),
+        hide_thinking: false,
+        now_ms: 0.0,
+    });
+    view.rows().rows.iter().map(|row| row.key().into_owned()).collect()
+}
+
+fn keys(view: &TranscriptView) -> Vec<String> {
+    view.rows().rows.iter().map(|row| row.key().into_owned()).collect()
+}
+
+#[test]
+fn a_frame_folds_the_subagents_own_items_and_follows_the_stream() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.events("subagent", 1.0);
+    host.take();
+    host.live.open_frame("toolu_task");
+    host.drain();
+    assert!(host.changed().frames);
+    let frame = host.live.frame("toolu_task").unwrap();
+    assert_eq!(keys(frame), frame_rows(&host.live.state().items, "toolu_task"));
+    assert!(keys(frame).iter().all(|key| !key.starts_with("task:")));
+
+    let before = keys(host.live.frame("toolu_task").unwrap()).len();
+    let child = json!({"type": "assistant_message", "message": {"role": "assistant", "content": [{"type": "text", "text": "Done."}]},
+        "parentToolUseId": "toolu_task", "uuid": "a-99"});
+    host.frame(event_frame(14, child), 2.0);
+    assert!(host.changed().frames);
+    assert_eq!(keys(host.live.frame("toolu_task").unwrap()).len(), before + 1);
+
+    host.live.close_frame("toolu_task");
+    host.drain();
+    assert!(host.changed().frames);
+    assert!(host.live.frame("toolu_task").is_none());
+}
+
+#[test]
+fn a_press_inside_a_frame_expands_there_and_navigates_through_the_session() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.events("subagent", 1.0);
+    host.live.open_frame("toolu_task");
+    host.take();
+    let frame = host.live.frame("toolu_task").unwrap();
+    let row = frame.rows().rows.iter().position(|row| row.key().contains("toolu_ls")).expect("ls row");
+    let key = frame.row(row).map(wd_native::expansion::row_expansion_keys).unwrap_or_default();
+    let toggle = TermPress::Toggle(key.into_iter().next().expect("expandable"));
+    host.live.frame_press("toolu_task", &toggle, row);
+    host.drain();
+    assert!(host.changed().frames);
+    assert!(!host.live.frame("toolu_task").unwrap().expansion().is_empty());
+    assert!(host.live.view().expansion().is_empty());
+
+    host.live.set_navigation(Navigation { subagents: true, shells: true });
+    host.live.frame_press("toolu_task", &TermPress::KillShell("sh_9".into()), 0);
+    assert!(host.live.take_effects().contains(&Effect::KillShell { shell_id: "sh_9".into() }));
 }

@@ -7,6 +7,7 @@ use crate::expansion::TermPress;
 use crate::planner::Metrics;
 use crate::protocol::{AttachedFrame, Body, Event};
 use crate::rest::{PermissionMode, SessionInfo, ShellInfo};
+use crate::rows::{subagent_items, subagent_task};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
@@ -33,6 +34,7 @@ pub struct Changed {
     pub chrome: bool,
     pub progress: bool,
     pub shells: bool,
+    pub frames: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,6 +68,7 @@ pub struct LiveSession {
     init_model: Option<String>,
     verifying: HashSet<String>,
     shells: HashMap<String, ShellSession>,
+    frames: HashMap<String, TranscriptView>,
     hide_thinking: bool,
     navigation: Navigation,
     metrics: Metrics,
@@ -96,6 +99,7 @@ impl LiveSession {
             init_model: None,
             verifying: HashSet::new(),
             shells: HashMap::new(),
+            frames: HashMap::new(),
             hide_thinking: false,
             navigation: Navigation::default(),
             metrics,
@@ -165,6 +169,42 @@ impl LiveSession {
 
     pub fn shell(&self, shell_id: &str) -> Option<&ShellSession> {
         self.shells.get(shell_id)
+    }
+
+    pub fn frame(&self, task_id: &str) -> Option<&TranscriptView> {
+        self.frames.get(task_id)
+    }
+
+    // A subagent's own transcript: the items it spawned, opened by the brief its task was given. Never a recap seam,
+    // which is a full-transcript index. Folds with the session's metrics; a frame drawn at another width is a P3 call.
+    pub fn open_frame(&mut self, task_id: &str) {
+        if self.frames.contains_key(task_id) {
+            return;
+        }
+        let mut frame = TranscriptView::new(self.metrics, Some(task_id.to_owned()));
+        self.fold_frame(task_id, &mut frame);
+        self.frames.insert(task_id.to_owned(), frame);
+        self.changed.frames = true;
+    }
+
+    pub fn close_frame(&mut self, task_id: &str) {
+        if self.frames.remove(task_id).is_some() {
+            self.changed.frames = true;
+        }
+    }
+
+    pub fn frame_press(&mut self, task_id: &str, press: &TermPress, row: usize) {
+        let Some(frame) = self.frames.get_mut(task_id) else { return };
+        let effects = frame.press(press, row, self.navigation);
+        self.changed.frames = true;
+        self.push_view_effects(effects);
+    }
+
+    pub fn frame_expand_everything(&mut self, task_id: &str) {
+        if let Some(frame) = self.frames.get_mut(task_id) {
+            frame.expand_everything();
+            self.changed.frames = true;
+        }
     }
 
     // Drained after every call. Folds whatever changed into one view update and one `Changed`.
@@ -239,6 +279,10 @@ impl LiveSession {
     pub fn press(&mut self, press: &TermPress, row: usize) {
         let effects = self.view.press(press, row, self.navigation);
         self.changed.transcript = true;
+        self.push_view_effects(effects);
+    }
+
+    fn push_view_effects(&mut self, effects: Vec<view::Effect>) {
         for effect in effects {
             self.effects.push(match effect {
                 view::Effect::FetchResult { call_id } => Effect::FetchResult { call_id },
@@ -257,6 +301,10 @@ impl LiveSession {
             None => {
                 self.view.fetch_failed(call_id);
                 self.changed.transcript = true;
+                for frame in self.frames.values_mut() {
+                    frame.fetch_failed(call_id);
+                }
+                self.changed.frames |= !self.frames.is_empty();
             }
         }
     }
@@ -595,6 +643,24 @@ impl LiveSession {
             now_ms: self.now_ms,
         });
         self.changed.transcript |= changed;
+        let mut frames = std::mem::take(&mut self.frames);
+        for (task_id, frame) in &mut frames {
+            self.changed.frames |= self.fold_frame(task_id, frame);
+        }
+        self.frames = frames;
+    }
+
+    fn fold_frame(&self, task_id: &str, frame: &mut TranscriptView) -> bool {
+        let items = subagent_items(&self.state.items, task_id);
+        let task = subagent_task(&self.state.items, task_id);
+        frame.update(Update {
+            items: &items,
+            metrics: self.metrics,
+            pending_approvals: self.state.pending_approvals.len(),
+            frame_task: task.as_deref(),
+            hide_thinking: self.hide_thinking,
+            now_ms: self.now_ms,
+        })
     }
 
     fn settle(&mut self) {
