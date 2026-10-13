@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import org.json.JSONObject
 
 data class SessionUi(
     val title: String? = null,
@@ -94,8 +93,13 @@ class SessionModel(private val client: GatewayClient, private val sessionId: Str
                     socket?.close(1000, null)
                     socket = null
                 }
+                is Effect.Request -> client.request(sessionId, effect.method, effect.path) { status, body ->
+                    worker.act { it.responded(effect.id, status.toUShort(), body) }
+                }
                 is Effect.Changed -> changed(effect.changed)
-                else -> Unit
+                // Navigation stays off until the app has subagent and shell screens, so these never come.
+                is Effect.OpenSubagent, is Effect.OpenShell -> Unit
+                is Effect.WakeAt -> Unit
             }
         }
     }
@@ -135,8 +139,7 @@ class SessionModel(private val client: GatewayClient, private val sessionId: Str
         }
         var ui = state.value
         if (changed.chrome) {
-            val title = session.sessionInfoJson()?.let { runCatching { JSONObject(it).optString("title").ifEmpty { null } }.getOrNull() }
-            ui = ui.copy(title = title, connection = session.connection(), error = session.takeProtocolError() ?: ui.error)
+            ui = ui.copy(title = session.sessionTitle(), connection = session.connection(), error = session.takeProtocolError() ?: ui.error)
         }
         if (changed.progress || changed.transcript) ui = ui.copy(progress = session.replayProgress())
         state.value = ui

@@ -52,10 +52,7 @@ pub enum Effect {
     Send { id: u64, text: String },
     Close,
     WakeAt { at: f64 },
-    FetchResult { call_id: String },
-    FetchShellOutput { shell_id: String },
-    VerifyShell { shell_id: String },
-    KillShell { shell_id: String },
+    Request { id: u64, method: String, path: String },
     OpenSubagent { task_id: String },
     OpenShell { shell_id: String },
     Changed { changed: Changed },
@@ -68,10 +65,7 @@ impl From<live::Effect> for Effect {
             live::Effect::Send { id, text } => Effect::Send { id, text },
             live::Effect::Close => Effect::Close,
             live::Effect::WakeAt(at) => Effect::WakeAt { at },
-            live::Effect::FetchResult { call_id } => Effect::FetchResult { call_id },
-            live::Effect::FetchShellOutput { shell_id } => Effect::FetchShellOutput { shell_id },
-            live::Effect::VerifyShell { shell_id } => Effect::VerifyShell { shell_id },
-            live::Effect::KillShell { shell_id } => Effect::KillShell { shell_id },
+            live::Effect::Request { id, method, path } => Effect::Request { id, method: method.to_owned(), path },
             live::Effect::OpenSubagent { task_id } => Effect::OpenSubagent { task_id },
             live::Effect::OpenShell { shell_id } => Effect::OpenShell { shell_id },
             live::Effect::Changed(c) => Effect::Changed {
@@ -243,16 +237,9 @@ impl Session {
         self.act(|live| live.press_line(row as usize, line as usize))
     }
 
-    pub fn result_fetched(&self, call_id: String, text: Option<String>) -> Vec<Effect> {
-        self.act(|live| live.result_fetched(&call_id, text.as_deref()))
-    }
-
-    pub fn shell_output_fetched(&self, shell_id: String, text: String) -> Vec<Effect> {
-        self.act(|live| live.shell_output_fetched(&shell_id, &text))
-    }
-
-    pub fn shell_verified(&self, shell_id: String, shell_json: Option<String>) -> Vec<Effect> {
-        self.act(|live| live.shell_verified(&shell_id, parse(shell_json)))
+    // The answer to an `Effect::Request`; status 0 when the request got no answer.
+    pub fn responded(&self, id: u64, status: u16, body: String) -> Vec<Effect> {
+        self.act(|live| live.responded(id, status, &body))
     }
 
     pub fn send(&self, text: String, attachment_ids: Vec<String>) -> Vec<Effect> {
@@ -323,6 +310,11 @@ impl Session {
 
     pub fn replay_progress(&self) -> Option<ReplayProgress> {
         self.live().replay_progress().map(|(seq, target)| ReplayProgress { seq, target })
+    }
+
+    // The session's name as every list draws it: its title, else the head of its id.
+    pub fn session_title(&self) -> Option<String> {
+        self.live().session_info().map(wd_native::vm::session_list::session_label)
     }
 
     pub fn session_info_json(&self) -> Option<String> {
@@ -453,4 +445,29 @@ pub fn band_names() -> Vec<String> {
 #[uniffi::export]
 pub fn snapshot_version() -> u8 {
     snapshot::VERSION
+}
+
+#[uniffi::export]
+pub fn normalize_base_url(raw: String) -> String {
+    wd_native::vm::gateway::normalize_base_url(&raw)
+}
+
+#[uniffi::export]
+pub fn api_base(base_url: String) -> String {
+    wd_native::vm::gateway::api_base(&base_url)
+}
+
+#[uniffi::export]
+pub fn socket_url(base_url: String, session_id: String, after_seq: i64) -> String {
+    wd_native::vm::gateway::socket_url(&base_url, &session_id, after_seq)
+}
+
+#[uniffi::export]
+pub fn gateway_name(base_url: String) -> String {
+    wd_native::vm::gateway::gateway_name(&base_url)
+}
+
+#[uniffi::export]
+pub fn classify_answer(status: u16, content_type: Option<String>) -> Option<String> {
+    wd_native::vm::gateway::classify_answer(status, content_type.as_deref())
 }

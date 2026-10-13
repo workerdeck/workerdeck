@@ -6,7 +6,7 @@ use crate::controller::transcript::{self as view, Navigation, TranscriptView, Up
 use crate::expansion::TermPress;
 use crate::planner::Metrics;
 use crate::protocol::{AttachedFrame, Body, Event};
-use crate::rest::{PermissionMode, SessionInfo, ShellInfo};
+use crate::rest::{PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
 use crate::rows::{subagent_items, subagent_task};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
@@ -43,13 +43,19 @@ pub enum Effect {
     Send { id: u64, text: String },
     Close,
     WakeAt(f64),
-    FetchResult { call_id: String },
-    FetchShellOutput { shell_id: String },
-    VerifyShell { shell_id: String },
-    KillShell { shell_id: String },
+    // A REST call under the session's own path (`/sessions/:id`); the platform answers it with `responded`.
+    Request { id: u64, method: &'static str, path: String },
     OpenSubagent { task_id: String },
     OpenShell { shell_id: String },
     Changed(Changed),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum Pending {
+    Result(String),
+    ShellOutput(String),
+    Verify(String),
+    Kill(String),
 }
 
 pub struct LiveSession {
@@ -67,6 +73,8 @@ pub struct LiveSession {
     protocol_error: Option<String>,
     init_model: Option<String>,
     verifying: HashSet<String>,
+    requests: HashMap<u64, Pending>,
+    next_request: u64,
     shells: HashMap<String, ShellSession>,
     frames: HashMap<String, TranscriptView>,
     hide_thinking: bool,
@@ -98,6 +106,8 @@ impl LiveSession {
             protocol_error: None,
             init_model: None,
             verifying: HashSet::new(),
+            requests: HashMap::new(),
+            next_request: 0,
             shells: HashMap::new(),
             frames: HashMap::new(),
             hide_thinking: false,
@@ -298,14 +308,64 @@ impl LiveSession {
 
     fn push_view_effects(&mut self, effects: Vec<view::Effect>) {
         for effect in effects {
-            self.effects.push(match effect {
-                view::Effect::FetchResult { call_id } => Effect::FetchResult { call_id },
-                view::Effect::FetchShellOutput { shell_id } => Effect::FetchShellOutput { shell_id },
-                view::Effect::KillShell { shell_id } => Effect::KillShell { shell_id },
-                view::Effect::OpenSubagent { task_id } => Effect::OpenSubagent { task_id },
-                view::Effect::OpenShell { shell_id } => Effect::OpenShell { shell_id },
-            });
+            match effect {
+                view::Effect::FetchResult { call_id } => self.request(Pending::Result(call_id)),
+                view::Effect::FetchShellOutput { shell_id } => self.request(Pending::ShellOutput(shell_id)),
+                view::Effect::KillShell { shell_id } => self.request(Pending::Kill(shell_id)),
+                view::Effect::OpenSubagent { task_id } => self.effects.push(Effect::OpenSubagent { task_id }),
+                view::Effect::OpenShell { shell_id } => self.effects.push(Effect::OpenShell { shell_id }),
+            }
         }
+    }
+
+    fn request(&mut self, pending: Pending) {
+        let (method, path) = match &pending {
+            Pending::Result(call_id) => {
+                let Some(seq) = self.result_seq(call_id) else {
+                    return self.result_fetched(call_id, None);
+                };
+                ("GET", format!("/events/{seq}/result?toolUseId={}&imageRefs=1", encode_component(call_id)))
+            }
+            Pending::ShellOutput(id) => ("GET", format!("/shells/{}/output?view=text", encode_component(id))),
+            Pending::Verify(id) => ("GET", format!("/shells/{}", encode_component(id))),
+            Pending::Kill(id) => ("POST", format!("/shells/{}/kill", encode_component(id))),
+        };
+        self.next_request += 1;
+        self.requests.insert(self.next_request, pending);
+        self.effects.push(Effect::Request { id: self.next_request, method, path });
+    }
+
+    // A 404 on a shell means the gateway no longer knows it; any other failure leaves the row as it was, and a
+    // failed result fetch lets a later press try again. Status 0 is a request that got no answer at all.
+    pub fn responded(&mut self, id: u64, status: u16, body: &str) {
+        let Some(pending) = self.requests.remove(&id) else { return };
+        let ok = (200..300).contains(&status);
+        match pending {
+            Pending::Result(call_id) => {
+                let text = if ok { tool_result_text(body) } else { None };
+                self.result_fetched(&call_id, text.as_deref());
+            }
+            Pending::ShellOutput(shell_id) if ok => self.shell_output_fetched(&shell_id, body),
+            Pending::ShellOutput(shell_id) | Pending::Verify(shell_id) if status == 404 => self.shell_verified(&shell_id, None),
+            Pending::Verify(shell_id) | Pending::Kill(shell_id) if ok => match shell_record(body) {
+                Some(shell) => self.shell_verified(&shell_id, Some(shell)),
+                None => {
+                    self.verifying.remove(&shell_id);
+                }
+            },
+            Pending::Verify(shell_id) => {
+                self.verifying.remove(&shell_id);
+            }
+            Pending::ShellOutput(_) | Pending::Kill(_) => {}
+        }
+    }
+
+    fn result_seq(&self, call_id: &str) -> Option<i64> {
+        let states = std::iter::once(&self.state).chain(self.buffer.as_ref());
+        states.flat_map(|state| state.items.iter()).find_map(|item| match item {
+            Item::ToolCall(call) if &*call.id == call_id => call.result.as_ref().and_then(|result| result.source_seq),
+            _ => None,
+        })
     }
 
     // `None` is a failed fetch: the row returns to its head and a later press may try again.
@@ -408,7 +468,7 @@ impl LiveSession {
     }
 
     pub fn kill_shell(&mut self, shell_id: &str) {
-        self.effects.push(Effect::KillShell { shell_id: shell_id.to_owned() });
+        self.request(Pending::Kill(shell_id.to_owned()));
     }
 
     pub fn set_permission_mode(&mut self, mode: PermissionMode) {
@@ -641,7 +701,7 @@ impl LiveSession {
 
     fn verify(&mut self, shell_id: String) {
         if self.verifying.insert(shell_id.clone()) {
-            self.effects.push(Effect::VerifyShell { shell_id });
+            self.request(Pending::Verify(shell_id));
         }
     }
 

@@ -1,23 +1,21 @@
 package bi.atomic.workerdeck.app.gateway
 
+import bi.atomic.workerdeck.core.ffi.classifyAnswer
+import bi.atomic.workerdeck.core.ffi.socketUrl
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
 class GatewayException(message: String) : IOException(message)
-
-// A wrong key or path falls through to the dashboard, which answers HTML (or 405), never JSON.
-fun classifyAnswer(code: Int, contentType: String?): String? = when {
-    code == 401 || code == 403 -> "The gateway refused the auth key"
-    contentType?.startsWith("application/json") != true -> "Not a WorkerDeck gateway, or the auth key is wrong"
-    code !in 200..299 -> "The gateway answered $code"
-    else -> null
-}
 
 class GatewayClient(val gateway: Gateway) {
     private val http = OkHttpClient.Builder()
@@ -31,7 +29,7 @@ class GatewayClient(val gateway: Gateway) {
         val request = authed(Request.Builder().url(gateway.apiBase + path)).build()
         try {
             http.newCall(request).execute().use { response ->
-                classifyAnswer(response.code, response.header("content-type"))?.let { throw GatewayException(it) }
+                classifyAnswer(response.code.toUShort(), response.header("content-type"))?.let { throw GatewayException(it) }
                 response.body?.string() ?: throw GatewayException("Empty answer")
             }
         } catch (error: IllegalArgumentException) {
@@ -39,9 +37,23 @@ class GatewayClient(val gateway: Gateway) {
         }
     }
 
+    // A core `Effect.Request` under the session's path, answered with its status and body; 0 when no answer came.
+    fun request(sessionId: String, method: String, path: String, answer: (Int, String) -> Unit) {
+        val body = if (method == "GET") null else ByteArray(0).toRequestBody()
+        val url = "${gateway.apiBase}/sessions/${encode(sessionId)}$path"
+        val request = runCatching { authed(Request.Builder().url(url)).method(method, body).build() }.getOrNull()
+            ?: return answer(0, "")
+        http.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = answer(0, "")
+
+            override fun onResponse(call: Call, response: Response) = response.use {
+                answer(it.code, runCatching { it.body?.string() }.getOrNull() ?: "")
+            }
+        })
+    }
+
     fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket {
-        val base = gateway.apiBase.replaceFirst("http", "ws")
-        val url = "$base/sessions/${encode(sessionId)}/ws?afterSeq=$afterSeq&truncateResults=1&imageRefs=1"
+        val url = socketUrl(gateway.baseUrl, sessionId, afterSeq)
         return http.newWebSocket(authed(Request.Builder().url(url)).build(), listener)
     }
 

@@ -191,8 +191,11 @@ impl SessionList {
         Ok(skipped)
     }
 
-    pub fn remove_host(&self, host_id: String) {
-        self.state().hosts.retain(|h| h.id != host_id);
+    // Drops the host and its read marks; answers whether the marks changed, so the app knows to save them.
+    pub fn remove_host(&self, host_id: String) -> bool {
+        let mut state = self.state();
+        state.hosts.retain(|h| h.id != host_id);
+        state.marks.forget_host(&host_id)
     }
 
     pub fn groups(&self) -> Vec<ListGroup> {

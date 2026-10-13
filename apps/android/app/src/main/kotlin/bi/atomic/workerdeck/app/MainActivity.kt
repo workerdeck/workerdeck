@@ -18,7 +18,6 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
-import bi.atomic.workerdeck.app.gateway.gatewayName
 import bi.atomic.workerdeck.app.gateway.GatewayStore
 import bi.atomic.workerdeck.app.session.SessionScreen
 import bi.atomic.workerdeck.app.sessions.SessionsModel
@@ -45,7 +44,7 @@ private fun App(store: GatewayStore) {
     val current = gateway
     if (current == null) {
         PairingScreen { url, key ->
-            val probe = GatewayClient(Gateway("primary", gatewayName(url), url, key))
+            val probe = GatewayClient(Gateway("probe", url, key))
             runCatching { probe.sessions() }.exceptionOrNull()?.let { describe(it) }
                 ?: null.also { gateway = store.save(url, key) }
         }
@@ -64,6 +63,7 @@ private fun App(store: GatewayStore) {
                 open = listOf(row.hostId, row.sessionId, row.title)
             },
             onForget = {
+                sessions.forget(current)
                 store.clear()
                 gateway = null
             },

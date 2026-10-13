@@ -702,3 +702,32 @@ pub struct AgentInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_members: Option<Vec<RemoteMember>>,
 }
+
+// `GET /sessions/:id/events/:seq/result`: the whole result as one string, folded by the reducer's rule.
+pub fn tool_result_text(body: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(body).ok()?;
+    let content = match value.get("content") {
+        None | Some(Value::Null) => return Some(String::new()),
+        Some(Value::String(text)) => crate::protocol::ToolResultContent::Text(text.clone()),
+        Some(parts) => crate::protocol::ToolResultContent::Parts(serde_json::from_value(parts.clone()).ok()?),
+    };
+    Some(content.joined_text())
+}
+
+// `GET /sessions/:id/shells/:shellId` and its `kill`: the record under `shell`.
+pub fn shell_record(body: &str) -> Option<Value> {
+    let mut value: Value = serde_json::from_str(body).ok()?;
+    value.get_mut("shell").map(Value::take).filter(Value::is_object)
+}
+
+pub fn encode_component(part: &str) -> String {
+    let mut out = String::with_capacity(part.len());
+    for byte in part.bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}

@@ -394,3 +394,16 @@ fn view_models_match_typescript() {
     }
     assert!(failures.is_empty(), "{} view-model mismatches:\n{}", failures.len(), failures.join("\n"));
 }
+
+#[test]
+fn forgetting_a_host_drops_only_its_marks() {
+    use wd_native::vm::watermarks::{Seen, Watermarks};
+    let mut marks = Watermarks::default();
+    let seen = Seen { activity: Some(3.0), ..Seen::default() };
+    marks.mark("gw-a", "s1", &seen, 1.0);
+    marks.mark("gw-ab", "s1", &seen, 1.0);
+    assert!(marks.forget_host("gw-a"));
+    assert!(marks.get("gw-a", "s1").is_none());
+    assert!(marks.get("gw-ab", "s1").is_some());
+    assert!(!marks.forget_host("gw-a"));
+}

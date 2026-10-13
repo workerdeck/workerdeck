@@ -231,9 +231,10 @@ fn a_replayed_running_shell_is_verified_once_and_a_404_marks_it_missing() {
         "message": {"role": "user", "content": "<local-command-stdout>$ npm run dev\nlistening</local-command-stdout>"}});
     host.frame(event_frame(1, row.clone()), 1.0);
     host.frame(event_frame(2, row), 1.0);
-    let verifies: Vec<Effect> = host.take().into_iter().filter(|e| matches!(e, Effect::VerifyShell { .. })).collect();
-    assert_eq!(verifies, [Effect::VerifyShell { shell_id: "sh_1".into() }]);
-    host.live.shell_verified("sh_1", None);
+    let verifies = requests(host.take());
+    assert_eq!(verifies.len(), 1);
+    assert_eq!((verifies[0].1, verifies[0].2.as_str()), ("GET", "/shells/sh_1"));
+    host.live.responded(verifies[0].0, 404, "");
     host.drain();
     let missing = host.live.state().items.iter().any(|item| matches!(item, Item::Shell(shell) if shell.missing));
     assert!(missing);
@@ -274,8 +275,14 @@ fn expanding_a_truncated_result_fetches_it_and_the_text_lands() {
     let row = host.live.view().row_index_for_item(item);
     host.live.press(&TermPress::ExpandFull("toolu_big".into()), row);
     host.drain();
-    assert!(host.take().contains(&Effect::FetchResult { call_id: "toolu_big".into() }));
-    host.live.result_fetched("toolu_big", Some("the whole log"));
+    let fetch = requests(host.take()).pop().expect("a result fetch");
+    assert_eq!(fetch.1, "GET");
+    assert!(fetch.2.starts_with("/events/") && fetch.2.ends_with("/result?toolUseId=toolu_big&imageRefs=1"), "{}", fetch.2);
+    host.live.responded(
+        fetch.0,
+        200,
+        r#"{"seq": 3, "toolUseId": "toolu_big", "content": [{"type": "text", "text": "the whole log"}], "isError": false}"#,
+    );
     host.drain();
     let text = host.live.state().items.iter().find_map(|item| match item {
         Item::ToolCall(call) if &*call.id == "toolu_big" => call.result.as_ref().map(|r| r.text.to_string()),
@@ -392,12 +399,12 @@ fn a_detach_ends_the_stream_and_the_record_says_why() {
     );
     host.take();
     host.frame(json!({"type": "shell_detached", "shellId": "sh_1", "reason": "backpressure"}), 1.0);
-    let effects = host.take();
-    assert!(effects.contains(&Effect::VerifyShell { shell_id: "sh_1".into() }));
+    let verify = requests(host.take()).pop().expect("a verify");
+    assert_eq!(verify.2, "/shells/sh_1");
     let shell = host.live.shell("sh_1").unwrap();
     assert_eq!((shell.status_text(), shell.can_type()), ("backpressure".to_owned(), false));
 
-    host.live.shell_verified("sh_1", Some(shell_record("exited", Some(1))));
+    host.live.responded(verify.0, 200, &json!({"shell": shell_record("exited", Some(1))}).to_string());
     host.drain();
     assert!(host.changed().shells);
     let shell = host.live.shell("sh_1").unwrap();
@@ -436,7 +443,8 @@ fn kill_asks_the_platform_and_leaves_the_stream_alone() {
     host.drain();
     host.take();
     host.live.kill_shell("sh_1");
-    assert!(host.live.take_effects().contains(&Effect::KillShell { shell_id: "sh_1".into() }));
+    let kill = requests(host.live.take_effects()).pop().expect("a kill");
+    assert_eq!((kill.1, kill.2.as_str()), ("POST", "/shells/sh_1/kill"));
     assert!(host.live.shell("sh_1").unwrap().is_attached());
 }
 
@@ -506,5 +514,57 @@ fn a_press_inside_a_frame_expands_there_and_navigates_through_the_session() {
 
     host.live.set_navigation(Navigation { subagents: true, shells: true });
     host.live.frame_press("toolu_task", &TermPress::KillShell("sh_9".into()), 0);
-    assert!(host.live.take_effects().contains(&Effect::KillShell { shell_id: "sh_9".into() }));
+    assert_eq!(requests(host.live.take_effects()).pop().map(|r| r.2), Some("/shells/sh_9/kill".to_owned()));
+}
+
+fn requests(effects: Vec<Effect>) -> Vec<(u64, &'static str, String)> {
+    effects
+        .into_iter()
+        .filter_map(|effect| match effect {
+            Effect::Request { id, method, path } => Some((id, method, path)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_failed_result_fetch_lets_a_later_press_try_again() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.events("tool-result-truncated-and-images", 1.0);
+    host.take();
+    let item = host.live.state().items.iter().position(|item| item.id() == "toolu_big").unwrap();
+    let row = host.live.view().row_index_for_item(item);
+    host.live.press(&TermPress::ExpandFull("toolu_big".into()), row);
+    host.drain();
+    let fetch = requests(host.take()).pop().expect("a result fetch");
+    host.live.press(&TermPress::ExpandFull("toolu_big".into()), row);
+    assert!(requests(host.live.take_effects()).is_empty(), "one fetch at a time");
+    host.live.responded(fetch.0, 0, "");
+    host.drain();
+    assert!(!host.live.view().expansion().is_fetching("toolu_big"));
+    host.live.responded(fetch.0, 200, "{}");
+    host.live.press(&TermPress::ExpandFull("toolu_big".into()), row);
+    host.drain();
+    assert_eq!(requests(host.take()).len(), 1);
+}
+
+#[test]
+fn a_verify_that_got_no_answer_may_be_asked_again() {
+    let mut host = Host::new();
+    host.open();
+    host.live.open_shell("sh_1", None, 80, 24);
+    host.drain();
+    host.frame(
+        json!({"type": "shell_attached", "shellId": "sh_1", "shell": shell_record("running", None), "cols": 80, "rows": 24,
+        "scrollback": ""}),
+        1.0,
+    );
+    host.take();
+    host.frame(json!({"type": "shell_detached", "shellId": "sh_1", "reason": "backpressure"}), 1.0);
+    let verify = requests(host.take()).pop().expect("a verify");
+    host.live.responded(verify.0, 502, "");
+    host.frame(json!({"type": "shell_detached", "shellId": "sh_1", "reason": "backpressure"}), 1.0);
+    assert_eq!(requests(host.take()).len(), 1);
 }

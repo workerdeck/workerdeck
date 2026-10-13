@@ -4,26 +4,25 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import bi.atomic.workerdeck.core.ffi.apiBase
+import bi.atomic.workerdeck.core.ffi.gatewayName
+import java.util.UUID
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-data class Gateway(val id: String, val name: String, val baseUrl: String, val key: String) {
-    val apiBase: String get() = "${normalizeBaseUrl(baseUrl)}/v1"
-}
+// `id` is minted at pairing and keys everything stored about this gateway (read marks), so it outlives a rename.
+class Gateway(val id: String, val baseUrl: String, val key: String) {
+    val name: String = gatewayName(baseUrl)
+    val apiBase: String = apiBase(baseUrl)
 
-fun normalizeBaseUrl(raw: String): String {
-    val trimmed = raw.trim().trimEnd('/')
-    val withScheme = if ("://" in trimmed) trimmed else "http://$trimmed"
-    return withScheme.removeSuffix("/v1")
-}
+    override fun equals(other: Any?) = other is Gateway && other.id == id && other.baseUrl == baseUrl && other.key == key
 
-// A tailnet or LAN name reads as its first label; an IP address stays whole.
-fun gatewayName(baseUrl: String): String {
-    val host = normalizeBaseUrl(baseUrl).substringAfter("://").substringBefore('/').substringBefore(':')
-    return if (host.all { it.isDigit() || it == '.' }) host else host.substringBefore('.')
+    override fun hashCode() = id.hashCode()
+
+    override fun toString() = "Gateway($id, $baseUrl)"
 }
 
 // The auth key is sealed with an AES key that never leaves the Android Keystore; prefs hold only the ciphertext.
@@ -34,13 +33,17 @@ class GatewayStore(context: Context) {
         val url = prefs.getString("url", null) ?: return null
         val sealed = prefs.getString("key", null) ?: return null
         val key = runCatching { open(sealed) }.getOrNull() ?: return null
-        return Gateway("primary", gatewayName(url), url, key)
+        val id = prefs.getString("id", null) ?: mint().also { prefs.edit().putString("id", it).apply() }
+        return Gateway(id, url, key)
     }
 
     fun save(baseUrl: String, key: String): Gateway {
-        prefs.edit().putString("url", baseUrl).putString("key", seal(key)).apply()
-        return Gateway("primary", gatewayName(baseUrl), baseUrl, key)
+        val id = mint()
+        prefs.edit().putString("id", id).putString("url", baseUrl).putString("key", seal(key)).apply()
+        return Gateway(id, baseUrl, key)
     }
+
+    private fun mint() = UUID.randomUUID().toString()
 
     fun clear() {
         prefs.edit().clear().apply()

@@ -87,6 +87,16 @@ impl Watermarks {
     }
 }
 
+impl Watermarks {
+    // A gateway unpaired takes its marks along: a later pairing mints a new host id and never reads them.
+    pub fn forget_host(&mut self, host_id: &str) -> bool {
+        let prefix = watermark_key(host_id, "");
+        let before = self.marks.len();
+        self.marks.0.retain(|(key, _)| !key.starts_with(&prefix));
+        self.marks.len() != before
+    }
+}
+
 pub fn unseen_count(mark: Option<&Watermark>, prose_count: Option<f64>) -> f64 {
     match (mark, prose_count) {
         (Some(mark), Some(count)) => (count - mark.prose.unwrap_or(count)).max(0.0),

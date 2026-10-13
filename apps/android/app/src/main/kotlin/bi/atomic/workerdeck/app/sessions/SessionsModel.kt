@@ -66,6 +66,14 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // Unpairing drops the gateway from the list along with its read marks; a new pairing gets a new id.
+    fun forget(gateway: Gateway) {
+        poll?.cancel()
+        client = null
+        if (list.removeHost(gateway.id)) prefs.edit().putString("marks", list.marksJson()).apply()
+        state.value = SessionsUi()
+    }
+
     fun sessionJson(hostId: String, sessionId: String): String? = list.sessionJson(hostId, sessionId)
 
     private fun update(change: () -> Unit) {
