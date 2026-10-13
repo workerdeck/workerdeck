@@ -1,5 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { readStatusLabelInput, type PeerSessionsResponse, type ResolvePermissionRequest, type SessionInfo, type UpdateSessionRequest } from '@workerdeck/protocol'
+import {
+  readStatusLabelInput,
+  type PeerSessionsResponse,
+  type ResolvePermissionRequest,
+  type SessionInfo,
+  type UpdateSessionRequest,
+} from '@workerdeck/protocol'
 import { contentTypeFor, fail, json, readJsonBody, requireMethod, sendUntrusted } from '../lib/http.ts'
 import type { SessionItemRoute, SessionRoute } from '../lib/parse-route.ts'
 import { permissionDecision } from '../lib/permissions.ts'
@@ -8,6 +14,7 @@ import type { AuthContext } from '../services/auth.ts'
 import { isDormant } from '../services/session-store.ts'
 import type { ServerContext } from '../context.ts'
 import { vetCreateRequest } from './create-vet.ts'
+import { retireAgent } from './agents.ts'
 import { handleAttachments } from './attachments.ts'
 import { handleMcp } from './mcp.ts'
 import { handleProducedFiles } from './produced-files.ts'
@@ -89,7 +96,7 @@ async function handleCollection(ctx: ServerContext, req: IncomingMessage, res: S
   json(res, 201, { session: projects.withProject(runner.info()) })
 }
 
-async function handleSession({ ctx, req, res, route, runner, parked, info }: SessionCall<'session' | 'ws'>): Promise<void> {
+async function handleSession({ ctx, req, res, auth, route, runner, parked, info }: SessionCall<'session' | 'ws'>): Promise<void> {
   const { attachmentStore, bridge, parking, producedFiles, projects, registry } = ctx
   requireMethod(req, 'GET', 'PATCH', 'DELETE')
   if (req.method === 'GET') {
@@ -134,6 +141,13 @@ async function handleSession({ ctx, req, res, route, runner, parked, info }: Ses
     }
     json(res, 200, { session: projects.withProject(live.info()) })
     return
+  }
+  const agent = ctx.agents.bySession(route.id)
+  if (agent) {
+    if (!ctx.auth.isOperator(auth)) {
+      fail(403, `${agent.name} is an agent; only an operator can delete it`)
+    }
+    await retireAgent(ctx, agent, 'release')
   }
   registry.remove(route.id)
   bridge.remove(route.id)

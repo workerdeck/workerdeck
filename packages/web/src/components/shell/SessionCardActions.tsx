@@ -91,8 +91,8 @@ export function SessionCardActions({
         </QuickAction>
       ) : null}
       <QuickAction
-        label="Close session"
-        title={agent ? 'End this session; the agent stays and can start a new conversation' : 'Close session'}
+        label={agent ? 'Delete agent' : 'Close session'}
+        title={agent ? 'Retire the agent and end its session; team members are released' : 'Close session'}
         onClick={() => onAction({ kind: 'close' })}
       >
         <Trash2 className="size-3 text-fg-3" />

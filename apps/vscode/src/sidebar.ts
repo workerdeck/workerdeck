@@ -303,8 +303,8 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     }
     items.push(...this.#teamItems(hostId, info))
     items.push({
-      label: '$(trash) Delete',
-      detail: info.agent ? 'End this session; the agent stays and can be restarted' : 'Remove the session from the gateway',
+      label: info.agent ? '$(trash) Delete agent' : '$(trash) Delete',
+      detail: info.agent ? 'Retire the agent and end its session; team members are released' : 'Remove the session from the gateway',
       run: () => this.#deleteSession(hostId, sessionId),
     })
     const name = info.agent?.name ?? info.title ?? sessionId.slice(0, 8)
@@ -693,7 +693,7 @@ export class SidebarProvider extends WebviewViewHost<SidebarToHost, HostToSideba
     }
     const info = this.#model.sessionsOf(hostId).find((s) => s.id === sessionId)
     const confirmed = await vscode.window.showWarningMessage(
-      `Delete session "${info?.title ?? sessionId.slice(0, 8)}"?`,
+      info?.agent ? `Delete agent ${info.agent.name}?` : `Delete session "${info?.title ?? sessionId.slice(0, 8)}"?`,
       { modal: true },
       'Delete',
     )

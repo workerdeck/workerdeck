@@ -552,7 +552,8 @@ identity and team and moves the old id to `pastSessions`. Clear, compaction, eng
 dormancy all keep the session id, so a restart is only needed after a failure. `POST /agents`
 creates an agent and its first session in one call through the ordinary create ladder, or adopts
 an existing session (`adopt`). Retiring (`DELETE`) closes the agent's session and releases its
-members (or retires them, `members: 'retire'`).
+members (or retires them, `members: 'retire'`); deleting the agent's session does the same,
+releasing members.
 
 A **team** is a lead and the agents whose `lead` names it, one level deep. Teams gate peer
 messaging: a member reaches only its lead and teammates, and nobody outside a team reaches its

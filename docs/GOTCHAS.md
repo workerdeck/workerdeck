@@ -1404,8 +1404,10 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
 
 - **The store is the source of truth; `SessionInfo.agent` is decoration.** `AgentService.decorate`
   rides `ProjectInfoService`'s `decorate` chain, so every `withProject` funnel (list, get, WS hello,
-  notifications, peers) carries it, and parked or dormant records never embed it. An agent whose
-  session was deleted stays bound to that dead id; clients draw it from `GET /agents`.
+  notifications, peers) carries it, and parked or dormant records never embed it.
+- **Deleting an agent's session retires the agent** (`DELETE /sessions/:id`, members released,
+  operator only). No client draws a session-less agent, so one left behind was invisible yet still
+  held its name, and the next create under that name was refused as a duplicate.
 - **The library default is an in-memory store**, so a host that forgets `agentStore` loses every
   agent on restart or hot reload while their sessions survive as plain cards. The CLI shipped that
   bug once: `stateDirDefaults` built `<state-dir>/agents.json` and `startInstance` never passed it
