@@ -18,18 +18,47 @@ pub fn socket_url(base_url: &str, session_id: &str, after_seq: i64) -> String {
     format!("{base}/sessions/{}/ws?afterSeq={after_seq}&truncateResults=1&imageRefs=1", encode_component(session_id))
 }
 
+fn host_of(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = rest.split('/').next().unwrap_or_default();
+    let host = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
+    match host.strip_prefix('[') {
+        Some(v6) => v6.split(']').next().unwrap_or_default(),
+        None => host.split(':').next().unwrap_or_default(),
+    }
+}
+
 // A tailnet or LAN name reads as its first label; an IP address stays whole.
 pub fn gateway_name(base_url: &str) -> String {
     let url = normalize_base_url(base_url);
-    let rest = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
-    let host = rest.split('/').next().unwrap_or_default();
-    let host = host.rsplit_once('@').map_or(host, |(_, host)| host);
-    let host = host.split(':').next().unwrap_or_default();
-    if host.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
+    let host = host_of(&url);
+    if host.contains(':') || host.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
         host.to_owned()
     } else {
         host.split('.').next().unwrap_or_default().to_owned()
     }
+}
+
+// The auth key rides every request, so plain `http` is only for a host the network itself keeps private: loopback,
+// a LAN, link-local, a tailnet (WireGuard encrypts it; `*.ts.net` and Tailscale's 100.64.0.0/10), `*.local`.
+pub fn cleartext_refusal(base_url: &str) -> Option<String> {
+    let url = normalize_base_url(base_url);
+    if !url.to_ascii_lowercase().starts_with("http://") {
+        return None;
+    }
+    let host = host_of(&url).to_ascii_lowercase();
+    let private = match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => {
+            let [a, b, ..] = ip.octets();
+            ip.is_loopback() || ip.is_private() || ip.is_link_local() || (a == 100 && (64..128).contains(&b))
+        }
+        Ok(std::net::IpAddr::V6(ip)) => {
+            let first = ip.segments()[0];
+            ip.is_loopback() || (first & 0xfe00) == 0xfc00 || (first & 0xffc0) == 0xfe80
+        }
+        Err(_) => host == "localhost" || host.ends_with(".ts.net") || host.ends_with(".local") || !host.contains('.'),
+    };
+    (!private).then(|| "Use https for a gateway outside your LAN or tailnet: plain http would send the auth key in the clear".to_owned())
 }
 
 // A wrong key or path falls through to the dashboard, which answers HTML (or 405), never JSON.
@@ -71,6 +100,28 @@ mod tests {
         assert_eq!(gateway_name("http://mac.tail.ts.net:8787"), "mac");
         assert_eq!(gateway_name("http://10.0.2.2:8790"), "10.0.2.2");
         assert_eq!(gateway_name("deck"), "deck");
+        assert_eq!(gateway_name("http://[::1]:8787"), "::1");
+    }
+
+    #[test]
+    fn plain_http_is_only_for_a_private_network() {
+        for ok in [
+            "10.0.2.2:8790",
+            "http://192.168.1.4",
+            "http://127.0.0.1",
+            "http://100.101.1.2",
+            "mac.tail.ts.net",
+            "http://deck.local",
+            "http://deck",
+            "http://[::1]:8787",
+            "http://[fd7a:115c::1]",
+            "https://deck.example",
+        ] {
+            assert_eq!(cleartext_refusal(ok), None, "{ok}");
+        }
+        for refused in ["deck.example", "http://8.8.8.8", "http://100.128.0.1", "http://[2001:db8::1]"] {
+            assert!(cleartext_refusal(refused).is_some(), "{refused}");
+        }
     }
 
     #[test]

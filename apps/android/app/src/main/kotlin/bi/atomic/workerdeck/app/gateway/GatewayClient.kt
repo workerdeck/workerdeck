@@ -17,7 +17,14 @@ import okhttp3.WebSocketListener
 
 class GatewayException(message: String) : IOException(message)
 
-class GatewayClient(val gateway: Gateway) {
+// What a session view needs from the network: its socket and the REST calls the core asks for. Tests fake it.
+interface Transport {
+    fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket
+
+    fun request(sessionId: String, method: String, path: String, answer: (Int, String) -> Unit)
+}
+
+class GatewayClient(val gateway: Gateway) : Transport {
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
@@ -38,7 +45,7 @@ class GatewayClient(val gateway: Gateway) {
     }
 
     // A core `Effect.Request` under the session's path, answered with its status and body; 0 when no answer came.
-    fun request(sessionId: String, method: String, path: String, answer: (Int, String) -> Unit) {
+    override fun request(sessionId: String, method: String, path: String, answer: (Int, String) -> Unit) {
         val body = if (method == "GET") null else ByteArray(0).toRequestBody()
         val url = "${gateway.apiBase}/sessions/${encode(sessionId)}$path"
         val request = runCatching { authed(Request.Builder().url(url)).method(method, body).build() }.getOrNull()
@@ -52,7 +59,7 @@ class GatewayClient(val gateway: Gateway) {
         })
     }
 
-    fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket {
+    override fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket {
         val url = socketUrl(gateway.baseUrl, sessionId, afterSeq)
         return http.newWebSocket(authed(Request.Builder().url(url)).build(), listener)
     }

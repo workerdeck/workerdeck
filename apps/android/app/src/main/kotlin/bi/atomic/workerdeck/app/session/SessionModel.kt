@@ -1,6 +1,6 @@
 package bi.atomic.workerdeck.app.session
 
-import bi.atomic.workerdeck.app.gateway.GatewayClient
+import bi.atomic.workerdeck.app.gateway.Transport
 import bi.atomic.workerdeck.core.LayoutRow
 import bi.atomic.workerdeck.core.SessionWorker
 import bi.atomic.workerdeck.core.Snapshots
@@ -33,7 +33,7 @@ data class SessionUi(
 // Drives one core `Session` over one socket, for as long as its screen is shown: the screen calls `close()` when it
 // leaves. Everything that touches the session, the socket and the window runs on the worker's thread; effects arrive
 // there too, so `handle` and the readers call the session directly.
-class SessionModel(private val client: GatewayClient, private val sessionId: String, metrics: Metrics) : AutoCloseable {
+class SessionModel(private val client: Transport, private val sessionId: String, metrics: Metrics) : AutoCloseable {
     private val session = Session(0, true, UUID.randomUUID().toString(), metrics)
     private val state = MutableStateFlow(SessionUi())
     private val worker = SessionWorker(session, onFailure = ::failed, onEffects = ::handle)

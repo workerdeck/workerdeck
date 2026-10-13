@@ -52,4 +52,22 @@ class SessionWorkerTest {
         worker.close()
         assertTrue(effects.none { it is Effect.Send })
     }
+
+    @Test
+    fun aWakeTheCoreAsksForIsServedHereAndAStaleOneOpensNothing() {
+        val effects = CopyOnWriteArrayList<Effect>()
+        val worker = SessionWorker(Fixtures.session()) { effects.addAll(it) }
+        worker.received(Fixtures.ATTACHED)
+        worker.closed()
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (effects.none { it is Effect.Open } && System.nanoTime() < deadline) Thread.sleep(10)
+        assertEquals("the backoff's wake reopens the socket", 1, effects.count { it is Effect.Open })
+        assertTrue(effects.none { it is Effect.WakeAt })
+
+        worker.closed()
+        worker.act { it.reconnectNow() }
+        Thread.sleep(1_500)
+        assertEquals("reconnecting now leaves the scheduled wake nothing to open", 2, effects.count { it is Effect.Open })
+        worker.close()
+    }
 }

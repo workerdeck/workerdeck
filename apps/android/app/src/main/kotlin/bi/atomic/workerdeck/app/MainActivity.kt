@@ -23,6 +23,7 @@ import bi.atomic.workerdeck.app.session.SessionScreen
 import bi.atomic.workerdeck.app.sessions.SessionsModel
 import bi.atomic.workerdeck.app.sessions.SessionsScreen
 import bi.atomic.workerdeck.app.sessions.describe
+import bi.atomic.workerdeck.core.ffi.cleartextRefusal
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,6 +45,7 @@ private fun App(store: GatewayStore) {
     val current = gateway
     if (current == null) {
         PairingScreen { url, key ->
+            cleartextRefusal(url)?.let { return@PairingScreen it }
             val probe = GatewayClient(Gateway("probe", url, key))
             runCatching { probe.sessions() }.exceptionOrNull()?.let { describe(it) }
                 ?: null.also { gateway = store.save(url, key) }
