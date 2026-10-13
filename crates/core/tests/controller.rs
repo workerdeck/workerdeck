@@ -289,3 +289,34 @@ fn sticky_prompt_degenerate_and_long() {
     let pin = resolve(&prompts, &rows, &heights, heights.total_height(), METRICS.line, None);
     assert_eq!(pin.map(|pin| pin.row), prompts.last().copied());
 }
+
+#[test]
+fn observe_answers_like_note_over_every_conformance_case() {
+    use wd_native::protocol::{Frame, decode_frame};
+    use wd_native::transcript::{TranscriptState, apply_event};
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/conformance");
+    let mut cases = 0;
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if !path.to_string_lossy().ends_with(".events.jsonl") {
+            continue;
+        }
+        let body = std::fs::read(&path).unwrap();
+        let (mut state, mut noted, mut observed, mut last) =
+            (TranscriptState::default(), TranscriptSeqIndex::new(), TranscriptSeqIndex::new(), 0);
+        for line in body.split(|&b| b == b'\n').filter(|line| !line.is_empty()) {
+            let Some(Frame::Event(event)) = decode_frame(line) else { continue };
+            let seq = event.seq;
+            last = last.max(seq);
+            let before = state.items.clone();
+            apply_event(&mut state, event);
+            noted.note(seq, &before, &state.items);
+            observed.observe(seq, &state.items);
+        }
+        for seq in 0..=last + 1 {
+            assert_eq!(observed.item_for_seq(seq), noted.item_for_seq(seq), "{} seq {seq}", path.display());
+        }
+        cases += 1;
+    }
+    assert!(cases > 10);
+}

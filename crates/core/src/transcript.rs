@@ -238,7 +238,8 @@ pub struct TranscriptState {
 pub fn seed_from_session_info(state: &mut TranscriptState, info: &SessionInfo) {
     let fresh = state.last_seq == 0;
     if fresh {
-        state.status = SessionStatus::parse(&serde_json::to_value(info.status).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default());
+        state.status =
+            SessionStatus::parse(&serde_json::to_value(info.status).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default());
         state.engine_asleep = info.engine_asleep == Some(true);
     }
     state.engine = info.engine.or(state.engine);

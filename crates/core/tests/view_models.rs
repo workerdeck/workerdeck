@@ -5,8 +5,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use wd_native::projection::project;
 use wd_native::protocol::{Frame, decode_frame};
-use wd_native::transcript::{TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info};
 use wd_native::rest::{AgentInfo, ByModel, ChecklistItem, Entries, ModelOption, SessionInfo, SubagentInfo, TokenUsage};
+use wd_native::transcript::{
+    TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
+};
 use wd_native::vm::session_list::{self as sl, CustomGroup, SessionRow, ViewConfig};
 use wd_native::vm::status_label::StatusLabelRead;
 use wd_native::vm::watermarks::{Watermark, Watermarks};
@@ -329,7 +331,8 @@ fn transcript_fn(fn_name: &str, a: &Args) -> Value {
                 }
             }
             "effort" => {
-                let frame = json!({"type": "event", "event": {"type": "effort_changed", "effort": op[1], "seq": state.last_seq + 1, "ts": 1}});
+                let frame =
+                    json!({"type": "event", "event": {"type": "effort_changed", "effort": op[1], "seq": state.last_seq + 1, "ts": 1}});
                 apply(&mut state, frame.to_string().as_bytes());
             }
             "seed" => seed_from_session_info(&mut state, &serde_json::from_value(op[1].clone()).unwrap()),

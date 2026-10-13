@@ -6,6 +6,7 @@ fn main() {
     match args.get(2).map(String::as_str) {
         Some("dump") => print!("{}", wd_native::bench::dump(&session)),
         Some("dump-vt") => print!("{}", wd_native::bench::dump_vt(&shell)),
+        Some("live") => println!("{}", wd_native::bench::run_live(&session)),
         _ => println!("{}", wd_native::bench::run(&session, &shell)),
     }
 }

@@ -182,10 +182,16 @@ impl TranscriptView {
     }
 
     pub fn plan(&self, index: usize) -> Vec<TermLine> {
+        self.lines(index).as_ref().clone()
+    }
+
+    pub fn lines(&self, index: usize) -> Arc<Vec<TermLine>> {
         let Some(row) = self.rows.rows.get(index) else {
-            return Vec::new();
+            return Arc::default();
         };
-        plan_with(row, &self.metrics, &self.expansion.subset(row), self.frame_parent_id.as_deref())
+        self.cache
+            .planned(row, &self.expansion)
+            .unwrap_or_else(|| Arc::new(plan_with(row, &self.metrics, &self.expansion.subset(row), self.frame_parent_id.as_deref())))
     }
 
     pub fn gap_above(&self, index: usize) -> bool {

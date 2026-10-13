@@ -1,12 +1,13 @@
 use crate::expansion::TerminalExpansion;
-use crate::planner::{self, Metrics};
+use crate::planner::{self, Metrics, TermLine};
 use crate::rows::{Row, TerminalRows};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 struct Entry {
     row: Row,
     expansion: TerminalExpansion,
-    lines: usize,
+    lines: Arc<Vec<TermLine>>,
 }
 
 pub struct PlanCache {
@@ -32,12 +33,17 @@ impl PlanCache {
         }
     }
 
-    fn cached(&self, row: &Row, subset: &TerminalExpansion) -> Option<usize> {
+    fn cached(&self, row: &Row, subset: &TerminalExpansion) -> Option<&Arc<Vec<TermLine>>> {
         let entry = self.entries.get(&*row.key())?;
-        (entry.row == *row && entry.expansion == *subset).then_some(entry.lines)
+        (entry.row == *row && entry.expansion == *subset).then_some(&entry.lines)
     }
 
-    fn store(&mut self, row: &Row, subset: TerminalExpansion, lines: usize) {
+    // The lines the book measured, for a renderer: planning is pure, so a row the book has seen is never planned twice.
+    pub fn planned(&self, row: &Row, expansion: &TerminalExpansion) -> Option<Arc<Vec<TermLine>>> {
+        self.cached(row, &subset_for(expansion, row)).cloned()
+    }
+
+    fn store(&mut self, row: &Row, subset: TerminalExpansion, lines: Arc<Vec<TermLine>>) {
         self.entries.insert(row.key().into_owned(), Entry { row: row.clone(), expansion: subset, lines });
     }
 
@@ -45,14 +51,20 @@ impl PlanCache {
         self.begin_epoch(*metrics);
         let subset = subset_for(expansion, row);
         if let Some(hit) = self.cached(row, &subset) {
-            return hit;
+            return hit.len();
         }
-        let lines = planner::plan_with(row, metrics, &subset, None).len();
+        let lines = Arc::new(planner::plan_with(row, metrics, &subset, None));
+        let count = lines.len();
         self.store(row, subset, lines);
-        lines
+        count
     }
 
+    // Amortized: a stale entry is harmless (a hit compares the whole row), so the sweep waits until the cache has
+    // clearly outgrown the rows instead of hashing every key on every update.
     pub fn evict(&mut self, rows: &TerminalRows) {
+        if self.entries.len() <= rows.len() * 2 + 64 {
+            return;
+        }
         let live: HashSet<String> = rows.rows.iter().map(|row| row.key().into_owned()).collect();
         self.entries.retain(|key, _| live.contains(key));
     }
@@ -146,8 +158,9 @@ fn line_counts(
         return Vec::new();
     }
     let subsets: Vec<TerminalExpansion> = rows.rows.iter().map(|row| subset_for(expansion, row)).collect();
-    let plan = |i: usize| planner::plan_with(&rows.rows[i], metrics, &subsets[i], frame_parent_id).len();
+    let plan = |i: usize| Arc::new(planner::plan_with(&rows.rows[i], metrics, &subsets[i], frame_parent_id));
     let mut lines = vec![usize::MAX; count];
+    let mut planned: Vec<Option<Arc<Vec<TermLine>>>> = vec![None; count];
     let misses: Vec<usize> = match cache.as_deref_mut() {
         None => (0..count).collect(),
         Some(cache) => {
@@ -155,7 +168,7 @@ fn line_counts(
             let mut missed = Vec::new();
             for (i, (row, line)) in rows.rows.iter().zip(lines.iter_mut()).enumerate() {
                 match cache.cached(row, &subsets[i]) {
-                    Some(hit) => *line = hit,
+                    Some(hit) => *line = hit.len(),
                     None => missed.push(i),
                 }
             }
@@ -166,7 +179,7 @@ fn line_counts(
     if misses.len() >= PARALLEL_PLAN_THRESHOLD {
         let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).max(1);
         let chunk = misses.len().div_ceil(threads);
-        let results: Vec<Vec<(usize, usize)>> = std::thread::scope(|scope| {
+        let results: Vec<Vec<(usize, Arc<Vec<TermLine>>)>> = std::thread::scope(|scope| {
             let handles: Vec<_> = misses
                 .chunks(chunk)
                 .map(|slice| {
@@ -177,19 +190,24 @@ fn line_counts(
             handles.into_iter().map(|h| h.join().unwrap()).collect()
         });
         for part in results {
-            for (i, n) in part {
-                lines[i] = n;
+            for (i, plan) in part {
+                lines[i] = plan.len();
+                planned[i] = Some(plan);
             }
         }
     } else {
         for &i in &misses {
-            lines[i] = plan(i);
+            let plan = plan(i);
+            lines[i] = plan.len();
+            planned[i] = Some(plan);
         }
     }
 
     if let Some(cache) = cache {
         for &i in &misses {
-            cache.store(&rows.rows[i], subsets[i].clone(), lines[i]);
+            if let Some(plan) = planned[i].take() {
+                cache.store(&rows.rows[i], subsets[i].clone(), plan);
+            }
         }
     }
     lines

@@ -200,6 +200,20 @@ impl LiveSession {
         self.push_view_effects(effects);
     }
 
+    // A native renderer only knows a line was pressable; the core re-plans the row to recover what the press means.
+    pub fn press_line(&mut self, row: usize, line: usize) {
+        if let Some(press) = self.view.lines(row).get(line).and_then(|line| line.press.clone()) {
+            self.press(&press, row);
+        }
+    }
+
+    pub fn frame_press_line(&mut self, task_id: &str, row: usize, line: usize) {
+        let press = self.frames.get(task_id).and_then(|frame| frame.lines(row).get(line)?.press.clone());
+        if let Some(press) = press {
+            self.frame_press(task_id, &press, row);
+        }
+    }
+
     pub fn frame_expand_everything(&mut self, task_id: &str) {
         if let Some(frame) = self.frames.get_mut(task_id) {
             frame.expand_everything();
@@ -578,9 +592,8 @@ impl LiveSession {
         }
         let seq = event.seq;
         let Some(mut hold) = self.hold else {
-            let before = self.state.items.clone();
             apply_event(&mut self.state, event);
-            self.seq_index.note(seq, &before, &self.state.items);
+            self.seq_index.observe(seq, &self.state.items);
             self.dirty = true;
             return;
         };
@@ -588,9 +601,8 @@ impl LiveSession {
             self.buffer = Some(self.state.clone());
         }
         let buffer = self.buffer.as_mut().expect("buffer");
-        let before = buffer.items.clone();
         apply_event(buffer, event);
-        self.seq_index.note(seq, &before, &buffer.items);
+        self.seq_index.observe(seq, &buffer.items);
         hold.advance(buffer.last_seq, self.now);
         self.hold = Some(hold);
         if hold.landed() {

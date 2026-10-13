@@ -80,8 +80,16 @@ pnpm fixtures:golden                          # TS reducer -> crates/core/tests/
 (cd apps/ios/WorkerDeckKit && WD_CONFORMANCE_WRITE=1 swift test --filter Conformance)  # kit -> planner + VT goldens
 node crates/bench/fixtures/gen.mjs            # synthetic, deterministic: session.jsonl + shell.txt (gitignored)
 cargo run --release -p wd-native-bench        # the workloads, as JSON; `-- <dir> dump|dump-vt` for the cross-checks
+cargo run --release -p wd-native-bench -- <dir> live   # LiveSession per frame, no FFI: tells core cost from binding cost
 ANDROID_NDK_HOME=~/Library/Android/android-ndk-r30 cargo ndk -t arm64-v8a -t x86_64 build -p wd-native-jni --release
+ANDROID_NDK_HOME=~/Library/Android/android-ndk-r30 cargo ndk -t arm64-v8a build -p wd-native-ffi --release
+cargo build -p wd-native-ffi && cargo run -p wd-native-ffi --features cli --bin uniffi-bindgen -- \
+  generate --library target/debug/libwdffi.dylib --language kotlin --out-dir <dir>   # or --language swift
 ```
+
+`crates/ffi` is the apps' door into the core (UniFFI, lib `wdffi`, package and module names in
+`crates/ffi/uniffi.toml`); its byte-buffer formats are in `docs/NATIVE-CORE-SNAPSHOTS.md`. Library
+mode picks `uniffi.toml` up by itself: do not pass `--config`.
 
 Android needs `cargo install cargo-ndk` and an NDK (r30 locally; CI uses the runner's
 `ANDROID_NDK_LATEST_HOME`). The stripped arm64 `libwdcore.so` is about 0.7 MB, and its `LOAD`

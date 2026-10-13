@@ -3,7 +3,7 @@ use crate::planner::{self, Metrics, TermLine};
 use crate::protocol::{Frame, decode_frame};
 use crate::rows::TerminalRows;
 use crate::transcript::{TranscriptState, apply_event};
-use crate::vt::{CellText, Color, Style, VtScreen};
+use crate::vt::{Cell, CellText, Color, Style, VtScreen};
 
 pub struct Engine {
     pub state: TranscriptState,
@@ -130,40 +130,43 @@ impl Engine {
         let mut out = ByteWriter::new();
         out.u16(vt.cols as u16);
         out.u16(vt.rows as u16);
-        let first = vt.total_rows() - vt.rows;
-        let mut runs: Vec<(Style, String)> = Vec::new();
-        for index in first..vt.total_rows() {
-            let cells = vt.line(index);
-            runs.clear();
-            for cell in cells.iter() {
-                if cell.continuation {
-                    continue;
-                }
-                let same = matches!(runs.last(), Some((style, _)) if *style == cell.style);
-                if !same {
-                    runs.push((cell.style, String::new()));
-                }
-                let text = &mut runs.last_mut().unwrap().1;
-                match &cell.text {
-                    CellText::None => text.push(' '),
-                    CellText::Char(c) => text.push(*c),
-                    CellText::Cluster(s) => text.push_str(s),
-                }
-            }
-            out.u16(runs.len().min(u16::MAX as usize) as u16);
-            for (style, text) in &runs {
-                out.u32(color(style.fg));
-                out.u32(color(style.bg));
-                out.u8((style.bold as u8)
-                    | ((style.dim as u8) << 1)
-                    | ((style.italic as u8) << 2)
-                    | ((style.underline as u8) << 3)
-                    | ((style.inverse as u8) << 4)
-                    | ((style.strikethrough as u8) << 5));
-                out.str32(text);
-            }
+        for index in vt.total_rows() - vt.rows..vt.total_rows() {
+            write_vt_line(&mut out, &vt.line(index));
         }
         out.bytes
+    }
+}
+
+pub fn write_vt_line(out: &mut ByteWriter, cells: &[Cell]) {
+    let mut runs: Vec<(Style, String)> = Vec::new();
+    for cell in cells {
+        if cell.continuation {
+            continue;
+        }
+        let same = matches!(runs.last(), Some((style, _)) if *style == cell.style);
+        if !same {
+            runs.push((cell.style, String::new()));
+        }
+        let text = &mut runs.last_mut().expect("run").1;
+        match &cell.text {
+            CellText::None => text.push(' '),
+            CellText::Char(c) => text.push(*c),
+            CellText::Cluster(s) => text.push_str(s),
+        }
+    }
+    let n = runs.len().min(u16::MAX as usize);
+    out.u16(n as u16);
+    for (style, text) in &runs[..n] {
+        out.u32(color(style.fg));
+        out.u32(color(style.bg));
+        out.u8((style.bold as u8)
+            | ((style.dim as u8) << 1)
+            | ((style.italic as u8) << 2)
+            | ((style.underline as u8) << 3)
+            | ((style.inverse as u8) << 4)
+            | ((style.strikethrough as u8) << 5)
+            | ((style.hidden as u8) << 6));
+        out.str32(text);
     }
 }
 
@@ -192,8 +195,27 @@ impl ByteWriter {
     pub fn u32(&mut self, v: u32) {
         self.bytes.extend_from_slice(&v.to_le_bytes());
     }
+    pub fn i32(&mut self, v: i32) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    pub fn u64(&mut self, v: u64) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    pub fn i64(&mut self, v: i64) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    pub fn f32(&mut self, v: f32) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
+    pub fn f64(&mut self, v: f64) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
+    }
     pub fn str16(&mut self, s: &str) {
-        let b = &s.as_bytes()[..s.len().min(u16::MAX as usize)];
+        let mut end = s.len().min(u16::MAX as usize);
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        let b = &s.as_bytes()[..end];
         self.u16(b.len() as u16);
         self.bytes.extend_from_slice(b);
     }

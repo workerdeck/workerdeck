@@ -1,0 +1,6 @@
+[bindings.kotlin]
+package_name = "bi.atomic.workerdeck.core.ffi"
+cdylib_name = "wdffi"
+
+[bindings.swift]
+module_name = "WorkerDeckCore"

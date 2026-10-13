@@ -10,6 +10,7 @@ pub mod projection;
 pub mod protocol;
 pub mod rest;
 pub mod rows;
+pub mod snapshot;
 pub mod transcript;
 pub mod vm;
 pub mod vt;

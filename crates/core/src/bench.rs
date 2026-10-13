@@ -214,3 +214,51 @@ pub fn dump_vt(shell_path: &str) -> String {
     }
     out
 }
+
+const ATTACHED: &str = r#"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","status":"running","cwd":"/w","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"#;
+const VISIBLE_ROWS: usize = 20;
+
+// The FFI workload without the FFI: what `LiveSession` itself costs per frame, so a device run can tell binding
+// overhead from core cost.
+pub fn run_live(session_path: &str) -> String {
+    use crate::controller::live::{Effect, LiveSession};
+    use crate::planner::Metrics;
+    use crate::snapshot::{transcript_layout, transcript_lines};
+    let data = std::fs::read_to_string(session_path).expect("fixture");
+    let lines: Vec<&str> = data.lines().filter(|line| !line.is_empty()).collect();
+    let (replay, tail) = lines.split_at(lines.len() - STREAM_TAIL);
+    let mut live = LiveSession::new(0, true, "bench".into(), Metrics { cell: 19.8, line: 44.0, width: 1080.0, font_size: 32.0 });
+    live.opened();
+    live.received(ATTACHED, 0.0);
+    live.take_effects();
+    let t = Instant::now();
+    for line in replay {
+        live.received(line, 0.0);
+    }
+    live.take_effects();
+    let replay_ms = t.elapsed().as_secs_f64() * 1e3;
+    let (mut frame, mut ingest, mut snap) = (Vec::new(), Vec::new(), Vec::new());
+    for line in tail {
+        let a = Instant::now();
+        live.received(line, 0.0);
+        let effects = live.take_effects();
+        let b = Instant::now();
+        if effects.iter().any(|e| matches!(e, Effect::Changed(c) if c.transcript)) {
+            let rows = live.view().rows().len();
+            let _ = transcript_layout(live.view());
+            let _ = transcript_lines(live.view(), rows.saturating_sub(VISIBLE_ROWS), rows);
+        }
+        let c = Instant::now();
+        frame.push((c - a).as_secs_f64() * 1e6);
+        ingest.push((b - a).as_secs_f64() * 1e6);
+        snap.push((c - b).as_secs_f64() * 1e6);
+    }
+    let mut out = BTreeMap::new();
+    out.insert("replay_ms", J::Num((replay_ms * 10.0).round() / 10.0));
+    out.insert("frame_us", percentiles(&frame));
+    out.insert("ingest_us", percentiles(&ingest));
+    out.insert("snapshot_us", percentiles(&snap));
+    let mut s = String::new();
+    write_json(&J::Obj(out), &mut s);
+    s
+}

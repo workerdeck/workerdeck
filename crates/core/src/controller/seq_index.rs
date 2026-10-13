@@ -9,6 +9,7 @@ pub struct Mark {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TranscriptSeqIndex {
     marks: Vec<Mark>,
+    ids: Vec<String>,
 }
 
 impl TranscriptSeqIndex {
@@ -25,21 +26,39 @@ impl TranscriptSeqIndex {
     }
 
     pub fn note(&mut self, seq: i64, before: &[Item], after: &[Item]) {
-        let tail_matches = match before.len().checked_sub(1) {
+        self.note_with(seq, before.len(), |i| before[i].id(), after);
+    }
+
+    // `note` against the ids this index saw last instead of a copy of the items: an append or an in-place update
+    // costs nothing, and only a tail that changed identity rebuilds the mirror.
+    pub fn observe(&mut self, seq: i64, after: &[Item]) {
+        let mut ids = std::mem::take(&mut self.ids);
+        if self.note_with(seq, ids.len(), |i| &ids[i], after) {
+            ids = after.iter().map(|item| item.id().to_owned()).collect();
+        } else {
+            let known = ids.len();
+            ids.extend(after[known..].iter().map(|item| item.id().to_owned()));
+        }
+        self.ids = ids;
+    }
+
+    fn note_with<'a>(&mut self, seq: i64, before_len: usize, before_id: impl Fn(usize) -> &'a str, after: &[Item]) -> bool {
+        let tail_matches = match before_len.checked_sub(1) {
             None => true,
-            Some(tail) => after.len() > tail && after[tail].id() == before[tail].id(),
+            Some(tail) => after.len() > tail && after[tail].id() == before_id(tail),
         };
         if tail_matches {
-            if after.len() > before.len() {
-                self.append(seq, before.len());
+            if after.len() > before_len {
+                self.append(seq, before_len);
             }
-            return;
+            return false;
         }
-        let first_changed = before.iter().zip(after).take_while(|(b, a)| a.id() == b.id()).count();
+        let first_changed = (0..before_len.min(after.len())).take_while(|&i| after[i].id() == before_id(i)).count();
         self.marks.retain(|mark| mark.item < first_changed);
         if first_changed < after.len() {
             self.append(seq, first_changed);
         }
+        true
     }
 
     fn append(&mut self, seq: i64, item: usize) {
