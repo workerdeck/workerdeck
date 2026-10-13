@@ -9,6 +9,9 @@ use wd_native::rest::{PermissionMode, ShellInfo};
 use wd_native::snapshot;
 use wd_native::vt::VtKey;
 
+mod list;
+pub use list::{ListError, ListGroup, ListRow, RowState, SessionList};
+
 uniffi::setup_scaffolding!();
 
 #[derive(Debug, Clone, Copy, uniffi::Record)]
@@ -434,6 +437,17 @@ impl Session {
     pub fn shell_grid(&self, shell_id: String, start: u32, count: u32) -> Option<Vec<u8>> {
         self.live().shell(&shell_id).map(|shell| snapshot::shell_grid(shell, start as usize, count as usize))
     }
+}
+
+// A line's `tone` / `gutterTone` / `band` byte indexes these, so a palette keys on the name and never mirrors the order.
+#[uniffi::export]
+pub fn tone_names() -> Vec<String> {
+    planner::Tone::ALL.iter().map(|t| t.raw().to_owned()).collect()
+}
+
+#[uniffi::export]
+pub fn band_names() -> Vec<String> {
+    planner::Band::ALL.iter().map(|b| b.raw().to_owned()).collect()
 }
 
 #[uniffi::export]

@@ -619,7 +619,11 @@ struct RawShellDetached {
 
 fn decode_cold_frame(ty: &str, line: &[u8]) -> Option<Frame> {
     Some(match ty {
-        "attached" => Frame::Attached(Box::new(serde_json::from_slice(line).ok()?)),
+        // An attach this reader cannot follow would otherwise leave the session connecting forever; say why instead.
+        "attached" => match serde_json::from_slice(line) {
+            Ok(attached) => Frame::Attached(Box::new(attached)),
+            Err(error) => Frame::ProtocolError(format!("unreadable attached frame: {error}")),
+        },
         "tool_call_request" => {
             let raw: RawToolCallRequest = serde_json::from_slice(line).ok()?;
             Frame::ToolCallRequest(Box::new(ToolCallRequestFrame {

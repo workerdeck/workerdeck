@@ -54,6 +54,24 @@ pub enum Band {
 }
 
 impl Tone {
+    pub const ALL: [Tone; 15] = [
+        Tone::Fg,
+        Tone::Bright,
+        Tone::Dim,
+        Tone::Faint,
+        Tone::Mark,
+        Tone::Blue,
+        Tone::Green,
+        Tone::Red,
+        Tone::Yellow,
+        Tone::Magenta,
+        Tone::Peer,
+        Tone::DiffAdd,
+        Tone::DiffRemove,
+        Tone::DiffContext,
+        Tone::DiffNumber,
+    ];
+
     pub fn raw(self) -> &'static str {
         match self {
             Tone::Fg => "fg",
@@ -76,6 +94,8 @@ impl Tone {
 }
 
 impl Band {
+    pub const ALL: [Band; 5] = [Band::None, Band::User, Band::Output, Band::DiffAdd, Band::DiffRemove];
+
     pub fn raw(self) -> &'static str {
         match self {
             Band::None => "none",

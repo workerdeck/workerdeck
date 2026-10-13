@@ -68,7 +68,7 @@ fn checklist_state(status: ChecklistStatus) -> SessionTaskState {
     match status {
         ChecklistStatus::InProgress => SessionTaskState::Running,
         ChecklistStatus::Completed => SessionTaskState::Done,
-        ChecklistStatus::Pending => SessionTaskState::Pending,
+        ChecklistStatus::Pending | ChecklistStatus::Unknown => SessionTaskState::Pending,
     }
 }
 
@@ -77,6 +77,7 @@ fn spawn_state(status: SubagentStatus) -> SessionTaskState {
         SubagentStatus::Running => SessionTaskState::Running,
         SubagentStatus::Done => SessionTaskState::Done,
         SubagentStatus::Failed => SessionTaskState::Failed,
+        SubagentStatus::Unknown => SessionTaskState::Done,
     }
 }
 

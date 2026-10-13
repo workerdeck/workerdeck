@@ -14,3 +14,11 @@ fn a_session_opens_attaches_and_draws_through_the_ffi_surface() {
     let sent = session.send("hello".into(), Vec::new());
     assert!(sent.iter().any(|effect| matches!(effect, Effect::Send { text, .. } if text.contains("hello"))));
 }
+
+#[test]
+fn an_attach_the_reader_cannot_follow_surfaces_as_a_protocol_error() {
+    let session = Session::new(0, true, "n".into(), Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 });
+    session.opened();
+    session.received(r#"{"type":"attached","protocolVersion":1,"replayingFrom":0,"session":{"id":"s1"}}"#.into(), 0.0);
+    assert!(session.take_protocol_error().is_some_and(|message| message.contains("attached")));
+}

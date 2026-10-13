@@ -152,7 +152,7 @@ impl ShellSession {
     pub fn attached(&mut self, frame: &ShellAttachedFrame) -> Option<ShellAction> {
         self.phase = match frame.shell.status {
             ShellStatus::Running => ShellPhase::Live,
-            ShellStatus::Exited => ShellPhase::Ended("ended".into()),
+            ShellStatus::Exited | ShellStatus::Unknown => ShellPhase::Ended("ended".into()),
         };
         self.shell = Some(frame.shell.clone());
         self.cols = frame.cols.max(1) as u32;
@@ -205,6 +205,7 @@ pub fn status_text(shell: &ShellInfo) -> String {
         ShellEndReason::ServerStopped => "server_stopped",
         ShellEndReason::ServerRestarted => "server_restarted",
         ShellEndReason::SpawnFailed => "spawn_failed",
+        ShellEndReason::Unknown => "unknown",
     });
     status_words(shell.status == ShellStatus::Running, shell.exit_code.map(i64::from), end_reason)
 }

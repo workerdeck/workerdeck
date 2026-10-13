@@ -141,3 +141,14 @@ fn the_shell_grid_reads_back_the_screen() {
     assert_eq!(text, ["hello", "world", "", ""]);
     assert_eq!(r.at, bytes.len());
 }
+
+#[test]
+fn tone_and_band_tables_follow_the_wire_bytes() {
+    use wd_native::planner::{Band, Tone};
+    for (i, tone) in Tone::ALL.iter().enumerate() {
+        assert_eq!(*tone as usize, i, "{}", tone.raw());
+    }
+    for (i, band) in Band::ALL.iter().enumerate() {
+        assert_eq!(*band as usize, i, "{}", band.raw());
+    }
+}

@@ -81,6 +81,17 @@ impl<'de, V: Deserialize<'de>> Deserialize<'de> for Entries<V> {
     }
 }
 
+// A record older or newer than this reader (a parked session from before a capability existed) reads as absent
+// instead of failing the whole session.
+fn lenient<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).ok())
+}
+
 fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -99,17 +110,22 @@ pub enum SessionStatus {
     Parked,
     Failed,
     Closed,
+    #[serde(other)]
+    Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PermissionMode {
+    #[default]
     Default,
     AcceptEdits,
     BypassPermissions,
     Plan,
     DontAsk,
     Auto,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,22 +134,30 @@ pub enum ProfileEngine {
     Claude,
     Codex,
     Provider,
+    #[serde(other)]
+    Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolFilters {
     All,
     Mcp,
+    #[default]
     None,
+    #[serde(other)]
+    Unknown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum StreamingMode {
     Token,
     Item,
+    #[default]
     None,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -142,10 +166,14 @@ pub enum AttachmentKind {
     Image,
     Pdf,
     Text,
+    #[serde(other)]
+    Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+// Every field defaults to "not supported", so a record from an older gateway (or a newer one that renamed a field)
+// still reads, with the missing capability off.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct EngineCapabilities {
     pub interactive_approvals: bool,
     pub permission_modes: Vec<PermissionMode>,
@@ -235,6 +263,7 @@ pub type ProfileUsage = Entries<ProfileUsageWindow>;
 pub enum CostBasis {
     List,
     Managed,
+    #[serde(other)]
     Unknown,
 }
 
@@ -258,6 +287,8 @@ pub enum SubagentStatus {
     Running,
     Done,
     Failed,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -283,6 +314,8 @@ pub enum ChecklistStatus {
     Pending,
     InProgress,
     Completed,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -302,6 +335,8 @@ pub enum ProjectIcon {
         media_type: String,
         hash: String,
     },
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -319,6 +354,8 @@ pub struct ProjectInfo {
 pub enum ShellOwner {
     User,
     Agent,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -326,6 +363,8 @@ pub enum ShellOwner {
 pub enum ShellStatus {
     Running,
     Exited,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -337,6 +376,8 @@ pub enum ShellEndReason {
     ServerStopped,
     ServerRestarted,
     SpawnFailed,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -375,6 +416,8 @@ pub struct ShellInfo {
 pub enum ShellAgentWrite {
     Gated,
     Allow,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -421,7 +464,7 @@ pub struct SessionInfo {
     pub profile: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine: Option<ProfileEngine>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<EngineCapabilities>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -501,6 +544,8 @@ pub struct GatewayRelayMeta {
 pub enum Sharing {
     Private,
     Shared,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -545,7 +590,7 @@ pub struct ProfileInfo {
     pub models: Option<Vec<ModelOption>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_model: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<EngineCapabilities>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available: Option<bool>,
@@ -586,6 +631,8 @@ pub enum RemoteLeadState {
     Joined,
     Unreachable,
     Unconfirmed,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -605,6 +652,8 @@ pub enum RemoteMemberState {
     Invited,
     Accepted,
     Unconfirmed,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

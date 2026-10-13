@@ -35,7 +35,9 @@ line = u8 tone, u8 gutterTone, u8 band, u8 flags,
 ```
 
 Flags: 1 bold, 2 italic, 4 nested, 8 pulsing, 16 inOpen, 32 pressable, 64 image, 128 elapsed.
-Tone and band are the `planner::Tone` / `planner::Band` declaration order. A pressable line is
+Tone and band index `tone_names()` / `band_names()` (the `planner::Tone` / `planner::Band`
+declaration order); key a palette on those names. Run `intent` is a bit set from
+`markdown.rs`: 1 em, 2 strong, 4 code, 32 strike. A pressable line is
 answered with `press_line(row, line)` (`frame_press_line` in a frame): the core re-plans the row to
 recover the press, so no press value ever crosses the boundary.
 
