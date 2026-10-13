@@ -402,20 +402,28 @@ pub mod shell {
     }
 
     pub fn label(item: &ShellItem) -> String {
-        match text(&item.shell, "label") {
+        label_of(text(&item.shell, "label"), text(&item.shell, "command").unwrap_or(""))
+    }
+
+    pub fn label_of(label: Option<&str>, command: &str) -> String {
+        match label {
             Some(label) if !label.is_empty() => label.to_owned(),
-            _ => text(&item.shell, "command").unwrap_or("").split('\n').next().unwrap_or("").to_owned(),
+            _ => command.split('\n').next().unwrap_or("").to_owned(),
         }
     }
 
     pub fn status_text(item: &ShellItem) -> String {
-        if running(item) {
+        status_words(running(item), exit_code(item), text(&item.shell, "endReason"))
+    }
+
+    pub fn status_words(running: bool, exit_code: Option<i64>, end_reason: Option<&str>) -> String {
+        if running {
             return "running".into();
         }
-        if let Some(code) = exit_code(item) {
+        if let Some(code) = exit_code {
             return format!("exit {code}");
         }
-        match text(&item.shell, "endReason") {
+        match end_reason {
             Some("killed") => "killed",
             Some("timeout") => "timed out",
             Some("server_stopped") => "killed: the gateway stopped",

@@ -1,16 +1,18 @@
 use crate::controller::replay::{ReplayHold, initial_replay_target};
 use crate::controller::seq_index::TranscriptSeqIndex;
 use crate::controller::session::{self as connection, SessionConnection, Signal};
+use crate::controller::shell::{ShellAction, ShellSession};
 use crate::controller::transcript::{self as view, Navigation, TranscriptView, Update};
 use crate::expansion::TermPress;
 use crate::planner::Metrics;
-use crate::protocol::{AttachedFrame, Body, Event, ShellAttachedFrame};
-use crate::rest::{PermissionMode, SessionInfo};
+use crate::protocol::{AttachedFrame, Body, Event};
+use crate::rest::{PermissionMode, SessionInfo, ShellInfo};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
+use crate::vt::VtKey;
 use serde_json::{Map, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 pub const OFFLINE_AFTER_ATTEMPTS: u32 = 3;
@@ -30,6 +32,7 @@ pub struct Changed {
     pub transcript: bool,
     pub chrome: bool,
     pub progress: bool,
+    pub shells: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,9 +47,6 @@ pub enum Effect {
     KillShell { shell_id: String },
     OpenSubagent { task_id: String },
     OpenShell { shell_id: String },
-    ShellAttached(Box<ShellAttachedFrame>),
-    ShellOutput { shell_id: String, data: String },
-    ShellDetached { shell_id: String, reason: String },
     Changed(Changed),
 }
 
@@ -65,6 +65,7 @@ pub struct LiveSession {
     protocol_error: Option<String>,
     init_model: Option<String>,
     verifying: HashSet<String>,
+    shells: HashMap<String, ShellSession>,
     hide_thinking: bool,
     navigation: Navigation,
     metrics: Metrics,
@@ -94,6 +95,7 @@ impl LiveSession {
             protocol_error: None,
             init_model: None,
             verifying: HashSet::new(),
+            shells: HashMap::new(),
             hide_thinking: false,
             navigation: Navigation::default(),
             metrics,
@@ -159,6 +161,10 @@ impl LiveSession {
 
     pub fn queued(&self) -> usize {
         self.conn.queued()
+    }
+
+    pub fn shell(&self, shell_id: &str) -> Option<&ShellSession> {
+        self.shells.get(shell_id)
     }
 
     // Drained after every call. Folds whatever changed into one view update and one `Changed`.
@@ -262,6 +268,10 @@ impl LiveSession {
     // `None` is the 404: the gateway no longer knows the shell, so the row stops claiming it runs.
     pub fn shell_verified(&mut self, shell_id: &str, shell: Option<Value>) {
         self.verifying.remove(shell_id);
+        if let Some(open) = self.shells.get_mut(shell_id) {
+            open.set_record(shell.clone().and_then(|shell| serde_json::from_value::<ShellInfo>(shell).ok()));
+            self.changed.shells = true;
+        }
         let shell = shell.map(Arc::new);
         self.hydrate(|state| hydrate_shell_row(state, shell_id, shell.clone()));
     }
@@ -298,20 +308,45 @@ impl LiveSession {
         self.act(|c| c.run_shell(command));
     }
 
-    pub fn attach_shell(&mut self, shell_id: String, cols: u32, rows: u32) {
-        self.act(|c| c.attach_shell(shell_id, cols, rows));
+    // Opening a screen subscribes this socket to the PTY; the `shell_attached` answer and every `shell_output`
+    // after it land in the shell's emulator inside the core, never on the platform.
+    pub fn open_shell(&mut self, shell_id: &str, shell: Option<ShellInfo>, cols: u32, rows: u32) {
+        self.shells.entry(shell_id.to_owned()).or_insert_with(|| ShellSession::new(shell_id.to_owned(), shell, cols, rows));
+        self.shell_act(shell_id, ShellSession::start);
+        self.changed.shells = true;
+        self.pump();
     }
 
-    pub fn write_shell(&mut self, shell_id: &str, data: &str) {
-        self.act(|c| c.write_shell(shell_id, data));
+    pub fn close_shell(&mut self, shell_id: &str) {
+        self.shell_act(shell_id, ShellSession::stop);
+        if self.shells.remove(shell_id).is_some() {
+            self.changed.shells = true;
+        }
+        self.pump();
     }
 
-    pub fn resize_shell(&mut self, shell_id: String, cols: u32, rows: u32) {
-        self.act(|c| c.resize_shell(shell_id, cols, rows));
+    pub fn shell_resize(&mut self, shell_id: &str, cols: u32, rows: u32) {
+        self.shell_act(shell_id, |shell| shell.resize(cols, rows));
+        self.pump();
     }
 
-    pub fn detach_shell(&mut self, shell_id: String) {
-        self.act(|c| c.detach_shell(shell_id));
+    pub fn shell_key(&mut self, shell_id: &str, key: VtKey) {
+        self.shell_act(shell_id, |shell| shell.key(key));
+        self.pump();
+    }
+
+    pub fn shell_text(&mut self, shell_id: &str, text: &str) {
+        self.shell_act(shell_id, |shell| shell.text(text));
+        self.pump();
+    }
+
+    pub fn shell_paste(&mut self, shell_id: &str, text: &str) {
+        self.shell_act(shell_id, |shell| shell.paste(text));
+        self.pump();
+    }
+
+    pub fn kill_shell(&mut self, shell_id: &str) {
+        self.effects.push(Effect::KillShell { shell_id: shell_id.to_owned() });
     }
 
     pub fn set_permission_mode(&mut self, mode: PermissionMode) {
@@ -342,6 +377,22 @@ impl LiveSession {
     fn act(&mut self, action: impl FnOnce(&mut SessionConnection)) {
         action(&mut self.conn);
         self.pump();
+    }
+
+    // Never pumps: it also runs inside `signal`, whose caller is already pumping.
+    fn shell_act(&mut self, shell_id: &str, action: impl FnOnce(&mut ShellSession) -> Option<ShellAction>) {
+        let Some(shell) = self.shells.get_mut(shell_id) else { return };
+        let before = shell.revision();
+        let action = action(shell);
+        self.changed.shells |= shell.revision() != before;
+        let Some(action) = action else { return };
+        let id = shell_id.to_owned();
+        match action {
+            ShellAction::Attach { cols, rows } => self.conn.attach_shell(id, cols, rows),
+            ShellAction::Write(data) => self.conn.write_shell(&id, &data),
+            ShellAction::Resize { cols, rows } => self.conn.resize_shell(id, cols, rows),
+            ShellAction::Detach => self.conn.detach_shell(id),
+        }
     }
 
     fn hydrate(&mut self, apply: impl Fn(&mut TranscriptState) -> bool) {
@@ -379,6 +430,12 @@ impl LiveSession {
             Signal::Event(event) => self.event(event),
             Signal::ConnectionChange(open) => {
                 self.set_connection(if open { ConnectionState::Live } else { ConnectionState::Reconnecting });
+                if open {
+                    let ids: Vec<String> = self.shells.keys().cloned().collect();
+                    for id in ids {
+                        self.shell_act(&id, |shell| shell.reconnected());
+                    }
+                }
             }
             Signal::ReconnectAttempt(attempts) => {
                 let down = attempts >= OFFLINE_AFTER_ATTEMPTS;
@@ -397,9 +454,17 @@ impl LiveSession {
                 self.protocol_mismatch = Some(server_version);
                 self.changed.chrome = true;
             }
-            Signal::ShellAttached(frame) => self.effects.push(Effect::ShellAttached(frame)),
-            Signal::ShellOutput { shell_id, data } => self.effects.push(Effect::ShellOutput { shell_id, data }),
-            Signal::ShellDetached { shell_id, reason } => self.effects.push(Effect::ShellDetached { shell_id, reason }),
+            Signal::ShellAttached(frame) => self.shell_act(&frame.shell_id, |shell| shell.attached(&frame)),
+            Signal::ShellOutput { shell_id, data } => self.shell_act(&shell_id, |shell| shell.output(&data)),
+            Signal::ShellDetached { shell_id, reason } => {
+                if self.shells.contains_key(&shell_id) {
+                    self.shell_act(&shell_id, |shell| {
+                        shell.detached(reason);
+                        None
+                    });
+                    self.verify(shell_id);
+                }
+            }
             Signal::Finished => {
                 self.finished = true;
                 self.changed.chrome = true;

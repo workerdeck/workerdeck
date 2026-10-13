@@ -2,9 +2,11 @@ use serde_json::{Value, json};
 use std::path::Path;
 use wd_native::controller::live::{Changed, ConnectionState, Effect, LiveSession};
 use wd_native::controller::replay::STALL_SECONDS;
+use wd_native::controller::shell::ShellPhase;
 use wd_native::expansion::TermPress;
 use wd_native::planner::Metrics;
 use wd_native::transcript::Item;
+use wd_native::vt::VtKey;
 
 const METRICS: Metrics = Metrics { cell: 8.0, line: 16.0, width: 800.0, font_size: 13.0 };
 
@@ -17,7 +19,8 @@ struct Host {
 
 impl Host {
     fn new() -> Self {
-        let mut host = Host { live: LiveSession::new(0, true, "n".into(), METRICS), effects: Vec::new(), sent: Vec::new(), opens: Vec::new() };
+        let mut host =
+            Host { live: LiveSession::new(0, true, "n".into(), METRICS), effects: Vec::new(), sent: Vec::new(), opens: Vec::new() };
         host.drain();
         host
     }
@@ -73,13 +76,27 @@ impl Host {
         count
     }
 
+    fn close_and_reopen(&mut self) {
+        self.live.closed(5.0);
+        self.drain();
+        self.live.tick(100.0);
+        self.drain();
+        self.open();
+        self.attach(0, 0, 1.0, 100.0);
+    }
+
     fn take(&mut self) -> Vec<Effect> {
         std::mem::take(&mut self.effects)
     }
 
     fn changed(&mut self) -> Changed {
         self.take().into_iter().fold(Changed::default(), |acc, effect| match effect {
-            Effect::Changed(c) => Changed { transcript: acc.transcript || c.transcript, chrome: acc.chrome || c.chrome, progress: acc.progress || c.progress },
+            Effect::Changed(c) => Changed {
+                transcript: acc.transcript || c.transcript,
+                chrome: acc.chrome || c.chrome,
+                progress: acc.progress || c.progress,
+                shells: acc.shells || c.shells,
+            },
             _ => acc,
         })
     }
@@ -267,7 +284,7 @@ fn expanding_a_truncated_result_fetches_it_and_the_text_lands() {
 }
 
 #[test]
-fn commands_go_out_through_the_connection_and_shell_frames_pass_through() {
+fn commands_go_out_through_the_connection_and_stray_shell_frames_are_dropped() {
     let mut host = Host::new();
     host.open();
     host.attach(0, 0, 1.0, 0.0);
@@ -275,8 +292,9 @@ fn commands_go_out_through_the_connection_and_shell_frames_pass_through() {
     host.live.interrupt();
     host.drain();
     assert_eq!(host.sent, [json!({"type": "user_message", "text": "hello", "clientId": "n.1"}), json!({"type": "interrupt"})]);
+    host.take();
     host.frame(json!({"type": "shell_output", "shellId": "sh_1", "data": "hi"}), 1.0);
-    assert!(host.take().contains(&Effect::ShellOutput { shell_id: "sh_1".into(), data: "hi".into() }));
+    assert!(!host.changed().shells);
     assert_eq!(host.live.queued(), 1);
     host.frame(json!({"type": "ack", "clientId": "n.1"}), 1.0);
     assert_eq!(host.live.queued(), 0);
@@ -295,4 +313,127 @@ fn a_protocol_error_and_a_mismatch_reach_the_chrome() {
         0.0,
     );
     assert_eq!(host.live.protocol_mismatch(), Some(99));
+}
+
+fn shell_record(status: &str, exit_code: Option<i32>) -> Value {
+    let mut shell = json!({"id": "sh_1", "sessionId": "s1", "ordinal": 3, "command": "npm run dev\n--port 1", "label": "", "cwd": "/repo",
+        "owner": "user", "status": status, "startedAt": 1, "bytes": 0, "cols": 80, "rows": 24});
+    if let Some(code) = exit_code {
+        shell["exitCode"] = json!(code);
+    }
+    shell
+}
+
+fn shell_frames(host: &mut Host) -> Vec<Value> {
+    std::mem::take(&mut host.sent).into_iter().filter(|frame| frame["type"].as_str().is_some_and(|t| t.starts_with("shell_"))).collect()
+}
+
+#[test]
+fn an_open_shell_feeds_its_own_screen_and_answers_the_pty() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.live.open_shell("sh_1", None, 10, 2);
+    host.drain();
+    assert_eq!(shell_frames(&mut host), [json!({"type": "shell_attach", "shellId": "sh_1", "cols": 20, "rows": 4})]);
+    let shell = host.live.shell("sh_1").unwrap();
+    assert_eq!((shell.title(), shell.status_text()), ("Shell".to_owned(), "connecting…".to_owned()));
+    host.live.shell_text("sh_1", "early");
+    host.drain();
+    assert!(shell_frames(&mut host).is_empty());
+
+    host.take();
+    host.frame(
+        json!({"type": "shell_attached", "shellId": "sh_1", "shell": shell_record("running", None), "cols": 80, "rows": 24,
+        "scrollback": "hello\u{1b}[6n"}),
+        1.0,
+    );
+    assert!(host.changed().shells);
+    let shell = host.live.shell("sh_1").unwrap();
+    assert_eq!(shell.phase(), &ShellPhase::Live);
+    assert_eq!(shell.size(), (80, 24));
+    assert_eq!((shell.screen().cols, shell.screen().rows), (80, 24));
+    assert_eq!(shell.title(), "#3 npm run dev");
+    assert!(shell.can_type());
+    assert_eq!(shell_frames(&mut host), [json!({"type": "shell_input", "shellId": "sh_1", "data": "\u{1b}[1;6R"})]);
+
+    host.live.shell_key("sh_1", VtKey::Enter);
+    host.live.shell_paste("sh_1", "a\nb");
+    host.live.shell_resize("sh_1", 80, 24);
+    host.live.shell_resize("sh_1", 100, 30);
+    host.drain();
+    assert_eq!(
+        shell_frames(&mut host),
+        [
+            json!({"type": "shell_input", "shellId": "sh_1", "data": "\r"}),
+            json!({"type": "shell_input", "shellId": "sh_1", "data": "a\rb"}),
+            json!({"type": "shell_resize", "shellId": "sh_1", "cols": 100, "rows": 30}),
+        ]
+    );
+
+    let before = host.live.shell("sh_1").unwrap().revision();
+    host.frame(json!({"type": "shell_output", "shellId": "sh_1", "data": "more"}), 1.0);
+    assert!(host.live.shell("sh_1").unwrap().revision() > before);
+    assert!(host.changed().shells);
+}
+
+#[test]
+fn a_detach_ends_the_stream_and_the_record_says_why() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.live.open_shell("sh_1", None, 80, 24);
+    host.frame(
+        json!({"type": "shell_attached", "shellId": "sh_1", "shell": shell_record("running", None), "cols": 80, "rows": 24,
+        "scrollback": ""}),
+        1.0,
+    );
+    host.take();
+    host.frame(json!({"type": "shell_detached", "shellId": "sh_1", "reason": "backpressure"}), 1.0);
+    let effects = host.take();
+    assert!(effects.contains(&Effect::VerifyShell { shell_id: "sh_1".into() }));
+    let shell = host.live.shell("sh_1").unwrap();
+    assert_eq!((shell.status_text(), shell.can_type()), ("backpressure".to_owned(), false));
+
+    host.live.shell_verified("sh_1", Some(shell_record("exited", Some(1))));
+    host.drain();
+    assert!(host.changed().shells);
+    let shell = host.live.shell("sh_1").unwrap();
+    assert_eq!((shell.status_text(), shell.is_running()), ("exit 1".to_owned(), false));
+
+    shell_frames(&mut host);
+    host.close_and_reopen();
+    assert!(shell_frames(&mut host).is_empty());
+}
+
+#[test]
+fn a_reconnect_reattaches_a_watching_shell_at_its_current_size_and_a_closed_one_never() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.live.open_shell("sh_1", None, 80, 24);
+    host.live.shell_resize("sh_1", 90, 20);
+    host.drain();
+    shell_frames(&mut host);
+    host.close_and_reopen();
+    assert_eq!(shell_frames(&mut host), [json!({"type": "shell_attach", "shellId": "sh_1", "cols": 90, "rows": 20})]);
+
+    host.live.close_shell("sh_1");
+    host.drain();
+    assert_eq!(shell_frames(&mut host), [json!({"type": "shell_detach", "shellId": "sh_1"})]);
+    assert!(host.live.shell("sh_1").is_none());
+    host.close_and_reopen();
+    assert!(shell_frames(&mut host).is_empty());
+}
+
+#[test]
+fn kill_asks_the_platform_and_leaves_the_stream_alone() {
+    let mut host = Host::new();
+    host.open();
+    host.live.open_shell("sh_1", None, 80, 24);
+    host.drain();
+    host.take();
+    host.live.kill_shell("sh_1");
+    assert!(host.live.take_effects().contains(&Effect::KillShell { shell_id: "sh_1".into() }));
+    assert!(host.live.shell("sh_1").unwrap().is_attached());
 }
