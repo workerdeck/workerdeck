@@ -13,6 +13,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "DEV_GATEWAY_URL", "\"\"")
+        buildConfigField("String", "DEV_GATEWAY_KEY", "\"\"")
     }
     val uploadStore = providers.gradleProperty("WD_UPLOAD_STORE_FILE").orNull
     signingConfigs {
@@ -26,6 +28,10 @@ android {
         }
     }
     buildTypes {
+        debug {
+            buildConfigField("String", "DEV_GATEWAY_URL", "\"http://10.0.2.2:8790\"")
+            buildConfigField("String", "DEV_GATEWAY_KEY", "\"androiddevkey\"")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -33,7 +39,10 @@ android {
             signingConfig = signingConfigs.getByName(if (uploadStore != null) "upload" else "debug")
         }
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

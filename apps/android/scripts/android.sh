@@ -2,6 +2,8 @@
 # The Android toolchain without Android Studio: an emulator, adb and Gradle on the command line.
 #   android.sh emu [--headless]   create the WorkerDeck AVD if missing, boot it, wait until ready
 #   android.sh stop               shut the emulator down
+#   android.sh dev [--headless]   private test gateway on :8790 + emulator + debug app, launched
+#   android.sh dev stop           stop the private test gateway and the emulator
 #   android.sh gradle <task...>   ./gradlew with a JDK that Gradle 8.14 runs on
 #   android.sh adb <args...>      the SDK's adb
 set -euo pipefail
@@ -11,6 +13,10 @@ SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}
 AVD=${WD_AVD:-WorkerDeck_API36}
 IMAGE=${WD_AVD_IMAGE:-system-images;android-36;google_apis_playstore;arm64-v8a}
 ADB="$SDK/platform-tools/adb"
+REPO=$(cd "$HERE/../.." && pwd)
+DEV_DIR=${WD_ANDROID_DEV_DIR:-/tmp/wd-android}
+DEV_PORT=8790
+DEV_KEY=androiddevkey
 
 java_home() {
   if [ -n "${JAVA_HOME:-}" ] && "$JAVA_HOME/bin/java" -version 2>&1 | grep -qE 'version "(17|21)'; then
@@ -41,19 +47,66 @@ booted() {
   [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]
 }
 
+start_emu() {
+  ensure_avd
+  if booted; then
+    echo "an emulator is already running"
+    return
+  fi
+  local flags=(-avd "$AVD" -no-boot-anim -no-snapshot-save -netdelay none -netspeed full)
+  [ "${1:-}" = "--headless" ] && flags+=(-no-window -no-audio)
+  # setsid: the shell that ran us kills its process group on exit, and nohup only covers SIGHUP.
+  perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' "$SDK/emulator/emulator" "${flags[@]}" </dev/null >"${TMPDIR:-/tmp}/wd-emulator.log" 2>&1 &
+  "$ADB" wait-for-device
+  until booted; do sleep 1; done
+  echo "emulator $AVD is up (log: ${TMPDIR:-/tmp}/wd-emulator.log)"
+}
+
+gateway_up() {
+  curl -sf -o /dev/null -H "x-workerdeck-key: $DEV_KEY" "http://127.0.0.1:$DEV_PORT/v1/sessions"
+}
+
+start_gateway() {
+  if gateway_up; then
+    echo "private gateway already up on :$DEV_PORT"
+    return
+  fi
+  rm -rf "$DEV_DIR/state"
+  mkdir -p "$DEV_DIR/state"
+  for item in parked profiles.json agents.json; do
+    [ -e "$HOME/.workerdeck/$item" ] && cp -R "$HOME/.workerdeck/$item" "$DEV_DIR/state/"
+  done
+  echo 'export default {}' >"$DEV_DIR/config.mjs"
+  pushd "$REPO" >/dev/null
+  perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' node --conditions=@workerdeck/source \
+    --import @swc-node/register/esm-register packages/cli/src/cli.ts -c "$DEV_DIR/config.mjs" --port "$DEV_PORT" \
+    --host 127.0.0.1 --state-dir "$DEV_DIR/state" --auth-key "$DEV_KEY" </dev/null >"$DEV_DIR/gateway.log" 2>&1 &
+  echo $! >"$DEV_DIR/gateway.pid"
+  popd >/dev/null
+  for _ in $(seq 60); do
+    gateway_up && { echo "private gateway up on :$DEV_PORT (log: $DEV_DIR/gateway.log)"; return; }
+    sleep 1
+  done
+  echo "private gateway did not come up; see $DEV_DIR/gateway.log" >&2
+  exit 1
+}
+
 case "${1:-}" in
   emu)
-    ensure_avd
-    if booted; then
-      echo "an emulator is already running"
+    start_emu "${2:-}"
+    ;;
+  dev)
+    if [ "${2:-}" = "stop" ]; then
+      [ -f "$DEV_DIR/gateway.pid" ] && kill "$(cat "$DEV_DIR/gateway.pid")" 2>/dev/null || true
+      rm -f "$DEV_DIR/gateway.pid"
+      "$ADB" emu kill 2>/dev/null || true
       exit 0
     fi
-    flags=(-avd "$AVD" -no-boot-anim -no-snapshot-save -netdelay none -netspeed full)
-    [ "${2:-}" = "--headless" ] && flags+=(-no-window -no-audio)
-    perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' "$SDK/emulator/emulator" "${flags[@]}" </dev/null >"${TMPDIR:-/tmp}/wd-emulator.log" 2>&1 &
-    "$ADB" wait-for-device
-    until booted; do sleep 1; done
-    echo "emulator $AVD is up (log: ${TMPDIR:-/tmp}/wd-emulator.log)"
+    start_gateway
+    start_emu "${2:-}"
+    (cd "$HERE" && JAVA_HOME=$(java_home) ./gradlew -q :app:installDebug)
+    "$ADB" shell am start -n bi.atomic.workerdeck/.app.MainActivity >/dev/null
+    echo "app launched; pair with the pre-filled http://10.0.2.2:$DEV_PORT (stop: pnpm android dev stop)"
     ;;
   stop)
     "$ADB" emu kill
@@ -68,7 +121,7 @@ case "${1:-}" in
     exec "$ADB" "$@"
     ;;
   *)
-    sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

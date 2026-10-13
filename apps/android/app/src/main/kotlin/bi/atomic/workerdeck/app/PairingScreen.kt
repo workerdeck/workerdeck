@@ -22,13 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import bi.atomic.workerdeck.BuildConfig
 import kotlinx.coroutines.launch
 
 // `onPair` probes the gateway and answers an error to show, or null once the pairing is saved.
 @Composable
 fun PairingScreen(onPair: suspend (url: String, key: String) -> String?) {
-    var url by rememberSaveable { mutableStateOf("") }
-    var key by rememberSaveable { mutableStateOf("") }
+    var url by rememberSaveable { mutableStateOf(BuildConfig.DEV_GATEWAY_URL) }
+    var key by rememberSaveable { mutableStateOf(BuildConfig.DEV_GATEWAY_KEY) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var busy by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
