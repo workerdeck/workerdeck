@@ -4,6 +4,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use wd_native::controller::live::{self, LiveSession};
 use wd_native::controller::transcript::Navigation;
+use wd_native::controller::viewport::Viewport;
 use wd_native::planner;
 use wd_native::rest::{PermissionMode, ShellInfo};
 use wd_native::snapshot;
@@ -150,6 +151,7 @@ pub struct ReplayProgress {
 #[derive(uniffi::Object)]
 pub struct Session {
     inner: Mutex<LiveSession>,
+    viewport: Mutex<Viewport>,
 }
 
 impl Session {
@@ -173,7 +175,8 @@ fn parse<T: serde::de::DeserializeOwned>(json: Option<String>) -> Option<T> {
 impl Session {
     #[uniffi::constructor]
     pub fn new(after_seq: i64, reconnect: bool, nonce: String, metrics: Metrics) -> Arc<Self> {
-        Arc::new(Session { inner: Mutex::new(LiveSession::new(after_seq, reconnect, nonce, metrics.into())) })
+        let live = LiveSession::new(after_seq, reconnect, nonce, metrics.into());
+        Arc::new(Session { inner: Mutex::new(live), viewport: Mutex::new(Viewport::default()) })
     }
 
     pub fn take_effects(&self) -> Vec<Effect> {
@@ -359,6 +362,22 @@ impl Session {
 
     pub fn transcript_lines(&self, start: u32, end: u32) -> Vec<u8> {
         snapshot::transcript_lines(self.live().view(), start as usize, end as usize)
+    }
+
+    // The rows on screen, `first..=last`; answers lines (as `transcript_lines` does) only when the held window moved.
+    pub fn show_rows(&self, first: u32, last: u32) -> Option<Vec<u8>> {
+        let mut viewport = self.viewport.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let live = self.live();
+        let rows = viewport.show(first as usize, last as usize, live.view().rows().len())?;
+        Some(snapshot::transcript_lines(live.view(), rows.start, rows.end))
+    }
+
+    // The lines of the held window, re-read after `Changed.transcript`; at the tail the window follows new rows.
+    pub fn viewport_lines(&self) -> Vec<u8> {
+        let mut viewport = self.viewport.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let live = self.live();
+        let rows = viewport.window(live.view().rows().len());
+        snapshot::transcript_lines(live.view(), rows.start, rows.end)
     }
 
     // The layout and the lines of `start..end` in one crossing: what a redraw needs.

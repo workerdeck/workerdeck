@@ -87,7 +87,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                         .distinctUntilChanged()
                         .collect { indices ->
                             if (indices.isEmpty() || count == 0) return@collect
-                            model.visible(count - 1 - indices.max(), count - 1 - indices.min(), count)
+                            model.visible(count - 1 - indices.max(), count - 1 - indices.min())
                         }
                 }
                 LazyColumn(Modifier.fillMaxSize().padding(horizontal = SIDE_PADDING), state = list, reverseLayout = true) {

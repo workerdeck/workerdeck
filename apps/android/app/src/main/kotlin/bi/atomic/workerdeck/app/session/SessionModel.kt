@@ -35,11 +35,10 @@ data class SessionUi(
 // there too, so `handle` and the readers call the session directly.
 class SessionModel(private val client: GatewayClient, private val sessionId: String, metrics: Metrics) : AutoCloseable {
     private val session = Session(0, true, UUID.randomUUID().toString(), metrics)
-    private val worker = SessionWorker(session, onEffects = ::handle)
     private val state = MutableStateFlow(SessionUi())
+    private val worker = SessionWorker(session, onFailure = ::failed, onEffects = ::handle)
     val ui: StateFlow<SessionUi> = state
     private var socket: WebSocket? = null
-    private var window: IntRange? = null
 
     // Socket callbacks run on OkHttp's threads, possibly before the worker has stored the socket, so each socket
     // carries its generation and a callback from a replaced one is dropped by comparing numbers, not references.
@@ -55,19 +54,10 @@ class SessionModel(private val client: GatewayClient, private val sessionId: Str
 
     fun reconnect() = worker.act { it.reconnectNow() }
 
-    // The rows on screen; lines are read for them plus a margin, and re-read only once the view leaves that range.
-    // A view showing the last row follows the tail.
-    fun visible(first: Int, last: Int, count: Int) {
-        val tail = last >= count - 1
-        val ui = state.value
-        val loaded = ui.startRow until ui.startRow + ui.lines.size
-        if (first in loaded && last in loaded && (!tail || ui.startRow + ui.lines.size >= count)) return
-        val wanted = if (tail) null else (first - MARGIN)..(last + MARGIN)
-        worker.act {
-            window = wanted
-            readLines()
-            emptyList()
-        }
+    // The rows on screen; the core decides which lines to hold for them and answers only when that moved.
+    fun visible(first: Int, last: Int) = worker.act {
+        it.showRows(first.toUInt(), last.toUInt())?.let(::showLines)
+        emptyList()
     }
 
     override fun close() {
@@ -78,6 +68,14 @@ class SessionModel(private val client: GatewayClient, private val sessionId: Str
             emptyList()
         }
         worker.close()
+    }
+
+    // The core panicked and the worker stopped: nothing more will arrive, so the screen says so and drops the socket.
+    private fun failed(failure: Exception) {
+        generation++
+        socket?.cancel()
+        socket = null
+        state.value = state.value.copy(error = "This session view stopped (${failure.message}). Go back and open it again.")
     }
 
     private fun handle(effects: List<Effect>) {
@@ -135,7 +133,7 @@ class SessionModel(private val client: GatewayClient, private val sessionId: Str
     private fun changed(changed: Changed) {
         if (changed.transcript) {
             state.value = state.value.copy(rows = Snapshots.transcriptLayout(session.transcriptLayout()).rows)
-            readLines()
+            showLines(session.viewportLines())
         }
         var ui = state.value
         if (changed.chrome) {
@@ -145,19 +143,8 @@ class SessionModel(private val client: GatewayClient, private val sessionId: Str
         state.value = ui
     }
 
-    // With no window the view sits at the tail, where a session opens.
-    private fun readLines() {
-        val ui = state.value
-        val count = ui.rows.size
-        val range = window ?: ((count - WINDOW)..count)
-        val start = range.first.coerceIn(0, count)
-        val end = range.last.coerceIn(start, count)
-        val lines = Snapshots.transcriptLines(session.transcriptLines(start.toUInt(), end.toUInt()))
-        state.value = ui.copy(startRow = lines.startRow, lines = lines.rows)
-    }
-
-    private companion object {
-        const val WINDOW = 80
-        const val MARGIN = 40
+    private fun showLines(bytes: ByteArray) {
+        val lines = Snapshots.transcriptLines(bytes)
+        state.value = state.value.copy(startRow = lines.startRow, lines = lines.rows)
     }
 }

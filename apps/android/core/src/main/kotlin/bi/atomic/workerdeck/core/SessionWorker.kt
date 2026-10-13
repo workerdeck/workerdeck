@@ -1,6 +1,7 @@
 package bi.atomic.workerdeck.core
 
 import bi.atomic.workerdeck.core.ffi.Effect
+import bi.atomic.workerdeck.core.ffi.InternalException
 import bi.atomic.workerdeck.core.ffi.Session
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
@@ -13,10 +14,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 // One thread owns the Session (docs/NATIVE-CORE-SNAPSHOTS.md § Calling pattern). Socket callbacks land on any thread;
 // frames that pile up while the session is busy cross in one `receivedBatch`, and `WakeAt` is served here, so a host
 // only ever sees the effects it has to act on, on the session thread. After `close()` every entry point is a no-op:
-// a socket callback that arrives late must never throw on the caller's thread.
+// a socket callback that arrives late must never throw on the caller's thread. A panic in the core (the FFI builds
+// with `panic = "unwind"`) stops the worker and reaches `onFailure` instead of taking the app down.
 class SessionWorker(
     private val session: Session,
     private val clock: () -> Double = { System.nanoTime() / 1e9 },
+    private val onFailure: (InternalException) -> Unit = {},
     private val onEffects: (List<Effect>) -> Unit,
 ) : AutoCloseable {
     private val executor = Executors.newSingleThreadScheduledExecutor { task ->
@@ -54,8 +57,18 @@ class SessionWorker(
     private fun post(task: () -> Unit) {
         if (closed.get()) return
         try {
-            executor.execute(task)
+            executor.execute { guarded(task) }
         } catch (_: RejectedExecutionException) {
+        }
+    }
+
+    private fun guarded(task: () -> Unit) {
+        try {
+            task()
+        } catch (failure: InternalException) {
+            if (closed.get()) return
+            close()
+            onFailure(failure)
         }
     }
 
@@ -93,6 +106,6 @@ class SessionWorker(
     private fun schedule(at: Double) {
         wake?.cancel(false)
         val delay = ((at - clock()) * 1e6).toLong().coerceAtLeast(0)
-        wake = executor.schedule({ if (!closed.get()) deliver(session.tick(clock())) }, delay, TimeUnit.MICROSECONDS)
+        wake = executor.schedule({ guarded { if (!closed.get()) deliver(session.tick(clock())) } }, delay, TimeUnit.MICROSECONDS)
     }
 }

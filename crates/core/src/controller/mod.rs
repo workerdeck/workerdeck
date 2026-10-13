@@ -6,3 +6,4 @@ pub mod session;
 pub mod shell;
 pub mod sticky;
 pub mod transcript;
+pub mod viewport;
