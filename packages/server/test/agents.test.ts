@@ -221,6 +221,36 @@ describe('agents', () => {
     expect(left[0]).not.toHaveProperty('lead')
   })
 
+  it('retires the agent when its session is deleted, freeing the name and releasing its members', async () => {
+    const { base } = await startGateway()
+    const lead = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
+    const member = (
+      await call<AgentResponse>(base, '/agents', 'POST', { name: 'Pip', config: { cwd: '/tmp/project' }, lead: lead.agent.id })
+    ).body
+
+    expect((await call(base, `/sessions/${lead.session!.id}`, 'DELETE')).status).toBe(200)
+    const left = (await call<{ agents: AgentInfo[] }>(base, '/agents')).body.agents
+    expect(left.map((a) => a.id)).toEqual([member.agent.id])
+    expect(left[0]).not.toHaveProperty('lead')
+    expect((await call(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).status).toBe(201)
+  })
+
+  it('refuses to delete an agent session for a caller who is not an operator', async () => {
+    const { base } = await startGateway(undefined, {
+      authenticate: (req) => (req.headers.authorization === 'Bearer op' ? {} : { scope: { tenant: 't1' } }),
+    })
+    const op = { authorization: 'Bearer op', 'content-type': 'application/json' }
+    const created = await fetch(`${base}/agents`, {
+      method: 'POST',
+      headers: op,
+      body: JSON.stringify({ name: 'Atlas', config: { cwd: '/tmp/project' } }),
+    })
+    const { session } = (await created.json()) as AgentResponse
+    const refused = await fetch(`${base}/sessions/${session!.id}`, { method: 'DELETE', headers: { authorization: 'Bearer user' } })
+    expect(refused.status).not.toBe(200)
+    expect(((await (await fetch(`${base}/agents`, { headers: op })).json()) as { agents: AgentInfo[] }).agents).toHaveLength(1)
+  })
+
   it('restarts an agent into a fresh session, keeping its identity and its team', async () => {
     const { base, server } = await startGateway()
     const lead = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
@@ -289,7 +319,9 @@ describe('agents', () => {
     const { agent } = (await call<AgentResponse>(base, '/agents', 'POST', { name: 'Atlas', config: { cwd: '/tmp/project' } })).body
     await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
     const servers = (harness.captured.options?.mcpServers ?? {}) as Record<string, { instance: unknown }>
-    const tools = (servers.workerdeck!.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>)['_registeredTools']!
+    const tools = (
+      servers.workerdeck!.instance as Record<string, Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>>
+    )['_registeredTools']!
     expect(Object.keys(tools)).toContain('change_avatar')
     const out = (await tools.change_avatar!.handler({ seed: 'heron' }, {})) as { content: { text: string }[]; isError?: boolean }
     expect(out.isError).toBeFalsy()

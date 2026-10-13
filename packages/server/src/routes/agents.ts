@@ -16,7 +16,14 @@ import {
 import type { ServerContext } from '../context.ts'
 import { fail, json, readJsonBody, requireMethod } from '../lib/http.ts'
 import type { AuthContext } from '../services/auth.ts'
-import { SHARING_OFF, isAgentRefusal, type AgentRefusal, type AgentService, type RemoteJoin } from '../services/agents.ts'
+import {
+  SHARING_OFF,
+  isAgentRefusal,
+  type AgentRefusal,
+  type AgentService,
+  type RemoteJoin,
+  type RetireOutcome,
+} from '../services/agents.ts'
 import type { StoredAgent } from '../services/agent-store.ts'
 import type { AvatarImage } from '../services/avatars.ts'
 import { vetCreateRequest } from './create-vet.ts'
@@ -109,8 +116,12 @@ export async function handleAgents(
     return
   }
   const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as RetireAgentRequest
-  const members = body.members === 'retire' ? 'retire' : 'release'
-  const outcome = await agents.retire(agent.id, members)
+  const outcome = await retireAgent(ctx, agent, body.members === 'retire' ? 'retire' : 'release')
+  json(res, 200, { retired: outcome.retired.map((a) => a.id), released: outcome.released.map((a) => a.id) })
+}
+
+export async function retireAgent(ctx: ServerContext, agent: StoredAgent, members: 'release' | 'retire'): Promise<RetireOutcome> {
+  const outcome = await ctx.agents.retire(agent.id, members)
   if (isAgentRefusal(outcome)) {
     fail(outcome.status, outcome.error)
   }
@@ -124,7 +135,7 @@ export async function handleAgents(
       runner.close('client')
     }
   }
-  json(res, 200, { retired: outcome.retired.map((a) => a.id), released: outcome.released.map((a) => a.id) })
+  return outcome
 }
 
 async function createAgent(ctx: ServerContext, agents: AgentService, req: IncomingMessage, res: ServerResponse, auth: AuthContext) {
