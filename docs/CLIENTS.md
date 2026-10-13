@@ -1305,6 +1305,22 @@ agent section (name, team, sharing, brief). Team moves are **same-gateway only**
 cross-gateway invitations stay on the web and VS Code, and drag-to-team is out. `UIPREVIEW=teams`
 draws every state from canned rows.
 
+## `apps/android`
+
+The Android app's Gradle root (outside pnpm and turbo). Today it holds one module, **`:core`**,
+an Android library over `crates/ffi`; the app itself (P4) lands beside it as `:app`.
+
+- **Nothing here is logic.** Kotlin decodes the core's byte snapshots (`Snapshots.kt`, layout in
+  `docs/NATIVE-CORE-SNAPSHOTS.md`, run offsets turned from UTF-8 bytes into UTF-16 units) and owns
+  the session thread (`SessionWorker.kt`). A computation iOS does in Swift is ported to Rust first.
+- **`SessionWorker` is the calling pattern.** One thread owns the `Session`; frames from any thread
+  queue up and cross as one `receivedBatch` (a UniFFI call costs 8 to 20 us, so a replay must not
+  cross per frame). It serves `WakeAt` itself with one timer and hands the host only the effects it
+  acts on, on the session thread.
+- **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's
+  metadata) and `libwdffi.so` for arm64-v8a and x86_64 (`cargoNdk`). The JVM unit tests load the
+  host build of `libwdffi` through JNA, so they drive the real core without an emulator.
+
 ## `apps/demo`
 
 **The interactive tour**: a VS Code window drawn in React (from the WorkerDeck Figma file,

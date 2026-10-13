@@ -87,6 +87,11 @@ cargo build -p wd-native-ffi && cargo run -p wd-native-ffi --features cli --bin 
   generate --library target/debug/libwdffi.dylib --language kotlin --out-dir <dir>   # or --language swift
 ```
 
+`apps/android` is a Gradle build (JDK 17 or later; Android Studio's bundled JBR works):
+`./gradlew :core:testDebugUnitTest` builds the host `libwdffi`, generates the Kotlin bindings and
+runs the JVM tests against the real core; `./gradlew :core:assembleRelease` adds the `cargo ndk`
+cross-build (arm64-v8a, x86_64) and packs both into the AAR. CI runs both in its `android` job.
+
 `crates/ffi` is the apps' door into the core (UniFFI, lib `wdffi`, package and module names in
 `crates/ffi/uniffi.toml`); its byte-buffer formats are in `docs/NATIVE-CORE-SNAPSHOTS.md`. Library
 mode picks `uniffi.toml` up by itself: do not pass `--config`.

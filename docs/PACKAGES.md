@@ -2435,6 +2435,7 @@ pnpm's globs and invisible to turbo:
 | Crate | Directory | What |
 | --- | --- | --- |
 | `wd-native` | `crates/core` | Pure, no FFI: decode, `apply_event`, rows, planner, markdown, height book, VT screen, `Engine` |
+| `wd-native-ffi` | `crates/ffi` | The apps' door: UniFFI (lib `wdffi`), one `Session` object, byte snapshots per `docs/NATIVE-CORE-SNAPSHOTS.md`; Kotlin side in `apps/android/core` |
 | `wd-native-jni` | `crates/jni` | JNI shim, builds `libwdcore.so` for `bi.atomic.workerdeck.core.NativeCore` |
 | `wd-native-bench` | `crates/bench` | `wdbench`, the spike's workloads plus the `dump` / `dump-vt` cross-check modes |
 
@@ -2458,7 +2459,7 @@ can be read side by side until iOS moves onto the core:
 | `book.rs` | `Terminal/TerminalHeightBook.swift` + `TerminalPlanCache`; 256 or more misses plan in parallel |
 | `vt.rs` | `Terminal/VTScreen.swift` + `VTTypes.swift`; parsing is the `vte` crate, dispatch mirrors the Swift handlers |
 
-**Still missing**: subagent frame views on `LiveSession`, the shell session, the scrubber, and the app-side view models (`CreateSessionModel`,
+**Still missing**: the scrubber and the app-side view models (`CreateSessionModel`,
 prompt completion, unread). The plan, with its
 phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
 
