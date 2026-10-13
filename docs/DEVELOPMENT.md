@@ -99,7 +99,7 @@ API 36 arm64) on first use and boots it, `pnpm android stop` shuts it down, `pnp
 `emulator`, `platform-tools` and `cmdline-tools`, and a JDK 17 or 21 when Android Studio is absent.
 
 `pnpm android dev [--headless]` is the one-command test rig: a private gateway from source on
-`127.0.0.1:8790` (key `androiddevkey`, an empty config, a fresh copy of `~/.workerdeck`'s parked
+`127.0.0.1:8790` (key `androiddevkey`, a config that only turns shells on, a fresh copy of `~/.workerdeck`'s parked
 sessions, profiles and agents under `/tmp/wd-android`), the emulator, and the debug app installed and
 launched. Debug builds pre-fill pairing with `http://10.0.2.2:8790` and that key; release builds
 leave it empty. `pnpm android dev stop` stops both. It never touches the dev gateway. Release builds

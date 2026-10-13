@@ -76,7 +76,7 @@ start_gateway() {
   for item in parked profiles.json agents.json; do
     [ -e "$HOME/.workerdeck/$item" ] && cp -R "$HOME/.workerdeck/$item" "$DEV_DIR/state/"
   done
-  echo 'export default {}' >"$DEV_DIR/config.mjs"
+  echo 'export default { shell: { enabled: true } }' >"$DEV_DIR/config.mjs"
   pushd "$REPO" >/dev/null
   perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' node --conditions=@workerdeck/source \
     --import @swc-node/register/esm-register packages/cli/src/cli.ts -c "$DEV_DIR/config.mjs" --port "$DEV_PORT" \

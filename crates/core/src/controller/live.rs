@@ -11,6 +11,7 @@ use crate::rows::{subagent_items, subagent_task};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
+use crate::vm::session_chrome::{SessionChrome, session_chrome};
 use crate::vt::VtKey;
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -85,6 +86,7 @@ pub struct LiveSession {
     now_ms: f64,
     wake: Option<f64>,
     changed: Changed,
+    published_chrome: SessionChrome,
     finished: bool,
     effects: Vec<Effect>,
 }
@@ -118,6 +120,7 @@ impl LiveSession {
             now_ms: 0.0,
             wake: None,
             changed: Changed::default(),
+            published_chrome: SessionChrome::default(),
             finished: false,
             effects: Vec::new(),
         };
@@ -171,6 +174,10 @@ impl LiveSession {
 
     pub fn is_finished(&self) -> bool {
         self.finished
+    }
+
+    pub fn chrome(&self) -> SessionChrome {
+        session_chrome(&self.state, self.init_model(), self.can_run_shell(), self.queued() as u32)
     }
 
     pub fn queued(&self) -> usize {
@@ -738,6 +745,11 @@ impl LiveSession {
     fn settle(&mut self) {
         if std::mem::take(&mut self.dirty) {
             self.update_view();
+        }
+        let chrome = self.chrome();
+        if chrome != self.published_chrome {
+            self.published_chrome = chrome;
+            self.changed.chrome = true;
         }
         let wake = match (self.conn.wake_at(), self.hold.map(|hold| hold.deadline())) {
             (Some(a), Some(b)) => Some(a.min(b)),

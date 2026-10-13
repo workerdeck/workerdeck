@@ -4,11 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +20,7 @@ import bi.atomic.workerdeck.app.session.SessionScreen
 import bi.atomic.workerdeck.app.sessions.SessionsModel
 import bi.atomic.workerdeck.app.sessions.SessionsScreen
 import bi.atomic.workerdeck.app.sessions.describe
+import bi.atomic.workerdeck.app.ui.WorkerDeckTheme
 import bi.atomic.workerdeck.core.ffi.cleartextRefusal
 
 class MainActivity : ComponentActivity() {
@@ -31,8 +29,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val store = GatewayStore(applicationContext)
         setContent {
-            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
-                Surface { App(store) }
+            WorkerDeckTheme {
+                Surface(color = MaterialTheme.colorScheme.background) { App(store) }
             }
         }
     }

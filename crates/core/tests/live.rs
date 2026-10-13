@@ -568,3 +568,18 @@ fn a_verify_that_got_no_answer_may_be_asked_again() {
     host.frame(json!({"type": "shell_detached", "shellId": "sh_1", "reason": "backpressure"}), 1.0);
     assert_eq!(requests(host.take()).len(), 1);
 }
+
+#[test]
+fn a_status_event_reaches_the_chrome_and_an_unchanged_one_does_not() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    assert!(host.live.chrome().busy);
+    host.take();
+    host.frame(event_frame(1, json!({"type": "status_changed", "status": "idle"})), 1.0);
+    assert!(host.changed().chrome);
+    assert!(!host.live.chrome().busy);
+    assert_eq!(host.live.chrome().status_label, "Idle");
+    host.frame(event_frame(2, json!({"type": "status_changed", "status": "idle"})), 2.0);
+    assert!(!host.changed().chrome);
+}

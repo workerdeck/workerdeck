@@ -11,6 +11,7 @@ import bi.atomic.workerdeck.core.ffi.Effect
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.ReplayProgress
 import bi.atomic.workerdeck.core.ffi.Session
+import bi.atomic.workerdeck.core.ffi.SessionChrome
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,7 @@ data class SessionUi(
     val rows: List<LayoutRow> = emptyList(),
     val startRow: Int = 0,
     val lines: List<List<TranscriptLine>> = emptyList(),
+    val chrome: SessionChrome? = null,
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
@@ -53,6 +55,12 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     fun press(row: Int, line: Int) = worker.act { it.pressLine(row.toUInt(), line.toUInt()) }
 
     fun reconnect() = worker.act { it.reconnectNow() }
+
+    fun send(text: String) = worker.act { it.send(text, emptyList()) }
+
+    fun runShell(command: String) = worker.act { it.runShell(command) }
+
+    fun interrupt() = worker.act { it.interrupt() }
 
     // The rows on screen; the core decides which lines to hold for them and answers only when that moved.
     fun visible(first: Int, last: Int) = worker.act {
@@ -139,6 +147,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         if (changed.chrome) {
             ui = ui.copy(title = session.sessionTitle(), connection = session.connection(), error = session.takeProtocolError() ?: ui.error)
         }
+        if (changed.chrome) ui = ui.copy(chrome = session.chrome())
         if (changed.progress || changed.transcript) ui = ui.copy(progress = session.replayProgress())
         state.value = ui
     }

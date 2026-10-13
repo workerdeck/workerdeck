@@ -1337,6 +1337,15 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `packages/ui` `terminal.css`) on the name and never mirrors the enum order.
 - **Every transcript line is pinned to the grid height** (`Modifier.height(line)`): a Compose
   `Text` measures a blank line shorter than its `lineHeight`, which opened gaps between rows.
+- **The look is the iOS app's terminal theme** (`ui/Theme.kt`): system black or white, the VS Code
+  blue accent, iOS semantic tints for status, dynamic colour off so every phone matches the other
+  clients. Material 3 supplies the components (centered top bars, menus, icons), not the palette.
+- **The session footer is a status strip over a docked composer**, as on iOS: one accent rule along
+  the composer's top (magenta in shell mode), a gutter cell on the transcript's marker column
+  (`❯`, `✕` to interrupt while busy, `$` to leave shell mode), the field, and the `↵` cell. What
+  the strip and the composer read is the core's `Session.chrome()`; the core flags `chrome` in
+  `Changed` whenever that record moves, including on status events. Typing `$` into an empty
+  field enters shell mode through the core's `composerTrigger`, so the rule is the iOS one.
 - **Pairing**: base URL + auth key (`Authorization: Bearer`), the key sealed with an AES-GCM key
   that never leaves the Android Keystore. The emulator reaches a loopback gateway at `10.0.2.2`.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's

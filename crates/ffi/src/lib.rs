@@ -148,6 +148,42 @@ pub struct ReplayProgress {
     pub target: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SessionChrome {
+    pub status: String,
+    pub status_label: String,
+    pub busy: bool,
+    pub enabled: bool,
+    pub model: Option<String>,
+    pub permission_mode: Option<String>,
+    pub mode_label: Option<String>,
+    pub can_run_shell: bool,
+    pub queued: u32,
+}
+
+impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
+    fn from(c: wd_native::vm::session_chrome::SessionChrome) -> Self {
+        Self {
+            status: c.status,
+            status_label: c.status_label,
+            busy: c.busy,
+            enabled: c.enabled,
+            model: c.model,
+            permission_mode: c.permission_mode,
+            mode_label: c.mode_label,
+            can_run_shell: c.can_run_shell,
+            queued: c.queued,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ComposerTrigger {
+    Enter,
+    Leave,
+    Pass,
+}
+
 #[derive(uniffi::Object)]
 pub struct Session {
     inner: Mutex<LiveSession>,
@@ -356,6 +392,10 @@ impl Session {
         self.live().queued() as u32
     }
 
+    pub fn chrome(&self) -> SessionChrome {
+        self.live().chrome().into()
+    }
+
     pub fn transcript_layout(&self) -> Vec<u8> {
         snapshot::transcript_layout(self.live().view())
     }
@@ -494,4 +534,29 @@ pub fn cleartext_refusal(base_url: String) -> Option<String> {
 #[uniffi::export]
 pub fn classify_answer(status: u16, content_type: Option<String>) -> Option<String> {
     wd_native::vm::gateway::classify_answer(status, content_type.as_deref())
+}
+
+#[uniffi::export]
+pub fn friendly_model(id: Option<String>) -> Option<String> {
+    wd_native::vm::model_name::friendly_model(id.as_deref())
+}
+
+#[uniffi::export]
+pub fn ago(epoch_ms: f64, now_ms: f64) -> String {
+    wd_native::vm::fmt::ago(epoch_ms, now_ms)
+}
+
+#[uniffi::export]
+pub fn composer_trigger(character: String, is_shell_mode: bool, can_run_shell: bool) -> ComposerTrigger {
+    use wd_native::controller::shell::{self, ComposerTrigger as Core};
+    match shell::composer_trigger(&character, is_shell_mode, can_run_shell) {
+        Core::Enter => ComposerTrigger::Enter,
+        Core::Leave => ComposerTrigger::Leave,
+        Core::Pass => ComposerTrigger::Pass,
+    }
+}
+
+#[uniffi::export]
+pub fn exit_draft(draft: String) -> String {
+    wd_native::controller::shell::exit_draft(&draft)
 }

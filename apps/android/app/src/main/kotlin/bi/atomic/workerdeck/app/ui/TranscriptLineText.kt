@@ -16,8 +16,8 @@ private const val STRIKE = 32
 
 fun annotate(line: TranscriptLine, palette: Palette): AnnotatedString = buildAnnotatedString {
     if (line.nested) append("  ")
-    if (line.gutter.isNotEmpty()) withStyle(SpanStyle(color = palette.tone(line.gutterTone))) { append(line.gutter) }
     if (line.indent > 0) append(" ".repeat(line.indent))
+    withStyle(SpanStyle(color = palette.tone(line.gutterTone))) { append(line.gutter.padEnd(line.columns)) }
     val base = SpanStyle(
         color = palette.tone(line.tone),
         fontWeight = if (line.bold) FontWeight.Bold else null,

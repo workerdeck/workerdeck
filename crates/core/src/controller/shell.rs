@@ -209,3 +209,51 @@ pub fn status_text(shell: &ShellInfo) -> String {
     });
     status_words(shell.status == ShellStatus::Running, shell.exit_code.map(i64::from), end_reason)
 }
+
+pub const SHELL_GLYPH: &str = "$";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComposerTrigger {
+    Enter,
+    Leave,
+    Pass,
+}
+
+pub fn composer_trigger(character: &str, is_shell_mode: bool, can_run_shell: bool) -> ComposerTrigger {
+    if is_shell_mode {
+        return if character.is_empty() { ComposerTrigger::Leave } else { ComposerTrigger::Pass };
+    }
+    if can_run_shell && character == SHELL_GLYPH { ComposerTrigger::Enter } else { ComposerTrigger::Pass }
+}
+
+pub fn exit_draft(draft: &str) -> String {
+    format!("{SHELL_GLYPH}{draft}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_dollar_enters_shell_mode_only_when_the_session_can_run_one() {
+        assert_eq!(composer_trigger("$", false, true), ComposerTrigger::Enter);
+        assert_eq!(composer_trigger("$", false, false), ComposerTrigger::Pass);
+        assert_eq!(composer_trigger("!", false, true), ComposerTrigger::Pass);
+        assert_eq!(composer_trigger("a", false, true), ComposerTrigger::Pass);
+        assert_eq!(composer_trigger("", false, true), ComposerTrigger::Pass);
+    }
+
+    #[test]
+    fn backspace_on_empty_leaves_shell_mode_and_anything_else_passes() {
+        assert_eq!(composer_trigger("", true, true), ComposerTrigger::Leave);
+        assert_eq!(composer_trigger("", true, false), ComposerTrigger::Leave);
+        assert_eq!(composer_trigger("$", true, true), ComposerTrigger::Pass);
+        assert_eq!(composer_trigger("l", true, true), ComposerTrigger::Pass);
+    }
+
+    #[test]
+    fn leaving_shell_mode_keeps_the_glyph_in_the_draft() {
+        assert_eq!(exit_draft("ls -la"), "$ls -la");
+        assert_eq!(exit_draft(""), "$");
+    }
+}

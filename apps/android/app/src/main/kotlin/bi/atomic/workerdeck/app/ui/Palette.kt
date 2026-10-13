@@ -6,8 +6,16 @@ import bi.atomic.workerdeck.core.ffi.toneNames
 
 // Colors from packages/ui/src/styles/terminal.css. Lines carry tone and band as bytes; the core names them, so the
 // tables below key on the name and the byte order is never written down twice.
-class Palette(val background: Color, val fg: Color, private val tones: List<Color>, private val bands: List<Color>) {
+class Palette(
+    val background: Color,
+    val fg: Color,
+    private val tones: List<Color>,
+    private val bands: List<Color>,
+    private val named: Map<String, Color>,
+) {
     fun tone(index: Int): Color = tones.getOrElse(index) { fg }
+
+    fun toneNamed(name: String): Color = named[name] ?: fg
 
     fun band(index: Int): Color = bands.getOrElse(index) { Color.Transparent }
 
@@ -40,10 +48,11 @@ class Palette(val background: Color, val fg: Color, private val tones: List<Colo
             val bandMap = if (dark) darkBands else lightBands
             val fg = toneMap.getValue("fg")
             return Palette(
-                background = if (dark) Color(0xFF1E1E1E) else Color.White,
+                background = if (dark) Color.Black else Color.White,
                 fg = fg,
                 tones = tones.map { toneMap[it] ?: fg },
                 bands = bands.map { bandMap[it] ?: Color.Transparent },
+                named = toneMap,
             )
         }
     }
