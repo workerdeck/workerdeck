@@ -1989,6 +1989,8 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   gets `baseSessionEnvFor` (no token, all three keys stripped, `BROWSER=true` so a server never
   opens a browser).
 - **Scope**: the token is `user:inference` only. No claude.ai connectors, no Remote Control.
+  Nor the subscription usage endpoint: `/api/oauth/usage` answers 403 `oauth_scope_insufficient`
+  (needs `user:profile`), and `count_tokens` accepts it but carries no rate-limit headers (CCStatusBar, 2026-10-13).
   `ProfileInfo.connectors: false` sets `ENABLE_CLAUDEAI_MCP_SERVERS=false` for any login; the
   inverse gotcha is that variable inherited from an operator's env silently disables them today.
 - **Guard order**: Claude engine, declared (403), `configDirGuard`, then `canManageProfiles` or the
