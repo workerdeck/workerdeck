@@ -10,6 +10,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck && pnpm typecheck:extras",
     "typecheck:extras": "tsgo -p smoke/tsconfig.json && tsgo -p examples/tsconfig.json && tsgo -p conformance/tsconfig.json",
+    "android": "apps/android/scripts/android.sh",
     "fix:dashes": "node scripts/fix-dashes.mjs",
     "fixtures:golden": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register conformance/generate.ts",
     "fixtures:vm": "node --conditions=@workerdeck/source --import @swc-node/register/esm-register conformance/generate-view-models.ts",

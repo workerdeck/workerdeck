@@ -92,6 +92,12 @@ cargo build -p wd-native-ffi && cargo run -p wd-native-ffi --features cli --bin 
 runs the JVM tests against the real core; `./gradlew :core:assembleRelease` adds the `cargo ndk`
 cross-build (arm64-v8a, x86_64) and packs both into the AAR. CI runs both in its `android` job.
 
+No Android Studio needed: `pnpm android emu [--headless]` creates the `WorkerDeck_API36` AVD (Pixel 8,
+API 36 arm64) on first use and boots it, `pnpm android stop` shuts it down, `pnpm android gradle
+<task>` runs Gradle with a JDK it accepts (Android Studio's JBR if present, else a 21 or 17), and
+`pnpm android adb <args>` is the SDK's adb (`apps/android/scripts/android.sh`). Needs the SDK's
+`emulator`, `platform-tools` and `cmdline-tools`, and a JDK 17 or 21 when Android Studio is absent.
+
 `crates/ffi` is the apps' door into the core (UniFFI, lib `wdffi`, package and module names in
 `crates/ffi/uniffi.toml`); its byte-buffer formats are in `docs/NATIVE-CORE-SNAPSHOTS.md`. Library
 mode picks `uniffi.toml` up by itself: do not pass `--config`.
