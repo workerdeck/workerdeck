@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionRunnerConfig } from '@workerdeck/core'
+import { ENGINE_CAPABILITIES, type EngineCapabilities } from '@workerdeck/protocol'
 import { createFileSessionStore, toDurableRecord, type ParkedSessionRecord } from '../src/index.ts'
 
 let dir: string
@@ -57,6 +58,16 @@ describe('createFileSessionStore', () => {
     expect(await store.get('s1')).toBeNull()
     expect(await store.delete('s1')).toBe(false)
     expect(await store.list()).toEqual([])
+  })
+
+  it('fills capability keys a record parked by an older gateway lacks, keeping the stored ones', async () => {
+    const store = createFileSessionStore({ dir })
+    const { toolFilters: _dropped, ...old } = ENGINE_CAPABILITIES.provider
+    const parked = record('s1')
+    await store.save({ ...parked, info: { ...parked.info, capabilities: { ...old, resume: false } as EngineCapabilities } })
+
+    const read = await store.get('s1')
+    expect(read?.info.capabilities).toEqual({ ...ENGINE_CAPABILITIES.provider, resume: false })
   })
 
   it('leaves no temp files behind and overwrites in place', async () => {

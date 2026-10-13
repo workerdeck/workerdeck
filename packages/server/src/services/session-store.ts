@@ -1,9 +1,10 @@
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CostLedgerState, ParkedExecution, RunnerSnapshot, SessionRunnerConfig } from '@workerdeck/core'
-import { pickCreateSessionRequest, type SessionInfo } from '@workerdeck/protocol'
+import { ENGINE_CAPABILITIES, pickCreateSessionRequest, type SessionInfo } from '@workerdeck/protocol'
 import { isMissing, writeFileAtomic } from '../lib/atomic-file.ts'
 import { DURABLE_HOST_KEYS } from '../lib/host-only-keys.ts'
+import { engineOf } from '../lib/profile-env.ts'
 
 export type ParkedSessionRecord = {
   kind?: 'parked' | 'live'
@@ -204,6 +205,7 @@ function parseRecord(value: unknown): StoredSessionRecord | null {
   if (!record.info || !record.config) {
     return null
   }
+  record.info = withCurrentCapabilities(record.info)
   if (record.kind === 'dormant') {
     const dormant = record as Partial<DormantSessionRecord>
     if (typeof dormant.sdkSessionId !== 'string' || typeof dormant.savedAt !== 'number') {
@@ -219,4 +221,13 @@ function parseRecord(value: unknown): StoredSessionRecord | null {
     return null
   }
   return parked as ParkedSessionRecord
+}
+
+// A record parked by an older gateway lacks capability keys added since; the engine's defaults fill them, so a
+// client never reads a SessionInfo missing a required key. Stored keys win: a sandboxed profile narrows them.
+function withCurrentCapabilities(info: SessionInfo): SessionInfo {
+  if (!info.capabilities) {
+    return info
+  }
+  return { ...info, capabilities: { ...ENGINE_CAPABILITIES[engineOf(info)], ...info.capabilities } }
 }
