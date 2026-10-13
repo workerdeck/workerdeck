@@ -14,12 +14,23 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
+    val uploadStore = providers.gradleProperty("WD_UPLOAD_STORE_FILE").orNull
+    signingConfigs {
+        if (uploadStore != null) {
+            create("upload") {
+                storeFile = file(uploadStore)
+                storePassword = providers.gradleProperty("WD_UPLOAD_STORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("WD_UPLOAD_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("WD_UPLOAD_KEY_PASSWORD").get()
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (uploadStore != null) "upload" else "debug")
         }
     }
     buildFeatures { compose = true }

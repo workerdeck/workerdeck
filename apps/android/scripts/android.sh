@@ -50,7 +50,7 @@ case "${1:-}" in
     fi
     flags=(-avd "$AVD" -no-boot-anim -no-snapshot-save -netdelay none -netspeed full)
     [ "${2:-}" = "--headless" ] && flags+=(-no-window -no-audio)
-    nohup "$SDK/emulator/emulator" "${flags[@]}" >"${TMPDIR:-/tmp}/wd-emulator.log" 2>&1 &
+    perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' "$SDK/emulator/emulator" "${flags[@]}" </dev/null >"${TMPDIR:-/tmp}/wd-emulator.log" 2>&1 &
     "$ADB" wait-for-device
     until booted; do sleep 1; done
     echo "emulator $AVD is up (log: ${TMPDIR:-/tmp}/wd-emulator.log)"
