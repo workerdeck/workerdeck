@@ -1307,8 +1307,8 @@ draws every state from canned rows.
 
 ## `apps/android`
 
-The Android app's Gradle root (outside pnpm and turbo). Today it holds one module, **`:core`**,
-an Android library over `crates/ffi`; the app itself (P4) lands beside it as `:app`.
+The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android library over
+`crates/ffi`, and **`:app`** (`bi.atomic.workerdeck`, Compose + Material 3, minSdk 28), the app.
 
 - **Nothing here is logic.** Kotlin decodes the core's byte snapshots (`Snapshots.kt`, layout in
   `docs/NATIVE-CORE-SNAPSHOTS.md`, run offsets turned from UTF-8 bytes into UTF-16 units) and owns
@@ -1317,6 +1317,28 @@ an Android library over `crates/ffi`; the app itself (P4) lands beside it as `:a
   queue up and cross as one `receivedBatch` (a UniFFI call costs 8 to 20 us, so a replay must not
   cross per frame). It serves `WakeAt` itself with one timer and hands the host only the effects it
   acts on, on the session thread.
+- **The sessions list is the core's `SessionList`.** The app hands it each gateway's raw
+  `GET /v1/sessions` body and gets display-ready groups and rows back; the view config and the
+  read watermarks go in and out as JSON the app only persists. A body that is not a session list
+  (a wrong key falls through to the dashboard's HTML) leaves the last reading in place, and a
+  single session that does not decode is skipped, never the whole list.
+- **A session lives as long as its screen.** `SessionModel` is a plain object the screen
+  `remember`s and closes in `DisposableEffect`, not an Activity-scoped ViewModel (that kept every
+  opened session streaming). `SessionWorker` is a no-op after `close()`: a late socket callback
+  must never throw on OkHttp's thread. Socket callbacks are matched by a generation number, not by
+  reference, because they can fire before the worker stores the socket. Only the parts a
+  `Changed` names are re-read (a replay's progress ticks never re-read the layout).
+- **Decoding never loses a session to a newer gateway.** Every REST enum in the core has an
+  `Unknown` fallback, missing `EngineCapabilities` fields default to "not supported", the list
+  reports how many sessions it skipped, and an `attached` frame the reader cannot follow surfaces
+  as a protocol error instead of leaving the session connecting forever.
+- **Tones and bands are names.** A transcript line carries them as bytes; `tone_names()` /
+  `band_names()` say which byte is which, so `Palette.kt` keys its colours (from
+  `packages/ui` `terminal.css`) on the name and never mirrors the enum order.
+- **Every transcript line is pinned to the grid height** (`Modifier.height(line)`): a Compose
+  `Text` measures a blank line shorter than its `lineHeight`, which opened gaps between rows.
+- **Pairing**: base URL + auth key (`Authorization: Bearer`), the key sealed with an AES-GCM key
+  that never leaves the Android Keystore. The emulator reaches a loopback gateway at `10.0.2.2`.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's
   metadata) and `libwdffi.so` for arm64-v8a and x86_64 (`cargoNdk`). The JVM unit tests load the
   host build of `libwdffi` through JNA, so they drive the real core without an emulator.

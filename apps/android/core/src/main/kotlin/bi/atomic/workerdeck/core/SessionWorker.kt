@@ -5,13 +5,15 @@ import bi.atomic.workerdeck.core.ffi.Session
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 // One thread owns the Session (docs/NATIVE-CORE-SNAPSHOTS.md § Calling pattern). Socket callbacks land on any thread;
 // frames that pile up while the session is busy cross in one `receivedBatch`, and `WakeAt` is served here, so a host
-// only ever sees the effects it has to act on, on the session thread.
+// only ever sees the effects it has to act on, on the session thread. After `close()` every entry point is a no-op:
+// a socket callback that arrives late must never throw on the caller's thread.
 class SessionWorker(
     private val session: Session,
     private val clock: () -> Double = { System.nanoTime() / 1e9 },
@@ -22,27 +24,39 @@ class SessionWorker(
     }
     private val inbox = ConcurrentLinkedQueue<String>()
     private val drainQueued = AtomicBoolean(false)
+    private val closed = AtomicBoolean(false)
     private var wake: ScheduledFuture<*>? = null
 
     fun received(frame: String) {
+        if (closed.get()) return
         inbox.add(frame)
-        if (drainQueued.compareAndSet(false, true)) executor.execute(::drain)
+        if (drainQueued.compareAndSet(false, true)) post(::drain)
     }
 
     fun opened() = act { it.opened() }
 
     fun closed() = act { it.closed(clock()) }
 
-    fun act(command: (Session) -> List<Effect>) {
-        executor.execute { deliver(command(session)) }
-    }
+    fun act(command: (Session) -> List<Effect>) = post { deliver(command(session)) }
 
     fun <T> read(query: (Session) -> T): Future<T> = executor.submit<T> { query(session) }
 
+    // Commands already queued still run; the session is freed after them, on its own thread.
     override fun close() {
-        wake?.cancel(false)
-        executor.execute { session.close() }
+        if (!closed.compareAndSet(false, true)) return
+        executor.execute {
+            wake?.cancel(false)
+            session.close()
+        }
         executor.shutdown()
+    }
+
+    private fun post(task: () -> Unit) {
+        if (closed.get()) return
+        try {
+            executor.execute(task)
+        } catch (_: RejectedExecutionException) {
+        }
     }
 
     private fun drain() {
@@ -68,6 +82,7 @@ class SessionWorker(
     }
 
     private fun deliver(effects: List<Effect>) {
+        if (closed.get()) return
         val rest = effects.filter { effect ->
             if (effect is Effect.WakeAt) schedule(effect.at)
             effect !is Effect.WakeAt
@@ -78,6 +93,6 @@ class SessionWorker(
     private fun schedule(at: Double) {
         wake?.cancel(false)
         val delay = ((at - clock()) * 1e6).toLong().coerceAtLeast(0)
-        wake = executor.schedule({ deliver(session.tick(clock())) }, delay, TimeUnit.MICROSECONDS)
+        wake = executor.schedule({ if (!closed.get()) deliver(session.tick(clock())) }, delay, TimeUnit.MICROSECONDS)
     }
 }

@@ -57,7 +57,7 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v5
       - run: cargo install cargo-ndk --locked
-      - run: ./gradlew :core:testDebugUnitTest :core:assembleRelease
+      - run: ./gradlew :core:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease
         working-directory: apps/android
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}

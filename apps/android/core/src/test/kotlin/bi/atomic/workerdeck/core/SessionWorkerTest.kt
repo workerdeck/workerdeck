@@ -38,4 +38,18 @@ class SessionWorkerTest {
         assertTrue(sent.toString(), sent.any { "hello" in it })
         worker.close()
     }
+
+    @Test
+    fun aCallbackAfterCloseIsANoOpAndNeverThrows() {
+        val effects = CopyOnWriteArrayList<Effect>()
+        val worker = SessionWorker(Fixtures.session()) { effects.addAll(it) }
+        worker.received(Fixtures.ATTACHED)
+        worker.close()
+        worker.received(Fixtures.user(1, "late"))
+        worker.opened()
+        worker.closed()
+        worker.act { it.send("late", emptyList()) }
+        worker.close()
+        assertTrue(effects.none { it is Effect.Send })
+    }
 }

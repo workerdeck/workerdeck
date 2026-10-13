@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "workerdeck-android"
-include(":core")
+include(":core", ":app")
