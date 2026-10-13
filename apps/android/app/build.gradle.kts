@@ -29,7 +29,7 @@ android {
     }
     packaging { jniLibs { useLegacyPackaging = false } }
     testOptions.unitTests.all {
-        it.systemProperty("jna.library.path", rootDir.resolve("../../target/release").canonicalPath)
+        it.systemProperty("jna.library.path", rootDir.resolve("../../target/host").canonicalPath)
     }
 }
 

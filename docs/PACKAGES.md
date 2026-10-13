@@ -2416,7 +2416,7 @@ the forwarder does not exist. Environment is per device token, never a flag, and
 that device (`DEFAULT_NOTIFY` = everything but `session_closed`) - `docs/GOTCHAS.md` §APNs.
 ## `crates/` (Rust, native clients only)
 
-One Rust core for the native apps: Android over JNI now, iOS over a C ABI later, so Kotlin never
+One Rust core for the native apps: Android over UniFFI now, iOS over the same bindings later, so Kotlin never
 becomes a third hand mirror of the protocol and the reducer. **TypeScript stays the source of
 truth** for the wire and the shared rules; the web, VS Code, the gateway and the relay never load
 Rust (V8 replays the spike fixture in 72 ms, so there is nothing to win there). Why Rust and not
@@ -2436,7 +2436,6 @@ pnpm's globs and invisible to turbo:
 | --- | --- | --- |
 | `wd-native` | `crates/core` | Pure, no FFI: decode, `apply_event`, rows, planner, markdown, height book, VT screen, `Engine` |
 | `wd-native-ffi` | `crates/ffi` | The apps' door: UniFFI (lib `wdffi`), one `Session` object, byte snapshots per `docs/NATIVE-CORE-SNAPSHOTS.md`; Kotlin side in `apps/android/core` |
-| `wd-native-jni` | `crates/jni` | JNI shim, builds `libwdcore.so` for `bi.atomic.workerdeck.core.NativeCore` |
 | `wd-native-bench` | `crates/bench` | `wdbench`, the spike's workloads plus the `dump` / `dump-vt` cross-check modes |
 
 Every module in `wd-native` is a port of a `WorkerDeckKit` file and keeps its names, so the two
@@ -2514,7 +2513,8 @@ text, where the TypeScript reducer keeps a `thinking` item with `addressed: true
 lines agree; the projection does not, so `thinking-addressed` is pending until the port follows
 TypeScript.
 
-**The engine's binary wire** (core to Kotlin, little-endian, no version byte yet):
+**The spike engine's binary wire** (`Engine`, which only `wdbench` drives now; the apps read the
+snapshots in `docs/NATIVE-CORE-SNAPSHOTS.md`; little-endian, no version byte):
 
 - Transcript snapshot: `u32 items, u32 rows, u32 totalLines, u32 lineCount`, then per line
   `u8 tone, u8 gutterTone, u8 flags (1 bold, 2 italic, 4 nested), u8 indent, u16+bytes gutter,
@@ -2524,12 +2524,6 @@ TypeScript.
 - VT snapshot: `u16 cols, u16 rows`, then per row `u16 runCount`, runs of `u32 fg, u32 bg`
   (0 default, `0x01000000|index`, `0x02rrggbb`), `u8 attrs` (1 bold, 2 dim, 4 italic,
   8 underline, 16 inverse, 32 strike), `u32+bytes text`.
-
-**JNI surface** (`external fun`s on `object NativeCore`): `create(widthPx, cellPx,
-linePx): Long`, `ingest(handle, batch: ByteArray): Int` (newline-separated `ServerFrame`s),
-`layout(handle)`, `snapshot(handle, maxLines): ByteArray`, `vtFeed(handle, utf8)`,
-`vtSnapshot(handle): ByteArray`, `bench(fixtureDir): String`, `destroy(handle)`. The handle is a
-boxed `Engine`; one engine per session, owned by one thread.
 
 ## `apps/docs`
 

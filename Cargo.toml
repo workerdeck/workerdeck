@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/ffi", "crates/jni", "crates/bench"]
+members = ["crates/core", "crates/ffi", "crates/bench"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,5 +15,13 @@ all = { level = "warn", priority = -1 }
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+panic = "unwind"
 strip = true
+
+# The host build the Android Gradle build runs: uniffi-bindgen reads its metadata symbols, which `strip` removes on
+# Linux, and the JVM tests load it.
+[profile.host]
+inherits = "release"
+strip = false
+lto = false
+codegen-units = 16

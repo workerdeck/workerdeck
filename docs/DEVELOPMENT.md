@@ -81,14 +81,14 @@ pnpm fixtures:golden                          # TS reducer -> crates/core/tests/
 node crates/bench/fixtures/gen.mjs            # synthetic, deterministic: session.jsonl + shell.txt (gitignored)
 cargo run --release -p wd-native-bench        # the workloads, as JSON; `-- <dir> dump|dump-vt` for the cross-checks
 cargo run --release -p wd-native-bench -- <dir> live   # LiveSession per frame, no FFI: tells core cost from binding cost
-ANDROID_NDK_HOME=~/Library/Android/android-ndk-r30 cargo ndk -t arm64-v8a -t x86_64 build -p wd-native-jni --release
 ANDROID_NDK_HOME=~/Library/Android/android-ndk-r30 cargo ndk -t arm64-v8a build -p wd-native-ffi --release
 cargo build -p wd-native-ffi && cargo run -p wd-native-ffi --features cli --bin uniffi-bindgen -- \
   generate --library target/debug/libwdffi.dylib --language kotlin --out-dir <dir>   # or --language swift
 ```
 
 `apps/android` is a Gradle build (JDK 17 or later; Android Studio's bundled JBR works):
-`./gradlew :core:testDebugUnitTest` builds the host `libwdffi`, generates the Kotlin bindings and
+`./gradlew :core:testDebugUnitTest` builds the host `libwdffi` (Cargo profile `host`: release
+unstripped, since `strip` drops the metadata uniffi-bindgen reads on Linux), generates the Kotlin bindings and
 runs the JVM tests against the real core; `./gradlew :core:assembleRelease` adds the `cargo ndk`
 cross-build (arm64-v8a, x86_64) and packs both into the AAR. CI runs both in its `android` job.
 

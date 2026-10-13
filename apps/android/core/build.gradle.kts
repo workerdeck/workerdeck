@@ -8,7 +8,7 @@ plugins {
 val repoRoot: File = rootDir.resolve("../..").canonicalFile
 val cargoTarget: File = repoRoot.resolve("target")
 val hostLib: File = cargoTarget.resolve(
-    "release/" + when {
+    "host/" + when {
         OperatingSystem.current().isMacOsX -> "libwdffi.dylib"
         OperatingSystem.current().isWindows -> "wdffi.dll"
         else -> "libwdffi.so"
@@ -26,7 +26,7 @@ fun Exec.cargoInputs() {
 val cargoHost by tasks.registering(Exec::class) {
     description = "Builds libwdffi and uniffi-bindgen for this machine: the bindgen's input and the JVM tests' library."
     cargoInputs()
-    commandLine("cargo", "build", "-p", "wd-native-ffi", "--release", "--features", "cli")
+    commandLine("cargo", "build", "-p", "wd-native-ffi", "--profile", "host", "--features", "cli")
     outputs.file(hostLib)
 }
 
@@ -38,7 +38,7 @@ val uniffiKotlin by tasks.registering(Exec::class) {
     outputs.dir(uniffiOut)
     doFirst { delete(uniffiOut) }
     commandLine(
-        cargoTarget.resolve("release/uniffi-bindgen").path,
+        cargoTarget.resolve("host/uniffi-bindgen").path,
         "generate", "--library", hostLib.path, "--language", "kotlin", "--no-format",
         "--out-dir", uniffiOut.get().asFile.path,
     )
