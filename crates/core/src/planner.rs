@@ -1618,6 +1618,10 @@ pub fn plan_diff(patch: &Value, m: &Metrics, nested: bool, press: Option<TermPre
     lines
 }
 
+pub fn prompt_markdown(source: &str, m: &Metrics) -> Vec<TermLine> {
+    plan_markdown(source, m, "", Tone::Fg, false, false)
+}
+
 fn plan_markdown(source: &str, m: &Metrics, gutter: &'static str, gutter_tone: Tone, nested: bool, in_open: bool) -> Vec<TermLine> {
     let mut lines: Vec<TermLine> = Vec::new();
     let mut first = true;

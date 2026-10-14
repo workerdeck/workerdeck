@@ -4,13 +4,14 @@ use crate::controller::session::{self as connection, SessionConnection, Signal};
 use crate::controller::shell::{ShellAction, ShellSession};
 use crate::controller::transcript::{self as view, Navigation, TranscriptView, Update};
 use crate::expansion::TermPress;
-use crate::planner::Metrics;
+use crate::planner::{Metrics, TermLine, prompt_markdown};
 use crate::protocol::{AttachedFrame, Body, Event};
 use crate::rest::{PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
 use crate::rows::{subagent_items, subagent_task};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
+use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
 use crate::vt::VtKey;
 use serde_json::{Map, Value};
@@ -36,6 +37,7 @@ pub struct Changed {
     pub progress: bool,
     pub shells: bool,
     pub frames: bool,
+    pub prompt: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,6 +89,7 @@ pub struct LiveSession {
     wake: Option<f64>,
     changed: Changed,
     published_chrome: SessionChrome,
+    published_prompt: Option<Prompt>,
     finished: bool,
     effects: Vec<Effect>,
 }
@@ -121,6 +124,7 @@ impl LiveSession {
             wake: None,
             changed: Changed::default(),
             published_chrome: SessionChrome::default(),
+            published_prompt: None,
             finished: false,
             effects: Vec::new(),
         };
@@ -174,6 +178,19 @@ impl LiveSession {
 
     pub fn is_finished(&self) -> bool {
         self.finished
+    }
+
+    // The head of the approval queue: approvals are answered in order, so only the first is ever drawn.
+    pub fn prompt(&self) -> Option<Prompt> {
+        let pending = &self.state.pending_approvals;
+        prompt_for(pending.first()?, pending.len())
+    }
+
+    pub fn prompt_plan_lines(&self) -> Vec<TermLine> {
+        match self.prompt().map(|prompt| prompt.body) {
+            Some(PromptBody::Permission { model, .. }) => model.plan.map(|plan| prompt_markdown(&plan, &self.metrics)).unwrap_or_default(),
+            _ => Vec::new(),
+        }
     }
 
     pub fn chrome(&self) -> SessionChrome {
@@ -415,6 +432,22 @@ impl LiveSession {
 
     pub fn deny(&mut self, request_id: String, message: Option<String>, interrupt: Option<bool>) {
         self.act(|c| c.deny(request_id, message, interrupt));
+    }
+
+    pub fn answer(&mut self, request_id: String, selections: &[Selection]) {
+        let Some(request) = self.state.pending_approvals.iter().find(|r| r.get("id").and_then(Value::as_str) == Some(request_id.as_str()))
+        else {
+            return;
+        };
+        let Some(Prompt { body: PromptBody::Question { questions, .. }, .. }) = prompt_for(request, 1) else {
+            return;
+        };
+        let updated = answered_input(request.get("input").unwrap_or(&Value::Null), &questions, selections);
+        self.approve(request_id, Some(updated));
+    }
+
+    pub fn dismiss_question(&mut self, request_id: String) {
+        self.deny(request_id, Some("Question dismissed by user".into()), None);
     }
 
     pub fn interrupt(&mut self) {
@@ -750,6 +783,11 @@ impl LiveSession {
         if chrome != self.published_chrome {
             self.published_chrome = chrome;
             self.changed.chrome = true;
+        }
+        let prompt = self.prompt();
+        if prompt != self.published_prompt {
+            self.published_prompt = prompt;
+            self.changed.prompt = true;
         }
         let wake = match (self.conn.wake_at(), self.hold.map(|hold| hold.deadline())) {
             (Some(a), Some(b)) => Some(a.min(b)),

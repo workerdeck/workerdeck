@@ -312,6 +312,50 @@ fn status_label_fn(fn_name: &str, a: &Args) -> Value {
     }
 }
 
+fn prompt_fn(fn_name: &str, a: &Args) -> Value {
+    use wd_native::vm::prompt::{self, ShellRequest};
+    match fn_name {
+        "permissionPromptModel" => out(prompt::permission_prompt_model(a.raw(0))),
+        "shellRequestLines" => {
+            let raw = a.raw(0);
+            let field = |key: &str| raw.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
+            let payload = match raw["kind"].as_str().unwrap() {
+                "run" => ShellRequest::Run { command: field("command") },
+                "write" => ShellRequest::Write {
+                    shell_id: field("shellId"),
+                    data: raw.get("data").and_then(Value::as_str).map(str::to_owned),
+                    keys: raw.get("keys").map(|keys| serde_json::from_value(keys.clone()).unwrap()),
+                },
+                "kill" => ShellRequest::Kill { shell_id: field("shellId") },
+                _ => ShellRequest::Grant { shell_id: field("shellId"), reason: field("reason") },
+            };
+            out(prompt::shell_request_lines(&payload))
+        }
+        "parseUserQuestions" => out(prompt::parse_user_questions(a.raw(0))),
+        "selectionScript" => {
+            let multi = a.raw(0).as_bool().unwrap();
+            let mut selection = prompt::Selection::default();
+            let steps: Vec<Value> = a
+                .raw(1)
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|op| {
+                    let value = op.get(1).and_then(Value::as_str).unwrap_or_default();
+                    selection = match op[0].as_str().unwrap() {
+                        "label" => prompt::toggle_label(&selection, value, multi),
+                        "other" => prompt::toggle_other(&selection, multi),
+                        _ => prompt::Selection { other: value.to_owned(), ..selection.clone() },
+                    };
+                    json!({ "selection": out(&selection), "answer": prompt::answer_for(&selection) })
+                })
+                .collect();
+            Value::Array(steps)
+        }
+        _ => panic!("prompt.{fn_name} has no Rust binding"),
+    }
+}
+
 fn transcript_fn(fn_name: &str, a: &Args) -> Value {
     assert_eq!(fn_name, "transcriptScript", "transcript.{fn_name} has no Rust binding");
     let mut state = TranscriptState::default();
@@ -364,6 +408,7 @@ fn run(module: &str, fn_name: &str, args: &[Value]) -> Value {
         "model-menu" => model_menu_fn(fn_name, &a),
         "status-label" => status_label_fn(fn_name, &a),
         "transcript" => transcript_fn(fn_name, &a),
+        "prompt" => prompt_fn(fn_name, &a),
         _ => panic!("unknown view-model module {module}"),
     }
 }

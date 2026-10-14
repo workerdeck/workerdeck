@@ -11,7 +11,9 @@ use wd_native::snapshot;
 use wd_native::vt::VtKey;
 
 mod list;
+mod prompt;
 pub use list::{ListError, ListGroup, ListRow, RowState, SessionList};
+pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
 
 uniffi::setup_scaffolding!();
 
@@ -45,6 +47,7 @@ pub struct Changed {
     pub progress: bool,
     pub shells: bool,
     pub frames: bool,
+    pub prompt: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -70,7 +73,14 @@ impl From<live::Effect> for Effect {
             live::Effect::OpenSubagent { task_id } => Effect::OpenSubagent { task_id },
             live::Effect::OpenShell { shell_id } => Effect::OpenShell { shell_id },
             live::Effect::Changed(c) => Effect::Changed {
-                changed: Changed { transcript: c.transcript, chrome: c.chrome, progress: c.progress, shells: c.shells, frames: c.frames },
+                changed: Changed {
+                    transcript: c.transcript,
+                    chrome: c.chrome,
+                    progress: c.progress,
+                    shells: c.shells,
+                    frames: c.frames,
+                    prompt: c.prompt,
+                },
             },
         }
     }
@@ -291,6 +301,25 @@ impl Session {
 
     pub fn deny(&self, request_id: String, message: Option<String>, interrupt: Option<bool>) -> Vec<Effect> {
         self.act(|live| live.deny(request_id, message, interrupt))
+    }
+
+    // The answers ride on an allow: `selections[i]` answers question `i` of the prompt.
+    pub fn answer(&self, request_id: String, selections: Vec<Selection>) -> Vec<Effect> {
+        let selections: Vec<_> = selections.into_iter().map(Into::into).collect();
+        self.act(|live| live.answer(request_id, &selections))
+    }
+
+    pub fn dismiss_question(&self, request_id: String) -> Vec<Effect> {
+        self.act(|live| live.dismiss_question(request_id))
+    }
+
+    pub fn prompt(&self) -> Option<Prompt> {
+        self.live().prompt().map(Prompt::from)
+    }
+
+    // A plan prompt's markdown, laid out at the session's metrics, in the `transcript_lines` shape (one row).
+    pub fn prompt_plan_lines(&self) -> Vec<u8> {
+        snapshot::lines_block(&self.live().prompt_plan_lines())
     }
 
     pub fn interrupt(&self) -> Vec<Effect> {

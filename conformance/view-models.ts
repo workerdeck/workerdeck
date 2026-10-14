@@ -1020,6 +1020,68 @@ const TRANSCRIPT: VmCase[] = [
   },
 ]
 
+const PROMPT_REQUESTS = [
+  { toolName: 'Bash', input: { command: 'ls' }, title: 'Claude wants to run ls', displayName: 'Run command' },
+  { toolName: 'Read', input: { file_path: '/a' }, displayName: 'Read file', description: 'Reads a file', decisionReason: 'not in allow list' },
+  { toolName: 'Edit', input: {} },
+  { toolName: 'ExitPlanMode', input: { plan: '## Steps\n\n1. Do it' }, description: 'plan time' },
+  { toolName: 'ExitPlanMode', input: { plan: '  \n ' }, title: 'Exit plan mode?' },
+  { toolName: 'ExitPlanMode', input: null },
+  { toolName: 'shell_run', input: { command: 'npm run dev\nsecond' } },
+  { toolName: 'mcp__workerdeck__shell_write', input: { shellId: 'sh_1', data: 'yes\r\x1b\x03\t\x7f', keys: ['enter', 3, 'ctrl-c'] } },
+  { toolName: 'mcp__workerdeck__shell_write', input: { shellId: 'sh_1', keys: [] } },
+  { toolName: 'mcp__workerdeck__shell_kill', input: { shellId: 'sh_2' } },
+  { toolName: 'mcp__workerdeck__shell_request_write', input: { shellId: 'sh_3', reason: 'fix\nit' } },
+  { toolName: 'mcp__other__shell_run', input: [] },
+  { toolName: 'mcp_shell_run', input: { command: 'x' } },
+]
+
+const PROMPT: VmCase[] = [
+  { module: 'prompt', name: 'permission-model', fn: 'permissionPromptModel', calls: PROMPT_REQUESTS.map((r) => [r]) },
+  {
+    module: 'prompt',
+    name: 'shell-lines',
+    fn: 'shellRequestLines',
+    calls: [
+      [{ kind: 'run', command: 'a\nb' }],
+      [{ kind: 'write', shellId: 's', data: 'x\ny', keys: ['enter', 'tab'] }],
+      [{ kind: 'write', shellId: 's' }],
+      [{ kind: 'kill', shellId: 's' }],
+      [{ kind: 'grant', shellId: 's', reason: 'r\x1b' }],
+    ],
+  },
+  {
+    module: 'prompt',
+    name: 'selections',
+    fn: 'selectionScript',
+    calls: [
+      [false, [['label', 'a'], ['label', 'b'], ['other'], ['label', 'c'], ['other']]],
+      [true, [['label', 'a'], ['label', 'b'], ['label', 'a'], ['other'], ['type', '  mine  '], ['label', 'c']]],
+      [true, [['other'], ['type', '   ']]],
+    ],
+  },
+  {
+    module: 'prompt',
+    name: 'questions',
+    fn: 'parseUserQuestions',
+    calls: [
+      [{}],
+      [{ questions: 'nope' }],
+      [
+        {
+          questions: [
+            { question: 'Which?', header: 'Pick', options: [{ label: 'a', description: 'first' }, { label: 'b', preview: 'b preview' }] },
+            { question: 'Many?', multiSelect: true, options: [{ label: 'x' }, { nope: 1 }] },
+            { question: 'Empty?', header: 'E', options: [] },
+            { header: 'no question', options: [{ label: 'z' }] },
+            { question: 'Flag?', header: 'F', multiSelect: 'yes', options: [{ label: 'q' }] },
+          ],
+        },
+      ],
+    ],
+  },
+]
+
 export const VM_CORPUS: VmCase[] = [
   ...SESSION_LIST,
   ...AGENTS,
@@ -1032,4 +1094,5 @@ export const VM_CORPUS: VmCase[] = [
   ...MODEL_MENU,
   ...STATUS_LABEL,
   ...TRANSCRIPT,
+  ...PROMPT,
 ]

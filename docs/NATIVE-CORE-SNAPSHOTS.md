@@ -20,7 +20,7 @@ i32 revealRow (-1: none), u64 revealNonce
 `height` already includes the gap line above a row. Keys are stable across updates: diff the list
 by key.
 
-## Transcript lines (`transcript_lines`, `frame_lines`)
+## Transcript lines (`transcript_lines`, `frame_lines`, `prompt_plan_lines`)
 
 ```
 u8 version
@@ -33,6 +33,8 @@ line = u8 tone, u8 gutterTone, u8 band, u8 flags,
        [str16 toolUseId, i64 sourceSeq, i64 partIndex,
         str16 mediaType, i64 bytes, u16 lines]  if flags & 0x40
 ```
+
+`prompt_plan_lines` is the same shape with one row at 0: a plan prompt's markdown, planned at the session's metrics.
 
 Flags: 1 bold, 2 italic, 4 nested, 8 pulsing, 16 inOpen, 32 pressable, 64 image, 128 elapsed.
 Tone and band index `tone_names()` / `band_names()` (the `planner::Tone` / `planner::Band`

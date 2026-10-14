@@ -1,0 +1,202 @@
+{
+  "input": {
+    "fn": "selectionScript",
+    "calls": [
+      [
+        false,
+        [
+          [
+            "label",
+            "a"
+          ],
+          [
+            "label",
+            "b"
+          ],
+          [
+            "other"
+          ],
+          [
+            "label",
+            "c"
+          ],
+          [
+            "other"
+          ]
+        ]
+      ],
+      [
+        true,
+        [
+          [
+            "label",
+            "a"
+          ],
+          [
+            "label",
+            "b"
+          ],
+          [
+            "label",
+            "a"
+          ],
+          [
+            "other"
+          ],
+          [
+            "type",
+            "  mine  "
+          ],
+          [
+            "label",
+            "c"
+          ]
+        ]
+      ],
+      [
+        true,
+        [
+          [
+            "other"
+          ],
+          [
+            "type",
+            "   "
+          ]
+        ]
+      ]
+    ]
+  },
+  "output": [
+    [
+      {
+        "selection": {
+          "labels": [
+            "a"
+          ],
+          "other": "",
+          "otherActive": false
+        },
+        "answer": "a"
+      },
+      {
+        "selection": {
+          "labels": [
+            "b"
+          ],
+          "other": "",
+          "otherActive": false
+        },
+        "answer": "b"
+      },
+      {
+        "selection": {
+          "labels": [],
+          "other": "",
+          "otherActive": true
+        },
+        "answer": ""
+      },
+      {
+        "selection": {
+          "labels": [
+            "c"
+          ],
+          "other": "",
+          "otherActive": false
+        },
+        "answer": "c"
+      },
+      {
+        "selection": {
+          "labels": [],
+          "other": "",
+          "otherActive": true
+        },
+        "answer": ""
+      }
+    ],
+    [
+      {
+        "selection": {
+          "labels": [
+            "a"
+          ],
+          "other": "",
+          "otherActive": false
+        },
+        "answer": "a"
+      },
+      {
+        "selection": {
+          "labels": [
+            "a",
+            "b"
+          ],
+          "other": "",
+          "otherActive": false
+        },
+        "answer": "a, b"
+      },
+      {
+        "selection": {
+          "labels": [
+            "b"
+          ],
+          "other": "",
+          "otherActive": false
+        },
+        "answer": "b"
+      },
+      {
+        "selection": {
+          "labels": [
+            "b"
+          ],
+          "other": "",
+          "otherActive": true
+        },
+        "answer": "b"
+      },
+      {
+        "selection": {
+          "labels": [
+            "b"
+          ],
+          "other": "  mine  ",
+          "otherActive": true
+        },
+        "answer": "b, mine"
+      },
+      {
+        "selection": {
+          "labels": [
+            "b",
+            "c"
+          ],
+          "other": "  mine  ",
+          "otherActive": true
+        },
+        "answer": "b, c, mine"
+      }
+    ],
+    [
+      {
+        "selection": {
+          "labels": [],
+          "other": "",
+          "otherActive": true
+        },
+        "answer": ""
+      },
+      {
+        "selection": {
+          "labels": [],
+          "other": "   ",
+          "otherActive": true
+        },
+        "answer": ""
+      }
+    ]
+  ]
+}

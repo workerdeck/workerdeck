@@ -7,6 +7,7 @@ pub mod model_menu;
 pub mod model_name;
 pub mod peer_mentions;
 pub mod pricing;
+pub mod prompt;
 pub mod recap;
 pub mod session_chrome;
 pub mod session_list;

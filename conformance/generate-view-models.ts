@@ -15,6 +15,9 @@ import {
   type TranscriptState,
 } from '../packages/react/src/lib/transcript.ts'
 import { projectTranscript } from '../packages/react/src/lib/transcript-projection.ts'
+import { permissionPromptModel } from '../packages/ui/src/lib/permission-prompt.ts'
+import { shellRequestLines } from '../packages/ui/src/lib/shell-request.ts'
+import { answerFor, EMPTY_SELECTION, toggleLabel, toggleOther, type Selection } from '../packages/ui/src/lib/question-answers.ts'
 import { caseEvents } from './corpus.ts'
 import { VM_CORPUS } from './view-models.ts'
 
@@ -89,6 +92,21 @@ function transcriptScript(ops: unknown[][]) {
   return projectTranscript(state)
 }
 
+// A question's selection through a run of taps: each step reports the selection and the answer it reads as.
+function selectionScript(multiSelect: boolean, ops: [string, string?][]) {
+  let selection: Selection = EMPTY_SELECTION
+  return ops.map(([op, value]) => {
+    if (op === 'label') {
+      selection = toggleLabel(selection, value!, multiSelect)
+    } else if (op === 'other') {
+      selection = toggleOther(selection, multiSelect)
+    } else {
+      selection = { ...selection, other: value! }
+    }
+    return { selection, answer: answerFor(selection) }
+  })
+}
+
 function taskScript(info: Parameters<typeof protocol.sessionTasks>[0]) {
   const tasks: SessionTask[] = protocol.sessionTasks(info)
   const summary = protocol.taskSummary(tasks)
@@ -107,6 +125,9 @@ const FNS: Record<string, Fn> = {
   watermarkScript,
   taskScript,
   transcriptScript,
+  permissionPromptModel,
+  shellRequestLines,
+  selectionScript,
   defaultPricing: () => protocol.DEFAULT_PRICING,
   meteredCostOf: (byModel: protocol.ByModel) => protocol.meteredCost(protocol.costOfByModel(byModel)),
   pricingAge: (now: number, asOf?: string) => ({ days: protocol.pricingAgeDays(now, asOf), note: protocol.pricingAgeNote(now, asOf) ?? null }),

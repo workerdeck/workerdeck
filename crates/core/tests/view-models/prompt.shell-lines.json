@@ -1,0 +1,61 @@
+{
+  "input": {
+    "fn": "shellRequestLines",
+    "calls": [
+      [
+        {
+          "kind": "run",
+          "command": "a\nb"
+        }
+      ],
+      [
+        {
+          "kind": "write",
+          "shellId": "s",
+          "data": "x\ny",
+          "keys": [
+            "enter",
+            "tab"
+          ]
+        }
+      ],
+      [
+        {
+          "kind": "write",
+          "shellId": "s"
+        }
+      ],
+      [
+        {
+          "kind": "kill",
+          "shellId": "s"
+        }
+      ],
+      [
+        {
+          "kind": "grant",
+          "shellId": "s",
+          "reason": "r\u001b"
+        }
+      ]
+    ]
+  },
+  "output": [
+    [
+      "$ a",
+      "  b"
+    ],
+    [
+      "types: x[newline]y",
+      "presses: [enter] [tab]"
+    ],
+    [],
+    [
+      "kill s"
+    ],
+    [
+      "why: r[escape]",
+      "until the shell ends or you revoke it"
+    ]
+  ]
+}

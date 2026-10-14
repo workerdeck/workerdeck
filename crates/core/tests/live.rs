@@ -98,6 +98,7 @@ impl Host {
                 progress: acc.progress || c.progress,
                 shells: acc.shells || c.shells,
                 frames: acc.frames || c.frames,
+                prompt: acc.prompt || c.prompt,
             },
             _ => acc,
         })

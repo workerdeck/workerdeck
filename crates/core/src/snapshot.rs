@@ -52,6 +52,19 @@ pub fn transcript_lines(view: &TranscriptView, start: usize, end: usize) -> Vec<
     out.bytes
 }
 
+// Free-standing lines (a plan in a prompt) in the `transcript_lines` shape: one row starting at 0.
+pub fn lines_block(lines: &[TermLine]) -> Vec<u8> {
+    let mut out = ByteWriter::new();
+    out.u8(VERSION);
+    out.u32(0);
+    out.u32(1);
+    out.u32(lines.len() as u32);
+    for line in lines {
+        write_line(&mut out, line);
+    }
+    out.bytes
+}
+
 fn write_line(out: &mut ByteWriter, line: &TermLine) {
     out.u8(line.tone as u8);
     out.u8(line.gutter_tone as u8);

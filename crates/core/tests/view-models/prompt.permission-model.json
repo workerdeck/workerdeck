@@ -1,0 +1,455 @@
+{
+  "input": {
+    "fn": "permissionPromptModel",
+    "calls": [
+      [
+        {
+          "toolName": "Bash",
+          "input": {
+            "command": "ls"
+          },
+          "title": "Claude wants to run ls",
+          "displayName": "Run command"
+        }
+      ],
+      [
+        {
+          "toolName": "Read",
+          "input": {
+            "file_path": "/a"
+          },
+          "displayName": "Read file",
+          "description": "Reads a file",
+          "decisionReason": "not in allow list"
+        }
+      ],
+      [
+        {
+          "toolName": "Edit",
+          "input": {}
+        }
+      ],
+      [
+        {
+          "toolName": "ExitPlanMode",
+          "input": {
+            "plan": "## Steps\n\n1. Do it"
+          },
+          "description": "plan time"
+        }
+      ],
+      [
+        {
+          "toolName": "ExitPlanMode",
+          "input": {
+            "plan": "  \n "
+          },
+          "title": "Exit plan mode?"
+        }
+      ],
+      [
+        {
+          "toolName": "ExitPlanMode",
+          "input": null
+        }
+      ],
+      [
+        {
+          "toolName": "shell_run",
+          "input": {
+            "command": "npm run dev\nsecond"
+          }
+        }
+      ],
+      [
+        {
+          "toolName": "mcp__workerdeck__shell_write",
+          "input": {
+            "shellId": "sh_1",
+            "data": "yes\r\u001b\u0003\t",
+            "keys": [
+              "enter",
+              3,
+              "ctrl-c"
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "toolName": "mcp__workerdeck__shell_write",
+          "input": {
+            "shellId": "sh_1",
+            "keys": []
+          }
+        }
+      ],
+      [
+        {
+          "toolName": "mcp__workerdeck__shell_kill",
+          "input": {
+            "shellId": "sh_2"
+          }
+        }
+      ],
+      [
+        {
+          "toolName": "mcp__workerdeck__shell_request_write",
+          "input": {
+            "shellId": "sh_3",
+            "reason": "fix\nit"
+          }
+        }
+      ],
+      [
+        {
+          "toolName": "mcp__other__shell_run",
+          "input": []
+        }
+      ],
+      [
+        {
+          "toolName": "mcp_shell_run",
+          "input": {
+            "command": "x"
+          }
+        }
+      ]
+    ]
+  },
+  "output": [
+    {
+      "heading": "Claude wants to run ls",
+      "question": "Do you want to proceed?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "heading": "Read file",
+      "question": "Do you want to proceed?",
+      "description": "Reads a file",
+      "decisionReason": "not in allow list",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "heading": "Permission needed",
+      "question": "Do you want to proceed?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "plan": "## Steps\n\n1. Do it",
+      "heading": "Plan ready for review",
+      "question": "Ready to implement this plan?",
+      "description": "plan time",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Approve plan",
+          "option": "Approve plan"
+        },
+        {
+          "key": "deny",
+          "button": "Keep planning",
+          "option": "Keep planning - tell it what to change"
+        },
+        {
+          "key": "stop",
+          "button": "Stop the turn",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "What should change? (optional) - the agent keeps planning and reads this"
+    },
+    {
+      "heading": "Exit plan mode?",
+      "question": "Do you want to proceed?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "heading": "Permission needed",
+      "question": "Do you want to proceed?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "shell": {
+        "kind": "run",
+        "command": "npm run dev\nsecond"
+      },
+      "heading": "Agent wants to start a shell",
+      "question": "Do you want to let it?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "shell": {
+        "kind": "write",
+        "shellId": "sh_1",
+        "data": "yes\r\u001b\u0003\t",
+        "keys": [
+          "enter",
+          "ctrl-c"
+        ]
+      },
+      "heading": "Agent wants to type into shell sh_1",
+      "question": "Do you want to let it?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "shell": {
+        "kind": "write",
+        "shellId": "sh_1"
+      },
+      "heading": "Agent wants to type into shell sh_1",
+      "question": "Do you want to let it?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "shell": {
+        "kind": "kill",
+        "shellId": "sh_2"
+      },
+      "heading": "Agent wants to kill shell sh_2",
+      "question": "Do you want to let it?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "shell": {
+        "kind": "grant",
+        "shellId": "sh_3",
+        "reason": "fix\nit"
+      },
+      "heading": "Agent asks to type into your shell sh_3",
+      "question": "Do you want to let it?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "shell": {
+        "kind": "run",
+        "command": ""
+      },
+      "heading": "Agent wants to start a shell",
+      "question": "Do you want to let it?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    },
+    {
+      "heading": "Permission needed",
+      "question": "Do you want to proceed?",
+      "choices": [
+        {
+          "key": "allow",
+          "button": "Allow",
+          "option": "Yes"
+        },
+        {
+          "key": "deny",
+          "button": "Deny",
+          "option": "No, and tell the agent what to do differently"
+        },
+        {
+          "key": "stop",
+          "button": "Deny & stop",
+          "option": "No, and stop the turn",
+          "danger": true
+        }
+      ],
+      "denyPlaceholder": "Reason (optional) - the agent reads this and can try something else"
+    }
+  ]
+}

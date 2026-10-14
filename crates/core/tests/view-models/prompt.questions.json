@@ -1,0 +1,111 @@
+{
+  "input": {
+    "fn": "parseUserQuestions",
+    "calls": [
+      [
+        {}
+      ],
+      [
+        {
+          "questions": "nope"
+        }
+      ],
+      [
+        {
+          "questions": [
+            {
+              "question": "Which?",
+              "header": "Pick",
+              "options": [
+                {
+                  "label": "a",
+                  "description": "first"
+                },
+                {
+                  "label": "b",
+                  "preview": "b preview"
+                }
+              ]
+            },
+            {
+              "question": "Many?",
+              "multiSelect": true,
+              "options": [
+                {
+                  "label": "x"
+                },
+                {
+                  "nope": 1
+                }
+              ]
+            },
+            {
+              "question": "Empty?",
+              "header": "E",
+              "options": []
+            },
+            {
+              "header": "no question",
+              "options": [
+                {
+                  "label": "z"
+                }
+              ]
+            },
+            {
+              "question": "Flag?",
+              "header": "F",
+              "multiSelect": "yes",
+              "options": [
+                {
+                  "label": "q"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    ]
+  },
+  "output": [
+    [],
+    [],
+    [
+      {
+        "question": "Which?",
+        "header": "Pick",
+        "options": [
+          {
+            "label": "a",
+            "description": "first"
+          },
+          {
+            "label": "b",
+            "preview": "b preview"
+          }
+        ],
+        "multiSelect": false
+      },
+      {
+        "question": "Many?",
+        "header": "",
+        "options": [
+          {
+            "label": "x"
+          }
+        ],
+        "multiSelect": true
+      },
+      {
+        "question": "Flag?",
+        "header": "F",
+        "options": [
+          {
+            "label": "q"
+          }
+        ],
+        "multiSelect": false
+      }
+    ]
+  ]
+}
