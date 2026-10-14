@@ -12,6 +12,8 @@ import {
   sessionLabel,
   subsetSummary,
   teamLingerEnds,
+  teamLingerStart,
+  TEAM_LINGER_MS,
   teamView,
   toggleTeamExpanded,
   isGroupCollapsed,
@@ -31,7 +33,9 @@ import type {
 import { AgentAvatar, avatarOf, type AgentAvatars } from './AgentAvatar.tsx'
 import { Button } from '../ui/Button.tsx'
 import { Empty } from '../ui/Empty.tsx'
+import { HoverCard } from '../ui/HoverCard.tsx'
 import { Input } from '../ui/Input.tsx'
+import { MemberCard } from './MemberCard.tsx'
 import { ProjectIcon } from './ProjectIcon.tsx'
 import { SessionFilters } from './SessionFilters.tsx'
 import { SessionItem, type SelectModifiers } from './SessionItem.tsx'
@@ -350,6 +354,8 @@ export function SessionBrowser({
                         lead={row}
                         view={views.get(sessionKey(row)) ?? { expanded: false, shown: row.members, tray: [] }}
                         avatars={avatars}
+                        selected={row.members.find(isActive)}
+                        now={now}
                         onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
                         onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
                         renderLead={(tray) =>
@@ -539,6 +545,8 @@ function TeamBlock({
   lead,
   view,
   avatars,
+  selected,
+  now,
   onToggle,
   onSelectMember,
   renderLead,
@@ -547,6 +555,8 @@ function TeamBlock({
   lead: SessionRow
   view: TeamView
   avatars?: AgentAvatars
+  selected?: SessionRow
+  now?: number
   onToggle: () => void
   onSelectMember: (member: SessionRow) => void
   renderLead: (tray?: ReactNode) => ReactNode
@@ -560,19 +570,24 @@ function TeamBlock({
       {avatarsShown.map((member) => {
         const name = member.info.agent?.name ?? sessionLabel(member.info)
         return (
-          <button
+          <HoverCard
             key={sessionKey(member)}
-            type="button"
-            aria-label={`Select ${name}`}
-            title={name}
-            onClick={(e) => {
-              e.stopPropagation()
-              onSelectMember(member)
-            }}
-            className="flex shrink-0 rounded-[3px] hover:ring-1 hover:ring-border"
+            trigger={
+              <button
+                type="button"
+                aria-label={`Select ${name}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelectMember(member)
+                }}
+                className="flex shrink-0 rounded-[3px] hover:ring-1 hover:ring-border"
+              >
+                <AgentAvatar row={member} image={avatarOf(avatars, member.info.agent)} size={16} title="" className="rounded-[3px]" />
+              </button>
+            }
           >
-            <AgentAvatar row={member} image={avatarOf(avatars, member.info.agent)} size={16} className="rounded-[3px]" />
-          </button>
+            <MemberCard member={member} avatars={avatars} />
+          </HoverCard>
         )
       })}
       <button
@@ -608,10 +623,32 @@ function TeamBlock({
               <ChevronDown className="size-2.5" />
             </button>
           ) : null}
-          {view.shown.map(renderMember)}
+          {view.shown.map((member) => (
+            <div key={sessionKey(member)} className="relative">
+              {renderMember(member)}
+              <LingerBar member={member} selected={selected} now={now} />
+            </div>
+          ))}
         </div>
       ) : null}
     </div>
+  )
+}
+
+// A member Auto keeps only for its linger window: a hairline fills left to right and the row leaves when it is full.
+function LingerBar({ member, selected, now }: { member: SessionRow; selected?: SessionRow; now?: number }) {
+  const clock = now ?? Date.now()
+  const start = teamLingerStart(member, selected && sessionKey(selected), clock)
+  if (start === undefined) {
+    return null
+  }
+  return (
+    <span
+      aria-hidden
+      title="Idle, leaving the list soon"
+      className="wd-linger pointer-events-none absolute right-2 bottom-0 left-2 h-0.5 rounded-full bg-fg-4/50"
+      style={{ animationDuration: `${TEAM_LINGER_MS}ms`, animationDelay: `${start - clock}ms` }}
+    />
   )
 }
 

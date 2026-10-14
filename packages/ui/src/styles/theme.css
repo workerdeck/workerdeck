@@ -688,6 +688,20 @@
     animation: none;
   }
 }
+@keyframes wd-linger {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.wd-linger {
+  transform-origin: left;
+  animation-name: wd-linger;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
 
 @keyframes prompt-area-chip-ripple {
   0% {

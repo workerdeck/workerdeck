@@ -31,6 +31,7 @@ import {
   subsetSummary,
   teamSummary,
   teamLingerEnds,
+  teamLingerStart,
   teamView,
   TEAM_LINGER_MS,
   toggleTeamExpanded,
@@ -658,6 +659,15 @@ describe('teamView', () => {
   it('reports when the next lingering member leaves', () => {
     expect(teamLingerEnds(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now), now)).toBe(now - 1_000 + TEAM_LINGER_MS)
     expect(teamLingerEnds(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now + TEAM_LINGER_MS), now + TEAM_LINGER_MS)).toBeUndefined()
+  })
+
+  it('starts a countdown only for a member shown just for its linger window', () => {
+    expect(teamLingerStart(recent, undefined, now)).toBe(now - 1_000)
+    expect(teamLingerStart(recent, sessionKey(recent), now)).toBeUndefined()
+    expect(teamLingerStart({ ...recent, unseen: 1 }, undefined, now)).toBeUndefined()
+    expect(teamLingerStart(member('s-run', { status: 'running', lastActivityAt: now - 1_000 }), undefined, now)).toBeUndefined()
+    expect(teamLingerStart(quiet, undefined, now)).toBeUndefined()
+    expect(teamLingerStart(recent, undefined, now - 1_000 + TEAM_LINGER_MS)).toBeUndefined()
   })
 })
 

@@ -502,6 +502,15 @@ export function teamView(lead: SessionRow, config: ViewConfig, selected: string 
   return { expanded, shown, tray }
 }
 
+// When a member Auto draws only for its linger window started, so a host can show the countdown; undefined otherwise.
+export function teamLingerStart(member: SessionRow, selected: string | undefined, now: number): number | undefined {
+  if (member.state === 'working' || member.state === 'attention' || member.unseen > 0 || sessionKey(member) === selected) {
+    return undefined
+  }
+  const at = member.info.lastActivityAt
+  return at !== undefined && now - at < TEAM_LINGER_MS ? at : undefined
+}
+
 // When the next lingering member's window closes, so a host can redraw then; undefined when none is lingering.
 export function teamLingerEnds(view: TeamView, now: number): number | undefined {
   let next: number | undefined
