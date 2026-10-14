@@ -207,7 +207,7 @@ const AUTO_ROWS = [
     id: 't3',
     title: 'peers.ts: team visibility',
     status: 'idle',
-    lastActivityAt: Date.now() - 8_000,
+    lastActivityAt: Date.now() - 1_000,
     agent: agent('juno', 'Juno', { lead: 'atlas', team: 'Atlas', order: 1 }),
   } as never),
   makeRow({
@@ -230,7 +230,7 @@ const AUTO_ROWS = [
   } as never),
 ]
 
-// Juno went idle 8 s ago, so its row carries the linger countdown; hover a tray avatar for its card.
+// Juno went idle a second ago, so its row carries the linger countdown; hover a tray avatar for its card.
 export const TeamsAuto: Story = {
   render: () => <Browser rows={AUTO_ROWS} avatars={AVATARS} showControls={false} initial={{ groupBy: 'none' }} />,
 }

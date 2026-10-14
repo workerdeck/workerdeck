@@ -475,13 +475,14 @@ export function toggleTeamExpanded(config: ViewConfig, row: SessionRow): ViewCon
   return { ...config, expandedTeams: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
 }
 
-export const TEAM_LINGER_MS = 30_000
+export const TEAM_LINGER_MS = 5_000
 
 export type TeamView = { expanded: boolean; shown: SessionRow[]; tray: SessionRow[] }
 
 // Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt`; the rest
-// sit in the lead's tray. An expanded team, or one under a search or facet filter, draws every member.
-export function teamView(lead: SessionRow, config: ViewConfig, selected: string | undefined, now: number): TeamView {
+// sit in the lead's tray. An expanded team, or one under a search or facet filter, draws every member. `peeked` holds
+// members opened while idle and not busy since: a peek folds back the moment the selection moves on, with no linger.
+export function teamView(lead: SessionRow, config: ViewConfig, selected: string | undefined, now: number, peeked?: ReadonlySet<string>): TeamView {
   const members = lead.members ?? []
   const expanded = isTeamExpanded(config, lead)
   if (expanded || hasFacetFilter(config)) {
@@ -496,15 +497,16 @@ export function teamView(lead: SessionRow, config: ViewConfig, selected: string 
       member.state === 'attention' ||
       member.unseen > 0 ||
       sessionKey(member) === selected ||
-      (at !== undefined && now - at < TEAM_LINGER_MS)
+      (at !== undefined && now - at < TEAM_LINGER_MS && !peeked?.has(sessionKey(member)))
     ;(auto ? shown : tray).push(member)
   }
   return { expanded, shown, tray }
 }
 
 // When a member Auto draws only for its linger window started, so a host can show the countdown; undefined otherwise.
-export function teamLingerStart(member: SessionRow, selected: string | undefined, now: number): number | undefined {
-  if (member.state === 'working' || member.state === 'attention' || member.unseen > 0 || sessionKey(member) === selected) {
+export function teamLingerStart(member: SessionRow, selected: string | undefined, now: number, peeked?: ReadonlySet<string>): number | undefined {
+  const key = sessionKey(member)
+  if (member.state === 'working' || member.state === 'attention' || member.unseen > 0 || key === selected || peeked?.has(key)) {
     return undefined
   }
   const at = member.info.lastActivityAt

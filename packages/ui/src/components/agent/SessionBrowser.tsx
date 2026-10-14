@@ -147,18 +147,34 @@ export function SessionBrowser({
   const [editingGroup, setEditingGroup] = useState<string>()
   const [tick, setTick] = useState(() => Date.now())
   const clock = now ?? tick
+  const [peeked, setPeeked] = useState<ReadonlySet<string>>(() => new Set())
+  useEffect(() => {
+    const next = new Set(peeked)
+    for (const group of groups) {
+      for (const member of group.rows.flatMap((row) => row.members ?? [])) {
+        if (member.state === 'working' || member.state === 'attention') {
+          next.delete(sessionKey(member))
+        } else if (isActive(member)) {
+          next.add(sessionKey(member))
+        }
+      }
+    }
+    if (next.size !== peeked.size || [...next].some((key) => !peeked.has(key))) {
+      setPeeked(next)
+    }
+  }, [groups, isActive, peeked])
   const views = useMemo(() => {
     const out = new Map<string, TeamView>()
     for (const group of groups) {
       for (const row of group.rows) {
         if (row.members?.length) {
           const selected = row.members.find(isActive)
-          out.set(sessionKey(row), teamView(row, config, selected && sessionKey(selected), clock))
+          out.set(sessionKey(row), teamView(row, config, selected && sessionKey(selected), clock, peeked))
         }
       }
     }
     return out
-  }, [groups, config, isActive, clock])
+  }, [groups, config, isActive, clock, peeked])
   const lingerEnds = useMemo(() => {
     const ends = [...views.values()].map((view) => teamLingerEnds(view, clock)).filter((end) => end !== undefined)
     return ends.length ? Math.min(...ends) : undefined
@@ -355,6 +371,7 @@ export function SessionBrowser({
                         view={views.get(sessionKey(row)) ?? { expanded: false, shown: row.members, tray: [] }}
                         avatars={avatars}
                         selected={row.members.find(isActive)}
+                        peeked={peeked}
                         now={now}
                         onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
                         onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
@@ -546,6 +563,7 @@ function TeamBlock({
   view,
   avatars,
   selected,
+  peeked,
   now,
   onToggle,
   onSelectMember,
@@ -556,6 +574,7 @@ function TeamBlock({
   view: TeamView
   avatars?: AgentAvatars
   selected?: SessionRow
+  peeked?: ReadonlySet<string>
   now?: number
   onToggle: () => void
   onSelectMember: (member: SessionRow) => void
@@ -626,7 +645,7 @@ function TeamBlock({
           {view.shown.map((member) => (
             <div key={sessionKey(member)} className="relative">
               {renderMember(member)}
-              <LingerBar member={member} selected={selected} now={now} />
+              <LingerBar member={member} selected={selected} peeked={peeked} now={now} />
             </div>
           ))}
         </div>
@@ -636,9 +655,9 @@ function TeamBlock({
 }
 
 // A member Auto keeps only for its linger window: a hairline fills left to right and the row leaves when it is full.
-function LingerBar({ member, selected, now }: { member: SessionRow; selected?: SessionRow; now?: number }) {
+function LingerBar({ member, selected, peeked, now }: { member: SessionRow; selected?: SessionRow; peeked?: ReadonlySet<string>; now?: number }) {
   const clock = now ?? Date.now()
-  const start = teamLingerStart(member, selected && sessionKey(selected), clock)
+  const start = teamLingerStart(member, selected && sessionKey(selected), clock, peeked)
   if (start === undefined) {
     return null
   }

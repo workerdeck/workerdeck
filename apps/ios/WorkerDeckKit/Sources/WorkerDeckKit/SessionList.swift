@@ -790,7 +790,7 @@ public func toggleTeamExpanded(_ config: ViewConfig, _ row: SessionRow) -> ViewC
 }
 
 /// Mirror of `TEAM_LINGER_MS`.
-public let teamLingerMs: Double = 30_000
+public let teamLingerMs: Double = 5_000
 
 public struct TeamView: Sendable, Equatable {
   public var expanded: Bool
