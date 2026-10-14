@@ -3,13 +3,14 @@ use wd_native::vm::agent_avatar;
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AvatarFetch {
     pub key: String,
+    pub host_id: String,
     pub still_path: String,
     pub busy_path: String,
 }
 
 impl From<agent_avatar::AvatarFetch> for AvatarFetch {
     fn from(fetch: agent_avatar::AvatarFetch) -> Self {
-        AvatarFetch { key: fetch.key, still_path: fetch.still_path, busy_path: fetch.busy_path }
+        AvatarFetch { key: fetch.key, host_id: fetch.host_id, still_path: fetch.still_path, busy_path: fetch.busy_path }
     }
 }
 

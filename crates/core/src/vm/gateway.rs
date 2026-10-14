@@ -39,6 +39,25 @@ pub fn gateway_name(base_url: &str) -> String {
     }
 }
 
+// Names for every paired gateway at once: the short `gateway_name`, but two that share one fall back to the URL's
+// authority (`host:port`), which is what tells them apart.
+pub fn gateway_names(base_urls: &[String]) -> Vec<String> {
+    let short: Vec<String> = base_urls.iter().map(|url| gateway_name(url)).collect();
+    short
+        .iter()
+        .zip(base_urls)
+        .map(|(name, url)| {
+            if short.iter().filter(|other| *other == name).count() < 2 {
+                return name.clone();
+            }
+            let url = normalize_base_url(url);
+            let rest = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+            let authority = rest.split('/').next().unwrap_or_default();
+            authority.rsplit_once('@').map_or(authority, |(_, host)| host).to_owned()
+        })
+        .collect()
+}
+
 // The auth key rides every request, so plain `http` is only for a host the network itself keeps private: loopback,
 // a LAN, link-local, a tailnet (WireGuard encrypts it; `*.ts.net` and Tailscale's 100.64.0.0/10), `*.local`.
 pub fn cleartext_refusal(base_url: &str) -> Option<String> {
@@ -77,6 +96,12 @@ pub fn classify_answer(status: u16, content_type: Option<&str>) -> Option<String
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn gateway_names_tell_colliding_gateways_apart() {
+        let urls = ["http://10.0.2.2:8790".to_owned(), "http://10.0.2.2:8791/".to_owned(), "http://mini.tail.ts.net:8787".to_owned()];
+        assert_eq!(super::gateway_names(&urls), ["10.0.2.2:8790", "10.0.2.2:8791", "mini"]);
+    }
+
     use super::*;
 
     #[test]

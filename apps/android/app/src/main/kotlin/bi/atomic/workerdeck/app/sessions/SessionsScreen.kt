@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -32,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.ui.CountBadge
 import bi.atomic.workerdeck.app.ui.EngineMark
 import bi.atomic.workerdeck.app.ui.StateGlyph
@@ -64,7 +67,7 @@ private val MEMBER_AVATAR = 32.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionsScreen(model: SessionsModel, gatewayName: String, onOpen: (ListRow) -> Unit, onForget: () -> Unit) {
+fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (ListRow) -> Unit, onAdd: () -> Unit, onForget: (Gateway) -> Unit) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val colors = Wd.colors
     Scaffold(
@@ -72,7 +75,7 @@ fun SessionsScreen(model: SessionsModel, gatewayName: String, onOpen: (ListRow) 
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
-                actions = { GatewayMenu(gatewayName, onForget) },
+                actions = { GatewayMenu(gateways, onAdd, onForget) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
             )
         },
@@ -110,25 +113,51 @@ fun SessionsScreen(model: SessionsModel, gatewayName: String, onOpen: (ListRow) 
     }
 }
 
+// Each paired gateway with its own Forget, then Add. Forgetting asks first: the key is gone once confirmed.
 @Composable
-private fun GatewayMenu(gatewayName: String, onForget: () -> Unit) {
+private fun GatewayMenu(gateways: List<Gateway>, onAdd: () -> Unit, onForget: (Gateway) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    var forgetting by remember { mutableStateOf<Gateway?>(null) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Gateway") }
+        IconButton(onClick = { open = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Gateways") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (gateway in gateways) {
+                DropdownMenuItem(
+                    text = { Text(gateway.name, color = Wd.colors.secondary) },
+                    onClick = {},
+                    enabled = false,
+                )
+                DropdownMenuItem(
+                    text = { Text("Forget ${gateway.name}", color = Wd.colors.red) },
+                    onClick = {
+                        open = false
+                        forgetting = gateway
+                    },
+                )
+                HorizontalDivider()
+            }
             DropdownMenuItem(
-                text = { Text(gatewayName, color = Wd.colors.secondary) },
-                onClick = {},
-                enabled = false,
-            )
-            DropdownMenuItem(
-                text = { Text("Forget this gateway", color = Wd.colors.red) },
+                text = { Text("Add a gateway") },
                 onClick = {
                     open = false
-                    onForget()
+                    onAdd()
                 },
             )
         }
+    }
+    forgetting?.let { gateway ->
+        AlertDialog(
+            onDismissRequest = { forgetting = null },
+            title = { Text("Forget ${gateway.name}?") },
+            text = { Text("The address and auth key are removed from this device. The gateway keeps running.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    forgetting = null
+                    onForget(gateway)
+                }) { Text("Forget", color = Wd.colors.red) }
+            },
+            dismissButton = { TextButton(onClick = { forgetting = null }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -253,7 +282,7 @@ private fun details(row: ListRow, now: Double) = buildAnnotatedString {
     val parts = mutableListOf<Pair<String, Color>>()
     row.modelLabel?.let { parts += it to if (row.nameTinted) colors.coral else colors.secondary }
     if (row.project.isNotEmpty()) parts += row.project to colors.secondary
-    if (row.hostName.isNotEmpty()) parts += row.hostName to colors.secondary
+    if (row.showGateway && row.hostName.isNotEmpty()) parts += row.hostName to colors.secondary
     if (row.lastActivityAt > 0) parts += ago(row.lastActivityAt, now) to colors.secondary
     parts.forEachIndexed { index, (text, color) ->
         if (index > 0) append(" · ")

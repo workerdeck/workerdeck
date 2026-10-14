@@ -580,6 +580,11 @@ pub fn gateway_name(base_url: String) -> String {
 }
 
 #[uniffi::export]
+pub fn gateway_names(base_urls: Vec<String>) -> Vec<String> {
+    wd_native::vm::gateway::gateway_names(&base_urls)
+}
+
+#[uniffi::export]
 pub fn cleartext_refusal(base_url: String) -> Option<String> {
     wd_native::vm::gateway::cleartext_refusal(&base_url)
 }

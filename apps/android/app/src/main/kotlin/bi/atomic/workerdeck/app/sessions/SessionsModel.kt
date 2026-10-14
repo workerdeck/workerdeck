@@ -11,6 +11,9 @@ import bi.atomic.workerdeck.core.ffi.ListGroup
 import bi.atomic.workerdeck.core.ffi.SessionList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,12 +40,15 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     private val list = SessionList(prefs.getString("config", null), prefs.getString("marks", null))
     private val state = MutableStateFlow(SessionsUi())
     val ui: StateFlow<SessionsUi> = state
-    private var client: GatewayClient? = null
+    private var clients: Map<String, GatewayClient> = emptyMap()
+    private var errors: Map<String, String> = emptyMap()
     private var poll: Job? = null
 
-    fun attach(gateway: Gateway) {
-        if (client?.gateway == gateway) return
-        client = GatewayClient(gateway)
+    // The paired gateways, in pairing order; the list merges them. Re-attaching the same set is a no-op.
+    fun attach(gateways: List<Gateway>) {
+        if (clients.values.map { it.gateway } == gateways) return
+        val kept = clients.filterKeys { id -> gateways.any { it.id == id } }
+        clients = gateways.associate { gateway -> gateway.id to (kept[gateway.id]?.takeIf { it.gateway == gateway } ?: GatewayClient(gateway)) }
         poll?.cancel()
         poll = viewModelScope.launch {
             while (isActive) {
@@ -53,7 +59,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun pullRefresh() {
-        if (client == null || state.value.refreshing) return
+        if (clients.isEmpty() || state.value.refreshing) return
         state.value = state.value.copy(refreshing = true)
         viewModelScope.launch {
             try {
@@ -65,25 +71,43 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun refresh() {
-        val client = client ?: return
-        val error = runCatching {
-            list.setHost(client.gateway.id, client.gateway.name, false, client.sessions())
-        }.fold(
-            onSuccess = { skipped -> if (skipped > 0u) "$skipped sessions could not be read (a newer gateway?)" else null },
-            onFailure = { describe(it) },
-        )
-        state.value = state.value.copy(groups = list.groups(), loaded = true, error = error)
-        fetchAvatars(client)
+        val current = clients
+        val answers = coroutineScope { current.values.map { client -> async { client to runCatching { client.sessions() } } }.awaitAll() }
+        if (clients !== current) return
+        val next = mutableMapOf<String, String>()
+        for ((client, answer) in answers) {
+            val gateway = client.gateway
+            answer.mapCatching { body -> list.setHost(gateway.id, gateway.name, false, body) }.fold(
+                onSuccess = { skipped -> if (skipped > 0u) next[gateway.id] = "$skipped sessions could not be read (a newer gateway?)" },
+                onFailure = { next[gateway.id] = describe(it) },
+            )
+        }
+        errors = next
+        state.value = state.value.copy(groups = list.groups(), loaded = true, error = errorText())
+        fetchAvatars()
     }
 
-    private fun fetchAvatars(client: GatewayClient) {
+    private fun errorText(): String? {
+        if (errors.isEmpty()) return null
+        if (clients.size == 1) return errors.values.first()
+        return errors.entries.joinToString("\n") { (id, error) -> "${clients[id]?.gateway?.name ?: id}: $error" }
+    }
+
+    fun client(hostId: String): GatewayClient? = clients[hostId]
+
+    private fun fetchAvatars() {
         for (fetch in list.avatarFetches(System.currentTimeMillis().toDouble())) {
+            val client = clients[fetch.hostId]
+            if (client == null) {
+                list.avatarSettled(fetch.key, false, System.currentTimeMillis().toDouble())
+                continue
+            }
             viewModelScope.launch {
                 val frames = client.image(fetch.stillPath)?.let { still ->
                     withContext(Dispatchers.Default) { decodeAvatar(still.first, client.image(fetch.busyPath)) }
                 }
                 list.avatarSettled(fetch.key, frames != null, System.currentTimeMillis().toDouble())
-                if (frames != null && this@SessionsModel.client === client) {
+                if (frames != null && clients[fetch.hostId] === client) {
                     state.value = state.value.copy(avatars = state.value.avatars + (fetch.key to frames))
                 }
             }
@@ -103,10 +127,9 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
 
     // Unpairing drops the gateway from the list along with its read marks; a new pairing gets a new id.
     fun forget(gateway: Gateway) {
-        poll?.cancel()
-        client = null
         if (list.removeHost(gateway.id)) prefs.edit().putString("marks", list.marksJson()).apply()
-        state.value = SessionsUi()
+        attach(clients.values.map { it.gateway }.filter { it.id != gateway.id })
+        state.value = state.value.copy(groups = list.groups())
     }
 
     fun sessionJson(hostId: String, sessionId: String): String? = list.sessionJson(hostId, sessionId)

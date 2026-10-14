@@ -6,7 +6,10 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import bi.atomic.workerdeck.core.ffi.apiBase
 import bi.atomic.workerdeck.core.ffi.gatewayName
+import bi.atomic.workerdeck.core.ffi.gatewayNames
 import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -14,39 +17,62 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 // `id` is minted at pairing and keys everything stored about this gateway (read marks), so it outlives a rename.
-class Gateway(val id: String, val baseUrl: String, val key: String) {
-    val name: String = gatewayName(baseUrl)
+// `name` comes from the store, which names every gateway at once so two on one host stay apart.
+class Gateway(val id: String, val baseUrl: String, val key: String, val name: String = gatewayName(baseUrl)) {
     val apiBase: String = apiBase(baseUrl)
 
-    override fun equals(other: Any?) = other is Gateway && other.id == id && other.baseUrl == baseUrl && other.key == key
+    override fun equals(other: Any?) = other is Gateway && other.id == id && other.baseUrl == baseUrl && other.key == key && other.name == name
 
     override fun hashCode() = id.hashCode()
 
     override fun toString() = "Gateway($id, $baseUrl)"
 }
 
-// The auth key is sealed with an AES key that never leaves the Android Keystore; prefs hold only the ciphertext.
+// Every paired gateway, in pairing order. Each auth key is sealed with an AES key that never leaves the Android
+// Keystore; prefs hold only the ciphertext. A single pairing from before multi-gateway is read as a one-item list.
 class GatewayStore(context: Context) {
     private val prefs = context.getSharedPreferences("gateway", Context.MODE_PRIVATE)
 
-    fun load(): Gateway? {
-        val url = prefs.getString("url", null) ?: return null
-        val sealed = prefs.getString("key", null) ?: return null
-        val key = runCatching { open(sealed) }.getOrNull() ?: return null
-        val id = prefs.getString("id", null) ?: mint().also { prefs.edit().putString("id", it).apply() }
-        return Gateway(id, url, key)
+    fun load(): List<Gateway> {
+        migrate()
+        val raw = prefs.getString("gateways", null) ?: return emptyList()
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        val opened = (0 until array.length()).mapNotNull { i ->
+            val item = array.optJSONObject(i) ?: return@mapNotNull null
+            val key = runCatching { open(item.getString("key")) }.getOrNull() ?: return@mapNotNull null
+            Triple(item.getString("id"), item.getString("url"), key)
+        }
+        val names = gatewayNames(opened.map { it.second })
+        return opened.mapIndexed { i, (id, url, key) -> Gateway(id, url, key, names[i]) }
     }
 
-    fun save(baseUrl: String, key: String): Gateway {
-        val id = mint()
-        prefs.edit().putString("id", id).putString("url", baseUrl).putString("key", seal(key)).apply()
-        return Gateway(id, baseUrl, key)
+    fun add(baseUrl: String, key: String): Gateway {
+        val gateway = Gateway(UUID.randomUUID().toString(), baseUrl, key)
+        write(stored() + entry(gateway.id, baseUrl, seal(key)))
+        return gateway
     }
 
-    private fun mint() = UUID.randomUUID().toString()
+    fun remove(id: String) {
+        write(stored().filter { it.getString("id") != id })
+    }
 
-    fun clear() {
-        prefs.edit().clear().apply()
+    private fun stored(): List<JSONObject> {
+        val array = prefs.getString("gateways", null)?.let { runCatching { JSONArray(it) }.getOrNull() } ?: return emptyList()
+        return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+    }
+
+    private fun write(items: List<JSONObject>) {
+        prefs.edit().putString("gateways", JSONArray(items).toString()).apply()
+    }
+
+    private fun entry(id: String, url: String, sealed: String) = JSONObject().put("id", id).put("url", url).put("key", sealed)
+
+    private fun migrate() {
+        val url = prefs.getString("url", null) ?: return
+        val sealed = prefs.getString("key", null)
+        val id = prefs.getString("id", null) ?: UUID.randomUUID().toString()
+        val items = if (sealed == null) stored() else stored() + entry(id, url, sealed)
+        prefs.edit().remove("url").remove("key").remove("id").putString("gateways", JSONArray(items).toString()).apply()
     }
 
     private fun secret(): SecretKey {

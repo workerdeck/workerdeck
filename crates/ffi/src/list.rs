@@ -49,6 +49,7 @@ pub struct ListRow {
     pub title: String,
     pub project: String,
     pub host_name: String,
+    pub show_gateway: bool,
     pub engine: String,
     pub mark: Option<Mark>,
     pub mark_tinted: bool,
@@ -148,7 +149,7 @@ impl From<EngineMark> for Mark {
     }
 }
 
-fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig) -> ListRow {
+fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig, show_gateway: bool) -> ListRow {
     let info = &row.info;
     let mark = engine_mark(&row.adapter, info.model.as_deref());
     let status = info.status_label.as_ref().map(|label| match &label.emoji {
@@ -167,6 +168,7 @@ fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig) -> ListRow {
         title: vm::display_name(info),
         project: vm::project_label(info),
         host_name: row.host_name.clone(),
+        show_gateway,
         engine: row.adapter.clone(),
         mark: mark.map(Into::into),
         mark_tinted: mark.is_some_and(EngineMark::tints_mark),
@@ -250,6 +252,7 @@ impl SessionList {
         let filtered = filter_rows(&rows, &state.config, None);
         let options = GroupOptions { gateway_count: Some(state.hosts.len()), all: Some(rows.clone()), relay_hosts: None };
         let config = &state.config;
+        let show_gateway = vm::shows_gateway(state.hosts.len(), config);
         group_rows(&filtered, config, &options)
             .into_iter()
             .map(|group| {
@@ -261,11 +264,11 @@ impl SessionList {
                 };
                 let mut out = Vec::new();
                 for row in &group.rows {
-                    out.push(list_row(row, 0, config));
+                    out.push(list_row(row, 0, config, show_gateway));
                     if let Some(members) = &row.members
                         && !vm::is_team_collapsed(config, row)
                     {
-                        out.extend(members.iter().map(|m| list_row(m, 1, config)));
+                        out.extend(members.iter().map(|m| list_row(m, 1, config, show_gateway)));
                     }
                 }
                 ListGroup {

@@ -735,6 +735,12 @@ pub fn toggle_team_collapsed(config: &ViewConfig, row: &SessionRow) -> ViewConfi
     }
 }
 
+// `SessionBrowser`'s `showGateway`: a row names its gateway only when there is more than one and the list is not
+// grouped by project (a project group's label already carries it).
+pub fn shows_gateway(gateway_count: usize, config: &ViewConfig) -> bool {
+    gateway_count > 1 && config.group_by != GroupBy::Project
+}
+
 pub fn is_group_collapsed(config: &ViewConfig, group_key: &str) -> bool {
     config.collapsed_groups.as_deref().unwrap_or_default().iter().any(|k| k == group_key)
 }
@@ -916,5 +922,19 @@ pub fn clear_filters(config: &ViewConfig) -> ViewConfig {
         collapsed_groups: config.collapsed_groups.clone(),
         earlier_open: config.earlier_open,
         ..ViewConfig::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shows_gateway_only_for_several_outside_project_grouping() {
+        let state = ViewConfig { group_by: GroupBy::State, ..ViewConfig::default() };
+        let project = ViewConfig { group_by: GroupBy::Project, ..ViewConfig::default() };
+        assert!(!shows_gateway(1, &state));
+        assert!(shows_gateway(2, &state));
+        assert!(!shows_gateway(2, &project));
     }
 }

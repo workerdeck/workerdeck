@@ -6,6 +6,7 @@ pub const RETRY_AFTER_MS: f64 = 60_000.0;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AvatarFetch {
     pub key: String,
+    pub host_id: String,
     pub still_path: String,
     pub busy_path: String,
 }
@@ -68,7 +69,7 @@ impl AvatarLoads {
             return None;
         }
         self.in_flight.insert(key.clone());
-        Some(AvatarFetch { key, still_path: avatar_path(&agent.id, false), busy_path: avatar_path(&agent.id, true) })
+        Some(AvatarFetch { key, host_id: host_id.to_owned(), still_path: avatar_path(&agent.id, false), busy_path: avatar_path(&agent.id, true) })
     }
 
     pub fn settle(&mut self, key: &str, loaded: bool, now_ms: f64) {

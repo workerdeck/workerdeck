@@ -3,6 +3,7 @@ package bi.atomic.workerdeck.app
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
@@ -46,34 +47,40 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun App(store: GatewayStore) {
-    var gateway by remember { mutableStateOf(store.load()) }
+    var gateways by remember { mutableStateOf(store.load()) }
+    var adding by rememberSaveable { mutableStateOf(false) }
     var open by rememberSaveable { mutableStateOf<List<String>?>(null) }
-    val current = gateway
-    if (current == null) {
+    if (gateways.isEmpty() || adding) {
+        BackHandler(enabled = adding) { adding = false }
         PairingScreen { url, key ->
             cleartextRefusal(url)?.let { return@PairingScreen it }
             val probe = GatewayClient(Gateway("probe", url, key))
             runCatching { probe.sessions() }.exceptionOrNull()?.let { describe(it) }
-                ?: null.also { gateway = store.save(url, key) }
+                ?: null.also {
+                    store.add(url, key)
+                    gateways = store.load()
+                    adding = false
+                }
         }
         return
     }
-    val client = remember(current) { GatewayClient(current) }
     val sessions: SessionsModel = viewModel()
-    sessions.attach(current)
+    sessions.attach(gateways)
     val target = open
-    if (target == null) {
+    val client = target?.let { sessions.client(it[0]) }
+    if (target == null || client == null) {
         SessionsScreen(
             sessions,
-            current.name,
+            gateways,
             onOpen = { row ->
                 sessions.markSeen(row.hostId, row.sessionId)
                 open = listOf(row.hostId, row.sessionId, row.title)
             },
-            onForget = {
-                sessions.forget(current)
-                store.clear()
-                gateway = null
+            onAdd = { adding = true },
+            onForget = { gateway ->
+                sessions.forget(gateway)
+                store.remove(gateway.id)
+                gateways = store.load()
             },
         )
     } else {
