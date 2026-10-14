@@ -32,10 +32,11 @@ export interface AgentAvatarProps {
   // The state the corner badge draws; a folded lead passes its team's most urgent one.
   state?: SessionState
   badge?: boolean
+  title?: string
   className?: string
 }
 
-export function AgentAvatar({ row, image, size = 32, state, badge = true, className }: AgentAvatarProps) {
+export function AgentAvatar({ row, image, size = 32, state, badge = true, title, className }: AgentAvatarProps) {
   const { info } = row
   const shown = state ?? row.state
   const busy = shown === 'working' && image?.busy && image.busy.durations.length > 1 ? image.busy : undefined
@@ -47,7 +48,7 @@ export function AgentAvatar({ row, image, size = 32, state, badge = true, classN
       data-slot="agent-avatar"
       className={cn('relative inline-flex shrink-0', className)}
       style={{ width: size, height: size }}
-      title={info.agent?.name}
+      title={title ?? info.agent?.name}
     >
       {busy ? (
         <span

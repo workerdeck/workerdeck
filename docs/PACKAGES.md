@@ -416,6 +416,8 @@ in Auto a Member is shown when it is `working` or `attention`, is the selected r
 `sessionKey`), has `unseen > 0`, or has `lastActivityAt` within `TEAM_LINGER_MS` (30 s) of `now`;
 the rest go to `tray`. Expanded, or under any search or facet filter, every Member is shown.
 `teamLingerEnds(view, now)` is when the next lingering Member drops out, so a host can redraw then.
+`teamLingerStart(member, selected, now)` is when the window began for a Member shown *only* because it lingers (not busy,
+unread or selected), so a host can draw the countdown: `ui` fills a hairline under that row and the row leaves when it is full.
 iOS mirrors both in `SessionList.swift`; the Rust core ports them next.
 
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
@@ -1932,7 +1934,9 @@ the corner, busy strip played by CSS `steps()`, desaturated asleep), named by th
 session title as its topic. Members are the one-row `variant="member"` under the lead on a tree
 line (`TeamBlock` in `SessionBrowser`). In Auto (see `teamView` in protocol) the tree shows only the
 Members `shown`; the rest are avatars on the lead's first line before the context ring (`teamTray`,
-at most four, then `+n`). An avatar selects that Member through `onSelect` (its `title` is the name);
+at most four, then `+n`). An avatar selects that Member through `onSelect`; hovering it opens `MemberCard` in a `HoverCard`
+(Base UI PreviewCard, portalled under `PortalScope`: avatar, state, status label, in-progress checklist item, unread and
+approvals), not a native `title`, which VS Code webviews do not show;
 the trailing chevron or `+n` expands the team, and the knob atop an expanded tree returns it to Auto.
 The selected Member comes from `isActive`, so hosts pass nothing new; with no `now` prop the browser
 runs its own timer to the next `teamLingerEnds`. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the

@@ -200,6 +200,41 @@ export const TeamsExpanded: Story = {
   ),
 }
 
+const AUTO_ROWS = [
+  TEAM_ROWS[0],
+  TEAM_ROWS[1],
+  makeRow({
+    id: 't3',
+    title: 'peers.ts: team visibility',
+    status: 'idle',
+    lastActivityAt: Date.now() - 8_000,
+    agent: agent('juno', 'Juno', { lead: 'atlas', team: 'Atlas', order: 1 }),
+  } as never),
+  makeRow({
+    id: 't4',
+    title: 'iOS mirror review',
+    status: 'idle',
+    engineAsleep: true,
+    statusLabel: { text: 'waiting for the Swift port', emoji: '🧭', setAt: 1 },
+    checklist: [
+      { text: 'Mirror teamView in SessionList.swift', status: 'completed' },
+      { text: 'Port the linger goldens to XCTest', status: 'in_progress' },
+    ],
+    agent: agent('rook', 'Rook', { lead: 'atlas', team: 'Atlas', order: 2 }),
+  } as never),
+  makeRow({
+    id: 't5',
+    title: 'Relay follow-ups',
+    status: 'idle',
+    agent: agent('marlow', 'Marlow', { lead: 'atlas', team: 'Atlas', order: 3 }),
+  } as never),
+]
+
+// Juno went idle 8 s ago, so its row carries the linger countdown; hover a tray avatar for its card.
+export const TeamsAuto: Story = {
+  render: () => <Browser rows={AUTO_ROWS} avatars={AVATARS} showControls={false} initial={{ groupBy: 'none' }} />,
+}
+
 export const TeamsByState: Story = {
   render: () => <Browser rows={TEAM_ROWS} avatars={AVATARS} showControls={false} initial={{ groupBy: 'state' }} />,
 }

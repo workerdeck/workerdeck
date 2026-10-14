@@ -25,6 +25,7 @@ export { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './compo
 export { Popover, PopoverContent, PopoverTrigger } from './components/ui/Popover.tsx'
 export { Dialog, DialogBody, DialogClose, DialogContent, DialogHeader, DialogRow, DialogTrigger } from './components/ui/Dialog.tsx'
 export { Tip, TooltipContent, TooltipProvider } from './components/ui/Tooltip.tsx'
+export { HoverCard } from './components/ui/HoverCard.tsx'
 export { Toaster, toast } from './components/ui/Sonner.tsx'
 export { CopyButton, type CopyButtonProps } from './components/ui/CopyButton.tsx'
 export { Spinner } from './components/ui/Spinner.tsx'
