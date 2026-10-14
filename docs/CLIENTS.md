@@ -1366,15 +1366,26 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   whether it or the model name wears the vendor colour is the core's (`ListRow.mark`,
   `markTinted`, `nameTinted`); an unrecognised engine draws nothing.
 - **Shells open on a Canvas** (`session/ShellScreen.kt`): pressing a shell row emits `OpenShell`
-  (navigation has `shells` on), and the screen draws the core's `shell_grid` window with one
-  `drawText` per run, advancing by the run's `columns`. `SessionModel` reads two grids per change
-  (the header for the line count, then the window `back` lines above the tail); a reader scrolled
-  back keeps their lines while output arrives. Runs are clipped to the canvas, because until the
+  (navigation has `shells` on), and the screen draws the core's `shell_window` with one
+  `drawText` per run, advancing by the run's `columns`. The scroll position is the core's
+  (`shell_scroll`, an anchor on an absolute line number, so a reader scrolled back keeps their
+  lines while output arrives, and a clear or the 1000-line ring dropping lines clamps instead of
+  underflowing); any typed key snaps back to the live screen. Runs are clipped to the canvas, because until the
   core answers a resize the grid can be larger than the canvas and `drawText` throws for a box that
   starts outside it. Typing goes through a 1 dp scratch field whose changes are diffed against its
-  last value (removed characters become backspaces); resetting it mid-composition is what garbled
+  last value by the core's `ime_edit` (one backspace per removed code point, so deleting an emoji
+  never erases the character before it); resetting it mid-composition is what garbled
   Gboard input, so it only resets outside one. Hardware Enter, Tab, Escape and arrows go straight
   through as keys; the control strip mirrors iOS (esc, tab, armed ctrl, ^C, arrows, keyboard).
+- **Agents wear their MonkeyArt avatars** (`sessions/AgentAvatar.kt`), 48 dp on a lead card and
+  32 dp on a team member, with the iOS fallback (dashed box, engine mark) when there is none. What
+  to fetch, the cache key (host plus the seed-versioned `AgentRef.avatar`), the 60 s retry, the
+  busy strip's frame width and the current frame are the core's (`vm::agent_avatar`,
+  `SessionList.avatar_fetches` / `avatar_settled`); Kotlin fetches and decodes the PNGs.
+- **The activity keeps itself across configuration changes** (`android:configChanges` in the
+  manifest): a theme switch or a rotation would otherwise recreate it, rebuild the screen's
+  `SessionModel`, reconnect, replay and drop an open shell. `onConfigurationChanged` re-derives the
+  system bar icon colours.
 - **Pairing**: base URL + auth key (`Authorization: Bearer`), the key sealed with an AES-GCM key
   that never leaves the Android Keystore. The emulator reaches a loopback gateway at `10.0.2.2`.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's
