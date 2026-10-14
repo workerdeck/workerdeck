@@ -173,6 +173,7 @@ pub struct SessionChrome {
     pub permission_mode: Option<String>,
     pub mode_label: Option<String>,
     pub can_run_shell: bool,
+    pub can_clear_context: bool,
     pub queued: u32,
 }
 
@@ -189,6 +190,7 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             permission_mode: c.permission_mode,
             mode_label: c.mode_label,
             can_run_shell: c.can_run_shell,
+            can_clear_context: c.can_clear_context,
             queued: c.queued,
         }
     }
@@ -592,6 +594,11 @@ pub fn cleartext_refusal(base_url: String) -> Option<String> {
 #[uniffi::export]
 pub fn classify_answer(status: u16, content_type: Option<String>) -> Option<String> {
     wd_native::vm::gateway::classify_answer(status, content_type.as_deref())
+}
+
+#[uniffi::export]
+pub fn answer_error(status: u16, content_type: Option<String>, body: String) -> Option<String> {
+    wd_native::vm::gateway::answer_error(status, content_type.as_deref(), &body)
 }
 
 #[uniffi::export]

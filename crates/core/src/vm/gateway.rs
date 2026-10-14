@@ -94,6 +94,16 @@ pub fn classify_answer(status: u16, content_type: Option<&str>) -> Option<String
     None
 }
 
+// `classify_answer` with the gateway's own reason: a refused action answers JSON `{ "error": "..." }`.
+pub fn answer_error(status: u16, content_type: Option<&str>, body: &str) -> Option<String> {
+    let generic = classify_answer(status, content_type)?;
+    if !(400..600).contains(&status) || status == 401 || status == 403 || classify_answer(200, content_type).is_some() {
+        return Some(generic);
+    }
+    let reason = serde_json::from_str::<serde_json::Value>(body).ok().and_then(|v| v.get("error")?.as_str().map(str::to_owned));
+    Some(reason.filter(|r| !r.trim().is_empty()).unwrap_or(generic))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -156,5 +166,16 @@ mod tests {
         assert!(classify_answer(405, Some("text/html")).is_some());
         assert!(classify_answer(401, Some("application/json")).is_some());
         assert_eq!(classify_answer(500, Some("application/json")).as_deref(), Some("The gateway answered 500"));
+    }
+
+    #[test]
+    fn a_refusal_carries_the_gateways_reason() {
+        let json = Some("application/json");
+        let body = r#"{"error":"cannot sleep: the engine has not started a conversation yet"}"#;
+        assert_eq!(answer_error(409, json, body).as_deref(), Some("cannot sleep: the engine has not started a conversation yet"));
+        assert_eq!(answer_error(500, json, "{}").as_deref(), Some("The gateway answered 500"));
+        assert_eq!(answer_error(401, json, body).as_deref(), Some("The gateway refused the auth key"));
+        assert_eq!(answer_error(409, Some("text/html"), body).as_deref(), Some("Not a WorkerDeck gateway, or the auth key is wrong"));
+        assert_eq!(answer_error(200, json, body), None);
     }
 }

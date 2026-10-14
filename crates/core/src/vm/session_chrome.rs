@@ -14,6 +14,7 @@ pub struct SessionChrome {
     pub permission_mode: Option<String>,
     pub mode_label: Option<String>,
     pub can_run_shell: bool,
+    pub can_clear_context: bool,
     pub queued: u32,
 }
 
@@ -66,6 +67,7 @@ pub fn session_chrome(
         mode_label: permission_mode.as_deref().and_then(mode_short_label).map(str::to_owned),
         permission_mode,
         can_run_shell,
+        can_clear_context: state.capabilities.as_ref().is_some_and(|c| c.clear_context == Some(true)),
         queued,
     }
 }
@@ -134,5 +136,18 @@ mod tests {
         assert!(chrome.can_run_shell);
         assert_eq!(chrome.queued, 3);
         assert_eq!(with_status(None).model, None);
+    }
+
+    #[test]
+    fn clear_context_follows_the_capability() {
+        use crate::rest::EngineCapabilities;
+        let with = |clear: Option<bool>| TranscriptState {
+            capabilities: Some(EngineCapabilities { clear_context: clear, ..EngineCapabilities::default() }),
+            ..TranscriptState::default()
+        };
+        assert!(session_chrome(&with(Some(true)), None, false, 0, None).can_clear_context);
+        assert!(!session_chrome(&with(Some(false)), None, false, 0, None).can_clear_context);
+        assert!(!session_chrome(&with(None), None, false, 0, None).can_clear_context);
+        assert!(!with_status(None).can_clear_context);
     }
 }

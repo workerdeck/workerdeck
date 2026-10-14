@@ -390,6 +390,13 @@ pub fn display_name(info: &SessionInfo) -> String {
     info.agent.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| session_label(info))
 }
 
+// The rule every client's Sleep action uses: an engine that can sleep, idle, and not already asleep.
+pub fn can_sleep(info: &SessionInfo) -> bool {
+    info.capabilities.as_ref().is_some_and(|c| c.engine_sleep == Some(true))
+        && info.status == SessionStatus::Idle
+        && info.engine_asleep != Some(true)
+}
+
 fn normalize_path(path: &str) -> String {
     path.replace('\\', "/").trim_end_matches('/').to_owned()
 }
@@ -971,5 +978,20 @@ mod tests {
         assert!(!shows_gateway(1, &state));
         assert!(shows_gateway(2, &state));
         assert!(!shows_gateway(2, &project));
+    }
+
+    #[test]
+    fn sleep_needs_the_capability_an_idle_session_and_an_awake_engine() {
+        let info = |status: &str, sleeps: bool, asleep: bool| -> SessionInfo {
+            serde_json::from_value(serde_json::json!({
+                "id": "s", "status": status, "cwd": "/w", "createdAt": 0, "lastSeq": 0, "pendingPermissionCount": 0,
+                "capabilities": { "engineSleep": sleeps }, "engineAsleep": asleep,
+            }))
+            .unwrap()
+        };
+        assert!(can_sleep(&info("idle", true, false)));
+        assert!(!can_sleep(&info("running", true, false)));
+        assert!(!can_sleep(&info("idle", false, false)));
+        assert!(!can_sleep(&info("idle", true, true)));
     }
 }
