@@ -1,6 +1,6 @@
 package bi.atomic.workerdeck.app.gateway
 
-import bi.atomic.workerdeck.core.ffi.classifyAnswer
+import bi.atomic.workerdeck.core.ffi.answerError
 import bi.atomic.workerdeck.core.ffi.socketUrl
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -42,15 +42,24 @@ class GatewayClient(val gateway: Gateway) : Transport {
         }.getOrNull()
     }
 
-    private suspend fun get(path: String): String = withContext(Dispatchers.IO) {
-        val request = authed(Request.Builder().url(gateway.apiBase + path)).build()
-        try {
-            http.newCall(request).execute().use { response ->
-                classifyAnswer(response.code.toUShort(), response.header("content-type"))?.let { throw GatewayException(it) }
-                response.body?.string() ?: throw GatewayException("Empty answer")
-            }
+    // `POST /sessions/:id/sleep`: the engine stops and wakes on the next message.
+    suspend fun sleep(sessionId: String) {
+        call("/sessions/${encode(sessionId)}/sleep", "POST")
+    }
+
+    private suspend fun get(path: String): String = call(path, "GET")
+
+    private suspend fun call(path: String, method: String): String = withContext(Dispatchers.IO) {
+        val body = if (method == "GET") null else ByteArray(0).toRequestBody()
+        val request = try {
+            authed(Request.Builder().url(gateway.apiBase + path)).method(method, body).build()
         } catch (error: IllegalArgumentException) {
             throw GatewayException("Invalid gateway address")
+        }
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string()
+            answerError(response.code.toUShort(), response.header("content-type"), text.orEmpty())?.let { throw GatewayException(it) }
+            text ?: throw GatewayException("Empty answer")
         }
     }
 

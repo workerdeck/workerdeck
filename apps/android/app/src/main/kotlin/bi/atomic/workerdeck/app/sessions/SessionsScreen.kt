@@ -1,7 +1,9 @@
 package bi.atomic.workerdeck.app.sessions
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,14 +34,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +58,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import bi.atomic.workerdeck.app.gateway.Gateway
@@ -63,6 +70,7 @@ import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.TrayMember
 import bi.atomic.workerdeck.core.ffi.RowState
 import bi.atomic.workerdeck.core.ffi.ago
+import kotlinx.coroutines.launch
 
 private val GUTTER = 16.dp
 private val MARK_COLUMN = 22.dp
@@ -75,8 +83,17 @@ private val TRAY_AVATAR = 22.dp
 fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (hostId: String, sessionId: String, title: String) -> Unit, onAdd: () -> Unit, onForget: (Gateway) -> Unit) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val colors = Wd.colors
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(ui.notice) {
+        ui.notice?.let {
+            scope.launch { snackbar.showSnackbar(it) }
+            model.noticeShown()
+        }
+    }
     Scaffold(
         containerColor = colors.background,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
@@ -115,6 +132,7 @@ fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (hostI
                                     onOpen = { onOpen(row.hostId, row.sessionId, row.title) },
                                     onOpenMember = { onOpen(it.hostId, it.sessionId, it.title) },
                                     onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) },
+                                    onSleep = { model.sleep(row.hostId, row.sessionId) },
                                 )
                             }
                         }
@@ -225,6 +243,7 @@ private fun GroupHeader(label: String, count: UInt, unseen: UInt, collapsed: Boo
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionRow(
     row: ListRow,
@@ -233,58 +252,76 @@ private fun SessionRow(
     onOpen: () -> Unit,
     onOpenMember: (TrayMember) -> Unit,
     onToggleTeam: () -> Unit,
+    onSleep: () -> Unit,
 ) {
     val colors = Wd.colors
+    var menu by remember { mutableStateOf(false) }
     val avatar = row.avatarKey?.let { avatars[it] }
     val indent = 20.dp * row.depth.toInt()
     val agent = row.agentId != null
     val column = if (!agent) MARK_COLUMN else if (row.depth > 0u) MEMBER_AVATAR else CARD_AVATAR
-    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).alpha(if (agent && row.asleep) 0.6f else 1f)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = GUTTER + indent, end = GUTTER, top = 12.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+    Box {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onOpen, onLongClick = if (row.canSleep) ({ menu = true }) else null)
+                .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
         ) {
-            if (agent) {
-                AgentAvatar(row, avatar, column)
-            } else {
-                Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    StateGlyph(row.state)
-                    Spacer(Modifier.height(8.dp))
-                    EngineMark(row.mark, row.markTinted)
+            Row(
+                Modifier.fillMaxWidth().padding(start = GUTTER + indent, end = GUTTER, top = 12.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (agent) {
+                    AgentAvatar(row, avatar, column)
+                } else {
+                    Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        StateGlyph(row.state)
+                        Spacer(Modifier.height(8.dp))
+                        EngineMark(row.mark, row.markTinted)
+                    }
                 }
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    row.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (row.state == RowState.ENDED) colors.secondary else colors.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    details(row, now),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.secondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                row.status?.let { status ->
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        row.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (row.state == RowState.ENDED) colors.secondary else colors.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     Spacer(Modifier.height(2.dp))
-                    Text(status, style = MaterialTheme.typography.bodySmall, color = colors.green, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        details(row, now),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    row.status?.let { status ->
+                        Spacer(Modifier.height(2.dp))
+                        Text(status, style = MaterialTheme.typography.bodySmall, color = colors.green, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (row.members > 0u) {
+                        TeamTray(row, avatars, onOpenMember, onToggleTeam)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    if (row.unseen > 0u) {
+                        CountBadge(row.unseen, if (row.state == RowState.ENDED) colors.badge else colors.blue)
+                    }
                 }
             }
-            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (row.members > 0u) {
-                    TeamTray(row, avatars, onOpenMember, onToggleTeam)
-                    Spacer(Modifier.width(8.dp))
-                }
-                if (row.unseen > 0u) {
-                    CountBadge(row.unseen, if (row.state == RowState.ENDED) colors.badge else colors.blue)
-                }
-            }
+            HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
         }
-        HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, offset = DpOffset(GUTTER + indent, 0.dp)) {
+            DropdownMenuItem(
+                text = { Text("Sleep") },
+                onClick = {
+                    menu = false
+                    onSleep()
+                },
+            )
+        }
     }
 }
 

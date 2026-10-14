@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -29,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -85,9 +87,10 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
         var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
         var shellMode by rememberSaveable { mutableStateOf(false) }
         var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
+        var clearing by rememberSaveable { mutableStateOf(false) }
         val chrome = ui.chrome
         Column(Modifier.fillMaxSize().imePadding()) {
-            SessionTopBar(ui.title ?: fallbackTitle, onBack, model::reconnect)
+            SessionTopBar(ui.title ?: fallbackTitle, onBack, model::reconnect, onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null)
             ui.error?.let { Text(it, color = Wd.colors.red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp)) }
             ui.progress?.let { p ->
                 val fraction = if (p.target > 0) (p.seq.toFloat() / p.target).coerceIn(0f, 1f) else 0f
@@ -100,7 +103,10 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 )
             }
             val list = rememberLazyListState()
-            val count = ui.rows.size
+            // One snapshot for the whole list: `ui` is a state read, so a lambda reading `ui.rows` later can see a
+            // shorter transcript (a cleared context) than the `count` it was built with.
+            val rows = ui.rows
+            val count = rows.size
             LaunchedEffect(list, count) {
                 snapshotFlow { list.layoutInfo.visibleItemsInfo.map { it.index } }
                     .distinctUntilChanged()
@@ -116,9 +122,9 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     }
                 }
             } else LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, reverseLayout = true) {
-                items(count, key = { index -> ui.rows[count - 1 - index].key }) { index ->
+                items(count, key = { index -> rows[count - 1 - index].key }) { index ->
                     val row = count - 1 - index
-                    val layout = ui.rows[row]
+                    val layout = rows[row]
                     val lines = ui.linesAt(row)
                     val height = with(density) { layout.height.toDp() }
                     val lineHeight = with(density) { LINE_HEIGHT.toDp() }
@@ -175,6 +181,21 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
         }
         val shell by model.shell.collectAsStateWithLifecycle()
         shell?.let { ShellScreen(model, it.id, style, palette, onClose = {}) }
+        if (clearing) {
+            // Not destructive red: the old conversation stays resumable, same wording as the other clients.
+            AlertDialog(
+                onDismissRequest = { clearing = false },
+                title = { Text("Clear the conversation?") },
+                text = { Text("The session keeps running and starts a fresh conversation. The old one stays resumable.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clearing = false
+                        model.clearContext()
+                    }) { Text("Clear context") }
+                },
+                dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
+            )
+        }
         picker?.let {
             PickerSheet(
                 picker = it,
@@ -191,7 +212,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SessionTopBar(title: String, onBack: () -> Unit, onReconnect: () -> Unit) {
+private fun SessionTopBar(title: String, onBack: () -> Unit, onReconnect: () -> Unit, onClearContext: (() -> Unit)?) {
     val colors = Wd.colors
     var menu by remember { mutableStateOf(false) }
     Column {
@@ -213,6 +234,15 @@ private fun SessionTopBar(title: String, onBack: () -> Unit, onReconnect: () -> 
                                 onReconnect()
                             },
                         )
+                        onClearContext?.let { clear ->
+                            DropdownMenuItem(
+                                text = { Text("Clear context") },
+                                onClick = {
+                                    menu = false
+                                    clear()
+                                },
+                            )
+                        }
                     }
                 }
             },

@@ -80,6 +80,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
 
     fun interrupt() = worker.act { it.interrupt() }
 
+    fun clearContext() = worker.act { it.clearContext() }
+
     fun openShell(id: String, cols: Int, rows: Int) = worker.act {
         shellState.value = (shellState.value ?: ShellView(id)).copy(sized = true)
         it.openShell(id, null, cols.toUInt(), rows.toUInt()).also { readShell() }

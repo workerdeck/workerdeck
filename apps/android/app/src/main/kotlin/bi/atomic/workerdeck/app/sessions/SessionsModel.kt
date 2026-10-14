@@ -27,6 +27,8 @@ data class SessionsUi(
     val error: String? = null,
     val avatars: Map<String, AvatarFrames> = emptyMap(),
     val refreshing: Boolean = false,
+    // A one-shot message for an action that failed; the screen shows it once and calls `noticeShown`.
+    val notice: String? = null,
 )
 
 fun describe(error: Throwable): String = when (error) {
@@ -150,6 +152,20 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         if (list.removeHost(gateway.id)) prefs.edit().putString("marks", list.marksJson()).apply()
         attach(clients.values.map { it.gateway }.filter { it.id != gateway.id })
         state.value = state.value.copy(groups = draw())
+    }
+
+    fun sleep(hostId: String, sessionId: String) {
+        val client = clients[hostId] ?: return
+        viewModelScope.launch {
+            runCatching { client.sleep(sessionId) }.fold(
+                onSuccess = { refresh() },
+                onFailure = { state.value = state.value.copy(notice = "Sleep failed: ${describe(it)}") },
+            )
+        }
+    }
+
+    fun noticeShown() {
+        state.value = state.value.copy(notice = null)
     }
 
     fun sessionJson(hostId: String, sessionId: String): String? = list.sessionJson(hostId, sessionId)
