@@ -203,7 +203,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
   public var subagents: StepDisplay
   public var shells: StepDisplay
   public var tasks: StepDisplay
-  public var collapsedTeams: [String]
+  public var expandedTeams: [String]
   public var earlierOpen: Bool
 
   public init(
@@ -211,7 +211,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     states: [SessionState] = [], projects: [String] = [], scoped: Bool = true,
     groupBy: GroupBy = .state, sortBy: SortBy = .recent,
     subagents: StepDisplay = .active, shells: StepDisplay = .active, tasks: StepDisplay = .active,
-    collapsedTeams: [String] = [], earlierOpen: Bool = false
+    expandedTeams: [String] = [], earlierOpen: Bool = false
   ) {
     self.search = search
     self.gateways = gateways
@@ -224,7 +224,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     self.subagents = subagents
     self.shells = shells
     self.tasks = tasks
-    self.collapsedTeams = collapsedTeams
+    self.expandedTeams = expandedTeams
     self.earlierOpen = earlierOpen
   }
 
@@ -259,7 +259,8 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
     subagents = try Self.display(c, .subagents)
     shells = try Self.display(c, .shells)
     tasks = try Self.display(c, .tasks)
-    collapsedTeams = (try? c.decodeIfPresent([String].self, forKey: .collapsedTeams)) ?? []
+    // A stored `collapsedTeams` is dropped, not migrated: it held the inverse.
+    expandedTeams = (try? c.decodeIfPresent([String].self, forKey: .expandedTeams)) ?? []
     earlierOpen = (try? c.decodeIfPresent(Bool.self, forKey: .earlierOpen)) ?? false
   }
 
@@ -272,7 +273,7 @@ public struct ViewConfig: Codable, Sendable, Equatable, Hashable {
 
   private enum CodingKeys: String, CodingKey {
     case search, gateways, adapters, states, projects, scoped, groupBy, sortBy, subagents, shells,
-      tasks, collapsedTeams, earlierOpen
+      tasks, expandedTeams, earlierOpen
   }
 }
 
@@ -772,20 +773,65 @@ public func teamState(_ rows: [SessionRow]) -> SessionState {
   return SessionState.order[best]
 }
 
-public func isTeamCollapsed(_ config: ViewConfig, _ row: SessionRow) -> Bool {
+public func isTeamExpanded(_ config: ViewConfig, _ row: SessionRow) -> Bool {
   guard let key = teamKey(row) else { return false }
-  return config.collapsedTeams.contains(key)
+  return config.expandedTeams.contains(key)
 }
 
-public func toggleTeamCollapsed(_ config: ViewConfig, _ row: SessionRow) -> ViewConfig {
+public func toggleTeamExpanded(_ config: ViewConfig, _ row: SessionRow) -> ViewConfig {
   guard let key = teamKey(row) else { return config }
   var next = config
-  if next.collapsedTeams.contains(key) {
-    next.collapsedTeams.removeAll { $0 == key }
+  if next.expandedTeams.contains(key) {
+    next.expandedTeams.removeAll { $0 == key }
   } else {
-    next.collapsedTeams.append(key)
+    next.expandedTeams.append(key)
   }
   return next
+}
+
+/// Mirror of `TEAM_LINGER_MS`.
+public let teamLingerMs: Double = 30_000
+
+public struct TeamView: Sendable, Equatable {
+  public var expanded: Bool
+  public var shown: [SessionRow]
+  public var tray: [SessionRow]
+
+  public init(expanded: Bool, shown: [SessionRow], tray: [SessionRow]) {
+    self.expanded = expanded
+    self.shown = shown
+    self.tray = tray
+  }
+}
+
+/// Mirror of protocol's `teamView`: Auto draws a member that is busy, selected,
+/// unread, or idle for under `teamLingerMs`; the rest sit in the lead's tray.
+public func teamView(_ lead: SessionRow, config: ViewConfig, selected: String?, now: Double)
+  -> TeamView
+{
+  let members = lead.members ?? []
+  let expanded = isTeamExpanded(config, lead)
+  if expanded || hasFacetFilter(config) {
+    return TeamView(expanded: expanded, shown: members, tray: [])
+  }
+  var shown: [SessionRow] = []
+  var tray: [SessionRow] = []
+  for member in members {
+    let lingering = member.info.lastActivityAt.map { now - $0 < teamLingerMs } ?? false
+    let auto =
+      member.state == .working || member.state == .attention || member.unseen > 0
+      || member.id == selected || lingering
+    if auto { shown.append(member) } else { tray.append(member) }
+  }
+  return TeamView(expanded: expanded, shown: shown, tray: tray)
+}
+
+/// Mirror of protocol's `teamLingerEnds`.
+public func teamLingerEnds(_ view: TeamView, now: Double) -> Double? {
+  view.shown.compactMap { member -> Double? in
+    guard let at = member.info.lastActivityAt, now - at < teamLingerMs else { return nil }
+    return at + teamLingerMs
+  }.min()
 }
 
 public struct TeamSummary: Sendable, Equatable {
@@ -888,7 +934,7 @@ public func clearFilters(_ config: ViewConfig) -> ViewConfig {
   next.subagents = config.subagents
   next.shells = config.shells
   next.tasks = config.tasks
-  next.collapsedTeams = config.collapsedTeams
+  next.expandedTeams = config.expandedTeams
   next.earlierOpen = config.earlierOpen
   return next
 }

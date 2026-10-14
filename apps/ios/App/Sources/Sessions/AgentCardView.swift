@@ -2,9 +2,14 @@ import SwiftUI
 import WorkerDeckKit
 
 struct TeamTray {
-  let members: Int
-  let collapsed: Bool
+  let view: TeamView
+  let frames: (SessionRow) -> AgentAvatarFrames?
+  let select: (SessionRow) -> Void
   let toggle: () -> Void
+
+  static let max = 3
+  var avatars: [SessionRow] { Array(view.tray.prefix(view.tray.count > Self.max ? Self.max - 1 : Self.max)) }
+  var overflow: Int { view.tray.count - avatars.count }
 }
 
 struct AgentCardView<MenuContent: View>: View {
@@ -140,23 +145,46 @@ struct AgentCardView<MenuContent: View>: View {
   }
 
   private func trayButton(_ tray: TeamTray) -> some View {
-    Button(action: tray.toggle) {
-      trayLabel(tray).padding(.bottom, 4).contentShape(Rectangle())
+    HStack(spacing: 4) {
+      ForEach(tray.avatars) { member in
+        Button { tray.select(member) } label: {
+          AgentAvatarView(info: member.info, frames: tray.frames(member), size: 18, badge: false)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Open \(member.info.agent?.name ?? sessionLabel(member.info))")
+      }
+      Button(action: tray.toggle) {
+        trayGlyph(tray).padding(.vertical, 4).contentShape(Rectangle())
+      }
+      .buttonStyle(.borderless)
+      .accessibilityLabel(tray.view.expanded ? "Show only active Members" : "Show all Team Members")
     }
-    .buttonStyle(.borderless)
-    .accessibilityLabel(tray.collapsed ? "Show team" : "Fold team")
+    .padding(.leading, 10)
+    .padding(.bottom, 4)
   }
 
   private func trayLabel(_ tray: TeamTray) -> some View {
-    HStack(spacing: 3) {
-      Image(systemName: "person.2")
-      Text("\(tray.members)").monospacedDigit()
-      Image(systemName: tray.collapsed ? "chevron.right" : "chevron.down")
-        .font(.caption2.weight(.semibold))
+    HStack(spacing: 4) {
+      ForEach(tray.avatars) { member in
+        AgentAvatarView(info: member.info, frames: tray.frames(member), size: 18, badge: false)
+      }
+      trayGlyph(tray)
+    }
+    .padding(.leading, 10)
+  }
+
+  @ViewBuilder
+  private func trayGlyph(_ tray: TeamTray) -> some View {
+    Group {
+      if tray.overflow > 0 && !tray.view.expanded {
+        Text("+\(tray.overflow)").monospacedDigit()
+      } else {
+        Image(systemName: tray.view.expanded ? "chevron.down" : "chevron.right")
+          .font(.caption2.weight(.semibold))
+      }
     }
     .font(.caption)
     .foregroundStyle(.secondary)
-    .padding(.leading, 10)
   }
 }
 
