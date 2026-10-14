@@ -32,6 +32,16 @@ class GatewayClient(val gateway: Gateway) : Transport {
 
     suspend fun sessions(): String = get("/sessions")
 
+    // An image under the API base with its `x-frame-durations` header; null when it did not come.
+    suspend fun image(path: String): Pair<ByteArray, String?>? = withContext(Dispatchers.IO) {
+        val request = runCatching { authed(Request.Builder().url(gateway.apiBase + path)).build() }.getOrNull() ?: return@withContext null
+        runCatching {
+            http.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) null else response.body?.bytes()?.let { it to response.header("x-frame-durations") }
+            }
+        }.getOrNull()
+    }
+
     private suspend fun get(path: String): String = withContext(Dispatchers.IO) {
         val request = authed(Request.Builder().url(gateway.apiBase + path)).build()
         try {

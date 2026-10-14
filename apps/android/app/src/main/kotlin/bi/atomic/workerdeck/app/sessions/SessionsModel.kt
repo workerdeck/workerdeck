@@ -9,14 +9,21 @@ import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.core.ffi.ListException
 import bi.atomic.workerdeck.core.ffi.ListGroup
 import bi.atomic.workerdeck.core.ffi.SessionList
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-data class SessionsUi(val groups: List<ListGroup> = emptyList(), val loaded: Boolean = false, val error: String? = null)
+data class SessionsUi(
+    val groups: List<ListGroup> = emptyList(),
+    val loaded: Boolean = false,
+    val error: String? = null,
+    val avatars: Map<String, AvatarFrames> = emptyMap(),
+)
 
 fun describe(error: Throwable): String = when (error) {
     is ListException.NotASessionList -> "Not a WorkerDeck gateway, or the auth key is wrong"
@@ -52,7 +59,22 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
             onSuccess = { skipped -> if (skipped > 0u) "$skipped sessions could not be read (a newer gateway?)" else null },
             onFailure = { describe(it) },
         )
-        state.value = SessionsUi(list.groups(), loaded = true, error = error)
+        state.value = state.value.copy(groups = list.groups(), loaded = true, error = error)
+        fetchAvatars(client)
+    }
+
+    private fun fetchAvatars(client: GatewayClient) {
+        for (fetch in list.avatarFetches(System.currentTimeMillis().toDouble())) {
+            viewModelScope.launch {
+                val frames = client.image(fetch.stillPath)?.let { still ->
+                    withContext(Dispatchers.Default) { decodeAvatar(still.first, client.image(fetch.busyPath)) }
+                }
+                list.avatarSettled(fetch.key, frames != null, System.currentTimeMillis().toDouble())
+                if (frames != null && this@SessionsModel.client === client) {
+                    state.value = state.value.copy(avatars = state.value.avatars + (fetch.key to frames))
+                }
+            }
+        }
     }
 
     fun toggleGroup(key: String) = update { list.toggleGroup(key) }

@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -56,6 +57,8 @@ import bi.atomic.workerdeck.core.ffi.ago
 
 private val GUTTER = 16.dp
 private val MARK_COLUMN = 22.dp
+private val CARD_AVATAR = 48.dp
+private val MEMBER_AVATAR = 32.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,7 +92,7 @@ fun SessionsScreen(model: SessionsModel, gatewayName: String, onOpen: (ListRow) 
                         }
                         if (!group.collapsed) {
                             items(group.rows, key = { "${group.key}/${it.key}" }) { row ->
-                                SessionRow(row, now, onOpen = { onOpen(row) }, onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) })
+                                SessionRow(row, now, row.avatarKey?.let { ui.avatars[it] }, onOpen = { onOpen(row) }, onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) })
                             }
                         }
                     }
@@ -170,18 +173,24 @@ private fun GroupHeader(label: String, count: UInt, unseen: UInt, collapsed: Boo
 }
 
 @Composable
-private fun SessionRow(row: ListRow, now: Double, onOpen: () -> Unit, onToggleTeam: () -> Unit) {
+private fun SessionRow(row: ListRow, now: Double, avatar: AvatarFrames?, onOpen: () -> Unit, onToggleTeam: () -> Unit) {
     val colors = Wd.colors
     val indent = 20.dp * row.depth.toInt()
-    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+    val agent = row.agentId != null
+    val column = if (!agent) MARK_COLUMN else if (row.depth > 0u) MEMBER_AVATAR else CARD_AVATAR
+    Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).alpha(if (agent && row.asleep) 0.6f else 1f)) {
         Row(
             Modifier.fillMaxWidth().padding(start = GUTTER + indent, end = GUTTER, top = 12.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                StateGlyph(row.state)
-                Spacer(Modifier.height(8.dp))
-                EngineMark(row.mark, row.markTinted)
+            if (agent) {
+                AgentAvatar(row, avatar, column)
+            } else {
+                Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    StateGlyph(row.state)
+                    Spacer(Modifier.height(8.dp))
+                    EngineMark(row.mark, row.markTinted)
+                }
             }
             Column(Modifier.weight(1f)) {
                 Text(
@@ -222,7 +231,7 @@ private fun SessionRow(row: ListRow, now: Double, onOpen: () -> Unit, onToggleTe
                 }
             }
         }
-        HorizontalDivider(Modifier.padding(start = GUTTER + indent + MARK_COLUMN + 10.dp), thickness = 0.5.dp, color = colors.separator)
+        HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
     }
 }
 

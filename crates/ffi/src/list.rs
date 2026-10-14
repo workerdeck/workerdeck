@@ -1,7 +1,9 @@
 // The sessions list for a native app: every gateway's REST rollup, the read watermarks and the view config go in,
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
+use crate::avatar::AvatarFetch;
 use std::sync::Mutex;
 use wd_native::rest::{Entries, ProfileEngine, SessionInfo};
+use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
     self as vm, GroupOptions, SessionRow, SessionState, ViewConfig, filter_rows, group_rows, normalize_view_config,
@@ -58,6 +60,10 @@ pub struct ListRow {
     pub model: Option<String>,
     pub model_label: Option<String>,
     pub agent: Option<String>,
+    pub agent_id: Option<String>,
+    pub avatar_key: Option<String>,
+    pub avatar_busy: bool,
+    pub asleep: bool,
     pub members: u32,
     pub team_collapsed: bool,
     pub last_activity_at: f64,
@@ -86,6 +92,7 @@ struct State {
     hosts: Vec<Host>,
     config: ViewConfig,
     marks: Watermarks,
+    avatars: AvatarLoads,
 }
 
 impl State {
@@ -149,6 +156,9 @@ fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig) -> ListRow {
         None => label.text.clone(),
     });
     let state = row.team_state.unwrap_or(row.state);
+    let team_collapsed = row.members.is_some() && vm::is_team_collapsed(config, row);
+    let asleep = info.engine_asleep == Some(true);
+    let shown = if team_collapsed { state } else { row.state };
     ListRow {
         key: vm::session_key(&row.host_id, &info.id),
         host_id: row.host_id.clone(),
@@ -168,8 +178,12 @@ fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig) -> ListRow {
         model: info.model.clone(),
         model_label: wd_native::vm::model_name::friendly_model(info.model.as_deref()),
         agent: info.agent.as_ref().map(|_| vm::session_label(info)),
+        agent_id: info.agent.as_ref().map(|a| a.id.clone()),
+        avatar_key: info.agent.as_ref().and_then(|a| avatar_key(&row.host_id, a)),
+        avatar_busy: shown == SessionState::Working && !asleep,
+        asleep,
         members: row.members.as_ref().map_or(0, |m| m.len() as u32),
-        team_collapsed: row.members.is_some() && vm::is_team_collapsed(config, row),
+        team_collapsed,
         last_activity_at: info.last_activity_at.unwrap_or(info.created_at),
     }
 }
@@ -198,7 +212,7 @@ impl SessionList {
         let stored = config_json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok());
         let marks = marks_json.and_then(|json| serde_json::from_str::<Entries<Watermark>>(&json).ok()).unwrap_or_default();
         std::sync::Arc::new(SessionList {
-            inner: Mutex::new(State { hosts: Vec::new(), config: normalize_view_config(stored.as_ref()), marks: Watermarks::new(marks) }),
+            inner: Mutex::new(State { hosts: Vec::new(), config: normalize_view_config(stored.as_ref()), marks: Watermarks::new(marks), avatars: AvatarLoads::default() }),
         })
     }
 
@@ -226,6 +240,7 @@ impl SessionList {
     pub fn remove_host(&self, host_id: String) -> bool {
         let mut state = self.state();
         state.hosts.retain(|h| h.id != host_id);
+        state.avatars.forget_host(&host_id);
         state.marks.forget_host(&host_id)
     }
 
@@ -265,6 +280,25 @@ impl SessionList {
                 }
             })
             .collect()
+    }
+
+    // The agent pictures to fetch now, each marked in flight until `avatar_settled`; a failure is retried after a minute.
+    pub fn avatar_fetches(&self, now_ms: f64) -> Vec<AvatarFetch> {
+        let mut state = self.state();
+        let State { hosts, avatars, .. } = &mut *state;
+        let mut out = Vec::new();
+        for host in hosts.iter() {
+            for agent in host.sessions.iter().filter_map(|s| s.agent.as_ref()) {
+                if let Some(fetch) = avatars.begin(&host.id, agent, now_ms) {
+                    out.push(fetch.into());
+                }
+            }
+        }
+        out
+    }
+
+    pub fn avatar_settled(&self, key: String, loaded: bool, now_ms: f64) {
+        self.state().avatars.settle(&key, loaded, now_ms);
     }
 
     pub fn unseen_total(&self) -> u32 {

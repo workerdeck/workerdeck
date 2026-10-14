@@ -1,3 +1,4 @@
+pub mod agent_avatar;
 pub mod agents;
 pub mod checklist;
 pub mod collate;
