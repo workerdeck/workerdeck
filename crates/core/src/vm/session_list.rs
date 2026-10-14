@@ -385,6 +385,11 @@ pub fn session_label(info: &SessionInfo) -> String {
     info.title.clone().unwrap_or_else(|| info.id.chars().take(8).collect())
 }
 
+// What a row and a session header call the session: an agent by its name, anything else by its label.
+pub fn display_name(info: &SessionInfo) -> String {
+    info.agent.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| session_label(info))
+}
+
 fn normalize_path(path: &str) -> String {
     path.replace('\\', "/").trim_end_matches('/').to_owned()
 }

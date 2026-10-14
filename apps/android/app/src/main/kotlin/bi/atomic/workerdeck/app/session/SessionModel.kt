@@ -46,7 +46,7 @@ data class SessionUi(
 
 // The open shell screen: `back` is how many lines the reader scrolled up from the tail (0 follows it), `shown` how many
 // rows the canvas holds. A reader scrolled back stays on the same lines while output arrives.
-data class ShellView(val id: String, val back: Int = 0, val shown: Int = 0, val grid: ShellGrid? = null, val total: Int = 0)
+data class ShellView(val id: String, val sized: Boolean = false, val grid: ShellGrid? = null)
 
 // Drives one core `Session` over one socket, for as long as its screen is shown: the screen calls `close()` when it
 // leaves. Everything that touches the session, the socket and the window runs on the worker's thread; effects arrive
@@ -81,19 +81,16 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     fun interrupt() = worker.act { it.interrupt() }
 
     fun openShell(id: String, cols: Int, rows: Int) = worker.act {
-        shellState.value = (shellState.value ?: ShellView(id)).copy(shown = rows)
+        shellState.value = (shellState.value ?: ShellView(id)).copy(sized = true)
         it.openShell(id, null, cols.toUInt(), rows.toUInt()).also { readShell() }
     }
 
     fun resizeShell(id: String, cols: Int, rows: Int) = worker.act {
-        shellState.value = shellState.value?.copy(shown = rows)
         it.shellResize(id, cols.toUInt(), rows.toUInt()).also { readShell() }
     }
 
-    fun scrollShell(back: Int) = worker.act {
-        shellState.value = shellState.value?.copy(back = back.coerceAtLeast(0))
-        readShell()
-        emptyList()
+    fun scrollShell(lines: Int) = worker.act { session ->
+        session.shellScroll(shellState.value?.id ?: return@act emptyList(), lines).also { readShell() }
     }
 
     fun shellKey(id: String, key: Key) = worker.act { it.shellKey(id, key) }
@@ -219,16 +216,10 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         state.value = ui
     }
 
-    // Two reads: the header for the line count, then the window `back` lines above the tail.
     private fun readShell() {
         val view = shellState.value ?: return
-        if (view.shown <= 0) return
-        val head = session.shellGrid(view.id, 0u, 0u)?.let(Snapshots::shellGrid) ?: return
-        val grown = if (view.back > 0 && view.total > 0) head.totalLines - view.total else 0
-        val back = (view.back + grown).coerceAtMost((head.totalLines - view.shown).coerceAtLeast(0))
-        val start = (head.totalLines - view.shown - back).coerceAtLeast(0)
-        val grid = session.shellGrid(view.id, start.toUInt(), view.shown.toUInt())?.let(Snapshots::shellGrid)
-        shellState.value = view.copy(back = back, grid = grid, total = head.totalLines)
+        if (!view.sized) return
+        shellState.value = view.copy(grid = session.shellWindow(view.id)?.let(Snapshots::shellGrid))
     }
 
     private fun showLines(bytes: ByteArray) {

@@ -1,5 +1,6 @@
 package bi.atomic.workerdeck.app
 
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +34,13 @@ class MainActivity : ComponentActivity() {
                 Surface(color = MaterialTheme.colorScheme.background) { App(store) }
             }
         }
+    }
+
+    // The manifest keeps the activity across configuration changes, so a live session survives a theme switch or a
+    // rotation; the system bars still need their icon colours re-derived.
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        enableEdgeToEdge()
     }
 }
 

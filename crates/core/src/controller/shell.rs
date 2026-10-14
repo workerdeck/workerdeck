@@ -33,6 +33,7 @@ pub struct ShellSession {
     rows: u32,
     attached: bool,
     revision: u64,
+    anchor: Option<u64>,
 }
 
 impl ShellSession {
@@ -48,7 +49,36 @@ impl ShellSession {
             rows,
             attached: false,
             revision: 0,
+            anchor: None,
         }
+    }
+
+    // The first line of the screen-tall window a viewer shows: the live screen while following, else the absolute
+    // line it was scrolled to, clamped into what the ring still holds.
+    pub fn window_start(&self) -> usize {
+        let screen = &self.screen;
+        let tail = screen.total_rows().saturating_sub(screen.rows);
+        match self.anchor {
+            None => tail,
+            Some(line) => (line.saturating_sub(screen.scrolled_base()) as usize).min(tail),
+        }
+    }
+
+    pub fn is_following(&self) -> bool {
+        self.anchor.is_none()
+    }
+
+    // Positive scrolls back into history. Reaching the live screen follows it again, so new output moves the window
+    // only then; scrolled back, the window stays on its lines until the ring drops them.
+    pub fn scroll(&mut self, lines: i64) {
+        let screen = &self.screen;
+        let tail = screen.total_rows().saturating_sub(screen.rows) as i64;
+        let start = (self.window_start() as i64 - lines).clamp(0, tail);
+        self.anchor = (start < tail).then(|| screen.scrolled_base() + start as u64);
+    }
+
+    pub fn follow(&mut self) {
+        self.anchor = None;
     }
 
     pub fn shell_id(&self) -> &str {
@@ -230,9 +260,81 @@ pub fn exit_draft(draft: &str) -> String {
     format!("{SHELL_GLYPH}{draft}")
 }
 
+// An IME edits a scratch field rather than sending keys, so its change is diffed into what a terminal understands:
+// one backspace per removed code point (readline erases characters, not UTF-16 units), then the added text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImeEdit {
+    pub backspaces: usize,
+    pub text: String,
+}
+
+pub fn ime_edit(old: &str, new: &str) -> ImeEdit {
+    let kept: usize = old.chars().zip(new.chars()).take_while(|(a, b)| a == b).map(|(a, _)| a.len_utf8()).sum();
+    ImeEdit { backspaces: old[kept..].chars().count(), text: new[kept..].to_owned() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn printed(from: usize, to: usize) -> String {
+        (from..to).map(|n| format!("{n}\r\n")).collect()
+    }
+
+    fn top_line(shell: &ShellSession) -> String {
+        let cells = shell.screen().line(shell.window_start());
+        let text = |cell: &crate::vt::Cell| match &cell.text {
+            crate::vt::CellText::None => " ".to_owned(),
+            crate::vt::CellText::Char(c) => c.to_string(),
+            crate::vt::CellText::Cluster(s) => s.to_string(),
+        };
+        cells.iter().map(text).collect::<String>().trim_end().to_owned()
+    }
+
+    #[test]
+    fn a_scrolled_back_window_stays_on_its_lines_while_output_arrives() {
+        let mut shell = ShellSession::new("s".into(), None, 20, 4);
+        shell.output(&printed(0, 50));
+        shell.scroll(10);
+        let pinned = top_line(&shell);
+        shell.output(&printed(50, 80));
+        assert_eq!(top_line(&shell), pinned);
+        assert!(!shell.is_following());
+        shell.scroll(-1000);
+        assert!(shell.is_following());
+        shell.scroll(1000);
+        assert_eq!(shell.window_start(), 0);
+    }
+
+    #[test]
+    fn a_cleared_or_overflowed_history_clamps_the_window_instead_of_underflowing() {
+        let mut shell = ShellSession::new("s".into(), None, 20, 4);
+        shell.output(&printed(0, 120));
+        shell.scroll(100);
+        shell.output("\u{1b}[3J");
+        assert_eq!(shell.window_start(), 0);
+        let mut shell = ShellSession::new("s".into(), None, 20, 4);
+        shell.output(&printed(0, SCROLLBACK_LINES + 20));
+        shell.scroll(SCROLLBACK_LINES as i64);
+        assert_eq!(shell.window_start(), 0);
+        let oldest = top_line(&shell);
+        shell.output(&printed(SCROLLBACK_LINES + 20, SCROLLBACK_LINES + 25));
+        assert_eq!(shell.window_start(), 0);
+        assert_ne!(top_line(&shell), oldest);
+    }
+
+    #[test]
+    fn an_ime_edit_counts_code_points_not_utf16_units() {
+        let edit = |old: &str, new: &str| {
+            let e = ime_edit(old, new);
+            (e.backspaces, e.text)
+        };
+        assert_eq!(edit(" a\u{1F600}", " a"), (1, String::new()));
+        assert_eq!(edit(" a", " a\u{1F600}"), (0, "\u{1F600}".to_owned()));
+        assert_eq!(edit(" teh", " the"), (2, "he".to_owned()));
+        assert_eq!(edit(" \u{1F600}x", " \u{1F601}x"), (2, "\u{1F601}x".to_owned()));
+        assert_eq!(edit(" ", ""), (1, String::new()));
+    }
 
     #[test]
     fn a_dollar_enters_shell_mode_only_when_the_session_can_run_one() {

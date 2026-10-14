@@ -154,7 +154,7 @@ fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig) -> ListRow {
         host_id: row.host_id.clone(),
         session_id: info.id.clone(),
         depth,
-        title: info.agent.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| vm::session_label(info)),
+        title: vm::display_name(info),
         project: vm::project_label(info),
         host_name: row.host_name.clone(),
         engine: row.adapter.clone(),

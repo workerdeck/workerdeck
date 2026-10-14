@@ -411,7 +411,8 @@ impl LiveSession {
             }
             Pending::ShellOutput(_) | Pending::Kill(_) => {}
             Pending::Catalog(profile) if ok => self.catalog = profile_models(body, &profile),
-            Pending::Catalog(_) => {}
+            Pending::Catalog(_) if status == 404 => {}
+            Pending::Catalog(_) => self.catalog_requested = false,
         }
     }
 
@@ -524,17 +525,33 @@ impl LiveSession {
     }
 
     pub fn shell_key(&mut self, shell_id: &str, key: VtKey) {
-        self.shell_act(shell_id, |shell| shell.key(key));
+        self.shell_act(shell_id, |shell| {
+            shell.follow();
+            shell.key(key)
+        });
         self.pump();
     }
 
+    // Scrolling is a view change only: no frame goes out, the platform re-reads the window after it.
+    pub fn shell_scroll(&mut self, shell_id: &str, lines: i64) {
+        if let Some(shell) = self.shells.get_mut(shell_id) {
+            shell.scroll(lines);
+        }
+    }
+
     pub fn shell_text(&mut self, shell_id: &str, text: &str) {
-        self.shell_act(shell_id, |shell| shell.text(text));
+        self.shell_act(shell_id, |shell| {
+            shell.follow();
+            shell.text(text)
+        });
         self.pump();
     }
 
     pub fn shell_paste(&mut self, shell_id: &str, text: &str) {
-        self.shell_act(shell_id, |shell| shell.paste(text));
+        self.shell_act(shell_id, |shell| {
+            shell.follow();
+            shell.paste(text)
+        });
         self.pump();
     }
 

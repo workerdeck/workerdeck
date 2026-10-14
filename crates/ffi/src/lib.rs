@@ -386,9 +386,9 @@ impl Session {
         self.live().replay_progress().map(|(seq, target)| ReplayProgress { seq, target })
     }
 
-    // The session's name as every list draws it: its title, else the head of its id.
+    // The session's name as the list draws it: an agent's name, else its title, else the head of its id.
     pub fn session_title(&self) -> Option<String> {
-        self.live().session_info().map(wd_native::vm::session_list::session_label)
+        self.live().session_info().map(wd_native::vm::session_list::display_name)
     }
 
     pub fn session_info_json(&self) -> Option<String> {
@@ -508,6 +508,10 @@ impl Session {
         self.act(|live| live.shell_resize(&shell_id, cols, rows))
     }
 
+    pub fn shell_scroll(&self, shell_id: String, lines: i32) -> Vec<Effect> {
+        self.act(|live| live.shell_scroll(&shell_id, lines as i64))
+    }
+
     pub fn shell_key(&self, shell_id: String, key: Key) -> Vec<Effect> {
         self.act(|live| {
             if let Some(key) = key.vt() {
@@ -530,6 +534,11 @@ impl Session {
 
     pub fn shell_grid(&self, shell_id: String, start: u32, count: u32) -> Option<Vec<u8>> {
         self.live().shell(&shell_id).map(|shell| snapshot::shell_grid(shell, start as usize, count as usize))
+    }
+
+    // The screen-tall window the shell's scroll position shows, live screen or history.
+    pub fn shell_window(&self, shell_id: String) -> Option<Vec<u8>> {
+        self.live().shell(&shell_id).map(|shell| snapshot::shell_grid(shell, shell.window_start(), shell.screen().rows))
     }
 }
 
@@ -597,6 +606,18 @@ pub fn composer_trigger(character: String, is_shell_mode: bool, can_run_shell: b
         Core::Leave => ComposerTrigger::Leave,
         Core::Pass => ComposerTrigger::Pass,
     }
+}
+
+#[uniffi::export]
+pub fn ime_edit(old: String, new: String) -> ImeEdit {
+    let edit = wd_native::controller::shell::ime_edit(&old, &new);
+    ImeEdit { backspaces: edit.backspaces as u32, text: edit.text }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImeEdit {
+    pub backspaces: u32,
+    pub text: String,
 }
 
 #[uniffi::export]

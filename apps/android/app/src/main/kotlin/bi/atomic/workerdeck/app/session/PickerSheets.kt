@@ -76,14 +76,14 @@ fun PickerSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = Wd.colors
-    val state = rememberModalBottomSheetState()
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
     fun choose(row: PickerRow, act: (String?) -> Unit): () -> Unit = {
         if (!row.selected) act(row.value)
         close()
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = colors.background) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = if (colors.dark) colors.raised else colors.background) {
         Column(Modifier.navigationBarsPadding()) {
             val title = when (picker) {
                 Picker.MODEL -> models?.title ?: "Select model"

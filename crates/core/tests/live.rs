@@ -626,3 +626,38 @@ fn a_session_without_reported_models_offers_its_profile_catalog_and_switches_ove
     host.close_and_reopen();
     assert!(host.take().iter().all(|effect| !matches!(effect, Effect::Request { scoped: false, .. })));
 }
+
+#[test]
+fn a_failed_catalog_fetch_is_retried_on_the_next_attach_but_a_missing_route_is_not() {
+    let attached = json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+        "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "profile": "codex"}});
+    let catalog = |effects: Vec<Effect>| {
+        effects.into_iter().find_map(|effect| match effect {
+            Effect::Request { id, method: "GET", path, scoped: false } if path == "/profiles" => Some(id),
+            _ => None,
+        })
+    };
+    for (status, retried) in [(0, true), (503, true), (404, false)] {
+        let mut host = Host::new();
+        host.open();
+        host.frame(attached.clone(), 0.0);
+        let id = catalog(host.take()).expect("the first attach fetches the catalog");
+        host.live.responded(id, status, "");
+        host.drain();
+        host.take();
+        host.live.closed(5.0);
+        host.drain();
+        host.live.tick(100.0);
+        host.drain();
+        host.open();
+        host.frame(attached.clone(), 101.0);
+        let again = catalog(host.take());
+        assert_eq!(again.is_some(), retried, "status {status}");
+        if let Some(id) = again {
+            let body = json!({"profiles": [{"name": "codex", "models": [{"value": "gpt-5.6", "displayName": "GPT-5.6"}]}]});
+            host.live.responded(id, 200, &body.to_string());
+            host.drain();
+            assert_eq!(host.live.model_picker().main.len(), 1, "status {status}");
+        }
+    }
+}

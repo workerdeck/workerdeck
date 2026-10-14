@@ -271,6 +271,7 @@ struct LineRing {
     storage: Vec<Vec<Cell>>,
     start: usize,
     count: usize,
+    pushed: u64,
 }
 
 impl LineRing {
@@ -281,6 +282,7 @@ impl LineRing {
         if self.capacity == 0 {
             return;
         }
+        self.pushed += 1;
         let slot = (self.start + self.count) % self.capacity;
         if slot < self.storage.len() {
             self.storage[slot] = line;
@@ -303,6 +305,7 @@ impl LineRing {
             return None;
         }
         self.count -= 1;
+        self.pushed -= 1;
         let slot = (self.start + self.count) % self.capacity;
         Some(std::mem::take(&mut self.storage[slot]))
     }
@@ -391,7 +394,7 @@ impl VtScreen {
             focus_reporting: false,
             buffer: Buffer::new(cols, rows, &BLANK),
             inactive: None,
-            scrollback: LineRing { capacity: scrollback_limit, storage: Vec::new(), start: 0, count: 0 },
+            scrollback: LineRing { capacity: scrollback_limit, storage: Vec::new(), start: 0, count: 0, pushed: 0 },
             style: Style::default(),
             origin_mode: false,
             autowrap: true,
@@ -420,6 +423,12 @@ impl VtScreen {
 
     pub fn scrollback_count(&self) -> usize {
         self.scrollback.count
+    }
+
+    // How many lines have ever scrolled off, kept or not: line `i` of `line()` is absolute line `scrolled_base() + i`,
+    // so a position survives the ring dropping its oldest line or a clear emptying it.
+    pub fn scrolled_base(&self) -> u64 {
+        self.scrollback.pushed - self.scrollback.count as u64
     }
 
     pub fn line(&self, index: usize) -> std::borrow::Cow<'_, [Cell]> {

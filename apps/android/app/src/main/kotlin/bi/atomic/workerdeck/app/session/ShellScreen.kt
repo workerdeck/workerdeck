@@ -48,6 +48,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key as HardKey
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -74,6 +75,7 @@ import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ShellGrid
 import bi.atomic.workerdeck.core.ShellRun
 import bi.atomic.workerdeck.core.ffi.Key
+import bi.atomic.workerdeck.core.ffi.imeEdit
 import kotlin.math.floor
 
 // The IME edits a scratch field whose changes are diffed against the last value: removed characters are backspaces,
@@ -98,16 +100,18 @@ fun ShellScreen(model: SessionModel, shellId: String, style: TextStyle, palette:
     val colors = Wd.colors
     val send: (Key) -> Unit = { model.shellKey(shellId, it) }
     val type: (String) -> Unit = { text ->
+        val points = text.codePointCount(0, text.length)
         when {
-            controlArmed && text.length == 1 -> {
+            controlArmed && points == 1 -> {
                 controlArmed = false
                 send(Key.Control(text))
             }
             text == "\n" -> send(Key.Enter)
-            text.length > 1 -> model.shellPaste(shellId, text)
+            points > 1 -> model.shellPaste(shellId, text)
             else -> model.shellText(shellId, text)
         }
     }
+    val ink = if (Wd.colors.dark) SHELL_INK_DARK else SHELL_INK_LIGHT
     Column(Modifier.fillMaxSize().background(palette.background).imePadding()) {
         CenterAlignedTopAppBar(
             title = { Text(grid?.title ?: "Shell", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -149,7 +153,7 @@ fun ShellScreen(model: SessionModel, shellId: String, style: TextStyle, palette:
                             val lines = (drag / line).toInt()
                             if (lines != 0) {
                                 drag -= lines * line
-                                model.scrollShell((model.shell.value?.back ?: 0) + lines)
+                                model.scrollShell(lines)
                             }
                         }
                     },
@@ -164,7 +168,7 @@ fun ShellScreen(model: SessionModel, shellId: String, style: TextStyle, palette:
                     for (run in runs) {
                         val x = padding + column * cell
                         if (column >= grid.cols || x + cell > size.width) break
-                        val (fg, bg) = colorsOf(run, palette)
+                        val (fg, bg) = colorsOf(run, ink, palette.background)
                         bg?.let { drawRect(it, Offset(x, y), Size(run.columns * cell, line)) }
                         if (!run.hidden && run.text.isNotBlank()) {
                             drawText(
@@ -187,7 +191,7 @@ fun ShellScreen(model: SessionModel, shellId: String, style: TextStyle, palette:
                 }
                 val cursorLine = grid.totalLines - grid.rows + grid.cursorRow - grid.startLine
                 if (grid.cursorVisible && cursorLine in grid.lines.indices) {
-                    drawRect(palette.fg.copy(alpha = 0.55f), Offset(padding + grid.cursorCol * cell, cursorLine * line), Size(cell, line))
+                    drawRect(ink.copy(alpha = 0.55f), Offset(padding + grid.cursorCol * cell, cursorLine * line), Size(cell, line))
                 }
             }
             Keyboard(focus, type, send)
@@ -242,15 +246,16 @@ private fun Keyboard(focus: FocusRequester, onText: (String) -> Unit, onKey: (Ke
     BasicTextField(
         value = field,
         onValueChange = { next ->
-            val old = field.text
             val new = next.text
-            val kept = old.commonPrefixWith(new).length
-            repeat(old.length - kept) { onKey(Key.Backspace) }
-            if (new.length > kept) onText(new.substring(kept))
+            val edit = imeEdit(field.text, new)
+            repeat(edit.backspaces.toInt()) { onKey(Key.Backspace) }
+            if (edit.text.isNotEmpty()) onText(edit.text)
             val settled = next.composition == null && (new.length < SENTINEL.length || new.length > 64)
             field = if (settled) TextFieldValue(SENTINEL, TextRange(SENTINEL.length)) else next
         },
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = ImeAction.None),
+        textStyle = TextStyle(color = Color.Transparent),
+        cursorBrush = SolidColor(Color.Transparent),
         modifier = Modifier
             .size(1.dp)
             .focusRequester(focus)
@@ -308,14 +313,18 @@ private fun StripKey(label: String, active: Boolean = false, onClick: () -> Unit
     }
 }
 
-private fun colorsOf(run: ShellRun, palette: Palette): Pair<Color, Color?> {
+// The web pane's xterm foreground and cursor, not the transcript's ink: a shell's colours are the program's.
+private val SHELL_INK_LIGHT = Color(0xFF1F2328)
+private val SHELL_INK_DARK = Color(0xFFD4D4D4)
+
+private fun colorsOf(run: ShellRun, ink: Color, background: Color): Pair<Color, Color?> {
     fun word(value: Int): Color? = when (value and 0xFF000000.toInt()) {
-        ShellRun.FOREGROUND -> palette.fg
-        ShellRun.BACKGROUND -> palette.background
+        ShellRun.FOREGROUND -> ink
+        ShellRun.BACKGROUND -> background
         ShellRun.RGB -> Color(0xFF000000.toInt() or (value and 0xFFFFFF))
         else -> null
     }
-    val fg = word(run.fg) ?: palette.fg
+    val fg = word(run.fg) ?: ink
     return (if (run.dim) fg.copy(alpha = 0.6f) else fg) to word(run.bg)
 }
 
