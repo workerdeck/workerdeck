@@ -70,7 +70,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
     BoxWithConstraints(Modifier.fillMaxSize().background(palette.background)) {
         val metrics = with(density) {
             val cell = measurer.measure("MMMMMMMMMM", style).size.width / 10.0
-            Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
+            Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2 - RAIL_WIDTH).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
         }
         val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
         val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry) }
@@ -78,6 +78,8 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
         val context = LocalContext.current
         val bookmarks = remember(client, sessionId) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId) }
         LaunchedEffect(metrics) { model.resize(metrics) }
+        val bookmarkRevision by bookmarks.revision.collectAsStateWithLifecycle()
+        LaunchedEffect(bookmarkRevision) { model.bookmarks(bookmarks.ids()) }
         val ui by model.ui.collectAsStateWithLifecycle()
         var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
         var shellMode by rememberSaveable { mutableStateOf(false) }
@@ -116,6 +118,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     jump = ui.jump,
                     menu = rememberRowMenuHost(model, bookmarks, inFrame = false),
+                    rail = rememberRailHost(model, ui.rail, inFrame = false),
                 )
             }
             Column(Modifier.navigationBarsPadding()) {

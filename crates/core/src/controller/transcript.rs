@@ -2,9 +2,11 @@ use crate::book::{HeightBook, PlanCache};
 use crate::expansion::{ExpansionKey, TermPress, TerminalExpansion, row_expansion_keys};
 use crate::planner::{Metrics, TermLine, plan_with};
 use crate::rows::{BuildOptions, Row, TerminalRows};
+use crate::scrubber::{self, Cluster, Peek, Recap, ScrubberInput, build_clusters};
 use crate::transcript::{Item, ShellItem, ToolCall};
 use crate::vm::fmt::ago;
 use crate::vm::recap::{recap_line, summarize_since};
+use serde_json::Value;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -204,6 +206,28 @@ impl TranscriptView {
 
     pub fn row(&self, index: usize) -> Option<&Row> {
         self.rows.rows.get(index)
+    }
+
+    pub fn scrubber(&self, pending_approvals: usize, bookmarks: &[String], rail_h: f64, viewport_h: f64) -> Vec<Cluster> {
+        let recap = self
+            .recap_row()
+            .map(|row_index| Recap { row_index, label: self.rows.rows[row_index].recap_label().unwrap_or_default().to_owned() });
+        let input = ScrubberInput {
+            items: &self.items,
+            rows: &self.rows,
+            book: &self.book,
+            pending_approvals,
+            bookmarks,
+            recap,
+            frame_parent_id: self.frame_parent_id.as_deref(),
+            viewport_h,
+        };
+        build_clusters(&input, rail_h)
+    }
+
+    pub fn scrubber_peek(&self, cluster: &Cluster, y: f64, approval: Option<&Value>) -> Peek {
+        let recap = self.recap_row().and_then(|row| self.rows.rows[row].recap_label());
+        scrubber::peek(cluster, cluster.nearest_member(y).as_ref(), &self.items, approval, recap)
     }
 
     fn truncated_shell(&self, id: &str) -> Option<Arc<ShellItem>> {

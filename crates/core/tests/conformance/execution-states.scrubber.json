@@ -1,0 +1,85 @@
+[
+  {
+    "name": "top",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 600,
+    "viewportH": 900,
+    "heights": [
+      176
+    ],
+    "clusters": [
+      {
+        "lane": "r",
+        "kind": "toolFailed",
+        "y": 78,
+        "h": 2,
+        "marks": [
+          {
+            "kind": "toolFailed",
+            "itemIndex": 2,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 78
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "dense",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [
+      "ex-2",
+      "not-in-this-transcript"
+    ],
+    "pending": 1,
+    "railH": 120,
+    "viewportH": 400,
+    "heights": [
+      176
+    ],
+    "clusters": [
+      {
+        "lane": "r",
+        "kind": "toolFailed",
+        "y": 35,
+        "h": 2,
+        "marks": [
+          {
+            "kind": "toolFailed",
+            "itemIndex": 2,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 35
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 18,
+        "h": 2,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 1,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 18
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "approval",
+        "y": 118,
+        "h": 2,
+        "marks": []
+      }
+    ]
+  }
+]

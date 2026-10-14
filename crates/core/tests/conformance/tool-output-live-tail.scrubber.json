@@ -1,0 +1,54 @@
+[
+  {
+    "name": "top",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 600,
+    "viewportH": 900,
+    "heights": [
+      176
+    ],
+    "clusters": []
+  },
+  {
+    "name": "dense",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [
+      "toolu_bash2",
+      "not-in-this-transcript"
+    ],
+    "pending": 1,
+    "railH": 120,
+    "viewportH": 400,
+    "heights": [
+      176
+    ],
+    "clusters": [
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 26,
+        "h": 2,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 1,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 26
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "approval",
+        "y": 118,
+        "h": 2,
+        "marks": []
+      }
+    ]
+  }
+]

@@ -1395,7 +1395,15 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `row_menu` decides what the row bookmarks (its head item), copies (its source, never the drawn
   lines) and moves to the background (only with the `backgroundTasks` capability). Bookmarks are the
   core's `Bookmarks` (the web's `workerdeck.bookmarks.v1` rules) kept as JSON in prefs, dropped with
-  their gateway; nothing draws them until the scrubber rail lands.
+  their gateway, and the scrubber rail draws them.
+- **The scrubber rail** (`session/ScrubberRail.kt`) is a Canvas over the transcript's right edge,
+  in the session and the takeover (a takeover draws no bookmarks, as on the web). The core owns
+  everything it decides (`wd_native::scrubber`, a port of the web's marks, clusters and peek, held
+  to TS goldens): clusters (`Session.scrubber` / `frame_scrubber`), the peek, the band
+  (`scrub_band`), the press hit-test (`scrub_hit`, `scrub_target`), the drag offset (`scrub_offset`)
+  and, Android only so far, `scrub_pad`: a transcript shorter than the screen sits at its foot, so
+  the rail moves down with it. A drag scrubs and peeks, a clean press jumps to a mark (its row at
+  the top) or scrolls to that point; the approval pin goes to the bottom.
 - **Pairing**: base URL + auth key (`Authorization: Bearer`), each key sealed with an AES-GCM key
   that never leaves the Android Keystore. Several gateways merge into one list; the gateway menu adds
   and forgets them, a row names its gateway only when there is more than one (core `shows_gateway`),

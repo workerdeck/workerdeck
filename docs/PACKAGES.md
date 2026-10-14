@@ -2521,7 +2521,10 @@ parser keeps the markers and the portable one drops them.
 (`conformance/generate-view-models.ts` over `conformance/view-models.ts`) runs the
 `packages/protocol` functions and writes `crates/core/tests/view-models/<module>.<case>.json` as
 `{input: {fn, calls}, output}`; `--check` runs in CI. Recap goldens ride the transcript corpus
-(`<case>.recap.json`, every boundary). Numbers compare within 4 ulps (serde_json reads some
+(`<case>.recap.json`, every boundary), and so do the scrubber rail's (`<case>.scrubber.json`: the
+web's `buildClusters` from `packages/ui` `terminal/scrubber-rail.ts` over synthetic row heights,
+at the top, dense with a recap, bookmarks and an approval, and inside each sub-agent frame;
+`tests/scrubber.rs` replays them through `wd_native::scrubber`). Numbers compare within 4 ulps (serde_json reads some
 decimals one ulp off). Client frame encoding is pinned the same way: `pnpm fixtures:frames` drives
 the real `@workerdeck/client` session handle over a fake socket and writes
 `crates/core/tests/client-frames/commands.json`, which `tests/session.rs` replays.

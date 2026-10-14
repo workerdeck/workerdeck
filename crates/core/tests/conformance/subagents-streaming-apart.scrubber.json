@@ -1,0 +1,242 @@
+[
+  {
+    "name": "top",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 600,
+    "viewportH": 900,
+    "heights": [
+      176,
+      44,
+      132,
+      220,
+      88
+    ],
+    "clusters": [
+      {
+        "lane": "l",
+        "kind": "user",
+        "y": 0,
+        "h": 235,
+        "marks": [
+          {
+            "kind": "user",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          },
+          {
+            "kind": "subagent",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 117
+          },
+          {
+            "kind": "subagent",
+            "itemIndex": 2,
+            "rowIndex": 2,
+            "turnIndex": null,
+            "y": 147
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 235,
+        "h": 147,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 3,
+            "rowIndex": 3,
+            "turnIndex": 6,
+            "y": 235
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "dense",
+    "frameParentId": null,
+    "recapAt": 3,
+    "bookmarks": [
+      "toolu_a",
+      "text-10-toolu_b",
+      "not-in-this-transcript"
+    ],
+    "pending": 1,
+    "railH": 120,
+    "viewportH": 400,
+    "heights": [
+      176,
+      44,
+      132,
+      220,
+      88,
+      176,
+      44
+    ],
+    "clusters": [
+      {
+        "lane": "l",
+        "kind": "user",
+        "y": 0,
+        "h": 29,
+        "marks": [
+          {
+            "kind": "user",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          },
+          {
+            "kind": "subagent",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 24
+          },
+          {
+            "kind": "subagent",
+            "itemIndex": 2,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 27
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 48,
+        "h": 30,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 3,
+            "rowIndex": 3,
+            "turnIndex": 6,
+            "y": 48
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 24,
+        "h": 2,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 24
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "recap",
+        "y": 30,
+        "h": 18,
+        "marks": [
+          {
+            "kind": "recap",
+            "itemIndex": null,
+            "rowIndex": 2,
+            "turnIndex": null,
+            "y": 30
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 78,
+        "h": 12,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 4,
+            "rowIndex": 4,
+            "turnIndex": null,
+            "y": 78
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "approval",
+        "y": 118,
+        "h": 2,
+        "marks": []
+      }
+    ]
+  },
+  {
+    "name": "frame:toolu_a",
+    "frameParentId": "toolu_a",
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 300,
+    "viewportH": 500,
+    "heights": [
+      176
+    ],
+    "clusters": [
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 0,
+        "h": 106,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "frame:toolu_b",
+    "frameParentId": "toolu_b",
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 300,
+    "viewportH": 500,
+    "heights": [
+      176
+    ],
+    "clusters": [
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 0,
+        "h": 106,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          }
+        ]
+      }
+    ]
+  }
+]

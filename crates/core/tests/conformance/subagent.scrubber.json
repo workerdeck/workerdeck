@@ -1,0 +1,208 @@
+[
+  {
+    "name": "top",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 600,
+    "viewportH": 900,
+    "heights": [
+      176,
+      44,
+      132,
+      220
+    ],
+    "clusters": [
+      {
+        "lane": "l",
+        "kind": "user",
+        "y": 0,
+        "h": 146,
+        "marks": [
+          {
+            "kind": "user",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          },
+          {
+            "kind": "subagent",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 117
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 147,
+        "h": 88,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 5,
+            "rowIndex": 2,
+            "turnIndex": 6,
+            "y": 147
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "dense",
+    "frameParentId": null,
+    "recapAt": 3,
+    "bookmarks": [
+      "toolu_task",
+      "a-11-0",
+      "not-in-this-transcript"
+    ],
+    "pending": 1,
+    "railH": 120,
+    "viewportH": 400,
+    "heights": [
+      176,
+      44,
+      132,
+      220,
+      88,
+      176,
+      44
+    ],
+    "clusters": [
+      {
+        "lane": "l",
+        "kind": "user",
+        "y": 0,
+        "h": 30,
+        "marks": [
+          {
+            "kind": "user",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          },
+          {
+            "kind": "subagent",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 24
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 90,
+        "h": 24,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 5,
+            "rowIndex": 5,
+            "turnIndex": 6,
+            "y": 90
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 24,
+        "h": 24,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 24
+          },
+          {
+            "kind": "recap",
+            "itemIndex": null,
+            "rowIndex": 2,
+            "turnIndex": null,
+            "y": 30
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 78,
+        "h": 12,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 4,
+            "rowIndex": 4,
+            "turnIndex": null,
+            "y": 78
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "approval",
+        "y": 118,
+        "h": 2,
+        "marks": []
+      }
+    ]
+  },
+  {
+    "name": "frame:toolu_task",
+    "frameParentId": "toolu_task",
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 300,
+    "viewportH": 500,
+    "heights": [
+      176,
+      44,
+      132,
+      220
+    ],
+    "clusters": [
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 92,
+        "h": 23,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 0,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 92
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 185,
+        "h": 115,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 2,
+            "rowIndex": 3,
+            "turnIndex": null,
+            "y": 185
+          }
+        ]
+      }
+    ]
+  }
+]

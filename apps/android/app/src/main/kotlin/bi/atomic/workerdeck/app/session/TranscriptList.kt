@@ -9,6 +9,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +27,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import bi.atomic.workerdeck.app.ui.Palette
 import bi.atomic.workerdeck.app.ui.annotate
 import bi.atomic.workerdeck.core.LayoutRow
@@ -46,6 +49,7 @@ fun TranscriptList(
     modifier: Modifier = Modifier,
     jump: Jump? = null,
     menu: RowMenuHost? = null,
+    rail: RailHost? = null,
 ) {
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
@@ -63,7 +67,8 @@ fun TranscriptList(
         val row = jump?.row ?: return@LaunchedEffect
         if (row < count) list.scrollToItem(count - 1 - row)
     }
-    LazyColumn(modifier, state = list, reverseLayout = true) {
+    Box(modifier) {
+    LazyColumn(Modifier.fillMaxSize(), state = list, reverseLayout = true) {
         items(count, key = { index -> rows[count - 1 - index].key }) { index ->
             val row = count - 1 - index
             val height = with(density) { rows[row].height.toDp() }
@@ -86,7 +91,7 @@ fun TranscriptList(
                                 .fillMaxWidth()
                                 .height(line)
                                 .background(palette.band(it.band))
-                                .padding(horizontal = sidePadding)
+                                .padding(start = sidePadding, end = sidePadding + if (rail != null) RAIL_WIDTH else 0.dp)
                                 .let { modifier ->
                                     when {
                                         menu != null -> modifier.combinedClickable(
@@ -108,6 +113,8 @@ fun TranscriptList(
                 }
             }
         }
+    }
+    rail?.let { ScrubberRail(it, rows, list, palette, style) }
     }
 }
 

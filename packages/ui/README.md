@@ -208,8 +208,9 @@ lose by forgetting a second mount isn't one.
   keeps and which marks the rail paints are all string-and-array contracts with no DOM in them,
   and they are where this package's bugs have actually shipped. Geometry - does the rendered row
   come out the height the calculator predicted - is the browser audit above. A test in `test/`
-  that wants a DOM belongs in `dev/` instead. `buildClusters` and `railScale` are exported from
-  `scrubber.tsx` for the test alone and are deliberately absent from `index.ts`.
+  that wants a DOM belongs in `dev/` instead. `buildClusters` and `railScale` live in
+  `scrubber-rail.ts` for the test and the conformance goldens, and are deliberately absent from
+  `index.ts`.
 - **`affordances={false}` must leave a way to scroll.** The scrubber replaces the native scrollbar
   while it is interactive; with affordances off, the marks stay painted but inert *and the native
   scrollbar comes back*. A rail that kept the scrollbar hidden while refusing the pointer would

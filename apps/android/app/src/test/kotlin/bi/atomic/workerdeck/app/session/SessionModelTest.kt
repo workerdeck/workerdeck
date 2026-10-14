@@ -153,6 +153,31 @@ class SessionModelTest {
     }
 
     @Test
+    fun theRailMarksThePromptTheTaskAndABookmarkAndPeeksThem() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, user(1, "Survey the tests."))
+        listener.onMessage(socket, TASK)
+        eventually("two rows") { model.ui.value.rows.size >= 2 }
+        assertEquals(emptyList<Any>(), model.ui.value.rail)
+        model.railSize(400.0, 400.0, inFrame = false)
+        eventually("a rail") { model.ui.value.rail.isNotEmpty() }
+        assertTrue(model.ui.value.rail.any { it.kind == "user" && it.lane == "l" })
+        model.bookmarks(listOf("toolu_task"))
+        eventually("the bookmark") { model.ui.value.rail.any { it.kind == "bookmark" } }
+        val prompt = model.ui.value.rail.first { it.kind == "user" }
+        model.peek(prompt, prompt.y, inFrame = false)
+        eventually("a peek") { model.peek.value != null }
+        assertEquals("Survey the tests.", model.peek.value!!.peek.lines.first().text)
+        model.peek(null, 0.0, inFrame = false)
+        eventually("the peek gone") { model.peek.value == null }
+        model.close()
+    }
+
+    @Test
     fun aTaskRowPressOpensItsTakeoverWhichFollowsTheAgent() {
         val transport = FakeTransport()
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))

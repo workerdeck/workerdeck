@@ -9,6 +9,7 @@ use crate::protocol::{AttachedFrame, Body, Event};
 use crate::rest::{ModelOption, PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
 use crate::row_menu::{RowMenu, row_menu};
 use crate::rows::{subagent_items, subagent_task, tool_call_item_index};
+use crate::scrubber::{Cluster, Peek};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
@@ -199,6 +200,23 @@ impl LiveSession {
 
     pub fn frame_row_menu(&self, task_id: &str, row: usize) -> Option<RowMenu> {
         self.frames.get(task_id)?.row(row).map(|row| row_menu(row, self.can_background_tasks()))
+    }
+
+    // The overview rail of the session (`task_id` none) or a takeover. A takeover's rail draws no bookmarks, as on the web.
+    pub fn scrubber(&self, task_id: Option<&str>, bookmarks: &[String], rail_h: f64, viewport_h: f64) -> Option<Vec<Cluster>> {
+        let (view, bookmarks) = match task_id {
+            Some(id) => (self.frames.get(id)?, &[][..]),
+            None => (&self.view, bookmarks),
+        };
+        Some(view.scrubber(self.state.pending_approvals.len(), bookmarks, rail_h, viewport_h))
+    }
+
+    pub fn scrubber_peek(&self, task_id: Option<&str>, cluster: &Cluster, y: f64) -> Option<Peek> {
+        let view = match task_id {
+            Some(id) => self.frames.get(id)?,
+            None => &self.view,
+        };
+        Some(view.scrubber_peek(cluster, y, self.state.pending_approvals.first().map(|request| &**request)))
     }
 
     fn can_background_tasks(&self) -> bool {

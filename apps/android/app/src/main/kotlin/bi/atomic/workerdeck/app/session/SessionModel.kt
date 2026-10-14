@@ -19,6 +19,8 @@ import bi.atomic.workerdeck.core.ffi.Prompt
 import bi.atomic.workerdeck.core.ffi.PromptKind
 import bi.atomic.workerdeck.core.ffi.ReplayProgress
 import bi.atomic.workerdeck.core.ffi.RowMenu
+import bi.atomic.workerdeck.core.ffi.ScrubCluster
+import bi.atomic.workerdeck.core.ffi.ScrubPeek
 import bi.atomic.workerdeck.core.ffi.Session
 import bi.atomic.workerdeck.core.ffi.SessionChrome
 import bi.atomic.workerdeck.core.ffi.Selection
@@ -43,6 +45,7 @@ data class SessionUi(
     val prompt: Prompt? = null,
     val planLines: List<TranscriptLine> = emptyList(),
     val jump: Jump? = null,
+    val rail: List<ScrubCluster> = emptyList(),
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
@@ -66,6 +69,7 @@ data class FrameView(
     val rows: List<LayoutRow> = emptyList(),
     val startRow: Int = 0,
     val lines: List<List<TranscriptLine>> = emptyList(),
+    val rail: List<ScrubCluster> = emptyList(),
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
@@ -89,6 +93,11 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     val frame: StateFlow<FrameView?> = frameState
     private val menuState = MutableStateFlow<OpenRowMenu?>(null)
     val menu: StateFlow<OpenRowMenu?> = menuState
+    private val peekState = MutableStateFlow<RailPeek?>(null)
+    val peek: StateFlow<RailPeek?> = peekState
+    private var railSize: RailSize? = null
+    private var frameRailSize: RailSize? = null
+    private var bookmarkIds: List<String> = emptyList()
     private var socket: WebSocket? = null
 
     // Socket callbacks run on OkHttp's threads, possibly before the worker has stored the socket, so each socket
@@ -167,6 +176,34 @@ class SessionModel(private val client: Transport, private val sessionId: String,
 
     fun framePress(row: Int, line: Int) = worker.act { session ->
         session.framePressLine(frameState.value?.taskId ?: return@act emptyList(), row.toUInt(), line.toUInt())
+    }
+
+    // The rail's size in layout pixels; the clusters follow from it, the transcript and the bookmarks.
+    fun railSize(railH: Double, viewportH: Double, inFrame: Boolean) = worker.act {
+        val size = RailSize(railH, viewportH)
+        if (inFrame) {
+            frameRailSize = size
+            readFrame()
+        } else {
+            railSize = size
+            readRail()
+        }
+        emptyList()
+    }
+
+    fun bookmarks(ids: List<String>) = worker.act {
+        if (ids != bookmarkIds) {
+            bookmarkIds = ids
+            readRail()
+        }
+        emptyList()
+    }
+
+    // What the finger is over on the rail, or `null` once it lifts.
+    fun peek(cluster: ScrubCluster?, y: Double, inFrame: Boolean) = worker.act { session ->
+        val taskId = if (inFrame) frameState.value?.taskId ?: return@act emptyList() else null
+        peekState.value = cluster?.let { session.scrubberPeek(taskId, it, y) }?.let { RailPeek(inFrame, y, it) }
+        emptyList()
     }
 
     fun frameVisible(first: Int, last: Int) = worker.act { session ->
@@ -285,7 +322,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         if (changed.progress || changed.transcript) ui = ui.copy(progress = session.replayProgress())
         if (changed.shells) readShell()
         state.value = ui
-        if (changed.frames || changed.transcript) readFrame()
+        if (changed.transcript || changed.prompt) readRail()
+        if (changed.frames || changed.transcript || changed.prompt) readFrame()
         if (pending != null && ui.connection == ConnectionState.LIVE && ui.progress == null && ui.rows.isNotEmpty()) enter()
     }
 
@@ -310,7 +348,13 @@ class SessionModel(private val client: Transport, private val sessionId: String,
             rows = Snapshots.transcriptLayout(layout).rows,
             startRow = lines?.startRow ?: 0,
             lines = lines?.rows.orEmpty(),
+            rail = frameRailSize?.let { session.frameScrubber(view.taskId, it.railH, it.viewportH) }.orEmpty(),
         )
+    }
+
+    private fun readRail() {
+        val size = railSize ?: return
+        state.value = state.value.copy(rail = session.scrubber(bookmarkIds, size.railH, size.viewportH))
     }
 
     private fun readShell() {
@@ -324,5 +368,9 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         state.value = state.value.copy(startRow = lines.startRow, lines = lines.rows)
     }
 }
+
+data class RailSize(val railH: Double, val viewportH: Double)
+
+data class RailPeek(val inFrame: Boolean, val y: Double, val peek: ScrubPeek)
 
 data class OpenRowMenu(val row: Int, val inFrame: Boolean, val menu: RowMenu)

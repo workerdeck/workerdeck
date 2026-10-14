@@ -1,0 +1,129 @@
+[
+  {
+    "name": "top",
+    "frameParentId": null,
+    "recapAt": null,
+    "bookmarks": [],
+    "pending": 0,
+    "railH": 600,
+    "viewportH": 900,
+    "heights": [
+      176,
+      44,
+      132,
+      220
+    ],
+    "clusters": [
+      {
+        "lane": "l",
+        "kind": "user",
+        "y": 0,
+        "h": 117,
+        "marks": [
+          {
+            "kind": "user",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 147,
+        "h": 88,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 2,
+            "rowIndex": 2,
+            "turnIndex": 3,
+            "y": 147
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "dense",
+    "frameParentId": null,
+    "recapAt": 2,
+    "bookmarks": [
+      "th-1-0",
+      "not-in-this-transcript"
+    ],
+    "pending": 1,
+    "railH": 120,
+    "viewportH": 400,
+    "heights": [
+      176,
+      44,
+      132,
+      220,
+      88
+    ],
+    "clusters": [
+      {
+        "lane": "l",
+        "kind": "user",
+        "y": 0,
+        "h": 32,
+        "marks": [
+          {
+            "kind": "user",
+            "itemIndex": 0,
+            "rowIndex": 0,
+            "turnIndex": null,
+            "y": 0
+          }
+        ]
+      },
+      {
+        "lane": "r",
+        "kind": "turn",
+        "y": 64,
+        "h": 40,
+        "marks": [
+          {
+            "kind": "turn",
+            "itemIndex": 2,
+            "rowIndex": 3,
+            "turnIndex": 3,
+            "y": 64
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "bookmark",
+        "y": 32,
+        "h": 32,
+        "marks": [
+          {
+            "kind": "bookmark",
+            "itemIndex": 1,
+            "rowIndex": 1,
+            "turnIndex": null,
+            "y": 32
+          },
+          {
+            "kind": "recap",
+            "itemIndex": null,
+            "rowIndex": 2,
+            "turnIndex": null,
+            "y": 40
+          }
+        ]
+      },
+      {
+        "lane": "f",
+        "kind": "approval",
+        "y": 118,
+        "h": 2,
+        "marks": []
+      }
+    ]
+  }
+]

@@ -15,10 +15,12 @@ mod bookmarks;
 mod list;
 mod pickers;
 mod prompt;
+mod scrubber;
 pub use bookmarks::{Bookmarks, RowMenu};
 pub use list::{ListError, ListGroup, ListRow, Mark, RowState, SessionList};
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
+pub use scrubber::{ScrubBand, ScrubCluster, ScrubMark, ScrubPeek, ScrubPeekLine};
 
 uniffi::setup_scaffolding!();
 
@@ -446,6 +448,19 @@ impl Session {
 
     pub fn frame_row_menu(&self, task_id: String, row: u32) -> Option<RowMenu> {
         self.live().frame_row_menu(&task_id, row as usize).map(RowMenu::from)
+    }
+
+    // The overview rail at `rail_h` over a viewport `viewport_h` tall, both in the layout's pixels.
+    pub fn scrubber(&self, bookmarks: Vec<String>, rail_h: f64, viewport_h: f64) -> Vec<ScrubCluster> {
+        self.live().scrubber(None, &bookmarks, rail_h, viewport_h).unwrap_or_default().iter().map(ScrubCluster::from).collect()
+    }
+
+    pub fn frame_scrubber(&self, task_id: String, rail_h: f64, viewport_h: f64) -> Option<Vec<ScrubCluster>> {
+        self.live().scrubber(Some(&task_id), &[], rail_h, viewport_h).map(|clusters| clusters.iter().map(ScrubCluster::from).collect())
+    }
+
+    pub fn scrubber_peek(&self, task_id: Option<String>, cluster: ScrubCluster, y: f64) -> Option<ScrubPeek> {
+        self.live().scrubber_peek(task_id.as_deref(), &(&cluster).into(), y).map(ScrubPeek::from)
     }
 
     pub fn row_for_item(&self, item: u32) -> u32 {

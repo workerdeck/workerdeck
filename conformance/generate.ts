@@ -6,6 +6,7 @@ import { recapLine, summarizeSince } from '../packages/react/src/lib/recap.ts'
 import { projectTranscript } from '../packages/react/src/lib/transcript-projection.ts'
 import { applyEvent, initialTranscriptState } from '../packages/react/src/lib/transcript.ts'
 import { CORPUS, eventsOf, type Case } from './corpus.ts'
+import { scrubberGolden } from './scrubber.ts'
 import { VT_CORPUS } from './vt-corpus.ts'
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'crates', 'core', 'tests', 'conformance')
@@ -17,6 +18,7 @@ function render(entry: Case): Map<string, string> {
     [`${entry.name}.events.jsonl`, `${frames}\n`],
     [`${entry.name}.projection.json`, `${JSON.stringify(projectTranscript(state), null, 2)}\n`],
     [`${entry.name}.recap.json`, `${JSON.stringify(recaps(state), null, 2)}\n`],
+    [`${entry.name}.scrubber.json`, `${JSON.stringify(scrubberGolden(state.items), null, 2)}\n`],
   ])
 }
 
@@ -28,7 +30,7 @@ function recaps(state: typeof initialTranscriptState): unknown[] {
   })
 }
 
-const OWNED = /(\.events\.jsonl|\.projection\.json|\.recap\.json|\.vt\.json)$/
+const OWNED = /(\.events\.jsonl|\.projection\.json|\.recap\.json|\.scrubber\.json|\.vt\.json)$/
 
 const check = process.argv.includes('--check')
 const wanted = new Map<string, string>()

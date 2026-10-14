@@ -98,6 +98,7 @@ fun FrameScreen(
                     onPress = model::framePress,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     menu = rememberRowMenuHost(model, bookmarks, inFrame = true),
+                    rail = rememberRailHost(model, frame.rail, inFrame = true),
                 )
             }
             Column(Modifier.navigationBarsPadding()) {
