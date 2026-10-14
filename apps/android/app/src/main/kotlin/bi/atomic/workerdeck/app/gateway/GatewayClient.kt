@@ -22,6 +22,9 @@ interface Transport {
     fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket
 
     fun request(sessionId: String, method: String, path: String, scoped: Boolean, answer: (Int, String) -> Unit)
+
+    // Raw bytes under the API base, `null` on any failure: tool-result pictures.
+    suspend fun bytes(path: String): ByteArray?
 }
 
 class GatewayClient(val gateway: Gateway) : Transport {
@@ -41,6 +44,8 @@ class GatewayClient(val gateway: Gateway) : Transport {
             }
         }.getOrNull()
     }
+
+    override suspend fun bytes(path: String): ByteArray? = image(path)?.first
 
     // `POST /sessions/:id/sleep`: the engine stops and wakes on the next message.
     suspend fun sleep(sessionId: String) {

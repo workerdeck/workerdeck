@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,119 +68,125 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
     val style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = FONT_SIZE, lineHeight = LINE_HEIGHT, color = palette.fg)
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
-    BoxWithConstraints(Modifier.fillMaxSize().background(palette.background)) {
-        val metrics = with(density) {
-            val cell = measurer.measure("MMMMMMMMMM", style).size.width / 10.0
-            Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2 - RAIL_WIDTH).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
-        }
-        val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
-        val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry) }
-        DisposableEffect(model) { onDispose { model.close() } }
-        val context = LocalContext.current
-        val bookmarks = remember(client, sessionId) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId) }
-        LaunchedEffect(metrics) { model.resize(metrics) }
-        val bookmarkRevision by bookmarks.revision.collectAsStateWithLifecycle()
-        LaunchedEffect(bookmarkRevision) { model.bookmarks(bookmarks.ids()) }
-        val ui by model.ui.collectAsStateWithLifecycle()
-        var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
-        var shellMode by rememberSaveable { mutableStateOf(false) }
-        var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
-        var clearing by rememberSaveable { mutableStateOf(false) }
-        val chrome = ui.chrome
-        Column(Modifier.fillMaxSize().imePadding()) {
-            SessionTopBar(ui.title ?: fallbackTitle, onBack, model::reconnect, onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null)
-            ui.error?.let { Text(it, color = Wd.colors.red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp)) }
-            ui.progress?.let { p ->
-                val fraction = if (p.target > 0) (p.seq.toFloat() / p.target).coerceIn(0f, 1f) else 0f
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier.fillMaxWidth().height(2.dp),
-                    color = Wd.colors.accent,
-                    trackColor = Color.Transparent,
-                    drawStopIndicator = {},
-                )
+    val images = remember(client, sessionId) { ToolImages(sessionId, client::bytes) }
+    var viewing by remember { mutableStateOf<ViewedImage?>(null) }
+    CompositionLocalProvider(LocalToolImages provides images, LocalOpenImage provides { viewing = it }) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(palette.background)) {
+            val metrics = with(density) {
+                val cell = measurer.measure("MMMMMMMMMM", style).size.width / 10.0
+                Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2 - RAIL_WIDTH).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
             }
-            if (ui.rows.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    if (ui.progress == null && ui.connection == ConnectionState.LIVE) {
-                        Text("No messages yet", style = MaterialTheme.typography.bodyMedium, color = Wd.colors.tertiary)
-                    }
-                }
-            } else {
-                TranscriptList(
-                    rows = ui.rows,
-                    linesAt = ui::linesAt,
-                    style = style,
-                    lineHeight = LINE_HEIGHT,
-                    sidePadding = SIDE_PADDING,
-                    palette = palette,
-                    onVisible = model::visible,
-                    onPress = model::press,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    jump = ui.jump,
-                    menu = rememberRowMenuHost(model, bookmarks, inFrame = false),
-                    rail = rememberRailHost(model, ui.rail, inFrame = false),
-                )
-            }
-            Column(Modifier.navigationBarsPadding()) {
-                ui.prompt?.let { prompt ->
-                    PendingPrompt(
-                        prompt = prompt,
-                        planLines = ui.planLines,
-                        style = style,
-                        lineHeight = LINE_HEIGHT,
-                        cell = metrics.cell,
-                        palette = palette,
-                        maxBodyHeight = promptMaxHeight,
-                        actions = model,
+            val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
+            val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry) }
+            DisposableEffect(model) { onDispose { model.close() } }
+            val context = LocalContext.current
+            val bookmarks = remember(client, sessionId) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId) }
+            LaunchedEffect(metrics) { model.resize(metrics) }
+            val bookmarkRevision by bookmarks.revision.collectAsStateWithLifecycle()
+            LaunchedEffect(bookmarkRevision) { model.bookmarks(bookmarks.ids()) }
+            val ui by model.ui.collectAsStateWithLifecycle()
+            var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
+            var shellMode by rememberSaveable { mutableStateOf(false) }
+            var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
+            var clearing by rememberSaveable { mutableStateOf(false) }
+            val chrome = ui.chrome
+            Column(Modifier.fillMaxSize().imePadding()) {
+                SessionTopBar(ui.title ?: fallbackTitle, onBack, model::reconnect, onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null)
+                ui.error?.let { Text(it, color = Wd.colors.red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp)) }
+                ui.progress?.let { p ->
+                    val fraction = if (p.target > 0) (p.seq.toFloat() / p.target).coerceIn(0f, 1f) else 0f
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier.fillMaxWidth().height(2.dp),
+                        color = Wd.colors.accent,
+                        trackColor = Color.Transparent,
+                        drawStopIndicator = {},
                     )
                 }
-                StatusStrip(chrome, ui.connection, model::reconnect) { picker = it }
-                Composer(
-                    state = ComposerState(draft, shellMode),
-                    onState = {
-                        draft = it.draft
-                        shellMode = it.shellMode
+                if (ui.rows.isEmpty()) {
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        if (ui.progress == null && ui.connection == ConnectionState.LIVE) {
+                            Text("No messages yet", style = MaterialTheme.typography.bodyMedium, color = Wd.colors.tertiary)
+                        }
+                    }
+                } else {
+                    TranscriptList(
+                        rows = ui.rows,
+                        linesAt = ui::linesAt,
+                        style = style,
+                        lineHeight = LINE_HEIGHT,
+                        cell = with(density) { metrics.cell.toFloat().toDp() },
+                        sidePadding = SIDE_PADDING,
+                        palette = palette,
+                        onVisible = model::visible,
+                        onPress = model::press,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        jump = ui.jump,
+                        menu = rememberRowMenuHost(model, bookmarks, inFrame = false),
+                        rail = rememberRailHost(model, ui.rail, inFrame = false),
+                    )
+                }
+                Column(Modifier.navigationBarsPadding()) {
+                    ui.prompt?.let { prompt ->
+                        PendingPrompt(
+                            prompt = prompt,
+                            planLines = ui.planLines,
+                            style = style,
+                            lineHeight = LINE_HEIGHT,
+                            cell = metrics.cell,
+                            palette = palette,
+                            maxBodyHeight = promptMaxHeight,
+                            actions = model,
+                        )
+                    }
+                    StatusStrip(chrome, ui.connection, model::reconnect) { picker = it }
+                    Composer(
+                        state = ComposerState(draft, shellMode),
+                        onState = {
+                            draft = it.draft
+                            shellMode = it.shellMode
+                        },
+                        busy = chrome?.busy == true,
+                        enabled = chrome?.enabled != false,
+                        canRunShell = chrome?.canRunShell == true,
+                        queued = chrome?.queued ?: 0u,
+                        onSend = { text, shell -> if (shell) model.runShell(text) else model.send(text) },
+                        onStop = model::interrupt,
+                    )
+                }
+            }
+            val shell by model.shell.collectAsStateWithLifecycle()
+            shell?.let { ShellScreen(model, it.id, style, palette, onClose = {}) }
+            val frame by model.frame.collectAsStateWithLifecycle()
+            frame?.let { FrameScreen(model, it, bookmarks, style, LINE_HEIGHT, SIDE_PADDING, metrics.cell, palette, promptMaxHeight) }
+            if (clearing) {
+                // Not destructive red: the old conversation stays resumable, same wording as the other clients.
+                AlertDialog(
+                    onDismissRequest = { clearing = false },
+                    title = { Text("Clear the conversation?") },
+                    text = { Text("The session keeps running and starts a fresh conversation. The old one stays resumable.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            clearing = false
+                            model.clearContext()
+                        }) { Text("Clear context") }
                     },
-                    busy = chrome?.busy == true,
-                    enabled = chrome?.enabled != false,
-                    canRunShell = chrome?.canRunShell == true,
-                    queued = chrome?.queued ?: 0u,
-                    onSend = { text, shell -> if (shell) model.runShell(text) else model.send(text) },
-                    onStop = model::interrupt,
+                    dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
+                )
+            }
+            picker?.let {
+                PickerSheet(
+                    picker = it,
+                    models = ui.modelPicker,
+                    modes = ui.modePicker,
+                    onModel = model::setModel,
+                    onEffort = model::setEffort,
+                    onMode = model::setMode,
+                    onDismiss = { picker = null },
                 )
             }
         }
-        val shell by model.shell.collectAsStateWithLifecycle()
-        shell?.let { ShellScreen(model, it.id, style, palette, onClose = {}) }
-        val frame by model.frame.collectAsStateWithLifecycle()
-        frame?.let { FrameScreen(model, it, bookmarks, style, LINE_HEIGHT, SIDE_PADDING, metrics.cell, palette, promptMaxHeight) }
-        if (clearing) {
-            // Not destructive red: the old conversation stays resumable, same wording as the other clients.
-            AlertDialog(
-                onDismissRequest = { clearing = false },
-                title = { Text("Clear the conversation?") },
-                text = { Text("The session keeps running and starts a fresh conversation. The old one stays resumable.") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        clearing = false
-                        model.clearContext()
-                    }) { Text("Clear context") }
-                },
-                dismissButton = { TextButton(onClick = { clearing = false }) { Text("Cancel") } },
-            )
-        }
-        picker?.let {
-            PickerSheet(
-                picker = it,
-                models = ui.modelPicker,
-                modes = ui.modePicker,
-                onModel = model::setModel,
-                onEffort = model::setEffort,
-                onMode = model::setMode,
-                onDismiss = { picker = null },
-            )
-        }
+        viewing?.let { ImageViewer(it) { viewing = null } }
     }
 }
 

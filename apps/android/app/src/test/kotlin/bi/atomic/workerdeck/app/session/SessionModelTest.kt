@@ -49,6 +49,8 @@ class SessionModelTest {
             requests.add(Triple(method, path, answer))
         }
 
+        override suspend fun bytes(path: String): ByteArray? = null
+
         fun open(): Pair<FakeSocket, WebSocketListener> {
             val (socket, listener) = sockets.last()
             val response = Response.Builder().request(socket.request()).protocol(Protocol.HTTP_1_1).code(101).message("").build()
@@ -229,7 +231,33 @@ class SessionModelTest {
         }
     }
 
+    @Test
+    fun aResultPictureOpensABoxNamedForItsToolWithItsOwnAddress() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s 1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, SHOT)
+        listener.onMessage(socket, SHOT_RESULT)
+        eventually("the box") { model.ui.value.lines.flatten().any { it.image != null } }
+        val lines = model.ui.value.lines.flatten()
+        val at = lines.indexOfFirst { it.image != null }
+        val image = lines[at].image!!
+        assertEquals("mcp__browser__screenshot-2.png", image.name)
+        assertTrue(image.placeholder, image.placeholder.startsWith("image · "))
+        assertTrue(lines.size >= at + image.lines)
+        assertEquals("/sessions/s%201/events/3/result?toolUseId=toolu_shot&part=1", ToolImages("s 1") { null }.path(image))
+        model.close()
+    }
+
     private companion object {
+        const val SHOT =
+            """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_shot","name":"mcp__browser__screenshot","input":{}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""
+
+        const val SHOT_RESULT =
+            """{"type":"event","event":{"type":"user_message","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_shot","content":[{"type":"text","text":"looked"},{"type":"image_ref","part_index":1,"media_type":"image/png","bytes":340000}]}]},"parentToolUseId":null,"synthetic":true,"uuid":"r-shot","seq":3,"ts":1}}"""
+
         const val TASK =
             """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_task","name":"Task","input":{"description":"Survey tests","prompt":"List the test files."}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""
 

@@ -155,6 +155,8 @@ pub struct TermImageBox {
     pub media_type: String,
     pub bytes: i64,
     pub lines: usize,
+    pub name: String,
+    pub placeholder: String,
 }
 
 impl TermImageBox {
@@ -168,6 +170,19 @@ pub fn image_placeholder(bytes: i64) -> String {
 }
 
 pub const IMAGE_UNAVAILABLE: &str = "image unavailable";
+
+// The web's `resultImageName`: what the viewer titles a result picture, `<tool>-<n>.<ext>`.
+pub fn result_image_name(tool_name: &str, part_index: i64, media_type: &str) -> String {
+    let extension = match media_type {
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/svg+xml" => "svg",
+        other => other.rsplit('/').next().filter(|tail| !tail.is_empty()).unwrap_or("img"),
+    };
+    format!("{}-{}.{extension}", tool_name.to_lowercase(), part_index + 1)
+}
 
 impl TermLine {
     fn plain(text: String, tone: Tone) -> Self {
@@ -1169,7 +1184,15 @@ pub fn clip_to_chars<'a>(lines: &[&'a str], max: usize) -> Vec<&'a str> {
     out
 }
 
-fn plan_image_box(image: &ImageRef, call_id: &str, first: bool, nested: bool, press: &Option<TermPress>, in_open: bool) -> Vec<TermLine> {
+fn plan_image_box(
+    image: &ImageRef,
+    call_id: &str,
+    tool_name: &str,
+    first: bool,
+    nested: bool,
+    press: &Option<TermPress>,
+    in_open: bool,
+) -> Vec<TermLine> {
     let image_box = TermImageBox {
         tool_use_id: call_id.to_owned(),
         source_seq: image.source_seq,
@@ -1177,6 +1200,8 @@ fn plan_image_box(image: &ImageRef, call_id: &str, first: bool, nested: bool, pr
         media_type: image.media_type.to_string(),
         bytes: image.bytes as i64,
         lines: IMAGE_BOX_LINES,
+        name: result_image_name(tool_name, image.part_index as i64, &image.media_type),
+        placeholder: image_placeholder(image.bytes as i64),
     };
     (0..image_box.lines)
         .map(|offset| {
@@ -1245,7 +1270,7 @@ fn plan_tool_call(call: &ToolCall, m: &Metrics, x: &TerminalExpansion, in_open: 
 
     if let Some(images) = call.result.as_ref().and_then(|r| r.images.as_ref()) {
         for (offset, image) in images.iter().enumerate() {
-            lines.extend(plan_image_box(image, &call.id, offset == 0, nested, &press, wash));
+            lines.extend(plan_image_box(image, &call.id, &call.name, offset == 0, nested, &press, wash));
         }
     }
 
@@ -1732,4 +1757,16 @@ fn plan_list(items: &[ListItem], m: &Metrics, nested: bool, in_open: bool) -> Ve
         ));
     }
     lines
+}
+
+#[cfg(test)]
+mod tests {
+    use super::result_image_name;
+
+    #[test]
+    fn a_result_picture_is_named_for_its_tool_and_one_based_part() {
+        assert_eq!(result_image_name("Read", 0, "image/jpeg"), "read-1.jpg");
+        assert_eq!(result_image_name("mcp__x__Shot", 2, "image/avif"), "mcp__x__shot-3.avif");
+        assert_eq!(result_image_name("Read", 0, "image/"), "read-1.img");
+    }
 }

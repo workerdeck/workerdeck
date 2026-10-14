@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +32,11 @@ import androidx.compose.ui.unit.dp
 import bi.atomic.workerdeck.app.ui.Palette
 import bi.atomic.workerdeck.app.ui.annotate
 import bi.atomic.workerdeck.core.LayoutRow
+import bi.atomic.workerdeck.core.LineImage
+import bi.atomic.workerdeck.core.ffi.imageUnavailable
+import androidx.compose.foundation.Image
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
 import bi.atomic.workerdeck.core.TranscriptLine
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -42,6 +48,7 @@ fun TranscriptList(
     linesAt: (Int) -> List<TranscriptLine>?,
     style: TextStyle,
     lineHeight: TextUnit,
+    cell: Dp,
     sidePadding: Dp,
     palette: Palette,
     onVisible: (Int, Int) -> Unit,
@@ -81,34 +88,60 @@ fun TranscriptList(
                     if (menu != null && menu.openRow == row) {
                         DropdownMenu(expanded = true, onDismissRequest = menu.onDismiss, content = menu.content)
                     }
+                    var covered = 0
                     lines.forEachIndexed { at, it ->
-                        Text(
-                            annotate(it, palette),
-                            style = style,
-                            softWrap = false,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(line)
-                                .background(palette.band(it.band))
-                                .padding(start = sidePadding, end = sidePadding + if (rail != null) RAIL_WIDTH else 0.dp)
-                                .let { modifier ->
-                                    when {
-                                        menu != null -> modifier.combinedClickable(
-                                            interactionSource = null,
-                                            indication = if (it.pressable) LocalIndication.current else null,
-                                            onLongClickLabel = "Row actions",
-                                            onLongClick = {
-                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                menu.onLongPress(row)
-                                            },
-                                            onClick = { if (it.pressable) onPress(row, at) },
-                                        )
-                                        it.pressable -> modifier.clickable { onPress(row, at) }
-                                        else -> modifier
-                                    }
-                                },
-                        )
+                        if (covered > 0) {
+                            covered--
+                            return@forEachIndexed
+                        }
+                        val textLine = @Composable { modifier: Modifier ->
+                            Text(
+                                annotate(it, palette),
+                                style = style,
+                                softWrap = false,
+                                maxLines = 1,
+                                modifier = modifier
+                                    .fillMaxWidth()
+                                    .height(line)
+                                    .background(palette.band(it.band))
+                                    .padding(start = sidePadding, end = sidePadding + if (rail != null) RAIL_WIDTH else 0.dp)
+                                    .let { modifier ->
+                                        when {
+                                            menu != null -> modifier.combinedClickable(
+                                                interactionSource = null,
+                                                indication = if (it.pressable) LocalIndication.current else null,
+                                                onLongClickLabel = "Row actions",
+                                                onLongClick = {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    menu.onLongPress(row)
+                                                },
+                                                onClick = { if (it.pressable) onPress(row, at) },
+                                            )
+                                            it.pressable -> modifier.clickable { onPress(row, at) }
+                                            else -> modifier
+                                        }
+                                    },
+                            )
+                        }
+                        val image = it.image
+                        if (image == null) {
+                            textLine(Modifier)
+                        } else {
+                            val span = image.lines.coerceIn(1, lines.size - at)
+                            covered = span - 1
+                            Box(Modifier.fillMaxWidth().height(line * span)) {
+                                textLine(Modifier.fillMaxHeight())
+                                val inset = cell * ((if (it.nested) 2 else 0) + it.indent + it.columns)
+                                TerminalImageBox(
+                                    image,
+                                    style,
+                                    palette,
+                                    Modifier
+                                        .padding(start = sidePadding + inset, end = sidePadding + if (rail != null) RAIL_WIDTH else 0.dp)
+                                        .height(line * span),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -125,3 +158,28 @@ class RowMenuHost(
     val onDismiss: () -> Unit,
     val content: @Composable ColumnScope.() -> Unit,
 )
+
+// The web's `.term-image`: the picture at the box's height, left and top, never wider than the row; a wash with the
+// placeholder until it lands. A tap opens the viewer.
+@Composable
+private fun TerminalImageBox(image: LineImage, style: TextStyle, palette: Palette, modifier: Modifier) {
+    val open = LocalOpenImage.current
+    when (val state = rememberImageState(image)) {
+        is ImageState.Loaded -> Image(
+            state.image,
+            contentDescription = image.name,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.TopStart,
+            modifier = modifier
+                .fillMaxWidth()
+                .let { if (open != null) it.clickable { open(ViewedImage(state.image, image.name)) } else it },
+        )
+        else -> Box(modifier.fillMaxWidth().background(palette.wash)) {
+            Text(
+                if (state == ImageState.Failed) imageUnavailable() else image.placeholder,
+                style = style.copy(color = palette.toneNamed("faint")),
+                maxLines = 1,
+            )
+        }
+    }
+}

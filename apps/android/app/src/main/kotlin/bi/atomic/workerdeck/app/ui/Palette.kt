@@ -12,6 +12,7 @@ class Palette(
     private val tones: List<Color>,
     private val bands: List<Color>,
     private val named: Map<String, Color>,
+    val wash: Color,
 ) {
     fun tone(index: Int): Color = tones.getOrElse(index) { fg }
 
@@ -53,6 +54,7 @@ class Palette(
                 tones = tones.map { toneMap[it] ?: fg },
                 bands = bands.map { bandMap[it] ?: Color.Transparent },
                 named = toneMap,
+                wash = bandMap.getValue("output"),
             )
         }
     }

@@ -92,6 +92,7 @@ fun FrameScreen(
                     linesAt = frame::linesAt,
                     style = style,
                     lineHeight = lineHeight,
+                    cell = with(LocalDensity.current) { cell.toFloat().toDp() },
                     sidePadding = sidePadding,
                     palette = palette,
                     onVisible = model::frameVisible,

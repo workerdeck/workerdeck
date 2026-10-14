@@ -647,6 +647,16 @@ pub fn socket_url(base_url: String, session_id: String, after_seq: i64) -> Strin
 }
 
 #[uniffi::export]
+pub fn result_image_path(session_id: String, seq: i64, tool_use_id: String, part_index: i64) -> String {
+    wd_native::vm::gateway::result_image_path(&session_id, seq, &tool_use_id, part_index)
+}
+
+#[uniffi::export]
+pub fn image_unavailable() -> String {
+    wd_native::planner::IMAGE_UNAVAILABLE.to_owned()
+}
+
+#[uniffi::export]
 pub fn gateway_name(base_url: String) -> String {
     wd_native::vm::gateway::gateway_name(&base_url)
 }

@@ -18,6 +18,11 @@ pub fn socket_url(base_url: &str, session_id: &str, after_seq: i64) -> String {
     format!("{base}/sessions/{}/ws?afterSeq={after_seq}&truncateResults=1&imageRefs=1", encode_component(session_id))
 }
 
+// One picture of a tool result, under the API base: the web's `toolResultImage`. A stale seq 404s, never another call's.
+pub fn result_image_path(session_id: &str, seq: i64, tool_use_id: &str, part_index: i64) -> String {
+    format!("/sessions/{}/events/{seq}/result?toolUseId={}&part={part_index}", encode_component(session_id), encode_component(tool_use_id))
+}
+
 fn host_of(url: &str) -> &str {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let authority = rest.split('/').next().unwrap_or_default();
@@ -119,6 +124,11 @@ mod tests {
         assert_eq!(normalize_base_url(" mac.tail.ts.net:8787/ "), "http://mac.tail.ts.net:8787");
         assert_eq!(normalize_base_url("https://deck.example/v1"), "https://deck.example");
         assert_eq!(api_base("https://deck.example/v1/"), "https://deck.example/v1");
+    }
+
+    #[test]
+    fn a_result_image_path_encodes_both_ids() {
+        assert_eq!(result_image_path("a b", 12, "toolu/1", 0), "/sessions/a%20b/events/12/result?toolUseId=toolu%2F1&part=0");
     }
 
     #[test]
