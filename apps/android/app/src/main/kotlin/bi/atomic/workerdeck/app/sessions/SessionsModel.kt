@@ -23,6 +23,7 @@ data class SessionsUi(
     val loaded: Boolean = false,
     val error: String? = null,
     val avatars: Map<String, AvatarFrames> = emptyMap(),
+    val refreshing: Boolean = false,
 )
 
 fun describe(error: Throwable): String = when (error) {
@@ -47,6 +48,18 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
             while (isActive) {
                 refresh()
                 delay(if (list.busy()) 2_000 else 5_000)
+            }
+        }
+    }
+
+    fun pullRefresh() {
+        if (client == null || state.value.refreshing) return
+        state.value = state.value.copy(refreshing = true)
+        viewModelScope.launch {
+            try {
+                refresh()
+            } finally {
+                state.value = state.value.copy(refreshing = false)
             }
         }
     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -32,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,10 +77,16 @@ fun SessionsScreen(model: SessionsModel, gatewayName: String, onOpen: (ListRow) 
             )
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = ui.refreshing,
+            onRefresh = model::pullRefresh,
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) {
             when {
                 !ui.loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 2.dp)
-                ui.groups.isEmpty() && ui.error == null -> EmptyList(Modifier.align(Alignment.Center))
+                ui.groups.isEmpty() && ui.error == null -> LazyColumn(Modifier.fillMaxSize()) {
+                    item(key = "empty") { EmptyList() }
+                }
                 else -> LazyColumn(Modifier.fillMaxSize()) {
                     ui.error?.let { error ->
                         item(key = "error") { ErrorStrip(error) }
@@ -125,8 +133,12 @@ private fun GatewayMenu(gatewayName: String, onForget: () -> Unit) {
 }
 
 @Composable
-private fun EmptyList(modifier: Modifier) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+private fun LazyItemScope.EmptyList() {
+    Column(
+        Modifier.fillParentMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
         Text("No sessions", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text("Sessions on this gateway show up here.", color = Wd.colors.secondary, style = MaterialTheme.typography.bodyMedium)
