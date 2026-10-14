@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import bi.atomic.workerdeck.app.gateway.Gateway
+import bi.atomic.workerdeck.app.ui.BadgeGlyph
 import bi.atomic.workerdeck.app.ui.CountBadge
 import bi.atomic.workerdeck.app.ui.EngineMark
 import bi.atomic.workerdeck.app.ui.StateGlyph
@@ -77,6 +78,7 @@ private val MARK_COLUMN = 22.dp
 private val CARD_AVATAR = 48.dp
 private val MEMBER_AVATAR = 32.dp
 private val TRAY_AVATAR = 22.dp
+private val MEMBER_INDENT = 24.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -257,9 +259,10 @@ private fun SessionRow(
     val colors = Wd.colors
     var menu by remember { mutableStateOf(false) }
     val avatar = row.avatarKey?.let { avatars[it] }
-    val indent = 20.dp * row.depth.toInt()
     val agent = row.agentId != null
-    val column = if (!agent) MARK_COLUMN else if (row.depth > 0u) MEMBER_AVATAR else CARD_AVATAR
+    val member = agent && row.depth > 0u
+    val indent = (if (member) MEMBER_INDENT else 20.dp) * row.depth.toInt()
+    val column = if (!agent) MARK_COLUMN else if (member) MEMBER_AVATAR else CARD_AVATAR
     Box {
         Column(
             Modifier
@@ -267,7 +270,9 @@ private fun SessionRow(
                 .combinedClickable(onClick = onOpen, onLongClick = if (row.canSleep) ({ menu = true }) else null)
                 .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
         ) {
-            Row(
+            if (member) {
+                MemberLine(row, now, avatar, Modifier.padding(start = GUTTER + indent, end = GUTTER, top = 6.dp, bottom = 6.dp))
+            } else Row(
                 Modifier.fillMaxWidth().padding(start = GUTTER + indent, end = GUTTER, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -275,7 +280,7 @@ private fun SessionRow(
                     AgentAvatar(row, avatar, column)
                 } else {
                     Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        StateGlyph(row.state)
+                        row.badge?.let { BadgeGlyph(it, size = 14.dp) } ?: StateGlyph(row.state)
                         Spacer(Modifier.height(8.dp))
                         EngineMark(row.mark, row.markTinted)
                     }
@@ -322,6 +327,26 @@ private fun SessionRow(
                 },
             )
         }
+    }
+}
+
+// A Member under its lead, the iOS member row: one line, the picture, name and status, then unread and age.
+@Composable
+private fun MemberLine(row: ListRow, now: Double, avatar: AvatarFrames?, modifier: Modifier) {
+    val colors = Wd.colors
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        AgentAvatar(row, avatar, MEMBER_AVATAR)
+        Text(row.title, style = MaterialTheme.typography.titleSmall, color = colors.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            row.status.orEmpty(),
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.secondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (row.unseen > 0u) CountBadge(row.unseen, if (row.state == RowState.ENDED) colors.badge else colors.blue)
+        if (row.lastActivityAt > 0) Text(ago(row.lastActivityAt, now), style = MaterialTheme.typography.bodySmall, color = colors.tertiary, maxLines = 1)
     }
 }
 

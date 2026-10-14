@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import bi.atomic.workerdeck.R
 import bi.atomic.workerdeck.core.ffi.Mark
 import bi.atomic.workerdeck.core.ffi.RowState
+import bi.atomic.workerdeck.core.ffi.StatusBadge
 
 // An unrecognised engine draws nothing, as on iOS. The marks are trademarks of their owners, used only to identify the
 // engine a session runs on.
@@ -60,6 +61,20 @@ fun StateGlyph(state: RowState, modifier: Modifier = Modifier, size: Dp = 14.dp)
             RowState.ENDED -> Box(Modifier.size(7.dp).background(colors.tertiary, CircleShape))
         }
     }
+}
+
+@Composable
+fun BadgeGlyph(badge: StatusBadge, size: Dp, modifier: Modifier = Modifier) {
+    val colors = Wd.colors
+    val (icon, tint) = when (badge) {
+        StatusBadge.WORKING -> return CircularProgressIndicator(modifier.size(size), color = colors.blue, strokeWidth = 1.5.dp)
+        StatusBadge.ATTENTION -> return Icon(Icons.Filled.Notifications, contentDescription = "Needs you", tint = colors.orange, modifier = modifier.size(size))
+        StatusBadge.FAILED -> R.drawable.badge_failed to colors.red
+        StatusBadge.CLOSED -> R.drawable.badge_closed to colors.tertiary
+        StatusBadge.PARKED -> R.drawable.badge_parked to colors.secondary
+        StatusBadge.ASLEEP -> R.drawable.badge_moon to colors.secondary
+    }
+    Icon(painterResource(icon), contentDescription = badge.name.lowercase(), tint = tint, modifier = modifier.size(size))
 }
 
 @Composable

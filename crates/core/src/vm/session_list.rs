@@ -390,6 +390,32 @@ pub fn display_name(info: &SessionInfo) -> String {
     info.agent.as_ref().map(|a| a.name.clone()).unwrap_or_else(|| session_label(info))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusBadge {
+    Attention,
+    Working,
+    Failed,
+    Closed,
+    Parked,
+    Asleep,
+}
+
+// The glyph on an agent's picture (web `SessionStatusIcon`, iOS `AgentAvatarView`): none for an idle, awake session.
+pub fn status_badge(state: SessionState, info: &SessionInfo) -> Option<StatusBadge> {
+    let asleep = info.engine_asleep == Some(true);
+    match state {
+        SessionState::Attention => Some(StatusBadge::Attention),
+        SessionState::Working => Some(StatusBadge::Working),
+        SessionState::Idle if !asleep => None,
+        _ => Some(match info.status {
+            SessionStatus::Failed => StatusBadge::Failed,
+            SessionStatus::Closed => StatusBadge::Closed,
+            SessionStatus::Parked => StatusBadge::Parked,
+            _ => StatusBadge::Asleep,
+        }),
+    }
+}
+
 // The rule every client's Sleep action uses: an engine that can sleep, idle, and not already asleep.
 pub fn can_sleep(info: &SessionInfo) -> bool {
     info.capabilities.as_ref().is_some_and(|c| c.engine_sleep == Some(true))
@@ -993,5 +1019,23 @@ mod tests {
         assert!(!can_sleep(&info("running", true, false)));
         assert!(!can_sleep(&info("idle", false, false)));
         assert!(!can_sleep(&info("idle", true, true)));
+    }
+
+    #[test]
+    fn a_badge_is_drawn_for_everything_but_an_idle_awake_session() {
+        let info = |status: &str, asleep: bool| -> SessionInfo {
+            serde_json::from_value(serde_json::json!({
+                "id": "s", "status": status, "cwd": "/w", "createdAt": 0, "lastSeq": 0, "pendingPermissionCount": 0,
+                "engineAsleep": asleep,
+            }))
+            .unwrap()
+        };
+        assert_eq!(status_badge(SessionState::Idle, &info("idle", false)), None);
+        assert_eq!(status_badge(SessionState::Idle, &info("idle", true)), Some(StatusBadge::Asleep));
+        assert_eq!(status_badge(SessionState::Working, &info("idle", true)), Some(StatusBadge::Working));
+        assert_eq!(status_badge(SessionState::Attention, &info("awaiting_approval", false)), Some(StatusBadge::Attention));
+        assert_eq!(status_badge(SessionState::Ended, &info("failed", false)), Some(StatusBadge::Failed));
+        assert_eq!(status_badge(SessionState::Ended, &info("closed", false)), Some(StatusBadge::Closed));
+        assert_eq!(status_badge(SessionState::Ended, &info("parked", false)), Some(StatusBadge::Parked));
     }
 }

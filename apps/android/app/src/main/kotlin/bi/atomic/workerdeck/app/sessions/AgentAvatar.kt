@@ -34,11 +34,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import bi.atomic.workerdeck.app.ui.EngineMark
-import bi.atomic.workerdeck.app.ui.StateGlyph
+import bi.atomic.workerdeck.app.ui.BadgeGlyph
 import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListRow
 import bi.atomic.workerdeck.core.ffi.TrayMember
-import bi.atomic.workerdeck.core.ffi.RowState
 import bi.atomic.workerdeck.core.ffi.avatarBusyFrame
 import bi.atomic.workerdeck.core.ffi.avatarFrameDurations
 import bi.atomic.workerdeck.core.ffi.avatarStripWidth
@@ -83,11 +82,11 @@ fun AgentAvatar(row: ListRow, frames: AvatarFrames?, size: Dp) {
             row.avatarBusy && frames.busy.isNotEmpty() -> BusyAvatar(frames, size)
             else -> Picture(frames.still, size, row.asleep)
         }
-        if (row.state != RowState.IDLE || row.asleep) {
+        row.badge?.let { badge ->
             Box(
                 Modifier.align(Alignment.BottomEnd).offset(4.dp, 4.dp).size(corner).background(colors.background, CircleShape),
                 contentAlignment = Alignment.Center,
-            ) { StateGlyph(row.state, size = corner * 0.8f) }
+            ) { BadgeGlyph(badge, size = corner * 0.72f) }
         }
     }
 }

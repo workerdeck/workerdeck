@@ -29,6 +29,29 @@ pub enum RowState {
     Ended,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum StatusBadge {
+    Attention,
+    Working,
+    Failed,
+    Closed,
+    Parked,
+    Asleep,
+}
+
+impl From<vm::StatusBadge> for StatusBadge {
+    fn from(badge: vm::StatusBadge) -> Self {
+        match badge {
+            vm::StatusBadge::Attention => StatusBadge::Attention,
+            vm::StatusBadge::Working => StatusBadge::Working,
+            vm::StatusBadge::Failed => StatusBadge::Failed,
+            vm::StatusBadge::Closed => StatusBadge::Closed,
+            vm::StatusBadge::Parked => StatusBadge::Parked,
+            vm::StatusBadge::Asleep => StatusBadge::Asleep,
+        }
+    }
+}
+
 impl From<SessionState> for RowState {
     fn from(state: SessionState) -> Self {
         match state {
@@ -56,6 +79,7 @@ pub struct ListRow {
     pub name_tinted: bool,
     pub state: RowState,
     pub state_label: String,
+    pub badge: Option<StatusBadge>,
     pub unseen: u32,
     pub status: Option<String>,
     pub model: Option<String>,
@@ -206,6 +230,7 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         name_tinted: mark.is_some_and(EngineMark::tints_name),
         state: state.into(),
         state_label: state.label().to_owned(),
+        badge: vm::status_badge(state, info).map(Into::into),
         unseen: row.unseen as u32,
         status,
         model: info.model.clone(),
