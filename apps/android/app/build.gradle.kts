@@ -11,8 +11,10 @@ android {
         applicationId = "bi.atomic.workerdeck"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI numbers its APKs by run, so each side-loaded build installs over the last one.
+        val build = providers.gradleProperty("WD_BUILD_NUMBER").orNull?.toInt()
+        versionCode = build ?: 1
+        versionName = "0.1.0" + (build?.let { "+ci.$it" } ?: "")
         buildConfigField("String", "DEV_GATEWAY_URL", "\"\"")
         buildConfigField("String", "DEV_GATEWAY_KEY", "\"\"")
     }

@@ -54,5 +54,27 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
       - run: cargo install cargo-ndk --locked
       # The runner exports ANDROID_NDK_LATEST_HOME; the `env` context cannot see it, so the shell maps it.
-      - run: ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" ./gradlew :core:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease
+      # The upload key from secrets when they exist, so every CI APK installs over the last; a fork's build falls back
+      # to the runner's throwaway debug key, which installs only on a clean device.
+      - name: Upload key
+        env:
+          KEYSTORE: ${{ secrets.WD_UPLOAD_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.WD_UPLOAD_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.WD_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then echo "no upload key: the APK is debug-signed"; exit 0; fi
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          {
+            echo "ORG_GRADLE_PROJECT_WD_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.jks"
+            echo "ORG_GRADLE_PROJECT_WD_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "ORG_GRADLE_PROJECT_WD_UPLOAD_KEY_ALIAS=upload"
+            echo "ORG_GRADLE_PROJECT_WD_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - run: ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" ./gradlew :core:testDebugUnitTest :app:testDebugUnitTest :app:assembleRelease -PWD_BUILD_NUMBER=${{ github.run_number }}
         working-directory: apps/android
+      - uses: actions/upload-artifact@v7
+        with:
+          name: workerdeck-android-${{ github.run_number }}
+          path: apps/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
