@@ -3,6 +3,9 @@ package bi.atomic.workerdeck.app.session
 import bi.atomic.workerdeck.app.gateway.Transport
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Metrics
+import bi.atomic.workerdeck.core.ffi.PromptKind
+import bi.atomic.workerdeck.core.ffi.Selection
+import bi.atomic.workerdeck.core.ffi.toggleLabel
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import okhttp3.Protocol
@@ -102,7 +105,32 @@ class SessionModelTest {
         assertTrue(transport.sockets.size == 2)
     }
 
+    @Test
+    fun aPendingQuestionIsThePromptAndItsAnswerGoesOutAsAnAllow() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, QUESTION)
+        eventually("the prompt") { model.ui.value.prompt != null }
+        val prompt = model.ui.value.prompt!!
+        assertEquals(PromptKind.QUESTION to listOf("a", "b"), prompt.kind to prompt.questions.single().options.map { it.label })
+        model.answer(prompt.requestId, listOf(toggleLabel(Selection(emptyList(), "", false), "b", false)))
+        eventually("the decision") { socket.sent.any { "permission_decision" in it } }
+        val decision = socket.sent.first { "permission_decision" in it }
+        assertTrue(decision, "\"answers\":{\"Which?\":\"b\"}" in decision && "\"behavior\":\"allow\"" in decision)
+        listener.onMessage(socket, RESOLVED)
+        eventually("the prompt cleared") { model.ui.value.prompt == null }
+        model.close()
+    }
+
     private companion object {
+        const val QUESTION =
+            """{"type":"event","event":{"type":"permission_requested","seq":1,"ts":1,"request":{"id":"r1","toolName":"AskUserQuestion","toolUseId":"t1","input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"a"},{"label":"b"}]}]}}}}"""
+
+        const val RESOLVED = """{"type":"event","event":{"type":"permission_resolved","requestId":"r1","seq":2,"ts":1}}"""
+
         const val ATTACHED =
             """{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"s1","title":"Deck work","status":"running","cwd":"/r","createdAt":1,"lastSeq":0,"pendingPermissionCount":0}}"""
 

@@ -77,6 +77,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
             val cell = measurer.measure("MMMMMMMMMM", style).size.width / 10.0
             Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
         }
+        val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
         val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics) }
         DisposableEffect(model) { onDispose { model.close() } }
         LaunchedEffect(metrics) { model.resize(metrics) }
@@ -143,6 +144,18 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 }
             }
             Column(Modifier.navigationBarsPadding()) {
+                ui.prompt?.let { prompt ->
+                    PendingPrompt(
+                        prompt = prompt,
+                        planLines = ui.planLines,
+                        style = style,
+                        lineHeight = LINE_HEIGHT,
+                        cell = metrics.cell,
+                        palette = palette,
+                        maxBodyHeight = promptMaxHeight,
+                        actions = model,
+                    )
+                }
                 StatusStrip(chrome, ui.connection, model::reconnect)
                 Composer(
                     state = ComposerState(draft, shellMode),

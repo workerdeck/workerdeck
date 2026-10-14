@@ -1346,6 +1346,16 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   the strip and the composer read is the core's `Session.chrome()`; the core flags `chrome` in
   `Changed` whenever that record moves, including on status events. Typing `$` into an empty
   field enters shell mode through the core's `composerTrigger`, so the rule is the iOS one.
+- **Approvals and questions dock above the status strip** (`session/PromptView.kt`), drawn like the
+  iOS terminal prompts: a strip ruled in the prompt's tint, a body that scrolls under a cap of half
+  the screen (220 dp floor), and the actions pinned below it. Only the head of the queue is drawn,
+  with "1 of N waiting" above it. Everything it shows comes from the core's `Session.prompt()`
+  (`Changed.prompt` says when to re-read): the kind (permission, plan, shell, question), the
+  heading, the whole tool subject, the three choices and their words, and the parsed questions.
+  A plan's markdown is laid out by the planner (`promptPlanLines`, the `transcript_lines` shape),
+  so it reads in the transcript's own vocabulary. Question selections toggle and read through the
+  core (`toggleLabel`, `toggleOther`, `answerText`) and go back as `answer(requestId, selections)`,
+  which allows with the tool input plus `answers`; Dismiss denies with the iOS message.
 - **Pairing**: base URL + auth key (`Authorization: Bearer`), the key sealed with an AES-GCM key
   that never leaves the Android Keystore. The emulator reaches a loopback gateway at `10.0.2.2`.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's
