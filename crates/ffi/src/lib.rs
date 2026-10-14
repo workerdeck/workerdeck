@@ -434,6 +434,10 @@ impl Session {
         self.live().item_for_seq(seq).map(|i| i as u32)
     }
 
+    pub fn row_for_tool_call(&self, tool_use_id: String) -> Option<u32> {
+        self.live().row_for_tool_call(&tool_use_id).map(|row| row as u32)
+    }
+
     pub fn row_for_item(&self, item: u32) -> u32 {
         self.live().view().row_index_for_item(item as usize) as u32
     }

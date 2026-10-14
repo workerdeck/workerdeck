@@ -158,6 +158,25 @@ class SessionModelTest {
         model.close()
     }
 
+    @Test
+    fun anEntryWaitsForTheTranscriptThenOpensTheTakeoverOrJumpsToTheCall() {
+        for (entry in listOf(Entry.Subagent("toolu_task"), Entry.Reveal("toolu_task"))) {
+            val transport = FakeTransport()
+            val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0), entry)
+            eventually("a socket") { transport.sockets.isNotEmpty() }
+            val (socket, listener) = transport.open()
+            listener.onMessage(socket, ATTACHED)
+            listener.onMessage(socket, user(1, "Survey the tests."))
+            listener.onMessage(socket, TASK)
+            listener.onMessage(socket, child(3, "Looking at the tree."))
+            when (entry) {
+                is Entry.Subagent -> eventually("the takeover") { model.frame.value?.taskId == "toolu_task" }
+                else -> eventually("the jump") { model.ui.value.jump != null }
+            }
+            model.close()
+        }
+    }
+
     private companion object {
         const val TASK =
             """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_task","name":"Task","input":{"description":"Survey tests","prompt":"List the test files."}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""

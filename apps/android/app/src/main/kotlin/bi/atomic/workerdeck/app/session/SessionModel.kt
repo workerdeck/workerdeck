@@ -41,9 +41,22 @@ data class SessionUi(
     val modePicker: ModePicker? = null,
     val prompt: Prompt? = null,
     val planLines: List<TranscriptLine> = emptyList(),
+    val jump: Jump? = null,
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
+
+// Where a session opens besides its tail: a sub-agent's takeover, a shell's screen, or a tool call's row. Held until
+// the replay settles, so it lands on a transcript that has the thing.
+sealed interface Entry {
+    data class Subagent(val taskId: String) : Entry
+
+    data class Shell(val shellId: String) : Entry
+
+    data class Reveal(val toolUseId: String) : Entry
+}
+
+data class Jump(val row: Int, val nonce: Long)
 
 // The open sub-agent takeover: one agent's own rows, read through the core's frame window.
 data class FrameView(
@@ -63,7 +76,8 @@ data class ShellView(val id: String, val sized: Boolean = false, val grid: Shell
 // Drives one core `Session` over one socket, for as long as its screen is shown: the screen calls `close()` when it
 // leaves. Everything that touches the session, the socket and the window runs on the worker's thread; effects arrive
 // there too, so `handle` and the readers call the session directly.
-class SessionModel(private val client: Transport, private val sessionId: String, metrics: Metrics) : AutoCloseable, PromptActions {
+class SessionModel(private val client: Transport, private val sessionId: String, metrics: Metrics, entry: Entry? = null) : AutoCloseable, PromptActions {
+    private var pending = entry
     private val session = Session(0, true, UUID.randomUUID().toString(), metrics)
     private val state = MutableStateFlow(SessionUi())
     private val worker = SessionWorker(session, onFailure = ::failed, onEffects = ::handle)
@@ -253,6 +267,19 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         if (changed.shells) readShell()
         state.value = ui
         if (changed.frames || changed.transcript) readFrame()
+        if (pending != null && ui.connection == ConnectionState.LIVE && ui.progress == null && ui.rows.isNotEmpty()) enter()
+    }
+
+    private fun enter() {
+        when (val entry = pending) {
+            is Entry.Subagent -> openFrame(entry.taskId)
+            is Entry.Shell -> if (shellState.value == null) shellState.value = ShellView(entry.shellId)
+            is Entry.Reveal -> session.rowForToolCall(entry.toolUseId)?.let { row ->
+                state.value = state.value.copy(jump = Jump(row.toInt(), (state.value.jump?.nonce ?: 0) + 1))
+            }
+            null -> Unit
+        }
+        pending = null
     }
 
     private fun readFrame() {

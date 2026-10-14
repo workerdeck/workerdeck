@@ -15,6 +15,7 @@ pub mod recap;
 pub mod session_chrome;
 pub mod session_list;
 pub mod status_label;
+pub mod steps;
 pub mod text;
 pub mod tool_titles;
 pub mod usage;

@@ -532,6 +532,17 @@ fn a_frame_strip_reads_the_spawning_call_and_a_missing_task_says_so() {
 }
 
 #[test]
+fn a_tool_call_resolves_to_the_row_that_holds_it() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.events("subagent", 1.0);
+    let row = host.live.row_for_tool_call("toolu_task").expect("the task row");
+    assert!(host.live.view().rows().rows[row].key().contains("toolu_task"));
+    assert_eq!(host.live.row_for_tool_call("toolu_nowhere"), None);
+}
+
+#[test]
 fn a_nested_task_inside_a_frame_expands_instead_of_opening_a_takeover() {
     let mut host = Host::new();
     host.open();

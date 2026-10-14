@@ -59,7 +59,7 @@ private val SIDE_PADDING = 8.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: String, onBack: () -> Unit) {
+fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: String, entry: Entry? = null, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val dark = isSystemInDarkTheme()
     val palette = remember(dark) { Palette.of(dark) }
@@ -72,7 +72,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
             Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
         }
         val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
-        val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics) }
+        val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry) }
         DisposableEffect(model) { onDispose { model.close() } }
         LaunchedEffect(metrics) { model.resize(metrics) }
         val ui by model.ui.collectAsStateWithLifecycle()
@@ -111,6 +111,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     onVisible = model::visible,
                     onPress = model::press,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    jump = ui.jump,
                 )
             }
             Column(Modifier.navigationBarsPadding()) {

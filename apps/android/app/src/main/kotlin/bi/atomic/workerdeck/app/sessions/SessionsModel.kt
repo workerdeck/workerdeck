@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
+import bi.atomic.workerdeck.core.ffi.ListStep
+import bi.atomic.workerdeck.core.ffi.StepKind
 import bi.atomic.workerdeck.core.ffi.ListException
 import bi.atomic.workerdeck.core.ffi.ListGroup
 import bi.atomic.workerdeck.core.ffi.SessionList
@@ -160,6 +162,23 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
             runCatching { client.sleep(sessionId) }.fold(
                 onSuccess = { refresh() },
                 onFailure = { state.value = state.value.copy(notice = "Sleep failed: ${describe(it)}") },
+            )
+        }
+    }
+
+    // A task stops by its call id, a shell is killed by its own; the list redraws from the gateway's answer.
+    fun stopStep(hostId: String, sessionId: String, step: ListStep) {
+        val client = clients[hostId] ?: return
+        viewModelScope.launch {
+            runCatching {
+                when (step.kind) {
+                    StepKind.TASK -> client.stopTask(sessionId, step.toolUseId ?: return@launch)
+                    StepKind.SHELL -> client.killShell(sessionId, step.key)
+                    StepKind.AGENT -> return@launch
+                }
+            }.fold(
+                onSuccess = { refresh() },
+                onFailure = { state.value = state.value.copy(notice = "Stop failed: ${describe(it)}") },
             )
         }
     }

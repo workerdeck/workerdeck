@@ -47,6 +47,14 @@ class GatewayClient(val gateway: Gateway) : Transport {
         call("/sessions/${encode(sessionId)}/sleep", "POST")
     }
 
+    suspend fun stopTask(sessionId: String, toolUseId: String) {
+        call("/sessions/${encode(sessionId)}/tasks/${encode(toolUseId)}/stop", "POST")
+    }
+
+    suspend fun killShell(sessionId: String, shellId: String) {
+        call("/sessions/${encode(sessionId)}/shells/${encode(shellId)}/kill", "POST")
+    }
+
     private suspend fun get(path: String): String = call(path, "GET")
 
     private suspend fun call(path: String, method: String): String = withContext(Dispatchers.IO) {

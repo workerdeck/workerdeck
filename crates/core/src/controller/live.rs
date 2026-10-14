@@ -7,7 +7,7 @@ use crate::expansion::TermPress;
 use crate::planner::{Metrics, SubagentStripLine, TermLine, prompt_markdown, subagent_strip_line};
 use crate::protocol::{AttachedFrame, Body, Event};
 use crate::rest::{ModelOption, PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
-use crate::rows::{subagent_items, subagent_task};
+use crate::rows::{subagent_items, subagent_task, tool_call_item_index};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
@@ -184,6 +184,11 @@ impl LiveSession {
 
     pub fn item_for_seq(&self, seq: i64) -> Option<usize> {
         self.seq_index.item_for_seq(seq)
+    }
+
+    // The row holding a tool call, for a route that lands on it (a task line on the sessions list).
+    pub fn row_for_tool_call(&self, tool_use_id: &str) -> Option<usize> {
+        tool_call_item_index(&self.state.items, tool_use_id).map(|item| self.view.row_index_for_item(item))
     }
 
     pub fn is_finished(&self) -> bool {

@@ -31,6 +31,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -112,103 +113,105 @@ fun ShellScreen(model: SessionModel, shellId: String, style: TextStyle, palette:
         }
     }
     val ink = if (Wd.colors.dark) SHELL_INK_DARK else SHELL_INK_LIGHT
-    Column(Modifier.fillMaxSize().background(palette.background).imePadding()) {
-        CenterAlignedTopAppBar(
-            title = { Text(grid?.title ?: "Shell", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            navigationIcon = { IconButton(onClick = close) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-            actions = {
-                if (grid?.running == true) TextButton(onClick = { confirmKill = true }) { Text("Kill", color = colors.red) }
-            },
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
-        )
-        StatusLine(grid, style, palette)
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val density = LocalDensity.current
-            val measurer = rememberTextMeasurer()
-            val cell = remember(style) { measurer.measure("MMMMMMMMMM", style).size.width / 10f }
-            val line = with(density) { style.lineHeight.toPx() }
-            val padding = with(density) { 8.dp.toPx() }
-            val cols = maxOf(floor((constraints.maxWidth - padding * 2) / cell).toInt(), 20)
-            val rows = maxOf(floor(constraints.maxHeight / line).toInt(), 4)
-            var opened by remember { mutableStateOf(false) }
-            LaunchedEffect(cols, rows) {
-                if (opened) model.resizeShell(shellId, cols, rows) else model.openShell(shellId, cols, rows)
-                opened = true
-            }
-            var drag by remember { mutableFloatStateOf(0f) }
-            Canvas(
-                Modifier
-                    .fillMaxSize()
-                    .pointerInput(shellId) {
-                        detectTapGestures {
-                            if (model.shell.value?.grid?.canType == true) {
-                                focus.requestFocus()
-                                keyboard?.show()
-                            }
-                        }
-                    }
-                    .pointerInput(shellId, line) {
-                        detectVerticalDragGestures(onDragEnd = { drag = 0f }) { _, delta ->
-                            drag += delta
-                            val lines = (drag / line).toInt()
-                            if (lines != 0) {
-                                drag -= lines * line
-                                model.scrollShell(lines)
-                            }
-                        }
-                    },
-            ) {
-                grid ?: return@Canvas
-                // Until the core answers a resize, the grid can hold more rows or columns than the canvas, and
-                // drawText throws for a box that starts outside it.
-                grid.lines.forEachIndexed { index, runs ->
-                    val y = index * line
-                    if (y + line > size.height) return@forEachIndexed
-                    var column = 0
-                    for (run in runs) {
-                        val x = padding + column * cell
-                        if (column >= grid.cols || x + cell > size.width) break
-                        val (fg, bg) = colorsOf(run, ink, palette.background)
-                        bg?.let { drawRect(it, Offset(x, y), Size(run.columns * cell, line)) }
-                        if (!run.hidden && run.text.isNotBlank()) {
-                            drawText(
-                                measurer,
-                                run.text,
-                                topLeft = Offset(x, y),
-                                size = Size(minOf(run.columns * cell + cell, size.width - x), line),
-                                style = style.copy(
-                                    color = fg,
-                                    fontWeight = if (run.bold) FontWeight.Bold else null,
-                                    fontStyle = if (run.italic) FontStyle.Italic else null,
-                                    textDecoration = decoration(run),
-                                ),
-                                softWrap = false,
-                                maxLines = 1,
-                            )
-                        }
-                        column += run.columns
-                    }
-                }
-                val cursorLine = grid.totalLines - grid.rows + grid.cursorRow - grid.startLine
-                if (grid.cursorVisible && cursorLine in grid.lines.indices) {
-                    drawRect(ink.copy(alpha = 0.55f), Offset(padding + grid.cursorCol * cell, cursorLine * line), Size(cell, line))
-                }
-            }
-            Keyboard(focus, type, send)
-        }
-        if (grid?.canType == true) {
-            ControlStrip(
-                controlArmed = controlArmed,
-                onControl = { controlArmed = !controlArmed },
-                onKey = { key ->
-                    controlArmed = false
-                    send(key)
+    Surface(Modifier.fillMaxSize(), color = palette.background) {
+        Column(Modifier.fillMaxSize().imePadding()) {
+            CenterAlignedTopAppBar(
+                title = { Text(grid?.title ?: "Shell", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = { IconButton(onClick = close) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+                actions = {
+                    if (grid?.running == true) TextButton(onClick = { confirmKill = true }) { Text("Kill", color = colors.red) }
                 },
-                onKeyboard = {
-                    focus.requestFocus()
-                    keyboard?.show()
-                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
             )
+            StatusLine(grid, style, palette)
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val density = LocalDensity.current
+                val measurer = rememberTextMeasurer()
+                val cell = remember(style) { measurer.measure("MMMMMMMMMM", style).size.width / 10f }
+                val line = with(density) { style.lineHeight.toPx() }
+                val padding = with(density) { 8.dp.toPx() }
+                val cols = maxOf(floor((constraints.maxWidth - padding * 2) / cell).toInt(), 20)
+                val rows = maxOf(floor(constraints.maxHeight / line).toInt(), 4)
+                var opened by remember { mutableStateOf(false) }
+                LaunchedEffect(cols, rows) {
+                    if (opened) model.resizeShell(shellId, cols, rows) else model.openShell(shellId, cols, rows)
+                    opened = true
+                }
+                var drag by remember { mutableFloatStateOf(0f) }
+                Canvas(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(shellId) {
+                            detectTapGestures {
+                                if (model.shell.value?.grid?.canType == true) {
+                                    focus.requestFocus()
+                                    keyboard?.show()
+                                }
+                            }
+                        }
+                        .pointerInput(shellId, line) {
+                            detectVerticalDragGestures(onDragEnd = { drag = 0f }) { _, delta ->
+                                drag += delta
+                                val lines = (drag / line).toInt()
+                                if (lines != 0) {
+                                    drag -= lines * line
+                                    model.scrollShell(lines)
+                                }
+                            }
+                        },
+                ) {
+                    grid ?: return@Canvas
+                    // Until the core answers a resize, the grid can hold more rows or columns than the canvas, and
+                    // drawText throws for a box that starts outside it.
+                    grid.lines.forEachIndexed { index, runs ->
+                        val y = index * line
+                        if (y + line > size.height) return@forEachIndexed
+                        var column = 0
+                        for (run in runs) {
+                            val x = padding + column * cell
+                            if (column >= grid.cols || x + cell > size.width) break
+                            val (fg, bg) = colorsOf(run, ink, palette.background)
+                            bg?.let { drawRect(it, Offset(x, y), Size(run.columns * cell, line)) }
+                            if (!run.hidden && run.text.isNotBlank()) {
+                                drawText(
+                                    measurer,
+                                    run.text,
+                                    topLeft = Offset(x, y),
+                                    size = Size(minOf(run.columns * cell + cell, size.width - x), line),
+                                    style = style.copy(
+                                        color = fg,
+                                        fontWeight = if (run.bold) FontWeight.Bold else null,
+                                        fontStyle = if (run.italic) FontStyle.Italic else null,
+                                        textDecoration = decoration(run),
+                                    ),
+                                    softWrap = false,
+                                    maxLines = 1,
+                                )
+                            }
+                            column += run.columns
+                        }
+                    }
+                    val cursorLine = grid.totalLines - grid.rows + grid.cursorRow - grid.startLine
+                    if (grid.cursorVisible && cursorLine in grid.lines.indices) {
+                        drawRect(ink.copy(alpha = 0.55f), Offset(padding + grid.cursorCol * cell, cursorLine * line), Size(cell, line))
+                    }
+                }
+                Keyboard(focus, type, send)
+            }
+            if (grid?.canType == true) {
+                ControlStrip(
+                    controlArmed = controlArmed,
+                    onControl = { controlArmed = !controlArmed },
+                    onKey = { key ->
+                        controlArmed = false
+                        send(key)
+                    },
+                    onKeyboard = {
+                        focus.requestFocus()
+                        keyboard?.show()
+                    },
+                )
+            }
         }
     }
     if (confirmKill) {

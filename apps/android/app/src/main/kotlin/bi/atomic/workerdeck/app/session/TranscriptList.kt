@@ -38,6 +38,7 @@ fun TranscriptList(
     onVisible: (Int, Int) -> Unit,
     onPress: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
+    jump: Jump? = null,
 ) {
     val density = LocalDensity.current
     val list = rememberLazyListState()
@@ -49,6 +50,10 @@ fun TranscriptList(
                 if (indices.isEmpty() || count == 0) return@collect
                 onVisible(count - 1 - indices.max(), count - 1 - indices.min())
             }
+    }
+    LaunchedEffect(jump) {
+        val row = jump?.row ?: return@LaunchedEffect
+        if (row < count) list.scrollToItem(count - 1 - row)
     }
     LazyColumn(modifier, state = list, reverseLayout = true) {
         items(count, key = { index -> rows[count - 1 - index].key }) { index ->

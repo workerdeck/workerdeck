@@ -8,6 +8,7 @@ use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
     self as vm, GroupOptions, SessionRow, SessionState, ViewConfig, filter_rows, group_rows, normalize_view_config,
 };
+use wd_native::vm::steps;
 use wd_native::vm::watermarks::{Seen, Watermark, Watermarks, unseen_count};
 
 #[derive(Debug, uniffi::Error)]
@@ -48,6 +49,59 @@ impl From<vm::StatusBadge> for StatusBadge {
             vm::StatusBadge::Closed => StatusBadge::Closed,
             vm::StatusBadge::Parked => StatusBadge::Parked,
             vm::StatusBadge::Asleep => StatusBadge::Asleep,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum StepKind {
+    Agent,
+    Task,
+    Shell,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum StepState {
+    Done,
+    Running,
+    Failed,
+    Pending,
+}
+
+// A line under a card: an agent opens its takeover, a task its call's row (a checklist item just the session), a
+// shell its screen. `killable` offers stop (a task, by `tool_use_id`) or kill (a shell, by `key`).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ListStep {
+    pub key: String,
+    pub kind: StepKind,
+    pub label: String,
+    pub state: StepState,
+    pub detail: Option<String>,
+    pub title: String,
+    pub killable: bool,
+    pub tool_use_id: Option<String>,
+}
+
+impl From<steps::Step> for ListStep {
+    fn from(step: steps::Step) -> Self {
+        Self {
+            key: step.key,
+            kind: match step.kind {
+                steps::StepKind::Agent => StepKind::Agent,
+                steps::StepKind::Task => StepKind::Task,
+                steps::StepKind::Shell => StepKind::Shell,
+            },
+            label: step.label,
+            state: match step.state {
+                steps::StepState::Done => StepState::Done,
+                steps::StepState::Running => StepState::Running,
+                steps::StepState::Failed => StepState::Failed,
+                steps::StepState::Pending => StepState::Pending,
+            },
+            detail: step.detail,
+            title: step.title,
+            killable: step.killable,
+            tool_use_id: step.tool_use_id,
         }
     }
 }
@@ -94,6 +148,7 @@ pub struct ListRow {
     pub team_expanded: bool,
     pub tray: Vec<TrayMember>,
     pub tray_overflow: u32,
+    pub steps: Vec<ListStep>,
     pub last_activity_at: f64,
 }
 
@@ -204,7 +259,11 @@ fn tray_member(row: &SessionRow) -> TrayMember {
     }
 }
 
-fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::TeamView>) -> ListRow {
+fn steps_of(row: &SessionRow, config: &ViewConfig, now_ms: f64) -> Vec<ListStep> {
+    steps::session_steps(&row.info, config, now_ms).into_iter().map(Into::into).collect()
+}
+
+fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::TeamView>, steps: Vec<ListStep>) -> ListRow {
     let info = &row.info;
     let mark = engine_mark(&row.adapter, info.model.as_deref());
     let status = info.status_label.as_ref().map(|label| match &label.emoji {
@@ -245,6 +304,7 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         team_expanded: team.is_some_and(|t| t.expanded),
         tray: tray[..drawn].iter().map(tray_member).collect(),
         tray_overflow: (tray.len() - drawn) as u32,
+        steps,
         last_activity_at: info.last_activity_at.unwrap_or(info.created_at),
     }
 }
@@ -333,15 +393,15 @@ impl SessionList {
                 let mut out = Vec::new();
                 for row in &group.rows {
                     if row.members.is_none() {
-                        out.push(list_row(row, 0, show_gateway, None));
+                        out.push(list_row(row, 0, show_gateway, None, steps_of(row, config, now_ms)));
                         continue;
                     }
                     let team = vm::team_view(row, config, state.selected.as_deref(), now_ms);
                     if let Some(ends) = vm::team_linger_ends(&team, now_ms) {
                         linger = Some(linger.map_or(ends, |l| l.min(ends)));
                     }
-                    out.push(list_row(row, 0, show_gateway, Some(&team)));
-                    out.extend(team.shown.iter().map(|m| list_row(m, 1, show_gateway, None)));
+                    out.push(list_row(row, 0, show_gateway, Some(&team), steps_of(row, config, now_ms)));
+                    out.extend(team.shown.iter().map(|m| list_row(m, 1, show_gateway, None, Vec::new())));
                 }
                 ListGroup {
                     key: group.key,

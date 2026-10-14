@@ -1,5 +1,18 @@
 package bi.atomic.workerdeck.app.sessions
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import bi.atomic.workerdeck.R
+import bi.atomic.workerdeck.app.session.Entry
+import bi.atomic.workerdeck.app.ui.Palette
+import bi.atomic.workerdeck.core.ffi.ListStep
+import bi.atomic.workerdeck.core.ffi.StepKind
+import bi.atomic.workerdeck.core.ffi.StepState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -82,7 +95,13 @@ private val MEMBER_INDENT = 24.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (hostId: String, sessionId: String, title: String) -> Unit, onAdd: () -> Unit, onForget: (Gateway) -> Unit) {
+fun SessionsScreen(
+    model: SessionsModel,
+    gateways: List<Gateway>,
+    onOpen: (hostId: String, sessionId: String, title: String, entry: Entry?) -> Unit,
+    onAdd: () -> Unit,
+    onForget: (Gateway) -> Unit,
+) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val colors = Wd.colors
     val snackbar = remember { SnackbarHostState() }
@@ -131,8 +150,9 @@ fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (hostI
                                     row,
                                     now,
                                     ui.avatars,
-                                    onOpen = { onOpen(row.hostId, row.sessionId, row.title) },
-                                    onOpenMember = { onOpen(it.hostId, it.sessionId, it.title) },
+                                    onOpen = { onOpen(row.hostId, row.sessionId, row.title, it) },
+                                    onOpenMember = { onOpen(it.hostId, it.sessionId, it.title, null) },
+                                    onStopStep = { model.stopStep(row.hostId, row.sessionId, it) },
                                     onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) },
                                     onSleep = { model.sleep(row.hostId, row.sessionId) },
                                 )
@@ -251,8 +271,9 @@ private fun SessionRow(
     row: ListRow,
     now: Double,
     avatars: Map<String, AvatarFrames>,
-    onOpen: () -> Unit,
+    onOpen: (Entry?) -> Unit,
     onOpenMember: (TrayMember) -> Unit,
+    onStopStep: (ListStep) -> Unit,
     onToggleTeam: () -> Unit,
     onSleep: () -> Unit,
 ) {
@@ -267,7 +288,7 @@ private fun SessionRow(
         Column(
             Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onOpen, onLongClick = if (row.canSleep) ({ menu = true }) else null)
+                .combinedClickable(onClick = { onOpen(null) }, onLongClick = if (row.canSleep) ({ menu = true }) else null)
                 .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
         ) {
             if (member) {
@@ -316,6 +337,9 @@ private fun SessionRow(
                     }
                 }
             }
+            for (step in row.steps) {
+                StepLine(step, Modifier.padding(start = GUTTER + indent + column + 10.dp, end = GUTTER - 8.dp), onOpen = { onOpen(stepEntry(step)) }, onStop = { onStopStep(step) })
+            }
             HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, offset = DpOffset(GUTTER + indent, 0.dp)) {
@@ -326,6 +350,59 @@ private fun SessionRow(
                     onSleep()
                 },
             )
+        }
+    }
+}
+
+// An agent opens its takeover, a task its call's row (a checklist item, with no call, just the session), a shell its screen.
+private fun stepEntry(step: ListStep): Entry? = when (step.kind) {
+    StepKind.AGENT -> Entry.Subagent(step.key)
+    StepKind.TASK -> step.toolUseId?.let(Entry::Reveal)
+    StepKind.SHELL -> Entry.Shell(step.key)
+}
+
+// One line per step under its card, the iOS step row: the state's mark, the label, the reading, and stop when it can.
+@Composable
+private fun StepLine(step: ListStep, modifier: Modifier, onOpen: () -> Unit, onStop: () -> Unit) {
+    val colors = Wd.colors
+    val palette = remember(colors.dark) { Palette.of(colors.dark) }
+    val tone = when {
+        step.state == StepState.FAILED -> palette.toneNamed("red")
+        step.kind == StepKind.SHELL -> palette.toneNamed("magenta")
+        step.kind == StepKind.AGENT -> palette.toneNamed("green")
+        step.state == StepState.PENDING -> colors.tertiary
+        else -> colors.secondary
+    }
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).then(modifier).height(32.dp).semantics { contentDescription = step.title },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(Modifier.width(16.dp), contentAlignment = Alignment.Center) {
+            when {
+                step.kind == StepKind.SHELL -> Text("$", color = tone, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                step.state == StepState.RUNNING -> CircularProgressIndicator(Modifier.size(11.dp), color = tone, strokeWidth = 1.5.dp)
+                step.state == StepState.FAILED -> Icon(painterResource(R.drawable.badge_failed), contentDescription = null, tint = tone, modifier = Modifier.size(12.dp))
+                step.state == StepState.DONE -> Icon(Icons.Filled.Check, contentDescription = null, tint = tone, modifier = Modifier.size(13.dp))
+                else -> Box(Modifier.size(10.dp).border(1.25.dp, tone, CircleShape))
+            }
+        }
+        Text(
+            step.label,
+            color = tone,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = if (step.kind == StepKind.SHELL) FontFamily.Monospace else null,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        step.detail?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = colors.tertiary, maxLines = 1) }
+        if (step.killable) {
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onStop)
+                    .semantics { contentDescription = if (step.kind == StepKind.TASK) "Stop ${step.label}" else "Kill ${step.label}" },
+                contentAlignment = Alignment.Center,
+            ) { Icon(painterResource(R.drawable.step_stop), contentDescription = null, tint = colors.secondary, modifier = Modifier.size(18.dp)) }
         }
     }
 }

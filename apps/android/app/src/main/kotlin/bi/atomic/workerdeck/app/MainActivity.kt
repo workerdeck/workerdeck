@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.gateway.GatewayStore
+import bi.atomic.workerdeck.app.session.Entry
 import bi.atomic.workerdeck.app.session.SessionScreen
 import bi.atomic.workerdeck.app.sessions.SessionsModel
 import bi.atomic.workerdeck.app.sessions.SessionsScreen
@@ -72,10 +73,10 @@ private fun App(store: GatewayStore) {
         SessionsScreen(
             sessions,
             gateways,
-            onOpen = { hostId, sessionId, title ->
+            onOpen = { hostId, sessionId, title, entry ->
                 sessions.select(hostId, sessionId)
                 sessions.markSeen(hostId, sessionId)
-                open = listOf(hostId, sessionId, title)
+                open = listOf(hostId, sessionId, title) + entryParts(entry)
             },
             onAdd = { adding = true },
             onForget = { gateway ->
@@ -85,9 +86,24 @@ private fun App(store: GatewayStore) {
             },
         )
     } else {
-        SessionScreen(client, target[1], target[2]) {
+        SessionScreen(client, target[1], target[2], entryOf(target.drop(3))) {
             sessions.markSeen(target[0], target[1])
             open = null
         }
     }
+}
+
+// The open route is saved as strings across a configuration change: kind, then id.
+private fun entryParts(entry: Entry?): List<String> = when (entry) {
+    is Entry.Subagent -> listOf("subagent", entry.taskId)
+    is Entry.Shell -> listOf("shell", entry.shellId)
+    is Entry.Reveal -> listOf("reveal", entry.toolUseId)
+    null -> emptyList()
+}
+
+private fun entryOf(parts: List<String>): Entry? = when (parts.getOrNull(0)) {
+    "subagent" -> Entry.Subagent(parts[1])
+    "shell" -> Entry.Shell(parts[1])
+    "reveal" -> Entry.Reveal(parts[1])
+    else -> null
 }
