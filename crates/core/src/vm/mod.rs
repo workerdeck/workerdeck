@@ -6,6 +6,7 @@ pub mod gateway;
 pub mod model_menu;
 pub mod model_name;
 pub mod peer_mentions;
+pub mod pickers;
 pub mod pricing;
 pub mod prompt;
 pub mod recap;

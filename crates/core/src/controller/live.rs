@@ -6,11 +6,12 @@ use crate::controller::transcript::{self as view, Navigation, TranscriptView, Up
 use crate::expansion::TermPress;
 use crate::planner::{Metrics, TermLine, prompt_markdown};
 use crate::protocol::{AttachedFrame, Body, Event};
-use crate::rest::{PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
+use crate::rest::{ModelOption, PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
 use crate::rows::{subagent_items, subagent_task};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
+use crate::vm::pickers::{ModePicker, ModelPicker, PickerSource, mode_picker, model_picker};
 use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
 use crate::vt::VtKey;
@@ -46,8 +47,9 @@ pub enum Effect {
     Send { id: u64, text: String },
     Close,
     WakeAt(f64),
-    // A REST call under the session's own path (`/sessions/:id`); the platform answers it with `responded`.
-    Request { id: u64, method: &'static str, path: String },
+    // A REST call the platform answers with `responded`; `path` is under the session's own (`/sessions/:id`) when
+    // `scoped`, else under the API base.
+    Request { id: u64, method: &'static str, path: String, scoped: bool },
     OpenSubagent { task_id: String },
     OpenShell { shell_id: String },
     Changed(Changed),
@@ -59,6 +61,7 @@ enum Pending {
     ShellOutput(String),
     Verify(String),
     Kill(String),
+    Catalog(String),
 }
 
 pub struct LiveSession {
@@ -90,6 +93,9 @@ pub struct LiveSession {
     changed: Changed,
     published_chrome: SessionChrome,
     published_prompt: Option<Prompt>,
+    published_pickers: (ModelPicker, ModePicker),
+    catalog: Vec<ModelOption>,
+    catalog_requested: bool,
     finished: bool,
     effects: Vec<Effect>,
 }
@@ -125,6 +131,9 @@ impl LiveSession {
             changed: Changed::default(),
             published_chrome: SessionChrome::default(),
             published_prompt: None,
+            published_pickers: Default::default(),
+            catalog: Vec::new(),
+            catalog_requested: false,
             finished: false,
             effects: Vec::new(),
         };
@@ -194,7 +203,22 @@ impl LiveSession {
     }
 
     pub fn chrome(&self) -> SessionChrome {
-        session_chrome(&self.state, self.init_model(), self.can_run_shell(), self.queued() as u32)
+        let effort = self.picker_source().shown_effort();
+        session_chrome(&self.state, self.init_model(), self.can_run_shell(), self.queued() as u32, effort)
+    }
+
+    fn picker_source(&self) -> PickerSource<'_> {
+        PickerSource { state: &self.state, init_model: self.init_model(), catalog: &self.catalog }
+    }
+
+    pub fn model_picker(&self) -> ModelPicker {
+        model_picker(&self.picker_source())
+    }
+
+    // The mode the session reported when it attached stands in for the one it started on.
+    pub fn mode_picker(&self) -> ModePicker {
+        let info = self.session_info();
+        mode_picker(&self.state, info.and_then(|info| info.permission_mode), info.and_then(|info| info.can_bypass_permissions))
     }
 
     pub fn queued(&self) -> usize {
@@ -343,6 +367,7 @@ impl LiveSession {
     }
 
     fn request(&mut self, pending: Pending) {
+        let mut scoped = true;
         let (method, path) = match &pending {
             Pending::Result(call_id) => {
                 let Some(seq) = self.result_seq(call_id) else {
@@ -353,10 +378,14 @@ impl LiveSession {
             Pending::ShellOutput(id) => ("GET", format!("/shells/{}/output?view=text", encode_component(id))),
             Pending::Verify(id) => ("GET", format!("/shells/{}", encode_component(id))),
             Pending::Kill(id) => ("POST", format!("/shells/{}/kill", encode_component(id))),
+            Pending::Catalog(_) => {
+                scoped = false;
+                ("GET", "/profiles".to_owned())
+            }
         };
         self.next_request += 1;
         self.requests.insert(self.next_request, pending);
-        self.effects.push(Effect::Request { id: self.next_request, method, path });
+        self.effects.push(Effect::Request { id: self.next_request, method, path, scoped });
     }
 
     // A 404 on a shell means the gateway no longer knows it; any other failure leaves the row as it was, and a
@@ -381,6 +410,8 @@ impl LiveSession {
                 self.verifying.remove(&shell_id);
             }
             Pending::ShellOutput(_) | Pending::Kill(_) => {}
+            Pending::Catalog(profile) if ok => self.catalog = profile_models(body, &profile),
+            Pending::Catalog(_) => {}
         }
     }
 
@@ -677,6 +708,12 @@ impl LiveSession {
                 self.changed.progress = true;
             }
         }
+        if !self.catalog_requested
+            && let Some(profile) = frame.session.profile.clone()
+        {
+            self.catalog_requested = true;
+            self.request(Pending::Catalog(profile));
+        }
         self.attached = Some(frame);
     }
 
@@ -784,6 +821,11 @@ impl LiveSession {
             self.published_chrome = chrome;
             self.changed.chrome = true;
         }
+        let pickers = (self.model_picker(), self.mode_picker());
+        if pickers != self.published_pickers {
+            self.published_pickers = pickers;
+            self.changed.chrome = true;
+        }
         let prompt = self.prompt();
         if prompt != self.published_prompt {
             self.published_prompt = prompt;
@@ -804,6 +846,15 @@ impl LiveSession {
             self.effects.push(Effect::Changed(changed));
         }
     }
+}
+
+// The models a profile's catalog lists, from `GET /profiles`; a 404 or an unknown shape is no catalog.
+fn profile_models(body: &str, profile: &str) -> Vec<ModelOption> {
+    let Ok(answer) = serde_json::from_str::<Value>(body) else { return Vec::new() };
+    let profiles = answer.get("profiles").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    let models =
+        profiles.iter().find(|row| row.get("name").and_then(Value::as_str) == Some(profile)).and_then(|row| row.get("models")?.as_array());
+    models.map(|rows| rows.iter().filter_map(|row| serde_json::from_value(row.clone()).ok()).collect()).unwrap_or_default()
 }
 
 fn running_shell(shell: Option<&Value>) -> Option<String> {

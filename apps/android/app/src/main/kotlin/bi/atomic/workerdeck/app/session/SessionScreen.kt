@@ -84,6 +84,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
         val ui by model.ui.collectAsStateWithLifecycle()
         var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
         var shellMode by rememberSaveable { mutableStateOf(false) }
+        var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
         val chrome = ui.chrome
         Column(Modifier.fillMaxSize().imePadding()) {
             SessionTopBar(ui.title ?: fallbackTitle, onBack, model::reconnect)
@@ -156,7 +157,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                         actions = model,
                     )
                 }
-                StatusStrip(chrome, ui.connection, model::reconnect)
+                StatusStrip(chrome, ui.connection, model::reconnect) { picker = it }
                 Composer(
                     state = ComposerState(draft, shellMode),
                     onState = {
@@ -171,6 +172,17 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     onStop = model::interrupt,
                 )
             }
+        }
+        picker?.let {
+            PickerSheet(
+                picker = it,
+                models = ui.modelPicker,
+                modes = ui.modePicker,
+                onModel = model::setModel,
+                onEffort = model::setEffort,
+                onMode = model::setMode,
+                onDismiss = { picker = null },
+            )
         }
     }
 }

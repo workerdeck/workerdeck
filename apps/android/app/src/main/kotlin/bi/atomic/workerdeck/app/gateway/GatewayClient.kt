@@ -21,7 +21,7 @@ class GatewayException(message: String) : IOException(message)
 interface Transport {
     fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket
 
-    fun request(sessionId: String, method: String, path: String, answer: (Int, String) -> Unit)
+    fun request(sessionId: String, method: String, path: String, scoped: Boolean, answer: (Int, String) -> Unit)
 }
 
 class GatewayClient(val gateway: Gateway) : Transport {
@@ -44,10 +44,10 @@ class GatewayClient(val gateway: Gateway) : Transport {
         }
     }
 
-    // A core `Effect.Request` under the session's path, answered with its status and body; 0 when no answer came.
-    override fun request(sessionId: String, method: String, path: String, answer: (Int, String) -> Unit) {
+    // A core `Effect.Request`, answered with its status and body; 0 when no answer came.
+    override fun request(sessionId: String, method: String, path: String, scoped: Boolean, answer: (Int, String) -> Unit) {
         val body = if (method == "GET") null else ByteArray(0).toRequestBody()
-        val url = "${gateway.apiBase}/sessions/${encode(sessionId)}$path"
+        val url = if (scoped) "${gateway.apiBase}/sessions/${encode(sessionId)}$path" else gateway.apiBase + path
         val request = runCatching { authed(Request.Builder().url(url)).method(method, body).build() }.getOrNull()
             ?: return answer(0, "")
         http.newCall(request).enqueue(object : Callback {

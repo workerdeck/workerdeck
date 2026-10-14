@@ -522,7 +522,7 @@ fn requests(effects: Vec<Effect>) -> Vec<(u64, &'static str, String)> {
     effects
         .into_iter()
         .filter_map(|effect| match effect {
-            Effect::Request { id, method, path } => Some((id, method, path)),
+            Effect::Request { id, method, path, scoped: true } => Some((id, method, path)),
             _ => None,
         })
         .collect()
@@ -583,4 +583,46 @@ fn a_status_event_reaches_the_chrome_and_an_unchanged_one_does_not() {
     assert_eq!(host.live.chrome().status_label, "Idle");
     host.frame(event_frame(2, json!({"type": "status_changed", "status": "idle"})), 2.0);
     assert!(!host.changed().chrome);
+}
+
+#[test]
+fn a_session_without_reported_models_offers_its_profile_catalog_and_switches_over_the_socket() {
+    let mut host = Host::new();
+    host.open();
+    host.frame(
+        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+            "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0, "profile": "codex",
+                "model": "gpt-5.6", "effort": "high", "permissionMode": "default", "canBypassPermissions": false,
+                "capabilities": {"permissionModes": ["default", "bypassPermissions", "acceptEdits"], "reasoningEfforts": ["low", "high"]}}}),
+        0.0,
+    );
+    let catalog = host.take().into_iter().find_map(|effect| match effect {
+        Effect::Request { id, method: "GET", path, scoped: false } if path == "/profiles" => Some(id),
+        _ => None,
+    });
+    let id = catalog.expect("the catalog is fetched once the profile is known");
+    assert!(host.live.model_picker().main.is_empty());
+    let body = json!({"profiles": [{"name": "other", "models": []}, {"name": "codex", "models": [
+        {"value": "gpt-5.6", "displayName": "GPT-5.6", "reasoningEfforts": ["low", "medium", "high"]},
+        {"value": "gpt-5.5", "displayName": "GPT-5.5"}]}]});
+    host.live.responded(id, 200, &body.to_string());
+    host.drain();
+    assert!(host.changed().chrome);
+    let picker = host.live.model_picker();
+    let titles: Vec<&str> = picker.main.iter().map(|row| row.title.as_str()).collect();
+    assert_eq!(titles, ["GPT-5.6"]);
+    assert!(picker.main[0].selected);
+    assert_eq!(picker.efforts.len(), 4);
+    assert_eq!(host.live.chrome().model_label.as_deref(), Some("GPT-5.6 \u{00B7} high"));
+    let modes = host.live.mode_picker();
+    assert!(modes.rows.last().unwrap().disabled && modes.rows[0].is_default && modes.rows[0].selected);
+
+    host.live.set_model(Some("gpt-5.5".into()));
+    host.live.set_effort(None);
+    host.drain();
+    let sent: Vec<&str> = host.sent.iter().filter_map(|frame| frame["type"].as_str()).collect();
+    assert!(sent.ends_with(&["set_model", "set_effort"]), "{sent:?}");
+
+    host.close_and_reopen();
+    assert!(host.take().iter().all(|effect| !matches!(effect, Effect::Request { scoped: false, .. })));
 }

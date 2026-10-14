@@ -11,8 +11,10 @@ use wd_native::snapshot;
 use wd_native::vt::VtKey;
 
 mod list;
+mod pickers;
 mod prompt;
 pub use list::{ListError, ListGroup, ListRow, RowState, SessionList};
+pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
 
 uniffi::setup_scaffolding!();
@@ -56,7 +58,7 @@ pub enum Effect {
     Send { id: u64, text: String },
     Close,
     WakeAt { at: f64 },
-    Request { id: u64, method: String, path: String },
+    Request { id: u64, method: String, path: String, scoped: bool },
     OpenSubagent { task_id: String },
     OpenShell { shell_id: String },
     Changed { changed: Changed },
@@ -69,7 +71,7 @@ impl From<live::Effect> for Effect {
             live::Effect::Send { id, text } => Effect::Send { id, text },
             live::Effect::Close => Effect::Close,
             live::Effect::WakeAt(at) => Effect::WakeAt { at },
-            live::Effect::Request { id, method, path } => Effect::Request { id, method: method.to_owned(), path },
+            live::Effect::Request { id, method, path, scoped } => Effect::Request { id, method: method.to_owned(), path, scoped },
             live::Effect::OpenSubagent { task_id } => Effect::OpenSubagent { task_id },
             live::Effect::OpenShell { shell_id } => Effect::OpenShell { shell_id },
             live::Effect::Changed(c) => Effect::Changed {
@@ -165,6 +167,8 @@ pub struct SessionChrome {
     pub busy: bool,
     pub enabled: bool,
     pub model: Option<String>,
+    pub effort: Option<String>,
+    pub model_label: Option<String>,
     pub permission_mode: Option<String>,
     pub mode_label: Option<String>,
     pub can_run_shell: bool,
@@ -179,6 +183,8 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             busy: c.busy,
             enabled: c.enabled,
             model: c.model,
+            effort: c.effort,
+            model_label: c.model_label,
             permission_mode: c.permission_mode,
             mode_label: c.mode_label,
             can_run_shell: c.can_run_shell,
@@ -423,6 +429,14 @@ impl Session {
 
     pub fn chrome(&self) -> SessionChrome {
         self.live().chrome().into()
+    }
+
+    pub fn model_picker(&self) -> ModelPicker {
+        self.live().model_picker().into()
+    }
+
+    pub fn mode_picker(&self) -> ModePicker {
+        self.live().mode_picker().into()
     }
 
     pub fn transcript_layout(&self) -> Vec<u8> {

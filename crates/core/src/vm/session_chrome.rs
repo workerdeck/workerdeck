@@ -9,6 +9,8 @@ pub struct SessionChrome {
     pub busy: bool,
     pub enabled: bool,
     pub model: Option<String>,
+    pub effort: Option<String>,
+    pub model_label: Option<String>,
     pub permission_mode: Option<String>,
     pub mode_label: Option<String>,
     pub can_run_shell: bool,
@@ -43,15 +45,24 @@ pub fn mode_short_label(mode: &str) -> Option<&'static str> {
     })
 }
 
-pub fn session_chrome(state: &TranscriptState, init_model: Option<&str>, can_run_shell: bool, queued: u32) -> SessionChrome {
+pub fn session_chrome(
+    state: &TranscriptState,
+    init_model: Option<&str>,
+    can_run_shell: bool,
+    queued: u32,
+    effort: Option<String>,
+) -> SessionChrome {
     let model = state.model.as_deref().or_else(|| state.session.as_ref().and_then(|info| info.model.as_deref())).or(init_model);
     let permission_mode = state.permission_mode.clone().filter(|mode| !mode.is_empty());
+    let model = friendly_model(model);
     SessionChrome {
         status: state.status.map(|status| status.raw().to_owned()).unwrap_or_default(),
         status_label: state.status.map(|status| status_label(status).to_owned()).unwrap_or_default(),
         busy: state.status.is_some_and(is_busy),
         enabled: state.status != Some(SessionStatus::Closed),
-        model: friendly_model(model),
+        model_label: model.as_ref().map(|name| effort.as_ref().map_or_else(|| name.clone(), |effort| format!("{name} \u{00B7} {effort}"))),
+        model,
+        effort,
         mode_label: permission_mode.as_deref().and_then(mode_short_label).map(str::to_owned),
         permission_mode,
         can_run_shell,
@@ -64,7 +75,7 @@ mod tests {
     use super::*;
 
     fn with_status(status: Option<SessionStatus>) -> SessionChrome {
-        session_chrome(&TranscriptState { status, ..TranscriptState::default() }, None, false, 0)
+        session_chrome(&TranscriptState { status, ..TranscriptState::default() }, None, false, 0, None)
     }
 
     #[test]
@@ -103,12 +114,12 @@ mod tests {
         ];
         for (mode, label) in cases {
             let state = TranscriptState { permission_mode: Some(mode.to_owned()), ..TranscriptState::default() };
-            let chrome = session_chrome(&state, None, false, 0);
+            let chrome = session_chrome(&state, None, false, 0, None);
             assert_eq!(chrome.permission_mode.as_deref(), Some(mode));
             assert_eq!(chrome.mode_label.as_deref(), Some(label));
         }
         let state = TranscriptState { permission_mode: Some("yolo".to_owned()), ..TranscriptState::default() };
-        let chrome = session_chrome(&state, None, false, 0);
+        let chrome = session_chrome(&state, None, false, 0, None);
         assert_eq!((chrome.permission_mode.as_deref(), chrome.mode_label), (Some("yolo"), None));
         assert_eq!(with_status(None).permission_mode, None);
     }
@@ -116,9 +127,10 @@ mod tests {
     #[test]
     fn the_model_prefers_the_transcript_then_the_init_model_and_is_friendly() {
         let state = TranscriptState { model: Some("claude-opus-5[1m]".to_owned()), ..TranscriptState::default() };
-        assert_eq!(session_chrome(&state, Some("gpt-5"), false, 0).model.as_deref(), Some("Opus 5"));
-        let chrome = session_chrome(&TranscriptState::default(), Some("gpt-5.6-luna"), true, 3);
+        assert_eq!(session_chrome(&state, Some("gpt-5"), false, 0, None).model.as_deref(), Some("Opus 5"));
+        let chrome = session_chrome(&TranscriptState::default(), Some("gpt-5.6-luna"), true, 3, Some("high".to_owned()));
         assert_eq!(chrome.model.as_deref(), Some("GPT-5.6 Luna"));
+        assert_eq!(chrome.model_label.as_deref(), Some("GPT-5.6 Luna \u{00B7} high"));
         assert!(chrome.can_run_shell);
         assert_eq!(chrome.queued, 3);
         assert_eq!(with_status(None).model, None);

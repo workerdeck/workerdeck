@@ -9,6 +9,9 @@ import bi.atomic.workerdeck.core.ffi.Changed
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Effect
 import bi.atomic.workerdeck.core.ffi.Metrics
+import bi.atomic.workerdeck.core.ffi.Mode
+import bi.atomic.workerdeck.core.ffi.ModePicker
+import bi.atomic.workerdeck.core.ffi.ModelPicker
 import bi.atomic.workerdeck.core.ffi.Prompt
 import bi.atomic.workerdeck.core.ffi.PromptKind
 import bi.atomic.workerdeck.core.ffi.ReplayProgress
@@ -31,6 +34,8 @@ data class SessionUi(
     val startRow: Int = 0,
     val lines: List<List<TranscriptLine>> = emptyList(),
     val chrome: SessionChrome? = null,
+    val modelPicker: ModelPicker? = null,
+    val modePicker: ModePicker? = null,
     val prompt: Prompt? = null,
     val planLines: List<TranscriptLine> = emptyList(),
 ) {
@@ -66,6 +71,12 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     fun runShell(command: String) = worker.act { it.runShell(command) }
 
     fun interrupt() = worker.act { it.interrupt() }
+
+    fun setModel(model: String?) = worker.act { it.setModel(model) }
+
+    fun setEffort(effort: String?) = worker.act { it.setEffort(effort) }
+
+    fun setMode(mode: Mode) = worker.act { it.setPermissionMode(mode) }
 
     override fun allow(requestId: String) = worker.act { it.approve(requestId, null) }
 
@@ -112,7 +123,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
                     socket?.close(1000, null)
                     socket = null
                 }
-                is Effect.Request -> client.request(sessionId, effect.method, effect.path) { status, body ->
+                is Effect.Request -> client.request(sessionId, effect.method, effect.path, effect.scoped) { status, body ->
                     worker.act { it.responded(effect.id, status.toUShort(), body) }
                 }
                 is Effect.Changed -> changed(effect.changed)
@@ -160,7 +171,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         if (changed.chrome) {
             ui = ui.copy(title = session.sessionTitle(), connection = session.connection(), error = session.takeProtocolError() ?: ui.error)
         }
-        if (changed.chrome) ui = ui.copy(chrome = session.chrome())
+        if (changed.chrome) ui = ui.copy(chrome = session.chrome(), modelPicker = session.modelPicker(), modePicker = session.modePicker())
         if (changed.prompt) ui = ui.copy(prompt = session.prompt())
         if ((changed.prompt || changed.transcript) && ui.prompt?.kind == PromptKind.PLAN) {
             ui = ui.copy(planLines = Snapshots.transcriptLines(session.promptPlanLines()).rows.firstOrNull().orEmpty())

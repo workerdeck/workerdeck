@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -29,7 +32,7 @@ import bi.atomic.workerdeck.core.ffi.SessionChrome
 // The terminal theme's status line: a flat band under a hairline. Connection trouble takes the status slot, since a
 // session status over a dead socket is a stale reading shown as a live one.
 @Composable
-fun StatusStrip(chrome: SessionChrome?, connection: ConnectionState, onReconnect: () -> Unit) {
+fun StatusStrip(chrome: SessionChrome?, connection: ConnectionState, onReconnect: () -> Unit, onPicker: (Picker) -> Unit) {
     val colors = Wd.colors
     Column(Modifier.fillMaxWidth().background(colors.background)) {
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.separator))
@@ -61,13 +64,17 @@ fun StatusStrip(chrome: SessionChrome?, connection: ConnectionState, onReconnect
                     modifier = Modifier.clickable(onClick = onReconnect),
                 )
             }
-            chrome?.model?.let { Chip(it, colors.primary, Modifier.weight(1f, fill = false)) }
-            chrome?.modeLabel?.let { Chip(it, modeTint(chrome.permissionMode, colors)) }
+            val model = chrome?.modelLabel
+            Chip(model ?: "Model", if (model == null) colors.secondary else colors.primary, Modifier.weight(1f, fill = false)) { onPicker(Picker.MODEL) }
+            Chip(chrome?.modeLabel ?: "Mode", modeTint(chrome?.permissionMode, colors)) { onPicker(Picker.MODE) }
         }
     }
 }
 
 @Composable
-private fun Chip(text: String, tint: Color, modifier: Modifier = Modifier) {
-    Text(text, style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
+private fun Chip(text: String, tint: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(modifier.clickable(onClick = onClick).padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = Wd.colors.tertiary, modifier = Modifier.size(12.dp))
+    }
 }

@@ -45,7 +45,7 @@ class SessionModelTest {
         override fun socket(sessionId: String, afterSeq: Long, listener: WebSocketListener): WebSocket =
             FakeSocket().also { sockets.add(it to listener) }
 
-        override fun request(sessionId: String, method: String, path: String, answer: (Int, String) -> Unit) {
+        override fun request(sessionId: String, method: String, path: String, scoped: Boolean, answer: (Int, String) -> Unit) {
             requests.add(Triple(method, path, answer))
         }
 
