@@ -13,7 +13,7 @@ use wd_native::vt::VtKey;
 mod list;
 mod pickers;
 mod prompt;
-pub use list::{ListError, ListGroup, ListRow, RowState, SessionList};
+pub use list::{ListError, ListGroup, ListRow, Mark, RowState, SessionList};
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
 

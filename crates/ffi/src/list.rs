@@ -2,6 +2,7 @@
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
 use std::sync::Mutex;
 use wd_native::rest::{Entries, ProfileEngine, SessionInfo};
+use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
     self as vm, GroupOptions, SessionRow, SessionState, ViewConfig, filter_rows, group_rows, normalize_view_config,
 };
@@ -47,6 +48,9 @@ pub struct ListRow {
     pub project: String,
     pub host_name: String,
     pub engine: String,
+    pub mark: Option<Mark>,
+    pub mark_tinted: bool,
+    pub name_tinted: bool,
     pub state: RowState,
     pub state_label: String,
     pub unseen: u32,
@@ -116,8 +120,30 @@ fn engine_name(engine: ProfileEngine) -> String {
     serde_json::to_value(engine).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default()
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Mark {
+    Claude,
+    Codex,
+    Gemini,
+    Deepseek,
+    Moonshot,
+}
+
+impl From<EngineMark> for Mark {
+    fn from(mark: EngineMark) -> Self {
+        match mark {
+            EngineMark::Claude => Mark::Claude,
+            EngineMark::Codex => Mark::Codex,
+            EngineMark::Gemini => Mark::Gemini,
+            EngineMark::Deepseek => Mark::Deepseek,
+            EngineMark::Moonshot => Mark::Moonshot,
+        }
+    }
+}
+
 fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig) -> ListRow {
     let info = &row.info;
+    let mark = engine_mark(&row.adapter, info.model.as_deref());
     let status = info.status_label.as_ref().map(|label| match &label.emoji {
         Some(emoji) => format!("{emoji} {}", label.text),
         None => label.text.clone(),
@@ -132,6 +158,9 @@ fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig) -> ListRow {
         project: vm::project_label(info),
         host_name: row.host_name.clone(),
         engine: row.adapter.clone(),
+        mark: mark.map(Into::into),
+        mark_tinted: mark.is_some_and(EngineMark::tints_mark),
+        name_tinted: mark.is_some_and(EngineMark::tints_name),
         state: state.into(),
         state_label: state.label().to_owned(),
         unseen: row.unseen as u32,

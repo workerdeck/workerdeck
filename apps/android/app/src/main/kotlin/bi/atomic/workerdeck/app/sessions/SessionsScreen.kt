@@ -181,7 +181,7 @@ private fun SessionRow(row: ListRow, now: Double, onOpen: () -> Unit, onToggleTe
             Column(Modifier.width(MARK_COLUMN).padding(top = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 StateGlyph(row.state)
                 Spacer(Modifier.height(8.dp))
-                EngineMark(row.engine)
+                EngineMark(row.mark, row.markTinted)
             }
             Column(Modifier.weight(1f)) {
                 Text(
@@ -230,7 +230,7 @@ private fun SessionRow(row: ListRow, now: Double, onOpen: () -> Unit, onToggleTe
 private fun details(row: ListRow, now: Double) = buildAnnotatedString {
     val colors = Wd.colors
     val parts = mutableListOf<Pair<String, Color>>()
-    row.modelLabel?.let { parts += it to if (row.engine == "claude") colors.coral else colors.secondary }
+    row.modelLabel?.let { parts += it to if (row.nameTinted) colors.coral else colors.secondary }
     if (row.project.isNotEmpty()) parts += row.project to colors.secondary
     if (row.hostName.isNotEmpty()) parts += row.hostName to colors.secondary
     if (row.lastActivityAt > 0) parts += ago(row.lastActivityAt, now) to colors.secondary

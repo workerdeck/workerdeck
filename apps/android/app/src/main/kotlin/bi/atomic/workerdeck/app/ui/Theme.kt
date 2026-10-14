@@ -35,6 +35,7 @@ data class WdColors(
     val red: Color,
     val purple: Color,
     val coral: Color,
+    val openai: Color,
     val badge: Color,
     val palette: Palette,
 )
@@ -55,6 +56,7 @@ private fun darkColors() = WdColors(
     red = Color(0xFFFF453A),
     purple = Color(0xFFBF5AF2),
     coral = Color(0xFFD97757),
+    openai = Color.White,
     badge = Color(0xFF636366),
     palette = Palette.of(dark = true),
 )
@@ -75,6 +77,7 @@ private fun lightColors() = WdColors(
     red = Color(0xFFFF3B30),
     purple = Color(0xFFAF52DE),
     coral = Color(0xFFBF5B3D),
+    openai = Color(0xFF373737),
     badge = Color(0xFFAEAEB2),
     palette = Palette.of(dark = false),
 )

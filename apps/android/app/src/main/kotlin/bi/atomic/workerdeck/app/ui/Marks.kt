@@ -20,19 +20,33 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.annotation.DrawableRes
+import androidx.compose.ui.res.painterResource
+import bi.atomic.workerdeck.R
+import bi.atomic.workerdeck.core.ffi.Mark
 import bi.atomic.workerdeck.core.ffi.RowState
 
+// An unrecognised engine draws nothing, as on iOS. The marks are trademarks of their owners, used only to identify the
+// engine a session runs on.
 @Composable
-fun EngineMark(engine: String, modifier: Modifier = Modifier, size: Dp = 16.dp) {
+fun EngineMark(mark: Mark?, tinted: Boolean, modifier: Modifier = Modifier, size: Dp = 13.dp) {
+    mark ?: return
     val colors = Wd.colors
-    val (glyph, tint) = when (engine) {
-        "claude" -> "✻" to colors.coral
-        "codex" -> "◎" to colors.primary
-        else -> "◆" to colors.secondary
+    val tint = when {
+        !tinted -> colors.secondary
+        mark == Mark.CLAUDE -> colors.coral
+        else -> colors.openai
     }
-    Box(modifier.size(size), contentAlignment = Alignment.Center) {
-        Text(glyph, color = tint, fontSize = (size.value * 0.95f).sp, lineHeight = size.value.sp, fontWeight = FontWeight.Bold)
-    }
+    Icon(painterResource(markDrawable(mark)), contentDescription = null, tint = tint, modifier = modifier.size(size))
+}
+
+@DrawableRes
+private fun markDrawable(mark: Mark): Int = when (mark) {
+    Mark.CLAUDE -> R.drawable.engine_claude
+    Mark.CODEX -> R.drawable.engine_codex
+    Mark.GEMINI -> R.drawable.engine_gemini
+    Mark.DEEPSEEK -> R.drawable.engine_deepseek
+    Mark.MOONSHOT -> R.drawable.engine_moonshot
 }
 
 @Composable

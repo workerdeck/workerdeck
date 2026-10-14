@@ -1356,6 +1356,15 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   so it reads in the transcript's own vocabulary. Question selections toggle and read through the
   core (`toggleLabel`, `toggleOther`, `answerText`) and go back as `answer(requestId, selections)`,
   which allows with the tool input plus `answers`; Dismiss denies with the iOS message.
+- **The model and mode chips open bottom sheets** (`session/PickerSheets.kt`) in the iOS shape;
+  every row (title, summary, checked, DEFAULT, greyed bypass) is the core's `Session.modelPicker()` /
+  `modePicker()`, re-read with `chrome`. Codex sends no `capabilities` event, so the core fetches
+  `GET /profiles` once on attach (a `Request` with `scoped = false`, under the API base rather than
+  the session) and offers the profile's catalog instead.
+- **Engine marks are vector drawables** generated from `packages/ui`'s `EngineIcon.tsx` by
+  `apps/android/scripts/gen-engine-marks.mjs` (checked in, like the iOS imagesets). Which mark and
+  whether it or the model name wears the vendor colour is the core's (`ListRow.mark`,
+  `markTinted`, `nameTinted`); an unrecognised engine draws nothing.
 - **Pairing**: base URL + auth key (`Authorization: Bearer`), the key sealed with an AES-GCM key
   that never leaves the Android Keystore. The emulator reaches a loopback gateway at `10.0.2.2`.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's
