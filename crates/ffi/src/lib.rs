@@ -159,6 +159,12 @@ impl Key {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct HostImageFetch {
+    pub path: String,
+    pub fs_read: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
 pub struct ReplayProgress {
     pub seq: i64,
@@ -463,6 +469,14 @@ impl Session {
         self.live().scrubber_peek(task_id.as_deref(), &(&cluster).into(), y).map(ScrubPeek::from)
     }
 
+    // Where a codex picture named by its host path is fetched, under the API base: its produced file when announced.
+    pub fn host_image_path(&self, session_id: String, path: String) -> HostImageFetch {
+        let live = self.live();
+        let produced = live.state().produced_files.iter().find(|(p, _)| *p == path).map(|(_, file)| file);
+        let fetch = wd_native::vm::gateway::host_image_path(&session_id, &path, produced);
+        HostImageFetch { path: fetch.path, fs_read: fetch.fs_read }
+    }
+
     pub fn row_for_item(&self, item: u32) -> u32 {
         self.live().view().row_index_for_item(item as usize) as u32
     }
@@ -649,6 +663,11 @@ pub fn socket_url(base_url: String, session_id: String, after_seq: i64) -> Strin
 #[uniffi::export]
 pub fn result_image_path(session_id: String, seq: i64, tool_use_id: String, part_index: i64) -> String {
     wd_native::vm::gateway::result_image_path(&session_id, seq, &tool_use_id, part_index)
+}
+
+#[uniffi::export]
+pub fn host_image_base64(body: String, path: String) -> Option<String> {
+    wd_native::vm::gateway::host_image_base64(&body, &path)
 }
 
 #[uniffi::export]

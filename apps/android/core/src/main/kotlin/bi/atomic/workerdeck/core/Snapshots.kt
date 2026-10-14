@@ -5,7 +5,7 @@ import java.nio.ByteOrder
 
 // Readers for the core's byte snapshots, layout per docs/NATIVE-CORE-SNAPSHOTS.md. Offsets the core gives in UTF-8
 // bytes come back here in UTF-16 units, the ones a Kotlin String and an AnnotatedString index by.
-const val SNAPSHOT_VERSION = 3
+const val SNAPSHOT_VERSION = 4
 
 class SnapshotVersionException(found: Int) : IllegalStateException("snapshot version $found, this reader knows $SNAPSHOT_VERSION")
 
@@ -24,6 +24,8 @@ data class LineImage(
     val lines: Int,
     val name: String,
     val placeholder: String,
+    // Non-empty for a codex picture named by its host path; fetched through `Session.hostImagePath`.
+    val hostPath: String,
 )
 
 data class TranscriptLine(
@@ -181,7 +183,7 @@ private class Reader(bytes: ByteArray) {
             TextRun(units.at(byteStart), units.at(byteStart + byteLen), u8())
         }
         val elapsed = if (flags and 128 != 0) buf.double else null
-        val image = if (flags and 64 != 0) LineImage(str16(), buf.long, buf.long, str16(), buf.long, u16(), str16(), str16()) else null
+        val image = if (flags and 64 != 0) LineImage(str16(), buf.long, buf.long, str16(), buf.long, u16(), str16(), str16(), str16()) else null
         return TranscriptLine(tone, gutterTone, band, flags, indent, columns, gutter, text, runs, elapsed, image)
     }
 }

@@ -77,7 +77,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 Metrics(cell, LINE_HEIGHT.toPx().toDouble(), (maxWidth - SIDE_PADDING * 2 - RAIL_WIDTH).toPx().toDouble(), FONT_SIZE.toPx().toDouble())
             }
             val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
-            val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry) }
+            val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry).also { images.host = it::hostImagePath } }
             DisposableEffect(model) { onDispose { model.close() } }
             val context = LocalContext.current
             val bookmarks = remember(client, sessionId) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId) }

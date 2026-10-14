@@ -10,6 +10,7 @@ import bi.atomic.workerdeck.core.ffi.Changed
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Effect
 import bi.atomic.workerdeck.core.ffi.FrameStrip
+import bi.atomic.workerdeck.core.ffi.HostImageFetch
 import bi.atomic.workerdeck.core.ffi.Key
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.Mode
@@ -98,6 +99,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     private var railSize: RailSize? = null
     private var frameRailSize: RailSize? = null
     private var bookmarkIds: List<String> = emptyList()
+
+    fun hostImagePath(path: String): HostImageFetch = session.hostImagePath(sessionId, path)
     private var socket: WebSocket? = null
 
     // Socket callbacks run on OkHttp's threads, possibly before the worker has stored the socket, so each socket

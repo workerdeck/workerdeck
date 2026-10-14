@@ -5,7 +5,7 @@ use crate::controller::transcript::TranscriptView;
 use crate::engine::{ByteWriter, write_vt_line};
 use crate::planner::TermLine;
 
-pub const VERSION: u8 = 3;
+pub const VERSION: u8 = 4;
 
 pub fn transcript_layout(view: &TranscriptView) -> Vec<u8> {
     let rows = view.rows();
@@ -101,6 +101,7 @@ fn write_line(out: &mut ByteWriter, line: &TermLine) {
         out.u16(image.lines.min(u16::MAX as usize) as u16);
         out.str16(&image.name);
         out.str16(&image.placeholder);
+        out.str16(image.host_path.as_deref().unwrap_or_default());
     }
 }
 

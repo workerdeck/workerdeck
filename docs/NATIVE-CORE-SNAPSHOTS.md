@@ -4,7 +4,7 @@ What `crates/core/src/snapshot.rs` hands a native renderer, through `crates/ffi`
 `wdffi`). Commands, effects and state go through UniFFI records; everything a renderer draws is
 one of these byte buffers, so a redraw costs one crossing.
 
-Little-endian. Every buffer opens with `u8 version` (currently **3**, `snapshot_version()`); a
+Little-endian. Every buffer opens with `u8 version` (currently **4**, `snapshot_version()`); a
 reader that sees another version refuses the buffer. `str16` / `str32` are a `u16` / `u32` byte
 length and UTF-8 bytes (`str16` is cut at a character boundary).
 
@@ -32,12 +32,16 @@ line = u8 tone, u8 gutterTone, u8 band, u8 flags,
        [f64 elapsedSince]                       if flags & 0x80
        [str16 toolUseId, i64 sourceSeq, i64 partIndex,
         str16 mediaType, i64 bytes, u16 lines,
-        str16 name, str16 placeholder]          if flags & 0x40
+        str16 name, str16 placeholder,
+        str16 hostPath]                         if flags & 0x40
 ```
 
 An image line opens a box `lines` tall (the following lines are blank); fetch its bytes at
 `result_image_path(sessionId, sourceSeq, toolUseId, partIndex)` under the API base. `name` titles the
 viewer, `placeholder` (`image · 12 KB`) fills the box until the bytes land, `image_unavailable()` after a failure.
+A non-empty `hostPath` is a codex picture named by its path on the host (`CodexImageGeneration`,
+`CodexImageView`): fetch `Session.host_image_path(sessionId, hostPath)` instead, a produced file when the
+session announced one and `/fs/read` otherwise; `host_image_base64(body, hostPath)` reads the latter's answer.
 
 `prompt_plan_lines` is the same shape with one row at 0: a plan prompt's markdown, planned at the session's metrics.
 

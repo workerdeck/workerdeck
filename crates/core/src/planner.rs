@@ -157,12 +157,43 @@ pub struct TermImageBox {
     pub lines: usize,
     pub name: String,
     pub placeholder: String,
+    pub host_path: Option<String>,
 }
 
 impl TermImageBox {
     pub fn key(&self) -> String {
-        format!("{}/{}/{}", self.source_seq, self.tool_use_id, self.part_index)
+        match &self.host_path {
+            Some(path) => format!("host/{}/{path}", self.tool_use_id),
+            None => format!("{}/{}/{}", self.source_seq, self.tool_use_id, self.part_index),
+        }
     }
+}
+
+const HOST_IMAGE_TOOLS: [&str; 2] = ["CodexImageGeneration", "CodexImageView"];
+
+// The web's `hostImagePathOf`: codex reports a picture it made or viewed by its path on the host, never its bytes.
+pub fn host_image_path_of(call: &ToolCall) -> Option<&str> {
+    if !HOST_IMAGE_TOOLS.contains(&&*call.name) {
+        return None;
+    }
+    let path = call.input.get("savedPath").filter(|v| !v.is_null()).or_else(|| call.input.get("path"))?;
+    path.as_str()
+}
+
+pub fn base_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().filter(|name| !name.is_empty()).unwrap_or(path)
+}
+
+pub fn image_media_type(path: &str) -> Option<&'static str> {
+    let extension = path.rsplit_once('.')?.1.to_ascii_lowercase();
+    Some(match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        _ => return None,
+    })
 }
 
 pub fn image_placeholder(bytes: i64) -> String {
@@ -1202,7 +1233,28 @@ fn plan_image_box(
         lines: IMAGE_BOX_LINES,
         name: result_image_name(tool_name, image.part_index as i64, &image.media_type),
         placeholder: image_placeholder(image.bytes as i64),
+        host_path: None,
     };
+    image_box_lines(image_box, first, nested, press, in_open)
+}
+
+fn plan_host_image_box(path: &str, call_id: &str, nested: bool, press: &Option<TermPress>, in_open: bool) -> Vec<TermLine> {
+    let name = base_name(path).to_owned();
+    let image_box = TermImageBox {
+        tool_use_id: call_id.to_owned(),
+        source_seq: 0,
+        part_index: 0,
+        media_type: image_media_type(path).unwrap_or_default().to_owned(),
+        bytes: 0,
+        lines: IMAGE_BOX_LINES,
+        placeholder: name.clone(),
+        name,
+        host_path: Some(path.to_owned()),
+    };
+    image_box_lines(image_box, true, nested, press, in_open)
+}
+
+fn image_box_lines(image_box: TermImageBox, first: bool, nested: bool, press: &Option<TermPress>, in_open: bool) -> Vec<TermLine> {
     (0..image_box.lines)
         .map(|offset| {
             let mut line = TermLine::plain(" ".to_owned(), Tone::Dim);
@@ -1268,9 +1320,13 @@ fn plan_tool_call(call: &ToolCall, m: &Metrics, x: &TerminalExpansion, in_open: 
     );
     lines.extend(plan_live_tail(&tail_lines(call), m, nested, &press, wash));
 
+    let host_image = host_image_path_of(call);
+    if let Some(path) = host_image {
+        lines.extend(plan_host_image_box(path, &call.id, nested, &press, wash));
+    }
     if let Some(images) = call.result.as_ref().and_then(|r| r.images.as_ref()) {
         for (offset, image) in images.iter().enumerate() {
-            lines.extend(plan_image_box(image, &call.id, &call.name, offset == 0, nested, &press, wash));
+            lines.extend(plan_image_box(image, &call.id, &call.name, offset == 0 && host_image.is_none(), nested, &press, wash));
         }
     }
 

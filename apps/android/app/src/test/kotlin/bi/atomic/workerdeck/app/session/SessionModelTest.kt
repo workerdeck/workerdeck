@@ -251,7 +251,31 @@ class SessionModelTest {
         model.close()
     }
 
+    @Test
+    fun aCodexPictureIsReadFromTheHostUntilTheSessionAnnouncesItsProducedFile() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s 1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, VIEW)
+        eventually("the box") { model.ui.value.lines.flatten().any { it.image != null } }
+        val image = model.ui.value.lines.flatten().firstNotNullOf { it.image }
+        assertEquals("v.png" to "/tmp/v.png", image.name to image.hostPath)
+        val images = ToolImages("s 1") { null }.also { it.host = model::hostImagePath }
+        assertEquals("/fs/read?path=%2Ftmp%2Fv.png", images.path(image))
+        listener.onMessage(socket, PRODUCED)
+        eventually("the produced file") { images.path(image) == "/sessions/s%201/produced/f1" }
+        model.close()
+    }
+
     private companion object {
+        const val VIEW =
+            """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_view","name":"CodexImageView","input":{"path":"/tmp/v.png"}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""
+
+        const val PRODUCED =
+            """{"type":"event","event":{"type":"file_produced","path":"/tmp/v.png","fileId":"f1","mediaType":"image/png","bytes":3,"seq":3,"ts":1}}"""
+
         const val SHOT =
             """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_shot","name":"mcp__browser__screenshot","input":{}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""
 

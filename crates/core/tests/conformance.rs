@@ -134,6 +134,9 @@ fn encode(line: TermLine) -> Value {
             "bytes": image.bytes,
             "lines": image.lines,
         });
+        if let Some(path) = image.host_path {
+            value["image"]["hostPath"] = json!(path);
+        }
     }
     value
 }

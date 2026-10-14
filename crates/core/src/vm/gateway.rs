@@ -1,6 +1,8 @@
 // Pairing rules for a native app: what a typed gateway address means, what to call it, and what an answer says
 // about the address and key it was reached with.
+use crate::planner::image_media_type;
 use crate::rest::encode_component;
+use crate::transcript::ProducedFile;
 
 pub fn normalize_base_url(raw: &str) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
@@ -21,6 +23,35 @@ pub fn socket_url(base_url: &str, session_id: &str, after_seq: i64) -> String {
 // One picture of a tool result, under the API base: the web's `toolResultImage`. A stale seq 404s, never another call's.
 pub fn result_image_path(session_id: &str, seq: i64, tool_use_id: &str, part_index: i64) -> String {
     format!("/sessions/{}/events/{seq}/result?toolUseId={}&part={part_index}", encode_component(session_id), encode_component(tool_use_id))
+}
+
+// The web's `useHostImage`: a picture codex names by its host path is served as the produced file the session
+// announced for it, which needs no host-file root; any other path goes through `/fs/read` and its roots.
+// A produced file answers raw bytes; `/fs/read` answers JSON for `host_image_base64`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostImageFetch {
+    pub path: String,
+    pub fs_read: bool,
+}
+
+pub fn host_image_path(session_id: &str, path: &str, produced: Option<&ProducedFile>) -> HostImageFetch {
+    match produced {
+        Some(file) => HostImageFetch {
+            path: format!("/sessions/{}/produced/{}", encode_component(session_id), encode_component(&file.file_id)),
+            fs_read: false,
+        },
+        None => HostImageFetch { path: format!("/fs/read?path={}", encode_component(path)), fs_read: true },
+    }
+}
+
+// What `/fs/read` answered, as base64 image bytes: only a binary read of a path named like a picture counts.
+pub fn host_image_base64(body: &str, path: &str) -> Option<String> {
+    image_media_type(path)?;
+    let file: serde_json::Value = serde_json::from_str(body).ok()?;
+    if file.get("encoding")?.as_str()? != "base64" {
+        return None;
+    }
+    file.get("content")?.as_str().map(str::to_owned)
 }
 
 fn host_of(url: &str) -> &str {
@@ -111,19 +142,36 @@ pub fn answer_error(status: u16, content_type: Option<&str>, body: &str) -> Opti
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn gateway_names_tell_colliding_gateways_apart() {
         let urls = ["http://10.0.2.2:8790".to_owned(), "http://10.0.2.2:8791/".to_owned(), "http://mini.tail.ts.net:8787".to_owned()];
         assert_eq!(super::gateway_names(&urls), ["10.0.2.2:8790", "10.0.2.2:8791", "mini"]);
     }
 
-    use super::*;
-
     #[test]
     fn a_typed_address_gains_a_scheme_and_loses_its_api_suffix() {
         assert_eq!(normalize_base_url(" mac.tail.ts.net:8787/ "), "http://mac.tail.ts.net:8787");
         assert_eq!(normalize_base_url("https://deck.example/v1"), "https://deck.example");
         assert_eq!(api_base("https://deck.example/v1/"), "https://deck.example/v1");
+    }
+
+    #[test]
+    fn a_host_picture_prefers_its_produced_file_and_reads_the_host_otherwise() {
+        let file = ProducedFile { file_id: "f 1".into(), media_type: Some("image/png".into()), bytes: None };
+        let fetch = |path: &str, fs_read| HostImageFetch { path: path.to_owned(), fs_read };
+        assert_eq!(host_image_path("s 1", "/tmp/a b.png", Some(&file)), fetch("/sessions/s%201/produced/f%201", false));
+        assert_eq!(host_image_path("s 1", "/tmp/a b.png", None), fetch("/fs/read?path=%2Ftmp%2Fa%20b.png", true));
+    }
+
+    #[test]
+    fn only_a_binary_read_of_a_picture_name_is_a_host_picture() {
+        let body = r#"{"path":"/tmp/a.png","content":"iVBO","encoding":"base64","bytes":3}"#;
+        assert_eq!(host_image_base64(body, "/tmp/a.PNG").as_deref(), Some("iVBO"));
+        assert_eq!(host_image_base64(body, "/tmp/a.txt"), None);
+        assert_eq!(host_image_base64(&body.replace("base64", "utf8"), "/tmp/a.png"), None);
+        assert_eq!(host_image_base64("<html>", "/tmp/a.png"), None);
     }
 
     #[test]

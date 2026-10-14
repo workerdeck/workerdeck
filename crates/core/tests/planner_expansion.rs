@@ -719,3 +719,20 @@ fn subagent_task_finds_the_spawning_call() {
     assert_eq!(subagent_task(&items, "T9"), None);
     assert!(subagent_items(&items, "T1").iter().all(|item| item.id() != "T1"));
 }
+
+#[test]
+fn a_codex_picture_named_by_its_host_path_opens_one_box_before_the_result() {
+    let saved = json!({ "savedPath": "/out/gen.png", "path": "/ignored.png" });
+    let shown = |name: &str, input: Value| {
+        let item = Item::ToolCall(Arc::new(tool("c", name, None, input, ToolCallStatus::Settled, Some(result("done", false)))));
+        let rows = TerminalRows::build(&[item]);
+        plan(&rows.rows[0], &WIDE).into_iter().filter_map(|line| line.image).collect::<Vec<_>>()
+    };
+    let boxes = shown("CodexImageGeneration", saved);
+    assert_eq!(boxes.len(), 1);
+    assert_eq!(boxes[0].host_path.as_deref(), Some("/out/gen.png"));
+    assert_eq!((boxes[0].name.as_str(), boxes[0].placeholder.as_str(), boxes[0].media_type.as_str()), ("gen.png", "gen.png", "image/png"));
+    assert_eq!(shown("CodexImageView", json!({ "path": "C:\\shots\\v.JPG" }))[0].name, "v.JPG");
+    assert!(shown("Read", json!({ "path": "/tmp/v.png" })).is_empty());
+    assert!(shown("CodexImageView", json!({})).is_empty());
+}
