@@ -16,6 +16,7 @@ import bi.atomic.workerdeck.core.ffi.StepState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,7 +134,7 @@ fun SessionsScreen(
                 ui.groups.isEmpty() && ui.error == null -> LazyColumn(Modifier.fillMaxSize()) {
                     item(key = "empty") { EmptyList() }
                 }
-                else -> LazyColumn(Modifier.fillMaxSize()) {
+                else -> LazyColumn(Modifier.fillMaxSize().testTag("sessions")) {
                     ui.error?.let { error ->
                         item(key = "error") { ErrorStrip(error) }
                     }
@@ -288,6 +289,7 @@ private fun SessionRow(
         Column(
             Modifier
                 .fillMaxWidth()
+                .testTag("session-row")
                 .combinedClickable(onClick = { onOpen(null) }, onLongClick = if (row.canSleep) ({ menu = true }) else null)
                 .alpha(if (!row.asleep) 1f else if (agent) 0.6f else 0.55f),
         ) {

@@ -2,6 +2,15 @@ package bi.atomic.workerdeck.app
 
 import android.content.res.Configuration
 import android.os.Bundle
+import android.util.Log
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.metrics.performance.JankStats
+import androidx.metrics.performance.PerformanceMetricsState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
+import bi.atomic.workerdeck.BuildConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -31,9 +40,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val store = GatewayStore(applicationContext)
+        if (BuildConfig.DEBUG) trackJank()
         setContent {
             WorkerDeckTheme {
-                Surface(color = MaterialTheme.colorScheme.background) { App(store) }
+                // Test tags as resource ids: the macrobenchmarks find the list, its rows and the transcript by them.
+                Surface(Modifier.semantics { testTagsAsResourceId = true }, color = MaterialTheme.colorScheme.background) { App(store) }
+            }
+        }
+    }
+
+    // Debug builds log every janky frame with the screen it happened on: `adb logcat -s JankStats`.
+    private fun trackJank() {
+        JankStats.createAndTrack(window) { frame ->
+            if (frame.isJank) {
+                val states = frame.states.joinToString { "${it.key}=${it.value}" }
+                Log.d("JankStats", "${frame.frameDurationUiNanos / 1_000_000} ms $states")
             }
         }
     }
@@ -53,6 +74,7 @@ private fun App(store: GatewayStore) {
     var open by rememberSaveable { mutableStateOf<List<String>?>(null) }
     if (gateways.isEmpty() || adding) {
         BackHandler(enabled = adding) { adding = false }
+        JankScreen("pairing")
         PairingScreen { url, key ->
             cleartextRefusal(url)?.let { return@PairingScreen it }
             val probe = GatewayClient(Gateway("probe", url, key))
@@ -69,6 +91,7 @@ private fun App(store: GatewayStore) {
     sessions.attach(gateways)
     val target = open
     val client = target?.let { sessions.client(it[0]) }
+    JankScreen(if (target == null || client == null) "sessions" else "session")
     if (target == null || client == null) {
         SessionsScreen(
             sessions,
@@ -90,6 +113,17 @@ private fun App(store: GatewayStore) {
             sessions.markSeen(target[0], target[1])
             open = null
         }
+    }
+}
+
+// Tags JankStats frames with the screen they belong to; release builds never track, so this is a cheap no-op there.
+@Composable
+private fun JankScreen(name: String) {
+    val view = LocalView.current
+    DisposableEffect(view, name) {
+        val holder = PerformanceMetricsState.getHolderForHierarchy(view)
+        holder.state?.putState("screen", name)
+        onDispose { holder.state?.removeState("screen") }
     }
 }
 

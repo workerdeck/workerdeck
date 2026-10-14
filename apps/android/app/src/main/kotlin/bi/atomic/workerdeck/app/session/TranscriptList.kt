@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -75,7 +76,7 @@ fun TranscriptList(
         if (row < count) list.scrollToItem(count - 1 - row)
     }
     Box(modifier) {
-    LazyColumn(Modifier.fillMaxSize(), state = list, reverseLayout = true) {
+    LazyColumn(Modifier.fillMaxSize().testTag("transcript"), state = list, reverseLayout = true) {
         items(count, key = { index -> rows[count - 1 - index].key }) { index ->
             val row = count - 1 - index
             val height = with(density) { rows[row].height.toDp() }

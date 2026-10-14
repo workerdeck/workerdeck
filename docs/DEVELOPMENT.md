@@ -105,6 +105,18 @@ launched. Debug builds pre-fill pairing with `http://10.0.2.2:8790` and that key
 leave it empty. `pnpm android dev stop` stops both. It never touches the dev gateway. Release builds
 sign with the upload key when `WD_UPLOAD_STORE_FILE`, `WD_UPLOAD_STORE_PASSWORD`, `WD_UPLOAD_KEY_ALIAS`
 and `WD_UPLOAD_KEY_PASSWORD` are Gradle properties (`~/.gradle/gradle.properties`), else the debug key.
+CI uploads every `android` job's release APK as the artifact `workerdeck-android-<run>` (version code = run
+number, name `0.1.0+ci.<run>`), signed with the upload key when the repo secrets `WD_UPLOAD_KEYSTORE_B64` (the
+`.jks`, base64), `WD_UPLOAD_STORE_PASSWORD` and `WD_UPLOAD_KEY_PASSWORD` exist, else with the runner's throwaway
+debug key (installs only on a device without an earlier build).
+
+Performance, with the rig up: `pnpm android profile` regenerates the baseline and startup profiles into
+`app/src/release/generated/baselineProfiles/` (commit them; `profileinstaller` ships them), and `pnpm android bench`
+runs the `:baselineprofile` macrobenchmarks (cold start to the sessions list, transcript fling frame times, each
+with and without the profile). Both drive the `.bench` app id, so the everyday app's pairings are never touched,
+and pair it with the private gateway at `127.0.0.1:8790` through `adb reverse`, so a phone works as well as the
+emulator. Measure on a phone: the headless emulator renders in software and its startup spread (350 to 2500 ms)
+hides any difference. Debug builds log janky frames with their screen: `adb logcat -s JankStats`.
 
 `crates/ffi` is the apps' door into the core (UniFFI, lib `wdffi`, package and module names in
 `crates/ffi/uniffi.toml`); its byte-buffer formats are in `docs/NATIVE-CORE-SNAPSHOTS.md`. Library

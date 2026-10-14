@@ -4,6 +4,8 @@
 #   android.sh stop               shut the emulator down
 #   android.sh dev [--headless]   private test gateway on :8790 + emulator + debug app, launched
 #   android.sh dev stop           stop the private test gateway and the emulator
+#   android.sh profile            (rig up) regenerate the baseline profile into app/src/release/generated
+#   android.sh bench              (rig up) startup + transcript scroll macrobenchmarks, with and without it
 #   android.sh gradle <task...>   ./gradlew with a JDK that Gradle 8.14 runs on
 #   android.sh adb <args...>      the SDK's adb
 set -euo pipefail
@@ -111,6 +113,17 @@ case "${1:-}" in
   stop)
     "$ADB" emu kill
     ;;
+  profile)
+    "$ADB" reverse tcp:$DEV_PORT tcp:$DEV_PORT >/dev/null
+    (cd "$HERE" && JAVA_HOME=$(java_home) ./gradlew :app:generateBaselineProfile)
+    ;;
+  bench)
+    "$ADB" reverse tcp:$DEV_PORT tcp:$DEV_PORT >/dev/null
+    # Macrobenchmark refuses emulators; their numbers only compare with and without the profile, a phone measures.
+    (cd "$HERE" && JAVA_HOME=$(java_home) ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+      -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR)
+    echo "results: $HERE/baselineprofile/build/outputs/connected_android_test_additional_output/"
+    ;;
   gradle)
     shift
     cd "$HERE"
@@ -121,7 +134,7 @@ case "${1:-}" in
     exec "$ADB" "$@"
     ;;
   *)
-    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac
