@@ -99,7 +99,7 @@ fn auto_shows_busy_and_selected_members_and_trays_the_rest() {
         session("busy", "running", &format!(r#","pendingPermissionCount":0{}"#, member("M1", 1))),
         idle("quiet1", &format!(r#","lastActivityAt":1000{}"#, member("M2", 2))),
         idle("quiet2", &format!(r#","lastActivityAt":1000{}"#, member("M3", 3))),
-        idle("recent", &format!(r#","lastActivityAt":90000{}"#, member("M4", 4))),
+        idle("recent", &format!(r#","lastActivityAt":98000{}"#, member("M4", 4))),
     ];
     list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
     let rows = |list: &SessionList| list.groups(100_000.0).into_iter().flat_map(|g| g.rows).collect::<Vec<_>>();
@@ -109,7 +109,7 @@ fn auto_shows_busy_and_selected_members_and_trays_the_rest() {
     let lead = drawn.iter().find(|r| r.session_id == "lead").unwrap();
     assert_eq!(lead.tray.iter().map(|t| t.session_id.as_str()).collect::<Vec<_>>(), ["quiet1", "quiet2"]);
     assert!(!lead.team_expanded);
-    assert_eq!(list.linger_ends(), Some(120_000.0));
+    assert_eq!(list.linger_ends(), Some(103_000.0));
 
     list.select("h1".into(), "quiet2".into());
     let ids: Vec<_> = rows(&list).into_iter().map(|r| r.session_id).collect();

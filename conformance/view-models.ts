@@ -189,7 +189,7 @@ const TEAM: SessionRow = {
     BY_ID.get('s-review-02')!,
     quiet('s-quiet-a', 3),
     quiet('s-unread', 4, {}, 2),
-    quiet('s-linger', 5, { lastActivityAt: T0 + 50_000 }),
+    quiet('s-linger', 5, { lastActivityAt: T0 + 57_000 }),
     quiet('s-quiet-b', 6),
   ],
 }

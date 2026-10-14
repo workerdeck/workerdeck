@@ -735,7 +735,7 @@ pub fn toggle_team_expanded(config: &ViewConfig, row: &SessionRow) -> ViewConfig
     }
 }
 
-pub const TEAM_LINGER_MS: f64 = 30_000.0;
+pub const TEAM_LINGER_MS: f64 = 5_000.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TeamView {
