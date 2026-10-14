@@ -411,14 +411,17 @@ Ended) and custom grouping (the operator placed them). `expandedTeams` (team key
 dropped on normalize, never migrated, because its meaning is the inverse.
 
 **Team Auto.** Every team is in Auto unless its key is in `expandedTeams`; there is no setting and no
-fully collapsed state. `teamView(lead, config, selected, now)` returns `{ expanded, shown, tray }`:
+fully collapsed state. `teamView(lead, config, selected, now, peeked?)` returns `{ expanded, shown, tray }`:
 in Auto a Member is shown when it is `working` or `attention`, is the selected row (`selected` is a
-`sessionKey`), has `unseen > 0`, or has `lastActivityAt` within `TEAM_LINGER_MS` (30 s) of `now`;
+`sessionKey`), has `unseen > 0`, or has `lastActivityAt` within `TEAM_LINGER_MS` (5 s) of `now`;
 the rest go to `tray`. Expanded, or under any search or facet filter, every Member is shown.
+`peeked` (TS only so far) holds Members opened while idle and not busy since: they never linger, so a peek folds back
+the moment the selection moves on. `ui`'s `SessionBrowser` keeps that set itself.
 `teamLingerEnds(view, now)` is when the next lingering Member drops out, so a host can redraw then.
-`teamLingerStart(member, selected, now)` is when the window began for a Member shown *only* because it lingers (not busy,
-unread or selected), so a host can draw the countdown: `ui` fills a hairline under that row and the row leaves when it is full.
-iOS mirrors both in `SessionList.swift`; the Rust core ports them next.
+`teamLingerStart(member, selected, now, peeked?)` is when the window began for a Member shown *only* because it lingers
+(not busy, unread, selected or peeked), so a host can draw the countdown: `ui` fills a hairline under that row and the row
+leaves when it is full. iOS mirrors `teamView` and `teamLingerEnds` in `SessionList.swift` and the Rust core in
+`vm/session_list.rs`, both without `peeked`.
 
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
 name drawing the no-project fallback - or an image **address, never bytes**, fetched from

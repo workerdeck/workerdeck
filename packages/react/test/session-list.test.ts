@@ -669,6 +669,13 @@ describe('teamView', () => {
     expect(teamLingerStart(quiet, undefined, now)).toBeUndefined()
     expect(teamLingerStart(recent, undefined, now - 1_000 + TEAM_LINGER_MS)).toBeUndefined()
   })
+
+  it('folds a peeked member back at once instead of lingering', () => {
+    const peeked = new Set([sessionKey(recent)])
+    expect(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now, peeked).tray).toContain(recent)
+    expect(teamView(lead, DEFAULT_VIEW_CONFIG, sessionKey(recent), now, peeked).shown).toContain(recent)
+    expect(teamLingerStart(recent, undefined, now, peeked)).toBeUndefined()
+  })
 })
 
 describe('custom group collapse', () => {
