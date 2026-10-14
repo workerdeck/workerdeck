@@ -11,9 +11,11 @@ use wd_native::snapshot;
 use wd_native::vt::VtKey;
 
 mod avatar;
+mod bookmarks;
 mod list;
 mod pickers;
 mod prompt;
+pub use bookmarks::{Bookmarks, RowMenu};
 pub use list::{ListError, ListGroup, ListRow, Mark, RowState, SessionList};
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
@@ -436,6 +438,14 @@ impl Session {
 
     pub fn row_for_tool_call(&self, tool_use_id: String) -> Option<u32> {
         self.live().row_for_tool_call(&tool_use_id).map(|row| row as u32)
+    }
+
+    pub fn row_menu(&self, row: u32) -> Option<RowMenu> {
+        self.live().row_menu(row as usize).map(RowMenu::from)
+    }
+
+    pub fn frame_row_menu(&self, task_id: String, row: u32) -> Option<RowMenu> {
+        self.live().frame_row_menu(&task_id, row as usize).map(RowMenu::from)
     }
 
     pub fn row_for_item(&self, item: u32) -> u32 {

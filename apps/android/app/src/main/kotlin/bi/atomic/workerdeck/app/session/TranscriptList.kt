@@ -1,6 +1,12 @@
 package bi.atomic.workerdeck.app.session
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,8 +45,10 @@ fun TranscriptList(
     onPress: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
     jump: Jump? = null,
+    menu: RowMenuHost? = null,
 ) {
     val density = LocalDensity.current
+    val haptics = LocalHapticFeedback.current
     val list = rememberLazyListState()
     val count = rows.size
     LaunchedEffect(list, count) {
@@ -65,6 +73,9 @@ fun TranscriptList(
             } else {
                 val line = with(density) { lineHeight.toDp() }
                 Column(Modifier.fillMaxWidth().height(height), verticalArrangement = Arrangement.Bottom) {
+                    if (menu != null && menu.openRow == row) {
+                        DropdownMenu(expanded = true, onDismissRequest = menu.onDismiss, content = menu.content)
+                    }
                     lines.forEachIndexed { at, it ->
                         Text(
                             annotate(it, palette),
@@ -76,7 +87,22 @@ fun TranscriptList(
                                 .height(line)
                                 .background(palette.band(it.band))
                                 .padding(horizontal = sidePadding)
-                                .let { modifier -> if (it.pressable) modifier.clickable { onPress(row, at) } else modifier },
+                                .let { modifier ->
+                                    when {
+                                        menu != null -> modifier.combinedClickable(
+                                            interactionSource = null,
+                                            indication = if (it.pressable) LocalIndication.current else null,
+                                            onLongClickLabel = "Row actions",
+                                            onLongClick = {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                menu.onLongPress(row)
+                                            },
+                                            onClick = { if (it.pressable) onPress(row, at) },
+                                        )
+                                        it.pressable -> modifier.clickable { onPress(row, at) }
+                                        else -> modifier
+                                    }
+                                },
                         )
                     }
                 }
@@ -84,3 +110,11 @@ fun TranscriptList(
         }
     }
 }
+
+// A row's long-press menu: which row has it open, and what it draws. `null` leaves rows without long-press at all.
+class RowMenuHost(
+    val openRow: Int?,
+    val onLongPress: (Int) -> Unit,
+    val onDismiss: () -> Unit,
+    val content: @Composable ColumnScope.() -> Unit,
+)

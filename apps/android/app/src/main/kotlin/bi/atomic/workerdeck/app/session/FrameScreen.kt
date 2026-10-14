@@ -45,6 +45,7 @@ import bi.atomic.workerdeck.core.ffi.FrameStrip
 fun FrameScreen(
     model: SessionModel,
     frame: FrameView,
+    bookmarks: SessionBookmarks,
     style: TextStyle,
     lineHeight: TextUnit,
     sidePadding: Dp,
@@ -96,6 +97,7 @@ fun FrameScreen(
                     onVisible = model::frameVisible,
                     onPress = model::framePress,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    menu = rememberRowMenuHost(model, bookmarks, inFrame = true),
                 )
             }
             Column(Modifier.navigationBarsPadding()) {

@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
@@ -74,6 +75,8 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
         val promptMaxHeight = maxOf(220.dp, maxHeight * 0.5f)
         val model = remember(client, sessionId) { SessionModel(client, sessionId, metrics, entry) }
         DisposableEffect(model) { onDispose { model.close() } }
+        val context = LocalContext.current
+        val bookmarks = remember(client, sessionId) { SessionBookmarks(BookmarkStore.of(context), client.gateway.id, sessionId) }
         LaunchedEffect(metrics) { model.resize(metrics) }
         val ui by model.ui.collectAsStateWithLifecycle()
         var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
@@ -112,6 +115,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     onPress = model::press,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     jump = ui.jump,
+                    menu = rememberRowMenuHost(model, bookmarks, inFrame = false),
                 )
             }
             Column(Modifier.navigationBarsPadding()) {
@@ -146,7 +150,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
         val shell by model.shell.collectAsStateWithLifecycle()
         shell?.let { ShellScreen(model, it.id, style, palette, onClose = {}) }
         val frame by model.frame.collectAsStateWithLifecycle()
-        frame?.let { FrameScreen(model, it, style, LINE_HEIGHT, SIDE_PADDING, metrics.cell, palette, promptMaxHeight) }
+        frame?.let { FrameScreen(model, it, bookmarks, style, LINE_HEIGHT, SIDE_PADDING, metrics.cell, palette, promptMaxHeight) }
         if (clearing) {
             // Not destructive red: the old conversation stays resumable, same wording as the other clients.
             AlertDialog(

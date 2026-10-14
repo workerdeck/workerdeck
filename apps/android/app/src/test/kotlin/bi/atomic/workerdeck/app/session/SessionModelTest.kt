@@ -126,6 +126,33 @@ class SessionModelTest {
     }
 
     @Test
+    fun aLongPressAsksTheCoreWhatTheRowOffers() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, user(1, "Survey the tests."))
+        listener.onMessage(socket, TASK)
+        eventually("two rows") { model.ui.value.rows.size >= 2 }
+        model.openMenu(0, inFrame = false)
+        eventually("the prompt's menu") { model.menu.value?.row == 0 }
+        val prompt = model.menu.value!!.menu
+        assertEquals("u1" to "Survey the tests.", prompt.bookmarkItemId to prompt.copyText)
+        assertEquals(null, prompt.backgroundCallId)
+        model.openMenu(1, inFrame = false)
+        eventually("the task's menu") { model.menu.value?.row == 1 }
+        val task = model.menu.value!!.menu
+        assertEquals("toolu_task", task.bookmarkItemId)
+        assertEquals(null to null, task.copyText to task.backgroundCallId)
+        model.closeMenu()
+        model.openMenu(99, inFrame = false)
+        Thread.sleep(50)
+        assertEquals(null, model.menu.value)
+        model.close()
+    }
+
+    @Test
     fun aTaskRowPressOpensItsTakeoverWhichFollowsTheAgent() {
         val transport = FakeTransport()
         val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))

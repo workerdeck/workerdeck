@@ -1,5 +1,6 @@
 pub mod agent_avatar;
 pub mod agents;
+pub mod bookmarks;
 pub mod checklist;
 pub mod collate;
 pub mod engine_mark;

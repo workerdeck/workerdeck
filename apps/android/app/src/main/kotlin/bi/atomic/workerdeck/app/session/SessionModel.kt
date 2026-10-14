@@ -18,6 +18,7 @@ import bi.atomic.workerdeck.core.ffi.ModelPicker
 import bi.atomic.workerdeck.core.ffi.Prompt
 import bi.atomic.workerdeck.core.ffi.PromptKind
 import bi.atomic.workerdeck.core.ffi.ReplayProgress
+import bi.atomic.workerdeck.core.ffi.RowMenu
 import bi.atomic.workerdeck.core.ffi.Session
 import bi.atomic.workerdeck.core.ffi.SessionChrome
 import bi.atomic.workerdeck.core.ffi.Selection
@@ -86,6 +87,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     val shell: StateFlow<ShellView?> = shellState
     private val frameState = MutableStateFlow<FrameView?>(null)
     val frame: StateFlow<FrameView?> = frameState
+    private val menuState = MutableStateFlow<OpenRowMenu?>(null)
+    val menu: StateFlow<OpenRowMenu?> = menuState
     private var socket: WebSocket? = null
 
     // Socket callbacks run on OkHttp's threads, possibly before the worker has stored the socket, so each socket
@@ -101,6 +104,22 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     fun press(row: Int, line: Int) = worker.act { it.pressLine(row.toUInt(), line.toUInt()) }
 
     fun reconnect() = worker.act { it.reconnectNow() }
+
+    // A long-press asks the core what this row offers; a row with nothing to offer opens no menu.
+    fun openMenu(row: Int, inFrame: Boolean) = worker.act { session ->
+        val taskId = frameState.value?.taskId
+        val menu = if (inFrame) taskId?.let { session.frameRowMenu(it, row.toUInt()) } else session.rowMenu(row.toUInt())
+        menuState.value = menu
+            ?.takeIf { it.bookmarkItemId != null || it.copyText != null || it.backgroundCallId != null }
+            ?.let { OpenRowMenu(row, inFrame, it) }
+        emptyList()
+    }
+
+    fun closeMenu() {
+        menuState.value = null
+    }
+
+    fun backgroundTask(toolUseId: String) = worker.act { it.backgroundTask(toolUseId) }
 
     fun send(text: String) = worker.act { it.send(text, emptyList()) }
 
@@ -305,3 +324,5 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         state.value = state.value.copy(startRow = lines.startRow, lines = lines.rows)
     }
 }
+
+data class OpenRowMenu(val row: Int, val inFrame: Boolean, val menu: RowMenu)

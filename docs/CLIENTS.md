@@ -1391,6 +1391,11 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   row carries its `tray` (at most three idle Members, `tray_overflow` past that) and `team_expanded`;
   `SessionList.groups(now)` takes the clock and `linger_ends()` says when to redraw. A phone has no
   lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
+- **A long-press on a transcript row opens its menu** (`session/RowMenuItems.kt`): the core's
+  `row_menu` decides what the row bookmarks (its head item), copies (its source, never the drawn
+  lines) and moves to the background (only with the `backgroundTasks` capability). Bookmarks are the
+  core's `Bookmarks` (the web's `workerdeck.bookmarks.v1` rules) kept as JSON in prefs, dropped with
+  their gateway; nothing draws them until the scrubber rail lands.
 - **Pairing**: base URL + auth key (`Authorization: Bearer`), each key sealed with an AES-GCM key
   that never leaves the Android Keystore. Several gateways merge into one list; the gateway menu adds
   and forgets them, a row names its gateway only when there is more than one (core `shows_gateway`),

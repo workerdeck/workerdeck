@@ -7,6 +7,7 @@ use crate::expansion::TermPress;
 use crate::planner::{Metrics, SubagentStripLine, TermLine, prompt_markdown, subagent_strip_line};
 use crate::protocol::{AttachedFrame, Body, Event};
 use crate::rest::{ModelOption, PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
+use crate::row_menu::{RowMenu, row_menu};
 use crate::rows::{subagent_items, subagent_task, tool_call_item_index};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
@@ -189,6 +190,19 @@ impl LiveSession {
     // The row holding a tool call, for a route that lands on it (a task line on the sessions list).
     pub fn row_for_tool_call(&self, tool_use_id: &str) -> Option<usize> {
         tool_call_item_index(&self.state.items, tool_use_id).map(|item| self.view.row_index_for_item(item))
+    }
+
+    // A long-press on a row: what it bookmarks, copies and moves to the background. `None` past the end.
+    pub fn row_menu(&self, row: usize) -> Option<RowMenu> {
+        self.view.row(row).map(|row| row_menu(row, self.can_background_tasks()))
+    }
+
+    pub fn frame_row_menu(&self, task_id: &str, row: usize) -> Option<RowMenu> {
+        self.frames.get(task_id)?.row(row).map(|row| row_menu(row, self.can_background_tasks()))
+    }
+
+    fn can_background_tasks(&self) -> bool {
+        self.state.capabilities.as_ref().is_some_and(|c| c.background_tasks == Some(true))
     }
 
     pub fn is_finished(&self) -> bool {

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
+import bi.atomic.workerdeck.app.session.BookmarkStore
 import bi.atomic.workerdeck.core.ffi.ListStep
 import bi.atomic.workerdeck.core.ffi.StepKind
 import bi.atomic.workerdeck.core.ffi.ListException
@@ -152,6 +153,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     // Unpairing drops the gateway from the list along with its read marks; a new pairing gets a new id.
     fun forget(gateway: Gateway) {
         if (list.removeHost(gateway.id)) prefs.edit().putString("marks", list.marksJson()).apply()
+        BookmarkStore.of(getApplication()).removeHost(gateway.id)
         attach(clients.values.map { it.gateway }.filter { it.id != gateway.id })
         state.value = state.value.copy(groups = draw())
     }

@@ -9,6 +9,7 @@ pub mod planner;
 pub mod projection;
 pub mod protocol;
 pub mod rest;
+pub mod row_menu;
 pub mod rows;
 pub mod snapshot;
 pub mod transcript;
