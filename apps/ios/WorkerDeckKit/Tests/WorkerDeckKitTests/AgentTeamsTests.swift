@@ -102,13 +102,63 @@ struct AgentTeamsTests {
     #expect(!groupRows(all, config: config(.state)).contains { $0.earlier })
   }
 
-  @Test func togglesCollapsePerTeamKeyAndSumsTheMembersForTheFoldedSummary() throws {
+  @Test func togglesExpansionPerTeamKeyAndSumsTheMembersForTheSummary() throws {
     let unit = try #require(groupRows(all, config: config(.none)).first?.rows.first)
-    let folded = toggleTeamCollapsed(.default, unit)
-    #expect(folded.collapsedTeams == ["mac:A"])
-    #expect(isTeamCollapsed(folded, unit))
-    #expect(!isTeamCollapsed(toggleTeamCollapsed(folded, unit), unit))
+    let expanded = toggleTeamExpanded(.default, unit)
+    #expect(expanded.expandedTeams == ["mac:A"])
+    #expect(isTeamExpanded(expanded, unit))
+    #expect(!isTeamExpanded(toggleTeamExpanded(expanded, unit), unit))
     #expect(teamSummary(unit) == TeamSummary(members: 2, working: 1, attention: 1, unseen: 0))
+  }
+
+  private let now: Double = 1_000_000
+
+  private func member(
+    _ id: String, status: SessionStatus = .idle, pending: Int = 0, lastActivityAt: Double? = nil,
+    unseen: Int = 0
+  ) -> SessionRow {
+    row(
+      info(
+        id: id, status: status, pendingPermissionCount: pending,
+        lastActivityAt: lastActivityAt ?? now - 10 * teamLingerMs),
+      unseen: unseen)
+  }
+
+  private var team: SessionRow {
+    var lead = row(info(id: "s-lead", agent: AgentRef(id: "A", name: "Atlas", avatar: "/a", leads: true)))
+    lead.members = [
+      member("s-busy", status: .running), member("s-asks", pending: 1), member("s-unread", unseen: 2),
+      member("s-recent", lastActivityAt: now - 1_000), member("s-quiet"), member("s-gone", status: .closed),
+    ]
+    return lead
+  }
+
+  @Test func autoShowsBusyUnreadAndLingeringMembersAndTraysTheRest() {
+    let view = teamView(team, config: .default, selected: nil, now: now)
+    #expect(!view.expanded)
+    #expect(view.shown.map(\.info.id) == ["s-busy", "s-asks", "s-unread", "s-recent"])
+    #expect(view.tray.map(\.info.id) == ["s-quiet", "s-gone"])
+  }
+
+  @Test func autoKeepsTheSelectedMemberInTheList() {
+    #expect(teamView(team, config: .default, selected: "mac:s-quiet", now: now).tray.map(\.info.id) == ["s-gone"])
+  }
+
+  @Test func autoDropsAMemberOnceItsLingerWindowHasPassed() {
+    #expect(teamView(team, config: .default, selected: nil, now: now + teamLingerMs).tray.map(\.info.id).contains("s-recent"))
+  }
+
+  @Test func showsEveryMemberWhenExpandedOrUnderAFilter() {
+    let expanded = teamView(team, config: toggleTeamExpanded(.default, team), selected: nil, now: now)
+    #expect(expanded.expanded && expanded.tray.isEmpty && expanded.shown.count == 6)
+    let searched = teamView(team, config: ViewConfig(search: "x"), selected: nil, now: now)
+    #expect(!searched.expanded && searched.tray.isEmpty && searched.shown.count == 6)
+  }
+
+  @Test func reportsWhenTheNextLingeringMemberLeaves() {
+    #expect(teamLingerEnds(teamView(team, config: .default, selected: nil, now: now), now: now) == now - 1_000 + teamLingerMs)
+    let later = now + teamLingerMs
+    #expect(teamLingerEnds(teamView(team, config: .default, selected: nil, now: later), now: later) == nil)
   }
 
   @Test func matchesSearchOnTheAgentName() {
@@ -128,10 +178,12 @@ struct AgentTeamsTests {
   }
 
   @Test func keepsFoldStateAcrossClearFiltersAndDecodesAnOlderConfig() throws {
-    let cleared = clearFilters(ViewConfig(search: "x", collapsedTeams: ["mac:A"], earlierOpen: true))
-    #expect(cleared.collapsedTeams == ["mac:A"] && cleared.earlierOpen)
+    let cleared = clearFilters(ViewConfig(search: "x", expandedTeams: ["mac:A"], earlierOpen: true))
+    #expect(cleared.expandedTeams == ["mac:A"] && cleared.earlierOpen)
     let old = try JSONDecoder().decode(ViewConfig.self, from: Data(#"{"groupBy":"none"}"#.utf8))
-    #expect(old.collapsedTeams.isEmpty && !old.earlierOpen)
+    #expect(old.expandedTeams.isEmpty && !old.earlierOpen)
+    let folded = try JSONDecoder().decode(ViewConfig.self, from: Data(#"{"collapsedTeams":["mac:A"]}"#.utf8))
+    #expect(folded.expandedTeams.isEmpty)
   }
 
   @Test func decodesAgentStatusLabelAndOwnerOnASessionAndToleratesAStrayField() throws {

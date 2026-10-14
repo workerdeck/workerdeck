@@ -109,8 +109,8 @@ private struct TeamsPreview: View {
             if !group.earlier || config.earlierOpen {
               ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
                 card(row, index: index)
-                if !isTeamCollapsed(config, row) {
-                  ForEach(Array((row.members ?? []).enumerated()), id: \.element.id) { offset, member in
+                if row.members != nil {
+                  ForEach(Array(view(row).shown.enumerated()), id: \.element.id) { offset, member in
                     AgentCardView(
                       row: member, frames: Self.picture(offset + 1), member: true, onOpen: {},
                       menu: { Button("Leave team") {} })
@@ -138,19 +138,21 @@ private struct TeamsPreview: View {
     }
   }
 
+  private func view(_ row: SessionRow) -> TeamView {
+    teamView(row, config: config, selected: nil, now: Date().timeIntervalSince1970 * 1000)
+  }
+
   @ViewBuilder
   private func card(_ row: SessionRow, index: Int) -> some View {
     if row.info.agent != nil {
-      let collapsed = isTeamCollapsed(config, row)
-      let members = row.members ?? []
+      let team = view(row)
       AgentCardView(
         row: row, frames: index == 0 ? Self.picture(0) : Self.picture(4),
-        badgeState: collapsed ? row.teamState : nil,
-        teamUnseen: collapsed ? teamSummary(row).unseen : 0,
-        tray: members.isEmpty
-          ? nil : TeamTray(members: members.count, collapsed: collapsed) {
-            config = toggleTeamCollapsed(config, row)
-          },
+        tray: team.tray.isEmpty && !team.expanded
+          ? nil
+          : TeamTray(
+            view: team, frames: { _ in Self.picture(1) }, select: { _ in },
+            toggle: { config = toggleTeamExpanded(config, row) }),
         onOpen: {}, menu: { Button("New conversation") {} })
       .listRowInsets(AgentCardView<EmptyView>.insets(member: false, hasSteps: false))
       .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)

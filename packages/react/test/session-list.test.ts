@@ -13,7 +13,7 @@ import {
   groupRows,
   hasFacetFilter,
   inScope,
-  isTeamCollapsed,
+  isTeamExpanded,
   moveCustomGroup,
   moveToCustomGroup,
   normalizeViewConfig,
@@ -30,7 +30,10 @@ import {
   sessionState,
   subsetSummary,
   teamSummary,
-  toggleTeamCollapsed,
+  teamLingerEnds,
+  teamView,
+  TEAM_LINGER_MS,
+  toggleTeamExpanded,
   groupSummary,
   isGroupCollapsed,
   toggleGroupCollapsed,
@@ -236,8 +239,8 @@ describe('clearFilters', () => {
   })
 
   it('keeps what the reader folded, which is layout too', () => {
-    const next = clearFilters(config({ search: 'x', collapsedTeams: ['mac:A'], collapsedGroups: ['custom:g'], earlierOpen: true }))
-    expect(next.collapsedTeams).toEqual(['mac:A'])
+    const next = clearFilters(config({ search: 'x', expandedTeams: ['mac:A'], collapsedGroups: ['custom:g'], earlierOpen: true }))
+    expect(next.expandedTeams).toEqual(['mac:A'])
     expect(next.collapsedGroups).toEqual(['custom:g'])
     expect(next.earlierOpen).toBe(true)
   })
@@ -477,6 +480,12 @@ describe('promotedShells', () => {
 })
 
 describe('normalizeViewConfig', () => {
+  it('drops a stored collapsedTeams rather than migrating it', () => {
+    const next = normalizeViewConfig({ collapsedTeams: ['mac:A'] } as Partial<ViewConfig>)
+    expect('collapsedTeams' in next).toBe(false)
+    expect(next.expandedTeams).toBeUndefined()
+  })
+
   it('reads a stored gateway grouping as project, and an unknown one as the default', () => {
     expect(normalizeViewConfig({ groupBy: 'gateway' as never }).groupBy).toBe('project')
     expect(normalizeViewConfig({ groupBy: 'bogus' as never }).groupBy).toBe(DEFAULT_VIEW_CONFIG.groupBy)
@@ -592,14 +601,63 @@ describe('agent teams in the list', () => {
     expect(groupRows(all, { ...DEFAULT_VIEW_CONFIG, groupBy: 'state' }).some((g) => g.earlier)).toBe(false)
   })
 
-  it('toggles collapse per team key and sums the members for the folded summary', () => {
+  it('toggles expansion per team key and sums the members for the summary', () => {
     const [group] = groupRows(all, { ...DEFAULT_VIEW_CONFIG, groupBy: 'none' })
     const unit = group!.rows[0]!
-    const folded = toggleTeamCollapsed(DEFAULT_VIEW_CONFIG, unit)
-    expect(folded.collapsedTeams).toEqual(['mac:A'])
-    expect(isTeamCollapsed(folded, unit)).toBe(true)
-    expect(isTeamCollapsed(toggleTeamCollapsed(folded, unit), unit)).toBe(false)
+    const expanded = toggleTeamExpanded(DEFAULT_VIEW_CONFIG, unit)
+    expect(expanded.expandedTeams).toEqual(['mac:A'])
+    expect(isTeamExpanded(expanded, unit)).toBe(true)
+    expect(isTeamExpanded(toggleTeamExpanded(expanded, unit), unit)).toBe(false)
     expect(teamSummary(unit)).toEqual({ members: 2, working: 1, attention: 1, unseen: 0 })
+  })
+})
+
+describe('teamView', () => {
+  const now = 1_000_000
+  const member = (id: string, over: Partial<SessionInfo> = {}, unseen = 0): SessionRow => ({
+    ...row({ info: info({ id, lastActivityAt: now - 10 * TEAM_LINGER_MS, ...over }) }),
+    unseen,
+  })
+  const busy = member('s-busy', { status: 'running' })
+  const asks = member('s-asks', { pendingPermissionCount: 1 })
+  const unread = member('s-unread', {}, 2)
+  const recent = member('s-recent', { lastActivityAt: now - 1_000 })
+  const quiet = member('s-quiet')
+  const gone = member('s-gone', { status: 'closed' })
+  const lead: SessionRow = {
+    ...row({ info: info({ id: 's-lead', agent: { id: 'A', name: 'Atlas', avatar: '/a', leads: true } }) }),
+    members: [busy, asks, unread, recent, quiet, gone],
+  }
+  const ids = (rows: SessionRow[]) => rows.map((r) => r.info.id)
+
+  it('shows busy, unread and lingering members in Auto and trays the rest', () => {
+    const view = teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now)
+    expect(view.expanded).toBe(false)
+    expect(ids(view.shown)).toEqual(['s-busy', 's-asks', 's-unread', 's-recent'])
+    expect(ids(view.tray)).toEqual(['s-quiet', 's-gone'])
+  })
+
+  it('keeps the selected member in the list', () => {
+    const view = teamView(lead, DEFAULT_VIEW_CONFIG, 'mac:s-quiet', now)
+    expect(ids(view.tray)).toEqual(['s-gone'])
+  })
+
+  it('drops a member once its linger window has passed', () => {
+    expect(ids(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now + TEAM_LINGER_MS).tray)).toContain('s-recent')
+  })
+
+  it('shows every member when expanded or under a filter', () => {
+    const expanded = teamView(lead, toggleTeamExpanded(DEFAULT_VIEW_CONFIG, lead), undefined, now)
+    expect(expanded).toMatchObject({ expanded: true, tray: [] })
+    expect(expanded.shown).toHaveLength(6)
+    const searched = teamView(lead, config({ search: 'x' }), undefined, now)
+    expect(searched).toMatchObject({ expanded: false, tray: [] })
+    expect(searched.shown).toHaveLength(6)
+  })
+
+  it('reports when the next lingering member leaves', () => {
+    expect(teamLingerEnds(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now), now)).toBe(now - 1_000 + TEAM_LINGER_MS)
+    expect(teamLingerEnds(teamView(lead, DEFAULT_VIEW_CONFIG, undefined, now + TEAM_LINGER_MS), now + TEAM_LINGER_MS)).toBeUndefined()
   })
 })
 

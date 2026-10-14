@@ -189,8 +189,14 @@ export const Teams: Story = {
       activeId="t3"
       showControls={false}
       onRenameAgent={() => {}}
-      initial={{ groupBy: 'none', collapsedTeams: ['local:orbit'] }}
+      initial={{ groupBy: 'none' }}
     />
+  ),
+}
+
+export const TeamsExpanded: Story = {
+  render: () => (
+    <Browser rows={TEAM_ROWS} avatars={AVATARS} activeId="t3" showControls={false} initial={{ groupBy: 'none', expandedTeams: ['local:atlas'] }} />
   ),
 }
 

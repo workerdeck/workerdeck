@@ -35,6 +35,9 @@ struct SessionListView: View {
   /// The search bar is shown on request, like the dashboard's; closing it
   /// clears the query, so a hidden search can never be what empties the list.
   @State private var searchOpen = false
+  /// The member opened last: the phone's stand-in for the dashboard's selected row.
+  @State private var lastOpened: String?
+  @State private var clock = Date()
 
   /// Restarting identity for the poll loop: any of these changing means the
   /// current loop is polling for the wrong world (or should not run at all).
@@ -357,6 +360,11 @@ struct SessionListView: View {
       }
     }
     .listStyle(.plain)
+    .task(id: lingerEnds(model)) {
+      guard let end = lingerEnds(model) else { return }
+      try? await Task.sleep(for: .milliseconds(max(0, end - Date().timeIntervalSince1970 * 1000) + 50))
+      clock = Date()
+    }
     .environment(\.defaultMinListRowHeight, SessionStepRow.height)
     .modifier(SessionSearch(open: $searchOpen, text: $model.config.search))
     .refreshable { await model.refresh() }
@@ -366,17 +374,18 @@ struct SessionListView: View {
   private func unit(_ row: SessionRow, model: SessionListModel) -> some View {
     if let route = sessionRoute(for: row) {
       if row.info.agent != nil {
-        let members = row.members ?? []
-        let collapsed = isTeamCollapsed(model.config, row)
+        let view = teamView(row, model.config, now: clockMs)
         AgentCardView(
           row: row, frames: model.agentAvatars.frames(hostId: row.hostId, agent: row.info.agent),
-          badgeState: collapsed ? row.teamState : nil,
-          teamUnseen: collapsed ? teamSummary(row).unseen : 0,
-          tray: members.isEmpty
+          tray: view.tray.isEmpty && !view.expanded
             ? nil
-            : TeamTray(members: members.count, collapsed: collapsed) {
-              model.config = toggleTeamCollapsed(model.config, row)
-            },
+            : TeamTray(
+              view: view,
+              frames: { model.agentAvatars.frames(hostId: $0.hostId, agent: $0.info.agent) },
+              select: { member in
+                if let route = sessionRoute(for: member) { open(member, route) }
+              },
+              toggle: { model.config = toggleTeamExpanded(model.config, row) }),
           onOpen: { path.append(route) },
           menu: { rowActions(for: row, model: model) })
         .opacity(row.context ? 0.5 : 1)
@@ -384,14 +393,10 @@ struct SessionListView: View {
         .contextMenu { rowActions(for: row, model: model) }
         .listRowInsets(
           AgentCardView<EmptyView>.insets(member: false, hasSteps: !steps(for: row, model: model).isEmpty))
-        .listRowBackground(
-          ListAttention.needsYou(row, badgeState: collapsed ? row.teamState : nil)
-            ? ListAttention.background : nil)
+        .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
         stepRows(for: row, model: model)
-        if !collapsed {
-          ForEach(members) { member in
-            memberUnit(member, model: model)
-          }
+        ForEach(view.shown) { member in
+          memberUnit(member, model: model)
         }
       } else {
         SessionCardView(
@@ -420,7 +425,7 @@ struct SessionListView: View {
       AgentCardView(
         row: row, frames: model.agentAvatars.frames(hostId: row.hostId, agent: row.info.agent),
         member: true,
-        onOpen: { path.append(route) },
+        onOpen: { open(row, route) },
         menu: { rowActions(for: row, model: model) })
       .modifier(rowChrome(row, model: model))
         .contextMenu { rowActions(for: row, model: model) }
@@ -432,6 +437,24 @@ struct SessionListView: View {
           TeamTreeLine()
         })
     }
+  }
+
+  private var clockMs: Double { clock.timeIntervalSince1970 * 1000 }
+
+  private func teamView(_ row: SessionRow, _ config: ViewConfig, now: Double) -> TeamView {
+    WorkerDeckKit.teamView(row, config: config, selected: lastOpened, now: now)
+  }
+
+  private func open(_ member: SessionRow, _ route: SessionRoute) {
+    lastOpened = member.id
+    path.append(route)
+  }
+
+  /// When the next lingering Member leaves Auto, so the list redraws then.
+  private func lingerEnds(_ model: SessionListModel) -> Double? {
+    model.groups.flatMap(\.rows).compactMap { row in
+      row.members == nil ? nil : teamLingerEnds(teamView(row, model.config, now: clockMs), now: clockMs)
+    }.min()
   }
 
   private func earlierHeader(_ group: SessionGroup, model: SessionListModel) -> some View {
