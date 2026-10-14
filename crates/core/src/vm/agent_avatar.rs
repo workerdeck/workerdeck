@@ -69,7 +69,12 @@ impl AvatarLoads {
             return None;
         }
         self.in_flight.insert(key.clone());
-        Some(AvatarFetch { key, host_id: host_id.to_owned(), still_path: avatar_path(&agent.id, false), busy_path: avatar_path(&agent.id, true) })
+        Some(AvatarFetch {
+            key,
+            host_id: host_id.to_owned(),
+            still_path: avatar_path(&agent.id, false),
+            busy_path: avatar_path(&agent.id, true),
+        })
     }
 
     pub fn settle(&mut self, key: &str, loaded: bool, now_ms: f64) {

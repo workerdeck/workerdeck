@@ -214,7 +214,12 @@ impl SessionList {
         let stored = config_json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok());
         let marks = marks_json.and_then(|json| serde_json::from_str::<Entries<Watermark>>(&json).ok()).unwrap_or_default();
         std::sync::Arc::new(SessionList {
-            inner: Mutex::new(State { hosts: Vec::new(), config: normalize_view_config(stored.as_ref()), marks: Watermarks::new(marks), avatars: AvatarLoads::default() }),
+            inner: Mutex::new(State {
+                hosts: Vec::new(),
+                config: normalize_view_config(stored.as_ref()),
+                marks: Watermarks::new(marks),
+                avatars: AvatarLoads::default(),
+            }),
         })
     }
 
