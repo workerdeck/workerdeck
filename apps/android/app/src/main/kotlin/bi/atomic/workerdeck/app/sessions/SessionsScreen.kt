@@ -44,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -57,6 +60,7 @@ import bi.atomic.workerdeck.app.ui.EngineMark
 import bi.atomic.workerdeck.app.ui.StateGlyph
 import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListRow
+import bi.atomic.workerdeck.core.ffi.TrayMember
 import bi.atomic.workerdeck.core.ffi.RowState
 import bi.atomic.workerdeck.core.ffi.ago
 
@@ -64,10 +68,11 @@ private val GUTTER = 16.dp
 private val MARK_COLUMN = 22.dp
 private val CARD_AVATAR = 48.dp
 private val MEMBER_AVATAR = 32.dp
+private val TRAY_AVATAR = 22.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (ListRow) -> Unit, onAdd: () -> Unit, onForget: (Gateway) -> Unit) {
+fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (hostId: String, sessionId: String, title: String) -> Unit, onAdd: () -> Unit, onForget: (Gateway) -> Unit) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val colors = Wd.colors
     Scaffold(
@@ -103,7 +108,14 @@ fun SessionsScreen(model: SessionsModel, gateways: List<Gateway>, onOpen: (ListR
                         }
                         if (!group.collapsed) {
                             items(group.rows, key = { "${group.key}/${it.key}" }) { row ->
-                                SessionRow(row, now, row.avatarKey?.let { ui.avatars[it] }, onOpen = { onOpen(row) }, onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) })
+                                SessionRow(
+                                    row,
+                                    now,
+                                    ui.avatars,
+                                    onOpen = { onOpen(row.hostId, row.sessionId, row.title) },
+                                    onOpenMember = { onOpen(it.hostId, it.sessionId, it.title) },
+                                    onToggleTeam = { model.toggleTeam(row.hostId, row.sessionId) },
+                                )
                             }
                         }
                     }
@@ -214,8 +226,16 @@ private fun GroupHeader(label: String, count: UInt, unseen: UInt, collapsed: Boo
 }
 
 @Composable
-private fun SessionRow(row: ListRow, now: Double, avatar: AvatarFrames?, onOpen: () -> Unit, onToggleTeam: () -> Unit) {
+private fun SessionRow(
+    row: ListRow,
+    now: Double,
+    avatars: Map<String, AvatarFrames>,
+    onOpen: () -> Unit,
+    onOpenMember: (TrayMember) -> Unit,
+    onToggleTeam: () -> Unit,
+) {
     val colors = Wd.colors
+    val avatar = row.avatarKey?.let { avatars[it] }
     val indent = 20.dp * row.depth.toInt()
     val agent = row.agentId != null
     val column = if (!agent) MARK_COLUMN else if (row.depth > 0u) MEMBER_AVATAR else CARD_AVATAR
@@ -256,15 +276,7 @@ private fun SessionRow(row: ListRow, now: Double, avatar: AvatarFrames?, onOpen:
             }
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (row.members > 0u) {
-                    Text(
-                        "${row.members} ${if (row.teamCollapsed) "▸" else "▾"}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.secondary,
-                        modifier = Modifier
-                            .background(colors.raised, RoundedCornerShape(50))
-                            .clickable(onClick = onToggleTeam)
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                    )
+                    TeamTray(row, avatars, onOpenMember, onToggleTeam)
                     Spacer(Modifier.width(8.dp))
                 }
                 if (row.unseen > 0u) {
@@ -273,6 +285,39 @@ private fun SessionRow(row: ListRow, now: Double, avatar: AvatarFrames?, onOpen:
             }
         }
         HorizontalDivider(Modifier.padding(start = GUTTER + indent + column + 10.dp), thickness = 0.5.dp, color = colors.separator)
+    }
+}
+
+// Auto's tray: the idle Members as pictures (a tap opens one), then `+n` past three, else a chevron that expands the
+// team or, expanded, returns it to Auto.
+@Composable
+private fun TeamTray(row: ListRow, avatars: Map<String, AvatarFrames>, onOpenMember: (TrayMember) -> Unit, onToggle: () -> Unit) {
+    val colors = Wd.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        for (member in row.tray) {
+            Box(Modifier.clip(RoundedCornerShape(4.dp)).clickable { onOpenMember(member) }.semantics { contentDescription = "Open ${member.title}" }) {
+                TrayAvatar(member, member.avatarKey?.let { avatars[it] }, TRAY_AVATAR)
+            }
+        }
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(colors.raised)
+                .clickable(onClick = onToggle)
+                .semantics { contentDescription = if (row.teamExpanded) "Show only active Members" else "Show all Team Members" }
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+        ) {
+            if (row.trayOverflow > 0u && !row.teamExpanded) {
+                Text("+${row.trayOverflow}", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
+            } else {
+                Icon(
+                    if (row.teamExpanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = colors.secondary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
     }
 }
 

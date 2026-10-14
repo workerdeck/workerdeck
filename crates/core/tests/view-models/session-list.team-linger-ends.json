@@ -1,0 +1,362 @@
+{
+  "input": {
+    "fn": "teamLingerEnds",
+    "calls": [
+      [
+        {
+          "expanded": false,
+          "shown": [
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "attention",
+              "info": {
+                "id": "s-art-0003",
+                "status": "idle",
+                "cwd": "/work/workerdeck",
+                "createdAt": 1760000000200,
+                "lastSeq": 0,
+                "pendingPermissionCount": 1,
+                "title": "WD-Art",
+                "project": {
+                  "name": "WorkerDeck",
+                  "root": "/work/workerdeck",
+                  "shortcode": "WD"
+                },
+                "agent": {
+                  "id": "ag-art",
+                  "name": "WD-Art",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 1
+                },
+                "lastActivityAt": 1760000001000
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "codex",
+              "state": "working",
+              "info": {
+                "id": "s-review-02",
+                "status": "running",
+                "cwd": "/work/workerdeck/packages/ui",
+                "createdAt": 1760000000100,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "WD-Review",
+                "project": {
+                  "name": "WorkerDeck",
+                  "root": "/work/workerdeck",
+                  "shortcode": "WD"
+                },
+                "agent": {
+                  "id": "ag-review",
+                  "name": "WD-Review",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 2
+                },
+                "lastActivityAt": 1760000007000,
+                "engine": "codex",
+                "proseCount": 3
+              },
+              "unseen": 1
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-quiet-a",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-quiet-a",
+                "agent": {
+                  "id": "ag-s-quiet-a",
+                  "name": "s-quiet-a",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 3
+                },
+                "lastActivityAt": 1760000000000
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-unread",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-unread",
+                "agent": {
+                  "id": "ag-s-unread",
+                  "name": "s-unread",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 4
+                },
+                "lastActivityAt": 1760000000000
+              },
+              "unseen": 2
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-linger",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-linger",
+                "agent": {
+                  "id": "ag-s-linger",
+                  "name": "s-linger",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 5
+                },
+                "lastActivityAt": 1760000050000
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-quiet-b",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-quiet-b",
+                "agent": {
+                  "id": "ag-s-quiet-b",
+                  "name": "s-quiet-b",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 6
+                },
+                "lastActivityAt": 1760000000000
+              },
+              "unseen": 0
+            }
+          ],
+          "tray": []
+        },
+        1760000060000
+      ],
+      [
+        {
+          "expanded": false,
+          "shown": [
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "attention",
+              "info": {
+                "id": "s-art-0003",
+                "status": "idle",
+                "cwd": "/work/workerdeck",
+                "createdAt": 1760000000200,
+                "lastSeq": 0,
+                "pendingPermissionCount": 1,
+                "title": "WD-Art",
+                "project": {
+                  "name": "WorkerDeck",
+                  "root": "/work/workerdeck",
+                  "shortcode": "WD"
+                },
+                "agent": {
+                  "id": "ag-art",
+                  "name": "WD-Art",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 1
+                },
+                "lastActivityAt": 1760000001000
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "codex",
+              "state": "working",
+              "info": {
+                "id": "s-review-02",
+                "status": "running",
+                "cwd": "/work/workerdeck/packages/ui",
+                "createdAt": 1760000000100,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "WD-Review",
+                "project": {
+                  "name": "WorkerDeck",
+                  "root": "/work/workerdeck",
+                  "shortcode": "WD"
+                },
+                "agent": {
+                  "id": "ag-review",
+                  "name": "WD-Review",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 2
+                },
+                "lastActivityAt": 1760000007000,
+                "engine": "codex",
+                "proseCount": 3
+              },
+              "unseen": 1
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-quiet-a",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-quiet-a",
+                "agent": {
+                  "id": "ag-s-quiet-a",
+                  "name": "s-quiet-a",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 3
+                },
+                "lastActivityAt": 1760000000000
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-unread",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-unread",
+                "agent": {
+                  "id": "ag-s-unread",
+                  "name": "s-unread",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 4
+                },
+                "lastActivityAt": 1760000000000
+              },
+              "unseen": 2
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-linger",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-linger",
+                "agent": {
+                  "id": "ag-s-linger",
+                  "name": "s-linger",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 5
+                },
+                "lastActivityAt": 1760000050000
+              },
+              "unseen": 0
+            },
+            {
+              "hostId": "mac",
+              "hostName": "Mac mini",
+              "local": true,
+              "adapter": "claude",
+              "state": "idle",
+              "info": {
+                "id": "s-quiet-b",
+                "status": "idle",
+                "cwd": "/work/alpha",
+                "createdAt": 1760000000000,
+                "lastSeq": 0,
+                "pendingPermissionCount": 0,
+                "title": "s-quiet-b",
+                "agent": {
+                  "id": "ag-s-quiet-b",
+                  "name": "s-quiet-b",
+                  "lead": "ag-lead",
+                  "team": "WD-Lead",
+                  "order": 6
+                },
+                "lastActivityAt": 1760000000000
+              },
+              "unseen": 0
+            }
+          ],
+          "tray": []
+        },
+        1760000100000
+      ],
+      [
+        {
+          "expanded": false,
+          "shown": [],
+          "tray": []
+        },
+        1760000000000
+      ]
+    ]
+  },
+  "output": [
+    1760000080000,
+    null,
+    null
+  ]
+}

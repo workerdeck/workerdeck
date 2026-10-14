@@ -1,6 +1,6 @@
 {
   "input": {
-    "fn": "isTeamCollapsed",
+    "fn": "isTeamExpanded",
     "calls": [
       [
         {
@@ -15,7 +15,7 @@
           "subagents": "active",
           "shells": "active",
           "tasks": "active",
-          "collapsedTeams": [
+          "expandedTeams": [
             "mac:ag-lead"
           ]
         },
@@ -156,7 +156,7 @@
           "subagents": "active",
           "shells": "active",
           "tasks": "active",
-          "collapsedTeams": [
+          "expandedTeams": [
             "mac:ag-lead"
           ]
         },

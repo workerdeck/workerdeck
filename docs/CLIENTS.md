@@ -1387,8 +1387,15 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   manifest): a theme switch or a rotation would otherwise recreate it, rebuild the screen's
   `SessionModel`, reconnect, replay and drop an open shell. `onConfigurationChanged` re-derives the
   system bar icon colours.
-- **Pairing**: base URL + auth key (`Authorization: Bearer`), the key sealed with an AES-GCM key
-  that never leaves the Android Keystore. The emulator reaches a loopback gateway at `10.0.2.2`.
+- **Teams are Auto** (`teamView` in the core, goldens `session-list.team-view.json`): a lead's
+  row carries its `tray` (at most three idle Members, `tray_overflow` past that) and `team_expanded`;
+  `SessionList.groups(now)` takes the clock and `linger_ends()` says when to redraw. A phone has no
+  lasting highlight, so the Member opened last counts as selected (`SessionList.select`), as on iOS.
+- **Pairing**: base URL + auth key (`Authorization: Bearer`), each key sealed with an AES-GCM key
+  that never leaves the Android Keystore. Several gateways merge into one list; the gateway menu adds
+  and forgets them, a row names its gateway only when there is more than one (core `shows_gateway`),
+  and two on one host are named by `host:port` (`gateway_names`). The emulator reaches a loopback
+  gateway at `10.0.2.2`.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's
   metadata) and `libwdffi.so` for arm64-v8a and x86_64 (`cargoNdk`). The JVM unit tests load the
   host build of `libwdffi` through JNA, so they drive the real core without an emulator.

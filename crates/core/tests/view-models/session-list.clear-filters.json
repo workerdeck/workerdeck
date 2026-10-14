@@ -64,7 +64,7 @@
               "icon": "data:image/png;base64,AAAA"
             }
           ],
-          "collapsedTeams": [
+          "expandedTeams": [
             "mac:ag-lead"
           ],
           "collapsedGroups": [
@@ -127,7 +127,7 @@
           "icon": "data:image/png;base64,AAAA"
         }
       ],
-      "collapsedTeams": [
+      "expandedTeams": [
         "mac:ag-lead"
       ],
       "collapsedGroups": [

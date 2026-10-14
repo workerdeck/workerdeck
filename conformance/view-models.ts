@@ -176,6 +176,24 @@ function pick(...ids: string[]): SessionRow[] {
   return ids.map((id) => BY_ID.get(id)!)
 }
 
+function quiet(id: string, order: number, over: Partial<SessionInfo> = {}, unseen = 0): SessionRow {
+  const agent = { id: `ag-${id}`, name: id, lead: 'ag-lead', team: 'WD-Lead', order }
+  return { ...row('mac', info(id, { title: id, agent, lastActivityAt: T0, ...over })), unseen }
+}
+
+// A lead with every reason a member shows in Auto: working, attention, unread, lingering, and two quiet ones.
+const TEAM: SessionRow = {
+  ...BY_ID.get('s-lead-0001')!,
+  members: [
+    BY_ID.get('s-art-0003')!,
+    BY_ID.get('s-review-02')!,
+    quiet('s-quiet-a', 3),
+    quiet('s-unread', 4, {}, 2),
+    quiet('s-linger', 5, { lastActivityAt: T0 + 50_000 }),
+    quiet('s-quiet-b', 6),
+  ],
+}
+
 const CUSTOM = [
   { id: 'g-core', name: 'Core', members: ['mac:s-codex-0006', 'box:s-windows-8', 'mac:missing'], color: '#3f8f6b' },
   { id: 'g-ops', name: 'Ops', members: ['mac:s-shells-09', 'mac:s-codex-0006'] },
@@ -275,7 +293,7 @@ const SESSION_LIST: VmCase[] = [
       [{ groupBy: 'gateway' }],
       [{ groupBy: 'banana', sortBy: 'name' }],
       [{ groupBy: 'custom', customGroups: CUSTOM, collapsedGroups: ['custom:g-ops'], earlierOpen: true, subagents: 'all' }],
-      [{ search: 'api', gateways: ['mac'], states: ['working'], scoped: false, shells: 'none', tasks: 'all', collapsedTeams: ['mac:ag-lead'] }],
+      [{ search: 'api', gateways: ['mac'], states: ['working'], scoped: false, shells: 'none', tasks: 'all', collapsedTeams: ['mac:ag-lead'], expandedTeams: ['mac:ag-x'] }],
     ],
   },
   { module: 'session-list', name: 'adapters', fn: 'adaptersOf', calls: [[ROWS], [[]]] },
@@ -363,22 +381,45 @@ const SESSION_LIST: VmCase[] = [
   },
   {
     module: 'session-list',
-    name: 'team-collapse',
-    fn: 'toggleTeamCollapsed',
+    name: 'team-expand',
+    fn: 'toggleTeamExpanded',
     calls: [
       [config(), BY_ID.get('s-lead-0001')],
-      [config({ collapsedTeams: ['mac:ag-lead', 'box:ag-x'] }), BY_ID.get('s-lead-0001')],
+      [config({ expandedTeams: ['mac:ag-lead', 'box:ag-x'] }), BY_ID.get('s-lead-0001')],
       [config(), BY_ID.get('s-solo-0004')],
     ],
   },
   {
     module: 'session-list',
-    name: 'team-collapsed',
-    fn: 'isTeamCollapsed',
+    name: 'team-expanded',
+    fn: 'isTeamExpanded',
     calls: [
-      [config({ collapsedTeams: ['mac:ag-lead'] }), BY_ID.get('s-lead-0001')],
+      [config({ expandedTeams: ['mac:ag-lead'] }), BY_ID.get('s-lead-0001')],
       [config(), BY_ID.get('s-lead-0001')],
-      [config({ collapsedTeams: ['mac:ag-lead'] }), BY_ID.get('s-solo-0004')],
+      [config({ expandedTeams: ['mac:ag-lead'] }), BY_ID.get('s-solo-0004')],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'team-view',
+    fn: 'teamView',
+    calls: [
+      [TEAM, config(), undefined, T0 + 60_000],
+      [TEAM, config(), 'mac:s-quiet-a', T0 + 60_000],
+      [TEAM, config(), undefined, T0 + 100_000],
+      [TEAM, config({ expandedTeams: ['mac:ag-lead'] }), undefined, T0 + 60_000],
+      [TEAM, config({ search: 'quiet' }), undefined, T0 + 60_000],
+      [BY_ID.get('s-solo-0004'), config(), undefined, T0],
+    ],
+  },
+  {
+    module: 'session-list',
+    name: 'team-linger-ends',
+    fn: 'teamLingerEnds',
+    calls: [
+      [{ expanded: false, shown: TEAM.members!, tray: [] }, T0 + 60_000],
+      [{ expanded: false, shown: TEAM.members!, tray: [] }, T0 + 100_000],
+      [{ expanded: false, shown: [], tray: [] }, T0],
     ],
   },
   {
@@ -481,7 +522,7 @@ const SESSION_LIST: VmCase[] = [
           shells: 'all',
           tasks: 'none',
           customGroups: CUSTOM,
-          collapsedTeams: ['mac:ag-lead'],
+          expandedTeams: ['mac:ag-lead'],
           collapsedGroups: ['custom:g-ops'],
           earlierOpen: true,
         }),

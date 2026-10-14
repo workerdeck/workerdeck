@@ -66,9 +66,25 @@ pub struct ListRow {
     pub avatar_busy: bool,
     pub asleep: bool,
     pub members: u32,
-    pub team_collapsed: bool,
+    pub team_expanded: bool,
+    pub tray: Vec<TrayMember>,
+    pub tray_overflow: u32,
     pub last_activity_at: f64,
 }
+
+// A Member the lead's tray holds in Auto: a picture to tap, which opens that Member.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct TrayMember {
+    pub key: String,
+    pub host_id: String,
+    pub session_id: String,
+    pub title: String,
+    pub avatar_key: Option<String>,
+    pub asleep: bool,
+}
+
+// The tray draws this many pictures; past it, one slot gives way to a `+n` count.
+const TRAY_MAX: usize = 3;
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct ListGroup {
@@ -94,6 +110,8 @@ struct State {
     config: ViewConfig,
     marks: Watermarks,
     avatars: AvatarLoads,
+    selected: Option<String>,
+    linger_ends: Option<f64>,
 }
 
 impl State {
@@ -149,17 +167,29 @@ impl From<EngineMark> for Mark {
     }
 }
 
-fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig, show_gateway: bool) -> ListRow {
+fn tray_member(row: &SessionRow) -> TrayMember {
+    let info = &row.info;
+    TrayMember {
+        key: vm::session_key(&row.host_id, &info.id),
+        host_id: row.host_id.clone(),
+        session_id: info.id.clone(),
+        title: vm::display_name(info),
+        avatar_key: info.agent.as_ref().and_then(|a| avatar_key(&row.host_id, a)),
+        asleep: info.engine_asleep == Some(true),
+    }
+}
+
+fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::TeamView>) -> ListRow {
     let info = &row.info;
     let mark = engine_mark(&row.adapter, info.model.as_deref());
     let status = info.status_label.as_ref().map(|label| match &label.emoji {
         Some(emoji) => format!("{emoji} {}", label.text),
         None => label.text.clone(),
     });
-    let state = row.team_state.unwrap_or(row.state);
-    let team_collapsed = row.members.is_some() && vm::is_team_collapsed(config, row);
+    let state = row.state;
     let asleep = info.engine_asleep == Some(true);
-    let shown = if team_collapsed { state } else { row.state };
+    let tray = team.map_or(&[][..], |t| &t.tray[..]);
+    let drawn = if tray.len() > TRAY_MAX { TRAY_MAX - 1 } else { tray.len() };
     ListRow {
         key: vm::session_key(&row.host_id, &info.id),
         host_id: row.host_id.clone(),
@@ -182,10 +212,12 @@ fn list_row(row: &SessionRow, depth: u8, config: &ViewConfig, show_gateway: bool
         agent: info.agent.as_ref().map(|_| vm::session_label(info)),
         agent_id: info.agent.as_ref().map(|a| a.id.clone()),
         avatar_key: info.agent.as_ref().and_then(|a| avatar_key(&row.host_id, a)),
-        avatar_busy: shown == SessionState::Working && !asleep,
+        avatar_busy: state == SessionState::Working && !asleep,
         asleep,
         members: row.members.as_ref().map_or(0, |m| m.len() as u32),
-        team_collapsed,
+        team_expanded: team.is_some_and(|t| t.expanded),
+        tray: tray[..drawn].iter().map(tray_member).collect(),
+        tray_overflow: (tray.len() - drawn) as u32,
         last_activity_at: info.last_activity_at.unwrap_or(info.created_at),
     }
 }
@@ -219,6 +251,8 @@ impl SessionList {
                 config: normalize_view_config(stored.as_ref()),
                 marks: Watermarks::new(marks),
                 avatars: AvatarLoads::default(),
+                selected: None,
+                linger_ends: None,
             }),
         })
     }
@@ -251,14 +285,16 @@ impl SessionList {
         state.marks.forget_host(&host_id)
     }
 
-    pub fn groups(&self) -> Vec<ListGroup> {
-        let state = self.state();
+    // `now_ms` drives Auto's linger window; `linger_ends` then says when to ask again.
+    pub fn groups(&self, now_ms: f64) -> Vec<ListGroup> {
+        let mut state = self.state();
         let rows = state.rows();
         let filtered = filter_rows(&rows, &state.config, None);
         let options = GroupOptions { gateway_count: Some(state.hosts.len()), all: Some(rows.clone()), relay_hosts: None };
         let config = &state.config;
         let show_gateway = vm::shows_gateway(state.hosts.len(), config);
-        group_rows(&filtered, config, &options)
+        let mut linger: Option<f64> = None;
+        let groups = group_rows(&filtered, config, &options)
             .into_iter()
             .map(|group| {
                 let summary = vm::group_summary(&group.rows);
@@ -269,12 +305,16 @@ impl SessionList {
                 };
                 let mut out = Vec::new();
                 for row in &group.rows {
-                    out.push(list_row(row, 0, config, show_gateway));
-                    if let Some(members) = &row.members
-                        && !vm::is_team_collapsed(config, row)
-                    {
-                        out.extend(members.iter().map(|m| list_row(m, 1, config, show_gateway)));
+                    if row.members.is_none() {
+                        out.push(list_row(row, 0, show_gateway, None));
+                        continue;
                     }
+                    let team = vm::team_view(row, config, state.selected.as_deref(), now_ms);
+                    if let Some(ends) = vm::team_linger_ends(&team, now_ms) {
+                        linger = Some(linger.map_or(ends, |l| l.min(ends)));
+                    }
+                    out.push(list_row(row, 0, show_gateway, Some(&team)));
+                    out.extend(team.shown.iter().map(|m| list_row(m, 1, show_gateway, None)));
                 }
                 ListGroup {
                     key: group.key,
@@ -287,7 +327,19 @@ impl SessionList {
                     rows: out,
                 }
             })
-            .collect()
+            .collect();
+        state.linger_ends = linger;
+        groups
+    }
+
+    // When the last `groups` call's soonest linger window closes, so the app redraws then; None when nothing lingers.
+    pub fn linger_ends(&self) -> Option<f64> {
+        self.state().linger_ends
+    }
+
+    // The Member a phone counts as selected: the one opened last, since nothing stays highlighted on a phone.
+    pub fn select(&self, host_id: String, session_id: String) {
+        self.state().selected = Some(vm::session_key(&host_id, &session_id));
     }
 
     // The agent pictures to fetch now, each marked in flight until `avatar_settled`; a failure is retried after a minute.
@@ -331,7 +383,7 @@ impl SessionList {
     pub fn toggle_team(&self, host_id: String, session_id: String) {
         let mut state = self.state();
         let Some(row) = state.rows().into_iter().find(|r| r.host_id == host_id && r.info.id == session_id) else { return };
-        state.config = vm::toggle_team_collapsed(&state.config, &row);
+        state.config = vm::toggle_team_expanded(&state.config, &row);
     }
 
     pub fn set_search(&self, search: String) {

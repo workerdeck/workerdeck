@@ -125,8 +125,10 @@ fn session_list(fn_name: &str, a: &Args) -> Value {
         }
         "teamKey" => out(sl::team_key(&a.get(0))),
         "teamState" => out(sl::team_state(&a.get::<Vec<SessionRow>>(0))),
-        "toggleTeamCollapsed" => out(sl::toggle_team_collapsed(&a.get(0), &a.get(1))),
-        "isTeamCollapsed" => out(sl::is_team_collapsed(&a.get(0), &a.get(1))),
+        "toggleTeamExpanded" => out(sl::toggle_team_expanded(&a.get(0), &a.get(1))),
+        "isTeamExpanded" => out(sl::is_team_expanded(&a.get(0), &a.get(1))),
+        "teamView" => out(sl::team_view(&a.get(0), &a.get(1), a.str(2).as_deref(), a.get(3))),
+        "teamLingerEnds" => out(sl::team_linger_ends(&a.get(0), a.get(1))),
         "toggleGroupCollapsed" => out(sl::toggle_group_collapsed(&a.get(0), a.raw(1)["key"].as_str().unwrap())),
         "isGroupCollapsed" => out(sl::is_group_collapsed(&a.get(0), a.raw(1)["key"].as_str().unwrap())),
         "groupSummary" => out(sl::group_summary(&serde_json::from_value::<Vec<SessionRow>>(a.raw(0)["rows"].clone()).unwrap())),

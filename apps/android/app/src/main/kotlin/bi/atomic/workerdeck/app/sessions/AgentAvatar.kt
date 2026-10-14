@@ -37,6 +37,7 @@ import bi.atomic.workerdeck.app.ui.EngineMark
 import bi.atomic.workerdeck.app.ui.StateGlyph
 import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ListRow
+import bi.atomic.workerdeck.core.ffi.TrayMember
 import bi.atomic.workerdeck.core.ffi.RowState
 import bi.atomic.workerdeck.core.ffi.avatarBusyFrame
 import bi.atomic.workerdeck.core.ffi.avatarFrameDurations
@@ -88,6 +89,16 @@ fun AgentAvatar(row: ListRow, frames: AvatarFrames?, size: Dp) {
                 contentAlignment = Alignment.Center,
             ) { StateGlyph(row.state, size = corner * 0.8f) }
         }
+    }
+}
+
+// A tray picture: idle by definition (Auto shows every busy Member as a row), so no badge and no animation.
+@Composable
+fun TrayAvatar(member: TrayMember, frames: AvatarFrames?, size: Dp) {
+    if (frames != null) {
+        Picture(frames.still, size, member.asleep)
+    } else {
+        Box(Modifier.size(size).background(Wd.colors.raised, RoundedCornerShape(4.dp)))
     }
 }
 

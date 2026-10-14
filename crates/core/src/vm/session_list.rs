@@ -107,7 +107,7 @@ pub struct ViewConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_groups: Option<Vec<CustomGroup>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub collapsed_teams: Option<Vec<String>>,
+    pub expanded_teams: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collapsed_groups: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -129,7 +129,7 @@ impl Default for ViewConfig {
             shells: Some(StepDisplay::Active),
             tasks: Some(StepDisplay::Active),
             custom_groups: None,
-            collapsed_teams: None,
+            expanded_teams: None,
             collapsed_groups: None,
             earlier_open: None,
         }
@@ -352,7 +352,7 @@ pub fn normalize_view_config(stored: Option<&Value>) -> ViewConfig {
         config.tasks = Some(tasks);
     }
     config.custom_groups = parse_enum(stored, "customGroups");
-    config.collapsed_teams = parse_enum(stored, "collapsedTeams");
+    config.expanded_teams = parse_enum(stored, "expandedTeams");
     config.collapsed_groups = parse_enum(stored, "collapsedGroups");
     config.earlier_open = parse_enum(stored, "earlierOpen");
     if let Some(group_by) = stored.get("groupBy").and_then(Value::as_str) {
@@ -715,8 +715,8 @@ pub fn team_state(rows: &[SessionRow]) -> SessionState {
     rows.iter().map(|row| row.state).min_by_key(|state| state.rank()).unwrap_or(SessionState::Ended)
 }
 
-pub fn is_team_collapsed(config: &ViewConfig, row: &SessionRow) -> bool {
-    team_key(row).is_some_and(|key| config.collapsed_teams.as_deref().unwrap_or_default().contains(&key))
+pub fn is_team_expanded(config: &ViewConfig, row: &SessionRow) -> bool {
+    team_key(row).is_some_and(|key| config.expanded_teams.as_deref().unwrap_or_default().contains(&key))
 }
 
 fn toggled(held: Option<&Vec<String>>, key: &str) -> Vec<String> {
@@ -728,11 +728,46 @@ fn toggled(held: Option<&Vec<String>>, key: &str) -> Vec<String> {
     }
 }
 
-pub fn toggle_team_collapsed(config: &ViewConfig, row: &SessionRow) -> ViewConfig {
+pub fn toggle_team_expanded(config: &ViewConfig, row: &SessionRow) -> ViewConfig {
     match team_key(row) {
-        Some(key) => ViewConfig { collapsed_teams: Some(toggled(config.collapsed_teams.as_ref(), &key)), ..config.clone() },
+        Some(key) => ViewConfig { expanded_teams: Some(toggled(config.expanded_teams.as_ref(), &key)), ..config.clone() },
         None => config.clone(),
     }
+}
+
+pub const TEAM_LINGER_MS: f64 = 30_000.0;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TeamView {
+    pub expanded: bool,
+    pub shown: Vec<SessionRow>,
+    pub tray: Vec<SessionRow>,
+}
+
+fn lingering(member: &SessionRow, now: f64) -> Option<f64> {
+    member.info.last_activity_at.filter(|at| now - at < TEAM_LINGER_MS)
+}
+
+// Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt`; the rest
+// sit in the lead's tray. An expanded team, or one under a search or facet filter, draws every member.
+pub fn team_view(lead: &SessionRow, config: &ViewConfig, selected: Option<&str>, now: f64) -> TeamView {
+    let members = lead.members.clone().unwrap_or_default();
+    let expanded = is_team_expanded(config, lead);
+    if expanded || has_facet_filter(config) {
+        return TeamView { expanded, shown: members, tray: Vec::new() };
+    }
+    let (shown, tray) = members.into_iter().partition(|member| {
+        matches!(member.state, SessionState::Working | SessionState::Attention)
+            || member.unseen > 0
+            || selected == Some(session_key(&member.host_id, &member.info.id).as_str())
+            || lingering(member, now).is_some()
+    });
+    TeamView { expanded, shown, tray }
+}
+
+// When the next lingering member's window closes, so a host can redraw then; None when none is lingering.
+pub fn team_linger_ends(view: &TeamView, now: f64) -> Option<f64> {
+    view.shown.iter().filter_map(|member| lingering(member, now)).map(|at| at + TEAM_LINGER_MS).min_by(f64::total_cmp)
 }
 
 // `SessionBrowser`'s `showGateway`: a row names its gateway only when there is more than one and the list is not
@@ -918,7 +953,7 @@ pub fn clear_filters(config: &ViewConfig) -> ViewConfig {
         shells: config.shells,
         tasks: config.tasks,
         custom_groups: config.custom_groups.clone(),
-        collapsed_teams: config.collapsed_teams.clone(),
+        expanded_teams: config.expanded_teams.clone(),
         collapsed_groups: config.collapsed_groups.clone(),
         earlier_open: config.earlier_open,
         ..ViewConfig::default()

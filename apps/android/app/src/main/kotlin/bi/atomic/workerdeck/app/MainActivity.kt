@@ -72,9 +72,10 @@ private fun App(store: GatewayStore) {
         SessionsScreen(
             sessions,
             gateways,
-            onOpen = { row ->
-                sessions.markSeen(row.hostId, row.sessionId)
-                open = listOf(row.hostId, row.sessionId, row.title)
+            onOpen = { hostId, sessionId, title ->
+                sessions.select(hostId, sessionId)
+                sessions.markSeen(hostId, sessionId)
+                open = listOf(hostId, sessionId, title)
             },
             onAdd = { adding = true },
             onForget = { gateway ->

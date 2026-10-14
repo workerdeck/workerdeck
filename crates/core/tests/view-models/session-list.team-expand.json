@@ -1,6 +1,6 @@
 {
   "input": {
-    "fn": "toggleTeamCollapsed",
+    "fn": "toggleTeamExpanded",
     "calls": [
       [
         {
@@ -84,7 +84,7 @@
           "subagents": "active",
           "shells": "active",
           "tasks": "active",
-          "collapsedTeams": [
+          "expandedTeams": [
             "mac:ag-lead",
             "box:ag-x"
           ]
@@ -196,7 +196,7 @@
       "subagents": "active",
       "shells": "active",
       "tasks": "active",
-      "collapsedTeams": [
+      "expandedTeams": [
         "mac:ag-lead"
       ]
     },
@@ -212,7 +212,7 @@
       "subagents": "active",
       "shells": "active",
       "tasks": "active",
-      "collapsedTeams": [
+      "expandedTeams": [
         "box:ag-x"
       ]
     },

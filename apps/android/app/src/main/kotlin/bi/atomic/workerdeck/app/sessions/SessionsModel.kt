@@ -83,7 +83,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
             )
         }
         errors = next
-        state.value = state.value.copy(groups = list.groups(), loaded = true, error = errorText())
+        state.value = state.value.copy(groups = draw(), loaded = true, error = errorText())
         fetchAvatars()
     }
 
@@ -91,6 +91,26 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
         if (errors.isEmpty()) return null
         if (clients.size == 1) return errors.values.first()
         return errors.entries.joinToString("\n") { (id, error) -> "${clients[id]?.gateway?.name ?: id}: $error" }
+    }
+
+    private var linger: Job? = null
+
+    // Auto's linger window closes on a clock, not on a poll, so the list redraws itself when the soonest one ends.
+    private fun draw(): List<ListGroup> {
+        val groups = list.groups(System.currentTimeMillis().toDouble())
+        linger?.cancel()
+        list.lingerEnds()?.let { ends ->
+            linger = viewModelScope.launch {
+                delay((ends - System.currentTimeMillis()).toLong().coerceAtLeast(0) + 50)
+                state.value = state.value.copy(groups = draw())
+            }
+        }
+        return groups
+    }
+
+    fun select(hostId: String, sessionId: String) {
+        list.select(hostId, sessionId)
+        state.value = state.value.copy(groups = draw())
     }
 
     fun client(hostId: String): GatewayClient? = clients[hostId]
@@ -121,7 +141,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     fun markSeen(hostId: String, sessionId: String) {
         if (list.markSeen(hostId, sessionId, System.currentTimeMillis().toDouble())) {
             prefs.edit().putString("marks", list.marksJson()).apply()
-            state.value = state.value.copy(groups = list.groups())
+            state.value = state.value.copy(groups = draw())
         }
     }
 
@@ -129,7 +149,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     fun forget(gateway: Gateway) {
         if (list.removeHost(gateway.id)) prefs.edit().putString("marks", list.marksJson()).apply()
         attach(clients.values.map { it.gateway }.filter { it.id != gateway.id })
-        state.value = state.value.copy(groups = list.groups())
+        state.value = state.value.copy(groups = draw())
     }
 
     fun sessionJson(hostId: String, sessionId: String): String? = list.sessionJson(hostId, sessionId)
@@ -137,7 +157,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     private fun update(change: () -> Unit) {
         change()
         prefs.edit().putString("config", list.configJson()).apply()
-        state.value = state.value.copy(groups = list.groups())
+        state.value = state.value.copy(groups = draw())
     }
 
     override fun onCleared() {
