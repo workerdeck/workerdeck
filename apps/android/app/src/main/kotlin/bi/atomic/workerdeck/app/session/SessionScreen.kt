@@ -2,21 +2,16 @@ package bi.atomic.workerdeck.app.session
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -40,7 +35,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,10 +50,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.ui.Palette
 import bi.atomic.workerdeck.app.ui.Wd
-import bi.atomic.workerdeck.app.ui.annotate
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Metrics
-import kotlinx.coroutines.flow.distinctUntilChanged
 
 private val FONT_SIZE = 13.sp
 private val LINE_HEIGHT = 18.sp
@@ -102,53 +94,24 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     drawStopIndicator = {},
                 )
             }
-            val list = rememberLazyListState()
-            // One snapshot for the whole list: `ui` is a state read, so a lambda reading `ui.rows` later can see a
-            // shorter transcript (a cleared context) than the `count` it was built with.
-            val rows = ui.rows
-            val count = rows.size
-            LaunchedEffect(list, count) {
-                snapshotFlow { list.layoutInfo.visibleItemsInfo.map { it.index } }
-                    .distinctUntilChanged()
-                    .collect { indices ->
-                        if (indices.isEmpty() || count == 0) return@collect
-                        model.visible(count - 1 - indices.max(), count - 1 - indices.min())
-                    }
-            }
-            if (count == 0) {
+            if (ui.rows.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     if (ui.progress == null && ui.connection == ConnectionState.LIVE) {
                         Text("No messages yet", style = MaterialTheme.typography.bodyMedium, color = Wd.colors.tertiary)
                     }
                 }
-            } else LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list, reverseLayout = true) {
-                items(count, key = { index -> rows[count - 1 - index].key }) { index ->
-                    val row = count - 1 - index
-                    val layout = rows[row]
-                    val lines = ui.linesAt(row)
-                    val height = with(density) { layout.height.toDp() }
-                    val lineHeight = with(density) { LINE_HEIGHT.toDp() }
-                    if (lines == null) {
-                        Spacer(Modifier.height(height))
-                    } else {
-                        Column(Modifier.fillMaxWidth().height(height), verticalArrangement = Arrangement.Bottom) {
-                            lines.forEachIndexed { at, line ->
-                                Text(
-                                    annotate(line, palette),
-                                    style = style,
-                                    softWrap = false,
-                                    maxLines = 1,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(lineHeight)
-                                        .background(palette.band(line.band))
-                                        .padding(horizontal = SIDE_PADDING)
-                                        .let { if (line.pressable) it.clickable { model.press(row, at) } else it },
-                                )
-                            }
-                        }
-                    }
-                }
+            } else {
+                TranscriptList(
+                    rows = ui.rows,
+                    linesAt = ui::linesAt,
+                    style = style,
+                    lineHeight = LINE_HEIGHT,
+                    sidePadding = SIDE_PADDING,
+                    palette = palette,
+                    onVisible = model::visible,
+                    onPress = model::press,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             }
             Column(Modifier.navigationBarsPadding()) {
                 ui.prompt?.let { prompt ->
@@ -181,6 +144,8 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
         }
         val shell by model.shell.collectAsStateWithLifecycle()
         shell?.let { ShellScreen(model, it.id, style, palette, onClose = {}) }
+        val frame by model.frame.collectAsStateWithLifecycle()
+        frame?.let { FrameScreen(model, it, style, LINE_HEIGHT, SIDE_PADDING, metrics.cell, palette, promptMaxHeight) }
         if (clearing) {
             // Not destructive red: the old conversation stays resumable, same wording as the other clients.
             AlertDialog(

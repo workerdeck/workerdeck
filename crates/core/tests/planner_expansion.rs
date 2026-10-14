@@ -511,6 +511,7 @@ fn strip_claims_what_the_task_row_claims() {
     assert_eq!(live.status, Some("working…"));
     assert!(live.busy);
     assert_eq!(live.tool_count, 2);
+    assert_eq!(live.text().as_deref(), Some("working… · 2 tools"));
 
     let settled_task = task_call("T1", Some("Explore"), Some("find the tests"), ToolCallStatus::Settled);
     let settled = subagent_strip_line(Some(&settled_task), &[child("c1", "T1", Some(""))], "Sub-agent");
@@ -521,11 +522,13 @@ fn strip_claims_what_the_task_row_claims() {
     failed_task.result = Some(result("boom", true));
     let failed = subagent_strip_line(Some(&failed_task), &[], "Sub-agent");
     assert_eq!(failed.status, Some("failed"));
+    assert_eq!(failed.text().as_deref(), Some("failed"));
     assert!(failed.failed);
 
     let fallback = subagent_strip_line(None, &[], "Explore");
     assert_eq!(fallback.name, "Explore");
     assert_eq!(fallback.status, None);
+    assert_eq!(fallback.text(), None);
     assert!(!fallback.busy && !fallback.failed);
 }
 

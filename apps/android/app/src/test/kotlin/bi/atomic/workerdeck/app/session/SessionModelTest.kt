@@ -125,7 +125,49 @@ class SessionModelTest {
         model.close()
     }
 
+    @Test
+    fun aTaskRowPressOpensItsTakeoverWhichFollowsTheAgent() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        listener.onMessage(socket, user(1, "Survey the tests."))
+        listener.onMessage(socket, TASK)
+        listener.onMessage(socket, child(3, "Looking at the tree."))
+        eventually("the task row") { model.ui.value.rows.size >= 2 && model.ui.value.linesAt(model.ui.value.rows.size - 1) != null }
+        val ui = model.ui.value
+        val (row, line) = ui.rows.indices.firstNotNullOf { row ->
+            ui.linesAt(row)?.indexOfFirst { it.pressable }?.takeIf { it >= 0 }?.let { row to it }
+        }
+        model.press(row, line)
+        eventually("the frame") { model.frame.value?.rows?.isNotEmpty() == true }
+        val frame = model.frame.value!!
+        assertEquals("toolu_task", frame.taskId)
+        assertEquals("working…", frame.strip?.text)
+        assertTrue(frame.linesAt(frame.rows.size - 1) != null)
+
+        val before = frame.rows.size
+        listener.onMessage(socket, child(4, "Two files."))
+        listener.onMessage(socket, TASK_RESULT)
+        eventually("the agent settled") { model.frame.value?.strip?.text == "done" }
+        assertTrue(model.frame.value!!.rows.size > before)
+
+        model.closeFrame("toolu_task")
+        eventually("closed") { model.frame.value == null }
+        model.close()
+    }
+
     private companion object {
+        const val TASK =
+            """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_task","name":"Task","input":{"description":"Survey tests","prompt":"List the test files."}}]},"parentToolUseId":null,"uuid":"a-2","seq":2,"ts":1}}"""
+
+        const val TASK_RESULT =
+            """{"type":"event","event":{"type":"user_message","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_task","content":"Two test files."}]},"parentToolUseId":null,"synthetic":true,"uuid":"toolu_task:result","seq":5,"ts":1}}"""
+
+        fun child(seq: Int, text: String) =
+            """{"type":"event","event":{"type":"assistant_message","message":{"role":"assistant","content":[{"type":"text","text":"$text"}]},"parentToolUseId":"toolu_task","uuid":"a$seq","seq":$seq,"ts":1}}"""
+
         const val QUESTION =
             """{"type":"event","event":{"type":"permission_requested","seq":1,"ts":1,"request":{"id":"r1","toolName":"AskUserQuestion","toolUseId":"t1","input":{"questions":[{"question":"Which?","header":"Pick","options":[{"label":"a"},{"label":"b"}]}]}}}}"""
 

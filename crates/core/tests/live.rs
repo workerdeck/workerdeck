@@ -518,6 +518,35 @@ fn a_press_inside_a_frame_expands_there_and_navigates_through_the_session() {
     assert_eq!(requests(host.live.take_effects()).pop().map(|r| r.2), Some("/shells/sh_9/kill".to_owned()));
 }
 
+#[test]
+fn a_frame_strip_reads_the_spawning_call_and_a_missing_task_says_so() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.events("subagent", 1.0);
+    let strip = host.live.frame_strip("toolu_task");
+    assert!(strip.status.is_some());
+    assert_ne!(strip.name, "Sub-agent");
+    let missing = host.live.frame_strip("toolu_nowhere");
+    assert_eq!((missing.name.as_str(), missing.status), ("Sub-agent", None));
+}
+
+#[test]
+fn a_nested_task_inside_a_frame_expands_instead_of_opening_a_takeover() {
+    let mut host = Host::new();
+    host.open();
+    host.attach(0, 0, 1.0, 0.0);
+    host.events("subagent", 1.0);
+    host.live.set_navigation(Navigation { subagents: true, shells: true });
+    host.live.open_frame("toolu_task");
+    host.take();
+    host.live.frame_press("toolu_task", &TermPress::OpenSubagent("toolu_inner".into()), 0);
+    let effects = host.live.take_effects();
+    assert!(!effects.iter().any(|effect| matches!(effect, Effect::OpenSubagent { .. })));
+    host.live.press(&TermPress::OpenSubagent("toolu_task".into()), 0);
+    assert!(host.live.take_effects().iter().any(|effect| matches!(effect, Effect::OpenSubagent { .. })));
+}
+
 fn requests(effects: Vec<Effect>) -> Vec<(u64, &'static str, String)> {
     effects
         .into_iter()

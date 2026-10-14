@@ -4,7 +4,7 @@ use crate::controller::session::{self as connection, SessionConnection, Signal};
 use crate::controller::shell::{ShellAction, ShellSession};
 use crate::controller::transcript::{self as view, Navigation, TranscriptView, Update};
 use crate::expansion::TermPress;
-use crate::planner::{Metrics, TermLine, prompt_markdown};
+use crate::planner::{Metrics, SubagentStripLine, TermLine, prompt_markdown, subagent_strip_line};
 use crate::protocol::{AttachedFrame, Body, Event};
 use crate::rest::{ModelOption, PermissionMode, SessionInfo, ShellInfo, encode_component, shell_record, tool_result_text};
 use crate::rows::{subagent_items, subagent_task};
@@ -14,6 +14,7 @@ use crate::transcript::{
 use crate::vm::pickers::{ModePicker, ModelPicker, PickerSource, mode_picker, model_picker};
 use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
+use crate::vm::session_list::subagent_label;
 use crate::vt::VtKey;
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -251,9 +252,21 @@ impl LiveSession {
         }
     }
 
+    // The spawning call names the agent; the session's rollup may only name one the transcript does not have.
+    pub fn frame_strip(&self, task_id: &str) -> SubagentStripLine {
+        let items = subagent_items(&self.state.items, task_id);
+        let task = subagent_task(&self.state.items, task_id);
+        let fallback = self
+            .session_info()
+            .and_then(|info| info.subagents.as_deref()?.iter().find(|sub| sub.tool_use_id == task_id).map(subagent_label))
+            .unwrap_or_else(|| "Sub-agent".to_owned());
+        subagent_strip_line(task.as_deref(), &items, &fallback)
+    }
+
+    // No takeover from a takeover: a nested task inside a frame expands in place, as on the web.
     pub fn frame_press(&mut self, task_id: &str, press: &TermPress, row: usize) {
         let Some(frame) = self.frames.get_mut(task_id) else { return };
-        let effects = frame.press(press, row, self.navigation);
+        let effects = frame.press(press, row, Navigation { subagents: false, ..self.navigation });
         self.changed.frames = true;
         self.push_view_effects(effects);
     }

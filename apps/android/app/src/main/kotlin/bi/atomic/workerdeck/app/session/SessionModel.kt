@@ -9,6 +9,7 @@ import bi.atomic.workerdeck.core.TranscriptLine
 import bi.atomic.workerdeck.core.ffi.Changed
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Effect
+import bi.atomic.workerdeck.core.ffi.FrameStrip
 import bi.atomic.workerdeck.core.ffi.Key
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.Mode
@@ -44,6 +45,17 @@ data class SessionUi(
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
 
+// The open sub-agent takeover: one agent's own rows, read through the core's frame window.
+data class FrameView(
+    val taskId: String,
+    val strip: FrameStrip? = null,
+    val rows: List<LayoutRow> = emptyList(),
+    val startRow: Int = 0,
+    val lines: List<List<TranscriptLine>> = emptyList(),
+) {
+    fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
+}
+
 // The open shell screen: `back` is how many lines the reader scrolled up from the tail (0 follows it), `shown` how many
 // rows the canvas holds. A reader scrolled back stays on the same lines while output arrives.
 data class ShellView(val id: String, val sized: Boolean = false, val grid: ShellGrid? = null)
@@ -58,6 +70,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     val ui: StateFlow<SessionUi> = state
     private val shellState = MutableStateFlow<ShellView?>(null)
     val shell: StateFlow<ShellView?> = shellState
+    private val frameState = MutableStateFlow<FrameView?>(null)
+    val frame: StateFlow<FrameView?> = frameState
     private var socket: WebSocket? = null
 
     // Socket callbacks run on OkHttp's threads, possibly before the worker has stored the socket, so each socket
@@ -65,7 +79,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     @Volatile private var generation = 0
 
     init {
-        worker.act { it.setWallClock(System.currentTimeMillis().toDouble()) + it.setNavigation(false, true) + it.takeEffects() }
+        worker.act { it.setWallClock(System.currentTimeMillis().toDouble()) + it.setNavigation(true, true) + it.takeEffects() }
     }
 
     fun resize(metrics: Metrics) = worker.act { it.resize(metrics) }
@@ -106,6 +120,29 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     fun closeShell(id: String) = worker.act {
         shellState.value = null
         it.closeShell(id)
+    }
+
+    fun openFrame(taskId: String) = worker.act {
+        frameState.value = FrameView(taskId)
+        it.openFrame(taskId)
+    }
+
+    fun closeFrame(taskId: String) = worker.act {
+        if (frameState.value?.taskId == taskId) frameState.value = null
+        it.closeFrame(taskId)
+    }
+
+    fun framePress(row: Int, line: Int) = worker.act { session ->
+        session.framePressLine(frameState.value?.taskId ?: return@act emptyList(), row.toUInt(), line.toUInt())
+    }
+
+    fun frameVisible(first: Int, last: Int) = worker.act { session ->
+        val view = frameState.value ?: return@act emptyList()
+        session.frameShowRows(view.taskId, first.toUInt(), last.toUInt())?.let { bytes ->
+            val lines = Snapshots.transcriptLines(bytes)
+            frameState.value = frameState.value?.takeIf { it.taskId == view.taskId }?.copy(startRow = lines.startRow, lines = lines.rows)
+        }
+        emptyList()
     }
 
     fun setModel(model: String?) = worker.act { it.setModel(model) }
@@ -164,8 +201,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
                 }
                 is Effect.Changed -> changed(effect.changed)
                 is Effect.OpenShell -> if (shellState.value?.id != effect.shellId) shellState.value = ShellView(effect.shellId)
-                // Sub-agent navigation stays off until the app has a frame screen, so this never comes.
-                is Effect.OpenSubagent -> Unit
+                is Effect.OpenSubagent -> openFrame(effect.taskId)
                 is Effect.WakeAt -> Unit
             }
         }
@@ -216,6 +252,19 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         if (changed.progress || changed.transcript) ui = ui.copy(progress = session.replayProgress())
         if (changed.shells) readShell()
         state.value = ui
+        if (changed.frames || changed.transcript) readFrame()
+    }
+
+    private fun readFrame() {
+        val view = frameState.value ?: return
+        val layout = session.frameLayout(view.taskId) ?: return
+        val lines = session.frameViewportLines(view.taskId)?.let(Snapshots::transcriptLines)
+        frameState.value = view.copy(
+            strip = session.frameStrip(view.taskId),
+            rows = Snapshots.transcriptLayout(layout).rows,
+            startRow = lines?.startRow ?: 0,
+            lines = lines?.rows.orEmpty(),
+        )
     }
 
     private fun readShell() {

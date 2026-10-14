@@ -715,6 +715,18 @@ pub struct SubagentStripLine {
     pub tool_count: usize,
 }
 
+impl SubagentStripLine {
+    // `working… · 3 tools`, the web strip's join; `None` when the transcript has no task to read.
+    pub fn text(&self) -> Option<String> {
+        let status = self.status?;
+        Some(match self.tool_count {
+            0 => status.to_owned(),
+            1 => format!("{status} · 1 tool"),
+            n => format!("{status} · {n} tools"),
+        })
+    }
+}
+
 pub fn subagent_strip_line(task: Option<&ToolCall>, items: &[Item], fallback_label: &str) -> SubagentStripLine {
     let busy = task.is_some_and(|task| task_busy(task, items));
     let failed = task.is_some_and(call_failed);

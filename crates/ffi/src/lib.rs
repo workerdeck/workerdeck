@@ -203,10 +203,22 @@ pub enum ComposerTrigger {
     Pass,
 }
 
+// The sub-agent takeover's line above its frame. `text` is `None` when the transcript has no such task: the frame then
+// says so rather than guess, and never closes itself.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FrameStrip {
+    pub name: String,
+    pub glyph: String,
+    pub text: Option<String>,
+    pub busy: bool,
+    pub failed: bool,
+}
+
 #[derive(uniffi::Object)]
 pub struct Session {
     inner: Mutex<LiveSession>,
     viewport: Mutex<Viewport>,
+    frame_viewport: Mutex<Viewport>,
 }
 
 impl Session {
@@ -231,7 +243,11 @@ impl Session {
     #[uniffi::constructor]
     pub fn new(after_seq: i64, reconnect: bool, nonce: String, metrics: Metrics) -> Arc<Self> {
         let live = LiveSession::new(after_seq, reconnect, nonce, metrics.into());
-        Arc::new(Session { inner: Mutex::new(live), viewport: Mutex::new(Viewport::default()) })
+        Arc::new(Session {
+            inner: Mutex::new(live),
+            viewport: Mutex::new(Viewport::default()),
+            frame_viewport: Mutex::new(Viewport::default()),
+        })
     }
 
     pub fn take_effects(&self) -> Vec<Effect> {
@@ -474,8 +490,33 @@ impl Session {
         bytes
     }
 
+    // One frame is on screen at a time, so one held window; a fresh open lands on the frame's tail.
     pub fn open_frame(&self, task_id: String) -> Vec<Effect> {
+        *self.frame_viewport.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Viewport::default();
         self.act(|live| live.open_frame(&task_id))
+    }
+
+    pub fn frame_strip(&self, task_id: String) -> FrameStrip {
+        let line = self.live().frame_strip(&task_id);
+        let glyph = if line.busy { wd_native::planner::glyph::PULSE_REST } else { wd_native::planner::glyph::BULLET };
+        FrameStrip { text: line.text(), glyph: glyph.to_owned(), name: line.name, busy: line.busy, failed: line.failed }
+    }
+
+    // `show_rows` and `viewport_lines` for the open frame.
+    pub fn frame_show_rows(&self, task_id: String, first: u32, last: u32) -> Option<Vec<u8>> {
+        let mut viewport = self.frame_viewport.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let live = self.live();
+        let frame = live.frame(&task_id)?;
+        let rows = viewport.show(first as usize, last as usize, frame.rows().len())?;
+        Some(snapshot::transcript_lines(frame, rows.start, rows.end))
+    }
+
+    pub fn frame_viewport_lines(&self, task_id: String) -> Option<Vec<u8>> {
+        let mut viewport = self.frame_viewport.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let live = self.live();
+        let frame = live.frame(&task_id)?;
+        let rows = viewport.window(frame.rows().len());
+        Some(snapshot::transcript_lines(frame, rows.start, rows.end))
     }
 
     pub fn close_frame(&self, task_id: String) -> Vec<Effect> {
