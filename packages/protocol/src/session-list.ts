@@ -86,8 +86,8 @@ export type ViewConfig = {
   shells?: StepDisplay
   tasks?: StepDisplay
   customGroups?: CustomGroup[]
-  // `teamKey` values: the teams this client draws folded. A viewing preference, never sent to the gateway.
-  collapsedTeams?: string[]
+  // `teamKey` values: the teams this client draws expanded rather than Auto. A viewing preference, never sent to the gateway.
+  expandedTeams?: string[]
   // `SessionGroup.key` values: the custom groups this client draws folded. A viewing preference too.
   collapsedGroups?: string[]
   earlierOpen?: boolean
@@ -172,8 +172,9 @@ export function sessionKey(row: Pick<SessionRow, 'hostId' | 'info'>): string {
 }
 
 // A stored `groupBy: 'gateway'` predates the merge into project groups, which name their gateway once there is more than one.
+// A stored `collapsedTeams` is dropped, not migrated: it held the inverse of `expandedTeams`.
 export function normalizeViewConfig(stored: Partial<ViewConfig> | undefined): ViewConfig {
-  const config = { ...DEFAULT_VIEW_CONFIG, ...stored }
+  const { collapsedTeams: _dropped, ...config } = { ...DEFAULT_VIEW_CONFIG, ...stored } as ViewConfig & { collapsedTeams?: unknown }
   const groupBy = config.groupBy as string
   return GROUP_BY.includes(groupBy as GroupBy)
     ? config
@@ -460,18 +461,57 @@ export function teamState(rows: readonly SessionRow[]): SessionState {
   return STATE_ORDER[best]!
 }
 
-export function isTeamCollapsed(config: ViewConfig, row: SessionRow): boolean {
+export function isTeamExpanded(config: ViewConfig, row: SessionRow): boolean {
   const key = teamKey(row)
-  return key !== undefined && (config.collapsedTeams ?? []).includes(key)
+  return key !== undefined && (config.expandedTeams ?? []).includes(key)
 }
 
-export function toggleTeamCollapsed(config: ViewConfig, row: SessionRow): ViewConfig {
+export function toggleTeamExpanded(config: ViewConfig, row: SessionRow): ViewConfig {
   const key = teamKey(row)
   if (key === undefined) {
     return config
   }
-  const held = config.collapsedTeams ?? []
-  return { ...config, collapsedTeams: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
+  const held = config.expandedTeams ?? []
+  return { ...config, expandedTeams: held.includes(key) ? held.filter((k) => k !== key) : [...held, key] }
+}
+
+export const TEAM_LINGER_MS = 30_000
+
+export type TeamView = { expanded: boolean; shown: SessionRow[]; tray: SessionRow[] }
+
+// Auto draws a member that is busy, selected, unread, or idle for under `TEAM_LINGER_MS` by `lastActivityAt`; the rest
+// sit in the lead's tray. An expanded team, or one under a search or facet filter, draws every member.
+export function teamView(lead: SessionRow, config: ViewConfig, selected: string | undefined, now: number): TeamView {
+  const members = lead.members ?? []
+  const expanded = isTeamExpanded(config, lead)
+  if (expanded || hasFacetFilter(config)) {
+    return { expanded, shown: [...members], tray: [] }
+  }
+  const shown: SessionRow[] = []
+  const tray: SessionRow[] = []
+  for (const member of members) {
+    const at = member.info.lastActivityAt
+    const auto =
+      member.state === 'working' ||
+      member.state === 'attention' ||
+      member.unseen > 0 ||
+      sessionKey(member) === selected ||
+      (at !== undefined && now - at < TEAM_LINGER_MS)
+    ;(auto ? shown : tray).push(member)
+  }
+  return { expanded, shown, tray }
+}
+
+// When the next lingering member's window closes, so a host can redraw then; undefined when none is lingering.
+export function teamLingerEnds(view: TeamView, now: number): number | undefined {
+  let next: number | undefined
+  for (const member of view.shown) {
+    const at = member.info.lastActivityAt
+    if (at !== undefined && now - at < TEAM_LINGER_MS && (next === undefined || at + TEAM_LINGER_MS < next)) {
+      next = at + TEAM_LINGER_MS
+    }
+  }
+  return next
 }
 
 export function isGroupCollapsed(config: ViewConfig, group: Pick<SessionGroup, 'key'>): boolean {
@@ -657,7 +697,7 @@ export function clearFilters(config: ViewConfig): ViewConfig {
     shells: config.shells,
     tasks: config.tasks,
     customGroups: config.customGroups,
-    collapsedTeams: config.collapsedTeams,
+    expandedTeams: config.expandedTeams,
     collapsedGroups: config.collapsedGroups,
     earlierOpen: config.earlierOpen,
   }

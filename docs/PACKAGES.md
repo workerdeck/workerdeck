@@ -406,8 +406,17 @@ is what state grouping places it by), and members never appear top-level. Pass t
 as `options.all`: a filter that matches only a member then pulls its lead in as a `context` row. A
 member whose lead is not in the list at all stays top-level rather than vanish. Ended sessions with
 no agent fold into a trailing `earlier` group, except under state grouping (which already has
-Ended) and custom grouping (the operator placed them). `collapsedTeams` (team keys,
-`hostId:agentId`) and `earlierOpen` are per-client view preferences.
+Ended) and custom grouping (the operator placed them). `expandedTeams` (team keys,
+`hostId:agentId`) and `earlierOpen` are per-client view preferences; a stored `collapsedTeams` is
+dropped on normalize, never migrated, because its meaning is the inverse.
+
+**Team Auto.** Every team is in Auto unless its key is in `expandedTeams`; there is no setting and no
+fully collapsed state. `teamView(lead, config, selected, now)` returns `{ expanded, shown, tray }`:
+in Auto a Member is shown when it is `working` or `attention`, is the selected row (`selected` is a
+`sessionKey`), has `unseen > 0`, or has `lastActivityAt` within `TEAM_LINGER_MS` (30 s) of `now`;
+the rest go to `tray`. Expanded, or under any search or facet filter, every Member is shown.
+`teamLingerEnds(view, now)` is when the next lingering Member drops out, so a host can redraw then.
+iOS mirrors both in `SessionList.swift`; the Rust core ports them next.
 
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
 name drawing the no-project fallback - or an image **address, never bytes**, fetched from
@@ -1907,10 +1916,12 @@ there. `expanded`/`editing` are uncontrolled by default and `renameOn` chooses t
 **Agent cards.** A row with `info.agent` draws as the agent card (`AgentAvatar`: 32 px, status on
 the corner, busy strip played by CSS `steps()`, desaturated asleep), named by the agent, with the
 session title as its topic. Members are the one-row `variant="member"` under the lead on a tree
-line (`TeamBlock` in `SessionBrowser`). The knob folds a team into its lead: no row of its own, the
-members' avatars (each with its status) drawn on the lead's first line before the context ring
-(`teamTray`, at most four, then `+n`), which unfold it again; a member that needs approval still
-draws as a row. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
+line (`TeamBlock` in `SessionBrowser`). In Auto (see `teamView` in protocol) the tree shows only the
+Members `shown`; the rest are avatars on the lead's first line before the context ring (`teamTray`,
+at most four, then `+n`). An avatar selects that Member through `onSelect` (its `title` is the name);
+the trailing chevron or `+n` expands the team, and the knob atop an expanded tree returns it to Auto.
+The selected Member comes from `isActive`, so hosts pass nothing new; with no `now` prop the browser
+runs its own timer to the next `teamLingerEnds`. `onTeamMove` makes cards draggable onto each other (`lib/team-drop.ts`, pure): the
 middle of a card joins its team, a member's edges place the drop beside it, a member dropped on a
 top-level edge or empty space leaves. Joining renumbers the team densely (`TeamMove.siblings`).
 `teamDropRefusal` mirrors the gateway's `leadRefusal` wording so a refused hover says why; a

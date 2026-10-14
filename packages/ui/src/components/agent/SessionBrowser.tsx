@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { HTMLAttributes, ReactNode } from 'react'
 import { BedDouble, ChevronDown, ChevronRight, Eraser, FolderOpen, Layers, Pencil, Plus, Search, SearchX, Trash2, X } from 'lucide-react'
 import {
@@ -7,12 +7,13 @@ import {
   groupRows,
   hasFacetFilter,
   relayHostsOf,
-  isTeamCollapsed,
   scopeActive,
   sessionKey,
+  sessionLabel,
   subsetSummary,
-  teamSummary,
-  toggleTeamCollapsed,
+  teamLingerEnds,
+  teamView,
+  toggleTeamExpanded,
   isGroupCollapsed,
   toggleGroupCollapsed,
 } from '@workerdeck/protocol'
@@ -20,10 +21,10 @@ import type {
   HostRelays,
   SessionGroup,
   SessionRow,
-  SessionState,
   SessionTask,
   StepDisplay,
   SubagentDisplay,
+  TeamView,
   ViewConfig,
   WorkspaceScope,
 } from '@workerdeck/protocol'
@@ -140,6 +141,31 @@ export function SessionBrowser({
   const tiles = useMemo(() => rows.some((row) => row.info.agent !== undefined), [rows])
   const custom = config.groupBy === 'custom'
   const [editingGroup, setEditingGroup] = useState<string>()
+  const [tick, setTick] = useState(() => Date.now())
+  const clock = now ?? tick
+  const views = useMemo(() => {
+    const out = new Map<string, TeamView>()
+    for (const group of groups) {
+      for (const row of group.rows) {
+        if (row.members?.length) {
+          const selected = row.members.find(isActive)
+          out.set(sessionKey(row), teamView(row, config, selected && sessionKey(selected), clock))
+        }
+      }
+    }
+    return out
+  }, [groups, config, isActive, clock])
+  const lingerEnds = useMemo(() => {
+    const ends = [...views.values()].map((view) => teamLingerEnds(view, clock)).filter((end) => end !== undefined)
+    return ends.length ? Math.min(...ends) : undefined
+  }, [views, clock])
+  useEffect(() => {
+    if (now !== undefined || lingerEnds === undefined) {
+      return
+    }
+    const timer = setTimeout(() => setTick(Date.now()), Math.max(0, lingerEnds - Date.now()) + 50)
+    return () => clearTimeout(timer)
+  }, [now, lingerEnds])
 
   const set = (patch: Partial<ViewConfig>) => onConfigChange({ ...config, ...patch })
   const byKey = useMemo(() => new Map(rows.map((row) => [sessionKey(row), row])), [rows])
@@ -318,21 +344,16 @@ export function SessionBrowser({
                     if (!row.members?.length) {
                       return item(row, 'card', { className: row.context ? 'opacity-50' : undefined })
                     }
-                    const collapsed = isTeamCollapsed(config, row)
                     return (
                       <TeamBlock
                         key={sessionKey(row)}
                         lead={row}
-                        collapsed={collapsed}
+                        view={views.get(sessionKey(row)) ?? { expanded: false, shown: row.members, tray: [] }}
                         avatars={avatars}
-                        onToggle={() => onConfigChange(toggleTeamCollapsed(config, row))}
-                        renderLead={(summary, tray) =>
-                          item(row, 'card', {
-                            className: row.context ? 'opacity-50' : undefined,
-                            badgeState: collapsed ? row.teamState : undefined,
-                            teamUnseen: collapsed ? summary.unseen : 0,
-                            teamTray: tray,
-                          })
+                        onToggle={() => onConfigChange(toggleTeamExpanded(config, row))}
+                        onSelectMember={(member) => onSelect?.(member, { meta: false, ctrl: false, alt: false })}
+                        renderLead={(tray) =>
+                          item(row, 'card', { className: row.context ? 'opacity-50' : undefined, teamTray: tray })
                         }
                         renderMember={(member) => item(member, 'member')}
                       />
@@ -356,8 +377,6 @@ interface SessionRowItemProps {
   row: SessionRow
   variant?: 'card' | 'member'
   avatars?: AgentAvatars
-  badgeState?: SessionState
-  teamUnseen?: number
   teamTray?: ReactNode
   tile?: boolean
   className?: string
@@ -391,8 +410,6 @@ function SessionRowItem({
   row,
   variant,
   avatars,
-  badgeState,
-  teamUnseen,
   teamTray,
   tile,
   className,
@@ -429,8 +446,6 @@ function SessionRowItem({
       row={row}
       variant={variant}
       avatars={avatars}
-      badgeState={badgeState}
-      teamUnseen={teamUnseen}
       teamTray={teamTray}
       tile={tile}
       className={className}
@@ -518,80 +533,84 @@ function SessionRowItem({
 
 const TRAY_MAX = 4
 
-// A folded team draws its members on the lead's first line (avatar and status each) and no row of its own; the tray
-// unfolds it. Expanded, a tree line runs from the lead's avatar with the knob atop it, so neither state needs a twistie.
+// Auto draws the members `teamView` shows under the lead and the rest as a tray on its first line: an avatar selects
+// that member, the trailing `+N` or chevron expands the team. Expanded, the knob atop the tree line returns it to Auto.
 function TeamBlock({
   lead,
-  collapsed,
+  view,
   avatars,
   onToggle,
+  onSelectMember,
   renderLead,
   renderMember,
 }: {
   lead: SessionRow
-  collapsed: boolean
+  view: TeamView
   avatars?: AgentAvatars
   onToggle: () => void
-  renderLead: (summary: ReturnType<typeof teamSummary>, tray?: ReactNode) => ReactNode
+  onSelectMember: (member: SessionRow) => void
+  renderLead: (tray?: ReactNode) => ReactNode
   renderMember: (member: SessionRow) => ReactNode
 }) {
-  const members = lead.members ?? []
-  const summary = teamSummary(lead)
-  if (collapsed) {
-    const surfaced = members.filter((member) => member.state === 'attention')
-    const counts = [
-      `${summary.members} member${summary.members === 1 ? '' : 's'}`,
-      summary.working ? `${summary.working} working` : undefined,
-      summary.attention ? `${summary.attention} need${summary.attention === 1 ? 's' : ''} you` : undefined,
-    ].filter(Boolean)
-    const hidden = members.length - TRAY_MAX
-    const tray = (
+  const team = lead.info.agent?.name ?? 'team'
+  const overflow = view.tray.length > TRAY_MAX
+  const avatarsShown = view.tray.slice(0, overflow ? TRAY_MAX - 1 : TRAY_MAX)
+  const tray = view.tray.length ? (
+    <span className="flex shrink-0 items-center gap-1">
+      {avatarsShown.map((member) => {
+        const name = member.info.agent?.name ?? sessionLabel(member.info)
+        return (
+          <button
+            key={sessionKey(member)}
+            type="button"
+            aria-label={`Select ${name}`}
+            title={name}
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelectMember(member)
+            }}
+            className="flex shrink-0 rounded-[3px] hover:ring-1 hover:ring-border"
+          >
+            <AgentAvatar row={member} image={avatarOf(avatars, member.info.agent)} size={16} className="rounded-[3px]" />
+          </button>
+        )
+      })}
       <button
         type="button"
         aria-expanded={false}
-        aria-label={`Expand ${lead.info.agent?.name ?? 'team'}: ${counts.join(', ')}`}
-        title={counts.join(' · ')}
+        aria-label={`Show all Team Members of ${team}`}
+        title={`${view.tray.length} more Member${view.tray.length === 1 ? '' : 's'}`}
         onClick={(e) => {
           e.stopPropagation()
           onToggle()
         }}
-        className="flex shrink-0 items-center gap-1 rounded-[4px] px-0.5 hover:bg-row-hover"
+        className="flex h-4 shrink-0 items-center rounded-[4px] px-0.5 text-label text-fg-4 tabular-nums hover:bg-row-hover hover:text-fg-1"
       >
-        {members.slice(0, hidden > 0 ? TRAY_MAX - 1 : TRAY_MAX).map((member) => (
-          <AgentAvatar
-            key={sessionKey(member)}
-            row={member}
-            image={avatarOf(avatars, member.info.agent)}
-            size={16}
-            className="rounded-[3px]"
-          />
-        ))}
-        {hidden > 0 ? <span className="text-label text-fg-4 tabular-nums">+{hidden + 1}</span> : null}
+        {overflow ? `+${view.tray.length - avatarsShown.length}` : <ChevronRight className="size-3" />}
       </button>
-    )
-    return (
-      <div data-slot="team" data-collapsed className="flex flex-col">
-        {renderLead(summary, tray)}
-        {surfaced.length ? <div className="ml-3 flex flex-col">{surfaced.map(renderMember)}</div> : null}
-      </div>
-    )
-  }
+    </span>
+  ) : undefined
   return (
-    <div data-slot="team" className="flex flex-col">
-      {renderLead(summary)}
-      <div className="relative ml-3.5 flex flex-col pl-1">
-        <span aria-hidden className="absolute top-0 bottom-3 left-0 w-px bg-border" />
-        <button
-          type="button"
-          aria-expanded
-          aria-label={`Collapse ${lead.info.agent?.name ?? 'team'}`}
-          onClick={onToggle}
-          className="absolute -top-1 -left-[7px] flex size-3.5 items-center justify-center rounded-full border border-border bg-bg text-fg-4 hover:text-fg-1"
-        >
-          <ChevronDown className="size-2.5" />
-        </button>
-        {members.map(renderMember)}
-      </div>
+    <div data-slot="team" data-expanded={view.expanded || undefined} className="flex flex-col">
+      {renderLead(tray)}
+      {view.shown.length ? (
+        <div className="relative ml-3.5 flex flex-col pl-1">
+          <span aria-hidden className="absolute top-0 bottom-3 left-0 w-px bg-border" />
+          {view.expanded ? (
+            <button
+              type="button"
+              aria-expanded
+              aria-label={`Show only active Team Members of ${team}`}
+              title="Show only active Members"
+              onClick={onToggle}
+              className="absolute -top-1 -left-[7px] flex size-3.5 items-center justify-center rounded-full border border-border bg-bg text-fg-4 hover:text-fg-1"
+            >
+              <ChevronDown className="size-2.5" />
+            </button>
+          ) : null}
+          {view.shown.map(renderMember)}
+        </div>
+      ) : null}
     </div>
   )
 }

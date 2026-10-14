@@ -1291,10 +1291,11 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 `/meta` (`Agents.swift`), and ports the team half of the list view model into `SessionList.swift`:
 `groupRows` builds team units (members under their lead in team order, `teamState` placing a team
 by its most urgent state, a context lead when a filter matches only a member, cross-gateway leads
-through `relayHostsOf`), the trailing Earlier fold, `collapsedTeams`/`earlierOpen` and
+through `relayHostsOf`), the trailing Earlier fold, `teamView`/`expandedTeams`/`earlierOpen` and
 `teamLeads`/`teamMembers`; `AgentTeamsTests` is the port of the TS block. `clearFilters` keeps the
-fold state on both sides: what a reader folded is layout, not a filter. The app draws agents with
-`AgentCardView` (44pt avatar card, 32pt member row on a tree line, a team tray that folds the team)
+expand state on both sides: what a reader folded is layout, not a filter. The app draws agents with
+`AgentCardView` (44pt avatar card, 32pt member row on a tree line, a team tray of the Members Auto hides; a tap on one opens it, and the member opened last stands in
+for the selected row)
 and `AgentAvatarView` (pixelated, busy strip sliced from `avatar-busy.png` by `x-frame-durations`
 and stepped in a `TimelineView`, desaturated asleep, a dashed engine tile with no picture);
 `AgentAvatarLoader` caches per gateway and avatar path. A card whose session or team needs an
