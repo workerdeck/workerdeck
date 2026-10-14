@@ -5,7 +5,7 @@ import java.nio.ByteOrder
 
 // Readers for the core's byte snapshots, layout per docs/NATIVE-CORE-SNAPSHOTS.md. Offsets the core gives in UTF-8
 // bytes come back here in UTF-16 units, the ones a Kotlin String and an AnnotatedString index by.
-const val SNAPSHOT_VERSION = 1
+const val SNAPSHOT_VERSION = 2
 
 class SnapshotVersionException(found: Int) : IllegalStateException("snapshot version $found, this reader knows $SNAPSHOT_VERSION")
 
@@ -49,7 +49,21 @@ data class TranscriptLines(val startRow: Int, val rows: List<List<TranscriptLine
 
 data class TranscriptFrame(val layout: TranscriptLayout, val lines: TranscriptLines)
 
-data class ShellRun(val fg: Int, val bg: Int, val style: Int, val text: String)
+// Colour words: 0 the slot's default (theme foreground, or no fill), FOREGROUND / BACKGROUND the theme's own, RGB | rgb.
+data class ShellRun(val fg: Int, val bg: Int, val style: Int, val columns: Int, val text: String) {
+    val bold get() = style and 1 != 0
+    val dim get() = style and 2 != 0
+    val italic get() = style and 4 != 0
+    val underline get() = style and 8 != 0
+    val strikethrough get() = style and 32 != 0
+    val hidden get() = style and 64 != 0
+
+    companion object {
+        const val FOREGROUND = 0x01000000
+        const val RGB = 0x02000000
+        const val BACKGROUND = 0x03000000
+    }
+}
 
 data class ShellGrid(
     val revision: Long,
@@ -97,7 +111,7 @@ object Snapshots {
         val start = u32()
         val count = u32()
         val lines = List(count) {
-            List(u16()) { ShellRun(buf.int, buf.int, u8(), str32()) }
+            List(u16()) { ShellRun(buf.int, buf.int, u8(), u16(), str32()) }
         }
         ShellGrid(revision, cols, rows, total, cursorRow, cursorCol, flags, title, status, start, lines)
     }

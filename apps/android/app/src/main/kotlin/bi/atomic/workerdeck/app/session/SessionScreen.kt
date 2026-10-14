@@ -173,6 +173,8 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 )
             }
         }
+        val shell by model.shell.collectAsStateWithLifecycle()
+        shell?.let { ShellScreen(model, it.id, style, palette, onClose = {}) }
         picker?.let {
             PickerSheet(
                 picker = it,

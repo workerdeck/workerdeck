@@ -138,27 +138,32 @@ impl Engine {
 }
 
 pub fn write_vt_line(out: &mut ByteWriter, cells: &[Cell]) {
-    let mut runs: Vec<(Style, String)> = Vec::new();
+    let mut runs: Vec<(Style, String, u16)> = Vec::new();
     for cell in cells {
         if cell.continuation {
+            if let Some(run) = runs.last_mut() {
+                run.2 += 1;
+            }
             continue;
         }
-        let same = matches!(runs.last(), Some((style, _)) if *style == cell.style);
+        let same = matches!(runs.last(), Some((style, _, _)) if *style == cell.style);
         if !same {
-            runs.push((cell.style, String::new()));
+            runs.push((cell.style, String::new(), 0));
         }
-        let text = &mut runs.last_mut().expect("run").1;
+        let run = runs.last_mut().expect("run");
+        run.2 += 1;
         match &cell.text {
-            CellText::None => text.push(' '),
-            CellText::Char(c) => text.push(*c),
-            CellText::Cluster(s) => text.push_str(s),
+            CellText::None => run.1.push(' '),
+            CellText::Char(c) => run.1.push(*c),
+            CellText::Cluster(s) => run.1.push_str(s),
         }
     }
     let n = runs.len().min(u16::MAX as usize);
     out.u16(n as u16);
-    for (style, text) in &runs[..n] {
-        out.u32(color(style.fg));
-        out.u32(color(style.bg));
+    for (style, text, columns) in &runs[..n] {
+        let (fg, bg) = resolve(style);
+        out.u32(fg);
+        out.u32(bg);
         out.u8((style.bold as u8)
             | ((style.dim as u8) << 1)
             | ((style.italic as u8) << 2)
@@ -166,15 +171,53 @@ pub fn write_vt_line(out: &mut ByteWriter, cells: &[Cell]) {
             | ((style.inverse as u8) << 4)
             | ((style.strikethrough as u8) << 5)
             | ((style.hidden as u8) << 6));
+        out.u16(*columns);
         out.str32(text);
     }
 }
 
-fn color(c: Color) -> u32 {
+pub const SLOT_DEFAULT: u32 = 0;
+pub const THEME_FOREGROUND: u32 = 0x0100_0000;
+pub const RGB: u32 = 0x0200_0000;
+pub const THEME_BACKGROUND: u32 = 0x0300_0000;
+
+const ANSI: [u32; 16] = [
+    0x000000, 0xcd0000, 0x00cd00, 0xcdcd00, 0x0000ee, 0xcd00cd, 0x00cdcd, 0xe5e5e5, 0x7f7f7f, 0xff0000, 0x00ff00, 0xffff00, 0x5c5cff,
+    0xff00ff, 0x00ffff, 0xffffff,
+];
+
+pub fn xterm_rgb(index: u8) -> u32 {
+    match index {
+        0..16 => ANSI[index as usize],
+        16..232 => {
+            let steps = [0u32, 95, 135, 175, 215, 255];
+            let offset = (index - 16) as usize;
+            steps[offset / 36] << 16 | steps[(offset % 36) / 6] << 8 | steps[offset % 6]
+        }
+        _ => {
+            let level = 8 + (index as u32 - 232) * 10;
+            level << 16 | level << 8 | level
+        }
+    }
+}
+
+fn rgb(c: Color) -> Option<u32> {
     match c {
-        Color::Default => 0,
-        Color::Indexed(i) => 0x0100_0000 | i as u32,
-        Color::Rgb(r, g, b) => 0x0200_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32,
+        Color::Default => None,
+        Color::Indexed(i) => Some(RGB | xterm_rgb(i)),
+        Color::Rgb(r, g, b) => Some(RGB | (r as u32) << 16 | (g as u32) << 8 | b as u32),
+    }
+}
+
+// Inverse against an unset colour swaps in the theme's own foreground or background, so the renderer only maps four
+// slot words onto its palette.
+pub fn resolve(style: &Style) -> (u32, u32) {
+    let fg = rgb(style.fg);
+    let bg = rgb(style.bg);
+    if style.inverse {
+        (bg.unwrap_or(THEME_BACKGROUND), fg.unwrap_or(THEME_FOREGROUND))
+    } else {
+        (fg.unwrap_or(SLOT_DEFAULT), bg.unwrap_or(SLOT_DEFAULT))
     }
 }
 
@@ -228,5 +271,43 @@ impl ByteWriter {
 impl Default for ByteWriter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod vt_line_tests {
+    use super::*;
+
+    fn style(fg: Color, bg: Color, inverse: bool) -> Style {
+        Style { fg, bg, inverse, ..Style::default() }
+    }
+
+    #[test]
+    fn indexed_colours_resolve_through_the_xterm_table() {
+        assert_eq!(xterm_rgb(1), 0xcd0000);
+        assert_eq!(xterm_rgb(16), 0x000000);
+        assert_eq!(xterm_rgb(196), 0xff0000);
+        assert_eq!(xterm_rgb(232), 0x080808);
+        assert_eq!(xterm_rgb(255), 0xeeeeee);
+        assert_eq!(resolve(&style(Color::Indexed(9), Color::Default, false)), (RGB | 0xff0000, SLOT_DEFAULT));
+    }
+
+    #[test]
+    fn inverse_swaps_and_fills_unset_colours_from_the_theme() {
+        assert_eq!(resolve(&style(Color::Default, Color::Default, true)), (THEME_BACKGROUND, THEME_FOREGROUND));
+        assert_eq!(resolve(&style(Color::Rgb(1, 2, 3), Color::Default, true)), (THEME_BACKGROUND, RGB | 0x010203));
+        assert_eq!(resolve(&style(Color::Default, Color::Indexed(4), true)), (RGB | 0x0000ee, THEME_FOREGROUND));
+    }
+
+    #[test]
+    fn a_wide_glyph_is_one_character_in_two_columns() {
+        let plain = Cell { text: CellText::Char('a'), style: Style::default(), continuation: false };
+        let wide = Cell { text: CellText::Char('漢'), ..plain.clone() };
+        let rest = Cell { text: CellText::None, continuation: true, ..plain.clone() };
+        let mut out = ByteWriter::new();
+        write_vt_line(&mut out, &[plain, wide, rest]);
+        let bytes = out.bytes;
+        assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 1);
+        assert_eq!(u16::from_le_bytes([bytes[11], bytes[12]]), 3);
     }
 }

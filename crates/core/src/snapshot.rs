@@ -5,7 +5,7 @@ use crate::controller::transcript::TranscriptView;
 use crate::engine::{ByteWriter, write_vt_line};
 use crate::planner::TermLine;
 
-pub const VERSION: u8 = 1;
+pub const VERSION: u8 = 2;
 
 pub fn transcript_layout(view: &TranscriptView) -> Vec<u8> {
     let rows = view.rows();

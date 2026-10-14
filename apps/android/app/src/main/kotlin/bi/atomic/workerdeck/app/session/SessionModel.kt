@@ -2,12 +2,14 @@ package bi.atomic.workerdeck.app.session
 
 import bi.atomic.workerdeck.app.gateway.Transport
 import bi.atomic.workerdeck.core.LayoutRow
+import bi.atomic.workerdeck.core.ShellGrid
 import bi.atomic.workerdeck.core.SessionWorker
 import bi.atomic.workerdeck.core.Snapshots
 import bi.atomic.workerdeck.core.TranscriptLine
 import bi.atomic.workerdeck.core.ffi.Changed
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Effect
+import bi.atomic.workerdeck.core.ffi.Key
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.Mode
 import bi.atomic.workerdeck.core.ffi.ModePicker
@@ -42,6 +44,10 @@ data class SessionUi(
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
 
+// The open shell screen: `back` is how many lines the reader scrolled up from the tail (0 follows it), `shown` how many
+// rows the canvas holds. A reader scrolled back stays on the same lines while output arrives.
+data class ShellView(val id: String, val back: Int = 0, val shown: Int = 0, val grid: ShellGrid? = null, val total: Int = 0)
+
 // Drives one core `Session` over one socket, for as long as its screen is shown: the screen calls `close()` when it
 // leaves. Everything that touches the session, the socket and the window runs on the worker's thread; effects arrive
 // there too, so `handle` and the readers call the session directly.
@@ -50,6 +56,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     private val state = MutableStateFlow(SessionUi())
     private val worker = SessionWorker(session, onFailure = ::failed, onEffects = ::handle)
     val ui: StateFlow<SessionUi> = state
+    private val shellState = MutableStateFlow<ShellView?>(null)
+    val shell: StateFlow<ShellView?> = shellState
     private var socket: WebSocket? = null
 
     // Socket callbacks run on OkHttp's threads, possibly before the worker has stored the socket, so each socket
@@ -57,7 +65,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     @Volatile private var generation = 0
 
     init {
-        worker.act { it.setWallClock(System.currentTimeMillis().toDouble()) + it.takeEffects() }
+        worker.act { it.setWallClock(System.currentTimeMillis().toDouble()) + it.setNavigation(false, true) + it.takeEffects() }
     }
 
     fun resize(metrics: Metrics) = worker.act { it.resize(metrics) }
@@ -71,6 +79,35 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     fun runShell(command: String) = worker.act { it.runShell(command) }
 
     fun interrupt() = worker.act { it.interrupt() }
+
+    fun openShell(id: String, cols: Int, rows: Int) = worker.act {
+        shellState.value = (shellState.value ?: ShellView(id)).copy(shown = rows)
+        it.openShell(id, null, cols.toUInt(), rows.toUInt()).also { readShell() }
+    }
+
+    fun resizeShell(id: String, cols: Int, rows: Int) = worker.act {
+        shellState.value = shellState.value?.copy(shown = rows)
+        it.shellResize(id, cols.toUInt(), rows.toUInt()).also { readShell() }
+    }
+
+    fun scrollShell(back: Int) = worker.act {
+        shellState.value = shellState.value?.copy(back = back.coerceAtLeast(0))
+        readShell()
+        emptyList()
+    }
+
+    fun shellKey(id: String, key: Key) = worker.act { it.shellKey(id, key) }
+
+    fun shellText(id: String, text: String) = worker.act { it.shellText(id, text) }
+
+    fun shellPaste(id: String, text: String) = worker.act { it.shellPaste(id, text) }
+
+    fun killShell(id: String) = worker.act { it.killShell(id) }
+
+    fun closeShell(id: String) = worker.act {
+        shellState.value = null
+        it.closeShell(id)
+    }
 
     fun setModel(model: String?) = worker.act { it.setModel(model) }
 
@@ -127,8 +164,9 @@ class SessionModel(private val client: Transport, private val sessionId: String,
                     worker.act { it.responded(effect.id, status.toUShort(), body) }
                 }
                 is Effect.Changed -> changed(effect.changed)
-                // Navigation stays off until the app has subagent and shell screens, so these never come.
-                is Effect.OpenSubagent, is Effect.OpenShell -> Unit
+                is Effect.OpenShell -> if (shellState.value?.id != effect.shellId) shellState.value = ShellView(effect.shellId)
+                // Sub-agent navigation stays off until the app has a frame screen, so this never comes.
+                is Effect.OpenSubagent -> Unit
                 is Effect.WakeAt -> Unit
             }
         }
@@ -177,7 +215,20 @@ class SessionModel(private val client: Transport, private val sessionId: String,
             ui = ui.copy(planLines = Snapshots.transcriptLines(session.promptPlanLines()).rows.firstOrNull().orEmpty())
         }
         if (changed.progress || changed.transcript) ui = ui.copy(progress = session.replayProgress())
+        if (changed.shells) readShell()
         state.value = ui
+    }
+
+    // Two reads: the header for the line count, then the window `back` lines above the tail.
+    private fun readShell() {
+        val view = shellState.value ?: return
+        if (view.shown <= 0) return
+        val head = session.shellGrid(view.id, 0u, 0u)?.let(Snapshots::shellGrid) ?: return
+        val grown = if (view.back > 0 && view.total > 0) head.totalLines - view.total else 0
+        val back = (view.back + grown).coerceAtMost((head.totalLines - view.shown).coerceAtLeast(0))
+        val start = (head.totalLines - view.shown - back).coerceAtLeast(0)
+        val grid = session.shellGrid(view.id, start.toUInt(), view.shown.toUInt())?.let(Snapshots::shellGrid)
+        shellState.value = view.copy(back = back, grid = grid, total = head.totalLines)
     }
 
     private fun showLines(bytes: ByteArray) {

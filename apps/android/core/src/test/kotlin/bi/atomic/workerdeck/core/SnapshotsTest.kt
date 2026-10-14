@@ -53,6 +53,7 @@ class SnapshotsTest {
         assertTrue(grid.cursorVisible && grid.canType && grid.running)
         assertEquals("#2 bash" to "running", grid.title to grid.statusText)
         assertEquals(listOf("hello", "world", "", ""), grid.lines.map { line -> line.joinToString("") { it.text }.trimEnd() })
+        assertEquals(List(4) { 20 }, grid.lines.map { line -> line.sumOf { it.columns } })
         session.close()
     }
 
@@ -62,7 +63,7 @@ class SnapshotsTest {
         val raw = text.toByteArray()
         val ok = raw.size - 2
         val bytes = buffer {
-            put(1); putInt(3); putInt(1); putInt(1)
+            put(SNAPSHOT_VERSION.toByte()); putInt(3); putInt(1); putInt(1)
             put(0); put(0); put(0); put(0); putShort(0); putShort(5)
             putShort(0)
             putInt(raw.size); put(raw)
@@ -80,7 +81,7 @@ class SnapshotsTest {
 
     @Test
     fun refusesAnotherVersion() {
-        assertThrows(SnapshotVersionException::class.java) { Snapshots.transcriptLayout(byteArrayOf(2, 0, 0, 0, 0)) }
+        assertThrows(SnapshotVersionException::class.java) { Snapshots.transcriptLayout(byteArrayOf((SNAPSHOT_VERSION + 1).toByte(), 0, 0, 0, 0)) }
     }
 
     private fun buffer(fill: ByteBuffer.() -> Unit): ByteArray {

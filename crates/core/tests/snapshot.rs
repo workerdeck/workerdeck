@@ -133,7 +133,7 @@ fn the_shell_grid_reads_back_the_screen() {
         let runs = r.u16();
         let mut line = String::new();
         for _ in 0..runs {
-            r.take(9);
+            r.take(11);
             line.push_str(&r.str32());
         }
         text.push(line.trim_end().to_owned());

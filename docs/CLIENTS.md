@@ -1365,6 +1365,16 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   `apps/android/scripts/gen-engine-marks.mjs` (checked in, like the iOS imagesets). Which mark and
   whether it or the model name wears the vendor colour is the core's (`ListRow.mark`,
   `markTinted`, `nameTinted`); an unrecognised engine draws nothing.
+- **Shells open on a Canvas** (`session/ShellScreen.kt`): pressing a shell row emits `OpenShell`
+  (navigation has `shells` on), and the screen draws the core's `shell_grid` window with one
+  `drawText` per run, advancing by the run's `columns`. `SessionModel` reads two grids per change
+  (the header for the line count, then the window `back` lines above the tail); a reader scrolled
+  back keeps their lines while output arrives. Runs are clipped to the canvas, because until the
+  core answers a resize the grid can be larger than the canvas and `drawText` throws for a box that
+  starts outside it. Typing goes through a 1 dp scratch field whose changes are diffed against its
+  last value (removed characters become backspaces); resetting it mid-composition is what garbled
+  Gboard input, so it only resets outside one. Hardware Enter, Tab, Escape and arrows go straight
+  through as keys; the control strip mirrors iOS (esc, tab, armed ctrl, ^C, arrows, keyboard).
 - **Pairing**: base URL + auth key (`Authorization: Bearer`), the key sealed with an AES-GCM key
   that never leaves the Android Keystore. The emulator reaches a loopback gateway at `10.0.2.2`.
 - **Generated, never committed**: the UniFFI Kotlin (`uniffiKotlin`, from the host library's

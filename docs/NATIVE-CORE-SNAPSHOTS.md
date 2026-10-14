@@ -4,7 +4,7 @@ What `crates/core/src/snapshot.rs` hands a native renderer, through `crates/ffi`
 `wdffi`). Commands, effects and state go through UniFFI records; everything a renderer draws is
 one of these byte buffers, so a redraw costs one crossing.
 
-Little-endian. Every buffer opens with `u8 version` (currently **1**, `snapshot_version()`); a
+Little-endian. Every buffer opens with `u8 version` (currently **2**, `snapshot_version()`); a
 reader that sees another version refuses the buffer. `str16` / `str32` are a `u16` / `u32` byte
 length and UTF-8 bytes (`str16` is cut at a character boundary).
 
@@ -55,13 +55,17 @@ u16 cursorRow, u16 cursorCol
 u8 flags (1 cursorVisible, 2 altScreen, 4 canType, 8 running, 16 ended)
 str16 title, str16 statusText
 u32 startLine, u32 lineCount
-lineCount x { u16 runCount, runCount x { u32 fg, u32 bg, u8 style, str32 text } }
+lineCount x { u16 runCount, runCount x { u32 fg, u32 bg, u8 style, u16 columns, str32 text } }
 ```
 
 `startLine` counts from the oldest scrollback line; the live screen is the last `rows` lines.
-Colors: `0` default, `0x01000000 | index`, `0x02000000 | rgb`. Style bits: 1 bold, 2 dim, 4 italic,
-8 underline, 16 inverse, 32 strikethrough, 64 hidden. Wide characters occupy one run character and
-two columns (continuation cells are skipped).
+Colors arrive resolved (version 2): `0` the slot's default (the theme foreground for `fg`, no fill
+for `bg`), `0x01000000` the theme foreground, `0x03000000` the theme background, `0x02000000 | rgb`.
+The core maps the 256-colour palette to RGB and applies inverse (an unset colour swaps in the theme's
+own), so a renderer maps four words onto its palette and never reads the style for colour. Style bits:
+1 bold, 2 dim, 4 italic, 8 underline, 16 inverse (already applied), 32 strikethrough, 64 hidden.
+`columns` is the run's width in cells: a wide character is one run character in two columns, so a
+renderer advances by `columns`, never by the text's length.
 
 ## Calling pattern
 
