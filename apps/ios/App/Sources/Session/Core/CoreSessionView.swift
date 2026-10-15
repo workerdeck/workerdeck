@@ -53,6 +53,13 @@ struct CoreSessionView: View {
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) { pickers(ui) }
     }
+    .navigationDestination(
+      isPresented: Binding(
+        get: { ui.shell != nil },
+        set: { if !$0, let id = model.ui.shell?.id { model.closeShell(id) } })
+    ) {
+      if let id = ui.shell?.id { CoreShellScreen(model: model, shellId: id) }
+    }
     .onAppear {
       if let client {
         images.fetch = { [sessionId] seq, toolUseId, part in
@@ -63,7 +70,8 @@ struct CoreSessionView: View {
         model.setRecap(mark)
       }
     }
-    .onDisappear { model.close() }
+    // Pushing the shell screen hides this one too; only leaving the session closes it.
+    .onDisappear { if model.ui.shell == nil { model.close() } }
   }
 
   private func composer(_ chrome: SessionChrome?) -> some View {

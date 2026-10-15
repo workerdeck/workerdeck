@@ -23,11 +23,19 @@ struct CoreSessionUi: @unchecked Sendable {
   var prompt: Prompt?
   var planLines: [TranscriptLine] = []
   var openSeconds: Double?
+  var shell: CoreShellState?
 
   func linesAt(_ row: Int) -> [TranscriptLine]? {
     let index = row - startRow
     return lines.indices.contains(index) ? lines[index] : nil
   }
+}
+
+// The open shell screen. `sized` turns true once the screen measured itself and attached, so a grid is read only after.
+struct CoreShellState: Equatable {
+  let id: String
+  var sized = false
+  var grid: ShellGrid?
 }
 
 struct CorePinnedLine {
@@ -75,7 +83,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     worker = SessionWorker(session: session) { [weak self] effects in self?.handle(effects) }
     let now = Date().timeIntervalSince1970 * 1000
     worker.act {
-      $0.setWallClock(nowMs: now) + $0.setNavigation(subagents: false, shells: false)
+      $0.setWallClock(nowMs: now) + $0.setNavigation(subagents: false, shells: true)
         + $0.setHideThinking(hide: hideThinking) + $0.takeEffects()
     }
   }
@@ -127,6 +135,49 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     }
   }
 
+  func openShell(_ id: String, cols: Int, rows: Int) {
+    worker.act { [self] session in
+      ui.shell = CoreShellState(id: id, sized: true, grid: ui.shell?.id == id ? ui.shell?.grid : nil)
+      let effects = session.openShell(shellId: id, shellJson: nil, cols: UInt32(cols), rows: UInt32(rows))
+      readShell()
+      publish(ui)
+      return effects
+    }
+  }
+
+  func resizeShell(_ id: String, cols: Int, rows: Int) {
+    worker.act { [self] session in
+      let effects = session.shellResize(shellId: id, cols: UInt32(cols), rows: UInt32(rows))
+      readShell()
+      publish(ui)
+      return effects
+    }
+  }
+
+  func scrollShell(_ lines: Int) {
+    worker.act { [self] session in
+      guard let id = ui.shell?.id else { return [] }
+      let effects = session.shellScroll(shellId: id, lines: Int32(clamping: lines))
+      readShell()
+      publish(ui)
+      return effects
+    }
+  }
+
+  func shellKey(_ id: String, _ key: Key) { worker.act { $0.shellKey(shellId: id, key: key) } }
+  func shellText(_ id: String, _ text: String) { worker.act { $0.shellText(shellId: id, text: text) } }
+  func shellPaste(_ id: String, _ text: String) { worker.act { $0.shellPaste(shellId: id, text: text) } }
+  func killShell(_ id: String) { worker.act { $0.killShell(shellId: id) } }
+
+  func closeShell(_ id: String) {
+    worker.act { [self] session in
+      guard ui.shell?.id == id else { return session.closeShell(shellId: id) }
+      ui.shell = nil
+      publish(ui)
+      return session.closeShell(shellId: id)
+    }
+  }
+
   // The worker drops anything queued after close, so the teardown happens here: invalidating cancels the socket and
   // releases the session's strong hold on this delegate.
   func close() {
@@ -159,7 +210,11 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
         socket = nil
       case .request(let id, let method, let path, let scoped): request(id, method, path, scoped)
       case .changed(let changed): self.changed(changed)
-      case .openShell, .openSubagent, .wakeAt: break
+      case .openShell(let id):
+        guard ui.shell?.id != id else { break }
+        ui.shell = CoreShellState(id: id)
+        publish(ui)
+      case .openSubagent, .wakeAt: break
       }
     }
   }
@@ -231,8 +286,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 
   private func sendFrame(_ id: UInt64, _ text: String) {
-    guard fixture == nil else {
+    if fixture != nil {
       worker.act { $0.sendDone(id: id, ok: true) }
+      CoreReplayFixture.replies(to: text).forEach(worker.received)
       return
     }
     guard let socket else {
@@ -245,8 +301,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 
   private func request(_ id: UInt64, _ method: String, _ path: String, _ scoped: Bool) {
-    guard fixture == nil else {
-      worker.act { $0.responded(id: id, status: 404, body: "") }
+    if fixture != nil {
+      let (status, body) = CoreReplayFixture.respond(method, path)
+      worker.act { $0.responded(id: id, status: status, body: body) }
       return
     }
     let encoded = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(["/"])) ?? sessionId
@@ -297,12 +354,18 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.planLines = (try? Snapshots.transcriptLines(session.promptPlanLines()))?.rows.first ?? []
     }
     if changed.progress || changed.transcript { ui.progress = session.replayProgress() }
+    if changed.shells { readShell() }
     if ui.openSeconds == nil, ui.connection == .live, ui.progress == nil, !ui.rows.isEmpty {
       let seconds = ProcessInfo.processInfo.systemUptime - startedAt
       ui.openSeconds = seconds
       Self.log.notice("session open: \(seconds, format: .fixed(precision: 3)) s, \(self.ui.rows.count) rows")
     }
     publish(ui)
+  }
+
+  private func readShell() {
+    guard let shell = ui.shell, shell.sized else { return }
+    ui.shell?.grid = session.shellWindow(shellId: shell.id).flatMap { try? Snapshots.shellGrid($0) }
   }
 
   private func showLines(_ bytes: Data) {

@@ -52,6 +52,62 @@ final class CoreTranscriptUITests: XCTestCase {
       "the strip still pins \(pinned) after jumping to it")
   }
 
+  // The fixture's last row is a running shell answered in-process: an 80-line scrollback, echoed input, a listing on
+  // Enter, and a kill that reports it exited.
+  @MainActor
+  func testCoreShellOpensTypesScrollsAndKills() throws {
+    let app = XCUIApplication()
+    app.launchEnvironment["UIPREVIEW"] = "core"
+    app.launch()
+
+    let header = text(app, containing: "npm run dev ·")
+    XCTAssertTrue(header.waitForExistence(timeout: 20), "no shell row at the tail")
+    snap(app, "shell-1-row")
+    sleep(1)
+    header.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0)).withOffset(CGVector(dx: 0, dy: 8)).tap()
+
+    let screen = app.descendants(matching: .any)["shell-screen"]
+    XCTAssertTrue(screen.waitForExistence(timeout: 5), "pressing the running shell did not open its screen")
+    XCTAssertTrue(wait(screen, contains: "boot 080"), "the attach scrollback never drew")
+    XCTAssertEqual(app.staticTexts["shell-status"].label, "running")
+    snap(app, "shell-2-open")
+
+    screen.tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "tapping the shell raised no keyboard")
+    app.typeText("ls\n")
+    XCTAssertTrue(wait(screen, contains: "file-a"), "typed input never reached the fixture shell")
+    snap(app, "shell-3-typed")
+
+    app.buttons["Hide keyboard"].tap()
+    for _ in 0..<8 where !(screen.value as? String ?? "").contains("boot 001") {
+      screen.swipeDown(velocity: .slow)
+    }
+    XCTAssertTrue(wait(screen, contains: "boot 001"), "dragging down never reached the top of the scrollback")
+    snap(app, "shell-4-scrolled")
+
+    app.navigationBars.buttons["Kill"].tap()
+    app.sheets.buttons["Kill"].firstMatch.tap()
+    let status = app.staticTexts["shell-status"]
+    let ended = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != 'running'"), object: status)
+    XCTAssertEqual(XCTWaiter.wait(for: [ended], timeout: 5), .completed, "the kill never ended the shell")
+    snap(app, "shell-5-killed")
+    attach(status.label, "status-after-kill")
+
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(header.waitForExistence(timeout: 5), "back did not return to the transcript")
+    XCTAssertFalse(screen.exists)
+    snap(app, "shell-6-back")
+  }
+
+  private func wait(_ element: XCUIElement, contains needle: String, timeout: TimeInterval = 5) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if (element.value as? String ?? "").contains(needle) { return true }
+      usleep(200_000)
+    }
+    return false
+  }
+
   private func text(_ app: XCUIApplication, containing needle: String) -> XCUIElement {
     app.textViews.matching(NSPredicate(format: "value CONTAINS %@", needle)).firstMatch
   }

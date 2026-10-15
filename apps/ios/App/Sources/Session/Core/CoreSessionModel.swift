@@ -59,6 +59,14 @@ final class CoreSessionModel {
   }
 
   func press(row: Int, line: Int) { driver?.press(row: row, line: line) }
+  func openShell(_ id: String, cols: Int, rows: Int) { driver?.openShell(id, cols: cols, rows: rows) }
+  func resizeShell(_ id: String, cols: Int, rows: Int) { driver?.resizeShell(id, cols: cols, rows: rows) }
+  func scrollShell(_ lines: Int) { driver?.scrollShell(lines) }
+  func shellKey(_ id: String, _ key: Key) { driver?.shellKey(id, key) }
+  func shellText(_ id: String, _ text: String) { driver?.shellText(id, text) }
+  func shellPaste(_ id: String, _ text: String) { driver?.shellPaste(id, text) }
+  func killShell(_ id: String) { driver?.killShell(id) }
+  func closeShell(_ id: String) { driver?.closeShell(id) }
   func reconnect() { driver?.reconnect() }
   func interrupt() { driver?.interrupt() }
   func setModel(_ model: String?) { driver?.setModel(model) }
@@ -78,6 +86,9 @@ final class CoreSessionModel {
     guard !trimmed.isEmpty else { return }
     driver?.send(trimmed)
   }
+
+  // A session left from its shell screen never saw its own disappear close it.
+  isolated deinit { driver?.close() }
 
   func close() {
     driver?.close()
