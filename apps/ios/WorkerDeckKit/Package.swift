@@ -1,5 +1,11 @@
 // swift-tools-version: 6.0
+import Foundation
 import PackageDescription
+
+// The Rust core joins once `scripts/build-core.sh` has built it into Native/ (gitignored), so an app-only checkout
+// still builds without cargo.
+let nativeCore = FileManager.default.fileExists(
+  atPath: Context.packageDirectory + "/Native/WdFFI.xcframework/Info.plist")
 
 let package = Package(
   name: "WorkerDeckKit",
@@ -21,3 +27,14 @@ let package = Package(
       resources: [.copy("Fixtures")]),
   ]
 )
+
+if nativeCore {
+  package.products.append(.library(name: "WorkerDeckCore", targets: ["WorkerDeckCore"]))
+  package.targets += [
+    .binaryTarget(name: "WorkerDeckCoreFFI", path: "Native/WdFFI.xcframework"),
+    .target(
+      name: "WorkerDeckCore", dependencies: ["WorkerDeckCoreFFI"], path: "Native/Bindings",
+      swiftSettings: [.swiftLanguageMode(.v5)]),
+    .testTarget(name: "WorkerDeckCoreTests", dependencies: ["WorkerDeckCore"]),
+  ]
+}

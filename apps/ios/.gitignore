@@ -16,3 +16,4 @@ DerivedData-*/
 # Local device/team for scripts/deploy.sh — machine-specific, never committed
 .deploy.env
 Widgets/Info.plist
+Native/
