@@ -5,20 +5,41 @@ import WorkerDeckKit
 
 struct CoreSessionView: View {
   @Environment(AppSettings.self) private var settings
+  @Environment(UnreadModel.self) private var unread
   @State private var model: CoreSessionModel
+  @State private var scroll = TranscriptScrollModel()
+  @State private var images = TerminalImageLoader()
   @State private var draft = ""
+  private let hostId: UUID
+  private let sessionId: String
+  private let client: WorkerClient?
+  private var fixtureRecap: CatchUpMark?
 
-  init(sessionId: String, client: WorkerClient) {
+  init(sessionId: String, hostId: UUID, client: WorkerClient) {
+    self.hostId = hostId
+    self.sessionId = sessionId
+    self.client = client
     _model = State(
       initialValue: CoreSessionModel(
         sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey))
+  }
+
+  // Frames replayed with no gateway behind them: `UIPREVIEW=core` and the UI tests.
+  init(fixture: [String], recap: CatchUpMark? = nil) {
+    fixtureRecap = recap
+    hostId = UUID()
+    sessionId = "fixture"
+    client = nil
+    _model = State(
+      initialValue: CoreSessionModel(
+        sessionId: "fixture", baseURL: "http://fixture.invalid", authKey: nil, fixture: fixture))
   }
 
   var body: some View {
     let ui = model.ui
     VStack(spacing: 0) {
       CoreStatusLine(ui: ui, reconnect: model.reconnect)
-      CoreTranscript(model: model, hideThinking: !settings.showThinking)
+      CoreTranscriptView(model: model, scroll: scroll, imageLoader: images, hideThinking: !settings.showThinking)
       if let prompt = ui.prompt {
         Divider()
         CorePromptCard(prompt: prompt, planLines: ui.planLines, model: model)
@@ -31,6 +52,16 @@ struct CoreSessionView: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) { pickers(ui) }
+    }
+    .onAppear {
+      if let client {
+        images.fetch = { [sessionId] seq, toolUseId, part in
+          try await client.toolResultImage(sessionId: sessionId, seq: seq, toolUseId: toolUseId, partIndex: part)
+        }
+      }
+      if let mark = fixtureRecap ?? (settings.catchUpMode ? unread.since(host: hostId, sessionId: sessionId) : nil) {
+        model.setRecap(mark)
+      }
     }
     .onDisappear { model.close() }
   }
@@ -48,6 +79,7 @@ struct CoreSessionView: View {
       Button("Send", systemImage: "arrow.up") {
         model.send(draft)
         draft = ""
+        scroll.scrollToBottom()
       }
       .labelStyle(.iconOnly)
       .buttonStyle(.borderedProminent)
@@ -150,67 +182,6 @@ private struct CoreStatusLine: View {
     case .connecting, .reconnecting: .yellow
     case .offline, .unreachable: .red
     }
-  }
-}
-
-private struct CoreTranscript: View {
-  let model: CoreSessionModel
-  let hideThinking: Bool
-  private static let tones = toneNames().map { TermTone(rawValue: $0) ?? .fg }
-  private let type = TerminalTypography.session
-
-  var body: some View {
-    let ui = model.ui
-    GeometryReader { geometry in
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 0) {
-          ForEach(Array(ui.rows.enumerated()), id: \.element.key) { index, row in
-            rowView(index, row, ui.linesAt(index))
-              .onAppear { model.rowShown(index, true) }
-              .onDisappear { model.rowShown(index, false) }
-          }
-        }
-        .padding(.horizontal, Self.inset)
-      }
-      .defaultScrollAnchor(.bottom)
-      .onAppear { model.layout(width: geometry.size.width - Self.inset * 2, hideThinking: hideThinking) }
-      .onChange(of: geometry.size.width) { _, width in
-        model.layout(width: width - Self.inset * 2, hideThinking: hideThinking)
-      }
-    }
-  }
-
-  private static let inset: CGFloat = 8
-
-  private func rowView(_ index: Int, _ row: LayoutRow, _ lines: [TranscriptLine]?) -> some View {
-    VStack(alignment: .leading, spacing: 0) {
-      ForEach(Array((lines ?? []).enumerated()), id: \.offset) { offset, line in
-        lineView(line)
-          .contentShape(Rectangle())
-          .onTapGesture { if line.pressable { model.press(row: index, line: offset) } }
-      }
-    }
-    .frame(maxWidth: .infinity, minHeight: CGFloat(row.height), maxHeight: CGFloat(row.height), alignment: .topLeading)
-    .clipped()
-  }
-
-  private func lineView(_ line: TranscriptLine) -> some View {
-    HStack(spacing: 0) {
-      Text(line.gutter).foregroundStyle(color(line.gutterTone))
-      Text(line.text)
-        .foregroundStyle(color(line.tone))
-        .bold(line.bold)
-        .italic(line.italic)
-    }
-    .font(type.font)
-    .lineLimit(1)
-    .padding(.leading, CGFloat(line.indent) * type.cell)
-    .frame(height: type.line, alignment: .leading)
-  }
-
-  private func color(_ tone: UInt8) -> Color {
-    let tones = Self.tones
-    return TerminalPalette.color(Int(tone) < tones.count ? tones[Int(tone)] : .fg)
   }
 }
 

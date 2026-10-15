@@ -1,6 +1,7 @@
 #if WD_NATIVE_CORE
 import Foundation
 import Observation
+import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
 
 @MainActor
@@ -10,43 +11,51 @@ final class CoreSessionModel {
   private(set) var ui = CoreSessionUi()
   private let baseURL: String
   private let authKey: String?
+  private let fixture: [String]?
   private var driver: CoreSessionDriver?
-  private var width: Double = 0
-  private var shown: Set<Int> = []
-  private var visibleQueued = false
+  private(set) var metrics: TerminalMetrics?
+  private var recap: CatchUpMark?
+  private var pinRequested: String?
 
-  init(sessionId: String, baseURL: String, authKey: String?) {
+  init(sessionId: String, baseURL: String, authKey: String?, fixture: [String]? = nil) {
+    self.fixture = fixture
     self.sessionId = sessionId
     self.baseURL = baseURL
     self.authKey = authKey
   }
 
   // The first width starts the session: the core plans rows for a width, so it cannot attach before it has one.
-  func layout(width: Double, hideThinking: Bool) {
-    guard width > 0, width != self.width else { return }
-    self.width = width
-    let metrics = Self.metrics(width: width)
+  func layout(metrics: TerminalMetrics, hideThinking: Bool) {
+    guard metrics.width > 0, metrics != self.metrics else { return }
+    self.metrics = metrics
+    let core = Metrics(
+      cell: Double(metrics.cell), line: Double(metrics.line), width: Double(metrics.width),
+      fontSize: Double(metrics.fontSize))
     if let driver {
-      driver.resize(metrics)
+      driver.resize(core)
       return
     }
-    driver = CoreSessionDriver(
-      sessionId: sessionId, baseURL: baseURL, authKey: authKey, metrics: metrics, hideThinking: hideThinking
+    let driver = CoreSessionDriver(
+      sessionId: sessionId, baseURL: baseURL, authKey: authKey, metrics: core, hideThinking: hideThinking,
+      fixture: fixture
     ) { [weak self] ui in
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }
     }
+    if let recap { driver.setRecap(boundary: recap.itemCount, since: recap.seenAt) }
+    self.driver = driver
   }
 
-  func rowShown(_ row: Int, _ on: Bool) {
-    if on { shown.insert(row) } else { shown.remove(row) }
-    guard !visibleQueued else { return }
-    visibleQueued = true
-    DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      visibleQueued = false
-      guard let first = shown.min(), let last = shown.max() else { return }
-      driver?.visible(first: first, last: last)
-    }
+  func setRecap(_ mark: CatchUpMark) {
+    recap = mark
+    driver?.setRecap(boundary: mark.itemCount, since: mark.seenAt)
+  }
+
+  func visible(first: Int, last: Int) { driver?.visible(first: first, last: last) }
+
+  func pinLine(row: Int, key: String) {
+    guard pinRequested != key else { return }
+    pinRequested = key
+    driver?.pinLine(row: row)
   }
 
   func press(row: Int, line: Int) { driver?.press(row: row, line: line) }
@@ -73,13 +82,8 @@ final class CoreSessionModel {
   func close() {
     driver?.close()
     driver = nil
-    width = 0
-  }
-
-  static func metrics(width: Double) -> Metrics {
-    let type = TerminalTypography.session
-    return Metrics(
-      cell: Double(type.cell), line: Double(type.line), width: floor(width), fontSize: Double(type.fontSize))
+    metrics = nil
+    pinRequested = nil
   }
 }
 #endif

@@ -54,6 +54,14 @@ public enum StickyPrompt {
     promptRows: [Int], rows: TerminalRows, book: TerminalHeightBook, top: CGFloat, line: CGFloat,
     stripHeight: CGFloat? = nil
   ) -> Pin? {
+    resolve(
+      promptRows: promptRows, contentTop: { book.offset(at: $0) + (rows.gapBefore($0) ? line : 0) }, top: top,
+      line: line, stripHeight: stripHeight)
+  }
+
+  public static func resolve(
+    promptRows: [Int], contentTop: (Int) -> CGFloat, top: CGFloat, line: CGFloat, stripHeight: CGFloat? = nil
+  ) -> Pin? {
     let strip = stripHeight ?? line
     // **Content offsets throughout, never frame offsets.** The blank line above
     // a row belongs to the row (see `TerminalHeightBook`), so a prompt's frame
@@ -62,9 +70,6 @@ public enum StickyPrompt {
     // early - which showed up as the new prompt's row being "found" while its
     // own blank line was still at the top edge, and the pin vanishing for a
     // line rather than being lifted out.
-    let contentTop = { (row: Int) in
-      book.offset(at: row) + (rows.gapBefore(row) ? line : 0)
-    }
     guard let index = lastPrompt(promptRows, atOrAbove: top, contentTop: contentTop)
     else { return nil }
     // Nothing to hold while the line is on screen in its own right: the pinned

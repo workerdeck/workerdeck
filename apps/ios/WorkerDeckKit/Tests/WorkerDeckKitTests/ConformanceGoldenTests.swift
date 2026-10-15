@@ -124,6 +124,7 @@ struct ConformanceGoldenTests {
     case .openSubagent(let id): return "openSubagent:\(id)"
     case .killShell(let id): return "killShell:\(id)"
     case .openShell(let id): return "openShell:\(id)"
+    case .line(let index): return "line:\(index)"
     }
   }
 

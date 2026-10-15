@@ -41,6 +41,7 @@ enum UIPreview: String {
   case sessions
   case shell
   case teams
+  case core
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
@@ -1161,6 +1162,21 @@ struct UIPreviewHarness: View {
 
     case .teams:
       TeamsPreview()
+
+    case .core:
+      #if WD_NATIVE_CORE
+        NavigationStack {
+          CoreSessionView(
+            fixture: CoreReplayFixture.frames,
+            recap: ProcessInfo.processInfo.environment["UIPREVIEW_RECAP"].flatMap(Int.init).map {
+              CatchUpMark(itemCount: $0, seenAt: Date().timeIntervalSince1970 * 1000 - 42 * 60 * 1000)
+            })
+        }
+        .environment(AppSettings())
+        .environment(UnreadModel())
+      #else
+        Text("Built without the Rust core")
+      #endif
 
     case .shell:
       // The shell drill-in's grid, which is otherwise only reachable with a

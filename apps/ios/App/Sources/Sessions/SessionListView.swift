@@ -129,7 +129,7 @@ struct SessionListView: View {
     case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell):
       #if WD_NATIVE_CORE
       if settings.nativeCorePreview, let context = model?.context(for: hostId) {
-        CoreSessionView(sessionId: sessionId, client: context.client)
+        CoreSessionView(sessionId: sessionId, hostId: hostId, client: context.client)
       } else {
         sessionScreen(hostId, sessionId, seq, epoch, subagent, reveal, shell)
       }

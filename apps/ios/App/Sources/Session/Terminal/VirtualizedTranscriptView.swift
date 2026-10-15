@@ -165,6 +165,37 @@ struct TerminalRowMenu {
   var background: (() -> Void)? = nil
 }
 
+// MARK: - Content
+
+// One epoch of what the view draws: keys for the diff, a book for the frames, and which rows must redraw.
+protocol TranscriptContent {
+  associatedtype Book: TranscriptRowBook
+  var count: Int { get }
+  var book: Book { get }
+  func key(at index: Int) -> String
+  func sameEpoch(as other: Self) -> Bool
+  func redraws(_ index: Int, from old: Self) -> Bool
+}
+
+// The Swift planner's epoch: rows, the book built from them, the metrics and expansion that book was measured at.
+struct TerminalTranscriptContent: TranscriptContent {
+  var rows: TerminalRows
+  var book: TerminalHeightBook
+  var metrics: TerminalMetrics
+  var expansion: TerminalExpansion
+
+  var count: Int { rows.count }
+  func key(at index: Int) -> String { rows[index].key }
+
+  func sameEpoch(as other: Self) -> Bool {
+    rows == other.rows && metrics == other.metrics && expansion == other.expansion
+  }
+
+  func redraws(_ index: Int, from old: Self) -> Bool {
+    metrics != old.metrics || expansion != old.expansion || rows.rows[index] != old.rows.rows[index]
+  }
+}
+
 // MARK: - Representable
 
 /// The virtualized terminal transcript: a `UICollectionView` under
@@ -179,8 +210,8 @@ struct TerminalRowMenu {
 /// one renderer on this surface and genericity was buying nothing.
 ///
 /// Contract with the parent, stated because the types cannot express it:
-/// - `rows`, `book` and `metrics` are one epoch: the book was built from
-///   exactly these rows at exactly these metrics. The layout draws frames from
+/// - `content` is one epoch: its book was built from exactly its rows at
+///   exactly its metrics. The layout draws frames from
 ///   the book and the rows draw their pre-wrapped lines from the same metrics,
 ///   which is the whole reason no self-sizing exists here.
 /// - Rows are the single source of what a cell draws. The builder runs only
@@ -190,14 +221,8 @@ struct TerminalRowMenu {
 ///   height the book doesn't know about is a frame the layout gets wrong.
 /// - A cell's frame includes the blank-line gap above its row (`gapBefore`);
 ///   the row view pads itself by one line when the fold says so.
-struct VirtualizedTranscriptView: UIViewRepresentable {
-  var rows: TerminalRows
-  var book: TerminalHeightBook
-  var metrics: TerminalMetrics
-  /// Which blocks are open. Part of the epoch, not a rendering detail: it
-  /// changes what the book says every row is worth, and `rows` do not move when
-  /// it changes, so nothing else here would notice.
-  var expansion: TerminalExpansion
+struct VirtualizedTranscriptView<Content: TranscriptContent>: UIViewRepresentable {
+  var content: Content
   var scroll: TranscriptScrollModel
   var reveal: TranscriptRevealRequest?
   /// Where a deep link wants the reader put - see ``TranscriptFocusRequest``.
@@ -219,6 +244,8 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   /// prompt's case by construction, since that copy of a row rides outside any
   /// collection view - presents nothing.
   var menuForRow: ((Int) -> TerminalRowMenu?)? = nil
+  // The first and last row under the viewport, whenever either moves.
+  var onVisibleRows: ((Int, Int) -> Void)? = nil
 
   func makeCoordinator() -> Coordinator {
     Coordinator(configureRow: configureRow)
@@ -261,6 +288,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     let coordinator = context.coordinator
     coordinator.configureRow = configureRow
     coordinator.menuForRow = menuForRow
+    coordinator.onVisibleRows = onVisibleRows
     coordinator.attach(model: scroll)
     if uiView.showsVerticalScrollIndicator != showsScrollIndicator {
       uiView.showsVerticalScrollIndicator = showsScrollIndicator
@@ -269,7 +297,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       uiView.contentInset = UIEdgeInsets(
         top: verticalPadding, left: 0, bottom: verticalPadding, right: 0)
     }
-    coordinator.apply(rows: rows, book: book, metrics: metrics, expansion: expansion)
+    coordinator.apply(content)
     // After the epoch has landed, so the offsets it reads are the new ones.
     coordinator.reveal(reveal)
     // And after the reveal, which is the weaker claim on the offset: if both
@@ -310,14 +338,15 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
   {
     var configureRow: (TerminalRowCell, Int) -> Void
     var menuForRow: ((Int) -> TerminalRowMenu?)?
+    var onVisibleRows: ((Int, Int) -> Void)?
     weak var collectionView: TranscriptCollectionView?
     weak var layout: TranscriptLayout?
     private(set) var model: TranscriptScrollModel?
 
-    private(set) var rows = TerminalRows(rows: [])
-    private var book: TerminalHeightBook?
-    private var metrics: TerminalMetrics?
-    private var expansion = TerminalExpansion()
+    private(set) var content: Content?
+    private var count: Int { content?.count ?? 0 }
+    private var book: Content.Book? { content?.book }
+    private var shownRows: (Int, Int)?
     private var revealedNonce: Int?
     private var focusedNonce: Int?
     /// Cached keys of `rows` - the diff runs per applied epoch and rebuilding
@@ -348,45 +377,26 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
 
     // MARK: Epochs
 
-    func apply(rows newRows: TerminalRows, book newBook: TerminalHeightBook,
-      metrics newMetrics: TerminalMetrics, expansion newExpansion: TerminalExpansion)
-    {
-      let rowsChanged = newRows != rows
-      let metricsChanged = newMetrics != metrics
-      // Expansion changes no row and no key - only what each is worth - so
-      // without this the guard below would swallow it and the layout would keep
-      // drawing the collapsed frames.
-      let expansionChanged = newExpansion != expansion
-      // Equal (rows, metrics) derive an identical book - the calculator is
-      // deterministic, which is the premise of this whole surface - so there
-      // is nothing to do. This guard is what makes it safe for SwiftUI to call
-      // `updateUIView` as often as it likes.
-      guard rowsChanged || metricsChanged || expansionChanged else { return }
+    func apply(_ newContent: Content) {
+      if let content, newContent.sameEpoch(as: content) { return }
 
       guard let cv = collectionView, let layout else {
-        self.rows = newRows
-        self.book = newBook
-        self.metrics = newMetrics
-        self.expansion = newExpansion
-        self.keys = newRows.rows.map(\.key)
+        content = newContent
+        keys = (0..<newContent.count).map(newContent.key(at:))
         return
       }
 
-      let old = rows
-      let oldBook = book
+      let old = content
       let oldKeys = keys
       let wasPinned = pinned
       // The anchor is captured before anything moves, and only when escaped -
       // pinned needs no anchor, the bottom is the anchor.
-      let anchor = wasPinned ? nil : captureAnchor(cv, old: old, oldBook: oldBook)
+      let anchor = wasPinned ? nil : old.flatMap { captureAnchor(cv, old: $0) }
 
-      rows = newRows
-      book = newBook
-      metrics = newMetrics
-      expansion = newExpansion
-      let newKeys = newRows.rows.map(\.key)
+      content = newContent
+      let newKeys = (0..<newContent.count).map(newContent.key(at:))
       keys = newKeys
-      layout.setBook(newBook, rowCount: newRows.count)
+      layout.setBook(newContent.book, rowCount: newContent.count)
 
       UIView.performWithoutAnimation {
         if cv.window == nil {
@@ -397,14 +407,14 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
           // The streaming shape: same rows, one of them grew (a delta landed,
           // a call settled into its run). Reconfigure keeps the same cell and
           // hosting view, so SwiftUI diffs in place.
-          reconfigureVisible(cv, old: old, force: metricsChanged || expansionChanged)
+          reconfigureVisible(cv, old: old)
         } else if newKeys.count > oldKeys.count, newKeys.starts(with: oldKeys) {
           // The append shape. The old tail commonly changed in the same event
           // (a run's key is its *first* call, so a growing run appends
           // nothing), hence the reconfigure ride-along.
           let inserted = (oldKeys.count..<newKeys.count).map { IndexPath(item: $0, section: 0) }
           cv.performBatchUpdates { cv.insertItems(at: inserted) }
-          reconfigureVisible(cv, old: old, force: metricsChanged || expansionChanged)
+          reconfigureVisible(cv, old: old)
         } else {
           // Anything structural - a refold, the recap splice, a truncation.
           // Deliberately not a keyed batch-diff: UICollectionView move/delete
@@ -432,14 +442,14 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       publishReadings(cv)
     }
 
-    private func reconfigureVisible(_ cv: UICollectionView, old: TerminalRows, force: Bool) {
+    private func reconfigureVisible(_ cv: UICollectionView, old: Content?) {
       // Positional compare is sound here because both callers guarantee the
-      // shared prefix is key-aligned. `force` is the metrics case: an
-      // unchanged row still re-wraps when the cell or width changed.
+      // shared prefix is key-aligned.
+      guard let content, let old else { return }
       let paths = cv.indexPathsForVisibleItems.filter { path in
-        guard path.item < rows.count else { return false }
+        guard path.item < content.count else { return false }
         guard path.item < old.count else { return false }  // freshly inserted: configured on mount
-        return force || old.rows[path.item] != rows.rows[path.item]
+        return content.redraws(path.item, from: old)
       }
       guard !paths.isEmpty else { return }
       cv.reconfigureItems(at: paths)
@@ -453,10 +463,9 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       var nearIndex: Int
     }
 
-    private func captureAnchor(_ cv: UICollectionView, old: TerminalRows,
-      oldBook: TerminalHeightBook?) -> Anchor?
-    {
-      guard let oldBook, old.count > 0 else { return nil }
+    private func captureAnchor(_ cv: UICollectionView, old: Content) -> Anchor? {
+      let oldBook = old.book
+      guard old.count > 0 else { return nil }
       let foldY = cv.contentOffset.y + cv.adjustedContentInset.top
       var row = min(max(oldBook.rowIndex(atOffset: foldY), 0), old.count - 1)
       // Settle onto the row actually containing the fold - the book's rounding
@@ -464,7 +473,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
       while row > 0, oldBook.offset(at: row) > foldY { row -= 1 }
       while row + 1 < old.count, oldBook.offset(at: row + 1) <= foldY { row += 1 }
       return Anchor(
-        key: old.rows[row].key,
+        key: old.key(at: row),
         within: max(0, foldY - oldBook.offset(at: row)),
         nearIndex: row)
     }
@@ -483,14 +492,14 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     /// two), so this is O(shift), not O(rows) - and never a per-epoch
     /// dictionary of five thousand strings.
     private func rowIndex(forKey key: String, near start: Int) -> Int? {
-      let count = rows.count
+      let count = keys.count
       guard count > 0 else { return nil }
       let base = min(max(start, 0), count - 1)
-      if rows[base].key == key { return base }
+      if keys[base] == key { return base }
       var distance = 1
       while base - distance >= 0 || base + distance < count {
-        if base - distance >= 0, rows[base - distance].key == key { return base - distance }
-        if base + distance < count, rows[base + distance].key == key { return base + distance }
+        if base - distance >= 0, keys[base - distance] == key { return base - distance }
+        if base + distance < count, keys[base + distance] == key { return base + distance }
         distance += 1
       }
       return nil
@@ -508,7 +517,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     func reveal(_ request: TranscriptRevealRequest?) {
       guard let request, request.nonce != revealedNonce else { return }
       revealedNonce = request.nonce
-      guard let cv = collectionView, let book, request.row >= 0, request.row < rows.count else {
+      guard let cv = collectionView, let book, request.row >= 0, request.row < count else {
         return
       }
       let foldY = cv.contentOffset.y + cv.adjustedContentInset.top
@@ -523,7 +532,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     // whole transcript rush past on the way to a row the reader has not seen yet.
     func focus(_ request: TranscriptFocusRequest?) {
       guard let request, request.nonce != focusedNonce else { return }
-      guard collectionView != nil, request.row >= 0, request.row < rows.count else { return }
+      guard collectionView != nil, request.row >= 0, request.row < count else { return }
       // Only marked consumed once it can actually be served: this arrives with
       // the very first epoch, and a request dropped because the collection view
       // was not mounted yet would never be offered again.
@@ -619,6 +628,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
         viewportHeight: scrollView.bounds.height - inset.top - inset.bottom,
         contentHeight: contentHeight(scrollView),
         pinned: pinned)
+      reportVisibleRows(scrollView)
       guard !publishScheduled else { return }
       publishScheduled = true
       Task { @MainActor [weak self] in
@@ -626,6 +636,18 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
         self.publishScheduled = false
         self.model?.publish(self.latest)
       }
+    }
+
+    private func reportVisibleRows(_ scrollView: UIScrollView) {
+      guard let onVisibleRows, let book, count > 0 else { return }
+      let inset = scrollView.adjustedContentInset
+      let top = scrollView.contentOffset.y + inset.top
+      let bottom = top + max(0, scrollView.bounds.height - inset.top - inset.bottom)
+      let first = min(max(book.rowIndex(atOffset: top), 0), count - 1)
+      let last = min(max(book.rowIndex(atOffset: max(top, bottom - 1)), first), count - 1)
+      guard shownRows.map({ $0 != (first, last) }) ?? true else { return }
+      shownRows = (first, last)
+      onVisibleRows(first, last)
     }
 
     // MARK: Commands (TranscriptScrollDriver)
@@ -652,7 +674,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
     }
 
     private func jump(to index: Int, anchor: TranscriptRowAnchor, animated: Bool, complete: Bool) {
-      guard let cv = collectionView, let book, index >= 0, index < rows.count else { return }
+      guard let cv = collectionView, let book, index >= 0, index < count else { return }
       let geometry = geometry(cv)
       let visible = cv.bounds.height - geometry.insetTop - geometry.insetBottom
       let top = book.offset(at: index)
@@ -678,7 +700,7 @@ struct VirtualizedTranscriptView: UIViewRepresentable {
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int)
       -> Int
-    { rows.count }
+    { count }
 
     func collectionView(_ collectionView: UICollectionView,
       cellForItemAt indexPath: IndexPath) -> UICollectionViewCell

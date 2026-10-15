@@ -9,8 +9,14 @@ struct CoreSessionUi: @unchecked Sendable {
   var error: String?
   var progress: ReplayProgress?
   var rows: [LayoutRow] = []
+  var book = CoreHeightBook([])
+  var promptRows: [Int] = []
+  var recapRow: Int?
+  var reveal: TranscriptRevealRequest?
   var startRow = 0
   var lines: [[TranscriptLine]] = []
+  var linesRevision = 0
+  var pinned: CorePinnedLine?
   var chrome: SessionChrome?
   var modelPicker: ModelPicker?
   var modePicker: ModePicker?
@@ -24,6 +30,11 @@ struct CoreSessionUi: @unchecked Sendable {
   }
 }
 
+struct CorePinnedLine {
+  let key: String
+  let line: TranscriptLine
+}
+
 // Android's SessionModel minus the UI state: everything that touches the Session, the socket and `ui` runs on the
 // worker's queue, and every change leaves through `publish` as one value.
 final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
@@ -34,6 +45,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private let apiBase: String
   private let authKey: String?
   private let publish: @Sendable (CoreSessionUi) -> Void
+  private let fixture: [String]?
   private let session: Session
   private var worker: SessionWorker!
   private var urlSession: URLSession!
@@ -49,8 +61,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   init(
     sessionId: String, baseURL: String, authKey: String?, metrics: Metrics, hideThinking: Bool,
-    publish: @escaping @Sendable (CoreSessionUi) -> Void
+    fixture: [String]? = nil, publish: @escaping @Sendable (CoreSessionUi) -> Void
   ) {
+    self.fixture = fixture
     self.sessionId = sessionId
     self.baseURL = baseURL
     self.apiBase = WorkerDeckSession.apiBase(baseUrl: baseURL)
@@ -86,6 +99,23 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 
   func dismiss(_ requestId: String) { worker.act { $0.dismissQuestion(requestId: requestId) } }
+
+  func setRecap(boundary: Int, since: Double) {
+    worker.act { $0.setRecap(boundary: UInt32(max(0, boundary)), sinceMs: since) }
+  }
+
+  // A row's first line for the sticky prompt, read on its own when the row sits outside the held window.
+  func pinLine(row: Int) {
+    worker.act { [self] session in
+      guard ui.rows.indices.contains(row),
+        let line = (try? Snapshots.transcriptLines(session.transcriptLines(start: UInt32(row), end: UInt32(row + 1))))?
+          .rows.first?.first
+      else { return [] }
+      ui.pinned = CorePinnedLine(key: ui.rows[row].key, line: line)
+      publish(ui)
+      return []
+    }
+  }
 
   func visible(first: Int, last: Int) {
     worker.act { [self] session in
@@ -135,6 +165,11 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 
   private func open(_ afterSeq: Int64) {
+    if let fixture {
+      worker.opened()
+      fixture.forEach(worker.received)
+      return
+    }
     let mine = bump()
     socket?.cancel(with: .goingAway, reason: nil)
     let address = WorkerDeckSession.socketUrl(baseUrl: baseURL, sessionId: sessionId, afterSeq: afterSeq)
@@ -196,6 +231,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 
   private func sendFrame(_ id: UInt64, _ text: String) {
+    guard fixture == nil else {
+      worker.act { $0.sendDone(id: id, ok: true) }
+      return
+    }
     guard let socket else {
       worker.act { $0.sendDone(id: id, ok: false) }
       return
@@ -206,6 +245,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 
   private func request(_ id: UInt64, _ method: String, _ path: String, _ scoped: Bool) {
+    guard fixture == nil else {
+      worker.act { $0.responded(id: id, status: 404, body: "") }
+      return
+    }
     let encoded = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(["/"])) ?? sessionId
     let address = scoped ? "\(apiBase)/sessions/\(encoded)\(path)" : apiBase + path
     guard let url = URL(string: address) else {
@@ -231,7 +274,14 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   // Each part is re-read only when the core says it moved: a replay's progress ticks never touch the layout.
   private func changed(_ changed: Changed) {
     if changed.transcript {
-      ui.rows = (try? Snapshots.transcriptLayout(session.transcriptLayout()).rows) ?? []
+      let layout = try? Snapshots.transcriptLayout(session.transcriptLayout())
+      ui.rows = layout?.rows ?? []
+      ui.book = CoreHeightBook(ui.rows)
+      ui.promptRows = ui.rows.indices.filter { ui.rows[$0].prompt }
+      ui.recapRow = ui.rows.firstIndex(where: \.recap)
+      ui.reveal = layout?.revealRow.map {
+        TranscriptRevealRequest(row: $0, nonce: Int(truncatingIfNeeded: layout?.revealNonce ?? 0))
+      }
       showLines(session.viewportLines())
     }
     if changed.chrome {
@@ -259,6 +309,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     guard let lines = try? Snapshots.transcriptLines(bytes) else { return }
     ui.startRow = lines.startRow
     ui.lines = lines.rows
+    ui.linesRevision &+= 1
   }
 }
 #endif

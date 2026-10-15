@@ -129,7 +129,8 @@ struct TerminalTranscriptView: View {
       Group {
         if let model, proxy.size.width > 0 {
           VirtualizedTranscriptView(
-            rows: model.rows, book: model.book, metrics: metrics, expansion: model.expansion,
+            content: TerminalTranscriptContent(
+              rows: model.rows, book: model.book, metrics: metrics, expansion: model.expansion),
             scroll: scroll, reveal: model.reveal,
             // Converted here and nowhere else - an item index is not a row
             // index, and `rowIndex(forItem:)` is the only thing that knows the

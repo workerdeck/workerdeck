@@ -21,14 +21,24 @@ import WorkerDeckKit
 /// range is found by binary search. That is what makes replacing the book -
 /// which happens on every folded delta while a turn streams - an
 /// `invalidateLayout()` and nothing else.
+// Frames for the virtualized transcript: the Swift planner's `TerminalHeightBook`, or the Rust core's layout heights.
+protocol TranscriptRowBook {
+  var totalHeight: CGFloat { get }
+  func height(at index: Int) -> CGFloat
+  func offset(at index: Int) -> CGFloat
+  func rowIndex(atOffset offset: CGFloat) -> Int
+}
+
+extension TerminalHeightBook: TranscriptRowBook {}
+
 final class TranscriptLayout: UICollectionViewLayout {
-  private(set) var book: TerminalHeightBook?
+  private(set) var book: (any TranscriptRowBook)?
   private(set) var rowCount = 0
   private var width: CGFloat = 0
 
   /// Swap in a new epoch's frames. Cheap by design - see the type comment.
   /// `rowCount` rides along because the book answers offsets, not membership.
-  func setBook(_ book: TerminalHeightBook?, rowCount: Int) {
+  func setBook(_ book: (any TranscriptRowBook)?, rowCount: Int) {
     self.book = book
     self.rowCount = rowCount
     invalidateLayout()
