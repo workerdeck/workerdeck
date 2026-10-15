@@ -29,12 +29,14 @@ let package = Package(
 )
 
 if nativeCore {
-  package.products.append(.library(name: "WorkerDeckCore", targets: ["WorkerDeckCore"]))
+  package.products.append(.library(name: "WorkerDeckSession", targets: ["WorkerDeckSession"]))
   package.targets += [
     .binaryTarget(name: "WorkerDeckCoreFFI", path: "Native/WdFFI.xcframework"),
     .target(
       name: "WorkerDeckCore", dependencies: ["WorkerDeckCoreFFI"], path: "Native/Bindings",
       swiftSettings: [.swiftLanguageMode(.v5)]),
+    .target(name: "WorkerDeckSession", dependencies: ["WorkerDeckCore"]),
     .testTarget(name: "WorkerDeckCoreTests", dependencies: ["WorkerDeckCore"]),
+    .testTarget(name: "WorkerDeckSessionTests", dependencies: ["WorkerDeckSession"]),
   ]
 }
