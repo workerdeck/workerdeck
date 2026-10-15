@@ -1273,6 +1273,13 @@ CoreDevice errors. For a screen that needs a live session to render at all, the 
 harness renders it from canned data in the simulator. Both are documented in
 `apps/ios/README.md`.
 
+**The Rust core preview is tested on the plugged-in phone** (`refactor/rust`, `WD_NATIVE_CORE`):
+`UIPREVIEW=core` plays `CoreReplayFixture` (60 turns plus one running shell answered in-process)
+through `CoreSessionView` with no gateway, and `WorkerDeckAppUITests/CoreTranscriptUITests` drives
+it with `xcodebuild test -destination 'id=<hardware UDID>'` (phone unlocked, UI Automation on;
+`xcrun xcresulttool export attachments` pulls the screenshots). Extend the fixture and the test
+with each slice.
+
 Dependency direction: `protocol ← core ← queue ← server ← cli`, `protocol ← client ← react ← ui ← web`,
 `sandbox` a leaf either side may use. The browser side (client/react/ui/apps) must never import
 core/server, the Agent SDK, or any model SDK; `client` must never devDep on `react` - that edge is
