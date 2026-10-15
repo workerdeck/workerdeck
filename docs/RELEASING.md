@@ -1586,6 +1586,16 @@ The wrapup checklist and the release ledger. Dispatched from `AGENTS.md`.
   versions). If a 3.12.1 package hangs the same way, the hold is content-triggered: open an npm
   support ticket rather than bumping again.
 
+  **3.13.0** - **Team Auto and agent retirement, released 2026-10-15** (tag `v3.13.0`). A
+  **minor**, protocol stays **1**. The Auto team view (`ui` + iOS session list) shows busy,
+  selected, unread and lingering Members, with a `MemberCard` hover card on tray avatars, a
+  countdown hairline under a lingering Member, `TEAM_LINGER_MS` 30 s to 5 s, and a peeked Member
+  folding back at once (TS only). Fixes: `client` splits shell input into gateway-sized frames,
+  and deleting an agent's session retires the agent. Cut from master to deploy the mini's deck and
+  onboard a second VS Code user; `refactor/rust` is not in it. **Verified**: `pnpm lint`,
+  `pnpm typecheck`, full `pnpm test`, gatekeeper; Team Auto seen in web and Storybook only, not
+  yet in VS Code.
+
 - **post-publish: a missing package is staged, not lost. Wait, do not re-run.** npm holds a
   just-published version for minutes before it enters the packument, so a 404 or an `ETARGET`
   install failure against a green publish log is the expected reading, not a broken release. Read
