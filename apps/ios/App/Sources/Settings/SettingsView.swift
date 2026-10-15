@@ -54,6 +54,16 @@ struct SettingsView: View {
         )
       }
 
+      #if WD_NATIVE_CORE
+      Section {
+        Toggle("Rust core preview", isOn: $settings.nativeCorePreview)
+      } header: {
+        Text("Developer")
+      } footer: {
+        Text("Opens sessions on the Rust core's preview screen: plain transcript, prompts, pickers and composer.")
+      }
+      #endif
+
       Section {
         Toggle("Notifications", isOn: $settings.pushEnabled)
         // Nested under the master switch rather than hidden by it: seeing which events are off is

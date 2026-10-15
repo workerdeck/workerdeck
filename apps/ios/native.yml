@@ -1,0 +1,9 @@
+# Merged by project.yml only when WD_NATIVE_CORE is set (scripts/deploy.sh sets it once build-core.sh has run).
+targets:
+  WorkerDeckApp:
+    dependencies:
+      - package: WorkerDeckKit
+        product: WorkerDeckSession
+    settings:
+      base:
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WD_NATIVE_CORE

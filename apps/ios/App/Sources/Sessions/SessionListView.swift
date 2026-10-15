@@ -11,6 +11,7 @@ struct SessionListView: View {
   @Environment(HostStore.self) private var hosts
   @Environment(PushCoordinator.self) private var push
   @Environment(UnreadModel.self) private var unread
+  @Environment(AppSettings.self) private var settings
   @Environment(\.scenePhase) private var scenePhase
 
   @State private var model: SessionListModel?
@@ -126,31 +127,52 @@ struct SessionListView: View {
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
     case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell):
-      if let context = model?.context(for: hostId) {
-        SessionView(
-          sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
-          focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal, openShell: shell)
-        .environment(model?.agentAvatars ?? AgentAvatarLoader())
+      #if WD_NATIVE_CORE
+      if settings.nativeCorePreview, let context = model?.context(for: hostId) {
+        CoreSessionView(sessionId: sessionId, client: context.client)
       } else {
-        missingHost
+        sessionScreen(hostId, sessionId, seq, epoch, subagent, reveal, shell)
       }
+      #else
+      sessionScreen(hostId, sessionId, seq, epoch, subagent, reveal, shell)
+      #endif
     case .create(let hostId, let seed):
-      if let context = model?.context(for: hostId) {
-        CreateSessionView(
-          seed: seed, client: context.client,
-          onAgentCreated: { response in
-            if let cwd = response.agent.config.cwd { context.rememberCwd(cwd) }
-            path = response.session.map { [.session(hostId: hostId, sessionId: $0.id)] } ?? []
-          }
-        ) { info in
-          context.rememberCwd(info.cwd)
-          // Replace the create step so Back from the session lands on the list.
-          path = [.session(hostId: hostId, sessionId: info.id)]
+      createScreen(hostId, seed)
+    }
+  }
+
+  @ViewBuilder
+  private func sessionScreen(
+    _ hostId: UUID, _ sessionId: String, _ seq: Int?, _ epoch: Int?, _ subagent: String?, _ reveal: String?,
+    _ shell: String?
+  ) -> some View {
+    if let context = model?.context(for: hostId) {
+      SessionView(
+        sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
+        focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal, openShell: shell)
+      .environment(model?.agentAvatars ?? AgentAvatarLoader())
+    } else {
+      missingHost
+    }
+  }
+
+  @ViewBuilder
+  private func createScreen(_ hostId: UUID, _ seed: CreateSessionSeed) -> some View {
+    if let context = model?.context(for: hostId) {
+      CreateSessionView(
+        seed: seed, client: context.client,
+        onAgentCreated: { response in
+          if let cwd = response.agent.config.cwd { context.rememberCwd(cwd) }
+          path = response.session.map { [.session(hostId: hostId, sessionId: $0.id)] } ?? []
         }
-        .environment(context)
-      } else {
-        missingHost
+      ) { info in
+        context.rememberCwd(info.cwd)
+        // Replace the create step so Back from the session lands on the list.
+        path = [.session(hostId: hostId, sessionId: info.id)]
       }
+      .environment(context)
+    } else {
+      missingHost
     }
   }
 

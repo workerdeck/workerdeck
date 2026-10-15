@@ -171,12 +171,17 @@ final class AppSettings {
     didSet { defaults.set(showThinking, forKey: Self.thinkingKey) }
   }
 
+  var nativeCorePreview: Bool {
+    didSet { defaults.set(nativeCorePreview, forKey: Self.nativeCoreKey) }
+  }
+
   private let defaults: UserDefaults
 
   private static let variantKey = "bi.atomic.workerdeck.ios.transcriptVariant"
   private static let fontKey = "bi.atomic.workerdeck.ios.transcriptFont"
   private static let catchUpKey = "bi.atomic.workerdeck.ios.catchUpMode"
   private static let thinkingKey = "bi.atomic.workerdeck.ios.showThinking"
+  private static let nativeCoreKey = "bi.atomic.workerdeck.ios.nativeCorePreview"
   private static let approveLockKey = "bi.atomic.workerdeck.ios.approveWhileLocked"
   private static let pushEnabledKey = "bi.atomic.workerdeck.ios.pushEnabled"
   private static let pushEventsKey = "bi.atomic.workerdeck.ios.pushEvents"
@@ -192,6 +197,7 @@ final class AppSettings {
       defaults.string(forKey: Self.fontKey).flatMap(TranscriptFont.init(rawValue:)) ?? .regular
     catchUpMode = defaults.object(forKey: Self.catchUpKey) as? Bool ?? true
     showThinking = defaults.object(forKey: Self.thinkingKey) as? Bool ?? true
+    nativeCorePreview = defaults.bool(forKey: Self.nativeCoreKey)
     approveWhileLocked =
       defaults.string(forKey: Self.approveLockKey).flatMap(ApproveWhileLocked.init(rawValue:)) ?? .unlockedOnly
     pushEnabled = defaults.object(forKey: Self.pushEnabledKey) as? Bool ?? true

@@ -15,6 +15,11 @@ packages:
   WorkerDeckKit:
     path: WorkerDeckKit
 
+# The Rust core (P5), linked only when the environment asks; WorkerDeckWidgets never links it.
+include:
+  - path: native.yml
+    enable: ${WD_NATIVE_CORE}
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
