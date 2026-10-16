@@ -206,7 +206,8 @@ fn steps_of(list: &SessionList) -> usize {
 fn the_filter_menu_drives_the_list_directly() {
     let agents = r#","subagents":[{"toolUseId":"a","agentType":"Explore","description":"d","status":"done","startedAt":0,"toolCount":1},{"toolUseId":"b","agentType":"Explore","description":"d","status":"running","startedAt":0,"toolCount":1}]"#;
     let list = SessionList::new(None, None);
-    list.set_host("h1".into(), "mac".into(), true, body(&[session("s1", "running", &format!(r#","pendingPermissionCount":0{agents}"#))])).unwrap();
+    list.set_host("h1".into(), "mac".into(), true, body(&[session("s1", "running", &format!(r#","pendingPermissionCount":0{agents}"#))]))
+        .unwrap();
     let start = list.filter();
     assert_eq!((start.agents, start.engaged), (StepShow::Active, false));
     assert_eq!(steps_of(&list), 1);
@@ -237,7 +238,9 @@ fn a_new_agent_seed_waits_for_the_meta_and_lists_leads_first() {
     list.set_host("h1".into(), "mac".into(), true, body(&[solo, lead, member])).unwrap();
     assert!(list.agent_seed("h1".into(), None).is_none());
     assert!(!list.set_meta("h1".into(), "<html>".into()));
-    assert!(list.set_meta("h1".into(), r#"{"protocolVersion":1,"agents":{"owner":"tobias","sharing":"shared","allowShared":true}}"#.into()));
+    assert!(
+        list.set_meta("h1".into(), r#"{"protocolVersion":1,"agents":{"owner":"tobias","sharing":"shared","allowShared":true}}"#.into())
+    );
     let seed = list.agent_seed("h1".into(), Some("s1".into())).unwrap();
     let names: Vec<_> = seed.leads.iter().map(|l| l.name.as_str()).collect();
     assert_eq!(names, ["Lead", "Solo"]);

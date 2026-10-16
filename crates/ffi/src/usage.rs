@@ -4,7 +4,9 @@
 use crate::Session;
 use serde_json::Value;
 use wd_native::rest::{ByModel, Entries, ProfileEngine, ProfileUsage, RateLimitInfo};
-use wd_native::vm::pricing::{PRICING_AS_OF, PricingTable, SubscriptionComparison, default_pricing, merge_pricing, pricing_age_note, pricing_note};
+use wd_native::vm::pricing::{
+    PRICING_AS_OF, PricingTable, SubscriptionComparison, default_pricing, merge_pricing, pricing_age_note, pricing_note,
+};
 use wd_native::vm::session_cost::session_cost;
 use wd_native::vm::usage::{self, SessionUsage};
 
@@ -165,7 +167,11 @@ pub(crate) fn usage_view(live: &wd_native::controller::live::LiveSession, profil
         max_tokens: c.max_tokens,
         percentage: c.percentage,
         model: c.model.clone(),
-        categories: c.categories.iter().map(|(name, tokens, color)| ContextSlice { name: name.clone(), tokens: *tokens, color: color.clone() }).collect(),
+        categories: c
+            .categories
+            .iter()
+            .map(|(name, tokens, color)| ContextSlice { name: name.clone(), tokens: *tokens, color: color.clone() })
+            .collect(),
         severity: usage::meter_severity(Some(c.percentage)).into(),
     });
     let pricing: PricingTable = match live.pricing_overrides() {

@@ -1029,9 +1029,7 @@ pub fn agent_leads<'a>(rows: &'a [SessionRow], host_id: &str) -> Vec<&'a Session
 // The members whose lead is this row's agent, on its gateway.
 pub fn team_members<'a>(row: &SessionRow, rows: &'a [SessionRow]) -> Vec<&'a SessionRow> {
     let Some(id) = row.info.agent.as_ref().map(|a| a.id.as_str()) else { return Vec::new() };
-    rows.iter()
-        .filter(|r| r.host_id == row.host_id && r.info.agent.as_ref().and_then(|a| a.lead.as_deref()) == Some(id))
-        .collect()
+    rows.iter().filter(|r| r.host_id == row.host_id && r.info.agent.as_ref().and_then(|a| a.lead.as_deref()) == Some(id)).collect()
 }
 
 #[cfg(test)]

@@ -20,7 +20,9 @@ fn attached(session_extra: &str, events: &[&str]) -> std::sync::Arc<Session> {
 const CONTEXT: &str = r##""type":"context_usage","usage":{"totalTokens":170000,"maxTokens":200000,"percentage":85,"model":"claude-opus-4-6","categories":[{"name":"Messages","tokens":150000,"color":"#ff0000"}]}"##;
 
 fn limit(key: &str, utilization: f64) -> String {
-    format!(r#""type":"rate_limit","info":{{"status":"allowed","rateLimitType":"{key}","utilization":{utilization},"resetsAt":1800003600}}"#)
+    format!(
+        r#""type":"rate_limit","info":{{"status":"allowed","rateLimitType":"{key}","utilization":{utilization},"resetsAt":1800003600}}"#
+    )
 }
 
 #[test]

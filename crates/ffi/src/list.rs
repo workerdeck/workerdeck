@@ -3,8 +3,8 @@
 use crate::avatar::AvatarFetch;
 use std::sync::Mutex;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, SessionInfo, Sharing};
-use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
+use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
     self as vm, GroupBy, GroupOptions, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig, filter_rows, group_rows,
@@ -546,11 +546,8 @@ impl SessionList {
         let mut state = self.state();
         let rows = state.rows();
         let filtered = filter_rows(&rows, &state.config, None);
-        let options = GroupOptions {
-            gateway_count: Some(state.hosts.len()),
-            all: Some(rows.clone()),
-            relay_hosts: Some(state.relay_hosts.clone()),
-        };
+        let options =
+            GroupOptions { gateway_count: Some(state.hosts.len()), all: Some(rows.clone()), relay_hosts: Some(state.relay_hosts.clone()) };
         let config = &state.config;
         let show_gateway = vm::shows_gateway(state.hosts.len(), config);
         let mut linger: Option<f64> = None;
