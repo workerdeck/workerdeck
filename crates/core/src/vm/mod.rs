@@ -14,6 +14,7 @@ pub mod pricing;
 pub mod prompt;
 pub mod recap;
 pub mod session_chrome;
+pub mod session_cost;
 pub mod session_list;
 pub mod status_label;
 pub mod steps;

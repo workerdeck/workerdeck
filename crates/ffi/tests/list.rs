@@ -1,4 +1,4 @@
-use wdffi::{ListError, RowState, SessionList};
+use wdffi::{ListError, ListFacet, ListGroupBy, ListSortBy, RowState, SessionList, StepKind, StepShow};
 
 fn session(id: &str, status: &str, extra: &str) -> String {
     format!(r#"{{"id":"{id}","status":"{status}","cwd":"/work/app","createdAt":1000,"lastSeq":4{extra}}}"#)
@@ -196,4 +196,54 @@ fn team_leads_name_the_agents_a_row_could_join() {
     let leads = list.team_leads("h1".into(), "plain".into());
     assert_eq!(leads.len(), 1);
     assert_eq!((leads[0].session_id.as_str(), leads[0].agent_id.as_str(), leads[0].name.as_str()), ("lead", "L", "Lead"));
+}
+
+fn steps_of(list: &SessionList) -> usize {
+    list.groups(0.0).into_iter().flat_map(|g| g.rows).map(|r| r.steps.len()).sum()
+}
+
+#[test]
+fn the_filter_menu_drives_the_list_directly() {
+    let agents = r#","subagents":[{"toolUseId":"a","agentType":"Explore","description":"d","status":"done","startedAt":0,"toolCount":1},{"toolUseId":"b","agentType":"Explore","description":"d","status":"running","startedAt":0,"toolCount":1}]"#;
+    let list = SessionList::new(None, None);
+    list.set_host("h1".into(), "mac".into(), true, body(&[session("s1", "running", &format!(r#","pendingPermissionCount":0{agents}"#))])).unwrap();
+    let start = list.filter();
+    assert_eq!((start.agents, start.engaged), (StepShow::Active, false));
+    assert_eq!(steps_of(&list), 1);
+    list.set_step_display(StepKind::Agent, StepShow::All);
+    assert_eq!(steps_of(&list), 2);
+    list.set_step_display(StepKind::Agent, StepShow::Hide);
+    assert_eq!(steps_of(&list), 0);
+    assert!(list.filter().engaged);
+    assert!(list.config_json().contains(r#""subagents":"none""#));
+    list.toggle_state(RowState::Idle);
+    assert!(list.groups(0.0).iter().all(|g| g.rows.is_empty()));
+    list.toggle_state(RowState::Idle);
+    list.toggle_facet(ListFacet::Adapter, "codex".into());
+    assert_eq!(list.filter().adapters, ["codex"]);
+    list.toggle_facet(ListFacet::Adapter, "codex".into());
+    list.set_group_by(ListGroupBy::None);
+    list.set_sort_by(ListSortBy::Name);
+    let filter = list.filter();
+    assert_eq!((filter.group_by, filter.sort_by, filter.adapters.len()), (ListGroupBy::None, ListSortBy::Name, 0));
+}
+
+#[test]
+fn a_new_agent_seed_waits_for_the_meta_and_lists_leads_first() {
+    let list = SessionList::new(None, None);
+    let solo = idle("s1", r#","agent":{"id":"a1","name":"Solo"}"#);
+    let lead = idle("s2", r#","agent":{"id":"a2","name":"Lead","leads":true}"#);
+    let member = idle("s3", r#","agent":{"id":"a3","name":"Member","lead":"a2"}"#);
+    list.set_host("h1".into(), "mac".into(), true, body(&[solo, lead, member])).unwrap();
+    assert!(list.agent_seed("h1".into(), None).is_none());
+    assert!(!list.set_meta("h1".into(), "<html>".into()));
+    assert!(list.set_meta("h1".into(), r#"{"protocolVersion":1,"agents":{"owner":"tobias","sharing":"shared","allowShared":true}}"#.into()));
+    let seed = list.agent_seed("h1".into(), Some("s1".into())).unwrap();
+    let names: Vec<_> = seed.leads.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["Lead", "Solo"]);
+    assert_eq!((seed.lead.as_deref(), seed.shared, seed.allow_shared, seed.owner.as_deref()), (Some("a1"), true, true, Some("tobias")));
+    list.set_meta("h1".into(), r#"{"agents":{"sharing":"shared","allowShared":false}}"#.into());
+    assert!(!list.agent_seed("h1".into(), None).unwrap().shared);
+    list.remove_host("h1".into());
+    assert!(list.agent_seed("h1".into(), None).is_none());
 }

@@ -16,11 +16,16 @@ mod list;
 mod pickers;
 mod prompt;
 mod scrubber;
+mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
-pub use list::{ListError, ListGroup, ListRow, Mark, RowState, SessionList};
+pub use list::{
+    ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow, ListSortBy, Mark, NewAgentSeed, RowState, SessionList, StepKind,
+    StepShow,
+};
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
 pub use scrubber::{ScrubBand, ScrubCluster, ScrubMark, ScrubPeek, ScrubPeekLine};
+pub use usage::{ContextSlice, ContextView, CostModelRow, CostView, SessionUsageView, Severity, SpendView, UsageWindowView};
 
 uniffi::setup_scaffolding!();
 
@@ -229,6 +234,7 @@ pub struct Session {
     inner: Mutex<LiveSession>,
     viewport: Mutex<Viewport>,
     frame_viewport: Mutex<Viewport>,
+    profiles: Mutex<Option<Vec<serde_json::Value>>>,
 }
 
 impl Session {
@@ -257,6 +263,7 @@ impl Session {
             inner: Mutex::new(live),
             viewport: Mutex::new(Viewport::default()),
             frame_viewport: Mutex::new(Viewport::default()),
+            profiles: Mutex::new(None),
         })
     }
 

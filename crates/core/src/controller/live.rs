@@ -168,6 +168,11 @@ impl LiveSession {
         self.attached.as_ref().map(|frame| &frame.session)
     }
 
+    // The operator's rate overrides from the attach frame, for merging over the bundled table.
+    pub fn pricing_overrides(&self) -> Option<&Value> {
+        self.attached.as_ref().and_then(|frame| frame.pricing_overrides.as_ref())
+    }
+
     pub fn can_run_shell(&self) -> bool {
         self.attached.as_ref().is_some_and(|frame| frame.shell == Some(true))
     }
