@@ -25,6 +25,7 @@ enum UIPreview: String {
   case sessions
   case teams
   case core
+  case coreextras
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
@@ -570,6 +571,9 @@ struct UIPreviewHarness: View {
       .environment(UnreadModel())
       .environment(PushCoordinator())
 
+    case .coreextras:
+      CoreExtrasPreview()
+
     case .projects:
       // Every shape line two can take, because each one is a different rule and
       // most need a differently-configured gateway to reach for real.
@@ -593,6 +597,37 @@ struct UIPreviewHarness: View {
               HostDirEntry(name: "scratch", path: "\(root)/scratch", type: .symlink),
             ]
           ]))
+    }
+  }
+}
+
+
+private struct CoreExtrasPreview: View {
+  @State private var sheet: CoreExtrasSheet?
+
+  private let skills: [SkillInfo] = {
+    let json = #"[{"name":"wrapup","description":"Wrap up a session.","scope":"user","enabled":true},{"name":"repo-skill","displayName":"Repo skill","shortDescription":"Project helper","scope":"repo","enabled":false}]"#
+    return (try? JSONDecoder().decode([SkillInfo].self, from: Data(json.utf8))) ?? []
+  }()
+
+  private let servers = [
+    McpServerStatusInfo(name: "workerdeck", status: "connected", scope: "user", transport: "stdio"),
+    McpServerStatusInfo(name: "figma", status: "needs-auth", scope: "project", transport: "http", url: "https://example.test/mcp"),
+  ]
+
+  var body: some View {
+    List {
+      Button("Session info") { sheet = .info }
+      Button("MCP servers") { sheet = .mcp }
+      Button("Skills") { sheet = .skills }
+    }
+    .sheet(item: $sheet) { sheet in
+      switch sheet {
+      case .info: SessionInfoSheet(chrome: nil, session: nil, fileAccess: nil)
+      case .mcp: McpServersView(load: { servers }, act: { _, _ in servers }, canManage: true)
+      case .skills: SkillsView(skills: skills, onUse: { _ in })
+      case .files: EmptyView()
+      }
     }
   }
 }

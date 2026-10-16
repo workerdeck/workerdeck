@@ -15,6 +15,7 @@ struct CoreSessionView: View {
   @State private var shellMode = false
   @State private var confirmClear = false
   @State private var confirmClose = false
+  @State private var extras = CoreExtras()
   private let hostId: UUID
   private let sessionId: String
   private let client: WorkerClient?
@@ -59,6 +60,7 @@ struct CoreSessionView: View {
       ToolbarItem(placement: .topBarTrailing) { pickers(ui) }
       ToolbarItem(placement: .topBarTrailing) { sessionMenu(ui.chrome) }
     }
+    .modifier(CoreExtrasSheets(extras: extras, model: model, client: client, sessionId: sessionId, draft: $draft))
     .confirmationDialog("Clear the conversation?", isPresented: $confirmClear, titleVisibility: .visible) {
       Button("Clear context", action: model.clearContext)
     } message: {
@@ -194,6 +196,7 @@ struct CoreSessionView: View {
         Button("Clear context", systemImage: "eraser") { confirmClear = true }
       }
       Button("Close session", systemImage: "xmark.circle", role: .destructive) { confirmClose = true }
+      CoreExtrasMenu(extras: extras)
     } label: {
       Label("Session", systemImage: "ellipsis.circle")
     }
