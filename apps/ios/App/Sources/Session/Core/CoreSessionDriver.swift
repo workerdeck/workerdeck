@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
 
 // One transcript surface as the core lays it out: the session's own rows, or an open sub-agent frame's.
@@ -115,6 +116,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private let apiBase: String
   private let authKey: String?
   private let publish: @Sendable (CoreSessionUi) -> Void
+  private let onSkills: (@Sendable ([SkillInfo]) -> Void)?
   private let fixture: [String]?
   private let session: Session
   private var worker: SessionWorker!
@@ -134,7 +136,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   init(
     sessionId: String, baseURL: String, authKey: String?, metrics: Metrics, hideThinking: Bool,
-    fixture: [String]? = nil, entry: CoreEntry? = nil, publish: @escaping @Sendable (CoreSessionUi) -> Void
+    fixture: [String]? = nil, entry: CoreEntry? = nil, onSkills: (@Sendable ([SkillInfo]) -> Void)? = nil,
+    publish: @escaping @Sendable (CoreSessionUi) -> Void
   ) {
     self.fixture = fixture
     pending = entry
@@ -143,6 +146,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     self.apiBase = WorkerDeckSession.apiBase(baseUrl: baseURL)
     self.authKey = authKey?.isEmpty == false ? authKey : nil
     self.publish = publish
+    self.onSkills = onSkills
     session = Session(afterSeq: 0, reconnect: true, nonce: UUID().uuidString, metrics: metrics)
     super.init()
     urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
@@ -390,10 +394,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       guard let self, self.current(task) else { return }
       switch result {
       case .success(.string(let text)):
-        self.worker.received(text)
+        self.deliver(text)
         self.receive(task)
       case .success(.data(let data)):
-        if let text = String(data: data, encoding: .utf8) { self.worker.received(text) }
+        if let text = String(data: data, encoding: .utf8) { self.deliver(text) }
         self.receive(task)
       case .success:
         self.receive(task)
@@ -401,6 +405,16 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
         self.lost(task)
       }
     }
+  }
+
+  // The core has no skills model, so the one `skills` event is read off the wire here.
+  private func deliver(_ text: String) {
+    worker.received(text)
+    guard onSkills != nil, text.contains(#""type":"skills""#), let data = text.data(using: .utf8),
+      let frame = try? JSONDecoder().decode(CoreSkillsFrame.self, from: data), frame.type == "event",
+      let skills = frame.event.skills
+    else { return }
+    onSkills?(skills)
   }
 
   private func lost(_ task: URLSessionTask) {
@@ -570,4 +584,11 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     ui.frame?.strip = session.frameStrip(taskId: taskId)
     ui.frame?.rows = rows
   }
+}
+
+
+private struct CoreSkillsFrame: Decodable {
+  struct Event: Decodable { let skills: [SkillInfo]? }
+  let type: String
+  let event: Event
 }

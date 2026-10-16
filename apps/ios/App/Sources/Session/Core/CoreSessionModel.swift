@@ -8,6 +8,7 @@ import WorkerDeckKit
 final class CoreSessionModel {
   let sessionId: String
   private(set) var ui = CoreSessionUi()
+  private(set) var skills: [SkillInfo]?
   private let baseURL: String
   private let authKey: String?
   private let fixture: [String]?
@@ -38,7 +39,8 @@ final class CoreSessionModel {
     }
     let driver = CoreSessionDriver(
       sessionId: sessionId, baseURL: baseURL, authKey: authKey, metrics: core, hideThinking: hideThinking,
-      fixture: fixture, entry: entry
+      fixture: fixture, entry: entry,
+      onSkills: { [weak self] skills in DispatchQueue.main.async { MainActor.assumeIsolated { self?.skills = skills } } }
     ) { [weak self] ui in
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }
     }
