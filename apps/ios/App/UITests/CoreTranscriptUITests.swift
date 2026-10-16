@@ -132,8 +132,9 @@ final class CoreTranscriptUITests: XCTestCase {
     snap(app, "frame-1-open")
     folded.tap()
     XCTAssertTrue(text(app, containing: "agent step 1)").waitForExistence(timeout: 5), "pressing the fold did not open the steps")
-    for _ in 0..<12 { app.swipeUp(velocity: .fast) }
-    XCTAssertTrue(text(app, containing: "agent step 40").waitForExistence(timeout: 3), "the opened steps do not reach step 40")
+    XCTAssertTrue(
+      scroll(app, until: text(app, containing: "agent step 40"), swipes: 20, down: false),
+      "the opened steps do not reach step 40")
     snap(app, "frame-2-expanded-tail")
     attach(app.debugDescription, "frame-hierarchy")
 
@@ -194,7 +195,8 @@ final class CoreTranscriptUITests: XCTestCase {
   }
 
   private func text(_ app: XCUIApplication, containing needle: String) -> XCUIElement {
-    app.textViews.matching(NSPredicate(format: "value CONTAINS %@", needle)).firstMatch
+    // A row's lines are also exposed one by one, by label; on the device a long row's value stops short of its tail.
+    app.textViews.matching(NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", needle, needle)).firstMatch
   }
 
   private func scroll(_ app: XCUIApplication, until element: XCUIElement, swipes: Int, down: Bool) -> Bool {
