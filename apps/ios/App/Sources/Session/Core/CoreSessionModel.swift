@@ -9,6 +9,7 @@ final class CoreSessionModel {
   let sessionId: String
   private(set) var ui = CoreSessionUi()
   private(set) var skills: [SkillInfo]?
+  var insertion: String?
   private let baseURL: String
   private let authKey: String?
   private let fixture: [String]?
@@ -96,11 +97,13 @@ final class CoreSessionModel {
   func answer(_ requestId: String, _ selections: [Selection]) { driver?.answer(requestId, selections) }
   func dismiss(_ requestId: String) { driver?.dismiss(requestId) }
 
-  func send(_ text: String) {
+  func send(_ text: String, attachmentIds: [String] = []) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
-    driver?.send(trimmed)
+    guard !trimmed.isEmpty || !attachmentIds.isEmpty else { return }
+    driver?.send(trimmed, attachmentIds: attachmentIds)
   }
+
+  func backgroundTask() { driver?.backgroundTask() }
 
   func runShell(_ command: String) {
     let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)

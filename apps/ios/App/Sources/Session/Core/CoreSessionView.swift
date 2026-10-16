@@ -11,8 +11,6 @@ struct CoreSessionView: View {
   @State private var model: CoreSessionModel
   @State private var scroll = TranscriptScrollModel()
   @State private var images = TerminalImageLoader()
-  @State private var draft = ""
-  @State private var shellMode = false
   @State private var confirmClear = false
   @State private var confirmClose = false
   @State private var extras = CoreExtras()
@@ -20,11 +18,13 @@ struct CoreSessionView: View {
   private let sessionId: String
   private let client: WorkerClient?
   private var fixtureRecap: CatchUpMark?
+  private let composerServices: CoreComposerServices
 
   init(sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry? = nil) {
     self.hostId = hostId
     self.sessionId = sessionId
     self.client = client
+    composerServices = .live(client: client, sessionId: sessionId)
     _model = State(
       initialValue: CoreSessionModel(
         sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey, entry: entry))
@@ -36,6 +36,7 @@ struct CoreSessionView: View {
     hostId = UUID()
     sessionId = "fixture"
     client = nil
+    composerServices = CoreReplayFixture.composerServices
     _model = State(
       initialValue: CoreSessionModel(
         sessionId: "fixture", baseURL: "http://fixture.invalid", authKey: nil, fixture: fixture))
@@ -51,8 +52,7 @@ struct CoreSessionView: View {
         CorePromptCard(prompt: prompt, planLines: ui.planLines, model: model)
           .id(prompt.requestId)
       }
-      Divider()
-      composer(ui.chrome)
+      CoreComposer(model: model, scroll: scroll, services: composerServices)
     }
     .navigationTitle(ui.title ?? "Session")
     .navigationBarTitleDisplayMode(.inline)
@@ -60,7 +60,7 @@ struct CoreSessionView: View {
       ToolbarItem(placement: .topBarTrailing) { pickers(ui) }
       ToolbarItem(placement: .topBarTrailing) { sessionMenu(ui.chrome) }
     }
-    .modifier(CoreExtrasSheets(extras: extras, model: model, client: client, sessionId: sessionId, draft: $draft))
+    .modifier(CoreExtrasSheets(extras: extras, model: model, client: client, sessionId: sessionId))
     .confirmationDialog("Clear the conversation?", isPresented: $confirmClear, titleVisibility: .visible) {
       Button("Clear context", action: model.clearContext)
     } message: {
@@ -137,52 +137,6 @@ struct CoreSessionView: View {
       guard let info = try? await client.getSession(id: sessionId) else { return }
       unread.mark(host: hostId, sessionId: sessionId, itemCount: seen.itemCount, info: info)
     }
-  }
-
-  // A `$` typed into an empty draft switches to shell mode when the session can run one; tapping the `$` leaves it.
-  private func composer(_ chrome: SessionChrome?) -> some View {
-    let canRunShell = model.ui.canRunShell
-    return HStack(alignment: .bottom, spacing: 8) {
-      if shellMode {
-        Button("$") {
-          draft = exitDraft(draft: draft)
-          shellMode = false
-        }
-        .font(.body.monospaced().bold())
-        .foregroundStyle(TerminalPalette.color(.magenta))
-        .accessibilityLabel("Leave shell mode")
-      }
-      TextField(shellMode ? "Run a command on the host" : "Message", text: $draft, axis: .vertical)
-        .lineLimit(1...6)
-        .textFieldStyle(.roundedBorder)
-        .font(shellMode ? .body.monospaced() : .body)
-        .textInputAutocapitalization(shellMode ? .never : .sentences)
-        .autocorrectionDisabled(shellMode)
-        .accessibilityIdentifier(shellMode ? "Shell command" : "Message")
-        .onChange(of: draft) { old, new in
-          guard old.isEmpty, new.count == 1,
-            composerTrigger(character: new, isShellMode: shellMode, canRunShell: canRunShell) == .enter
-          else { return }
-          draft = ""
-          shellMode = true
-        }
-      if chrome?.busy == true {
-        Button("Stop", systemImage: "stop.fill", action: model.interrupt)
-          .labelStyle(.iconOnly)
-          .buttonStyle(.bordered)
-      }
-      Button(shellMode ? "Run" : "Send", systemImage: shellMode ? "return" : "arrow.up") {
-        if shellMode { model.runShell(draft) } else { model.send(draft) }
-        draft = ""
-        shellMode = false
-        scroll.scrollToBottom()
-      }
-      .labelStyle(.iconOnly)
-      .buttonStyle(.borderedProminent)
-      .tint(shellMode ? TerminalPalette.color(.magenta) : nil)
-      .disabled(chrome?.enabled != true || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-    }
-    .padding(8)
   }
 
   @ViewBuilder

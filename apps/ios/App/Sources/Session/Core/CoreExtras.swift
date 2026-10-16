@@ -44,7 +44,6 @@ struct CoreExtrasSheets: ViewModifier {
   let model: CoreSessionModel
   let client: WorkerClient?
   let sessionId: String
-  @Binding var draft: String
 
   func body(content: Content) -> some View {
     content
@@ -82,8 +81,7 @@ struct CoreExtrasSheets: ViewModifier {
   private func use(_ skill: SkillInfo) {
     let trimmed = skill.defaultPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
     let base = trimmed?.isEmpty == false ? trimmed! : "$\(skill.name)"
-    let separator = draft.isEmpty || draft.hasSuffix(" ") ? "" : " "
-    draft += separator + base + (base.hasSuffix(" ") ? "" : " ")
+    model.insertion = base
     extras.sheet = nil
   }
 }

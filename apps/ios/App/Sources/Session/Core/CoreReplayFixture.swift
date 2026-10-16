@@ -1,4 +1,5 @@
 import Foundation
+import WorkerDeckKit
 
 // A long session as gateway frames, for driving the core preview with no gateway: each turn is a prompt, a Bash call
 // whose output is long enough to fold, and a markdown answer. Turn `taskTurn` hands its work to a sub-agent instead,
@@ -69,9 +70,15 @@ enum CoreReplayFixture {
     event(
       #""type":"user_message","message":{"role":"user","content":"<local-command-stdout>$ \#(shellCommand)\nready</local-command-stdout>"},"parentToolUseId":null,"synthetic":true,"shell":\#(shellRecord("running")),"uuid":"sh-row""#
     )
+    event(
+      #""type":"capabilities","models":[],"commands":[{"name":"compact","description":"Summarise the conversation so far"},{"name":"review","description":"Review the current diff","argumentHint":"[path]"},{"name":"dev:wrapup","description":"Wrap the session up"}]"#
+    )
+    event(
+      #""type":"skills","skills":[{"name":"pdf","description":"Read and write PDF files","enabled":true},{"name":"off-skill","enabled":false}]"#
+    )
     event(#""type":"status_changed","status":"idle""#)
     let attached =
-      #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"lastSeq":\#(seq),"pendingPermissionCount":0}}"#
+      #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"lastSeq":\#(seq),"pendingPermissionCount":0,"capabilities":{"attachments":["image","pdf","text"],"slashCommands":true,"skillsList":true,"backgroundTasks":true}}}"#
     return [attached] + events
   }
 
@@ -129,6 +136,7 @@ enum CoreReplayFixture {
     if frame["type"] as? String == "shell_command", let command = frame["command"] as? String {
       return [ran(command)]
     }
+    if frame["type"] as? String == "user_message" { return echo(frame) }
     guard frame["shellId"] as? String == shellId else { return [] }
     switch frame["type"] as? String {
     case "shell_attach":
@@ -148,6 +156,40 @@ enum CoreReplayFixture {
       return []
     }
   }
+
+  // A sent message is acked and lands as a user row. Fixture uploads are named in their ids, so the row can name them.
+  private static func echo(_ frame: [String: Any]) -> [String] {
+    let seq = seq.next()
+    let attachments = (frame["attachmentIds"] as? [String] ?? []).map { id in
+      ["id": id, "name": String(id.dropFirst(uploadPrefix.count)), "mediaType": "image/png", "bytes": 1]
+    }
+    var event: [String: Any] = [
+      "type": "user_message", "message": ["role": "user", "content": frame["text"] as? String ?? ""],
+      "parentToolUseId": NSNull(), "uuid": "sent-\(seq)", "seq": seq, "ts": 1_760_000_000_000 + seq * 1000,
+    ]
+    if !attachments.isEmpty { event["attachments"] = attachments }
+    return [json(["type": "ack", "clientId": frame["clientId"] ?? ""]), json(["type": "event", "event": event])]
+  }
+
+  static let uploadPrefix = "att_"
+
+  static let composerServices = CoreComposerServices(
+    upload: { name, mediaType, data in
+      try await Task.sleep(for: .milliseconds(300))
+      return MessageAttachment(id: uploadPrefix + name, name: name, mediaType: mediaType, bytes: data.count)
+    },
+    findFiles: { _, query in
+      let paths = ["src/main.swift", "src/composer/field.swift", "README.md", "docs/GUIDE.md"]
+      let rows = paths.filter { query.isEmpty || $0.lowercased().contains(query.lowercased()) }
+        .map { ["path": "/work/fixture/\($0)", "relative": $0] }
+      return try JSONDecoder().decode([HostFileMatch].self, from: JSONSerialization.data(withJSONObject: rows))
+    },
+    listPeers: {
+      [
+        PeerSession(id: "peer-1", slug: "Release-Lead", label: "Release Lead", detail: "claude · workerdeck · idle"),
+        PeerSession(id: "peer-2", slug: "Docs-Writer", label: "Docs Writer", detail: "codex · docs · running"),
+      ]
+    })
 
   private static func record(_ status: String) -> Any {
     (try? JSONSerialization.jsonObject(with: Data(shellRecord(status).utf8))) ?? [:]
