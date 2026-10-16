@@ -267,12 +267,14 @@ private struct SessionsPreview: View {
     ],
     unseen: ["1": 5, "2": 3, "3": 5, "4": 3, "5": 12],
     config: #"{"groupBy":"none"}"#)
-  @State private var config = ViewConfig.default
+  // The core list is not observable: the filter menu bumps this so the rows redraw.
+  @State private var revision = 0
   @State private var path: [SessionRoute] = []
 
   var body: some View {
     NavigationStack(path: $path) {
       List {
+        let _ = revision
         ForEach(model.sections().flatMap(\.items)) { item in
           SessionCardView(
             item: item, onOpen: { item.hostUUID.map { path.append(.session(hostId: $0, sessionId: item.info.id)) } },
@@ -299,7 +301,10 @@ private struct SessionsPreview: View {
           Button {} label: { Label("Search", systemImage: "magnifyingglass") }
         }
         ToolbarItem(id: "filter", placement: .topBarTrailing) {
-          FilterMenu(config: $config, hosts: [], adapters: ["claude", "codex"], projects: [])
+          let _ = revision
+          FilterMenu(
+            filter: model.list.filter(), hosts: [], adapters: ["claude", "codex"], projects: [], list: model.list,
+            changed: { revision += 1 })
         }
       }
       .navigationDestination(for: SessionRoute.self) { route in
