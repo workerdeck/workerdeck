@@ -189,10 +189,13 @@ public struct TermImageBox: Equatable, Sendable {
   /// rather than read from the constant at draw time so the view sizes what was
   /// actually planned, never what the constant happens to say now.
   public var lines: Int
+  // A codex picture is named by its path on the host rather than by a result part.
+  public var hostPath: String?
+  public var placeholder: String?
 
   public init(
     toolUseId: String, sourceSeq: Int, partIndex: Int, mediaType: String, bytes: Int,
-    lines: Int = TermImage.boxLines
+    lines: Int = TermImage.boxLines, hostPath: String? = nil, placeholder: String? = nil
   ) {
     self.toolUseId = toolUseId
     self.sourceSeq = sourceSeq
@@ -200,11 +203,15 @@ public struct TermImageBox: Equatable, Sendable {
     self.mediaType = mediaType
     self.bytes = bytes
     self.lines = lines
+    self.hostPath = hostPath
+    self.placeholder = placeholder
   }
 
   /// A stable identity for a cache and for an in-flight fetch. Not the row: the
   /// same picture is the same picture whichever row it lands in after a fold.
-  public var key: String { "\(sourceSeq)/\(toolUseId)/\(partIndex)" }
+  public var key: String {
+    hostPath.map { "host/\(toolUseId)/\($0)" } ?? "\(sourceSeq)/\(toolUseId)/\(partIndex)"
+  }
 }
 
 /// The gutter glyph vocabulary - the CLI's own.

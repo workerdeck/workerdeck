@@ -6,6 +6,8 @@ struct CoreSessionView: View {
   @Environment(AppSettings.self) private var settings
   @Environment(UnreadModel.self) private var unread
   @Environment(PushCoordinator.self) private var push
+  @Environment(BookmarkModel.self) private var bookmarks
+  @State private var viewing: CoreViewedImage?
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.dismiss) private var dismiss
   @State private var model: CoreSessionModel
@@ -44,7 +46,7 @@ struct CoreSessionView: View {
     let ui = model.ui
     VStack(spacing: 0) {
       CoreStatusLine(ui: ui, reconnect: model.reconnect)
-      CoreTranscriptView(model: model, scroll: scroll, imageLoader: images, hideThinking: !settings.showThinking)
+      transcriptArea(ui)
       if let prompt = ui.prompt {
         Divider()
         CorePromptCard(prompt: prompt, planLines: ui.planLines, model: model)
@@ -53,6 +55,7 @@ struct CoreSessionView: View {
       Divider()
       composer(ui.chrome)
     }
+    .modifier(CoreRowExtras(actions: rowActions, viewing: $viewing, revision: bookmarks.revision, onBookmarks: syncBookmarks))
     .navigationTitle(ui.title ?? "Session")
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -87,14 +90,12 @@ struct CoreSessionView: View {
     ) {
       if let id = ui.frame?.taskId {
         CoreFrameScreen(model: model, taskId: id, imageLoader: images, hideThinking: !settings.showThinking)
+          .environment(\.coreRowActions, rowActions)
       }
     }
     .onAppear {
-      if let client {
-        images.fetch = { [sessionId] seq, toolUseId, part in
-          try await client.toolResultImage(sessionId: sessionId, seq: seq, toolUseId: toolUseId, partIndex: part)
-        }
-      }
+      wireImages()
+      syncBookmarks()
       if let mark = fixtureRecap ?? (settings.catchUpMode ? unread.since(host: hostId, sessionId: sessionId) : nil) {
         model.setRecap(mark)
       }
@@ -171,6 +172,7 @@ struct CoreSessionView: View {
       }
       Button(shellMode ? "Run" : "Send", systemImage: shellMode ? "return" : "arrow.up") {
         if shellMode { model.runShell(draft) } else { model.send(draft) }
+        model.clearRecap()
         draft = ""
         shellMode = false
         scroll.scrollToBottom()
@@ -193,11 +195,47 @@ struct CoreSessionView: View {
       if chrome?.canClearContext == true {
         Button("Clear context", systemImage: "eraser") { confirmClear = true }
       }
+      if model.ui.extras.canSleep {
+        Button("Sleep", systemImage: "moon.zzz", action: model.sleep)
+      }
       Button("Close session", systemImage: "xmark.circle", role: .destructive) { confirmClose = true }
+        .disabled(client == nil)
     } label: {
       Label("Session", systemImage: "ellipsis.circle")
     }
-    .disabled(client == nil)
+  }
+
+  private var rowActions: CoreRowActions {
+    CoreRowActions(
+      menu: CoreRowMenu.make(model: model, bookmarks: bookmarks, hostId: hostId, sessionId: sessionId),
+      openImage: { viewing = CoreViewedImage(image: $0) })
+  }
+
+  private func syncBookmarks() { model.setBookmarks(bookmarks.bookmarks(host: hostId, sessionId: sessionId)) }
+
+  private func wireImages() {
+    images.sessionId = sessionId
+    images.host = { [model] in model.hostImage($0) }
+    if let client {
+      images.fetch = { try await client.bytes(path: $0) }
+    } else {
+      images.fetch = { try CoreMediaFixture.image(at: $0) }
+    }
+  }
+
+  @ViewBuilder
+  private func transcriptArea(_ ui: CoreSessionUi) -> some View {
+    CoreWarnings(mismatch: ui.extras.mismatch, error: ui.error, onDismiss: model.dismissError)
+    CoreTranscriptView(model: model, scroll: scroll, imageLoader: images, hideThinking: !settings.showThinking)
+      .overlay {
+        if ui.main.rows.isEmpty, ui.progress == nil, ui.connection == .live {
+          CoreEmptyState(cwd: ui.extras.cwd, canRunShell: ui.canRunShell)
+        }
+      }
+    if let count = ui.extras.newRows, count > 0, let row = ui.main.recapRow, ui.progress == nil {
+      CoreCatchUpBar(
+        count: count, onJump: { scroll.scrollToRow(row, anchor: .top, animated: true) }, onDismiss: model.clearRecap)
+    }
   }
 
   private func pickers(_ ui: CoreSessionUi) -> some View {
@@ -262,9 +300,6 @@ private struct CoreStatusLine: View {
       }
       if let progress = ui.progress {
         ProgressView(value: Double(progress.seq), total: Double(max(progress.target, 1)))
-      }
-      if let error = ui.error {
-        Text(error).foregroundStyle(.red)
       }
     }
     .font(.caption)

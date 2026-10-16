@@ -57,6 +57,7 @@ struct CoreSessionUi: @unchecked Sendable {
   var peek: CoreRailPeek?
   var focus: TranscriptFocusRequest?
   var seen: CoreSeen?
+  var extras = CoreSessionExtras()
 }
 
 // What a read mark records once the replay settled: the items on screen and the attach snapshot's rollup counters.
@@ -126,6 +127,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private var railSize: CoreRailSize?
   private var frameRailSize: CoreRailSize?
   private var pending: CoreEntry?
+  private var bookmarks: [String] = []
+  private var recapBoundary: Int?
+  private var sleepSent = false
 
   // Socket callbacks arrive on URLSession's queue, maybe before the worker stored the socket, so each task carries its
   // generation and a callback from a replaced one is dropped by number.
@@ -177,7 +181,56 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   func dismiss(_ requestId: String) { worker.act { $0.dismissQuestion(requestId: requestId) } }
 
   func setRecap(boundary: Int, since: Double) {
-    worker.act { $0.setRecap(boundary: UInt32(max(0, boundary)), sinceMs: since) }
+    worker.act { [self] session in
+      recapBoundary = max(0, boundary)
+      return session.setRecap(boundary: UInt32(max(0, boundary)), sinceMs: since)
+    }
+  }
+
+  func clearRecap() {
+    worker.act { [self] session in
+      recapBoundary = nil
+      ui.extras.newRows = nil
+      publish(ui)
+      return session.setRecap(boundary: nil, sinceMs: nil)
+    }
+  }
+
+  // Read straight off the core, which locks itself: a context menu asks while it presents and cannot wait a turn.
+  func rowMenu(row: Int, taskId: String?) -> RowMenu? {
+    let menu = taskId.map { session.frameRowMenu(taskId: $0, row: UInt32(row)) } ?? session.rowMenu(row: UInt32(row))
+    guard let menu, menu.bookmarkItemId != nil || menu.copyText != nil || menu.backgroundCallId != nil else { return nil }
+    return menu
+  }
+
+  func hostImage(_ path: String) -> HostImageFetch { session.hostImagePath(sessionId: sessionId, path: path) }
+  func backgroundTask(_ toolUseId: String) { worker.act { $0.backgroundTask(toolUseId: toolUseId) } }
+
+  func sleep() {
+    worker.act { [self] session in
+      sleepSent = true
+      ui.extras.canSleep = false
+      publish(ui)
+      return session.sleep()
+    }
+  }
+
+  func setBookmarks(_ ids: [String]) {
+    worker.act { [self] _ in
+      guard ids != bookmarks else { return [] }
+      bookmarks = ids
+      readRail()
+      publish(ui)
+      return []
+    }
+  }
+
+  func dismissError() {
+    worker.act { [self] _ in
+      ui.error = nil
+      publish(ui)
+      return []
+    }
   }
 
   // A row's first line for the sticky prompt, read on its own when the row sits outside the held window.
@@ -486,6 +539,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.modelPicker = session.modelPicker()
       ui.modePicker = session.modePicker()
       ui.canRunShell = session.canRunShell()
+      readExtras()
     }
     if changed.prompt { ui.prompt = session.prompt() }
     if (changed.prompt || changed.transcript) && ui.prompt?.kind == .plan {
@@ -494,6 +548,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     if changed.progress || changed.transcript { ui.progress = session.replayProgress() }
     if changed.shells { readShell() }
     if changed.transcript || changed.prompt { readRail() }
+    if changed.transcript, let boundary = recapBoundary {
+      ui.extras.newRows = ui.main.recapRow == nil ? nil : max(0, Int(session.itemCount()) - boundary)
+    }
     if changed.frames || changed.transcript || changed.prompt { readFrame() }
     if ui.openSeconds == nil, ui.connection == .live, ui.progress == nil, !ui.main.rows.isEmpty {
       let seconds = ProcessInfo.processInfo.systemUptime - startedAt
@@ -547,6 +604,20 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       turns: count("numTurns"))
   }
 
+  // The list's `can_sleep` rule; the core keeps the live `engineAsleep` to itself, so a sent sleep holds the action
+  // back until the status moves.
+  private func readExtras() {
+    let info = sessionInfo()
+    let status = ui.chrome?.status
+    if sleepSent, status != "idle" { sleepSent = false }
+    let capabilities = info?["capabilities"] as? [String: Any]
+    ui.extras.canSleep =
+      !sleepSent && status == "idle" && (capabilities?["engineSleep"] as? Bool) == true
+      && (info?["engineAsleep"] as? Bool) != true
+    ui.extras.cwd = info?["cwd"] as? String
+    ui.extras.mismatch = session.protocolMismatch().map(Int.init)
+  }
+
   private func readShell() {
     guard let shell = ui.shell, shell.sized else { return }
     ui.shell?.grid = session.shellWindow(shellId: shell.id).flatMap { try? Snapshots.shellGrid($0) }
@@ -554,7 +625,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   private func readRail() {
     guard let size = railSize else { return }
-    ui.main.rail = session.scrubber(bookmarks: [], railH: size.railH, viewportH: size.viewportH)
+    ui.main.rail = session.scrubber(bookmarks: bookmarks, railH: size.railH, viewportH: size.viewportH)
   }
 
   // Within a worker turn the core's frame is always open when `ui.frame` is, so a missing layout means the task left.

@@ -534,6 +534,11 @@ public struct WorkerClient: Sendable {
         + "?toolUseId=\(Self.encodeComponent(toolUseId))&part=\(partIndex)")
   }
 
+  // Raw bytes at a path under the REST base, as the core names one (a produced file, a host `/fs/read`).
+  public func bytes(path: String) async throws -> Data {
+    try await call("GET", path)
+  }
+
   /// WebSocket URL for a session attach: the REST base with `http`→`ws`
   /// (`https`→`wss`), mirroring the reference client's `replace(/^http/, 'ws')`.
   public func webSocketURL(
