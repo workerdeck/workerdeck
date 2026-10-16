@@ -783,6 +783,17 @@ static SPA.
   embedding was broken only in the mode anyone reading it would run.
 ## `apps/ios`
 
+**Rust-only from 2026-10-16 (`refactor/rust`, Tobias's call).** Every session opens on
+`CoreSessionView` over the Rust core (`WorkerDeckSession`, linked unconditionally); there is no
+toggle and no Swift fallback, and a phone app that is not fully featured until the migration ends
+is accepted. The Swift session screen (`SessionView`, `TranscriptViewModel`, the cards renderer,
+the composer, the status bar, the sheets and the host file browser) is deleted, so paragraphs
+below that describe them are history until slice 7 rewrites this section. Deep links still land:
+a push's `seq` (epoch-checked), a task step's tool call, a sub-agent step's takeover and a shell
+step's screen are held as a `CoreEntry` until the replay settles. What the core screen lacks is
+listed in `_docs/plans/IOS-ONTO-CORE.md` (newest entry). `WorkerDeckKit` still holds the Swift
+reducer and planner because they write the `.lines.jsonl` goldens Rust's conformance tests read.
+
 native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo - no
 package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
 client and a port of the react transcript reducer - protocol or transcript changes must be
@@ -1273,12 +1284,13 @@ CoreDevice errors. For a screen that needs a live session to render at all, the 
 harness renders it from canned data in the simulator. Both are documented in
 `apps/ios/README.md`.
 
-**The Rust core preview is tested on the plugged-in phone** (`refactor/rust`, `WD_NATIVE_CORE`):
-`UIPREVIEW=core` plays `CoreReplayFixture` (60 turns plus one running shell answered in-process)
-through `CoreSessionView` with no gateway, and `WorkerDeckAppUITests/CoreTranscriptUITests` drives
-it with `xcodebuild test -destination 'id=<hardware UDID>'` (phone unlocked, UI Automation on;
-`xcrun xcresulttool export attachments` pulls the screenshots). Extend the fixture and the test
-with each slice.
+**The core session screen is tested on the plugged-in phone**: `UIPREVIEW=core` plays
+`CoreReplayFixture` (60 turns plus one running shell answered in-process) through `CoreSessionView`
+with no gateway, and `WorkerDeckAppUITests/CoreTranscriptUITests` drives it with
+`xcodebuild test -destination 'id=<hardware UDID>'` (phone unlocked, UI Automation on;
+`xcrun xcresulttool export attachments` pulls the screenshots). The simulator runs it too. Extend
+the fixture and the test with each slice. The `UIPREVIEW` harness keeps only `core`, `sessions`,
+`steps`, `teams`, `projects` and `folders`.
 
 Dependency direction: `protocol ← core ← queue ← server ← cli`, `protocol ← client ← react ← ui ← web`,
 `sandbox` a leaf either side may use. The browser side (client/react/ui/apps) must never import

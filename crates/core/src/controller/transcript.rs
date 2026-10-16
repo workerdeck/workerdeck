@@ -92,6 +92,10 @@ impl TranscriptView {
         self.reveal
     }
 
+    pub fn item_count(&self) -> usize {
+        self.items.len()
+    }
+
     pub fn recap_row(&self) -> Option<usize> {
         self.rows.recap_row()
     }

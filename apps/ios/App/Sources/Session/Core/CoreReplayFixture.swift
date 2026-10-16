@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import Foundation
 
 // A long session as gateway frames, for driving the core preview with no gateway: each turn is a prompt, a Bash call
@@ -158,4 +157,3 @@ enum CoreReplayFixture {
     (try? JSONSerialization.data(withJSONObject: object)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
   }
 }
-#endif

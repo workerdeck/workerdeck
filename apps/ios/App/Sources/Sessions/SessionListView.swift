@@ -126,32 +126,15 @@ struct SessionListView: View {
   private func destination(_ route: SessionRoute) -> some View {
     switch route {
     case .session(let hostId, let sessionId, let seq, let epoch, let subagent, let reveal, let shell):
-      #if WD_NATIVE_CORE
-      if settings.nativeCorePreview, let context = model?.context(for: hostId) {
-        CoreSessionView(sessionId: sessionId, hostId: hostId, client: context.client)
+      if let context = model?.context(for: hostId) {
+        CoreSessionView(
+          sessionId: sessionId, hostId: hostId, client: context.client,
+          entry: SessionRoute.entry(seq: seq, epoch: epoch, subagent: subagent, reveal: reveal, shell: shell))
       } else {
-        sessionScreen(hostId, sessionId, seq, epoch, subagent, reveal, shell)
+        missingHost
       }
-      #else
-      sessionScreen(hostId, sessionId, seq, epoch, subagent, reveal, shell)
-      #endif
     case .create(let hostId, let seed):
       createScreen(hostId, seed)
-    }
-  }
-
-  @ViewBuilder
-  private func sessionScreen(
-    _ hostId: UUID, _ sessionId: String, _ seq: Int?, _ epoch: Int?, _ subagent: String?, _ reveal: String?,
-    _ shell: String?
-  ) -> some View {
-    if let context = model?.context(for: hostId) {
-      SessionView(
-        sessionId: sessionId, hostId: hostId, client: context.client, focusSeq: seq,
-        focusEpoch: epoch, openSubagent: subagent, revealToolUseId: reveal, openShell: shell)
-      .environment(model?.agentAvatars ?? AgentAvatarLoader())
-    } else {
-      missingHost
     }
   }
 

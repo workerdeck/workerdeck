@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import SwiftUI
 import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
@@ -6,23 +5,28 @@ import WorkerDeckKit
 struct CoreSessionView: View {
   @Environment(AppSettings.self) private var settings
   @Environment(UnreadModel.self) private var unread
+  @Environment(PushCoordinator.self) private var push
+  @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.dismiss) private var dismiss
   @State private var model: CoreSessionModel
   @State private var scroll = TranscriptScrollModel()
   @State private var images = TerminalImageLoader()
   @State private var draft = ""
   @State private var shellMode = false
+  @State private var confirmClear = false
+  @State private var confirmClose = false
   private let hostId: UUID
   private let sessionId: String
   private let client: WorkerClient?
   private var fixtureRecap: CatchUpMark?
 
-  init(sessionId: String, hostId: UUID, client: WorkerClient) {
+  init(sessionId: String, hostId: UUID, client: WorkerClient, entry: CoreEntry? = nil) {
     self.hostId = hostId
     self.sessionId = sessionId
     self.client = client
     _model = State(
       initialValue: CoreSessionModel(
-        sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey))
+        sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey, entry: entry))
   }
 
   // Frames replayed with no gateway behind them: `UIPREVIEW=core` and the UI tests.
@@ -53,6 +57,21 @@ struct CoreSessionView: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) { pickers(ui) }
+      ToolbarItem(placement: .topBarTrailing) { sessionMenu(ui.chrome) }
+    }
+    .confirmationDialog("Clear the conversation?", isPresented: $confirmClear, titleVisibility: .visible) {
+      Button("Clear context", action: model.clearContext)
+    } message: {
+      Text("The session keeps running and starts a fresh conversation. The old one stays resumable.")
+    }
+    .confirmationDialog("Close this session?", isPresented: $confirmClose, titleVisibility: .visible) {
+      // Over REST rather than the socket: leaving tears the socket down at once, and a close must outlive the screen.
+      Button("Close session", role: .destructive) {
+        if let client { Task { [sessionId] in _ = try? await client.deleteSession(id: sessionId) } }
+        dismiss()
+      }
+    } message: {
+      Text("The run is terminated on the server.")
     }
     .navigationDestination(
       isPresented: Binding(
@@ -79,9 +98,43 @@ struct CoreSessionView: View {
       if let mark = fixtureRecap ?? (settings.catchUpMode ? unread.since(host: hostId, sessionId: sessionId) : nil) {
         model.setRecap(mark)
       }
+      if client != nil { push.visibleSessionId = sessionId }
     }
     // Pushing a shell or sub-agent screen hides this one too; only leaving the session closes it.
-    .onDisappear { if model.ui.shell == nil && model.ui.frame == nil { model.close() } }
+    .onDisappear {
+      guard model.ui.shell == nil && model.ui.frame == nil else { return }
+      model.close()
+      if push.visibleSessionId == sessionId { push.visibleSessionId = nil }
+      finalizeSeen()
+    }
+    .onChange(of: model.ui.seen) { _, seen in
+      if scenePhase == .active, let seen { mark(seen) }
+    }
+    .onChange(of: scenePhase) { _, phase in
+      guard client != nil else { return }
+      if phase == .active { model.reconnect() }
+      push.visibleSessionId = phase == .active ? sessionId : nil
+      if phase != .active { finalizeSeen() }
+    }
+  }
+
+  // Only while this session is really on screen: a mark from anywhere else is how an unread badge silently stops
+  // working.
+  private func mark(_ seen: CoreSeen) {
+    guard client != nil else { return }
+    unread.mark(
+      host: hostId, sessionId: sessionId, itemCount: seen.itemCount, activity: seen.activity, prose: seen.prose,
+      turns: seen.turns)
+  }
+
+  // The in-view marks ran off the attach snapshot's counters, so anything the rollup counted since would read as
+  // unread although it was on screen: leaving trues the mark up once from a fresh read.
+  private func finalizeSeen() {
+    guard let client, let seen = model.ui.seen else { return }
+    Task { @MainActor [unread, hostId, sessionId] in
+      guard let info = try? await client.getSession(id: sessionId) else { return }
+      unread.mark(host: hostId, sessionId: sessionId, itemCount: seen.itemCount, info: info)
+    }
   }
 
   // A `$` typed into an empty draft switches to shell mode when the session can run one; tapping the `$` leaves it.
@@ -133,6 +186,18 @@ struct CoreSessionView: View {
   @ViewBuilder
   private func picked(_ title: String, _ selected: Bool) -> some View {
     if selected { Label(title, systemImage: "checkmark") } else { Text(title) }
+  }
+
+  private func sessionMenu(_ chrome: SessionChrome?) -> some View {
+    Menu {
+      if chrome?.canClearContext == true {
+        Button("Clear context", systemImage: "eraser") { confirmClear = true }
+      }
+      Button("Close session", systemImage: "xmark.circle", role: .destructive) { confirmClose = true }
+    } label: {
+      Label("Session", systemImage: "ellipsis.circle")
+    }
+    .disabled(client == nil)
   }
 
   private func pickers(_ ui: CoreSessionUi) -> some View {
@@ -336,4 +401,3 @@ struct CorePromptCard: View {
     picked[index] = set
   }
 }
-#endif

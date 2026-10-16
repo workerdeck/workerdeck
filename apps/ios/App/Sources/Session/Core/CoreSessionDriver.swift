@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import Foundation
 import OSLog
 @preconcurrency import WorkerDeckSession
@@ -56,6 +55,24 @@ struct CoreSessionUi: @unchecked Sendable {
   var shell: CoreShellState?
   var frame: CoreFrameState?
   var peek: CoreRailPeek?
+  var focus: TranscriptFocusRequest?
+  var seen: CoreSeen?
+}
+
+// What a read mark records once the replay settled: the items on screen and the attach snapshot's rollup counters.
+struct CoreSeen: Equatable, Sendable {
+  var itemCount: Int
+  var activity: Int?
+  var prose: Int?
+  var turns: Int?
+}
+
+// Where a session opens besides its tail. Held until the replay settles, so it lands on a transcript that has the thing.
+enum CoreEntry: Sendable {
+  case seq(Int, epoch: Int?)
+  case reveal(String)
+  case subagent(String)
+  case shell(String)
 }
 
 // The open sub-agent takeover: one agent's own rows, read through the core's frame window.
@@ -108,6 +125,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private var socket: URLSessionWebSocketTask?
   private var railSize: CoreRailSize?
   private var frameRailSize: CoreRailSize?
+  private var pending: CoreEntry?
 
   // Socket callbacks arrive on URLSession's queue, maybe before the worker stored the socket, so each task carries its
   // generation and a callback from a replaced one is dropped by number.
@@ -116,9 +134,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   init(
     sessionId: String, baseURL: String, authKey: String?, metrics: Metrics, hideThinking: Bool,
-    fixture: [String]? = nil, publish: @escaping @Sendable (CoreSessionUi) -> Void
+    fixture: [String]? = nil, entry: CoreEntry? = nil, publish: @escaping @Sendable (CoreSessionUi) -> Void
   ) {
     self.fixture = fixture
+    pending = entry
     self.sessionId = sessionId
     self.baseURL = baseURL
     self.apiBase = WorkerDeckSession.apiBase(baseUrl: baseURL)
@@ -141,6 +160,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   func send(_ text: String) { worker.act { $0.send(text: text, attachmentIds: []) } }
   func runShell(_ command: String) { worker.act { $0.runShell(command: command) } }
   func interrupt() { worker.act { $0.interrupt() } }
+  func clearContext() { worker.act { $0.clearContext() } }
   func setModel(_ model: String?) { worker.act { $0.setModel(model: model) } }
   func setEffort(_ effort: String?) { worker.act { $0.setEffort(effort: effort) } }
   func setMode(_ mode: Mode) { worker.act { $0.setPermissionMode(mode: mode) } }
@@ -480,7 +500,51 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.openSeconds = seconds
       Self.log.notice("session open: \(seconds, format: .fixed(precision: 3)) s, \(self.ui.main.rows.count) rows")
     }
+    if ui.connection == .live, ui.progress == nil {
+      if changed.transcript || changed.chrome || ui.seen == nil { ui.seen = readSeen() }
+      if pending != nil, !ui.main.rows.isEmpty { enter() }
+    }
     publish(ui)
+  }
+
+  private func enter() {
+    guard let entry = pending else { return }
+    pending = nil
+    switch entry {
+    case .seq(let seq, let epoch):
+      // A dormant wake renumbers the log, so a seq from another epoch is not the row it names.
+      guard (epoch ?? 0) == (sessionEpoch() ?? 0),
+        let item = session.itemForSeq(seq: Int64(seq))
+      else { return }
+      focus(row: Int(session.rowForItem(item: item)))
+    case .reveal(let toolUseId):
+      if let row = session.rowForToolCall(toolUseId: toolUseId) { focus(row: Int(row)) }
+    case .subagent(let taskId):
+      openFrame(taskId)
+    case .shell(let id):
+      if ui.shell == nil { ui.shell = CoreShellState(id: id) }
+    }
+  }
+
+  private func focus(row: Int) {
+    ui.focus = TranscriptFocusRequest(row: row, nonce: (ui.focus?.nonce ?? 0) &+ 1, complete: true)
+  }
+
+  private func sessionInfo() -> [String: Any]? {
+    guard let json = session.sessionInfoJson(), let data = json.data(using: .utf8) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+  }
+
+  private func sessionEpoch() -> Int? { (sessionInfo()?["epoch"] as? NSNumber)?.intValue }
+
+  // Nil before the attach: a session opened over a dead link was never seen, and a zero mark would turn its whole
+  // history unread.
+  private func readSeen() -> CoreSeen? {
+    guard let info = sessionInfo() else { return nil }
+    let count = { (key: String) in (info[key] as? NSNumber)?.intValue }
+    return CoreSeen(
+      itemCount: Int(session.itemCount()), activity: count("activityCount"), prose: count("proseCount"),
+      turns: count("numTurns"))
   }
 
   private func readShell() {
@@ -507,4 +571,3 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     ui.frame?.rows = rows
   }
 }
-#endif

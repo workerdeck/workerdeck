@@ -8,17 +8,12 @@ options:
   groupSortPosition: top
 
 # The only dependency, and it is local: the app is a SwiftUI shell over the
-# WorkerDeckKit package (protocol mirror + REST/WS client + transcript reducer),
-# with one UIKit bridge in it - `RichTextEditor`, which the composer needs for
-# attributed text and a caret position. Zero third-party packages by design.
+# WorkerDeckKit package and the Rust core it links (`WorkerDeckSession`, built
+# into WorkerDeckKit/Native by `scripts/build-core.sh`; WorkerDeckWidgets never
+# links it). Zero third-party packages by design.
 packages:
   WorkerDeckKit:
     path: WorkerDeckKit
-
-# The Rust core (P5): the app needs it since the sessions list moved onto it (`scripts/build-core.sh` builds it into
-# WorkerDeckKit/Native). WorkerDeckWidgets never links it.
-include:
-  - path: native.yml
 
 settings:
   base:
@@ -62,6 +57,8 @@ targets:
         product: WorkerDeckKit
       - package: WorkerDeckKit
         product: WorkerDeckActivity
+      - package: WorkerDeckKit
+        product: WorkerDeckSession
       - target: WorkerDeckWidgets
     # Also generated (and gitignored). Xcode's "+ Capability" button would edit
     # the generated .xcodeproj instead and be lost on the next `xcodegen

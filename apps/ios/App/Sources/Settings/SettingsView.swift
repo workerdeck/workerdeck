@@ -20,30 +20,6 @@ struct SettingsView: View {
 
     Form {
       Section {
-        Picker("Style", selection: $settings.transcriptVariant) {
-          ForEach(TranscriptVariant.allCases, id: \.self) { variant in
-            Text(variant.label).tag(variant)
-          }
-        }
-        // Font is Cards-only: Terminal is monospace by construction, so the
-        // choice has nothing to change there. Disabled rather than hidden - the
-        // row stays in place so picking Terminal and back doesn't reflow the
-        // form, but a control that changes nothing is worse than an absent one,
-        // hence the footer saying so.
-        Picker("Font", selection: $settings.transcriptFont) {
-          ForEach(TranscriptFont.allCases, id: \.self) { font in
-            Text(font.label).tag(font)
-          }
-        }
-        .disabled(settings.transcriptVariant.isTerminal)
-      } header: {
-        Text("Agent view")
-      } footer: {
-        Text(explanation)
-      }
-
-
-      Section {
         Toggle("Catch-up mode", isOn: $settings.catchUpMode)
         Toggle("Show thinking", isOn: $settings.showThinking)
       } header: {
@@ -53,16 +29,6 @@ struct SettingsView: View {
           "Thinking rows fold to one line; lines the model meant for you always show. Reopening a session marks where you left off: a recap of what happened, the rows you had already read faded, and a bar that counts the new ones and jumps to them. Off if you switch between sessions constantly and the marker is just noise."
         )
       }
-
-      #if WD_NATIVE_CORE
-      Section {
-        Toggle("Rust core preview", isOn: $settings.nativeCorePreview)
-      } header: {
-        Text("Developer")
-      } footer: {
-        Text("Opens sessions on the Rust core's preview screen: plain transcript, prompts, pickers and composer.")
-      }
-      #endif
 
       Section {
         Toggle("Notifications", isOn: $settings.pushEnabled)
@@ -145,29 +111,5 @@ struct SettingsView: View {
         Button("Done") { dismiss() }
       }
     }
-  }
-
-  /// Says what each choice does rather than naming it twice - "Cards" and
-  /// "Terminal" mean nothing until you've seen both.
-  private var explanation: String {
-    let style =
-      switch settings.transcriptVariant {
-      case .cards: "Cards puts your messages in bubbles and boxes each tool call."
-      case .terminal: "Terminal draws the transcript like a CLI session, in one monospaced size."
-      }
-    // Terminal's line saying it doesn't apply replaces the font sentence
-    // entirely, rather than joining them: a sentence explaining a disabled
-    // control is more useful than the control's own (inert) wording.
-    guard !settings.transcriptVariant.isTerminal else {
-      return "\(style) Font is fixed under Terminal."
-    }
-    let font =
-      switch settings.transcriptFont {
-      case .regular: "Regular is the system font."
-      case .monospace: "Monospace puts the whole agent view in the code font."
-      }
-    // Says what applies where, once: these two shape a session you have open
-    // and nothing else in the app.
-    return "\(style) \(font) These apply to the agent view only."
   }
 }

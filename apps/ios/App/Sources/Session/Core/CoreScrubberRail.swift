@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import SwiftUI
 import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
@@ -232,4 +231,3 @@ private struct CorePeekPanel: View {
     .accessibilityIdentifier("scrubber-peek")
   }
 }
-#endif

@@ -1,9 +1,0 @@
-# Merged by project.yml. `WD_NATIVE_CORE` still gates the session-screen preview code until slice 7 deletes the gate.
-targets:
-  WorkerDeckApp:
-    dependencies:
-      - package: WorkerDeckKit
-        product: WorkerDeckSession
-    settings:
-      base:
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WD_NATIVE_CORE

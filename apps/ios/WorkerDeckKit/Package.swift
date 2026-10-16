@@ -1,11 +1,5 @@
 // swift-tools-version: 6.0
-import Foundation
 import PackageDescription
-
-// The Rust core joins once `scripts/build-core.sh` has built it into Native/ (gitignored), so an app-only checkout
-// still builds without cargo.
-let nativeCore = FileManager.default.fileExists(
-  atPath: Context.packageDirectory + "/Native/WdFFI.xcframework/Info.plist")
 
 let package = Package(
   name: "WorkerDeckKit",
@@ -17,6 +11,8 @@ let package = Package(
     // the widget extension must link it without dragging the transcript
     // reducer and the terminal renderer into a memory-capped process.
     .library(name: "WorkerDeckActivity", targets: ["WorkerDeckActivity"]),
+    // The Rust core, built into Native/ (gitignored) by `scripts/build-core.sh`.
+    .library(name: "WorkerDeckSession", targets: ["WorkerDeckSession"]),
   ],
   targets: [
     .target(name: "WorkerDeckKit"),
@@ -25,12 +21,6 @@ let package = Package(
     .testTarget(
       name: "WorkerDeckActivityTests", dependencies: ["WorkerDeckActivity"],
       resources: [.copy("Fixtures")]),
-  ]
-)
-
-if nativeCore {
-  package.products.append(.library(name: "WorkerDeckSession", targets: ["WorkerDeckSession"]))
-  package.targets += [
     .binaryTarget(name: "WorkerDeckCoreFFI", path: "Native/WdFFI.xcframework"),
     .target(
       name: "WorkerDeckCore", dependencies: ["WorkerDeckCoreFFI"], path: "Native/Bindings",
@@ -39,4 +29,4 @@ if nativeCore {
     .testTarget(name: "WorkerDeckCoreTests", dependencies: ["WorkerDeckCore"]),
     .testTarget(name: "WorkerDeckSessionTests", dependencies: ["WorkerDeckSession"]),
   ]
-}
+)

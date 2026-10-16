@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import SwiftUI
 import UIKit
 import WorkerDeckKit
@@ -98,7 +97,8 @@ struct CoreTranscriptView: View {
   private func transcript(_ content: CoreTranscriptContent, bleed: CGFloat) -> some View {
     let inFrame = frame != nil
     return VirtualizedTranscriptView(
-      content: content, scroll: scroll, reveal: content.rows.reveal, showsScrollIndicator: false,
+      content: content, scroll: scroll, reveal: content.rows.reveal, focus: inFrame ? nil : model.ui.focus,
+      showsScrollIndicator: false,
       configureRow: { [model, imageLoader, typography] cell, index in
         cell.configure(
           lines: content.rows.linesAt(index)?.enumerated().map { $1.termLine(press: $0) } ?? [],
@@ -211,4 +211,3 @@ extension TranscriptLine {
     return AttributedString(string)
   }
 }
-#endif

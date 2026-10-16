@@ -8,6 +8,14 @@ client to the gateway you already run.
 
 Plan and research: `_docs/features/mobile-client.md` (gitignored, local).
 
+**Rust-only (2026-10-16).** Sessions open on `App/Sources/Session/Core/CoreSessionView.swift` over
+the Rust core (`WorkerDeckKit/Native`, built by `scripts/build-core.sh`, required: `deploy.sh`
+builds it when missing, and `swift test` needs it too). The Swift session screen and everything
+only it used are deleted; sections below that describe `SessionView`, `TranscriptViewModel`, the
+cards renderer, the composer, the status bar or `UIPREVIEW` variants other than `core`,
+`sessions`, `steps`, `teams`, `projects` and `folders` are history. See `docs/CLIENTS.md`
+§ `apps/ios`.
+
 ## Layout
 
 - `WorkerDeckKit/` - SwiftPM package, the platform-agnostic core (builds on iOS + macOS, unit
@@ -751,13 +759,10 @@ Most screens need a live session against a real server before they render anythi
 live:
 
 ```sh
-SIMCTL_CHILD_UIPREVIEW=usage xcrun simctl launch --terminate-running-process booted \
+SIMCTL_CHILD_UIPREVIEW=sessions xcrun simctl launch --terminate-running-process booted \
   bi.atomic.workerdeck.ios
-xcrun simctl io booted screenshot /tmp/usage.png
+xcrun simctl io booted screenshot /tmp/sessions.png
 ```
-
-`composer` renders the docked composer in each of its gutter states, stacked - an alignment claim
-needs to be seen as a column, not as five separate screenshots.
 
 `steps` renders the step rows that hang under a session card - every state and both kinds at
 once, which the real list will never show you. It is this app's answer to the dashboard's
@@ -766,14 +771,8 @@ sort has something to prove. The footer states the expected reading, top to bott
 the real `NavigationLink`s and its destination prints the route, so it is also where the UI test
 presses one step of each kind and checks that an agent frames and a task reveals.
 
-`terminal` renders the terminal transcript over a fixture built to exercise the row model rather
-than to look plausible - a folded run, two `Task`s whose children interleave, a diff carrying the
-engine's own line numbers, and a result long enough to hit both preview budgets. It reports the
-**overflow audit** across the top: the one thing that can catch the cell model disagreeing with
-real text layout, which would clip a line silently. `terminalStress` is the same screen over
-16,000 rows, which is what the virtualized engine exists for. `catchUp` and `catchUpCards` put
-the catch-up seam through both renderers on the same fixture - the faded rows above it, the
-recap line on it, the rail's mark, and the bar under it.
+`core` plays `CoreReplayFixture` through the real core session screen with no gateway
+(`UIPREVIEW_RECAP=<items>` adds a catch-up seam); it is what `CoreTranscriptUITests` drives.
 
 Two things that don't work and are worth not re-trying: driving the simulator's UI with System
 Events (clicking needs an Accessibility grant a CLI shell doesn't have), and guessing a layout

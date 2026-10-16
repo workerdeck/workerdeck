@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import SwiftUI
 import UIKit
 import WorkerDeckKit
@@ -314,4 +313,3 @@ final class CoreShellCanvasView: UIView {
       .draw(at: CGPoint(x: box.minX, y: box.minY + (box.height - font.lineHeight) / 2))
   }
 }
-#endif

@@ -49,6 +49,13 @@ enum SessionRoute: Hashable {
       return .session(hostId: hostId, sessionId: sessionId, shell: step.key)
     }
   }
+
+  static func entry(seq: Int?, epoch: Int?, subagent: String?, reveal: String?, shell: String?) -> CoreEntry? {
+    if let subagent { return .subagent(subagent) }
+    if let shell { return .shell(shell) }
+    if let reveal { return .reveal(reveal) }
+    return seq.map { .seq($0, epoch: epoch) }
+  }
 }
 
 /// Pre-fill for the create form. Carries only what a caller can know up front -

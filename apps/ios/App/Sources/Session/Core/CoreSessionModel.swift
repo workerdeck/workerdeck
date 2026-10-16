@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import Foundation
 import Observation
 import WorkerDeckKit
@@ -16,9 +15,11 @@ final class CoreSessionModel {
   private(set) var metrics: TerminalMetrics?
   private var recap: CatchUpMark?
   private var pinRequested: String?
+  private var entry: CoreEntry?
 
-  init(sessionId: String, baseURL: String, authKey: String?, fixture: [String]? = nil) {
+  init(sessionId: String, baseURL: String, authKey: String?, fixture: [String]? = nil, entry: CoreEntry? = nil) {
     self.fixture = fixture
+    self.entry = entry
     self.sessionId = sessionId
     self.baseURL = baseURL
     self.authKey = authKey
@@ -37,12 +38,13 @@ final class CoreSessionModel {
     }
     let driver = CoreSessionDriver(
       sessionId: sessionId, baseURL: baseURL, authKey: authKey, metrics: core, hideThinking: hideThinking,
-      fixture: fixture
+      fixture: fixture, entry: entry
     ) { [weak self] ui in
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }
     }
     if let recap { driver.setRecap(boundary: recap.itemCount, since: recap.seenAt) }
     self.driver = driver
+    entry = nil
   }
 
   func setRecap(_ mark: CatchUpMark) {
@@ -79,6 +81,7 @@ final class CoreSessionModel {
   func closeShell(_ id: String) { driver?.closeShell(id) }
   func reconnect() { driver?.reconnect() }
   func interrupt() { driver?.interrupt() }
+  func clearContext() { driver?.clearContext() }
   func setModel(_ model: String?) { driver?.setModel(model) }
   func setEffort(_ effort: String?) { driver?.setEffort(effort) }
   func setMode(_ mode: Mode) { driver?.setMode(mode) }
@@ -113,4 +116,3 @@ final class CoreSessionModel {
     pinRequested = nil
   }
 }
-#endif

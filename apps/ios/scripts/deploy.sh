@@ -122,18 +122,13 @@ if [[ "$core" == "build" || ! -f "$IOS_DIR/WorkerDeckKit/Native/WdFFI.xcframewor
   step "Building the Rust core"
   "$IOS_DIR/scripts/build-core.sh" || fail "build-core.sh failed."
 fi
-native="YES"
 
 # --- generate ----------------------------------------------------------------
 if [[ $generate -eq 1 ]]; then
-  stamp="$PROJECT/.wd-native"
-  if [[ ! -d "$PROJECT" || "$IOS_DIR/project.yml" -nt "$PROJECT/project.pbxproj" \
-    || "$IOS_DIR/native.yml" -nt "$PROJECT/project.pbxproj" \
-    || "$(cat "$stamp" 2>/dev/null)" != "$native" ]]; then
-    step "xcodegen generate (native core: $native)"
+  if [[ ! -d "$PROJECT" || "$IOS_DIR/project.yml" -nt "$PROJECT/project.pbxproj" ]]; then
+    step "xcodegen generate"
     command -v xcodegen >/dev/null || fail "xcodegen is required (brew install xcodegen)."
     (cd "$IOS_DIR" && xcodegen generate --quiet)
-    echo "$native" >"$stamp"
   fi
 fi
 

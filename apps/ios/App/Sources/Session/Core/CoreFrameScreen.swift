@@ -1,4 +1,3 @@
-#if WD_NATIVE_CORE
 import SwiftUI
 import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
@@ -60,4 +59,3 @@ struct CoreFrameScreen: View {
     .accessibilityIdentifier("frame-strip")
   }
 }
-#endif

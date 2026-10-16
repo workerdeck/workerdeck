@@ -477,6 +477,11 @@ impl Session {
         HostImageFetch { path: fetch.path, fs_read: fetch.fs_read }
     }
 
+    // Items the transcript holds: a read mark's recap boundary, in the same units `set_recap` takes.
+    pub fn item_count(&self) -> u32 {
+        self.live().view().item_count() as u32
+    }
+
     pub fn row_for_item(&self, item: u32) -> u32 {
         self.live().view().row_index_for_item(item as usize) as u32
     }
