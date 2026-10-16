@@ -1,9 +1,12 @@
 pub mod agent_avatar;
 pub mod agents;
+pub mod attachments;
 pub mod bookmarks;
 pub mod checklist;
 pub mod collate;
+pub mod composer;
 pub mod composer_lists;
+pub mod composer_tokens;
 pub mod create_form;
 pub mod engine_mark;
 pub mod fmt;

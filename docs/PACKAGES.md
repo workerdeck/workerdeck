@@ -1269,7 +1269,7 @@ a **poll** because nothing pushes them - a session's own `rate_limit` readings l
 turn's edges, so an idle session's meters age silently and a sibling session's spend never
 reaches them at all), the
 other pure helpers that both clients must agree on (`rateLimitWindows`, `scanPromptTokens` -
-the mirror of the Swift `PromptTokens`), and the browser tool host (`tool-host.ts`) running
+mirrored by the Rust core's `vm::composer_tokens`), and the browser tool host (`tool-host.ts`) running
 server-bridged calls in the tab. Companions must ride the hook's own `handle` - the bridge asks
 the first attached client, so a second handle sees nothing. `TranscriptState.capabilities` is
 always populated, and is what every surface renders from (see `docs/GOTCHAS.md`).

@@ -2,95 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import WorkerDeckKit
-
-// One staged file, from picked to sent. It exists before its upload lands, so the chip shows the moment it is picked.
-@MainActor
-@Observable
-final class ComposerAttachment: Identifiable {
-  enum State {
-    case uploading
-    case ready(remoteId: String)
-    case failed(String)
-  }
-
-  let id = UUID()
-  let name: String
-  let mediaType: String
-  let thumbnail: UIImage?
-  let data: Data
-  private(set) var state: State = .uploading
-
-  init(_ picked: PickedFile) {
-    name = picked.name
-    mediaType = picked.mediaType
-    thumbnail = picked.thumbnail
-    data = picked.data
-  }
-
-  var remoteId: String? {
-    if case .ready(let remoteId) = state { return remoteId }
-    return nil
-  }
-
-  var failure: String? {
-    if case .failed(let message) = state { return message }
-    return nil
-  }
-
-  func settle(_ state: State) { self.state = state }
-}
-
-// Uploads start the moment a file is staged, so a send only names ids that already landed.
-@MainActor
-@Observable
-final class ComposerAttachmentStore {
-  private(set) var items: [ComposerAttachment] = []
-  var errorText: String?
-  var upload: (@Sendable (String, String, Data) async throws -> String)?
-
-  var isEmpty: Bool { items.isEmpty }
-
-  var isUploading: Bool {
-    items.contains { if case .uploading = $0.state { true } else { false } }
-  }
-
-  // A failed upload blocks the send rather than silently dropping the picture from it.
-  var hasFailure: Bool { items.contains { $0.failure != nil } }
-  var readyIds: [String] { items.compactMap(\.remoteId) }
-
-  func add(_ picked: PickedFile) {
-    let item = ComposerAttachment(picked)
-    items.append(item)
-    send(item, announceFailure: true)
-  }
-
-  func retry(_ item: ComposerAttachment) {
-    guard item.failure != nil else { return }
-    item.settle(.uploading)
-    send(item, announceFailure: false)
-  }
-
-  private func send(_ item: ComposerAttachment, announceFailure: Bool) {
-    guard let upload else {
-      item.settle(.failed("Not connected"))
-      return
-    }
-    let (name, mediaType, data) = (item.name, item.mediaType, item.data)
-    Task {
-      do {
-        let uploaded = try await upload(name, mediaType, data)
-        item.settle(.ready(remoteId: uploaded))
-      } catch {
-        let message = (error as? WorkerClientError)?.message ?? error.localizedDescription
-        item.settle(.failed(message))
-        if announceFailure { errorText = message }
-      }
-    }
-  }
-
-  func remove(_ item: ComposerAttachment) { items.removeAll { $0.id == item.id } }
-  func clear() { items.removeAll() }
-}
+@preconcurrency import WorkerDeckSession
 
 struct PickedFile {
   let name: String
@@ -99,57 +11,54 @@ struct PickedFile {
   let thumbnail: UIImage?
 }
 
-// iPhone photos are usually HEIC, which no model takes: images are transcoded and scaled to what a vision model uses.
+// The core decides which bytes go out as picked and which are scaled and re-encoded; this only does the pixels.
 enum AttachmentNormalizer {
-  static let acceptedImageTypes: Set<String> = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-  static let maxImageEdge: CGFloat = 1568
-  static let jpegQuality: CGFloat = 0.8
-
   static let pasteboardImageTypes: [(UTType, String)] = [
     (.png, "image/png"), (.jpeg, "image/jpeg"), (.gif, "image/gif"), (.webP, "image/webp"),
   ]
 
-  static func image(_ image: UIImage, name: String, mediaType: String?) -> PickedFile? {
-    let scaled = downscaled(image)
-    if let mediaType, acceptedImageTypes.contains(mediaType), scaled === image,
-      let data = mediaType == "image/png" ? image.pngData() : image.jpegData(compressionQuality: jpegQuality)
-    {
-      return PickedFile(name: name, mediaType: mediaType, data: data, thumbnail: thumbnail(scaled))
-    }
-    guard let data = scaled.jpegData(compressionQuality: jpegQuality) else { return nil }
-    return PickedFile(name: renamed(name, to: "jpg"), mediaType: "image/jpeg", data: data, thumbnail: thumbnail(scaled))
+  // A picture with no bytes of its own (camera, a decoded clipboard image) always goes out as JPEG.
+  static func image(_ image: UIImage, name: String) -> PickedFile? {
+    jpeg(image, plan: imagePlan(name: name, mediaType: nil, width: pixels(image.size.width), height: pixels(image.size.height)))
   }
 
-  // Exact bytes when the format and size already suit: a screenshot re-encoded to JPEG reads measurably worse.
   static func file(data: Data, name: String, mediaType: String) -> PickedFile? {
-    if mediaType.hasPrefix("image/"), let image = UIImage(data: data) {
-      if acceptedImageTypes.contains(mediaType), downscaled(image) === image {
-        return PickedFile(name: name, mediaType: mediaType, data: data, thumbnail: thumbnail(image))
-      }
-      return self.image(image, name: name, mediaType: mediaType)
+    guard mediaType.hasPrefix("image/"), let image = UIImage(data: data) else {
+      return PickedFile(name: name, mediaType: mediaType, data: data, thumbnail: nil)
     }
-    return PickedFile(name: name, mediaType: mediaType, data: data, thumbnail: nil)
+    let plan = imagePlan(
+      name: name, mediaType: mediaType, width: pixels(image.size.width), height: pixels(image.size.height))
+    if case .keep = plan {
+      return PickedFile(name: name, mediaType: mediaType, data: data, thumbnail: thumbnail(image))
+    }
+    return jpeg(image, plan: plan)
+  }
+
+  private static func pixels(_ value: CGFloat) -> UInt32 { UInt32(clamping: Int(value.rounded())) }
+
+  private static func jpeg(_ image: UIImage, plan: ImagePlan) -> PickedFile? {
+    guard case .jpeg(let name, let width, let height) = plan else { return nil }
+    let scaled = render(image, width: width, height: height, scale: 1)
+    guard let data = scaled.jpegData(compressionQuality: CGFloat(imageJpegQuality())) else { return nil }
+    return PickedFile(name: name, mediaType: "image/jpeg", data: data, thumbnail: thumbnail(scaled))
+  }
+
+  private static func render(_ image: UIImage, width: UInt32, height: UInt32, scale: CGFloat?) -> UIImage {
+    let size = CGSize(width: CGFloat(width), height: CGFloat(height))
+    let format = UIGraphicsImageRendererFormat.default()
+    if let scale { format.scale = scale }
+    return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+      image.draw(in: CGRect(origin: .zero, size: size))
+    }
+  }
+
+  private static func thumbnail(_ image: UIImage) -> UIImage {
+    let size = attachmentThumbnailSize(width: pixels(image.size.width), height: pixels(image.size.height))
+    return render(image, width: max(size[0], 1), height: max(size[1], 1), scale: nil)
   }
 
   static func mediaType(for url: URL) -> String {
     UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-  }
-
-  private static let textTypes: Set<String> = [
-    "application/json", "application/xml", "application/yaml", "application/x-yaml", "application/toml",
-    "application/javascript", "application/typescript", "application/x-sh", "application/x-httpd-php",
-    "application/sql",
-  ]
-
-  // The capability kind a media type lands as; nil when unknown here, and then the gateway decides.
-  static func kind(of mediaType: String) -> String? {
-    let type =
-      mediaType.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-      ?? mediaType.lowercased()
-    if type.hasPrefix("image/") { return "image" }
-    if type == "application/pdf" { return "pdf" }
-    if type.hasPrefix("text/") || textTypes.contains(type) { return "text" }
-    return nil
   }
 
   static func importableTypes(_ kinds: Set<String>) -> [UTType] {
@@ -160,42 +69,19 @@ enum AttachmentNormalizer {
     if kinds.contains("text") { types.append(.text) }
     return types.isEmpty ? [.item] : types
   }
-
-  private static func downscaled(_ image: UIImage) -> UIImage {
-    let longest = max(image.size.width, image.size.height)
-    guard longest > maxImageEdge else { return image }
-    let scale = maxImageEdge / longest
-    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-    let format = UIGraphicsImageRendererFormat.default()
-    format.scale = 1
-    return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-      image.draw(in: CGRect(origin: .zero, size: size))
-    }
-  }
-
-  private static func thumbnail(_ image: UIImage) -> UIImage {
-    let scale = 120 / max(image.size.width, image.size.height, 1)
-    let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-    return UIGraphicsImageRenderer(size: size, format: .default()).image { _ in
-      image.draw(in: CGRect(origin: .zero, size: size))
-    }
-  }
-
-  private static func renamed(_ name: String, to ext: String) -> String {
-    let stem = (name as NSString).deletingPathExtension
-    return (stem.isEmpty ? "photo" : stem) + "." + ext
-  }
 }
 
 // The staged files above the field: a local thumbnail with the upload's state on top, tap to retry, x to remove.
 struct ComposerAttachmentStrip: View {
-  let store: ComposerAttachmentStore
+  let model: ComposerModel
 
   var body: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 8) {
-        ForEach(store.items) { item in
-          ComposerAttachmentChip(item: item, onRetry: { store.retry(item) }, onRemove: { store.remove(item) })
+        ForEach(model.chips, id: \.id) { chip in
+          ComposerAttachmentChip(
+            chip: chip, thumbnail: model.thumbnails[chip.id], onRetry: { model.retry(chip.id) },
+            onRemove: { model.remove(chip.id) })
         }
       }
       .padding(.horizontal, 6)
@@ -206,9 +92,15 @@ struct ComposerAttachmentStrip: View {
 }
 
 private struct ComposerAttachmentChip: View {
-  let item: ComposerAttachment
+  let chip: AttachmentChip
+  let thumbnail: UIImage?
   let onRetry: () -> Void
   let onRemove: () -> Void
+
+  private var failed: Bool {
+    if case .failed = chip.status { return true }
+    return false
+  }
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -217,9 +109,9 @@ private struct ComposerAttachmentChip: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(TerminalPalette.cellStroke))
         .overlay { status }
-        .onTapGesture { if item.failure != nil { onRetry() } }
+        .onTapGesture { if failed { onRetry() } }
         .accessibilityElement()
-        .accessibilityLabel(item.failure.map { "\(item.name), failed: \($0). Tap to retry." } ?? item.name)
+        .accessibilityLabel(chip.accessibilityLabel)
         .accessibilityIdentifier("Attachment")
       Button(action: onRemove) {
         Image(systemName: "xmark.circle.fill")
@@ -229,7 +121,7 @@ private struct ComposerAttachmentChip: View {
       }
       .buttonStyle(.plain)
       .offset(x: 5, y: -5)
-      .accessibilityLabel("Remove \(item.name)")
+      .accessibilityLabel("Remove \(chip.name)")
     }
     .padding(.top, 5)
     .padding(.trailing, 5)
@@ -237,12 +129,12 @@ private struct ComposerAttachmentChip: View {
 
   @ViewBuilder
   private var content: some View {
-    if let thumbnail = item.thumbnail {
+    if let thumbnail {
       Image(uiImage: thumbnail).resizable().scaledToFill()
     } else {
       VStack(spacing: 2) {
         Image(systemName: "doc").font(.footnote)
-        Text(fileExtension).font(.system(size: 9, weight: .semibold)).lineLimit(1)
+        Text(chip.extension).font(.system(size: 9, weight: .semibold)).lineLimit(1)
       }
       .foregroundStyle(TerminalPalette.color(.dim))
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -252,7 +144,7 @@ private struct ComposerAttachmentChip: View {
 
   @ViewBuilder
   private var status: some View {
-    switch item.state {
+    switch chip.status {
     case .uploading:
       ZStack {
         Color.black.opacity(0.35)
@@ -266,10 +158,5 @@ private struct ComposerAttachmentChip: View {
     case .ready:
       EmptyView()
     }
-  }
-
-  private var fileExtension: String {
-    let ext = (item.name as NSString).pathExtension.uppercased()
-    return ext.isEmpty ? "FILE" : ext
   }
 }

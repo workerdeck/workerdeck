@@ -188,23 +188,41 @@ enum CoreReplayFixture {
 
   static let uploadPrefix = "att_"
 
+  // Canned answers by route: the core names the calls exactly as it would against a gateway.
   static let composerServices = CoreComposerServices(
-    upload: { name, mediaType, data in
-      try await Task.sleep(for: .milliseconds(300))
-      return uploadPrefix + name
+    perform: { call in
+      if call.path.hasPrefix("/fs/find") {
+        let query = URLComponents(string: call.path)?.queryItems?.first { $0.name == "q" }?.value ?? ""
+        let paths = ["src/main.swift", "src/composer/field.swift", "README.md", "docs/GUIDE.md"]
+        let matches = paths.filter { query.isEmpty || $0.lowercased().contains(query.lowercased()) }
+          .map { ["path": "/work/fixture/\($0)", "relative": $0] }
+        return answer(["base": "/work/fixture", "matches": matches])
+      }
+      if call.path == "/sessions" {
+        return answer([
+          "sessions": [
+            [
+              "id": "peer-1", "title": "Release Lead", "status": "idle", "engine": "claude",
+              "project": ["name": "workerdeck", "root": "/w"], "createdAt": 2,
+            ],
+            [
+              "id": "peer-2", "title": "Docs Writer", "status": "running", "engine": "codex",
+              "project": ["name": "docs", "root": "/d"], "createdAt": 1,
+            ],
+          ]
+        ])
+      }
+      return HttpAnswer(status: 404, contentType: "application/json", body: #"{"error":"not found"}"#)
     },
-    findFiles: { _, query in
-      let paths = ["src/main.swift", "src/composer/field.swift", "README.md", "docs/GUIDE.md"]
-      let rows = paths.filter { query.isEmpty || $0.lowercased().contains(query.lowercased()) }
-        .map { HostFileMatch(path: "/work/fixture/\($0)", relative: $0) }
-      return rows
-    },
-    listPeers: {
-      [
-        PeerSession(id: "peer-1", slug: "Release-Lead", label: "Release Lead", detail: "claude · workerdeck · idle"),
-        PeerSession(id: "peer-2", slug: "Docs-Writer", label: "Docs Writer", detail: "codex · docs · running"),
-      ]
+    upload: { call, _, _ in
+      try? await Task.sleep(for: .milliseconds(300))
+      let name = URLComponents(string: call.path)?.queryItems?.first { $0.name == "name" }?.value ?? "file"
+      return answer(["attachment": ["id": uploadPrefix + name]])
     })
+
+  private static func answer(_ object: [String: Any]) -> HttpAnswer {
+    HttpAnswer(status: 200, contentType: "application/json", body: json(object))
+  }
 
   private static func record(_ status: String) -> Any {
     (try? JSONSerialization.jsonObject(with: Data(shellRecord(status).utf8))) ?? [:]

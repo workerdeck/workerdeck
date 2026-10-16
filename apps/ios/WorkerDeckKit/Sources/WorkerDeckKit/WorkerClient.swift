@@ -73,19 +73,19 @@ public struct WorkerClient: Sendable {
       body: String(decoding: data, as: UTF8.self))
   }
 
-  // An upload the core named (`uploadAttachmentCall`): the body is the raw bytes under their own media type.
-  public func upload(_ call: HttpCall, mediaType: String, data: Data) async throws -> Data {
-    var request = URLRequest(url: try makeURL(call.path))
+  // An upload the core named: the body is the raw bytes under their own media type; no answer is status 0.
+  public func upload(_ call: HttpCall, mediaType: String, data: Data) async -> HttpAnswer {
+    guard let url = try? makeURL(call.path) else { return HttpAnswer(status: 0, contentType: nil, body: "") }
+    var request = URLRequest(url: url)
     request.httpMethod = call.method
     request.setValue(mediaType, forHTTPHeaderField: "content-type")
     applyAuth(&request)
-    let (body, response) = try await urlSession.upload(for: request, from: data)
-    let status = UInt16(clamping: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "content-type")
-    if let error = restError(status: status, contentType: contentType, body: String(decoding: body, as: UTF8.self)) {
-      throw WorkerClientError(error)
-    }
-    return body
+    guard let (body, response) = try? await urlSession.upload(for: request, from: data),
+      let http = response as? HTTPURLResponse
+    else { return HttpAnswer(status: 0, contentType: nil, body: "") }
+    return HttpAnswer(
+      status: UInt16(clamping: http.statusCode), contentType: http.value(forHTTPHeaderField: "content-type"),
+      body: String(decoding: body, as: UTF8.self))
   }
 
   private func send(_ call: HttpCall) async throws -> (Data, HTTPURLResponse) {

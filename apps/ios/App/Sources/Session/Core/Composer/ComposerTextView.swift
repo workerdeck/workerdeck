@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import WorkerDeckKit
+@preconcurrency import WorkerDeckSession
 
 // The composer's field: a `UITextView`, because a SwiftUI field can neither style part of the draft nor say where
 // the caret is, and completion needs both.
@@ -11,7 +12,7 @@ struct ComposerTextView: UIViewRepresentable {
   @Binding var isFocused: Bool
   var isEnabled = true
   var isShellMode = false
-  var names = PromptTokenNames()
+  var tokens: (String) -> [TokenSpan] = { _ in [] }
   var maxLines = 6
   var onEdit: (String, NSRange) -> Void = { _, _ in }
   // True when the paste was taken as an attachment, which also drops the paste's alt text.
@@ -53,7 +54,7 @@ struct ComposerTextView: UIViewRepresentable {
     context.coordinator.isApplyingBinding = true
     defer { context.coordinator.isApplyingBinding = false }
     if view.text != text { view.text = text }
-    Self.restyle(view, names: names)
+    Self.restyle(view, tokens: tokens)
     let clamped = clamp(selection, to: view.text as NSString)
     if view.selectedRange != clamped { view.selectedRange = clamped }
     view.isEditable = isEnabled
@@ -89,15 +90,16 @@ struct ComposerTextView: UIViewRepresentable {
   }
 
   // Only confirmed tokens are styled: the word still being typed stays plain, so the draft does not flicker.
-  static func restyle(_ view: UITextView, names: PromptTokenNames) {
+  static func restyle(_ view: UITextView, tokens: (String) -> [TokenSpan]) {
     guard view.markedTextRange == nil else { return }
     let text = view.text ?? ""
     let storage = view.textStorage
     storage.beginEditing()
     storage.setAttributes(baseAttributes, range: NSRange(location: 0, length: storage.length))
-    for token in PromptTokens.confirmed(in: text, skills: names.skills, sessions: names.sessions) {
+    for token in tokens(text) where Int(token.end) <= storage.length {
       storage.addAttributes(
-        [.foregroundColor: UIColor(PromptTokenStyle.color(token.kind))], range: NSRange(token.range, in: text))
+        [.foregroundColor: UIColor(PromptTokenStyle.color(token.kind))],
+        range: NSRange(location: Int(token.start), length: Int(token.end - token.start)))
     }
     storage.endEditing()
     view.typingAttributes = baseAttributes
@@ -117,7 +119,7 @@ struct ComposerTextView: UIViewRepresentable {
 
     func textViewDidChange(_ view: UITextView) {
       guard !isApplyingBinding else { return }
-      ComposerTextView.restyle(view, names: parent.names)
+      ComposerTextView.restyle(view, tokens: parent.tokens)
       parent.text = view.text
       parent.selection = view.selectedRange
       parent.onEdit(view.text, view.selectedRange)
@@ -157,7 +159,7 @@ final class DraftTextView: UITextView {
 
 // `@file`, `/command`, `$skill` and `#session` as the CLI writes them: tinted, no fill.
 enum PromptTokenStyle {
-  static func color(_ kind: PromptToken.Kind) -> Color {
+  static func color(_ kind: TokenKind) -> Color {
     switch kind {
     case .file: TerminalPalette.color(.blue)
     case .command: .purple
@@ -165,10 +167,4 @@ enum PromptTokenStyle {
     case .session: TerminalPalette.color(.green)
     }
   }
-}
-
-// The two gated sigils' allowlists: `$name` and `#Name` are prose far more often than tokens.
-struct PromptTokenNames: Equatable {
-  var skills: Set<String> = []
-  var sessions: Set<String> = []
 }

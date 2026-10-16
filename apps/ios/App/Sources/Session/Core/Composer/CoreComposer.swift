@@ -4,87 +4,71 @@ import UIKit
 import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
 
-// What the composer reaches over REST: uploads (answering the attachment's id), the `@file` search and the `#` peer
-// list. Absent pieces switch their feature off. The core names each call and reads each answer.
-struct CoreComposerServices: Sendable {
-  var upload: (@Sendable (String, String, Data) async throws -> String)?
-  var findFiles: (@Sendable (_ cwd: String, _ query: String) async throws -> [HostFileMatch])?
-  var listPeers: (@Sendable () async throws -> [PeerSession])?
-
-  static func live(client: WorkerClient, sessionId: String) -> Self {
-    Self(
-      upload: { name, mediaType, data in
-        let body = try await client.upload(
-          uploadAttachmentCall(sessionId: sessionId, name: name), mediaType: mediaType, data: data)
-        guard let id = uploadedAttachmentId(body: String(decoding: body, as: UTF8.self)) else {
-          throw WorkerClientError(message: "The gateway's answer could not be read")
-        }
-        return id
-      },
-      findFiles: { cwd, query in
-        let call = findHostFilesCall(
-          directory: cwd, query: query, limit: UInt32(PromptCompletionModel.fileSearchLimit))
-        return hostFileMatches(body: String(decoding: try await client.perform(call), as: UTF8.self)) ?? []
-      },
-      listPeers: {
-        PromptCompletionModel.peerSessions(try await client.listSessions(), excluding: sessionId)
-      })
-  }
-}
-
 // The docked composer of the terminal theme: one rule along the top, a gutter cell on the transcript's marker column
 // (`$` in shell mode, a stop while busy, `+` to attach, else the prompt glyph), the field, and the send cell.
 struct CoreComposer: View {
   let model: CoreSessionModel
   let scroll: TranscriptScrollModel
-  let services: CoreComposerServices
 
+  @State private var composer: ComposerModel
   @State private var draft = ""
   @State private var selection = NSRange(location: 0, length: 0)
   @State private var focused = false
-  @State private var shellMode = false
-  @State private var attachments = ComposerAttachmentStore()
-  @State private var completion = PromptCompletionModel()
   @State private var showMedia = false
   @State private var showCamera = false
   @State private var showPhotos = false
   @State private var showFiles = false
   @State private var photoSelection: [PhotosPickerItem] = []
+  @State private var now = Date()
 
   private static let cell: CGFloat = 32
   private static let gap: CGFloat = 8
 
+  init(model: CoreSessionModel, scroll: TranscriptScrollModel, services: CoreComposerServices) {
+    self.model = model
+    self.scroll = scroll
+    _composer = State(initialValue: ComposerModel(core: model.composer, services: services))
+  }
+
   var body: some View {
-    let context = model.ui.composer
-    VStack(spacing: 0) {
-      if completion.isOpen && !shellMode {
-        PromptSuggestionList(suggestions: completion.suggestions, onAccept: accept)
+    _ = model.ui.composer.revision
+    let view = composer.view(draft: draft, now: now)
+    return VStack(spacing: 0) {
+      if view.suggestionsOpen {
+        PromptSuggestionList(suggestions: composer.suggestions, onAccept: accept)
       }
       Rectangle()
-        .fill(shellMode ? TerminalPalette.color(.magenta) : Color.accentColor)
+        .fill(view.shellMode ? TerminalPalette.color(.magenta) : Color.accentColor)
         .frame(height: 1)
       VStack(alignment: .leading, spacing: 6) {
-        if !attachments.isEmpty && !shellMode { ComposerAttachmentStrip(store: attachments) }
+        if !composer.chips.isEmpty && !view.shellMode { ComposerAttachmentStrip(model: composer) }
         HStack(alignment: .center, spacing: Self.gap) {
-          gutter
-          field
-          ComposerGlyphCell(glyph: "\u{21B5}", label: shellMode ? "Run" : "Send", action: send)
-            .disabled(!canSend)
+          gutter(view)
+          field(view)
+          ComposerGlyphCell(glyph: "\u{21B5}", label: view.sendLabel, action: { send(background: false) })
+            .disabled(!view.canSend)
         }
-        note(context)
+        note(view)
       }
       .padding(.horizontal, 6)
       .padding(.top, 6)
       .padding(.bottom, 8)
     }
     .background(Color(.systemBackground).ignoresSafeArea(edges: .bottom))
-    .animation(.easeOut(duration: 0.15), value: shellMode)
+    .animation(.easeOut(duration: 0.15), value: view.shellMode)
+    .task(id: view.wakeAt) {
+      guard let wakeAt = view.wakeAt else { return }
+      let wait = Double(wakeAt) / 1000 - Date().timeIntervalSince1970
+      if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+      guard !Task.isCancelled else { return }
+      now = Date()
+    }
     .sheet(isPresented: $showMedia) {
-      AddMediaSheet(acceptsImages: context.attachmentKinds.contains("image"), onChoose: choose)
+      AddMediaSheet(acceptsImages: view.attachmentKinds.contains("image"), onChoose: choose)
     }
     .fullScreenCover(isPresented: $showCamera) {
       CameraPicker { image in
-        if let picked = AttachmentNormalizer.image(image, name: "photo.jpg", mediaType: nil) { attachments.add(picked) }
+        if let picked = AttachmentNormalizer.image(image, name: "photo.jpg") { composer.add(picked) }
       }
       .ignoresSafeArea()
     }
@@ -95,74 +79,43 @@ struct CoreComposer: View {
       items.forEach(loadPhoto)
     }
     .fileImporter(
-      isPresented: $showFiles, allowedContentTypes: AttachmentNormalizer.importableTypes(context.attachmentKinds),
+      isPresented: $showFiles, allowedContentTypes: AttachmentNormalizer.importableTypes(Set(view.attachmentKinds)),
       allowsMultipleSelection: true
     ) { result in
       switch result {
       case .success(let urls): urls.forEach(loadFile)
-      case .failure(let error): attachments.errorText = error.localizedDescription
+      case .failure(let error): composer.announce(error.localizedDescription)
       }
     }
     .alert(
       "Attachment failed",
-      isPresented: Binding(get: { attachments.errorText != nil }, set: { if !$0 { attachments.errorText = nil } })
+      isPresented: Binding(get: { composer.errorText != nil }, set: { if !$0 { composer.errorText = nil } })
     ) {
       Button("OK", role: .cancel) {}
     } message: {
-      Text(attachments.errorText ?? "")
+      Text(composer.errorText ?? "")
     }
-    .onAppear { attachments.upload = services.upload }
     .onChange(of: model.insertion) { _, text in
       guard let text else { return }
       model.insertion = nil
-      let separator = draft.isEmpty || draft.hasSuffix(" ") ? "" : " "
-      draft += separator + text + (text.hasSuffix(" ") ? "" : " ")
-      selection = NSRange(location: (draft as NSString).length, length: 0)
+      apply(composerInsert(draft: draft, text: text))
     }
-    .onChange(of: context.cwd, initial: true) { _, cwd in
-      guard let cwd, let find = services.findFiles else {
-        completion.findFiles = nil
-        return
-      }
-      completion.findFiles = { query in try await find(cwd, query) }
-    }
-    .onChange(of: context.commands, initial: true) { _, commands in completion.commands = commands }
-    .onChange(of: context.skills, initial: true) { _, skills in completion.skills = skills }
-    // Polled slowly: a name is not a reading, and it only has to be right when the list opens.
-    .task {
-      guard let listPeers = services.listPeers else { return }
-      while !Task.isCancelled {
-        if let peers = try? await listPeers() { completion.peers = peers }
-        try? await Task.sleep(for: .seconds(20))
-      }
-    }
-  }
-
-  private var enabled: Bool { model.ui.chrome?.enabled == true }
-  private var busy: Bool { model.ui.chrome?.busy == true }
-  private var canAddMedia: Bool { !model.ui.composer.attachmentKinds.isEmpty && !shellMode }
-
-  // A picture on its own is a message, but not before its upload landed; in shell mode the line alone decides.
-  private var canSend: Bool {
-    guard enabled else { return false }
-    let typed = !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    if shellMode { return typed }
-    guard !attachments.isUploading, !attachments.hasFailure else { return false }
-    return typed || !attachments.isEmpty
+    .task { await composer.pollPeers() }
   }
 
   @ViewBuilder
-  private var gutter: some View {
-    if shellMode {
+  private func gutter(_ view: ComposerView) -> some View {
+    switch view.gutter {
+    case .shell:
       ComposerGlyphCell(
         glyph: TerminalShell.glyph, label: "Leave shell mode", tint: TerminalPalette.color(.magenta), action: exitShell)
-    } else if busy {
+    case .interrupt:
       ComposerGlyphCell(
         glyph: "\u{2715}", label: "Interrupt", tint: TerminalPalette.color(.yellow), action: model.interrupt)
-    } else if canAddMedia {
+    case .addMedia:
       ComposerGlyphCell(glyph: "+", label: "Add media", action: { showMedia = true })
-        .disabled(!enabled)
-    } else {
+        .disabled(!view.enabled)
+    case .prompt:
       Text(TermGlyph.prompt)
         .font(Font(ComposerTextView.font))
         .foregroundStyle(TerminalPalette.color(.blue))
@@ -171,43 +124,39 @@ struct CoreComposer: View {
     }
   }
 
-  private var field: some View {
+  private func field(_ view: ComposerView) -> some View {
     ZStack(alignment: .leading) {
       if draft.isEmpty {
-        Text(shellMode ? "Run a command on the host" : "Message")
+        Text(view.placeholder)
           .font(Font(ComposerTextView.font))
           .foregroundStyle(TerminalPalette.color(.faint))
           .allowsHitTesting(false)
           .accessibilityHidden(true)
       }
       ComposerTextView(
-        text: $draft, selection: $selection, isFocused: $focused, isEnabled: enabled, isShellMode: shellMode,
-        names: completion.names,
-        onEdit: { text, caret in
-          guard !shellMode else { return }
-          completion.update(for: text, cursor: Range(caret, in: text)?.lowerBound)
-        },
-        onImagePaste: pasteImage,
-        onLeadingTrigger: leadingTrigger)
+        text: $draft, selection: $selection, isFocused: $focused, isEnabled: view.enabled, isShellMode: view.shellMode,
+        tokens: { [composer] text in composer.tokens(text) },
+        onEdit: { text, caret in composer.edit(text, cursor: caret.location) },
+        onImagePaste: { pasteImage(view) },
+        onLeadingTrigger: composer.leadingTrigger)
     }
     .frame(minHeight: Self.cell)
   }
 
   @ViewBuilder
-  private func note(_ context: CoreComposerContext) -> some View {
-    let queued = model.ui.chrome?.queued ?? 0
+  private func note(_ view: ComposerView) -> some View {
     Group {
-      if shellMode {
-        Text("shell mode · tap $ to exit")
-      } else if context.canSendNow && canSend {
-        Button(action: sendNow) {
-          Text("send now - moves the running command to the background")
-            .foregroundStyle(TerminalPalette.color(.blue))
-            .frame(maxWidth: .infinity, alignment: .leading)
+      if let note = view.note {
+        if note.kind == .sendNow {
+          Button { send(background: true) } label: {
+            Text(note.text)
+              .foregroundStyle(TerminalPalette.color(.blue))
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+          .buttonStyle(.plain)
+        } else {
+          Text(note.text)
         }
-        .buttonStyle(.plain)
-      } else if queued > 0 {
-        Text("\(queued) queued · sends when the turn ends")
       }
     }
     .font(.caption.monospaced())
@@ -215,53 +164,32 @@ struct CoreComposer: View {
     .padding(.leading, Self.cell + Self.gap)
   }
 
-  private func leadingTrigger(_ character: String) -> Bool {
-    switch composerTrigger(character: character, isShellMode: shellMode, canRunShell: model.ui.canRunShell) {
-    case .enter:
-      shellMode = true
-      completion.cancel()
-      return true
-    case .leave:
-      shellMode = false
-      return true
-    case .pass:
-      return false
-    }
+  private func apply(_ edit: DraftEdit) {
+    draft = edit.text
+    selection = NSRange(location: Int(edit.cursor), length: 0)
   }
 
   // The phone's Escape: the `$` goes back in front of the draft.
-  private func exitShell() {
-    shellMode = false
-    draft = exitDraft(draft: draft)
-    selection = NSRange(location: (draft as NSString).length, length: 0)
+  private func exitShell() { apply(composer.exitShell(draft)) }
+
+  private func accept(_ index: Int) {
+    if let edit = composer.accept(index, draft: draft, cursor: selection.location) { apply(edit) }
   }
 
-  private func accept(_ suggestion: PromptCompletionModel.Suggestion) {
-    let result = completion.accept(suggestion, in: draft, cursor: Range(selection, in: draft)?.lowerBound)
-    draft = result.text
-    selection = NSRange(location: result.cursor.utf16Offset(in: result.text), length: 0)
-  }
-
-  private func send() {
-    guard canSend else { return }
-    completion.cancel()
-    if shellMode {
-      model.runShell(draft)
-      shellMode = false
-    } else {
-      model.send(draft, attachmentIds: attachments.readyIds)
-      attachments.clear()
+  private func send(background: Bool) {
+    guard let outgoing = composer.send(draft, background: background) else { return }
+    switch outgoing {
+    case .shell(let command):
+      model.runShell(command)
+    case .message(let text, let attachmentIds, let background):
+      model.send(text, attachmentIds: attachmentIds)
+      if background { model.backgroundTask() }
     }
     model.clearRecap()
     draft = ""
     selection = NSRange(location: 0, length: 0)
     focused = true
     scroll.scrollToBottom()
-  }
-
-  private func sendNow() {
-    send()
-    model.backgroundTask()
   }
 
   private func choose(_ source: AddMediaSheet.Source) {
@@ -273,20 +201,21 @@ struct CoreComposer: View {
   }
 
   // Raw bytes first: a screenshot is PNG, and decoding it to re-encode as JPEG only loses legibility.
-  private func pasteImage() -> Bool {
-    guard canAddMedia, enabled, model.ui.composer.attachmentKinds.contains("image") else { return false }
+  private func pasteImage(_ view: ComposerView) -> Bool {
+    guard view.canAddMedia, view.enabled, view.attachmentKinds.contains("image") else { return false }
     let board = UIPasteboard.general
     guard board.hasImages else { return false }
     for (type, mediaType) in AttachmentNormalizer.pasteboardImageTypes {
       guard let data = board.data(forPasteboardType: type.identifier) else { continue }
       let name = "pasted.\(type.preferredFilenameExtension ?? "img")"
       guard let picked = AttachmentNormalizer.file(data: data, name: name, mediaType: mediaType) else { continue }
-      attachments.add(picked)
+      composer.add(picked)
       return true
     }
-    guard let image = board.image, let picked = AttachmentNormalizer.image(image, name: "pasted.jpg", mediaType: nil)
-    else { return false }
-    attachments.add(picked)
+    guard let image = board.image, let picked = AttachmentNormalizer.image(image, name: "pasted.jpg") else {
+      return false
+    }
+    composer.add(picked)
     return true
   }
 
@@ -297,10 +226,10 @@ struct CoreComposer: View {
       guard let data = try? await item.loadTransferable(type: Data.self),
         let picked = AttachmentNormalizer.file(data: data, name: name, mediaType: mediaType)
       else {
-        attachments.errorText = "Could not read that photo."
+        composer.announce("Could not read that photo.")
         return
       }
-      attachments.add(picked)
+      composer.add(picked)
     }
   }
 
@@ -309,17 +238,17 @@ struct CoreComposer: View {
     let scoped = url.startAccessingSecurityScopedResource()
     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
     let mediaType = AttachmentNormalizer.mediaType(for: url)
-    if let kind = AttachmentNormalizer.kind(of: mediaType), !model.ui.composer.attachmentKinds.contains(kind) {
-      attachments.errorText = "This session's engine does not take \(kind) attachments."
+    if let refusal = composer.refusal(mediaType: mediaType) {
+      composer.announce(refusal)
       return
     }
     guard let data = try? Data(contentsOf: url),
       let picked = AttachmentNormalizer.file(data: data, name: url.lastPathComponent, mediaType: mediaType)
     else {
-      attachments.errorText = "Could not read \(url.lastPathComponent)."
+      composer.announce(unreadableFile(name: url.lastPathComponent))
       return
     }
-    attachments.add(picked)
+    composer.add(picked)
   }
 }
 

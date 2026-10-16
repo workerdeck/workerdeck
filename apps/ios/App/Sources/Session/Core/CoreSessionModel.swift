@@ -11,6 +11,7 @@ final class CoreSessionModel {
   var skills: [SkillInfo] { ui.composer.skills }
   var skillSections: [SkillSection] { ui.composer.skillSections }
   var insertion: String?
+  let composer: Composer
   private let baseURL: String
   private let authKey: String?
   private let fixture: [String]?
@@ -24,6 +25,7 @@ final class CoreSessionModel {
     self.fixture = fixture
     self.entry = entry
     self.sessionId = sessionId
+    composer = Composer(sessionId: sessionId)
     self.baseURL = baseURL
     self.authKey = authKey
   }
@@ -40,7 +42,8 @@ final class CoreSessionModel {
       return
     }
     let driver = CoreSessionDriver(
-      sessionId: sessionId, baseURL: baseURL, authKey: authKey, metrics: core, hideThinking: hideThinking,
+      sessionId: sessionId, baseURL: baseURL, authKey: authKey, composer: composer, metrics: core,
+      hideThinking: hideThinking,
       fixture: fixture, entry: entry
     ) { [weak self] ui in
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }

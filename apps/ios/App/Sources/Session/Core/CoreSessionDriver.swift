@@ -121,6 +121,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private let publish: @Sendable (CoreSessionUi) -> Void
   private let fixture: [String]?
   private let session: Session
+  private let composer: Composer
   private var worker: SessionWorker!
   private var urlSession: URLSession!
   private let startedAt = ProcessInfo.processInfo.systemUptime
@@ -132,7 +133,6 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private var pending: CoreEntry?
   private var bookmarks: [String] = []
   private var recapBoundary: Int?
-  private var sendNowCheck: DispatchWorkItem?
 
   // Socket callbacks arrive on URLSession's queue, maybe before the worker stored the socket, so each task carries its
   // generation and a callback from a replaced one is dropped by number.
@@ -141,13 +141,14 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private var usagePoll: Task<Void, Never>?
 
   init(
-    sessionId: String, baseURL: String, authKey: String?, metrics: Metrics, hideThinking: Bool,
+    sessionId: String, baseURL: String, authKey: String?, composer: Composer, metrics: Metrics, hideThinking: Bool,
     fixture: [String]? = nil, entry: CoreEntry? = nil,
     publish: @escaping @Sendable (CoreSessionUi) -> Void
   ) {
     self.fixture = fixture
     pending = entry
     self.sessionId = sessionId
+    self.composer = composer
     self.baseURL = baseURL
     self.apiBase = WorkerDeckSession.apiBase(baseUrl: baseURL)
     self.authKey = authKey?.isEmpty == false ? authKey : nil
@@ -552,8 +553,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.modelPicker = session.modelPicker()
       ui.modePicker = session.modePicker()
       ui.canRunShell = session.canRunShell()
-      ui.composer.read(chrome: ui.chrome!, commands: session.commands(), skills: session.skills())
-      readSendNow()
+      composer.readSession(session: session)
+      ui.composer.read(skills: session.skills())
       readUsage()
       readExtras()
     }
@@ -578,29 +579,6 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       if pending != nil, !ui.main.rows.isEmpty { enter() }
     }
     publish(ui)
-  }
-
-  // Send now waits until the oldest backgroundable call is old enough, as on the web; a pending check re-reads it then.
-  private func readSendNow() {
-    sendNowCheck?.cancel()
-    sendNowCheck = nil
-    guard let since = ui.chrome?.sendNowSince else {
-      ui.composer.canSendNow = false
-      return
-    }
-    let wait = Double(since + sendNowAfterMs()) - Date().timeIntervalSince1970 * 1000
-    ui.composer.canSendNow = wait <= 0
-    guard wait > 0 else { return }
-    let check = DispatchWorkItem { [weak self] in
-      self?.worker.act { [weak self] _ in
-        guard let self else { return [] }
-        readSendNow()
-        publish(ui)
-        return []
-      }
-    }
-    sendNowCheck = check
-    DispatchQueue.global().asyncAfter(deadline: .now() + wait / 1000, execute: check)
   }
 
   private func enter() {

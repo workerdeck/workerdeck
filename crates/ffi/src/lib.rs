@@ -12,6 +12,7 @@ use wd_native::vt::VtKey;
 
 mod avatar;
 mod bookmarks;
+mod composer;
 mod create_form;
 mod extras;
 mod files;
@@ -22,6 +23,7 @@ mod rest;
 mod scrubber;
 mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
+pub use composer::Composer;
 pub use create_form::{CreateForm, CreateFormFields, CreateFormState, FormLead, FormProfile};
 pub use extras::{
     Fact, McpSection, McpServerDetail, McpServerRow, McpServers, McpStatus, McpToolDetail, McpToolRow, SessionExtras, SkillRow,
@@ -204,7 +206,7 @@ pub struct SessionChrome {
     pub can_clear_context: bool,
     pub queued: u32,
     pub can_sleep: bool,
-    pub send_now_since: Option<i64>,
+    pub send_now_at: Option<i64>,
     pub cwd: Option<String>,
     pub attachment_kinds: Vec<String>,
 }
@@ -225,7 +227,7 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             can_clear_context: c.can_clear_context,
             queued: c.queued,
             can_sleep: c.can_sleep,
-            send_now_since: c.send_now_since,
+            send_now_at: c.send_now_at,
             cwd: c.cwd,
             attachment_kinds: c.attachment_kinds,
         }
@@ -718,11 +720,6 @@ pub fn tone_names() -> Vec<String> {
 #[uniffi::export]
 pub fn band_names() -> Vec<String> {
     planner::Band::ALL.iter().map(|b| b.raw().to_owned()).collect()
-}
-
-#[uniffi::export]
-pub fn send_now_after_ms() -> i64 {
-    wd_native::vm::session_chrome::SEND_NOW_AFTER_MS
 }
 
 #[uniffi::export]

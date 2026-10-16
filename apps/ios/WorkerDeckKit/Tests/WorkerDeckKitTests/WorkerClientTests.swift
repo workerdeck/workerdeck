@@ -249,10 +249,11 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"attachment":{"id":"att_1","name":"a b.png"}}"#.utf8)) }
     let client = makeStubClient()
 
-    let body = try await client.upload(
+    let answer = await client.upload(
       uploadAttachmentCall(sessionId: "s", name: "a b.png"), mediaType: "image/png", data: Data([1, 2, 3]))
 
-    #expect(uploadedAttachmentId(body: String(decoding: body, as: UTF8.self)) == "att_1")
+    #expect(answer.status == 200)
+    #expect(uploadedAttachmentId(body: answer.body) == "att_1")
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "POST")
     #expect(request.value(forHTTPHeaderField: "content-type") == "image/png")

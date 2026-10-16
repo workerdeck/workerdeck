@@ -27,7 +27,7 @@ struct CoreSessionView: View {
     self.hostId = hostId
     self.sessionId = sessionId
     self.client = client
-    composerServices = .live(client: client, sessionId: sessionId)
+    composerServices = .live(client: client)
     _model = State(
       initialValue: CoreSessionModel(
         sessionId: sessionId, baseURL: client.baseURL.absoluteString, authKey: client.authKey, entry: entry))

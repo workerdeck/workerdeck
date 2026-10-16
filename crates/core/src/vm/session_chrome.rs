@@ -19,9 +19,9 @@ pub struct SessionChrome {
     pub can_clear_context: bool,
     pub queued: u32,
     pub can_sleep: bool,
-    // The earliest start (ms) among the running top-level calls the engine can move to the background, the web's
-    // `backgroundableSince`; 0 when a call carries no time. Send now shows once it is `SEND_NOW_AFTER_MS` old.
-    pub send_now_since: Option<i64>,
+    // When (epoch ms) Send now shows: `SEND_NOW_AFTER_MS` after the oldest running top-level call the engine can move
+    // to the background started (the web's `backgroundableSince`).
+    pub send_now_at: Option<i64>,
     pub cwd: Option<String>,
     pub attachment_kinds: Vec<String>,
 }
@@ -82,8 +82,8 @@ pub fn session_chrome(
         can_sleep: state.capabilities.as_ref().is_some_and(|c| c.engine_sleep == Some(true))
             && state.status == Some(SessionStatus::Idle)
             && !state.engine_asleep,
-        send_now_since: if state.capabilities.as_ref().is_some_and(|c| c.background_tasks == Some(true)) {
-            backgroundable_since(&state.items)
+        send_now_at: if state.capabilities.as_ref().is_some_and(|c| c.background_tasks == Some(true)) {
+            backgroundable_since(&state.items).map(|since| since + SEND_NOW_AFTER_MS)
         } else {
             None
         },
@@ -199,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn send_now_dates_from_the_oldest_running_top_level_call_of_this_turn() {
+    fn send_now_counts_from_the_oldest_running_top_level_call_of_this_turn() {
         let items = vec![
             call("old", "Bash", None, ToolCallStatus::Running, Some(1.0)),
             prompt(),
@@ -210,9 +210,9 @@ mod tests {
             call("done", "Bash", None, ToolCallStatus::Settled, Some(10.0)),
         ];
         let state = TranscriptState { items, capabilities: capable(false, true), ..TranscriptState::default() };
-        assert_eq!(session_chrome(&state, None, false, 0, None).send_now_since, Some(40));
+        assert_eq!(session_chrome(&state, None, false, 0, None).send_now_at, Some(40 + SEND_NOW_AFTER_MS));
         let without = TranscriptState { capabilities: capable(false, false), ..state };
-        assert_eq!(session_chrome(&without, None, false, 0, None).send_now_since, None);
+        assert_eq!(session_chrome(&without, None, false, 0, None).send_now_at, None);
     }
 
     #[test]

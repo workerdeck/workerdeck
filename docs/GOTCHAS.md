@@ -2518,11 +2518,11 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
   description, there is no `/skillname` any engine recognises. Skills ride their own `skills` event
   and `skillsList` capability, never `capabilities.commands`. A client may list or offer them as a
   typing aid; it may not render them as command chips.
-- **iOS has caught up on both halves.** Skills complete on `/` there too
-  (`PromptCompletionModel.showCommands` merges them and the pick still inserts codex's `$name`),
-  and `PromptTokens.scan` takes `skills` and `sessions` allowlists instead of hard-skipping
-  `.skill`, so a sent `$name`/`#Name` badges the way it does on the web. `$` is no longer a
-  trigger anywhere.
+- **The native apps have caught up on both halves, in the Rust core.** Skills complete on `/`
+  there too (`crates/core/src/vm/composer_tokens.rs` `Completion::update` merges them and the pick
+  still inserts codex's `$name` or the skill's opener), and `scan` takes `skills` and `sessions`
+  allowlists (`TokenNames`), so a draft's `$name`/`#Name` styles the way it does on the web. `$` is
+  no longer a trigger anywhere.
 - **Skills complete on `/`, alongside commands**, in one ranked list built by `mergeComposerRows`
   in `packages/ui/src/components/agent/composer-commands.ts` from three sources: engine commands,
   host client commands, and skills. They used to complete on codex's own `$` convention, dropped
@@ -2549,8 +2549,8 @@ that owns one session at a time. `docs/ARCHITECTURE.md` §Agents and teams has t
 - **`$name` is styled in a sent codex message, but only for a listed skill.** `scanPromptTokens`
   takes the session's skill names (`Transcript` provides them from `state.skills`), so `$10` is
   never a badge and a session with no skills never badges. `#Name` is gated the same way, on the
-  folded peer slugs (`SessionNamesProvider`), so `#ff0000` and `#1` never badge either. Swift
-  mirrors both through `PromptTokenNames` in the environment.
+  folded peer slugs (`SessionNamesProvider`), so `#ff0000` and `#1` never badge either. The
+  native composer mirrors both through the core `Composer`'s `TokenNames`.
 - **Codex has skills and no commands; Claude has commands and no listable skills.** Claude's CLI
   reports skill names on `system_init` and nothing else (no descriptions, scope, or suggested
   prompt), not enough to fill a picker honestly, so `skillsList` is false there. The SDK's
