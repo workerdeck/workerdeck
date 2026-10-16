@@ -18,186 +18,44 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
 
 ## Layout
 
-- `WorkerDeckKit/` - SwiftPM package, the platform-agnostic core (builds on iOS + macOS, unit
-  tests run with plain `swift test` on a Mac):
+- `WorkerDeckKit/` - SwiftPM package (builds on iOS + macOS, unit tests run with plain
+  `swift test` on a Mac). The transcript reducer, line planner, scrubber and VT emulator are the
+  Rust core's (`crates/core`, through `Native/` as the `WorkerDeckSession` target); the Swift kit
+  keeps the protocol and REST types, the REST client and the small values the core-backed views
+  draw with:
   - `ProtocolTypes.swift` / `RestTypes.swift` / `JSONValue.swift` - hand-written Swift mirror of
     `@workerdeck/protocol` (see `WorkerProtocol.version`, kept in lockstep with
     `PROTOCOL_VERSION`). Decoding is lenient by contract: unknown event/frame/block types degrade
     to `.unknown`, never a stream error.
-  - `WorkerClient.swift` / `SessionHandle.swift` - REST client + WebSocket session handle
-    (attach/replay via `afterSeq`, reconnect with backoff, command outbox). Auth is
-    `Authorization: Bearer <key>` on both REST and the WS handshake - native apps don't need the
-    cookie machinery the web dashboard uses.
-  - `Transcript.swift` - pure transcript reducer, a 1:1 port of
-    `packages/react/src/lib/transcript.ts`. Keep the two in sync when transcript semantics change.
-    One deliberate divergence: a tool call's human-readable title (`tool_titles`, see
-    `ToolTitles.swift`) is resolved onto the `ToolCallItem` as it is reduced - and re-resolved when
-    a later event names it - where the web client resolves it at draw time from a context. The
-    terminal renderer's plan cache keys on the row, so a title that changed what a row draws
-    without changing the row would leave a cached height that is wrong.
-  - `ReplayHold.swift` - opening a session without watching its history stream past. The end of
-    the replay is **stated**, not detected: the `attached` frame arrives before the replayed
-    events and names the seq they end on. What the backstop decides is only *when to give up*,
-    and it gives up on a **stall** rather than on a flat deadline from the attach - a phone
-    replaying thousands of events over a tailnet does not finish in 1.5s, and the flat version
-    fired on exactly the sessions the hold exists for. Progress is `state.lastSeq`, never raw
-    arrival, so a reconnect storm cannot hold the screen. Not the quiet-window latch this design
-    refuses: that refusal is about detecting the replay's *end* by timing, and the end is still
-    stated. `TranscriptViewModel` holds the **whole reduced state** while it stands, not the
-    transcript view - a session screen is more than its transcript, and approvals, the question
-    prompt, the meters, the composer's busy state and the empty state all read the same state, so
-    a replay used to drive every one of them through the session's entire history on the way past.
-    Holding one view was never the fix; holding the state deletes the question of which views
-    remembered to opt in. The placeholder is a spinner and a live `seq / target` counter, because
-    a blank screen for several seconds is indistinguishable from a session that failed to open.
-    That counter is also where the phone's whole session-open cost turned out to live:
-    `TranscriptViewModel` is `@Observable` and the hold was a stored property on it, written back
-    on **every applied event**, so 818 replayed events meant 818 layout passes of a spinner and a
-    formatted number - 1,533 ms of a 1,692 ms open. The hold's state is `@ObservationIgnored` now
-    and still exact; `replayProgress` is published at most ten times a second. The general rule is
-    not iOS-specific: **a per-event write to observed state, on a path that replays hundreds of
-    events, costs a render per event.**
-  - `MarkdownBlocks.swift` - splits assistant text into blocks: headings, lists, quotes, rules
-    and fenced code, with anything it doesn't model (tables included) falling through as prose
-    rather than being lost. Pure, so it lives here (this package is the only part of the app
-    under test); the SwiftUI rendering stays in `App/`. **Streaming is the design constraint**:
-    the classifier is strictly line-local, so a block renders in its final shape from its first
-    character - a bullet that appeared as a paragraph and snapped into place a token later would
-    be worse than not rendering it at all.
-  - `Terminal/` - the terminal transcript's rules, ported from
-    `packages/ui/src/components/terminal/`, **plus the VT emulator the shell drill-in draws**.
-    Pure and testable, which is the point: the geometry of this theme is arithmetic, and
-    arithmetic belongs where `swift test` can reach it.
-    - `VTScreen.swift` / `VTTypes.swift` - a dependency-free terminal emulator: a resumable
-      parser, a cell grid, scrollback, the alternate screen, 256 colours and true colour, and the
-      keystroke encoder that knows about application cursor keys and bracketed paste. Written
-      rather than imported because this project takes **no third-party packages**, and pinned by
-      60 tests. Two properties carry the rest. The parser is **resumable across `feed` calls**: a
-      CSI arrives split over three socket frames often enough, and a parser that reset between
-      chunks would print escape codes at the reader. And wrap is **deferred** (the pending-wrap
-      flag), so a character written in the last column does not scroll early - the classic
-      off-by-one that double-spaces every full-width line.
-      What it deliberately does not do, for anyone reading a bug report: no reflow on resize, no
-      left/right margins, no mouse reporting (the modes are recorded, nothing is sent), no sixel.
-    - `TerminalBlocks.swift` / `TerminalRows.swift` - the two folds (a run of consecutive tool
-      calls is one row; a `Task` and everything its subagent produced is one row) and the row
-      addressing over them. The load-bearing distinction: a run is built from **adjacency**, a
-      task from **membership** (`parentToolUseId`), because parallel Tasks interleave in the
-      stream. So a row covers a *membership*, never a contiguous `[index, index + n)` range -
-      anything positional (a scrubber mark, a catch-up jump, "reveal that sub-agent") must go
-      through `TerminalRows.rowIndex(forItem:)`.
-    - `TerminalCells.swift` - the cell model and the wrap: grapheme widths, wide/pictographic
-      clusters flagged inexact, break-after-hyphen (so `protocol-0.16.0` stays together), and
-      preserved spaces that **hang** past the last column rather than forcing a break.
-    - `TerminalPlanner.swift` / `TerminalPlan.swift` / `TerminalHeightBook.swift` - the port of
-      `height.ts`, **turned inside out**. On the web the browser wraps and `height.ts` predicts
-      how many lines that will be. Here the planner wraps, the renderer draws the lines it
-      returned, and a row's height is `lines.count × line` by definition - there is no
-      prediction that can be wrong and no post-mount correction. It costs nothing: the wrap was
-      computed to measure the row anyway. `TerminalPlanCache` is what keeps a refold cheap on
-      every streamed token, standing in for the web client's `WeakMap` on item identity (a Swift
-      array is a value; there is no identity to hang one on). `TerminalPlanner.plan` **must stay a
-      pure function of `(row, metrics, expansion)`** - no shared state, no caches, no globals. The
-      cold height build runs it under `DispatchQueue.concurrentPerform` over disjoint row indices,
-      and nothing but this sentence enforces that.
-    - `TerminalExpansion.swift` - which blocks are open, as an **input to the planner**. This is
-      the one place the port deliberately inverts the web client rather than mirroring it: there,
-      expansion is component-local `useState` and an expanded row is mounted and self-measures.
-      Here nothing self-measures - a `UICollectionViewLayout` takes every frame from the height
-      book - so a height the book does not know about is a frame the layout gets wrong. So the
-      planner plans **both** states, `ResultPreview`'s expanded budgets stop being decorative
-      (the whole of a hundred-thousand-character result lands in *one* virtual row), and the plan
-      cache is keyed on the slice of the expansion **that row** can read - an epoch-wide
-      invalidation would re-plan sixteen thousand rows for one finger. Two rules that are bugs if
-      dropped: a call with nothing folded behind it (no result text, or a file edit whose only
-      content is the diff already drawn) advertises **no press**, because a target that visibly
-      does nothing reads as the theme being broken rather than the row being empty; and closing a
-      result forgets that its character budget was lifted, so re-opening never lands back on the
-      unclipped form for a reader who has long since scrolled away.
-
-      **Row keys and expansion keys are two namespaces, and the confusion already cost a bug.** A
-      block's `key` (`run:<id>` / `task:<id>` / `toolCall:<id>` / `recap`) is *row identity* -
-      mirrored with web's `blocks.ts`, and what view diffing, the plan cache and scroll
-      re-anchoring all key on. What *opens* a row is a typed `ExpansionKey` (`.run` / `.task` /
-      `.call`), produced only by `expansionKeys(of:)`. They coincide for two of five block shapes
-      and are never interchangeable. **A key that opens nothing must never be offered**: a run of
-      one is drawn as the call (`TerminalRunBlock.expansionKey` is `Optional`), and a `Task`'s own
-      header has no result of its own (`BlockCall.drawsResult == false`).
-
-      And **anything that plans a row plans it from `expansion.subset(for: row)`** - the same
-      function of the same value the height book used. Handing the whole expansion to one caller
-      and the subset to the other is two derivations of the one claim this renderer cannot afford
-      to get wrong: the lines drawn are as tall as the height reserved.
-    - `MarkdownInline.swift` - inline markdown rendered once and shared by the measurer and the
-      renderer, so `**bold**` cannot be measured as eight characters and drawn as four. The web
-      client strips inline syntax with a regex chain; a second answer to "what does this render
-      as" is a second answer that drifts.
-    - `TerminalScrubber.swift` - the overview ruler's arithmetic, and **the thing the height book
-      was built for**: a mark's position is its row's *pixel offset*, and almost every row a rail
-      draws is unmounted, so only a computed height can answer for it. It lives in the kit for the
-      reason the web client exports `buildClusters`/`railScale` for its tests alone - both have
-      shipped pure-logic bugs, and neither is visible in a screenshot: a live answer with no
-      `turn_result` yet went unmarked for the whole two minutes it was the only thing worth
-      navigating to, and a replayed history (which carries no turn rows at all) came back with an
-      empty response lane. So a response mark anchors on **the answer**, with a `turn_result` only
-      *decorating* it. Two rules that are bugs if dropped: `railScale`'s denominator is
-      `max(totalSize, viewportHeight)` and never `totalSize` alone (a transcript shorter than its
-      window otherwise hangs thousands of points of empty scroll under three rows), and **a mark's
-      item index is not its row index** - every one goes through `rowIndex(forItem:)`. Merging is
-      what keeps a press cheap as well as legible: a dense session chain-merges each lane into one
-      bar, so the cluster count is bounded by the rail rather than by the session, and the bar
-      answers by its **nearest member** rather than by whichever mark founded it.
-    - `ToolRun.swift` / `ResultPreview.swift` / `TerminalFormat.swift` - the exact strings. In
-      this theme **the string is the height**, so every summary, preview and affordance is
-      spelled once, here, and never in a view.
-    - `TranscriptScrollGeometry.swift` - the scroll view's range in content-offset space (`top`,
-      `bottom`, `clamped`) and `pinsAfterJump`, the one rule for whether a jump re-arms the
-      bottom pin. Here because the coordinator in `App/` has no test host, and the bug it fixes
-      (a deep link into a still-filling transcript pinning at a bottom that was not the bottom
-      yet) is arithmetic on four numbers.
-  - `TranscriptSeqIndex.swift` - where each event's rows landed in `items`, so a tapped push
-    notification can open **on** the event it was about instead of at the tail. Deliberately
-    *beside* the reducer, not in it: `TranscriptState` is a hand-mirror of the react reducer, and a
-    field only the phone needs is a field the two copies would disagree about. The caller hands it
-    the item list either side of `applyEvent` - the lists, not their counts, because a normal turn
-    shrinks the list too and only the ids say where the change began; the lookup answers with the
-    first item appended at or after a seq, which is what lets an event that appended nothing (a
-    permission request) still resolve. `deepLinkSeqSurvives` beside it refuses a seq numbered in a
-    log the session has since woken out of (`SessionInfo.epoch`). `deepLinkPlacement` beside it is the rule for acting on the answer: a row found while
-    the replay is still filling (the hold lifts on a stall, not only on the stated seq) is landed
-    on but marked incomplete, so the scroll never follows the tail from there. The two permanent
-    limits - the cards renderer ignores `seq`, and a `seq` older than retention lands at the top
-    of what remains - are in `docs/CLIENTS.md`.
+  - `WorkerClient.swift` - the REST client. Auth is `Authorization: Bearer <key>`; the session
+    socket is the core's.
   - `ModelName.swift` - `friendlyModel`, a 1:1 port of the rule in
     `packages/ui/src/lib/format.ts`: `claude-haiku-4-5-20251001` → "Haiku 4.5". A port and it has
     to stay one - a sessions list is where the same person reads all three clients, and a model
     spelled `claude-opus-5` on the phone and `Opus 5` in the sidebar is the drift the shared list
     view model exists to prevent. Version tokens join with dots, code names are kept and
     capitalised, and an eight-digit snapshot date is dropped (it is a build, not a version).
-  - `SessionList.swift` / `Watermarks.swift` - ports of `packages/protocol/src/session-list.ts`
-    and `watermarks.ts`, the same way `Transcript.swift` is a port of the react reducer. The
+  - `SessionList.swift` - a port of `packages/protocol/src/session-list.ts`. The
     sessions-list view model (the `attention/working/idle/ended` buckets, the gateway/adapter/
-    state facets, filter/group/sort, `subsetSummary`) and the unread model (monotonic marks
-    behind a storage seam, `unseenCount`'s rows-not-turns arithmetic). These are **rules**, not
+    state facets, filter/group/sort, `subsetSummary`). These are **rules**, not
     this app's preferences - the VS Code extension's activity-bar badge counts the same rows its
     list shows and the dashboard renders the same list, so a client that filtered differently
     would be announcing work it is hiding. Two Swift-specific notes: JS `sort` is stable and
     Swift's is not, so both the row and the group sort carry an explicit insertion-index
     tiebreak; and `ViewConfig` decodes leniently over its defaults, the Swift spelling of the
     webview's spread.
-  - `Recap.swift` - catch-up mode's counting, ported from `packages/react/src/lib/recap.ts`:
-    `summarizeSince` + `recapLine`. **Counted, never written** - a prose recap would spend a turn
-    on a summary nobody asked for, and would be worst in the case that matters most, a session
-    that failed unattended. Shared with the seam's row (`TerminalRows.build(recapAt:)`) and with
-    the cards renderer's divider, so both draw one sentence.
   - `PromptToken.swift` - the `@file` and `/command` rules in one place: which words are tokens,
-    which are being typed, which are finished, and how one is replaced. Here for the same reason
-    as `MarkdownBlocks` - pure string logic whose interesting cases are all edges - and shared, so
-    a token looks the same in the composer as it does once sent. Both need a word boundary and
-    nothing more - so `toby@example.com` isn't a file picker, and a command completes mid-draft
+    which are being typed, which are finished, and how one is replaced. Pure string logic whose
+    interesting cases are all edges, and shared, so a token looks the same in the composer as it
+    does once sent. Both need a word boundary and nothing more - so `toby@example.com` isn't a file picker, and a command completes mid-draft
     as well as at the front (the CLI only *runs* one from the front, but the picker is an editing
     aid). What keeps an absolute path from reading as a command is the charset: a command name
     may not contain a slash.
+  - `Terminal/` - what the row cell decodes the core's lines into and draws with: `TermLine`,
+    `TermTone`, `TermBand`, `TermPress`, `TermImageBox` (`TerminalPlan.swift`), `TermImage`,
+    `TermFmt`, `TerminalCells.clusterCells` and `LiveTool`'s elapsed label, `StickyPrompt`'s pin arithmetic,
+    `TranscriptScrollGeometry` (whether a jump re-arms the bottom pin), and `VTKey` for the shell
+    keyboard.
 - `App/` - the SwiftUI app (hosts, sessions, transcript, permissions, HUD). Hosts + auth keys
   are stored in the Keychain.
   - `App/Sources/Sessions/{SessionListModel,SessionListView}.swift` - **one list across every
@@ -205,12 +63,12 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     frame it lives in: there is no "current server" mode, and a gateway that is unreachable or
     unauthorized is a banner beside the rows rather than a broken screen - on a tailnet the usual
     failure is "the VPN dropped", not "the data is gone". Everything visible is derived through
-    the kit's shared rules (`rows → filtered → groups`, plus the subset line), with the workspace
+    the core's shared rules (`rows → filtered → groups`, plus the subset line), with the workspace
     scope passed as `nil` throughout: a phone has no open folders, so that filter is genuinely
     inert here rather than hiding everything. The poll follows the work (2s while anything runs
     or waits on a human, 5s otherwise) and runs only while the list itself is on screen - inside
     a session, that session's socket is the fresher source. Each row carries an **unread count**
-    (`App/Sources/Model/UnreadModel.swift`, the kit's `Watermarks` over `UserDefaults`), and the
+    (`App/Sources/Model/UnreadModel.swift`, the core's unread marks), and the
     same sum - over the rows the filter is *showing*, never the hidden ones - is stamped on the
     app icon. Marks are written only while a session is genuinely on screen and attached; the
     session view re-fetches once on disappear and marks a final time, so rows produced after the
@@ -225,7 +83,7 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     now what owns the stack, the poll and the actions, and nothing else.
 
     **The steps under a row** - the session's sub-agents, and one day the CLI's own task
-    checklist - come from the kit's `sessionSteps` (`SessionSteps.swift`), the port of
+    checklist - come from the core's list rows (`ListStep`), the port of
     `packages/ui`'s `SessionSteps.tsx`. Agents sort above tasks, and **the kind is what routes
     the press**: an *agent* has work of its own, so it pushes that agent's takeover; a *task* is
     a reference to a place in the transcript, so it opens the session and travels to that tool
@@ -256,124 +114,13 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     anything. Above it every row draws at 45% (the web's `opacity-45`); at it sits `※ recap:` and
     the counted line; under the composer sits `CatchUpBar` - "N new rows since you were last
     here", `jump`, `dismiss`. Sending dismisses it too, which is the reader saying they are
-    caught up. Two renderers, two splices and deliberately no shared branch: the terminal fold
-    takes `recapAt` and returns the row it put the seam on (`TerminalRows.recapRow`, which also
-    feeds the rail's mark and the fade, because a fold makes an item index and a row index
-    different numbers), while the cards list inserts a `RecapDivider` before the boundary item.
-    The label is `Recap.swift`'s and is **re-derived on every fold**, so a turn landing while the
-    bar is up says so. It never enters a sub-agent takeover: the boundary is a full-transcript
-    index and a frame's rows are a filtered list. `UIPREVIEW=catchUp` / `catchUpCards` are the
-    look-loop for both.
-  - `App/Sources/Session/Terminal/` - the terminal transcript's *rendering* half, over the rules
-    in the kit's `Terminal/`. It is a **renderer, not a set of branches**: it draws every row
-    itself, and nothing under the cards path asks which variant it is in. (That is the lesson of
-    the deleted `lines` variant, which survived only as an `isLines` branch duplicated across
-    fifteen view bodies.)
-    - `Shell/` - the drill-in. `ShellTerminalModel` owns a `VTScreen` and the two directions of
-      the PTY; `ShellGridView` draws the grid in UIKit over the dirty rect and follows the tail
-      unless the reader has scrolled off it; `ShellKeyboard` is a `UIKeyInput` first responder,
-      not a text view, because a terminal's stdin is a stream the process echoes rather than a
-      document to edit - which is also why every autocorrect and smart-quote trait is off.
-      `ShellPalette` resolves **xterm's** sixteen and not `TerminalPalette`: the theme's green is
-      WorkerDeck's claim about a row, where `ls` asking for blue is the program's.
-    - `TranscriptMetrics.swift` - the cell, **measured** over 200 characters rather than derived
-      from the font size (a 12pt monospace face advances ~7.4pt, not 7.2). The cell keeps its
-      exact fractional advance and only the **line** is rounded to a whole point: a fractional
-      line puts every second row on a half-pixel, which softens the text and seams the diff
-      bands, while rounding the *cell* up costs a fraction of a point per cell - four characters
-      a line at phone widths, about nine percent of the transcript.
-    - `TerminalRowCell.swift` / `TerminalPalette.swift` - the row, **drawn by hand in UIKit**,
-      and the palette, ported value-for-value from `styles/terminal.css` so a session reads the
-      same here as in the dashboard. Three views per row - a backdrop, a gutter and a body -
-      where there used to be a `UIHostingConfiguration` holding two SwiftUI views per *line*.
-      The reason is not performance (that came free): **the body has to be one selectable text
-      run**, and a stack of per-line `Text`s cannot be selected across. So each `TermLine`
-      becomes one TextKit *paragraph* with wrapping off (`.byClipping`) and
-      `minimumLineHeight == maximumLineHeight == metrics.line`, its head indent set to where its
-      body column starts - N planned lines are N line fragments of exactly `line` points, and
-      the height the book handed the layout is the height the text occupies, by construction.
-      Get `lineFragmentPadding`, `textContainerInset`, the min/max line heights or the break
-      mode wrong and every row is off by a fraction with nothing visibly wrong, which is why
-      `TerminalAudit.measureHeights` exists beside the width gate.
-      **The gutter stays its own column, and it is drawn, never text** - not for layout, for
-      what lands on the clipboard: `●`, `⎿` and a diff's line numbers are scaffolding nobody
-      typed and nobody wants pasted into a commit message. (It also gives every wrapped line its
-      hanging indent for free, which is why the planner pads gutters to a cell count rather than
-      prefixing the text.) The bands, the open wash and the nested rule are drawn per line for
-      the same reason the gutter is: an expanded result is fifty lines, and fifty background
-      views per row is exactly the per-cell view count this shed. Presses ride the plan
-      (`TermLine.press`), resolved by dividing the touch's `y` by the line - **the whole block,
-      not just its header, which is where the web client puts its `Pressable`**: a pointer can
-      hit a 19px strip and a thumb cannot. A press is refused while a selection stands in the
-      row, because collapsing the block would take the selection with it. An open block keeps a
-      full-bleed wash (`TermLine.inOpen`, the web's `.term-open`) so eighty lines that arrived
-      at once read as one block rather than as the transcript having grown.
-    - `TranscriptLayout.swift` / `VirtualizedTranscriptView.swift` - a `UICollectionView` with a
-      custom layout whose frames come **entirely** from the height book; no self-sizing anywhere.
-      That is what makes the rest possible: an overview scrubber needs the pixel offset of rows
-      that were never mounted, and only a computed height can answer for a view that does not
-      exist. Stick-to-bottom and size-change correction are split into two regimes, as on the
-      web - pinned, corrections are suppressed entirely (being at the bottom *is* the scroll
-      position); escaped, the row under the viewport's top edge is re-anchored **by key**, since
-      "the same row" is a membership question once folds are in play. Expansion is part of that
-      epoch and has to be: it moves no row and changes no key, so the coordinator's guard would
-      otherwise swallow it and the layout would keep drawing collapsed frames. `reveal` is the
-      other half - the iOS spelling of `useRevealOnOpen`, one-directional and only on the open
-      transition. The escaped case barely needs it (the anchor already holds the pressed row
-      still); it exists for the **pinned** case, where expanding near the tail re-pins to the
-      bottom and pushes the header you pressed clean off the top of the screen.
-    - `TerminalStickyPromptView.swift` / the kit's `StickyPrompt.swift` - the prompt of the turn
-      you are reading, held at the top of the scroller. **One line, and the prompt's first line**:
-      a pasted twenty-line prompt pinned whole covers the very answer being read. The arithmetic
-      is in the kit (and unit-tested) and the view only draws what it returns - a
-      `UIViewRepresentable` overlay cannot be driven by a test, and the arithmetic is the part
-      that can be wrong. Where the web client needs real machinery for this (a lane per turn, an
-      absolutely positioned head, a sentinel `IntersectionObserver`, and the compositor doing pin
-      and push-off because a JS-written pin trails it and wobbles), here it is a binary search and
-      a subtraction: the height book knows the pixel offset of every row, mounted or not. Two
-      rules earned their tests. **Content offsets, never frame offsets** - the blank line above a
-      row belongs to the row, so a prompt's frame starts one line before its text does and that
-      strip is visually the *previous* turn's; searching by frame handed over a line early. And a
-      **subagent's brief is not a prompt** - it really is a `user_message` on the wire, which is
-      why it once drew the human's own `❯`, but a turn is a thing a person started.
-    - `TerminalScrubberView.swift` - the rail, drawn, and where the phone parts company with the
-      web design twice. **There is no hover**: a pointer resting on a mark opens the peek there and
-      a drag *dismisses* it, which would leave a finger no way to see a mark before committing to
-      it - so here a drag scrubs **and** peeks what it is passing, and a clean press with no travel
-      is a jump on a mark, a scroll-to-here on the ground. And **12 points is not a touch target**:
-      the paint is the theme's 12 (the one place the `ch` rule is set aside - the rail is chrome
-      beside the grid, not a column of text) and the hit strip is wider, though deliberately not
-      the HIG's 44, because this sits where a right thumb scrolls. Three structural notes: it is a
-      `Canvas` with arithmetic hit-testing rather than a view per mark, since a dense rail is
-      hundreds of clusters repainted per scroll tick; the band is **its own view**, because
-      observation is per body and reading the scroll offset beside the clusters would rebuild every
-      one of them per frame of a fling; and the gesture's own state (`peek`, `dragging`) lives one
-      layer down in `ScrubberTouchLayer`, **never beside the rail build**, because
-      `buildScrubberRail` is O(items + calls) over the whole transcript and any `@State` written
-      from `onChanged` in the same body re-runs it on every touch event - during the exact gesture
-      the rail exists for. (Same rule as the band split, one level up.) And the whole thing is a
-      **full-width overlay with only the strip taking touches**, because a peek is wider than the
-      rail and laying it out inside a 28-point container puts it off the screen. A scrub goes to a content offset, never to a row -
-      a rail drag is continuous, and snapping to row boundaries makes a hundred-line answer a dead
-      zone. The transcript's wrap width is reduced by the rail for the same reason it is reduced by
-      the bleed: the rail is an overlay, and a row wrapped to the full screen has its last column
-      drawn underneath it - silent clipping the audit cannot see, because the line fits the column
-      it was planned for and the column is simply covered.
-    - `TerminalAudit.swift` - the gate. The planner counts cells; if a line's real rendered width
-      ever exceeds the column it was planned for, it is clipped *silently*, which is worse than a
-      wrong height because nothing about it looks wrong. Debug-only and deliberately not a unit
-      test: a unit test would check the calculator against its author's assumptions. It is
-      reported on screen by the `terminal` preview - a gate nobody reads is a gate that has never
-      run. It ignores trailing spaces on purpose, those being the wrap model's own hanging
-      spaces rather than an overflow. It audits **both states**: a summary that wraps correctly
-      says nothing about the fifty result lines folded behind it, and planning is pure, so the
-      second pass costs a calculation and draws nothing. `UIPREVIEW=terminalOpen` is the visual
-      counterpart - the same fixture with every block open, through a real layout pass, which is
-      the only thing that can show a planned line and a drawn line parting company.
-      `measureHeights` is the **second** claim, and the one the hand-rolled renderer added: the
-      text really draws at the height the book handed the layout. It mounts a real text view per
-      row, so it is **capped and says so** (`heights exact over first 400 rows`) - a gate that
-      quietly covered a tenth of the rows reads as a gate that covered them all.
+    caught up. The core puts the seam (`recapRow`, which also feeds the rail's mark and the
+    fade) and re-derives its label on every fold, so a turn landing while the bar is up says so.
+  - `App/Sources/Session/Terminal/` - the transcript's rendering, over rows the core planned:
+    `TranscriptLayout` + `VirtualizedTranscriptView` (a `UICollectionView` whose frames come from
+    the core's row heights, never self-sized), `TerminalRowCell` (each row drawn by hand in UIKit,
+    one text run so a selection crosses lines) and `TranscriptMetrics` (the measured cell).
+    `Session/Shell/` holds the shell keyboard and palette; the grid is the core's.
   - `App/Sources/Session/SessionStatusBar.swift` - the mini status bar, one glass line floating
     just above the composer where a thumb reaches it: status, model, permission mode, usage. The
     status slot is **shared with connectivity, and connectivity wins it** - while the socket is
@@ -564,7 +311,7 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     Everything else in `App/` remains plain SwiftUI.
 - `Widgets/Sources/` - the **widget extension**, which draws the Live Activity and nothing else:
   no credential, no network call. Its only dependency is the `WorkerDeckActivity` product, so the
-  transcript reducer and the terminal renderer stay out of a memory-capped process. A card's
+  Rust core and the transcript renderer stay out of a memory-capped process. A card's
   buttons are `LiveActivityIntent`s, performed by the *app* in the background.
 - `WorkerDeckKit/Sources/WorkerDeckActivity/` - the Live Activity payload and the intent types,
   shared by the app and the extension. A separate target from `WorkerDeckKit` on purpose: this is a
@@ -591,12 +338,6 @@ each target's own `deploymentTarget`, and `WorkerDeckKit/Package.swift`'s `platf
 ```sh
 # Kit tests (no Xcode project needed)
 cd apps/ios/WorkerDeckKit && swift test
-
-# What an attach actually costs, over a REAL replay - both opt-in, both silent
-# without their inputs, so the suite stays green on a machine with neither.
-pnpm smoke:attach <host> <sessionId> --capture /tmp/attach.jsonl    # from the repo root
-WD_ATTACH_CAPTURE=/tmp/attach.jsonl swift test -c release --filter AttachReplayBench
-WD_ATTACH_HOST=<host> WD_ATTACH_SESSION=<id> swift test -c release --filter AttachPipelineBench
 
 # App
 cd apps/ios && xcodegen generate && open WorkerDeckApp.xcodeproj
@@ -664,8 +405,8 @@ apps/ios/scripts/deploy.sh --release    # optimized build - what a shipped app c
 apps/ios/scripts/deploy.sh --core       # rebuild the Rust core first (built anyway when Native/ is empty)
 ```
 
-The app always links the Rust core (`scripts/build-core.sh`, needs cargo): the sessions list,
-unread marks and bookmarks run on it. `swift test` in `WorkerDeckKit` still runs without it.
+The app always links the Rust core (`scripts/build-core.sh`, needs cargo): sessions, the
+sessions list, unread marks and bookmarks run on it, and `swift test` in `WorkerDeckKit` needs it too.
 
 `--release` matters for one thing and it is not cosmetic: **any performance number taken off a
 Debug build is a number about the build.** The transcript fold alone is ~5.6× slower unoptimized
@@ -828,7 +569,8 @@ mobile). When `packages/protocol` changes:
 1. Bump-check: the app warns when `AttachedFrame.protocolVersion` ≠ `WorkerProtocol.version`.
 2. Mirror the type change in `ProtocolTypes.swift`/`RestTypes.swift` and update
    `WorkerProtocol.version`.
-3. If transcript semantics changed, port the `transcript.ts` diff into `Transcript.swift`.
+3. If transcript semantics changed, port the `transcript.ts` diff into the Rust core
+   (`crates/core`), whose goldens check it.
 
 `isJobRun` **is** mirrored (`SessionList.swift`) even though this app has no jobs surface to
 filter against - its own doc names "the extension, the phone" as the clients that should list job
@@ -838,43 +580,12 @@ arrives, that is a decision already made rather than one rediscovered.
 Not yet mirrored (later phases): the job-queue REST/WS surface, profile create/update/delete,
 browser-bridge tool hosting (the app answers `tool_call_request` with a polite refusal).
 
-**Truncated tool results.** The attach asks for `?truncateResults=1` (in `TranscriptViewModel.run`
-and nowhere else - the opt-in belongs to the unit that renders), so an oversized `tool_result`
-arrives as its head with `truncated`/`total_chars` set, and the rest is one
-`WorkerClient.toolResult` away. The press is the terminal renderer's third expansion state:
-`TerminalExpansion.pending`, drawn as `… fetching N chars` with no press of its own, promoted to
-`full` by `TerminalTranscriptModel.update` when the fetched text lands on the item. It is
-deliberately not planned from `total_chars` - that would invent a line count for text nobody has
-seen, which is the estimate-and-correct model this renderer exists not to be. The cards renderer
-carries the same affordance, because the variant is a preference and a head reaches both.
-
-**Tool-result images.** The attach also asks for `?imageRefs=1` - its **own** flag beside
-`truncateResults`, not a widening of it, and asked for in the same one place. A `tool_result`'s
-base64 `image` parts then arrive as `image_ref` addresses (`media_type`, decoded `bytes`,
-`part_index`) and the bytes are fetched over `WorkerClient.toolResultImage` when the row is
-actually on screen. This is where the payload was: measured across 214 local sessions, **91% of
-all tool-result payload is base64 no client renders** - `joinedText` drops it exactly as the web's
-`blockText` does - so this makes a tool's pictures visible on the phone for the first time *and*
-takes them off the wire.
-
-The height model is what shapes the rendering. Everything else here is planned and then drawn, so
-an image cannot be sized by its own pixels: nobody has fetched them, and a row that self-corrected
-on load would be the estimate-and-correct model this renderer exists not to be. So the planner
-reserves a **fixed box of `TermImage.boxLines` (12) whole lines per image** - the same constant
-the web client uses - carried on the box's first `TermLine` as a `TermImageBox` with the lines
-under it merely holding the grid. The box is that size in all three states (placeholder
-`image · 335.0 KB`, the picture, `image unavailable`), so a fetch landing or failing can never
-reflow the transcript, and `TerminalAudit` needs no new claim: a box of K lines is exact by
-definition.
-
-Two divergences from the web client, both deliberate:
-
-- **The box stays fixed when the row is expanded.** There an expanded row is mounted and
-  self-measures, so an image may reveal its intrinsic size; here nothing self-measures. Tested as
-  a divergence, like run-of-one.
-- **Cards does not draw them.** The terminal renderer is the one that reserves grid, and a
-  fixed-height frame in the cards renderer is a separate piece of work. Images in the cards
-  variant stay as invisible as they are today, which is a gap rather than a regression.
+**Truncated tool results and images.** The core's attach asks for `?truncateResults=1` and
+`?imageRefs=1`, so an oversized `tool_result` arrives as its head (the rest one fetch away, drawn
+as `… fetching N chars` meanwhile) and a result's base64 images arrive as `image_ref` addresses.
+An image is a fixed box of `TermImage.boxLines` (12) whole lines, the web's constant, carried on
+the box's first `TermLine` as a `TermImageBox`; the box is that size as placeholder, picture and
+`image unavailable`, so a fetch landing or failing never reflows the transcript.
 
 Laziness is the collection view's own: `willDisplay` fires the fetch, `didEndDisplaying` cancels
 the `URLSession` task, and `TerminalImageLoader` holds an `NSCache` of *decoded* images between -

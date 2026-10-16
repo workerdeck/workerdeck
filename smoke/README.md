@@ -211,8 +211,6 @@ pnpm smoke:attach $HOST $ID refs --capture /tmp/after.jsonl
 diff /tmp/before.jsonl /tmp/after.jsonl     # must be empty on a session with no images
 ```
 
-The same capture feeds iOS's `AttachReplayBench` (`apps/ios/README.md`).
-
 ## `smoke:push`: a real notification, on demand
 
 ```bash

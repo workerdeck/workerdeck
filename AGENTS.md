@@ -50,7 +50,7 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
 | `apps/vscode` | The VS Code extension. No webview draws its own header; no view has screens. |
 | `apps/embedded` | The reference embedding - read it before designing another one. |
 | `apps/demo` | Interactive tour: a VS Code shell with the real `ui` panels over a scripted in-browser gateway. Private, static. |
-| `apps/ios` | Native iOS remote control (iOS 18+). `WorkerDeckKit/` hand-mirrors protocol + the reducer; `WorkerDeckActivity` + `Widgets/` are the Live Activity. |
+| `apps/ios` | Native iOS remote control (iOS 18+). `WorkerDeckKit/` hand-mirrors protocol, the transcript runs on the Rust core; `WorkerDeckActivity` + `Widgets/` are the Live Activity. |
 | `apps/docs` | Astro site → Pages. Keep in sync with README. |
 | `apps/android` | Android (Gradle, outside pnpm/turbo). `:core` wraps `crates/ffi`: snapshot decoders and the session thread, no logic; the app (P4) is next. |
 | `crates/` | Rust core shared by the **native** clients only (Android now, iOS later): decode, reducer, planner, VT, and every piece of app logic both apps need (view models, controllers); Kotlin never mirrors Swift. Ports the Swift kit; TS stays the source of truth, checked by `pnpm fixtures:golden` goldens. Cargo, outside pnpm/turbo. |

@@ -559,7 +559,7 @@ extension only connects to takes its defaults from its own config.
 `workerdeck.host.agentContextReset` (`off`, the default, `on` or `never`) reaches the child as
 `--agent-context-reset <value>` when it is not `off`, and is a restart-offer key. An agent-requested
 reset draws as one info notice (`The agent cleared its context: <reason>`) in the emptied
-transcript. The react reducer and the iOS kit both seed it from `conversation_reset.agentReason`.
+transcript. The react reducer and the Rust core both seed it from `conversation_reset.agentReason`.
 
 ### Dev harness & CSP
 
@@ -791,26 +791,24 @@ the composer, the status bar, the sheets and the host file browser) is deleted, 
 below that describe them are history until slice 7 rewrites this section. Deep links still land:
 a push's `seq` (epoch-checked), a task step's tool call, a sub-agent step's takeover and a shell
 step's screen are held as a `CoreEntry` until the replay settles. What the core screen lacks is
-listed in `_docs/plans/IOS-ONTO-CORE.md` (newest entry). `WorkerDeckKit` still holds the Swift
-reducer and planner because they write the `.lines.jsonl` goldens Rust's conformance tests read.
+listed in `_docs/plans/IOS-ONTO-CORE.md` (newest entry). Slice 7 deleted the Swift reducer,
+planner and VT emulator from `WorkerDeckKit`; their goldens are Rust's (`crates/core/tests/conformance.rs`).
 
 native iOS remote control (SwiftUI + XcodeGen; invisible to pnpm/turbo - no
 package.json). `WorkerDeckKit/` is a hand-written Swift mirror of `packages/protocol` plus a
-client and a port of the react transcript reducer - protocol or transcript changes must be
-mirrored there (`WorkerProtocol.version` tracks `PROTOCOL_VERSION`); see `apps/ios/README.md`.
+REST client - protocol changes must be mirrored there (`WorkerProtocol.version` tracks
+`PROTOCOL_VERSION`), transcript changes in the Rust core; see `apps/ios/README.md`.
 `context_compacted` draws as an ordinary transcript item, not as a synthetic seam like the recap
 row: it has a uuid, so it is addressable and bookmarkable, and it nests inside a sub-agent's
 frame on `parentToolUseId`. It appends where `conversation_reset` empties, and leaves
 `contextUsage` alone - the engine reports post-compaction occupancy itself. It arrives twice
 under one id - `pending` while the engine summarises, settled when the boundary lands - so the
-row says it is working and then says what it did (`docs/GOTCHAS.md`). `TermFmt.compaction` is
-Swift's own port of `compactionText`, pinned by `TerminalTextTests` because there is no module
-the two sides can share.
+row says it is working and then says what it did (`docs/GOTCHAS.md`).
 The agent-view preferences are mirrored too (`AppSettings.swift`): variant as an environment
 value the rows read, and the font as one `fontDesign` on the session view - with the composer's
 `UITextView` told separately, since UIKit sits outside SwiftUI's font environment. `lines` is
-**gone**, replaced by a native Swift **terminal** renderer (`App/Sources/Session/Terminal/`
-over `WorkerDeckKit/.../Terminal/`). Density is
+**gone**, replaced by a native **terminal** renderer (`App/Sources/Session/Terminal/` over rows
+the Rust core plans). Density is
 gone everywhere - every client dropped it - and font stays Cards-only here, as it does on the
 web clients. The port carries
 the rules across - the two folds, the row-covers-a-*membership* addressing, the cell/wrap model,
@@ -863,9 +861,9 @@ inside one would be a coin toss under a thumb - the web can put both on one row 
 can hit either.
 
 **The drill-in is a native terminal**, and it has to be: `apps/ios/project.yml` takes zero
-third-party packages, so SwiftTerm was never on the table. `VTScreen` (`WorkerDeckKit/Terminal/`)
-is a dependency-free VT emulator - a resumable parser, a cell grid, scrollback, the alternate
-screen, 256 colours and true colour - pinned by 60 tests. It matters that the parser is
+third-party packages, so SwiftTerm was never on the table. The emulator is the Rust core's
+(`crates/core` `vt.rs`; the Swift `VTScreen` it was ported from is deleted) - a resumable parser,
+a cell grid, scrollback, the alternate screen, 256 colours and true colour. It matters that the parser is
 **resumable across `feed` calls**: one CSI arrives split over three frames often enough, and a
 parser that reset between chunks would print escape codes at the reader.
 
@@ -1250,7 +1248,7 @@ session gets no card: iOS stops accepting updates at 8 h and force-ends at 12 h,
 sits through an idle session dies before the moment it exists for. `SessionActivityAttributes` and
 its `ContentState` live in **`WorkerDeckActivity`**, a second SwiftPM target beside `WorkerDeckKit`
 - the app and the widget extension must compile the *same* type, and the extension should not link
-the transcript reducer. It is deliberately not part of the kit for the same reason
+the Rust core. It is deliberately not part of the kit for the same reason
 `DeviceRegistration` is not: this is a contract with the CLI's forwarder, not with
 `packages/protocol`. `packages/cli/test/live-activity.test.ts` writes the payload fixtures that
 `WorkerDeckActivityTests` decodes with the real types (`UPDATE_FIXTURES=1` to regenerate), which is

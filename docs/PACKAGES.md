@@ -2461,8 +2461,9 @@ pnpm's globs and invisible to turbo:
 | `wd-native-ffi` | `crates/ffi` | The apps' door: UniFFI (lib `wdffi`), one `Session` object, byte snapshots per `docs/NATIVE-CORE-SNAPSHOTS.md`; Kotlin side in `apps/android/core` |
 | `wd-native-bench` | `crates/bench` | `wdbench`, the spike's workloads plus the `dump` / `dump-vt` cross-check modes |
 
-Every module in `wd-native` is a port of a `WorkerDeckKit` file and keeps its names, so the two
-can be read side by side until iOS moves onto the core:
+Every module in `wd-native` began as a port of a `WorkerDeckKit` file and keeps its names. iOS now
+runs on the core and the Swift reducer, planner and VT files are deleted, so the right column
+names where each module came from:
 
 | Rust | Swift (`apps/ios/WorkerDeckKit/Sources/WorkerDeckKit`) |
 | --- | --- |
