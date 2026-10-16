@@ -289,7 +289,7 @@ after a restart, and a session with no profile has no account state at all.
 `orderUsageWindows` is the ordering-and-drop-the-unknown rule beside it, because the panel
 renders windows off a merged transcript and the dashboard's profile page renders them off
 `ProfileInfo.usage` with no session in sight. Tests in `packages/react/test/usage.test.ts`,
-mirrored in `WorkerDeckKit/Tests/WorkerDeckKitTests/UsageTests.swift` - including the case that
+mirrored in `crates/core` (`vm/usage`, the native clients' copy) - including the case that
 pins profile-wins-unconditionally, which is the one a well-meaning "make it compare timestamps"
 change breaks.
 `isJobRun` is the third of these rules and the one a client gets wrong silently. A job run is an
@@ -1204,8 +1204,8 @@ on `execution_failed` or an error one. Surfaces derive their UI from `status`, n
 being present: a pending or deferred call has no result yet and is not the same thing as a running
 one. The execution events are keyed by `executionId`, which **equals the `tool_use` id for calls
 the model made**, and an event for an unknown id is ignored rather than fabricating an item - the
-`tool_use` that explains it may simply not have arrived, or may belong to another session. Swift
-mirror: `ToolCallStatus` in `Transcript.swift`.
+`tool_use` that explains it may simply not have arrived, or may belong to another session. Native
+mirror: `crates/core/src/transcript.rs`.
 A person's **slash command** arrives as a user message wrapped in
 `<command-message>/<command-name>/<command-args>` markup; the reducer renders the typed command
 line and never the wrapper, and it must not be suppressed here *or* in the runner - hiding it
