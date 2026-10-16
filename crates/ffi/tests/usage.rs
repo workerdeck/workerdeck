@@ -82,3 +82,12 @@ fn a_provider_engine_without_capabilities_reports_no_plan_windows() {
     assert_eq!(usage.engine, "provider");
     assert!(!usage.rate_limits);
 }
+
+#[test]
+fn a_rate_limit_event_alone_tells_the_platform_to_reread_the_meters() {
+    let s = attached("", &[]);
+    let event = format!(r#"{{"type":"event","event":{{{},"seq":1,"ts":{NOW}}}}}"#, limit("five_hour", 30.0));
+    let effects = s.received(event, NOW);
+    assert!(effects.iter().any(|effect| matches!(effect, wdffi::Effect::Changed { changed } if changed.chrome)));
+    assert_eq!(s.usage(NOW).windows.len(), 1);
+}

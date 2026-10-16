@@ -97,6 +97,7 @@ pub struct LiveSession {
     published_chrome: SessionChrome,
     published_prompt: Option<Prompt>,
     published_pickers: (ModelPicker, ModePicker),
+    published_usage: UsageMark,
     catalog: Vec<ModelOption>,
     catalog_requested: bool,
     finished: bool,
@@ -135,6 +136,7 @@ impl LiveSession {
             published_chrome: SessionChrome::default(),
             published_prompt: None,
             published_pickers: Default::default(),
+            published_usage: UsageMark::default(),
             catalog: Vec::new(),
             catalog_requested: false,
             finished: false,
@@ -893,6 +895,11 @@ impl LiveSession {
             self.published_chrome = chrome;
             self.changed.chrome = true;
         }
+        let usage = UsageMark::of(&self.state);
+        if usage != self.published_usage {
+            self.published_usage = usage;
+            self.changed.chrome = true;
+        }
         let pickers = (self.model_picker(), self.mode_picker());
         if pickers != self.published_pickers {
             self.published_pickers = pickers;
@@ -921,6 +928,26 @@ impl LiveSession {
 }
 
 // The models a profile's catalog lists, from `GET /profiles`; a 404 or an unknown shape is no catalog.
+// What the meters read, so a context or rate-limit event that draws no row still tells the platform to re-read them.
+#[derive(Debug, Clone, PartialEq, Default)]
+struct UsageMark {
+    context: Option<(i64, i64, u64)>,
+    limits: (usize, Option<u64>),
+    cost: (u64, Option<u64>),
+    plan: Option<String>,
+}
+
+impl UsageMark {
+    fn of(state: &TranscriptState) -> Self {
+        UsageMark {
+            context: state.context_usage.as_ref().map(|c| (c.total_tokens, c.max_tokens, c.percentage.to_bits())),
+            limits: (state.rate_limits.len(), state.rate_limits_updated_at.map(f64::to_bits)),
+            cost: (state.total_cost_usd.to_bits(), state.cost_usd.map(f64::to_bits)),
+            plan: state.subscription_type.clone(),
+        }
+    }
+}
+
 fn profile_models(body: &str, profile: &str) -> Vec<ModelOption> {
     let Ok(answer) = serde_json::from_str::<Value>(body) else { return Vec::new() };
     let profiles = answer.get("profiles").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
