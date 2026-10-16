@@ -1,7 +1,7 @@
 // Pairing rules for a native app: what a typed gateway address means, what to call it, and what an answer says
 // about the address and key it was reached with.
 use crate::planner::image_media_type;
-use crate::rest::encode_component;
+use crate::rest::{calls, encode_component};
 use crate::transcript::ProducedFile;
 
 pub fn normalize_base_url(raw: &str) -> String {
@@ -22,7 +22,7 @@ pub fn socket_url(base_url: &str, session_id: &str, after_seq: i64) -> String {
 
 // One picture of a tool result, under the API base: the web's `toolResultImage`. A stale seq 404s, never another call's.
 pub fn result_image_path(session_id: &str, seq: i64, tool_use_id: &str, part_index: i64) -> String {
-    format!("/sessions/{}/events/{seq}/result?toolUseId={}&part={part_index}", encode_component(session_id), encode_component(tool_use_id))
+    calls::tool_result_image(session_id, seq, tool_use_id, part_index).path
 }
 
 // The web's `useHostImage`: a picture codex names by its host path is served as the produced file the session
@@ -36,11 +36,8 @@ pub struct HostImageFetch {
 
 pub fn host_image_path(session_id: &str, path: &str, produced: Option<&ProducedFile>) -> HostImageFetch {
     match produced {
-        Some(file) => HostImageFetch {
-            path: format!("/sessions/{}/produced/{}", encode_component(session_id), encode_component(&file.file_id)),
-            fs_read: false,
-        },
-        None => HostImageFetch { path: format!("/fs/read?path={}", encode_component(path)), fs_read: true },
+        Some(file) => HostImageFetch { path: calls::produced_file(session_id, &file.file_id).path, fs_read: false },
+        None => HostImageFetch { path: calls::read_host_file(path).path, fs_read: true },
     }
 }
 

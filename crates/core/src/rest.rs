@@ -7,6 +7,8 @@ use std::marker::PhantomData;
 
 pub mod calls;
 pub mod error;
+pub mod files;
+pub mod mcp;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entries<V>(pub Vec<(String, V)>);

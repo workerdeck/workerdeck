@@ -14,6 +14,12 @@ impl From<agent_avatar::AvatarFetch> for AvatarFetch {
     }
 }
 
+// What `AvatarFetch.key` names for an agent's `avatar`, for a screen that holds the agent rather than the fetch.
+#[uniffi::export]
+pub fn avatar_key(host_id: String, avatar: String) -> String {
+    agent_avatar::key(&host_id, &avatar)
+}
+
 // The busy strip's `x-frame-durations` header: one entry per frame, frames laid out left to right.
 #[uniffi::export]
 pub fn avatar_frame_durations(header: Option<String>) -> Vec<f64> {

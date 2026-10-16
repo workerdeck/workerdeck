@@ -1,4 +1,4 @@
-use crate::rest::{AgentRef, encode_component};
+use crate::rest::AgentRef;
 use std::collections::{HashMap, HashSet};
 
 pub const RETRY_AFTER_MS: f64 = 60_000.0;
@@ -12,12 +12,16 @@ pub struct AvatarFetch {
 }
 
 pub fn avatar_path(agent_id: &str, busy: bool) -> String {
-    format!("/agents/{}/{}", encode_component(agent_id), if busy { "avatar-busy.png" } else { "avatar.png" })
+    crate::rest::calls::agent_avatar_path(agent_id, busy)
 }
 
 // `AgentRef.avatar` is versioned by the avatar's seed, so a new seed is a new key and each picture is fetched once.
 pub fn avatar_key(host_id: &str, agent: &AgentRef) -> Option<String> {
-    agent.avatar.as_ref().map(|avatar| format!("{host_id}|{avatar}"))
+    agent.avatar.as_ref().map(|avatar| key(host_id, avatar))
+}
+
+pub fn key(host_id: &str, avatar: &str) -> String {
+    format!("{host_id}|{avatar}")
 }
 
 pub fn frame_durations(header: Option<&str>) -> Vec<f64> {

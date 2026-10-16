@@ -2499,8 +2499,31 @@ header, TLS, timeouts, and byte fetches, where any 2xx is the answer. A body a c
 (`SessionList.set_host`, `set_meta`, `set_profiles`) goes to it whole. Moved so far (R1): sessions
 list, get, update, sleep, delete, stop and background task, kill shell, resolve permission, agents
 list, restart, retire, update, avatar reroll, meta, profiles; then (R2) create session and agent,
-SDK sessions and profile detail. Files, host files, attachments, MCP, shells and tool results (R3)
-still build their routes in Swift, through the same transport.
+SDK sessions and profile detail; then (R3) session files, attachment upload and fetch, MCP list
+and action, shells list, get and output, host files (roots, list, find, read, write), produced
+files, project icon, agent avatar and tool result (text and image). An upload is the one call
+with a raw body: the core names the path (`?name=`), the platform sends the bytes under their
+media type (Swift `WorkerClient.upload`). A screen that decides things from an answer takes it
+whole as an `HttpAnswer { status, content_type, body }` (Swift `WorkerClient.answer`, status 0
+for no answer) and reads and classifies it itself; a body that does not parse is `Unreadable`.
+
+**R3's view models.** `vm::host_files` (FFI `HostFiles`, `HostFileEditor`): `HostFiles.session(cwd)`
+asks `/fs/roots` (a 404 is `Unavailable`, the gateway has no `--fs-root`), then lists the cwd (a
+404 is `OutsideRoots`: every filesystem refusal is a uniform 404); `HostFiles.folders()` is the
+folder picker, ready on the roots, keeping only directories and symlinks and clearing its error on
+a good listing. Listings are cached under the path asked for and the canonical path answered, a
+listing in flight is not asked twice, `force` refetches. The editor holds the draft; a utf8 read is
+text, base64 is `Binary` and never editable; a save sends `expectedHash` (the read's, then each
+save's own) and on success the text sent becomes the original; a 409 sets `conflict`, fixed by a
+reload. `vm::session_extras`: `McpView` (FFI `McpServers`) groups servers by scope in Claude Code's
+order (project, local, user, dynamic, managed, claudeai, then the rest alphabetically, no scope
+being "other") with its titles, a status tint, `N tools` for a connected server, the server's facts,
+Reconnect plus Enable or Disable only where `mcpServerActions`, the tool filter (trimmed,
+case-folded, name or title or description) and `mcp__<server>__<tool>`; a refusal keeps the last
+list and says why. `skill_sections` groups skills (repo, user, system, admin, then the rest,
+capitalised). `SessionExtras` reads `GET /sessions/:id` for the menu (files once read, MCP and
+skills by the resolved capabilities) and the info sheet. The composer's attachment state machine,
+kind rules and can-send are still Swift (the composer slice); only the upload call moved.
 
 **The create form** is `vm::create_form` (FFI `CreateForm`, built by `CreateForm.session` or, for an
 agent, `CreateForm.agent` over the `SessionList`, whose meta and profiles seed it and which it feeds

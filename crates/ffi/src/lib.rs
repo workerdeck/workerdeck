@@ -13,6 +13,8 @@ use wd_native::vt::VtKey;
 mod avatar;
 mod bookmarks;
 mod create_form;
+mod extras;
+mod files;
 mod list;
 mod pickers;
 mod prompt;
@@ -21,6 +23,13 @@ mod scrubber;
 mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
 pub use create_form::{CreateForm, CreateFormFields, CreateFormState, FormLead, FormProfile};
+pub use extras::{
+    Fact, McpSection, McpServerDetail, McpServerRow, McpServers, McpStatus, McpToolDetail, McpToolRow, SessionExtras, SkillRow,
+    SkillSection, session_extras, session_extras_unknown, skill_sections,
+};
+pub use files::{
+    HostEntry, HostEntryKind, HostFileContent, HostFileEditor, HostFileState, HostFiles, HostFilesAvailability, HostListing, HostRoot,
+};
 pub use list::{
     ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow, ListSortBy, Mark, NewAgentSeed, RowState, SessionList, StepKind,
     StepShow,

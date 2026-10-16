@@ -300,6 +300,149 @@ pub fn list_profiles() -> HttpCall {
     HttpCall::get("/profiles".to_owned())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpAction {
+    Reconnect,
+    Enable,
+    Disable,
+}
+
+impl McpAction {
+    pub fn name(self) -> &'static str {
+        match self {
+            McpAction::Reconnect => "reconnect",
+            McpAction::Enable => "enable",
+            McpAction::Disable => "disable",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShellOutputView {
+    Text,
+    Raw,
+    Screen,
+}
+
+// `PUT /fs/write` is always conditional: `expected_hash` is the read the edit started from, absent only to create.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostWrite {
+    pub path: String,
+    pub content: String,
+    pub base64: bool,
+    pub expected_hash: Option<String>,
+}
+
+fn query(pairs: &[(&str, Option<String>)]) -> String {
+    let set: Vec<String> =
+        pairs.iter().filter_map(|(name, value)| value.as_ref().map(|v| format!("{name}={}", encode_component(v)))).collect();
+    if set.is_empty() { String::new() } else { format!("?{}", set.join("&")) }
+}
+
+pub fn session_files(session_id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/files", session(session_id)))
+}
+
+// The web's `sessionFileUrl`: each segment encoded, empty ones dropped.
+pub fn session_file(session_id: &str, path: &str) -> HttpCall {
+    let encoded: Vec<String> = path.split('/').filter(|s| !s.is_empty()).map(encode_component).collect();
+    HttpCall::get(format!("{}/files/{}", session(session_id), encoded.join("/")))
+}
+
+// The body is the file's raw bytes under its own media type, which the platform sends; the answer is `{attachment}`.
+pub fn upload_attachment(session_id: &str, name: &str) -> HttpCall {
+    HttpCall::post(format!("{}/attachments{}", session(session_id), query(&[("name", Some(name.to_owned()))])))
+}
+
+pub fn attachment(session_id: &str, attachment_id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/attachments/{}", session(session_id), encode_component(attachment_id)))
+}
+
+pub fn mcp_servers(session_id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/mcp", session(session_id)))
+}
+
+pub fn mcp_action(session_id: &str, server: &str, action: McpAction) -> HttpCall {
+    HttpCall::with("POST", format!("{}/mcp/{}", session(session_id), encode_component(server)), json!({ "action": action.name() }))
+}
+
+fn shell(session_id: &str, shell_id: &str) -> String {
+    format!("{}/shells/{}", session(session_id), encode_component(shell_id))
+}
+
+pub fn list_shells(session_id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/shells", session(session_id)))
+}
+
+pub fn get_shell(session_id: &str, shell_id: &str) -> HttpCall {
+    HttpCall::get(shell(session_id, shell_id))
+}
+
+pub fn shell_output(session_id: &str, shell_id: &str, view: ShellOutputView, tail: Option<u32>) -> HttpCall {
+    let view = match view {
+        ShellOutputView::Text => "text",
+        ShellOutputView::Raw => "raw",
+        ShellOutputView::Screen => "screen",
+    };
+    let suffix = query(&[("view", Some(view.to_owned())), ("tail", tail.map(|t| t.to_string()))]);
+    HttpCall::get(format!("{}/output{suffix}", shell(session_id, shell_id)))
+}
+
+pub fn host_roots() -> HttpCall {
+    HttpCall::get("/fs/roots".to_owned())
+}
+
+pub fn host_dir(path: &str) -> HttpCall {
+    HttpCall::get(format!("/fs/list{}", query(&[("path", Some(path.to_owned()))])))
+}
+
+pub fn find_host_files(directory: &str, q: &str, limit: Option<u32>) -> HttpCall {
+    let suffix = query(&[("path", Some(directory.to_owned())), ("q", Some(q.to_owned())), ("limit", limit.map(|l| l.to_string()))]);
+    HttpCall::get(format!("/fs/find{suffix}"))
+}
+
+pub fn read_host_file(path: &str) -> HttpCall {
+    HttpCall::get(format!("/fs/read{}", query(&[("path", Some(path.to_owned()))])))
+}
+
+pub fn write_host_file(write: &HostWrite) -> HttpCall {
+    let mut body = Map::new();
+    body.insert("path".to_owned(), json!(write.path));
+    body.insert("content".to_owned(), json!(write.content));
+    body.insert("encoding".to_owned(), json!(if write.base64 { "base64" } else { "utf8" }));
+    put(&mut body, "expectedHash", &write.expected_hash);
+    HttpCall::with("PUT", "/fs/write".to_owned(), Value::Object(body))
+}
+
+// Bytes the session's engine reported writing (codex's generated images): no host-file root, no byte cap.
+pub fn produced_file(session_id: &str, file_id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/produced/{}", session(session_id), encode_component(file_id)))
+}
+
+// A 404 is the uniform "no icon"; cache the bytes by the icon's hash, never by session.
+pub fn project_icon(session_id: &str) -> HttpCall {
+    HttpCall::get(format!("{}/project/icon", session(session_id)))
+}
+
+pub fn agent_avatar(agent_id: &str, busy: bool) -> HttpCall {
+    HttpCall::get(agent_avatar_path(agent_id, busy))
+}
+
+pub fn agent_avatar_path(agent_id: &str, busy: bool) -> String {
+    format!("{}/{}", agent(agent_id), if busy { "avatar-busy.png" } else { "avatar.png" })
+}
+
+// A stale seq 404s rather than serving another call's result: ask again after a fresh attach.
+pub fn tool_result(session_id: &str, seq: i64, tool_use_id: &str, image_refs: bool) -> HttpCall {
+    let suffix = query(&[("toolUseId", Some(tool_use_id.to_owned())), ("imageRefs", image_refs.then(|| "1".to_owned()))]);
+    HttpCall::get(format!("{}/events/{seq}/result{suffix}", session(session_id)))
+}
+
+pub fn tool_result_image(session_id: &str, seq: i64, tool_use_id: &str, part_index: i64) -> HttpCall {
+    let suffix = query(&[("toolUseId", Some(tool_use_id.to_owned())), ("part", Some(part_index.to_string()))]);
+    HttpCall::get(format!("{}/events/{seq}/result{suffix}", session(session_id)))
+}
+
 // A live session's `Request` effect names its path under the session when `scoped`.
 pub fn session_request_path(session_id: &str, path: &str, scoped: bool) -> String {
     if scoped { format!("{}{path}", session(session_id)) } else { path.to_owned() }
@@ -409,6 +552,53 @@ mod tests {
         let query = SdkSessionQuery { dir: Some("/a b".into()), limit: Some(20), offset: None, profile: Some("p&q".into()) };
         assert_eq!(list_sdk_sessions(&query), call("GET", "/sdk-sessions?dir=%2Fa%20b&limit=20&profile=p%26q", None));
         assert_eq!(get_profile("my profile"), call("GET", "/profiles/my%20profile", None));
+    }
+
+    #[test]
+    fn session_file_routes_encode_ids_and_each_path_segment() {
+        assert_eq!(session_files("s 1"), call("GET", "/sessions/s%201/files", None));
+        assert_eq!(session_file("s 1", "/out//my report.md"), call("GET", "/sessions/s%201/files/out/my%20report.md", None));
+        assert_eq!(upload_attachment("s", "a+b c.png"), call("POST", "/sessions/s/attachments?name=a%2Bb%20c.png", None));
+        assert_eq!(attachment("s", "at/1"), call("GET", "/sessions/s/attachments/at%2F1", None));
+        assert_eq!(produced_file("s", "f 1"), call("GET", "/sessions/s/produced/f%201", None));
+        assert_eq!(project_icon("s/1"), call("GET", "/sessions/s%2F1/project/icon", None));
+        assert_eq!(agent_avatar("a b", false), call("GET", "/agents/a%20b/avatar.png", None));
+        assert_eq!(agent_avatar("a", true), call("GET", "/agents/a/avatar-busy.png", None));
+    }
+
+    #[test]
+    fn mcp_and_shell_routes() {
+        assert_eq!(mcp_servers("s"), call("GET", "/sessions/s/mcp", None));
+        assert_eq!(
+            mcp_action("s", "my server", McpAction::Disable),
+            call("POST", "/sessions/s/mcp/my%20server", Some(r#"{"action":"disable"}"#))
+        );
+        assert_eq!(mcp_action("s", "x", McpAction::Reconnect).body.as_deref(), Some(r#"{"action":"reconnect"}"#));
+        assert_eq!(list_shells("s"), call("GET", "/sessions/s/shells", None));
+        assert_eq!(get_shell("s", "sh 1"), call("GET", "/sessions/s/shells/sh%201", None));
+        assert_eq!(shell_output("s", "x", ShellOutputView::Text, None), call("GET", "/sessions/s/shells/x/output?view=text", None));
+        assert_eq!(
+            shell_output("s", "x", ShellOutputView::Raw, Some(4096)),
+            call("GET", "/sessions/s/shells/x/output?view=raw&tail=4096", None)
+        );
+    }
+
+    #[test]
+    fn host_file_routes_carry_their_query_encoded() {
+        assert_eq!(host_roots(), call("GET", "/fs/roots", None));
+        assert_eq!(host_dir("/repo/my src"), call("GET", "/fs/list?path=%2Frepo%2Fmy%20src", None));
+        assert_eq!(find_host_files("/repo", "a t", Some(8)), call("GET", "/fs/find?path=%2Frepo&q=a%20t&limit=8", None));
+        assert_eq!(find_host_files("/repo", "", None), call("GET", "/fs/find?path=%2Frepo&q=", None));
+        assert_eq!(read_host_file("/a&b"), call("GET", "/fs/read?path=%2Fa%26b", None));
+        let create = HostWrite { path: "/n".into(), content: "aGk=".into(), base64: true, expected_hash: None };
+        assert_eq!(write_host_file(&create), call("PUT", "/fs/write", Some(r#"{"path":"/n","content":"aGk=","encoding":"base64"}"#)));
+    }
+
+    #[test]
+    fn tool_result_routes_verify_the_call_they_name() {
+        assert_eq!(tool_result("s", 12, "tu/1", false), call("GET", "/sessions/s/events/12/result?toolUseId=tu%2F1", None));
+        assert_eq!(tool_result("s", 12, "tu", true).path, "/sessions/s/events/12/result?toolUseId=tu&imageRefs=1");
+        assert_eq!(tool_result_image("a b", 12, "toolu/1", 0).path, "/sessions/a%20b/events/12/result?toolUseId=toolu%2F1&part=0");
     }
 
     #[test]
