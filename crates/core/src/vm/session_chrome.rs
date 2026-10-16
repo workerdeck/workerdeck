@@ -1,5 +1,7 @@
 use crate::protocol::SessionStatus;
-use crate::transcript::TranscriptState;
+use crate::rest::AttachmentKind;
+use crate::row_menu::can_background;
+use crate::transcript::{Item, TranscriptState};
 use crate::vm::model_name::friendly_model;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -16,7 +18,15 @@ pub struct SessionChrome {
     pub can_run_shell: bool,
     pub can_clear_context: bool,
     pub queued: u32,
+    pub can_sleep: bool,
+    // The earliest start (ms) among the running top-level calls the engine can move to the background, the web's
+    // `backgroundableSince`; 0 when a call carries no time. Send now shows once it is `SEND_NOW_AFTER_MS` old.
+    pub send_now_since: Option<i64>,
+    pub cwd: Option<String>,
+    pub attachment_kinds: Vec<String>,
 }
+
+pub const SEND_NOW_AFTER_MS: i64 = 5000;
 
 pub fn status_label(status: SessionStatus) -> &'static str {
     match status {
@@ -69,12 +79,56 @@ pub fn session_chrome(
         can_run_shell,
         can_clear_context: state.capabilities.as_ref().is_some_and(|c| c.clear_context == Some(true)),
         queued,
+        can_sleep: state.capabilities.as_ref().is_some_and(|c| c.engine_sleep == Some(true))
+            && state.status == Some(SessionStatus::Idle)
+            && !state.engine_asleep,
+        send_now_since: if state.capabilities.as_ref().is_some_and(|c| c.background_tasks == Some(true)) {
+            backgroundable_since(&state.items)
+        } else {
+            None
+        },
+        cwd: state.cwd.clone().filter(|cwd| !cwd.is_empty()),
+        attachment_kinds: state
+            .capabilities
+            .as_ref()
+            .map(|c| {
+                c.attachments
+                    .iter()
+                    .filter_map(|kind| match kind {
+                        AttachmentKind::Image => Some("image"),
+                        AttachmentKind::Pdf => Some("pdf"),
+                        AttachmentKind::Text => Some("text"),
+                        AttachmentKind::Unknown => None,
+                    })
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
+}
+
+// Walks back only through the current turn: a running call is never older than the last prompt.
+pub fn backgroundable_since(items: &[Item]) -> Option<i64> {
+    let mut since: Option<i64> = None;
+    for item in items.iter().rev() {
+        match item {
+            Item::User { parent_tool_use_id: None, .. } => break,
+            Item::ToolCall(call) if can_background(call) => {
+                let ts = call.ts.unwrap_or(0.0) as i64;
+                since = Some(since.map_or(ts, |since| since.min(ts)));
+            }
+            _ => {}
+        }
+    }
+    since
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rest::EngineCapabilities;
+    use crate::transcript::{ToolCall, ToolCallStatus};
+    use std::sync::Arc;
 
     fn with_status(status: Option<SessionStatus>) -> SessionChrome {
         session_chrome(&TranscriptState { status, ..TranscriptState::default() }, None, false, 0, None)
@@ -96,6 +150,79 @@ mod tests {
             assert_eq!((chrome.status.as_str(), chrome.status_label.as_str(), chrome.busy), (wire, label, busy));
             assert_eq!(chrome.enabled, status != SessionStatus::Closed);
         }
+    }
+
+    fn capable(engine_sleep: bool, background_tasks: bool) -> Option<EngineCapabilities> {
+        Some(EngineCapabilities {
+            engine_sleep: Some(engine_sleep),
+            background_tasks: Some(background_tasks),
+            attachments: vec![AttachmentKind::Image, AttachmentKind::Unknown, AttachmentKind::Pdf],
+            ..EngineCapabilities::default()
+        })
+    }
+
+    fn call(id: &str, name: &str, parent: Option<&str>, status: ToolCallStatus, ts: Option<f64>) -> Item {
+        Item::ToolCall(Arc::new(ToolCall {
+            id: id.into(),
+            name: name.into(),
+            parent_tool_use_id: parent.map(Into::into),
+            title: None,
+            input: Arc::new(serde_json::Value::Null),
+            status,
+            result: None,
+            ts,
+            live_tail: None,
+            patch: None,
+            execution_id: None,
+            backend: None,
+            logs: None,
+        }))
+    }
+
+    fn prompt() -> Item {
+        Item::User { id: "u".into(), text: "go".into(), parent_tool_use_id: None, attachments: None, origin: None }
+    }
+
+    #[test]
+    fn sleep_needs_the_capability_an_idle_status_and_an_awake_engine() {
+        let idle = |capabilities, asleep| TranscriptState {
+            status: Some(SessionStatus::Idle),
+            engine_asleep: asleep,
+            capabilities,
+            ..TranscriptState::default()
+        };
+        assert!(session_chrome(&idle(capable(true, false), false), None, false, 0, None).can_sleep);
+        assert!(!session_chrome(&idle(capable(true, false), true), None, false, 0, None).can_sleep);
+        assert!(!session_chrome(&idle(capable(false, false), false), None, false, 0, None).can_sleep);
+        let running = TranscriptState { status: Some(SessionStatus::Running), ..idle(capable(true, false), false) };
+        assert!(!session_chrome(&running, None, false, 0, None).can_sleep);
+    }
+
+    #[test]
+    fn send_now_dates_from_the_oldest_running_top_level_call_of_this_turn() {
+        let items = vec![
+            call("old", "Bash", None, ToolCallStatus::Running, Some(1.0)),
+            prompt(),
+            call("read", "Read", None, ToolCallStatus::Running, Some(2.0)),
+            call("nested", "Bash", Some("t"), ToolCallStatus::Running, Some(3.0)),
+            call("bash", "Bash", None, ToolCallStatus::Running, Some(50.0)),
+            call("agent", "Agent", None, ToolCallStatus::Pending, Some(40.0)),
+            call("done", "Bash", None, ToolCallStatus::Settled, Some(10.0)),
+        ];
+        let state = TranscriptState { items, capabilities: capable(false, true), ..TranscriptState::default() };
+        assert_eq!(session_chrome(&state, None, false, 0, None).send_now_since, Some(40));
+        let without = TranscriptState { capabilities: capable(false, false), ..state };
+        assert_eq!(session_chrome(&without, None, false, 0, None).send_now_since, None);
+    }
+
+    #[test]
+    fn cwd_and_attachment_kinds_come_from_the_state() {
+        let state = TranscriptState { cwd: Some("/w".into()), capabilities: capable(false, false), ..TranscriptState::default() };
+        let chrome = session_chrome(&state, None, false, 0, None);
+        assert_eq!(chrome.cwd.as_deref(), Some("/w"));
+        assert_eq!(chrome.attachment_kinds, vec!["image".to_owned(), "pdf".to_owned()]);
+        let blank = TranscriptState { cwd: Some(String::new()), ..TranscriptState::default() };
+        assert_eq!(session_chrome(&blank, None, false, 0, None).cwd, None);
     }
 
     #[test]

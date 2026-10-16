@@ -119,7 +119,6 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private let apiBase: String
   private let authKey: String?
   private let publish: @Sendable (CoreSessionUi) -> Void
-  private let onSkills: (@Sendable ([SkillInfo]) -> Void)?
   private let fixture: [String]?
   private let session: Session
   private var worker: SessionWorker!
@@ -133,7 +132,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private var pending: CoreEntry?
   private var bookmarks: [String] = []
   private var recapBoundary: Int?
-  private var sleepSent = false
+  private var sendNowCheck: DispatchWorkItem?
 
   // Socket callbacks arrive on URLSession's queue, maybe before the worker stored the socket, so each task carries its
   // generation and a callback from a replaced one is dropped by number.
@@ -143,7 +142,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   init(
     sessionId: String, baseURL: String, authKey: String?, metrics: Metrics, hideThinking: Bool,
-    fixture: [String]? = nil, entry: CoreEntry? = nil, onSkills: (@Sendable ([SkillInfo]) -> Void)? = nil,
+    fixture: [String]? = nil, entry: CoreEntry? = nil,
     publish: @escaping @Sendable (CoreSessionUi) -> Void
   ) {
     self.fixture = fixture
@@ -153,7 +152,6 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     self.apiBase = WorkerDeckSession.apiBase(baseUrl: baseURL)
     self.authKey = authKey?.isEmpty == false ? authKey : nil
     self.publish = publish
-    self.onSkills = onSkills
     session = Session(afterSeq: 0, reconnect: true, nonce: UUID().uuidString, metrics: metrics)
     super.init()
     urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
@@ -219,10 +217,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   func sleep() {
     worker.act { [self] session in
-      sleepSent = true
-      ui.extras.canSleep = false
-      publish(ui)
-      return session.sleep()
+      session.sleep()
     }
   }
 
@@ -434,7 +429,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private func open(_ afterSeq: Int64) {
     if let fixture {
       worker.opened()
-      fixture.forEach(feed)
+      fixture.forEach(deliver)
       return
     }
     let mine = bump()
@@ -471,14 +466,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     }
   }
 
-  // The core has no skills model, so the one `skills` event is read off the wire here.
   private func deliver(_ text: String) {
-    feed(text)
-    guard onSkills != nil, text.contains(#""type":"skills""#), let data = text.data(using: .utf8),
-      let frame = try? JSONDecoder().decode(CoreSkillsFrame.self, from: data), frame.type == "event",
-      let skills = frame.event.skills
-    else { return }
-    onSkills?(skills)
+    worker.received(text)
   }
 
   private func lost(_ task: URLSessionTask) {
@@ -510,7 +499,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private func sendFrame(_ id: UInt64, _ text: String) {
     if fixture != nil {
       worker.act { $0.sendDone(id: id, ok: true) }
-      CoreReplayFixture.replies(to: text).forEach(feed)
+      CoreReplayFixture.replies(to: text).forEach(deliver)
       return
     }
     guard let socket else {
@@ -564,11 +553,11 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.modelPicker = session.modelPicker()
       ui.modePicker = session.modePicker()
       ui.canRunShell = session.canRunShell()
-      ui.composer.read(sessionInfoJson: session.sessionInfoJson())
+      ui.composer.read(chrome: ui.chrome!, commands: session.commands(), skills: session.skills())
+      readSendNow()
       readUsage()
       readExtras()
     }
-    if changed.transcript || changed.chrome { ui.composer.canSendNow = backgroundable() }
     if changed.prompt { ui.prompt = session.prompt() }
     if (changed.prompt || changed.transcript) && ui.prompt?.kind == .plan {
       ui.planLines = (try? Snapshots.transcriptLines(session.promptPlanLines()))?.rows.first ?? []
@@ -592,22 +581,27 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     publish(ui)
   }
 
-  // The composer's lists ride frames the core folds but does not hand out, so they are read on their way in.
-  private func feed(_ text: String) {
-    if CoreComposerContext.mayCarryLists(text) {
-      worker.act { [self] _ in
-        if ui.composer.absorb(text) { publish(ui) }
+  // Send now waits until the oldest backgroundable call is old enough, as on the web; a pending check re-reads it then.
+  private func readSendNow() {
+    sendNowCheck?.cancel()
+    sendNowCheck = nil
+    guard let since = ui.chrome?.sendNowSince else {
+      ui.composer.canSendNow = false
+      return
+    }
+    let wait = Double(since + sendNowAfterMs()) - Date().timeIntervalSince1970 * 1000
+    ui.composer.canSendNow = wait <= 0
+    guard wait > 0 else { return }
+    let check = DispatchWorkItem { [weak self] in
+      self?.worker.act { [weak self] _ in
+        guard let self else { return [] }
+        readSendNow()
+        publish(ui)
         return []
       }
     }
-    worker.received(text)
-  }
-
-  // Walks back through the current turn only: a running call is never older than the last prompt.
-  private func backgroundable() -> Bool {
-    let rows = ui.main.rows.count
-    let floor = max(ui.main.promptRows.last ?? 0, rows - 24, 0)
-    return (floor..<rows).reversed().contains { session.rowMenu(row: UInt32($0))?.backgroundCallId != nil }
+    sendNowCheck = check
+    DispatchQueue.global().asyncAfter(deadline: .now() + wait / 1000, execute: check)
   }
 
   private func enter() {
@@ -701,17 +695,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     return true
   }
 
-  // The list's `can_sleep` rule; the core keeps the live `engineAsleep` to itself, so a sent sleep holds the action
-  // back until the status moves.
   private func readExtras() {
-    let info = sessionInfo()
-    let status = ui.chrome?.status
-    if sleepSent, status != "idle" { sleepSent = false }
-    let capabilities = info?["capabilities"] as? [String: Any]
-    ui.extras.canSleep =
-      !sleepSent && status == "idle" && (capabilities?["engineSleep"] as? Bool) == true
-      && (info?["engineAsleep"] as? Bool) != true
-    ui.extras.cwd = info?["cwd"] as? String
+    ui.extras.canSleep = ui.chrome?.canSleep ?? false
+    ui.extras.cwd = ui.chrome?.cwd
     ui.extras.mismatch = session.protocolMismatch().map(Int.init)
   }
 
@@ -738,12 +724,6 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     ui.frame?.strip = session.frameStrip(taskId: taskId)
     ui.frame?.rows = rows
   }
-}
-
-private struct CoreSkillsFrame: Decodable {
-  struct Event: Decodable { let skills: [SkillInfo]? }
-  let type: String
-  let event: Event
 }
 
 // The last `GET /v1/profiles` body per gateway, shared by every session screen.

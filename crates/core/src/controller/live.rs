@@ -13,6 +13,7 @@ use crate::scrubber::{Cluster, Peek};
 use crate::transcript::{
     Item, TranscriptState, apply_event, hydrate_shell_output, hydrate_shell_row, hydrate_tool_result, seed_from_session_info,
 };
+use crate::vm::composer_lists::{Skill, SlashCommand, skills, slash_commands};
 use crate::vm::pickers::{ModePicker, ModelPicker, PickerSource, mode_picker, model_picker};
 use crate::vm::prompt::{Prompt, PromptBody, Selection, answered_input, prompt_for};
 use crate::vm::session_chrome::{SessionChrome, session_chrome};
@@ -98,6 +99,8 @@ pub struct LiveSession {
     published_prompt: Option<Prompt>,
     published_pickers: (ModelPicker, ModePicker),
     published_usage: UsageMark,
+    published_lists: (usize, usize),
+    sleep_sent_at: Option<i64>,
     catalog: Vec<ModelOption>,
     catalog_requested: bool,
     finished: bool,
@@ -137,6 +140,8 @@ impl LiveSession {
             published_prompt: None,
             published_pickers: Default::default(),
             published_usage: UsageMark::default(),
+            published_lists: (0, 0),
+            sleep_sent_at: None,
             catalog: Vec::new(),
             catalog_requested: false,
             finished: false,
@@ -249,7 +254,22 @@ impl LiveSession {
 
     pub fn chrome(&self) -> SessionChrome {
         let effort = self.picker_source().shown_effort();
-        session_chrome(&self.state, self.init_model(), self.can_run_shell(), self.queued() as u32, effort)
+        let mut chrome = session_chrome(&self.state, self.init_model(), self.can_run_shell(), self.queued() as u32, effort);
+        chrome.can_sleep &= self.sleep_sent_at != Some(self.state.last_seq);
+        chrome
+    }
+
+    pub fn commands(&self) -> Vec<SlashCommand> {
+        slash_commands(self.state.commands.as_deref())
+    }
+
+    pub fn skills(&self) -> Vec<Skill> {
+        skills(self.state.skills.as_deref())
+    }
+
+    fn lists_mark(&self) -> (usize, usize) {
+        let mark = |list: &Option<Arc<Value>>| list.as_ref().map_or(0, |list| Arc::as_ptr(list) as usize);
+        (mark(&self.state.commands), mark(&self.state.skills))
     }
 
     fn picker_source(&self) -> PickerSource<'_> {
@@ -547,7 +567,9 @@ impl LiveSession {
         self.act(SessionConnection::clear_context);
     }
 
+    // Sleep stays off until the session answers: the next event either moves the status or puts the engine asleep.
     pub fn sleep(&mut self) {
+        self.sleep_sent_at = Some(self.state.last_seq);
         self.act(SessionConnection::sleep);
     }
 
@@ -898,6 +920,11 @@ impl LiveSession {
         let usage = UsageMark::of(&self.state);
         if usage != self.published_usage {
             self.published_usage = usage;
+            self.changed.chrome = true;
+        }
+        let lists = self.lists_mark();
+        if lists != self.published_lists {
+            self.published_lists = lists;
             self.changed.chrome = true;
         }
         let pickers = (self.model_picker(), self.mode_picker());

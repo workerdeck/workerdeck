@@ -63,7 +63,7 @@ struct CoreExtrasSheets: ViewModifier {
               },
               canManage: extras.capabilities?.mcpServerActions ?? false)
           case .skills:
-            SkillsView(skills: model.skills ?? [], onUse: use)
+            SkillsView(skills: model.skills, onUse: use)
           }
         }
       }

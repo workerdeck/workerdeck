@@ -701,3 +701,39 @@ fn a_failed_catalog_fetch_is_retried_on_the_next_attach_but_a_missing_route_is_n
         }
     }
 }
+
+#[test]
+fn sleep_stays_off_from_the_send_until_the_session_answers_and_lists_flag_the_chrome() {
+    let mut host = Host::new();
+    host.open();
+    host.frame(
+        json!({"type": "attached", "protocolVersion": 1, "replayingFrom": 0, "acks": true,
+            "session": {"id": "s1", "status": "idle", "cwd": "/repo", "createdAt": 1.0, "lastSeq": 0, "pendingPermissionCount": 0,
+                "capabilities": {"engineSleep": true, "attachments": ["image"]}}}),
+        0.0,
+    );
+    host.frame(event_frame(1, json!({"type": "status_changed", "status": "idle"})), 1.0);
+    let chrome = host.live.chrome();
+    assert!(chrome.can_sleep);
+    assert_eq!((chrome.cwd.as_deref(), chrome.attachment_kinds), (Some("/repo"), vec!["image".to_owned()]));
+    host.take();
+    host.live.sleep();
+    host.drain();
+    assert!(host.changed().chrome);
+    assert!(!host.live.chrome().can_sleep);
+    host.frame(event_frame(2, json!({"type": "engine_sleep", "asleep": true})), 2.0);
+    assert!(!host.live.chrome().can_sleep);
+    host.frame(event_frame(3, json!({"type": "engine_sleep", "asleep": false})), 3.0);
+    assert!(host.live.chrome().can_sleep);
+
+    host.take();
+    host.frame(event_frame(4, json!({"type": "skills", "skills": [{"name": "pdf", "enabled": true}]})), 4.0);
+    assert!(host.changed().chrome);
+    assert_eq!(host.live.skills()[0].name, "pdf");
+    host.frame(
+        event_frame(5, json!({"type": "capabilities", "models": [], "commands": [{"name": "review", "argumentHint": "<pr>"}]})),
+        5.0,
+    );
+    assert!(host.changed().chrome);
+    assert_eq!(host.live.commands()[0].argument_hint.as_deref(), Some("<pr>"));
+}

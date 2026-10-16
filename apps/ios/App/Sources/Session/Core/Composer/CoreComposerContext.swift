@@ -1,44 +1,26 @@
 import Foundation
 import WorkerDeckKit
+@preconcurrency import WorkerDeckSession
 
-// What the composer needs from the session beyond the chrome. The core folds commands and skills into its state but
-// the FFI does not hand them out, so they are read off the frames on their way in; cwd and the attachment kinds come
-// from the session info the core does expose.
+// What the composer needs from the session beyond the chrome, in the kit types the completions already take.
 struct CoreComposerContext: Equatable, Sendable {
   var cwd: String?
   var attachmentKinds: Set<String> = []
   var commands: [SlashCommandInfo] = []
   var skills: [SkillInfo] = []
-  // A running top-level Bash or subagent call the engine can move to the background.
+  // A running top-level Bash or subagent call the engine can move to the background, `SEND_NOW_AFTER_MS` old.
   var canSendNow = false
 
-  // A cheap test before any decode: a replay is thousands of frames and nearly none of them carry a list.
-  static func mayCarryLists(_ text: String) -> Bool {
-    text.contains(#""type":"capabilities""#) || text.contains(#""type":"skills""#)
-  }
-
-  // True when a list changed.
-  mutating func absorb(_ text: String) -> Bool {
-    guard case .event(let event)? = try? JSONDecoder().decode(ServerFrame.self, from: Data(text.utf8)) else {
-      return false
+  mutating func read(chrome: SessionChrome, commands: [SlashCommand], skills: [Skill]) {
+    cwd = chrome.cwd
+    attachmentKinds = Set(chrome.attachmentKinds)
+    self.commands = commands.map {
+      SlashCommandInfo(name: $0.name, description: $0.description, argumentHint: $0.argumentHint, aliases: $0.aliases)
     }
-    switch event.body {
-    case .capabilities(_, let commands, _) where commands != self.commands:
-      self.commands = commands
-    case .skills(let skills) where skills != self.skills:
-      self.skills = skills
-    default:
-      return false
+    self.skills = skills.map {
+      SkillInfo(
+        name: $0.name, description: $0.description, shortDescription: $0.shortDescription, displayName: $0.displayName,
+        defaultPrompt: $0.defaultPrompt, scope: $0.scope, enabled: $0.enabled)
     }
-    return true
-  }
-
-  mutating func read(sessionInfoJson json: String?) {
-    guard let data = json?.data(using: .utf8),
-      let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return }
-    cwd = (info["cwd"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-    let capabilities = info["capabilities"] as? [String: Any]
-    attachmentKinds = Set((capabilities?["attachments"] as? [String] ?? []).filter { $0 != "unknown" })
   }
 }

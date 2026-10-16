@@ -190,6 +190,10 @@ pub struct SessionChrome {
     pub can_run_shell: bool,
     pub can_clear_context: bool,
     pub queued: u32,
+    pub can_sleep: bool,
+    pub send_now_since: Option<i64>,
+    pub cwd: Option<String>,
+    pub attachment_kinds: Vec<String>,
 }
 
 impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
@@ -207,6 +211,49 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
             can_run_shell: c.can_run_shell,
             can_clear_context: c.can_clear_context,
             queued: c.queued,
+            can_sleep: c.can_sleep,
+            send_now_since: c.send_now_since,
+            cwd: c.cwd,
+            attachment_kinds: c.attachment_kinds,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SlashCommand {
+    pub name: String,
+    pub description: Option<String>,
+    pub argument_hint: Option<String>,
+    pub aliases: Vec<String>,
+}
+
+impl From<wd_native::vm::composer_lists::SlashCommand> for SlashCommand {
+    fn from(c: wd_native::vm::composer_lists::SlashCommand) -> Self {
+        Self { name: c.name, description: c.description, argument_hint: c.argument_hint, aliases: c.aliases }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Skill {
+    pub name: String,
+    pub description: Option<String>,
+    pub short_description: Option<String>,
+    pub display_name: Option<String>,
+    pub default_prompt: Option<String>,
+    pub scope: Option<String>,
+    pub enabled: bool,
+}
+
+impl From<wd_native::vm::composer_lists::Skill> for Skill {
+    fn from(s: wd_native::vm::composer_lists::Skill) -> Self {
+        Self {
+            name: s.name,
+            description: s.description,
+            short_description: s.short_description,
+            display_name: s.display_name,
+            default_prompt: s.default_prompt,
+            scope: s.scope,
+            enabled: s.enabled,
         }
     }
 }
@@ -505,6 +552,14 @@ impl Session {
         self.live().chrome().into()
     }
 
+    pub fn commands(&self) -> Vec<SlashCommand> {
+        self.live().commands().into_iter().map(Into::into).collect()
+    }
+
+    pub fn skills(&self) -> Vec<Skill> {
+        self.live().skills().into_iter().map(Into::into).collect()
+    }
+
     pub fn model_picker(&self) -> ModelPicker {
         self.live().model_picker().into()
     }
@@ -650,6 +705,11 @@ pub fn tone_names() -> Vec<String> {
 #[uniffi::export]
 pub fn band_names() -> Vec<String> {
     planner::Band::ALL.iter().map(|b| b.raw().to_owned()).collect()
+}
+
+#[uniffi::export]
+pub fn send_now_after_ms() -> i64 {
+    wd_native::vm::session_chrome::SEND_NOW_AFTER_MS
 }
 
 #[uniffi::export]

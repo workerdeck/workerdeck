@@ -3,6 +3,7 @@ pub mod agents;
 pub mod bookmarks;
 pub mod checklist;
 pub mod collate;
+pub mod composer_lists;
 pub mod engine_mark;
 pub mod fmt;
 pub mod gateway;
