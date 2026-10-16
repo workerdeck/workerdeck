@@ -373,7 +373,7 @@ struct SessionListView: View {
       clock = Date()
     }
     .environment(\.defaultMinListRowHeight, SessionStepRow.height)
-    .modifier(SessionSearch(open: $searchOpen, text: $model.config.search))
+    .modifier(SessionSearch(open: $searchOpen, text: $model.search))
     .refreshable { await model.refresh() }
   }
 
@@ -407,11 +407,11 @@ struct SessionListView: View {
           item: item,
           onOpen: { path.append(route) },
           // Grouped by project, the section header already names the gateway.
-          hostName: showsHostNames(model) && model.config.groupBy != .project
+          hostName: showsHostNames(model) && model.filter.groupBy != .project
             ? item.row.hostName : nil,
           projectImage: projectImage(for: item, model: model),
           // Grouped by project, the section header already names it.
-          showsProject: model.config.groupBy != .project,
+          showsProject: model.filter.groupBy != .project,
           menu: { rowActions(for: item, model: model) })
         .modifier(rowChrome(item, model: model))
         .contextMenu { rowActions(for: item, model: model) }
@@ -563,7 +563,7 @@ struct SessionListView: View {
         } label: {
           Label("Make private", systemImage: "lock")
         }
-      } else if model.agentDefaults(for: hostId)?.allowShared == true {
+      } else if model.agentSeed(for: hostId)?.allowShared == true {
         Button {
           Task { await model.setSharing(row, .shared) }
         } label: {
@@ -780,10 +780,12 @@ struct SessionListView: View {
       Group {
         if let model {
           FilterMenu(
-            config: Binding(get: { model.config }, set: { model.config = $0 }),
+            filter: model.filter,
             hosts: hosts.hosts.map { FilterMenu.Gateway(id: $0.id, name: $0.displayName) },
             adapters: model.adapters,
-            projects: model.projects)
+            projects: model.projects,
+            list: model.list,
+            changed: { model.syncConfig() })
         }
       }
     }
@@ -804,10 +806,10 @@ struct SessionListView: View {
           } label: {
             Label("New session", systemImage: "bubble.left")
           }
-          if model?.agentDefaults(for: host.id) != nil {
+          if let agent = model?.agentSeed(for: host.id) {
             Button {
               var agentSeed = seed(for: host)
-              agentSeed.agent = model?.agentSeed(for: host.id)
+              agentSeed.agent = agent
               path.append(.create(hostId: host.id, seed: agentSeed))
             } label: {
               Label("New agent", systemImage: "person.crop.square")

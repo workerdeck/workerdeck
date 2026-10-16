@@ -1017,6 +1017,15 @@ pub fn team_leads<'a>(rows: &'a [SessionRow], row: &SessionRow) -> Vec<&'a Sessi
     leads
 }
 
+// A new agent's lead choices on one gateway: its top-level agents, leads first, then solo agents.
+pub fn agent_leads<'a>(rows: &'a [SessionRow], host_id: &str) -> Vec<&'a SessionRow> {
+    let open = rows.iter().filter(|r| r.host_id == host_id && r.info.agent.as_ref().is_some_and(|a| a.lead.is_none()));
+    let (mut leads, solo): (Vec<&SessionRow>, Vec<&SessionRow>) =
+        open.partition(|r| r.info.agent.as_ref().and_then(|a| a.leads) == Some(true));
+    leads.extend(solo);
+    leads
+}
+
 // The members whose lead is this row's agent, on its gateway.
 pub fn team_members<'a>(row: &SessionRow, rows: &'a [SessionRow]) -> Vec<&'a SessionRow> {
     let Some(id) = row.info.agent.as_ref().map(|a| a.id.as_str()) else { return Vec::new() };

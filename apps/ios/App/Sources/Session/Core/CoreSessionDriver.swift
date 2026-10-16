@@ -59,6 +59,7 @@ struct CoreSessionUi: @unchecked Sendable {
   var focus: TranscriptFocusRequest?
   var seen: CoreSeen?
   var composer = CoreComposerContext()
+  var usage: SessionUsageView?
 }
 
 // What a read mark records once the replay settled: the items on screen and the attach snapshot's rollup counters.
@@ -134,6 +135,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   // generation and a callback from a replaced one is dropped by number.
   private let lock = NSLock()
   private var generation = 0
+  private var usagePoll: Task<Void, Never>?
 
   init(
     sessionId: String, baseURL: String, authKey: String?, metrics: Metrics, hideThinking: Bool,
@@ -334,6 +336,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   // releases the session's strong hold on this delegate.
   func close() {
     _ = bump()
+    lock.lock()
+    usagePoll?.cancel()
+    usagePoll = nil
+    lock.unlock()
     worker.close()
     urlSession.invalidateAndCancel()
   }
@@ -506,6 +512,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.modePicker = session.modePicker()
       ui.canRunShell = session.canRunShell()
       ui.composer.read(sessionInfoJson: session.sessionInfoJson())
+      readUsage()
     }
     if changed.transcript || changed.chrome { ui.composer.canSendNow = backgroundable() }
     if changed.prompt { ui.prompt = session.prompt() }
@@ -586,6 +593,57 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       turns: count("numTurns"))
   }
 
+  // The meters, re-read whenever the core flags the chrome; the first reading that names a profile with plan windows
+  // starts the account poll.
+  private func readUsage() {
+    let usage = session.usage(nowMs: Date().timeIntervalSince1970 * 1000)
+    ui.usage = usage
+    guard let profile = usage.profile, usage.rateLimits else { return }
+    startUsagePoll(profile: profile)
+  }
+
+  // `GET /v1/profiles` on the dashboard's 60 s cadence, seeded from the last body any session on this gateway read, so
+  // a session switch does not draw its own replayed numbers for a whole round trip. A 404 is a gateway that predates
+  // profiles: stop asking.
+  private func startUsagePoll(profile: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard usagePoll == nil else { return }
+    if let cached = CoreProfilesCache.shared.body(for: apiBase), session.setProfiles(body: cached) {
+      ui.usage = session.usage(nowMs: Date().timeIntervalSince1970 * 1000)
+    }
+    usagePoll = Task { [weak self] in
+      while !Task.isCancelled {
+        guard let self, await self.pollProfiles() else { return }
+        try? await Task.sleep(for: .seconds(60))
+      }
+    }
+  }
+
+  private func pollProfiles() async -> Bool {
+    let status: UInt16
+    let body: String
+    if fixture != nil {
+      (status, body) = CoreReplayFixture.respond("GET", "/profiles")
+    } else {
+      guard let url = URL(string: apiBase + "/profiles"),
+        let (data, response) = try? await urlSession.data(for: authed(URLRequest(url: url)))
+      else { return true }
+      status = UInt16(clamping: (response as? HTTPURLResponse)?.statusCode ?? 0)
+      body = String(decoding: data, as: UTF8.self)
+    }
+    if status == 404 { return false }
+    guard (200..<300).contains(status) else { return true }
+    CoreProfilesCache.shared.set(body, for: apiBase)
+    worker.act { [self] session in
+      guard session.setProfiles(body: body) else { return [] }
+      ui.usage = session.usage(nowMs: Date().timeIntervalSince1970 * 1000)
+      publish(ui)
+      return []
+    }
+    return true
+  }
+
   private func readShell() {
     guard let shell = ui.shell, shell.sized else { return }
     ui.shell?.grid = session.shellWindow(shellId: shell.id).flatMap { try? Snapshots.shellGrid($0) }
@@ -611,9 +669,27 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   }
 }
 
-
 private struct CoreSkillsFrame: Decodable {
   struct Event: Decodable { let skills: [SkillInfo]? }
   let type: String
   let event: Event
+}
+
+// The last `GET /v1/profiles` body per gateway, shared by every session screen.
+final class CoreProfilesCache: @unchecked Sendable {
+  static let shared = CoreProfilesCache()
+  private let lock = NSLock()
+  private var bodies: [String: String] = [:]
+
+  func body(for apiBase: String) -> String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return bodies[apiBase]
+  }
+
+  func set(_ body: String, for apiBase: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    bodies[apiBase] = body
+  }
 }

@@ -405,6 +405,15 @@ public struct WorkerClient: Sendable {
     try decode(GatewayMeta.self, from: try await call("GET", "/meta"))
   }
 
+  // `GET /v1/meta` and `GET /v1/profiles` as received, for the native core, which decodes them on its own.
+  public func metaBody() async throws -> String {
+    String(decoding: try await call("GET", "/meta"), as: UTF8.self)
+  }
+
+  public func profilesBody() async throws -> String {
+    String(decoding: try await call("GET", "/profiles"), as: UTF8.self)
+  }
+
   // Operator-only: a gateway without agents, or a scoped caller, answers 404.
   public func listAgents() async throws -> [AgentInfo] {
     try decode(AgentsResponse.self, from: try await call("GET", "/agents")).agents

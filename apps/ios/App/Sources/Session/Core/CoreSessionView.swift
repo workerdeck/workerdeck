@@ -14,6 +14,7 @@ struct CoreSessionView: View {
   @State private var confirmClear = false
   @State private var confirmClose = false
   @State private var extras = CoreExtras()
+  @State private var meterSheet: CoreMeterSheet?
   private let hostId: UUID
   private let sessionId: String
   private let client: WorkerClient?
@@ -45,7 +46,7 @@ struct CoreSessionView: View {
   var body: some View {
     let ui = model.ui
     VStack(spacing: 0) {
-      CoreStatusLine(ui: ui, reconnect: model.reconnect)
+      CoreStatusLine(ui: ui, reconnect: model.reconnect, openMeter: { meterSheet = $0 })
       CoreTranscriptView(model: model, scroll: scroll, imageLoader: images, hideThinking: !settings.showThinking)
       if let prompt = ui.prompt {
         Divider()
@@ -61,6 +62,12 @@ struct CoreSessionView: View {
       ToolbarItem(placement: .topBarTrailing) { sessionMenu(ui.chrome) }
     }
     .modifier(CoreExtrasSheets(extras: extras, model: model, client: client, sessionId: sessionId))
+    .sheet(item: $meterSheet) { sheet in
+      switch sheet {
+      case .context: CoreContextSheet(context: model.ui.usage?.context)
+      case .usage: if let usage = model.ui.usage { CoreUsageSheet(usage: usage) }
+      }
+    }
     .confirmationDialog("Clear the conversation?", isPresented: $confirmClear, titleVisibility: .visible) {
       Button("Clear context", action: model.clearContext)
     } message: {
@@ -146,6 +153,10 @@ struct CoreSessionView: View {
 
   private func sessionMenu(_ chrome: SessionChrome?) -> some View {
     Menu {
+      if let usage = model.ui.usage {
+        if usage.contextUsage { Button("Context", systemImage: "chart.pie") { meterSheet = .context } }
+        Button("Usage", systemImage: "gauge") { meterSheet = .usage }
+      }
       if chrome?.canClearContext == true {
         Button("Clear context", systemImage: "eraser") { confirmClear = true }
       }
@@ -197,6 +208,7 @@ struct CoreSessionView: View {
 private struct CoreStatusLine: View {
   let ui: CoreSessionUi
   let reconnect: () -> Void
+  var openMeter: (CoreMeterSheet) -> Void = { _ in }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
@@ -216,6 +228,7 @@ private struct CoreStatusLine: View {
         if ui.connection == .offline || ui.connection == .unreachable {
           Button("Retry", action: reconnect).buttonStyle(.borderless)
         }
+        if let usage = ui.usage { CoreUsageHud(usage: usage, open: openMeter) }
       }
       if let progress = ui.progress {
         ProgressView(value: Double(progress.seq), total: Double(max(progress.target, 1)))

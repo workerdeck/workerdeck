@@ -76,9 +76,14 @@ enum CoreReplayFixture {
     event(
       #""type":"skills","skills":[{"name":"pdf","description":"Read and write PDF files","enabled":true},{"name":"off-skill","enabled":false}]"#
     )
+    event(
+      ##""type":"context_usage","usage":{"totalTokens":124000,"maxTokens":200000,"percentage":62,"model":"claude-opus-4-6","categories":[{"name":"Messages","tokens":98000,"color":"#497eae"},{"name":"System tools","tokens":26000,"color":"inactive"}]}"##
+    )
+    event(#""type":"rate_limit","info":{"status":"allowed","rateLimitType":"five_hour","utilization":34}"#)
+    event(#""type":"rate_limit","info":{"status":"allowed","rateLimitType":"seven_day","utilization":83}"#)
     event(#""type":"status_changed","status":"idle""#)
     let attached =
-      #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"lastSeq":\#(seq),"pendingPermissionCount":0,"capabilities":{"attachments":["image","pdf","text"],"slashCommands":true,"skillsList":true,"backgroundTasks":true}}}"#
+      #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"profile":"fixture","totalCostUsd":1.84,"costUsd":1.62,"usageByModel":{"claude-opus-4-6":{"input":120000,"output":30000,"cacheWrite5m":0,"cacheWrite1h":0,"cacheRead":900000}},"lastSeq":\#(seq),"pendingPermissionCount":0,"capabilities":{"attachments":["image","pdf","text"],"slashCommands":true,"skillsList":true,"backgroundTasks":true,"rateLimits":true}}}"#
     return [attached] + events
   }
 
@@ -121,10 +126,19 @@ enum CoreReplayFixture {
       #"{"type":"event","event":{"type":"user_message","message":{"role":"user","content":"<local-command-stdout>$ \#(quoted)\n\#(ranOutput)</local-command-stdout>"},"parentToolUseId":null,"synthetic":true,"shell":\#(record),"uuid":"sh-run-\#(seq)","seq":\#(seq),"ts":\#(1_760_000_000_000 + seq * 1000)}}"#
   }
 
+  // The account's own reading for the fixture's profile: fresh, so it wins the weekly window over the replay's.
+  private static var profiles: String {
+    let now = Int(Date().timeIntervalSince1970 * 1000)
+    let resets = Int(Date().timeIntervalSince1970) + 2 * 86_400
+    return
+      #"{"profiles":[{"name":"fixture","usage":{"seven_day":{"info":{"status":"allowed","utilization":71,"resetsAt":\#(resets)},"updatedAt":\#(now)},"seven_day_opus":{"info":{"status":"allowed","utilization":12},"updatedAt":\#(now)}},"spend":{"weekUsd":41.2,"monthUsd":160,"weekByModel":{},"unpricedShare":0,"subscription":{"weeklyUsd":41.2,"monthlyUsd":200,"weeklyShareUsd":46.15,"ratio":0.89}}}]}"#
+  }
+
   static func respond(_ method: String, _ path: String) -> (UInt16, String) {
     switch (method, path) {
     case ("GET", "/shells/\(shellId)"): return (200, #"{"shell":\#(shellRecord("running"))}"#)
     case ("POST", "/shells/\(shellId)/kill"): return (200, #"{"shell":\#(shellRecord("exited"))}"#)
+    case ("GET", "/profiles"): return (200, profiles)
     default: return (404, "")
     }
   }

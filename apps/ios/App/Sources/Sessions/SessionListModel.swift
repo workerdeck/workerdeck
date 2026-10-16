@@ -42,16 +42,16 @@ final class SessionListModel {
   }
 
   var tab: Tab = .live
-  // How the list is filtered, grouped and sorted. The core owns it (and normalizes what is set); this is its last
-  // reading, for the filter menu and the search box. Persisted so the phone keeps the reader's layout.
-  var config: ViewConfig {
-    get { storedConfig }
+  // How the list is filtered, grouped and sorted. The core owns it; this is its last reading, for the filter menu and
+  // the search box. Persisted so the phone keeps the reader's layout.
+  private(set) var filter: ListFilter
+  var search: String {
+    get { filter.search }
     set {
-      core.setConfigJson(json: Self.encode(newValue))
+      core.setSearch(search: newValue)
       syncConfig()
     }
   }
-  private var storedConfig = ViewConfig.default
   private(set) var snapshots: [UUID: HostSnapshot] = [:]
   // Bumped whenever the core was fed, so Observation re-derives what reads it: the core is not observable.
   private(set) var revision = 0
@@ -61,7 +61,7 @@ final class SessionListModel {
   /// per-gateway clients live and where new rows arrive.
   let projectIcons = ProjectIconLoader()
   let agentAvatars = AgentAvatarLoader()
-  private(set) var metas: [UUID: GatewayMeta] = [:]
+  private var metaRead: Set<UUID> = []
   var actionError: String?
 
   private let hostStore: HostStore
@@ -76,11 +76,14 @@ final class SessionListModel {
   private static let configKey = "bi.atomic.workerdeck.ios.sessionListConfig"
 
   private var core: SessionList { unread.list }
+  // The core list the filter menu writes to; `syncConfig` after every edit.
+  var list: SessionList { unread.list }
 
   init(hosts: HostStore, unread: UnreadModel, defaults: UserDefaults = .standard) {
     self.hostStore = hosts
     self.unread = unread
     self.defaults = defaults
+    filter = unread.list.filter()
     if let stored = defaults.string(forKey: Self.configKey)
       ?? defaults.data(forKey: Self.configKey).map({ String(decoding: $0, as: UTF8.self) })
     {
@@ -89,15 +92,10 @@ final class SessionListModel {
     syncConfig()
   }
 
-  private func syncConfig() {
-    let json = core.configJson()
-    storedConfig = (try? JSONDecoder().decode(ViewConfig.self, from: Data(json.utf8))) ?? .default
-    defaults.set(json, forKey: Self.configKey)
+  func syncConfig() {
+    filter = core.filter()
+    defaults.set(core.configJson(), forKey: Self.configKey)
     revision &+= 1
-  }
-
-  private static func encode(_ config: ViewConfig) -> String {
-    (try? JSONEncoder().encode(config)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
   }
 
   // MARK: - Contexts
@@ -175,17 +173,15 @@ final class SessionListModel {
   }
 
   private func ensureMetas() async {
-    for host in hostStore.hosts where metas[host.id] == nil && snapshots[host.id]?.probe == .connected {
+    for host in hostStore.hosts where !metaRead.contains(host.id) && snapshots[host.id]?.probe == .connected {
       guard let client = context(for: host.id)?.client,
-        let meta = try? await client.meta()
+        let body = try? await client.metaBody(),
+        core.setMeta(hostId: host.id.uuidString, body: body)
       else { continue }
-      metas[host.id] = meta
-      core.setRelay(hostId: host.id.uuidString, gateway: meta.relay?.gateway)
+      metaRead.insert(host.id)
       revision &+= 1
     }
   }
-
-  func agentDefaults(for hostId: UUID) -> GatewayAgentDefaults? { metas[hostId]?.agents }
 
   /// Ask for any project icon this list needs and does not have.
   ///
@@ -495,14 +491,14 @@ final class SessionListModel {
   }
 
   // The create form's lead picker: this gateway's top-level agents, leads first.
-  func agentSeed(for hostId: UUID, lead: ListItem? = nil) -> AgentSeed {
-    let agents = (snapshots[hostId]?.sessions ?? []).compactMap(\.agent).filter { $0.lead == nil }
-    let leads = (agents.filter { $0.isLead == true } + agents.filter { $0.isLead != true })
-      .map { AgentSeed.Lead(id: $0.id, name: $0.name) }
-    let defaults = agentDefaults(for: hostId)
+  // The create form's lead picker and sharing default, from the core; nil while the gateway has not said it runs
+  // agents.
+  func agentSeed(for hostId: UUID, lead: ListItem? = nil) -> AgentSeed? {
+    _ = revision
+    guard let seed = core.agentSeed(hostId: hostId.uuidString, leadSessionId: lead?.info.id) else { return nil }
     return AgentSeed(
-      leads: leads, lead: lead?.info.agent?.id, allowShared: defaults?.allowShared ?? false,
-      sharing: defaults?.sharing ?? .private)
+      leads: seed.leads.map { AgentSeed.Lead(id: $0.agentId, name: $0.name) }, lead: seed.lead,
+      allowShared: seed.allowShared, sharing: seed.shared ? .shared : .private)
   }
 
   private func agentAct(on item: ListItem, _ failure: String, _ body: (WorkerClient) async throws -> Void) async {

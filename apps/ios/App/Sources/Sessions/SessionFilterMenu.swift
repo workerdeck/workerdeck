@@ -1,5 +1,6 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckCore
+import WorkerDeckKit
 
 /// The facets, the two layout choices, and how much of each card's child lists
 /// (agents, shells, tasks) is drawn. Search is its own toggle in the title bar;
@@ -7,133 +8,129 @@ import SwiftUI
 /// unconditional - with this menu closed it is the only thing saying rows are
 /// hidden.
 ///
-/// **A view of its own, and `Equatable` over plain values.** It used to be a
-/// method on the list, which meant its body read `model.adapters` - a property
-/// *computed from the session rows* - so `@Observable` invalidated it on every
-/// one of the 1.2s poll's refreshes, and an open dropdown closed itself as soon
-/// as anything moved. An unread badge ticking up was enough. Taking `hosts` and
-/// `adapters` as values means SwiftUI can see that a refresh which brought no
-/// new engine and no new gateway changes nothing here, and skip the body
-/// entirely; the `config` binding still writes straight through to the model.
+/// It reads the core list's `ListFilter` and writes straight to the core
+/// `SessionList`; `changed` tells the owner to redraw and persist, since the core
+/// is not observable.
 ///
-/// The `Binding` is deliberately not in the `==`: two bindings are never equal
-/// and comparing them would defeat the whole thing. It is safe to leave out
-/// because the *values* it reads - `config` - are covered by `configSnapshot`.
+/// **A view of its own, and `Equatable` over plain values.** Its inputs derived
+/// from the rows (`adapters`, `projects`) are passed as values, so a poll that
+/// brought no new engine changes nothing here and an open dropdown stays open.
+/// The list and the callback are deliberately not in the `==`.
 struct FilterMenu: View, Equatable {
   struct Gateway: Equatable, Identifiable {
     let id: UUID
     let name: String
   }
 
-  @Binding var config: ViewConfig
+  let filter: ListFilter
   let hosts: [Gateway]
   let adapters: [String]
-  /// Passed as a *value* for the same reason `adapters` is: it is derived from
-  /// the session rows, so reading it off the model inside this body would make
-  /// every 1.2s refresh invalidate the menu and shut an open dropdown. It is in
-  /// the `==` below for the other half of that rule.
   let projects: [ProjectOption]
+  let list: SessionList
+  let changed: () -> Void
 
-  /// `nonisolated` because SwiftUI compares views off the main actor. It only
-  /// touches value types, so there is nothing to race on.
   nonisolated static func == (lhs: FilterMenu, rhs: FilterMenu) -> Bool {
     lhs.hosts == rhs.hosts && lhs.adapters == rhs.adapters && lhs.projects == rhs.projects
-      && lhs.config == rhs.config
+      && lhs.filter == rhs.filter
   }
+
+  private static let states: [(RowState, String)] = [
+    (.attention, "Needs attention"), (.working, "Working"), (.idle, "Idle"), (.ended, "Ended"),
+  ]
 
   var body: some View {
     Menu {
       Section("State") {
-        ForEach(SessionState.order, id: \.self) { state in
-          Toggle(state.label, isOn: membership(\.states, state))
+        ForEach(Self.states, id: \.0) { state, label in
+          Toggle(label, isOn: toggle(filter.states.contains(state)) { list.toggleState(state: state) })
         }
       }
       if hosts.count > 1 {
         Section("Gateway") {
           ForEach(hosts) { host in
-            Toggle(host.name, isOn: membership(\.gateways, host.id.uuidString))
+            facet(host.name, .gateway, host.id.uuidString, filter.gateways)
           }
         }
       }
       if adapters.count > 1 {
         Section("Engine") {
           ForEach(adapters, id: \.self) { adapter in
-            Toggle(adapter, isOn: membership(\.adapters, adapter))
+            facet(adapter, .adapter, adapter, filter.adapters)
           }
         }
       }
       if projects.count > 1 {
         Section("Project") {
           ForEach(projects) { project in
-            Toggle(project.label, isOn: membership(\.projects, project.key))
+            facet(project.label, .project, project.key, filter.projects)
           }
         }
       }
       Section {
         Menu("Group by") {
-          Picker("Group by", selection: $config.groupBy) {
-            Text("None").tag(GroupBy.none)
-            Text("Engine").tag(GroupBy.adapter)
-            Text("State").tag(GroupBy.state)
-            Text("Project").tag(GroupBy.project)
+          Picker("Group by", selection: pick(filter.groupBy) { list.setGroupBy(groupBy: $0) }) {
+            Text("None").tag(ListGroupBy.none)
+            Text("Engine").tag(ListGroupBy.adapter)
+            Text("State").tag(ListGroupBy.state)
+            Text("Project").tag(ListGroupBy.project)
           }
         }
         Menu("Sort by") {
-          Picker("Sort by", selection: $config.sortBy) {
-            Text("Recent").tag(SortBy.recent)
-            Text("Name").tag(SortBy.name)
-            Text("Gateway").tag(SortBy.gateway)
-            Text("Engine").tag(SortBy.adapter)
-            Text("State").tag(SortBy.state)
-            Text("Project").tag(SortBy.project)
+          Picker("Sort by", selection: pick(filter.sortBy) { list.setSortBy(sortBy: $0) }) {
+            Text("Recent").tag(ListSortBy.recent)
+            Text("Name").tag(ListSortBy.name)
+            Text("Gateway").tag(ListSortBy.gateway)
+            Text("Engine").tag(ListSortBy.adapter)
+            Text("State").tag(ListSortBy.state)
+            Text("Project").tag(ListSortBy.project)
           }
         }
       }
       Section("Show under each session") {
-        display("Agents", \.subagents)
-        display("Shells", \.shells)
-        display("Tasks", \.tasks)
+        display("Agents", .agent, filter.agents)
+        display("Shells", .shell, filter.shells)
+        display("Tasks", .task, filter.tasks)
       }
     } label: {
       Label(
         "Filter",
-        systemImage: engaged
+        systemImage: filter.engaged
           ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
     }
     .accessibilityIdentifier("Filter")
   }
 
-  /// The funnel fills while a facet is filtering or a card display is off its
-  /// default. Search shows its own state in the search field.
-  private var engaged: Bool {
-    facetFilterCount(config) > 0 || displayCustomized(config)
-  }
-
   /// One card display as a submenu that names its current value, the same three
   /// choices the dashboard's segmented control offers.
-  private func display(_ label: String, _ keyPath: WritableKeyPath<ViewConfig, StepDisplay>)
-    -> some View
-  {
-    Picker(label, selection: Binding(get: { config[keyPath: keyPath] }, set: { config[keyPath: keyPath] = $0 })) {
-      Text("All").tag(StepDisplay.all)
-      Text("Active").tag(StepDisplay.active)
-      Text("Hide").tag(StepDisplay.none)
+  private func display(_ label: String, _ kind: StepKind, _ value: StepShow) -> some View {
+    Picker(label, selection: pick(value) { list.setStepDisplay(kind: kind, show: $0) }) {
+      Text("All").tag(StepShow.all)
+      Text("Active").tag(StepShow.active)
+      Text("Hide").tag(StepShow.hide)
     }
     .pickerStyle(.menu)
   }
 
-  /// A Toggle binding for membership of one value in one facet array.
-  private func membership<Value: Equatable>(
-    _ keyPath: WritableKeyPath<ViewConfig, [Value]>, _ value: Value
-  ) -> Binding<Bool> {
+  private func facet(_ label: String, _ facet: ListFacet, _ value: String, _ chosen: [String]) -> some View {
+    Toggle(label, isOn: toggle(chosen.contains(value)) { list.toggleFacet(facet: facet, value: value) })
+  }
+
+  private func toggle(_ on: Bool, _ flip: @escaping () -> Void) -> Binding<Bool> {
     Binding(
-      get: { config[keyPath: keyPath].contains(value) },
-      set: { on in
-        if on {
-          if !config[keyPath: keyPath].contains(value) { config[keyPath: keyPath].append(value) }
-        } else {
-          config[keyPath: keyPath].removeAll { $0 == value }
-        }
+      get: { on },
+      set: { next in
+        guard next != on else { return }
+        flip()
+        changed()
+      })
+  }
+
+  private func pick<Value: Hashable>(_ value: Value, _ set: @escaping (Value) -> Void) -> Binding<Value> {
+    Binding(
+      get: { value },
+      set: { next in
+        set(next)
+        changed()
       })
   }
 }

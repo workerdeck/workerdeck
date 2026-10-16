@@ -69,3 +69,47 @@ pub fn usage_infos(usage: Option<&ProfileUsage>) -> Option<Entries<RateLimitInfo
     let usage = usage?;
     Some(Entries(usage.iter().map(|(key, window)| (key.clone(), window.info.clone())).collect()))
 }
+
+// How alarming a reading is: `meterSeverity` in `packages/ui/src/lib/status.ts`. A number or a ring turns at 80/95,
+// later than a bar's fill does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MeterSeverity {
+    None,
+    Warning,
+    Error,
+}
+
+pub fn meter_severity(percentage: Option<f64>) -> MeterSeverity {
+    match percentage {
+        Some(p) if p >= 95.0 => MeterSeverity::Error,
+        Some(p) if p >= 80.0 => MeterSeverity::Warning,
+        _ => MeterSeverity::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn severity_turns_at_eighty_and_ninety_five() {
+        assert_eq!(meter_severity(None), MeterSeverity::None);
+        assert_eq!(meter_severity(Some(79.9)), MeterSeverity::None);
+        assert_eq!(meter_severity(Some(80.0)), MeterSeverity::Warning);
+        assert_eq!(meter_severity(Some(94.9)), MeterSeverity::Warning);
+        assert_eq!(meter_severity(Some(95.0)), MeterSeverity::Error);
+    }
+
+    #[test]
+    fn a_transcript_reading_without_a_clock_is_dated_zero() {
+        let mut limits = Entries::new();
+        limits.set("five_hour".to_owned(), RateLimitInfo { status: "allowed".into(), utilization: Some(10.0), ..info() });
+        let merged = merge_usage(&SessionUsage { rate_limits: Some(limits), updated_at: None }, None);
+        assert_eq!(merged.get("five_hour").map(|w| w.updated_at), Some(0.0));
+    }
+
+    fn info() -> RateLimitInfo {
+        RateLimitInfo { status: String::new(), rate_limit_type: None, utilization: None, resets_at: None, is_using_overage: None }
+    }
+}

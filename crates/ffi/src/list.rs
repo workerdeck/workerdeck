@@ -2,11 +2,13 @@
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
 use crate::avatar::AvatarFetch;
 use std::sync::Mutex;
-use wd_native::rest::{Entries, ProfileEngine, SessionInfo};
+use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, SessionInfo, Sharing};
+use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
-    self as vm, GroupOptions, SessionRow, SessionState, ViewConfig, filter_rows, group_rows, normalize_view_config,
+    self as vm, GroupBy, GroupOptions, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig, filter_rows, group_rows,
+    normalize_view_config,
 };
 use wd_native::vm::steps;
 use wd_native::vm::watermarks::{Seen, Watermark, Watermarks, unseen_count};
@@ -216,6 +218,130 @@ pub struct ReadMark {
     pub seen_at: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ListGroupBy {
+    None,
+    State,
+    Adapter,
+    Project,
+    Custom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ListSortBy {
+    Recent,
+    Name,
+    Gateway,
+    Adapter,
+    State,
+    Project,
+}
+
+// How much of a card's agents, shells or tasks draws under it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum StepShow {
+    All,
+    Active,
+    Hide,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ListFacet {
+    Gateway,
+    Adapter,
+    Project,
+}
+
+// The filter menu's whole reading. `engaged` fills its funnel: a facet filters, or a card display is off its default.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ListFilter {
+    pub search: String,
+    pub states: Vec<RowState>,
+    pub gateways: Vec<String>,
+    pub adapters: Vec<String>,
+    pub projects: Vec<String>,
+    pub group_by: ListGroupBy,
+    pub sort_by: ListSortBy,
+    pub agents: StepShow,
+    pub shells: StepShow,
+    pub tasks: StepShow,
+    pub engaged: bool,
+}
+
+// What the create form starts a new agent from on one gateway: the leads it could join, which one is chosen, and
+// what the gateway stamps on an agent that asks for nothing.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NewAgentSeed {
+    pub leads: Vec<TeamLead>,
+    pub lead: Option<String>,
+    pub allow_shared: bool,
+    pub shared: bool,
+    pub owner: Option<String>,
+}
+
+fn group_by_of(value: GroupBy) -> ListGroupBy {
+    match value {
+        GroupBy::None => ListGroupBy::None,
+        GroupBy::State => ListGroupBy::State,
+        GroupBy::Adapter => ListGroupBy::Adapter,
+        GroupBy::Project => ListGroupBy::Project,
+        GroupBy::Custom => ListGroupBy::Custom,
+    }
+}
+
+fn sort_by_of(value: SortBy) -> ListSortBy {
+    match value {
+        SortBy::Recent => ListSortBy::Recent,
+        SortBy::Name => ListSortBy::Name,
+        SortBy::Gateway => ListSortBy::Gateway,
+        SortBy::Adapter => ListSortBy::Adapter,
+        SortBy::State => ListSortBy::State,
+        SortBy::Project => ListSortBy::Project,
+    }
+}
+
+fn show_of(value: StepDisplay) -> StepShow {
+    match value {
+        StepDisplay::All => StepShow::All,
+        StepDisplay::Active => StepShow::Active,
+        StepDisplay::None => StepShow::Hide,
+    }
+}
+
+fn display_of(value: StepShow) -> StepDisplay {
+    match value {
+        StepShow::All => StepDisplay::All,
+        StepShow::Active => StepDisplay::Active,
+        StepShow::Hide => StepDisplay::None,
+    }
+}
+
+fn session_state_of(state: RowState) -> SessionState {
+    match state {
+        RowState::Attention => SessionState::Attention,
+        RowState::Working => SessionState::Working,
+        RowState::Idle => SessionState::Idle,
+        RowState::Ended => SessionState::Ended,
+    }
+}
+
+fn toggle<T: PartialEq>(values: &mut Vec<T>, value: T) {
+    match values.iter().position(|v| *v == value) {
+        Some(at) => {
+            values.remove(at);
+        }
+        None => values.push(value),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct MetaResponse {
+    #[serde(default)]
+    relay: Option<serde_json::Value>,
+    #[serde(default)]
+    agents: Option<serde_json::Value>,
+}
+
 struct State {
     hosts: Vec<Host>,
     relay_hosts: Entries<String>,
@@ -224,6 +350,7 @@ struct State {
     avatars: AvatarLoads,
     selected: Option<String>,
     linger_ends: Option<f64>,
+    agent_defaults: Entries<GatewayAgentDefaults>,
 }
 
 impl State {
@@ -379,6 +506,7 @@ impl SessionList {
                 avatars: AvatarLoads::default(),
                 selected: None,
                 linger_ends: None,
+                agent_defaults: Entries::new(),
             }),
         })
     }
@@ -408,6 +536,7 @@ impl SessionList {
         let mut state = self.state();
         state.hosts.retain(|h| h.id != host_id);
         state.relay_hosts.0.retain(|(_, host)| *host != host_id);
+        state.agent_defaults.0.retain(|(host, _)| *host != host_id);
         state.avatars.forget_host(&host_id);
         state.marks.forget_host(&host_id)
     }
@@ -541,6 +670,104 @@ impl SessionList {
         if let Some(gateway) = gateway {
             state.relay_hosts.set(gateway, host_id);
         }
+    }
+
+    pub fn filter(&self) -> ListFilter {
+        let config = &self.state().config;
+        ListFilter {
+            search: config.search.clone(),
+            states: config.states.iter().map(|s| RowState::from(*s)).collect(),
+            gateways: config.gateways.clone(),
+            adapters: config.adapters.clone(),
+            projects: config.projects.clone().unwrap_or_default(),
+            group_by: group_by_of(config.group_by),
+            sort_by: sort_by_of(config.sort_by),
+            agents: show_of(config.subagents),
+            shells: show_of(config.shells.unwrap_or(StepDisplay::Active)),
+            tasks: show_of(config.tasks.unwrap_or(StepDisplay::Active)),
+            engaged: vm::facet_filter_count(config) > 0 || vm::display_customized(config),
+        }
+    }
+
+    pub fn toggle_state(&self, state: RowState) {
+        toggle(&mut self.state().config.states, session_state_of(state));
+    }
+
+    pub fn toggle_facet(&self, facet: ListFacet, value: String) {
+        let config = &mut self.state().config;
+        match facet {
+            ListFacet::Gateway => toggle(&mut config.gateways, value),
+            ListFacet::Adapter => toggle(&mut config.adapters, value),
+            ListFacet::Project => toggle(config.projects.get_or_insert_with(Vec::new), value),
+        }
+    }
+
+    pub fn set_group_by(&self, group_by: ListGroupBy) {
+        self.state().config.group_by = match group_by {
+            ListGroupBy::None => GroupBy::None,
+            ListGroupBy::State => GroupBy::State,
+            ListGroupBy::Adapter => GroupBy::Adapter,
+            ListGroupBy::Project => GroupBy::Project,
+            ListGroupBy::Custom => GroupBy::Custom,
+        };
+    }
+
+    pub fn set_sort_by(&self, sort_by: ListSortBy) {
+        self.state().config.sort_by = match sort_by {
+            ListSortBy::Recent => SortBy::Recent,
+            ListSortBy::Name => SortBy::Name,
+            ListSortBy::Gateway => SortBy::Gateway,
+            ListSortBy::Adapter => SortBy::Adapter,
+            ListSortBy::State => SortBy::State,
+            ListSortBy::Project => SortBy::Project,
+        };
+    }
+
+    pub fn set_step_display(&self, kind: StepKind, show: StepShow) {
+        let config = &mut self.state().config;
+        let display = display_of(show);
+        match kind {
+            StepKind::Agent => config.subagents = display,
+            StepKind::Shell => config.shells = Some(display),
+            StepKind::Task => config.tasks = Some(display),
+        }
+    }
+
+    // The body of `GET /v1/meta`: the relay it names (see `set_relay`) and the new-agent defaults. False when the
+    // body is not a meta answer, which leaves the host's last reading in place.
+    pub fn set_meta(&self, host_id: String, body: String) -> bool {
+        let Ok(meta) = serde_json::from_str::<MetaResponse>(&body) else { return false };
+        let relay = meta.relay.and_then(|r| serde_json::from_value::<GatewayRelayMeta>(r).ok());
+        let defaults = meta.agents.and_then(|a| serde_json::from_value::<GatewayAgentDefaults>(a).ok());
+        self.set_relay(host_id.clone(), relay.map(|r| r.gateway));
+        let mut state = self.state();
+        state.agent_defaults.0.retain(|(host, _)| *host != host_id);
+        if let Some(defaults) = defaults {
+            state.agent_defaults.set(host_id, defaults);
+        }
+        true
+    }
+
+    // None while the host has not said it runs agents (no meta yet, or one that predates them).
+    pub fn agent_seed(&self, host_id: String, lead_session_id: Option<String>) -> Option<NewAgentSeed> {
+        let state = self.state();
+        let defaults = state.agent_defaults.get(&host_id)?;
+        let rows = state.rows();
+        let leads = vm::agent_leads(&rows, &host_id)
+            .into_iter()
+            .filter_map(|lead| {
+                let agent = lead.info.agent.as_ref()?;
+                Some(TeamLead { session_id: lead.info.id.clone(), agent_id: agent.id.clone(), name: agent.name.clone() })
+            })
+            .collect();
+        let lead = lead_session_id.and_then(|id| state.find(&host_id, &id)?.agent.as_ref().map(|a| a.id.clone()));
+        Some(NewAgentSeed {
+            leads,
+            lead,
+            allow_shared: defaults.allow_shared,
+            shared: new_agent_sharing(Some(defaults), None) == Sharing::Shared,
+            owner: new_agent_owner(Some(defaults), None),
+        })
     }
 
     pub fn subset(&self) -> Option<Subset> {
