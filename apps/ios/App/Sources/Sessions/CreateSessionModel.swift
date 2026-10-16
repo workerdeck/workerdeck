@@ -33,11 +33,15 @@ final class CreateSessionModel {
   /// '' = the engine's default. Only sent when the capability record offers it.
   var reasoningEffort: String = ""
 
-  let agent: AgentSeed?
+  private(set) var agent: AgentSeed?
   var agentName = ""
   var brief = ""
   var lead: String?
-  var sharing: AgentSharing = .private
+  private var sharingChoice: AgentSharing?
+  var sharing: AgentSharing {
+    get { sharingChoice ?? agent?.sharing ?? .private }
+    set { sharingChoice = newValue }
+  }
 
   private(set) var profiles: [ProfileInfo] = []
   /// Set when `/profiles` 404s - a server predating profiles, not an error.
@@ -47,13 +51,14 @@ final class CreateSessionModel {
   private(set) var errorMessage: String?
 
   private let client: WorkerClient
+  private let seeding: AgentSeeding?
 
-  init(seed: CreateSessionSeed, client: WorkerClient) {
+  init(seed: CreateSessionSeed, client: WorkerClient, seeding: AgentSeeding? = nil) {
     cwd = seed.cwd
     resume = seed.resume ?? ""
     agent = seed.agent
     lead = seed.agent?.lead
-    sharing = seed.agent?.sharing ?? .private
+    self.seeding = seeding
     // Resuming defaults to continuing, not forking - forking is the deliberate
     // choice ("keep the original intact"), so it stays opt-in.
     self.client = client
@@ -134,7 +139,8 @@ final class CreateSessionModel {
     isLoadingProfiles = true
     defer { isLoadingProfiles = false }
     do {
-      let response = try await client.listProfiles()
+      let (response, body) = try await client.listProfilesWithBody()
+      if agent != nil { seeding?.adoptProfiles(body) }
       profiles = response.profiles
       if profileName == nil { profileName = response.profiles.first?.name }
       applyProfileDefaults()
@@ -149,6 +155,7 @@ final class CreateSessionModel {
   /// to the capability record's coercion targets - a sticky mode or effort from
   /// another engine must not survive into a request this one would 400.
   func applyProfileDefaults() {
+    if agent != nil, let seeding, let seed = seeding.seed(profileName) { agent = seed }
     guard let profile = selectedProfile else { return }
     let capabilities = profile.resolvedCapabilities
     if let defaultModel = profile.defaults?.model, model.isEmpty { model = defaultModel }

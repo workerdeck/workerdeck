@@ -230,23 +230,32 @@ fn the_filter_menu_drives_the_list_directly() {
 }
 
 #[test]
-fn a_new_agent_seed_waits_for_the_meta_and_lists_leads_first() {
+fn a_new_agent_seed_waits_for_the_meta_lists_leads_first_and_follows_the_profile() {
     let list = SessionList::new(None, None);
     let solo = idle("s1", r#","agent":{"id":"a1","name":"Solo"}"#);
     let lead = idle("s2", r#","agent":{"id":"a2","name":"Lead","leads":true}"#);
     let member = idle("s3", r#","agent":{"id":"a3","name":"Member","lead":"a2"}"#);
     list.set_host("h1".into(), "mac".into(), true, body(&[solo, lead, member])).unwrap();
-    assert!(list.agent_seed("h1".into(), None).is_none());
+    assert!(list.agent_seed("h1".into(), None, None).is_none());
     assert!(!list.set_meta("h1".into(), "<html>".into()));
     assert!(
         list.set_meta("h1".into(), r#"{"protocolVersion":1,"agents":{"owner":"tobias","sharing":"shared","allowShared":true}}"#.into())
     );
-    let seed = list.agent_seed("h1".into(), Some("s1".into())).unwrap();
+    let seed = list.agent_seed("h1".into(), Some("s1".into()), None).unwrap();
     let names: Vec<_> = seed.leads.iter().map(|l| l.name.as_str()).collect();
     assert_eq!(names, ["Lead", "Solo"]);
     assert_eq!((seed.lead.as_deref(), seed.shared, seed.allow_shared, seed.owner.as_deref()), (Some("a1"), true, true, Some("tobias")));
+    assert!(!list.set_profiles("h1".into(), "<html>".into()));
+    assert!(list.set_profiles(
+        "h1".into(),
+        r#"{"profiles":[{"name":"work","owner":"dan","defaults":{"sharing":"private"}},{"name":"plain"}]}"#.into()
+    ));
+    let work = list.agent_seed("h1".into(), None, Some("work".into())).unwrap();
+    assert_eq!((work.shared, work.owner.as_deref()), (false, Some("dan")));
+    let plain = list.agent_seed("h1".into(), None, Some("plain".into())).unwrap();
+    assert_eq!((plain.shared, plain.owner.as_deref()), (true, Some("tobias")));
     list.set_meta("h1".into(), r#"{"agents":{"sharing":"shared","allowShared":false}}"#.into());
-    assert!(!list.agent_seed("h1".into(), None).unwrap().shared);
+    assert!(!list.agent_seed("h1".into(), None, None).unwrap().shared);
     list.remove_host("h1".into());
-    assert!(list.agent_seed("h1".into(), None).is_none());
+    assert!(list.agent_seed("h1".into(), None, None).is_none());
 }

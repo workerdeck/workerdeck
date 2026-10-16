@@ -490,15 +490,25 @@ final class SessionListModel {
     }
   }
 
-  // The create form's lead picker: this gateway's top-level agents, leads first.
   // The create form's lead picker and sharing default, from the core; nil while the gateway has not said it runs
-  // agents.
-  func agentSeed(for hostId: UUID, lead: ListItem? = nil) -> AgentSeed? {
+  // agents. `profile` is the form's pick, whose own owner and sharing win over the gateway's.
+  func agentSeed(for hostId: UUID, lead: ListItem? = nil, profile: String? = nil) -> AgentSeed? {
     _ = revision
-    guard let seed = core.agentSeed(hostId: hostId.uuidString, leadSessionId: lead?.info.id) else { return nil }
+    guard let seed = core.agentSeed(hostId: hostId.uuidString, leadSessionId: lead?.info.id, profile: profile)
+    else { return nil }
     return AgentSeed(
       leads: seed.leads.map { AgentSeed.Lead(id: $0.agentId, name: $0.name) }, lead: seed.lead,
       allowShared: seed.allowShared, sharing: seed.shared ? .shared : .private)
+  }
+
+  func agentSeeding(for hostId: UUID, lead: String?) -> AgentSeeding {
+    AgentSeeding(
+      adoptProfiles: { [core] body in _ = core.setProfiles(hostId: hostId.uuidString, body: body) },
+      seed: { [weak self] profile in
+        guard var seed = self?.agentSeed(for: hostId, profile: profile) else { return nil }
+        seed.lead = lead
+        return seed
+      })
   }
 
   private func agentAct(on item: ListItem, _ failure: String, _ body: (WorkerClient) async throws -> Void) async {

@@ -268,8 +268,13 @@ public struct WorkerClient: Sendable {
   /// The profiles this caller may use, plus whether it may create new ones.
   /// Servers predating profiles 404 here - catch and treat as none declared.
   public func listProfiles() async throws -> ListProfilesResponse {
+    try await listProfilesWithBody().response
+  }
+
+  // The body as received too, for the core's profile-aware view models.
+  public func listProfilesWithBody() async throws -> (response: ListProfilesResponse, body: String) {
     let data = try await call("GET", "/profiles")
-    return try decode(ListProfilesResponse.self, from: data)
+    return (try decode(ListProfilesResponse.self, from: data), String(decoding: data, as: UTF8.self))
   }
 
   /// One profile plus a view-only snapshot of its config directory (settings,

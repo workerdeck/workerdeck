@@ -2,7 +2,7 @@
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
 use crate::avatar::AvatarFetch;
 use std::sync::Mutex;
-use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, SessionInfo, Sharing};
+use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, SessionInfo, Sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
@@ -351,6 +351,7 @@ struct State {
     selected: Option<String>,
     linger_ends: Option<f64>,
     agent_defaults: Entries<GatewayAgentDefaults>,
+    profiles: Entries<Vec<ProfileInfo>>,
 }
 
 impl State {
@@ -507,6 +508,7 @@ impl SessionList {
                 selected: None,
                 linger_ends: None,
                 agent_defaults: Entries::new(),
+                profiles: Entries::new(),
             }),
         })
     }
@@ -537,6 +539,7 @@ impl SessionList {
         state.hosts.retain(|h| h.id != host_id);
         state.relay_hosts.0.retain(|(_, host)| *host != host_id);
         state.agent_defaults.0.retain(|(host, _)| *host != host_id);
+        state.profiles.0.retain(|(host, _)| *host != host_id);
         state.avatars.forget_host(&host_id);
         state.marks.forget_host(&host_id)
     }
@@ -745,10 +748,20 @@ impl SessionList {
         true
     }
 
+    // The body of `GET /v1/profiles`, so a new agent's sharing and owner follow the profile the create form picks.
+    // False when the body is not a profiles answer, which leaves the host's last reading in place.
+    pub fn set_profiles(&self, host_id: String, body: String) -> bool {
+        let Some(rows) = crate::usage::profile_rows(&body) else { return false };
+        let profiles = rows.into_iter().filter_map(|row| serde_json::from_value(row).ok()).collect();
+        self.state().profiles.set(host_id, profiles);
+        true
+    }
+
     // None while the host has not said it runs agents (no meta yet, or one that predates them).
-    pub fn agent_seed(&self, host_id: String, lead_session_id: Option<String>) -> Option<NewAgentSeed> {
+    pub fn agent_seed(&self, host_id: String, lead_session_id: Option<String>, profile: Option<String>) -> Option<NewAgentSeed> {
         let state = self.state();
         let defaults = state.agent_defaults.get(&host_id)?;
+        let profile = profile.and_then(|name| state.profiles.get(&host_id)?.iter().find(|p| p.name == name));
         let rows = state.rows();
         let leads = vm::agent_leads(&rows, &host_id)
             .into_iter()
@@ -762,8 +775,8 @@ impl SessionList {
             leads,
             lead,
             allow_shared: defaults.allow_shared,
-            shared: new_agent_sharing(Some(defaults), None) == Sharing::Shared,
-            owner: new_agent_owner(Some(defaults), None),
+            shared: new_agent_sharing(Some(defaults), profile) == Sharing::Shared,
+            owner: new_agent_owner(Some(defaults), profile),
         })
     }
 

@@ -20,11 +20,11 @@ struct CreateSessionView: View {
   private let onAgentCreated: (AgentResponse) -> Void
 
   init(
-    seed: CreateSessionSeed, client: WorkerClient,
+    seed: CreateSessionSeed, client: WorkerClient, seeding: AgentSeeding? = nil,
     onAgentCreated: @escaping (AgentResponse) -> Void = { _ in },
     onCreated: @escaping (SessionInfo) -> Void
   ) {
-    _model = State(initialValue: CreateSessionModel(seed: seed, client: client))
+    _model = State(initialValue: CreateSessionModel(seed: seed, client: client, seeding: seeding))
     self.onCreated = onCreated
     self.onAgentCreated = onAgentCreated
   }

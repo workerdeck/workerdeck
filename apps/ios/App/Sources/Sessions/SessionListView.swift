@@ -143,6 +143,7 @@ struct SessionListView: View {
     if let context = model?.context(for: hostId) {
       CreateSessionView(
         seed: seed, client: context.client,
+        seeding: seed.agent.flatMap { agent in model?.agentSeeding(for: hostId, lead: agent.lead) },
         onAgentCreated: { response in
           if let cwd = response.agent.config.cwd { context.rememberCwd(cwd) }
           path = response.session.map { [.session(hostId: hostId, sessionId: $0.id)] } ?? []

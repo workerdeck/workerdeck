@@ -67,6 +67,12 @@ struct CreateSessionSeed: Hashable {
   var agent: AgentSeed?
 }
 
+// The list core's new-agent seed for one gateway, re-read when the create form's profile changes.
+struct AgentSeeding {
+  let adoptProfiles: (String) -> Void
+  let seed: (String?) -> AgentSeed?
+}
+
 struct AgentSeed: Hashable {
   struct Lead: Hashable, Identifiable {
     let id: String
