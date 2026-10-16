@@ -29,6 +29,54 @@ export function staleReplaySeqs(events: readonly SessionEvent[], afterSeq: numbe
   return stale
 }
 
+function resetResidueKey(event: SessionEvent): string | undefined {
+  switch (event.type) {
+    case 'system_init':
+    case 'status_changed':
+    case 'capabilities':
+    case 'skills':
+    case 'model_changed':
+    case 'effort_changed':
+    case 'permission_mode_changed':
+    case 'plan_info':
+    case 'engine_sleep': {
+      return event.type
+    }
+    case 'rate_limit': {
+      return replayCoalesceKey(event)
+    }
+    case 'file_produced': {
+      return `file_produced:${event.path}`
+    }
+    case 'tool_titles': {
+      return `tool_titles:${event.seq}`
+    }
+    default: {
+      return undefined
+    }
+  }
+}
+
+export function resetResidueSeqs(events: readonly SessionEvent[], afterSeq: number, resetSeq: number): Set<number> {
+  const kept = new Set<number>()
+  const seen = new Set<string>()
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]!
+    if (event.seq <= afterSeq) {
+      break
+    }
+    if (event.seq >= resetSeq) {
+      continue
+    }
+    const key = resetResidueKey(event)
+    if (key !== undefined && !seen.has(key)) {
+      seen.add(key)
+      kept.add(event.seq)
+    }
+  }
+  return kept
+}
+
 export function replaySlice(
   events: readonly SessionEvent[],
   options: {
@@ -41,13 +89,14 @@ export function replaySlice(
 ): SessionEvent[] {
   const { afterSeq, resetSeq = 0, coalesceReplay, truncateResults, imageRefs } = options
   const stale = coalesceReplay ? staleReplaySeqs(events, afterSeq) : undefined
+  const residue = coalesceReplay ? resetResidueSeqs(events, afterSeq, resetSeq) : undefined
   const lastSeq = events[events.length - 1]?.seq ?? 0
   const out: SessionEvent[] = []
   for (const event of events) {
     if (event.seq <= afterSeq) {
       continue
     }
-    if (event.seq < resetSeq && transcriptContent(event)) {
+    if (event.seq < resetSeq && (residue ? !residue.has(event.seq) : transcriptContent(event))) {
       continue
     }
     if (stale?.has(event.seq)) {
