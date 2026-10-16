@@ -989,8 +989,7 @@ inventing a phone shape: two lines, not three - a state *glyph*, title, unread b
 context ring on top; the engine's mark, one truncating run of model · project · gateway ·
 profile · cost, then the age underneath, in that order. The project slot
 is `projectLabel` from the kit, so a declared `shortcode` shortens the phone's row exactly as it
-shortens the dashboard's, with no App-side change: `projectName` is the kit's companion for a
-surface that wants the whole name, and the phone has no tooltip to put one on. **State leads both
+shortens the dashboard's, with no App-side change: **State leads both
 lines**, in a 14pt cell the engine
 mark lands in underneath - it used to trail, and a trailing glyph has no fixed x, so a list of
 thirty gave the eye nothing to run down. The mark itself needed two new pieces the app had
@@ -1035,8 +1034,8 @@ default rather than failing and resetting every preference the person had. The c
 that step rows are there without a press, that the filter menu's displays change how many, that a
 row's stop button does not open the row, and that the row still pushes (`xcodebuild test … -only-testing:WorkerDeckAppUITests`, in `apps/ios/README.md`).
 The **context ring reads off the ring ramp**, not the bar ramp: the web draws two off one
-percentage and they turn in different places, so `meterSeverity` (80/95, neutral below) is now in
-the kit and tested there, `ringTint` maps it, and `usageTint` (70/90, accent below) stays what a
+percentage and they turn in different places, so `ringTint` (80/95, neutral below, the core's
+`meterSeverity` rule) is the app's, and `usageTint` (70/90, accent below) stays what a
 *bar* fills with. A ring that was accent-blue from 1% to 79% had spent the accent saying nothing.
 The **working spinner is tinted** (`text-info`) rather than left at the system's grey, and
 **parked is neutral** rather than purple - the dashboard spends no hue on a state that wants
@@ -1192,8 +1191,7 @@ bare percentage rather than a usage record: the session screen holds a whole `Co
 row holds the compact `ContextReading`, and the percentage is the one number both agree on. On a
 row it draws **without its inner label** - two digits inside a 14pt ring are unreadable at arm's
 length, and across twenty rows the fill *is* the reading.
-`SessionList.swift` and `Watermarks.swift` are two more such mirrors - protocol's sessions-list
-view model and unread model - so the phone's list is **one list across every configured
+The sessions list and unread model are the Rust core's (`SessionList`, `Session.usage()`); the Swift kit keeps only the per-session reads in `SessionList.swift` (`sessionState`, `projectLabel`). The phone's list is **one list across every configured
 gateway**, gateway as a facet rather than the frame, with search/facets/group/sort, the subset
 line, per-row unread and the app-icon badge summed over the rows the filter is *showing*. The
 scope filter is passed `nil` throughout: a phone has no open folders, so it is genuinely inert
@@ -1305,12 +1303,7 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 
 **Agents and teams** (Agent Teams phase 5). The kit mirrors `AgentRef`, `AgentInfo`,
 `StatusLabel`, `SessionInfo.agent`/`owner`/`statusLabel`, `GatewayMeta`, the `/agents` routes and
-`/meta` (`Agents.swift`), and ports the team half of the list view model into `SessionList.swift`:
-`groupRows` builds team units (members under their lead in team order, `teamState` placing a team
-by its most urgent state, a context lead when a filter matches only a member, cross-gateway leads
-through `relayHostsOf`), the trailing Earlier fold, `teamView`/`expandedTeams`/`earlierOpen` and
-`teamLeads`/`teamMembers`; `AgentTeamsTests` is the port of the TS block. `clearFilters` keeps the
-expand state on both sides: what a reader folded is layout, not a filter. The app draws agents with
+`/meta` (`Agents.swift`), and the team half of the list view model (team units, `teamState`, the context lead, `teamView`, `teamLeads`/`teamMembers`) is the core's `SessionList`. The app draws agents with
 `AgentCardView` (44pt avatar card, 32pt member row on a tree line, a team tray of the Members Auto hides; a tap on one opens it, and the member opened last stands in
 for the selected row)
 and `AgentAvatarView` (pixelated, busy strip sliced from `avatar-busy.png` by `x-frame-durations`

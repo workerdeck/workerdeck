@@ -209,17 +209,6 @@ extension ProfileEngine {
   public var defaultCapabilities: EngineCapabilities { engineCapabilities[self]! }
 }
 
-/// Permission modes the model-agnostic provider engine understands.
-/// Deprecated spelling - read `ProfileEngine.provider.defaultCapabilities`.
-public let providerPermissionModes: [PermissionMode] =
-  engineCapabilities[.provider]!.permissionModes
-
-/// Whether a profile's engine can run a permission mode. An absent `engine`
-/// means 'claude' (every mode).
-public func supportsPermissionMode(engine: ProfileEngine?, mode: PermissionMode) -> Bool {
-  (engine ?? .claude).defaultCapabilities.permissionModes.contains(mode)
-}
-
 public enum SessionCapability: String, Codable, Sendable {
   case webSearch = "web_search"
   case download
@@ -285,7 +274,7 @@ public struct ProfileUsageWindow: Codable, Sendable, Equatable {
   public let info: RateLimitInfo
   /// Epoch ms of the `rate_limit` event this reading came from. Per window -
   /// unlike the transcript's one clock for its whole map, which is why
-  /// `mergeUsage` never compares the two.
+  /// the two are never compared.
   public let updatedAt: Double
   /// The tracker watched `resetsAt` pass with nothing reported since, and is
   /// serving an inferred 0% dated by the original reading. Advisory styling
@@ -332,12 +321,8 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
   public let unavailableReason: String?
   /// Response-only: the gateway's per-account usage tracker, folded from every
   /// session's `rate_limit` events on this profile - never behind what one
-  /// transcript holds. Render through `mergeUsage`, not instead of it.
+  /// transcript holds.
   public let usage: ProfileUsage?
-  /// Response-only: the gateway's rolling spend ledger for this profile, priced
-  /// from per-model token counts rather than from anything an engine billed.
-  /// Absent on a gateway that predates the field.
-  public let spend: ProfileSpend?
   /// Response-only: store-backed and editable through the API.
   public let managed: Bool?
 
@@ -358,7 +343,7 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     defaults: ProfileDefaults? = nil, session: ProfileSessionDefaults? = nil,
     models: [ModelOption]? = nil, defaultModel: String? = nil,
     capabilities: EngineCapabilities? = nil, available: Bool? = nil,
-    unavailableReason: String? = nil, usage: ProfileUsage? = nil, spend: ProfileSpend? = nil,
+    unavailableReason: String? = nil, usage: ProfileUsage? = nil,
     managed: Bool? = nil
   ) {
     self.name = name
@@ -375,7 +360,6 @@ public struct ProfileInfo: Codable, Sendable, Equatable, Identifiable {
     self.available = available
     self.unavailableReason = unavailableReason
     self.usage = usage
-    self.spend = spend
     self.managed = managed
   }
 }
@@ -604,8 +588,6 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
   /// `totalCostUsd` wherever a session's cost is drawn; absent on a gateway
   /// that predates the field, which is why every reader still falls back.
   public let costUsd: Double?
-  /// Session-cumulative per-model token counts, for every engine.
-  public let usageByModel: ByModel?
   public let numTurns: Int?
   /// How many transcript rows this session has produced (`transcriptActivity`'s
   /// unit) - a monotonic counter a client can diff against a remembered value to
@@ -679,7 +661,7 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     apiKeySource: String? = nil,
     createdAt: Double, lastSeq: Int, epoch: Int? = nil, pendingPermissionCount: Int,
     meta: [String: JSONValue]? = nil, title: String? = nil, totalCostUsd: Double? = nil,
-    costUsd: Double? = nil, usageByModel: ByModel? = nil,
+    costUsd: Double? = nil,
     numTurns: Int? = nil, activityCount: Int? = nil, proseCount: Int? = nil,
     lastActivityAt: Double? = nil,
     subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
@@ -708,7 +690,6 @@ public struct SessionInfo: Decodable, Sendable, Equatable, Identifiable {
     self.title = title
     self.totalCostUsd = totalCostUsd
     self.costUsd = costUsd
-    self.usageByModel = usageByModel
     self.numTurns = numTurns
     self.activityCount = activityCount
     self.proseCount = proseCount

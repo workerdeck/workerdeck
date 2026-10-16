@@ -25,7 +25,7 @@ struct FilterMenu: View, Equatable {
   let filter: ListFilter
   let hosts: [Gateway]
   let adapters: [String]
-  let projects: [ProjectOption]
+  let projects: [ProjectChoice]
   let list: SessionList
   let changed: () -> Void
 

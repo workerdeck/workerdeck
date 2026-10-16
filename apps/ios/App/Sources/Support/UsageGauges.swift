@@ -92,15 +92,12 @@ func usageTint(_ percentage: Double) -> Color {
   }
 }
 
-/// A **ring's** stroke - the web's `meterColorClass` over the kit's
-/// `meterSeverity`, which turns later than a bar and is neutral below the first
-/// turn. The session card's ring is a reading, and a reading that is blue from
+/// A **ring's** stroke - the web's `meterColorClass`: a ramp that turns
+/// later than a bar and is neutral below the first turn. The session card's ring is a reading, and a reading that is blue from
 /// 1% to 79% has spent the accent saying nothing.
 func ringTint(_ percentage: Double) -> Color {
-  switch meterSeverity(percentage) {
-  case .error: return .red
-  case .warning: return .orange
-  case .none: return .secondary
-  }
+  if percentage >= 95 { return .red }
+  if percentage >= 80 { return .orange }
+  return .secondary
 }
 

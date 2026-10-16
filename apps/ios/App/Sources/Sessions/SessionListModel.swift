@@ -284,9 +284,9 @@ final class SessionListModel {
     return core.adapters()
   }
 
-  var projects: [ProjectOption] {
+  var projects: [ProjectChoice] {
     _ = revision
-    return core.projects().map { ProjectOption(key: $0.key, label: $0.label) }
+    return core.projects()
   }
 
   func clearFilters() {

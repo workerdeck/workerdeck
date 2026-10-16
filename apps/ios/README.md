@@ -25,8 +25,8 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
   draw with:
   - `ProtocolTypes.swift` / `RestTypes.swift` / `JSONValue.swift` - hand-written Swift mirror of
     `@workerdeck/protocol` (see `WorkerProtocol.version`, kept in lockstep with
-    `PROTOCOL_VERSION`). Decoding is lenient by contract: unknown event/frame/block types degrade
-    to `.unknown`, never a stream error.
+    `PROTOCOL_VERSION`): the REST records and the Live Activity's types only. The session socket's
+    frames and events are decoded by the core.
   - `WorkerClient.swift` - the REST client. Auth is `Authorization: Bearer <key>`; the session
     socket is the core's.
   - `ModelName.swift` - `friendlyModel`, a 1:1 port of the rule in
@@ -35,15 +35,10 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     spelled `claude-opus-5` on the phone and `Opus 5` in the sidebar is the drift the shared list
     view model exists to prevent. Version tokens join with dots, code names are kept and
     capitalised, and an eight-digit snapshot date is dropped (it is a build, not a version).
-  - `SessionList.swift` - a port of `packages/protocol/src/session-list.ts`. The
-    sessions-list view model (the `attention/working/idle/ended` buckets, the gateway/adapter/
-    state facets, filter/group/sort, `subsetSummary`). These are **rules**, not
-    this app's preferences - the VS Code extension's activity-bar badge counts the same rows its
-    list shows and the dashboard renders the same list, so a client that filtered differently
-    would be announcing work it is hiding. Two Swift-specific notes: JS `sort` is stable and
-    Swift's is not, so both the row and the group sort carry an explicit insertion-index
-    tiebreak; and `ViewConfig` decodes leniently over its defaults, the Swift spelling of the
-    webview's spread.
+  - `SessionList.swift` - only the per-session reads the views still call on a bare `SessionInfo`:
+    `sessionState`, `runningSubagents`, `sessionLabel`, `projectLabel`, `projectSubpath`. The list
+    itself (filter, group, sort, teams, unread, usage, pricing) is the core's (`SessionList`,
+    `Session.usage()`), and the core has no free function over one `SessionInfo`.
   - `PromptToken.swift` - the `@file` and `/command` rules in one place: which words are tokens,
     which are being typed, which are finished, and how one is replaced. Pure string logic whose
     interesting cases are all edges, and shared, so a token looks the same in the composer as it
@@ -571,11 +566,6 @@ mobile). When `packages/protocol` changes:
    `WorkerProtocol.version`.
 3. If transcript semantics changed, port the `transcript.ts` diff into the Rust core
    (`crates/core`), whose goldens check it.
-
-`isJobRun` **is** mirrored (`SessionList.swift`) even though this app has no jobs surface to
-filter against - its own doc names "the extension, the phone" as the clients that should list job
-runs among their sessions, so nothing here filters on it. Mirrored so that the day a jobs surface
-arrives, that is a decision already made rather than one rediscovered.
 
 Not yet mirrored (later phases): the job-queue REST/WS surface, profile create/update/delete,
 browser-bridge tool hosting (the app answers `tool_call_request` with a polite refusal).

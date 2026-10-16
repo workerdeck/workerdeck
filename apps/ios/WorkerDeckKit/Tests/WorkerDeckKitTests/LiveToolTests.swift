@@ -9,26 +9,6 @@ struct LiveToolTests {
 
   // MARK: - Wire
 
-  @Test func decodesToolOutput() throws {
-    let event = try JSONDecoder().decode(
-      SessionEvent.self,
-      from: Data(#"{"type":"tool_output","toolUseId":"tu1","tail":"a\nb","seq":3,"ts":1}"#.utf8))
-    #expect(event.body == .toolOutput(toolUseId: "tu1", tail: "a\nb"))
-  }
-
-  @Test func encodesBackgroundTaskWithAndWithoutAnId() throws {
-    let named = try #require(
-      try JSONSerialization.jsonObject(
-        with: JSONEncoder().encode(SessionCommand.backgroundTask(toolUseId: "tu1")))
-        as? [String: Any])
-    #expect(named["type"] as? String == "background_task")
-    #expect(named["toolUseId"] as? String == "tu1")
-    let bare = try #require(
-      try JSONSerialization.jsonObject(with: JSONEncoder().encode(SessionCommand.backgroundTask()))
-        as? [String: Any])
-    #expect(bare.count == 1)
-  }
-
   @Test func backgroundTasksCapabilityIsClaudeOnlyAndAbsentReadsFalse() throws {
     #expect(ProfileEngine.claude.defaultCapabilities.backgroundTasks)
     #expect(!ProfileEngine.codex.defaultCapabilities.backgroundTasks)

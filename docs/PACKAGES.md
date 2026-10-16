@@ -425,8 +425,8 @@ the moment the selection moves on. `ui`'s `SessionBrowser` keeps that set itself
 `teamLingerEnds(view, now)` is when the next lingering Member drops out, so a host can redraw then.
 `teamLingerStart(member, selected, now, peeked?)` is when the window began for a Member shown *only* because it lingers
 (not busy, unread, selected or peeked), so a host can draw the countdown: `ui` fills a hairline under that row and the row
-leaves when it is full. iOS mirrors `teamView` and `teamLingerEnds` in `SessionList.swift` and the Rust core in
-`vm/session_list.rs`, both without `peeked`.
+leaves when it is full. The Rust core mirrors `teamView` and `teamLingerEnds` in
+`vm/session_list.rs` (iOS and Android both draw from it), without `peeked`.
 
 A `ProjectIcon` is either a named glyph - looked up in the client's own icon set, with an unknown
 name drawing the no-project fallback - or an image **address, never bytes**, fetched from
@@ -2041,7 +2041,7 @@ Not every line under a session is pressable. The tracker opens a record for ever
 *and* for any nested event whose parent it has not seen, so the list holds two things wearing one
 shape: an **agent**, which carries a `subagent_type` and has work worth a surface, and a **task**,
 which carries only a description and has no agent behind it. `isAgentRecord` (protocol, mirrored in
-`SessionList.swift`) is the split, and it lives there because it decides two things no two clients
+the Rust core) is the split, and it lives there because it decides two things no two clients
 may disagree about - what is pressable, and what wears the sub-agent colour. An agent row is
 **green** and opens the takeover; a task row is muted, is a `div` rather than a disabled-looking
 button, and stops the click rather than letting it fall through to the session underneath. The

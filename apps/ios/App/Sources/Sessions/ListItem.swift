@@ -23,6 +23,10 @@ struct ListSection: Identifiable {
   var earlier: Bool { group.key == "earlier" }
 }
 
+extension ProjectChoice: @retroactive Identifiable {
+  public var id: String { key }
+}
+
 extension ListStep: @retroactive Identifiable {
   public var id: String { "\(kind)-\(key)" }
 }

@@ -51,16 +51,6 @@ public struct AgentRef: Codable, Sendable, Equatable, Hashable {
   public var isMember: Bool { lead != nil }
 }
 
-public enum TeamRole: String, Sendable, Equatable {
-  case lead, member
-}
-
-public func teamRole(_ agent: AgentRef?) -> TeamRole? {
-  guard let agent else { return nil }
-  if agent.lead != nil { return .member }
-  return agent.isLead ? .lead : nil
-}
-
 public struct StatusLabel: Codable, Sendable, Equatable, Hashable {
   public let text: String
   public let emoji: String?
