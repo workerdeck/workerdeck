@@ -3,205 +3,86 @@ import Testing
 
 @testable import WorkerDeckKit
 
-/// The sticky prompt - which turn's prompt is held at the top, and the hand-off
-/// as the next one arrives.
-///
-/// The whole feature is this arithmetic; the view draws what it returns. That
-/// split exists because a `UIViewRepresentable` overlay cannot be driven by a
-/// test and this is the part that can be wrong.
 @Suite("StickyPrompt")
 struct StickyPromptTests {
-  private let metrics = TerminalMetrics(cell: 8, line: 18, width: 8 * 80, fontSize: 13)
+  private let line: CGFloat = 18
 
-  private func user(_ id: String, _ text: String, parent: String? = nil) -> TranscriptItem {
-    .user(id: id, text: text, attachments: nil, parentToolUseId: parent)
-  }
-  private func answer(_ id: String, _ text: String = "an answer") -> TranscriptItem {
-    .assistantText(id: id, text: text, streaming: false, parentToolUseId: nil)
+  // Turns of a prompt row (a gap line, then one line) and an answer row (a gap line, then three lines).
+  private struct Turns {
+    var offsets: [CGFloat] = []
+    var promptRows: [Int] = []
+    var total: CGFloat = 0
   }
 
-  /// Three turns, each a prompt followed by an answer.
-  private func transcript(turns: Int) -> TerminalRows {
-    var items: [TranscriptItem] = []
-    for turn in 0..<turns {
-      items.append(user("u\(turn)", "prompt \(turn)"))
-      items.append(answer("a\(turn)"))
+  private func turns(_ count: Int) -> Turns {
+    var result = Turns()
+    for _ in 0..<count {
+      result.promptRows.append(result.offsets.count)
+      result.offsets.append(result.total)
+      result.total += 2 * line
+      result.offsets.append(result.total)
+      result.total += 4 * line
     }
-    return TerminalRows.build(items: items)
+    return result
   }
 
-  private func book(_ rows: TerminalRows) -> TerminalHeightBook {
-    TerminalHeightBook(rows: rows, metrics: metrics)
-  }
-
-  @Test("a subagent's brief is not the human's prompt")
-  func subagentBriefIsNotAPrompt() {
-    // It really is a `user_message` on the wire - which is why it once rendered
-    // with the human's own `❯` - but it is the parent agent talking to its
-    // child. A turn is a thing a person started.
-    let rows = TerminalRows.build(items: [
-      user("u0", "do the thing"),
-      .toolCall(
-        ToolCallItem(id: "t1", name: "Task", input: .object([:]), status: .running)),
-      user("brief", "explore the repo", parent: "t1"),
-      answer("a0"),
-    ])
-    let prompts = rows.promptRows
-    #expect(prompts.count == 1)
-    #expect(rows.rowIndex(forItem: 0) == prompts[0])
-  }
-
-  @Test("a peer's message is not the human's prompt either")
-  func peerMessageIsNotAPrompt() {
-    // Another session wrote it. A turn is a thing a person started, and a
-    // header reading `Alpha: ...` would name a turn nobody here began.
-    let rows = TerminalRows.build(items: [
-      user("u0", "do the thing"),
-      answer("a0"),
-      .user(
-        id: "p1", text: "ping from Alpha",
-        origin: MessageOrigin(sessionId: "sess-a", name: "Alpha")),
-      answer("a1"),
-    ])
-    let prompts = rows.promptRows
-    #expect(prompts.count == 1)
-    #expect(rows.rowIndex(forItem: 0) == prompts[0])
+  private func resolve(_ turns: Turns, top: CGFloat, strip: CGFloat? = nil) -> StickyPrompt.Pin? {
+    StickyPrompt.resolve(
+      promptRows: turns.promptRows, contentTop: { turns.offsets[$0] + line }, top: top, line: line,
+      stripHeight: strip)
   }
 
   @Test("nothing is pinned while the prompt is on screen in its own right")
   func noPinWhileVisible() {
-    // Two identical lines a pixel apart is the seam this theme exists not to
-    // have, so the pin takes over only once the real line has left.
-    let rows = transcript(turns: 3)
-    let heights = book(rows)
-    let first = rows.promptRows[0]
-    #expect(
-      StickyPrompt.resolve(
-        promptRows: rows.promptRows, rows: rows, book: heights,
-        top: heights.offset(at: first), line: metrics.line) == nil)
+    let three = turns(3)
+    #expect(resolve(three, top: three.offsets[0] + line) == nil)
   }
 
   @Test("the prompt of the turn being read is the one pinned")
   func pinsTheTurnBeingRead() {
-    let rows = transcript(turns: 4)
-    let heights = book(rows)
-    let prompts = rows.promptRows
-    for (turn, promptRow) in prompts.enumerated() {
-      // A point just inside the turn's own answer.
-      let top = heights.offset(at: promptRow) + heights.height(at: promptRow) + 1
-      let pin = StickyPrompt.resolve(
-        promptRows: prompts, rows: rows, book: heights, top: top, line: metrics.line)
-      #expect(pin?.row == promptRow, "turn \(turn)")
-      #expect(pin?.offset == 0, "turn \(turn) is fully pinned mid-answer")
+    let four = turns(4)
+    for promptRow in four.promptRows {
+      let pin = resolve(four, top: four.offsets[promptRow + 1] + 1)
+      #expect(pin == StickyPrompt.Pin(row: promptRow, offset: 0))
     }
   }
 
   @Test("the next prompt lifts the pinned one out rather than sliding under it")
   func handsOffToTheNextPrompt() {
-    let rows = transcript(turns: 3)
-    let heights = book(rows)
-    let prompts = rows.promptRows
-    let next = prompts[1]
-    let gap = rows.gapBefore(next) ? metrics.line : 0
-    // The next prompt's content edge, walked up to the viewport's top edge.
-    let contentEdge = heights.offset(at: next) + gap
-
-    // A whole line out: still fully pinned.
-    var pin = StickyPrompt.resolve(
-      promptRows: prompts, rows: rows, book: heights, top: contentEdge - metrics.line,
-      line: metrics.line)
-    #expect(pin?.row == prompts[0])
-    #expect(pin?.offset == 0)
-
-    // Half a line in: half lifted, and it is still the *old* prompt being drawn.
-    pin = StickyPrompt.resolve(
-      promptRows: prompts, rows: rows, book: heights, top: contentEdge - metrics.line / 2,
-      line: metrics.line)
-    #expect(pin?.row == prompts[0])
-    #expect(pin?.offset == -metrics.line / 2)
-
-    // At its content edge: the new prompt's own line is at the top, so nothing
-    // is pinned - `noPinWhileVisible`'s rule, arrived at from the other side.
-    pin = StickyPrompt.resolve(
-      promptRows: prompts, rows: rows, book: heights, top: contentEdge, line: metrics.line)
-    #expect(pin == nil)
-
-    // And one line *earlier* - inside the blank line above the new prompt -
-    // the old one is still fully pinned. That strip is the previous turn's, and
-    // reading the frame offset instead of the content offset handed over here.
-    pin = StickyPrompt.resolve(
-      promptRows: prompts, rows: rows, book: heights, top: heights.offset(at: next),
-      line: metrics.line)
-    #expect(pin?.row == prompts[0])
+    let three = turns(3)
+    let next = three.promptRows[1]
+    let contentEdge = three.offsets[next] + line
+    #expect(resolve(three, top: contentEdge - line) == StickyPrompt.Pin(row: 0, offset: 0))
+    #expect(resolve(three, top: contentEdge - line / 2) == StickyPrompt.Pin(row: 0, offset: -line / 2))
+    #expect(resolve(three, top: contentEdge) == nil)
+    // Inside the blank line above the new prompt the old one still holds: that strip is the previous turn's.
+    #expect(resolve(three, top: three.offsets[next])?.row == 0)
   }
 
   @Test("a taller strip hands off against its own height, not the grid line")
   func handsOffAgainstTheStripHeight() {
-    // The strip carries air above and below its line and a rule under it, so it
-    // is taller than a row. Measuring the hand-off against the grid line would
-    // let the next prompt slide under that padding before the lift began.
-    let rows = transcript(turns: 3)
-    let heights = book(rows)
-    let prompts = rows.promptRows
-    let next = prompts[1]
-    let strip = metrics.line + 10
-    let contentEdge = heights.offset(at: next) + (rows.gapBefore(next) ? metrics.line : 0)
-
-    // A grid line out - inside the strip's height, so the lift has begun.
-    let pin = StickyPrompt.resolve(
-      promptRows: prompts, rows: rows, book: heights, top: contentEdge - metrics.line,
-      line: metrics.line, stripHeight: strip)
-    #expect(pin?.row == prompts[0])
-    #expect(pin?.offset == metrics.line - strip)
-
-    // A whole strip out: untouched.
-    #expect(
-      StickyPrompt.resolve(
-        promptRows: prompts, rows: rows, book: heights, top: contentEdge - strip,
-        line: metrics.line, stripHeight: strip)?.offset == 0)
+    let three = turns(3)
+    let contentEdge = three.offsets[three.promptRows[1]] + line
+    let strip = line + 10
+    #expect(resolve(three, top: contentEdge - line, strip: strip) == StickyPrompt.Pin(row: 0, offset: line - strip))
+    #expect(resolve(three, top: contentEdge - strip, strip: strip)?.offset == 0)
   }
 
   @Test("the lift never exceeds one line")
   func liftIsBounded() {
-    // Anything past a line would draw the pinned copy over the row above the
-    // fold, which is not the transcript's own content.
-    let rows = transcript(turns: 3)
-    let heights = book(rows)
-    let prompts = rows.promptRows
-    for step in stride(from: 0.0, through: heights.totalHeight, by: 3) {
-      guard
-        let pin = StickyPrompt.resolve(
-          promptRows: prompts, rows: rows, book: heights, top: step, line: metrics.line)
-      else { continue }
+    let three = turns(3)
+    for top in stride(from: 0.0, through: three.total, by: 3) {
+      guard let pin = resolve(three, top: top) else { continue }
       #expect(pin.offset <= 0)
-      #expect(pin.offset >= -metrics.line)
+      #expect(pin.offset >= -line)
     }
   }
 
-  @Test("an empty transcript and a transcript with no prompts pin nothing")
-  func degenerateCases() {
-    let empty = TerminalRows(rows: [])
-    #expect(
-      StickyPrompt.resolve(
-        promptRows: [], rows: empty, book: book(empty), top: 0, line: metrics.line) == nil)
-    let answersOnly = TerminalRows.build(items: [answer("a0"), answer("a1")])
-    #expect(answersOnly.promptRows.isEmpty)
-    #expect(
-      StickyPrompt.resolve(
-        promptRows: answersOnly.promptRows, rows: answersOnly, book: book(answersOnly),
-        top: 999, line: metrics.line) == nil)
-  }
-
-  @Test("a long transcript resolves by binary search, not by walking")
-  func scalesToALongTranscript() {
-    let rows = transcript(turns: 4_000)
-    let heights = book(rows)
-    let prompts = rows.promptRows
-    #expect(prompts.count == 4_000)
-    let last = prompts[prompts.count - 1]
-    let pin = StickyPrompt.resolve(
-      promptRows: prompts, rows: rows, book: heights, top: heights.totalHeight,
-      line: metrics.line)
-    #expect(pin?.row == last)
+  @Test("no prompts pin nothing, and a long transcript resolves")
+  func degenerateAndLong() {
+    #expect(resolve(Turns(), top: 999) == nil)
+    let many = turns(4_000)
+    let last = many.promptRows[3_999]
+    #expect(resolve(many, top: many.offsets[last + 1] + 1)?.row == last)
   }
 }

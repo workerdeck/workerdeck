@@ -4,7 +4,7 @@ import Foundation
 /// pushed it off - the arithmetic behind the web client's `stickyPrompt`.
 ///
 /// **One line, and the prompt's first line.** Not the row: a pasted twenty-line
-/// prompt pinned whole covers the very answer being read. The planner already
+/// prompt pinned whole covers the very answer being read. The core already
 /// puts the marker on the first line only (a pasted prompt is one prompt, not
 /// twenty), so the first planned line is exactly the right thing to lift.
 ///
@@ -37,7 +37,7 @@ public enum StickyPrompt {
 
   /// - Parameters:
   ///   - promptRows: ascending row indices of the human's own prompts
-  ///     (`TerminalRows.promptRows`).
+  ///     (the core's `promptRows`).
   ///   - top: the viewport's top edge, in content space.
   ///   - line: the grid line, which is what a row's blank-line gap is worth.
   ///   - stripHeight: how tall the drawn strip is, which is **not** the same
@@ -51,20 +51,11 @@ public enum StickyPrompt {
   ///     hands the next prompt over at a different `y` than the real row it
   ///     replaces, and the takeover jumps by the padding.
   public static func resolve(
-    promptRows: [Int], rows: TerminalRows, book: TerminalHeightBook, top: CGFloat, line: CGFloat,
-    stripHeight: CGFloat? = nil
-  ) -> Pin? {
-    resolve(
-      promptRows: promptRows, contentTop: { book.offset(at: $0) + (rows.gapBefore($0) ? line : 0) }, top: top,
-      line: line, stripHeight: stripHeight)
-  }
-
-  public static func resolve(
     promptRows: [Int], contentTop: (Int) -> CGFloat, top: CGFloat, line: CGFloat, stripHeight: CGFloat? = nil
   ) -> Pin? {
     let strip = stripHeight ?? line
     // **Content offsets throughout, never frame offsets.** The blank line above
-    // a row belongs to the row (see `TerminalHeightBook`), so a prompt's frame
+    // a row belongs to the row, so a prompt's frame
     // begins one line before its text does, and the strip in between is
     // visually the *previous* turn's. Searching by frame hands over a line
     // early - which showed up as the new prompt's row being "found" while its

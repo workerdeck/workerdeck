@@ -143,7 +143,7 @@ final class PushCoordinator {
 
   /// A tapped Live Activity. `widgetURL` is the only way a card can route, so it lands here and
   /// becomes the same `PushRoute` a notification tap produces - one destination type, one
-  /// `deepLinkSeqSurvives` rule, whichever surface asked.
+  /// epoch rule in the core, whichever surface asked.
   func handle(url: URL) {
     guard url.scheme == "workerdeck", url.host == "session",
       let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,

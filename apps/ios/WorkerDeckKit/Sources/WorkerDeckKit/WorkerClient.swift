@@ -41,29 +41,16 @@ public struct WorkerClient: Sendable {
   public let authKey: String?
 
   private let urlSession: URLSession
-  /// Test seam: swaps `URLSessionWebSocketTransport` for a fake.
-  private let socketFactory: (@Sendable (URLRequest, URLSession) -> any WebSocketConnecting)?
 
   public init(baseURL: URL, authKey: String? = nil, urlSession: URLSession = .shared) {
-    self.init(baseURL: baseURL, authKey: authKey, urlSession: urlSession, socketFactory: nil)
-  }
-
-  init(
-    baseURL: URL,
-    authKey: String? = nil,
-    urlSession: URLSession = .shared,
-    socketFactory: (@Sendable (URLRequest, URLSession) -> any WebSocketConnecting)?
-  ) {
     self.baseURL = baseURL
     self.authKey = authKey
     self.urlSession = urlSession
-    self.socketFactory = socketFactory
   }
 
   // MARK: - Sessions
 
-  /// Start a session. The returned info's `id` is what `attach` and every other
-  /// session route take (not the underlying SDK session id).
+  /// Start a session. The returned info's `id` is what every other session route takes (not the underlying SDK session id).
   public func createSession(_ request: CreateSessionRequest) async throws -> SessionInfo {
     let data = try await call("POST", "/sessions", body: request)
     return try decode(SessionResponse.self, from: data).session
@@ -141,7 +128,7 @@ public struct WorkerClient: Sendable {
   // MARK: - Attachments
 
   /// Upload one file for a session, ahead of the message that will carry it.
-  /// The returned attachment's `id` goes to `SessionHandle.send`.
+  /// The returned attachment's `id` goes into the message that carries it.
   ///
   /// The body is the raw bytes - there is no multipart here, which is why this is
   /// a plain upload task and not a hand-rolled form encoder.
@@ -463,41 +450,6 @@ public struct WorkerClient: Sendable {
     "/agents/\(encodeComponent(id))\(suffix)"
   }
 
-  // MARK: - Live attach
-
-  /// Open a live connection to a session's event stream.
-  ///
-  /// - Parameters:
-  ///   - afterSeq: replay events with `seq` greater than this (0 = full replay).
-  ///   - reconnect: auto-reconnect with backoff on unexpected disconnects.
-  ///   - truncateResults: replay an oversized `tool_result` block as its **head**,
-  ///     marked, with the rest one ``toolResult(sessionId:seq:toolUseId:)`` away.
-  ///     Measured, three such frames were 68% of one 3.1 MB attach. Default off,
-  ///     and permanently: only the unit that *renders* may ask for heads, since a
-  ///     caller that cannot fetch them back would present one as the whole result.
-  ///   - imageRefs: deliver a `tool_result`'s base64 image parts as `image_ref`
-  ///     addresses, their bytes one ``toolResultImage(sessionId:seq:toolUseId:partIndex:)``
-  ///     away. This is where the bytes actually were: 91% of all tool-result
-  ///     payload across 214 sessions, and no client rendered a byte of it. Its
-  ///     **own** flag rather than a widening of `truncateResults`, because this
-  ///     family's "additive on this protocol" argument rests on a client that never
-  ///     asked being unable to receive one, by construction. Default off under
-  ///     the same rule, and unlike truncation it applies to **live** events too:
-  ///     the render path is ref-then-fetch, so bytes arriving live would only be
-  ///     discarded or pinned in memory.
-  @MainActor
-  public func attach(
-    sessionId: String, afterSeq: Int = 0, reconnect: Bool = true, truncateResults: Bool = false,
-    imageRefs: Bool = false
-  ) -> SessionHandle {
-    let client = self
-    return SessionHandle(sessionId: sessionId, afterSeq: afterSeq, reconnect: reconnect) { seq in
-      try client.openSocket(
-        sessionId: sessionId, afterSeq: seq, truncateResults: truncateResults,
-        imageRefs: imageRefs)
-    }
-  }
-
   /// The whole of a tool result whose replay delivered only its head.
   ///
   /// `toolUseId` is required and the gateway verifies it against the block: a
@@ -546,41 +498,6 @@ public struct WorkerClient: Sendable {
   // Raw bytes at a path under the REST base, as the core names one (a produced file, a host `/fs/read`).
   public func bytes(path: String) async throws -> Data {
     try await call("GET", path)
-  }
-
-  /// WebSocket URL for a session attach: the REST base with `http`→`ws`
-  /// (`https`→`wss`), mirroring the reference client's `replace(/^http/, 'ws')`.
-  public func webSocketURL(
-    sessionId: String, afterSeq: Int, truncateResults: Bool = false, imageRefs: Bool = false
-  ) throws -> URL {
-    var base = Self.trimmedBase(baseURL)
-    if base.hasPrefix("https") {
-      base = "wss" + base.dropFirst("https".count)
-    } else if base.hasPrefix("http") {
-      base = "ws" + base.dropFirst("http".count)
-    }
-    let string =
-      "\(base)/sessions/\(Self.encodeComponent(sessionId))/ws?afterSeq=\(afterSeq)"
-      + (truncateResults ? "&truncateResults=1" : "")
-      + (imageRefs ? "&imageRefs=1" : "")
-    guard let url = URL(string: string) else {
-      throw WorkerClientError(message: "Invalid WebSocket URL: \(string)")
-    }
-    return url
-  }
-
-  func openSocket(
-    sessionId: String, afterSeq: Int, truncateResults: Bool = false, imageRefs: Bool = false
-  ) throws -> any WebSocketConnecting {
-    var request = URLRequest(
-      url: try webSocketURL(
-        sessionId: sessionId, afterSeq: afterSeq, truncateResults: truncateResults,
-        imageRefs: imageRefs))
-    applyAuth(&request)
-    if let socketFactory {
-      return socketFactory(request, urlSession)
-    }
-    return URLSessionWebSocketTransport(request: request, urlSession: urlSession)
   }
 
   // MARK: - Plumbing

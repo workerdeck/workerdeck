@@ -21,14 +21,14 @@ struct PushPayload: Sendable, Equatable {
   /// Seq of the event this notification is about - the protocol says in as many
   /// words what it is for ("attach with `afterSeq: seq - 1` to land on it"), and
   /// this app lands on it a different way: it attaches in full and scrolls to
-  /// the row (see `TranscriptSeqIndex`), so the reader arrives *at* the news
+  /// the row (the core's `CoreEntry.seq`), so the reader arrives *at* the news
   /// with the history above them intact.
   ///
   /// Optional like `hostId`, and for the same reason: a hand-crafted
   /// `simctl push` carries none and must still deep-link to the session.
   let seq: Int?
   /// Which log `seq` counts in (`SessionInfo.epoch`). A wake renumbers the log, so a payload
-  /// that outlived one has to be told from a current one - see `deepLinkSeqSurvives`.
+  /// that outlived one has to be told from a current one, which the core does.
   let epoch: Int?
 
   init?(userInfo: [AnyHashable: Any]) {

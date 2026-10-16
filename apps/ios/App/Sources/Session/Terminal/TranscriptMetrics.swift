@@ -8,9 +8,8 @@ import WorkerDeckKit
 /// other row on a half-pixel").
 ///
 /// Everything here exists to make one guarantee true: **N pre-wrapped lines
-/// render at exactly N × `line` points.** The calculator wraps
-/// (`TerminalCells.wrapped`), the renderer draws those exact lines, and this
-/// type is where the two agree on the pixels.
+/// render at exactly N × `line` points.** The core wraps, the renderer draws
+/// those exact lines, and this type is where the two agree on the pixels.
 ///
 /// The two ways a row view can draw its lines and keep the guarantee:
 ///

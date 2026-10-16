@@ -45,9 +45,9 @@ struct TranscriptFocusRequest: Equatable, Sendable {
 
 /// One frame's worth of scroll geometry, all in **content space** (the top
 /// inset already folded in, so `contentOffset` is "how far into the content the
-/// first visible point is"). This is the coordinate system the scrubber's
-/// `railScale` arithmetic wants - its denominator is
-/// `max(contentHeight, viewportHeight)`, exactly as on the web.
+/// first visible point is"). This is the coordinate system the core's scrubber
+/// arithmetic wants - its denominator is `max(contentHeight, viewportHeight)`,
+/// exactly as on the web.
 struct TranscriptScrollReadings: Equatable, Sendable {
   var contentOffset: CGFloat = 0
   var viewportHeight: CGFloat = 0
@@ -56,8 +56,6 @@ struct TranscriptScrollReadings: Equatable, Sendable {
 }
 
 /// What the coordinator answers for; the model forwards commands through it.
-/// A protocol rather than the coordinator type because the coordinator is
-/// generic over the row content and the model must not be.
 @MainActor
 protocol TranscriptScrollDriver: AnyObject {
   func scrollToBottom(animated: Bool)
@@ -90,8 +88,7 @@ final class TranscriptScrollModel {
   }
 
   /// Jump to a row by **row index** (the fold's index, not a transcript item
-  /// index - resolve items through `TerminalRows.rowIndex(forItem:)` first,
-  /// never by arithmetic; a `Task` row covers a membership).
+  /// index: the core resolves items to rows, never arithmetic).
   func scrollToRow(_ index: Int, anchor: TranscriptRowAnchor = .top, animated: Bool = false) {
     driver?.scrollToRow(index, anchor: anchor, animated: animated)
   }
@@ -165,37 +162,6 @@ struct TerminalRowMenu {
   var background: (() -> Void)? = nil
 }
 
-// MARK: - Content
-
-// One epoch of what the view draws: keys for the diff, a book for the frames, and which rows must redraw.
-protocol TranscriptContent {
-  associatedtype Book: TranscriptRowBook
-  var count: Int { get }
-  var book: Book { get }
-  func key(at index: Int) -> String
-  func sameEpoch(as other: Self) -> Bool
-  func redraws(_ index: Int, from old: Self) -> Bool
-}
-
-// The Swift planner's epoch: rows, the book built from them, the metrics and expansion that book was measured at.
-struct TerminalTranscriptContent: TranscriptContent {
-  var rows: TerminalRows
-  var book: TerminalHeightBook
-  var metrics: TerminalMetrics
-  var expansion: TerminalExpansion
-
-  var count: Int { rows.count }
-  func key(at index: Int) -> String { rows[index].key }
-
-  func sameEpoch(as other: Self) -> Bool {
-    rows == other.rows && metrics == other.metrics && expansion == other.expansion
-  }
-
-  func redraws(_ index: Int, from old: Self) -> Bool {
-    metrics != old.metrics || expansion != old.expansion || rows.rows[index] != old.rows.rows[index]
-  }
-}
-
 // MARK: - Representable
 
 /// The virtualized terminal transcript: a `UICollectionView` under
@@ -221,8 +187,8 @@ struct TerminalTranscriptContent: TranscriptContent {
 ///   height the book doesn't know about is a frame the layout gets wrong.
 /// - A cell's frame includes the blank-line gap above its row (`gapBefore`);
 ///   the row view pads itself by one line when the fold says so.
-struct VirtualizedTranscriptView<Content: TranscriptContent>: UIViewRepresentable {
-  var content: Content
+struct VirtualizedTranscriptView: UIViewRepresentable {
+  var content: CoreTranscriptContent
   var scroll: TranscriptScrollModel
   var reveal: TranscriptRevealRequest?
   /// Where a deep link wants the reader put - see ``TranscriptFocusRequest``.
@@ -343,9 +309,9 @@ struct VirtualizedTranscriptView<Content: TranscriptContent>: UIViewRepresentabl
     weak var layout: TranscriptLayout?
     private(set) var model: TranscriptScrollModel?
 
-    private(set) var content: Content?
+    private(set) var content: CoreTranscriptContent?
     private var count: Int { content?.count ?? 0 }
-    private var book: Content.Book? { content?.book }
+    private var book: CoreHeightBook? { content?.book }
     private var shownRows: (Int, Int)?
     private var revealedNonce: Int?
     private var focusedNonce: Int?
@@ -377,7 +343,7 @@ struct VirtualizedTranscriptView<Content: TranscriptContent>: UIViewRepresentabl
 
     // MARK: Epochs
 
-    func apply(_ newContent: Content) {
+    func apply(_ newContent: CoreTranscriptContent) {
       if let content, newContent.sameEpoch(as: content) { return }
 
       guard let cv = collectionView, let layout else {
@@ -442,7 +408,7 @@ struct VirtualizedTranscriptView<Content: TranscriptContent>: UIViewRepresentabl
       publishReadings(cv)
     }
 
-    private func reconfigureVisible(_ cv: UICollectionView, old: Content?) {
+    private func reconfigureVisible(_ cv: UICollectionView, old: CoreTranscriptContent?) {
       // Positional compare is sound here because both callers guarantee the
       // shared prefix is key-aligned.
       guard let content, let old else { return }
@@ -463,7 +429,7 @@ struct VirtualizedTranscriptView<Content: TranscriptContent>: UIViewRepresentabl
       var nearIndex: Int
     }
 
-    private func captureAnchor(_ cv: UICollectionView, old: Content) -> Anchor? {
+    private func captureAnchor(_ cv: UICollectionView, old: CoreTranscriptContent) -> Anchor? {
       let oldBook = old.book
       guard old.count > 0 else { return nil }
       let foldY = cv.contentOffset.y + cv.adjustedContentInset.top

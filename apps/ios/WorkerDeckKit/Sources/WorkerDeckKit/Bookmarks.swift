@@ -13,9 +13,8 @@ import Foundation
 /// which is why the app-side read swallows a decode failure rather than
 /// guarding one.
 ///
-/// Not a protocol port the way `Watermarks` is - no shared `bookmarks.ts`
-/// exists - but the rules live in the kit for the reason `MarkdownBlocks`'s do:
-/// this package is the only part of the app under test, and toggle semantics
+/// Not a protocol port - no shared `bookmarks.ts` exists - but the rules live
+/// in the kit because this package is the only part of the app under test, and toggle semantics
 /// are exactly the kind of pure logic whose interesting cases are all edges.
 public struct BookmarkStore {
   public var read: () -> [String: [String]]?

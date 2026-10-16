@@ -206,7 +206,6 @@ struct ProtocolDecodingTests {
       """#
     let info = try JSONDecoder().decode(SessionInfo.self, from: Data(json.utf8))
     #expect(info.checklist == nil)
-    #expect(sessionTasks(info).isEmpty)
   }
 
   /// `clearContext` and `hostCwd` are optional on the wire: absent reads as

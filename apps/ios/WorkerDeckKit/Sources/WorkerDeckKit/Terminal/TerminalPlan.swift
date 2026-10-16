@@ -1,31 +1,6 @@
 import Foundation
 
-/// What a row draws, line by line - the port of
-/// `packages/ui/src/components/terminal/height.ts`, turned inside out.
-///
-/// On the web the browser wraps the text and `height.ts` *predicts* how many
-/// lines that will be; the two agree to 99-100% on real content and the
-/// calculator flags the cases it cannot know. On iOS we can do better than
-/// agree: the planner wraps the text, the renderer draws the lines the planner
-/// returned, and a row's height is by definition `lines.count × metrics.line`.
-/// There is no prediction to be wrong.
-///
-/// That is why this file produces a *plan* rather than a number. The number is
-/// `plan.count`; the renderer is handed the same array.
-///
-/// Two invariants carried over from the web client, both still load-bearing:
-///
-/// 1. **Every state a row can be in is planned, collapsed and expanded alike.**
-///    This is where the port stops mirroring the web client, and the reason is
-///    the sentence above: there, an expanded row is mounted and self-measures,
-///    so it never has to be predicted. Here nothing self-measures, so an
-///    expanded row that the book had not planned would be a frame the layout
-///    got wrong. `TerminalExpansion` is therefore an input to the planner, and
-///    the expanded budgets in `ResultPreview` are load-bearing rather than
-///    decorative - see `TerminalExpansion.swift`.
-/// 2. **The strings are the heights.** Every summary, preview and affordance
-///    string comes from `ToolRun.swift` / `ResultPreview.swift`, never from a
-///    view - a second spelling would be a second height.
+// What a row draws, line by line, as the Rust core planned it: a row's height is `lines.count × metrics.line`.
 
 // MARK: - Metrics
 
@@ -47,16 +22,6 @@ public struct TerminalMetrics: Equatable, Sendable {
     self.line = line
     self.width = width
     self.fontSize = fontSize
-  }
-
-  /// How many character columns fit a body, given what the gutter and indent
-  /// have already spent.
-  ///
-  /// The epsilon is not superstition: layout rounds, and an exactly-N-cell body
-  /// otherwise floors to N − 1 and wraps a line that fits.
-  public func columns(gutter: Int, indent: Int = 0, extra: CGFloat = 0) -> Int {
-    let body = width - extra - CGFloat(gutter + indent) * cell
-    return max(0, Int((body / cell + 1e-4).rounded(.down)))
   }
 }
 
@@ -165,6 +130,11 @@ public struct TermLine: Equatable, Sendable {
   }
 }
 
+// A press on a line: the core recovers what it means from the row and this line index (`press_line`).
+public enum TermPress: Equatable, Sendable {
+  case line(Int)
+}
+
 /// A picture reserved on the grid: which image it is, and how many whole lines
 /// of the plan belong to it.
 ///
@@ -214,32 +184,12 @@ public struct TermImageBox: Equatable, Sendable {
   }
 }
 
-/// The gutter glyph vocabulary - the CLI's own.
+// The gutter glyphs the views draw themselves, the CLI's own.
 public enum TermGlyph {
-  /// What you typed. Shared with the composer: two spellings would put the caret
-  /// a glyph off the column every prompt row sits on.
+  // Shared with the composer: two spellings would put the caret a glyph off the column every prompt row sits on.
   public static let prompt = "❯"
-  /// What the model said, or a tool it called.
-  public static let bullet = "●"
-  /// That tool's output, one level in.
-  public static let output = "⎿"
-  public static let thinking = "✻"
-  public static let notice = "!"
-  public static let file = "⤓"
-  /// A message that arrived from another session, and one this session sent.
-  public static let peerIn = "↦"
-  public static let peerOut = "↤"
-  public static let compaction = "≡"
-  public static let compactionPending = "⋯"
-  /// The catch-up seam.
   public static let recap = "※"
-  /// Between two diff hunks.
-  public static let hunkGap = "⋮"
-
-  /// The working marker: the classic braille spinner, ten frames at 90ms. It is
-  /// no longer the brand mark's pulse and no longer shares a clock with
-  /// `icon-loading.svg`. Braille has no "complete" frame, so the Reduce Motion
-  /// rest is an explicit choice: `⠿`, all six dots.
+  // The braille spinner, ten frames at 90ms; Reduce Motion rests on all six dots.
   public static let pulseFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
   public static let pulseRest = "⠿"
   public static let pulseInterval: TimeInterval = 0.09

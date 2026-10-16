@@ -8,8 +8,7 @@ import Testing
 /// clients are annotating different transcripts that happen to share a name.
 @Suite("Bookmarks")
 struct BookmarksTests {
-  /// An in-memory store standing in for UserDefaults, keeping the last write -
-  /// the shape `WatermarksTests` uses, because the seam is the same idea.
+  /// An in-memory store standing in for UserDefaults, keeping the last write.
   private final class StoreBox {
     var data: [String: [String]]
 

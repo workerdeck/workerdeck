@@ -377,16 +377,4 @@ struct WorkerClientTests {
       try await client.backgroundTask(sessionId: "sess_1")
     }
   }
-
-  @Test func derivesTheWebSocketURLFromTheRestBase() throws {
-    let insecure = WorkerClient(baseURL: URL(string: "http://host:8787/v1")!)
-    #expect(
-      try insecure.webSocketURL(sessionId: "sess_1", afterSeq: 12).absoluteString
-        == "ws://host:8787/v1/sessions/sess_1/ws?afterSeq=12")
-
-    let secure = WorkerClient(baseURL: URL(string: "https://host/v1/")!)
-    #expect(
-      try secure.webSocketURL(sessionId: "sess_1", afterSeq: 0).absoluteString
-        == "wss://host/v1/sessions/sess_1/ws?afterSeq=0")
-  }
 }

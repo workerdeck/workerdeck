@@ -215,26 +215,6 @@ public enum ToolResultContent: Sendable, Equatable {
       return parts.compactMap { $0.text }.filter { !$0.isEmpty }.joined(separator: "\n")
     }
   }
-
-  /// The `image_ref` addresses in this content, or `nil` when it holds none -
-  /// which is the common case, and is why this is not an empty array: an absent
-  /// field keeps the tool-call item byte-identical, and that item is
-  /// `Equatable` and half the row-plan cache's key.
-  ///
-  /// Mirrors the react reducer's `imageRefsOf`. Reads `part_index` rather than
-  /// the array position for the reason the field exists: a truncated head has
-  /// already dropped parts by the time this runs.
-  public func imageRefs(sourceSeq: Int) -> [ToolResultImageRef]? {
-    guard case .parts(let parts) = self else { return nil }
-    let refs = parts.enumerated().compactMap { position, part -> ToolResultImageRef? in
-      guard part.type == "image_ref" else { return nil }
-      return ToolResultImageRef(
-        partIndex: part.partIndex ?? position,
-        mediaType: part.mediaType ?? "application/octet-stream",
-        bytes: part.bytes ?? 0, sourceSeq: sourceSeq)
-    }
-    return refs.isEmpty ? nil : refs
-  }
 }
 
 extension ToolResultContent: Codable {
@@ -1634,4 +1614,49 @@ extension ServerFrame: Decodable {
       self = .unknown(type: type, raw: (try? JSONValue(from: decoder)) ?? .null)
     }
   }
+}
+
+public enum ChecklistStatus: String, Decodable, Sendable, Equatable, Hashable {
+  case pending
+  case inProgress = "in_progress"
+  case completed
+}
+
+public struct ChecklistItem: Decodable, Sendable, Equatable, Hashable {
+  public let text: String
+  public let status: ChecklistStatus
+
+  public init(text: String, status: ChecklistStatus) {
+    self.text = text
+    self.status = status
+  }
+}
+
+public struct CompactionItem: Sendable, Equatable, Identifiable {
+  public var id: String
+  public var parentToolUseId: String?
+  public var pending: Bool
+  public var trigger: CompactionTrigger?
+  public var preTokens: Int?
+  public var postTokens: Int?
+  public var error: String?
+
+  public init(
+    id: String, parentToolUseId: String? = nil, pending: Bool = false,
+    trigger: CompactionTrigger? = nil, preTokens: Int? = nil, postTokens: Int? = nil,
+    error: String? = nil
+  ) {
+    self.id = id
+    self.parentToolUseId = parentToolUseId
+    self.pending = pending
+    self.trigger = trigger
+    self.preTokens = preTokens
+    self.postTokens = postTokens
+    self.error = error
+  }
+}
+
+public enum CompactionTrigger: String, Sendable, Equatable {
+  case manual
+  case auto
 }

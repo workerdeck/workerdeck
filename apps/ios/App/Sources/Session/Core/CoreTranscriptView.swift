@@ -3,7 +3,7 @@ import UIKit
 import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
 
-struct CoreHeightBook: TranscriptRowBook {
+struct CoreHeightBook {
   private let heights: [CGFloat]
   private let offsets: [CGFloat]
 
@@ -42,7 +42,7 @@ struct CoreHeightBook: TranscriptRowBook {
 }
 
 // Rows outside the window the core holds draw empty at their planned height until `show_rows` brings their lines.
-struct CoreTranscriptContent: TranscriptContent {
+struct CoreTranscriptContent {
   let rows: CoreRows
   let metrics: TerminalMetrics
 

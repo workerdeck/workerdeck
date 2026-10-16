@@ -56,7 +56,7 @@ struct SessionActivityWidget: Widget {
 }
 
 // The deep link a tap produces, in the same shape a notification tap does, so both land through one
-// `PushRoute` and one `deepLinkSeqSurvives` rule.
+// `PushRoute` and one epoch rule in the core.
 private func sessionURL(_ attributes: SessionActivityAttributes, _ state: SessionActivityAttributes.ContentState) -> URL? {
   var components = URLComponents()
   components.scheme = "workerdeck"

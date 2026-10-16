@@ -7,7 +7,7 @@ import Foundation
 
 /// The transcript's own reading: the reducer's per-window map plus its **one**
 /// clock for the whole map (the `ts` of the newest `rate_limit` event of any
-/// window - see `TranscriptState.rateLimitsUpdatedAt`).
+/// window).
 public struct SessionUsage: Sendable, Equatable {
   public let rateLimits: [String: RateLimitInfo]?
   public let updatedAt: Double?

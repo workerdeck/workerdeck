@@ -25,8 +25,7 @@ import WorkerDeckKit
 ///    set to where its body column starts. So N planned lines are N line
 ///    fragments of exactly `line` points, and the height the book handed the
 ///    layout is the height the text actually occupies - by construction, not by
-///    agreement. `TerminalRowCell.measuredHeight` is the gate that proves it
-///    (see `TerminalAudit.measureHeights`).
+///    agreement. `TerminalRowCell.measuredHeight` is the gate that proves it.
 ///
 /// 3. **Nothing here decides anything.** Where a line breaks, what it says, what
 ///    a tap on it does - all of that is already in the plan. This puts it on
@@ -356,7 +355,7 @@ struct TerminalRowGeometry {
   /// The nested rule's own column, drawn inside the padding so a subagent's
   /// indent stays exactly two cells.
   func nestedOffset(_ line: TermLine) -> CGFloat {
-    line.nested ? TerminalPlanner.nestedIndentCells * metrics.cell : 0
+    line.nested ? 2 * metrics.cell : 0
   }
 
   func gutterX(_ line: TermLine) -> CGFloat {
