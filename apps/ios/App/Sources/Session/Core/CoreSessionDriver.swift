@@ -57,6 +57,7 @@ struct CoreSessionUi: @unchecked Sendable {
   var peek: CoreRailPeek?
   var focus: TranscriptFocusRequest?
   var seen: CoreSeen?
+  var composer = CoreComposerContext()
 }
 
 // What a read mark records once the replay settled: the items on screen and the attach snapshot's rollup counters.
@@ -157,7 +158,11 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   func resize(_ metrics: Metrics) { worker.act { $0.resize(metrics: metrics) } }
   func press(row: Int, line: Int) { worker.act { $0.pressLine(row: UInt32(row), line: UInt32(line)) } }
   func reconnect() { worker.act { $0.reconnectNow() } }
-  func send(_ text: String) { worker.act { $0.send(text: text, attachmentIds: []) } }
+  func send(_ text: String, attachmentIds: [String]) {
+    worker.act { $0.send(text: text, attachmentIds: attachmentIds) }
+  }
+
+  func backgroundTask() { worker.act { $0.backgroundTask(toolUseId: nil) } }
   func runShell(_ command: String) { worker.act { $0.runShell(command: command) } }
   func interrupt() { worker.act { $0.interrupt() } }
   func clearContext() { worker.act { $0.clearContext() } }
@@ -366,7 +371,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private func open(_ afterSeq: Int64) {
     if let fixture {
       worker.opened()
-      fixture.forEach(worker.received)
+      fixture.forEach(feed)
       return
     }
     let mine = bump()
@@ -390,10 +395,10 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       guard let self, self.current(task) else { return }
       switch result {
       case .success(.string(let text)):
-        self.worker.received(text)
+        self.feed(text)
         self.receive(task)
       case .success(.data(let data)):
-        if let text = String(data: data, encoding: .utf8) { self.worker.received(text) }
+        if let text = String(data: data, encoding: .utf8) { self.feed(text) }
         self.receive(task)
       case .success:
         self.receive(task)
@@ -432,7 +437,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private func sendFrame(_ id: UInt64, _ text: String) {
     if fixture != nil {
       worker.act { $0.sendDone(id: id, ok: true) }
-      CoreReplayFixture.replies(to: text).forEach(worker.received)
+      CoreReplayFixture.replies(to: text).forEach(feed)
       return
     }
     guard let socket else {
@@ -486,7 +491,9 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.modelPicker = session.modelPicker()
       ui.modePicker = session.modePicker()
       ui.canRunShell = session.canRunShell()
+      ui.composer.read(sessionInfoJson: session.sessionInfoJson())
     }
+    if changed.transcript || changed.chrome { ui.composer.canSendNow = backgroundable() }
     if changed.prompt { ui.prompt = session.prompt() }
     if (changed.prompt || changed.transcript) && ui.prompt?.kind == .plan {
       ui.planLines = (try? Snapshots.transcriptLines(session.promptPlanLines()))?.rows.first ?? []
@@ -505,6 +512,24 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       if pending != nil, !ui.main.rows.isEmpty { enter() }
     }
     publish(ui)
+  }
+
+  // The composer's lists ride frames the core folds but does not hand out, so they are read on their way in.
+  private func feed(_ text: String) {
+    if CoreComposerContext.mayCarryLists(text) {
+      worker.act { [self] _ in
+        if ui.composer.absorb(text) { publish(ui) }
+        return []
+      }
+    }
+    worker.received(text)
+  }
+
+  // Walks back through the current turn only: a running call is never older than the last prompt.
+  private func backgroundable() -> Bool {
+    let rows = ui.main.rows.count
+    let floor = max(ui.main.promptRows.last ?? 0, rows - 24, 0)
+    return (floor..<rows).reversed().contains { session.rowMenu(row: UInt32($0))?.backgroundCallId != nil }
   }
 
   private func enter() {
