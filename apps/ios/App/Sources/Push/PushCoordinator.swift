@@ -1,6 +1,7 @@
 import Observation
 import UIKit
 import UserNotifications
+import WorkerDeckCore
 import WorkerDeckKit
 
 /// Everything push: authorization, the device token, per-host registration, and
@@ -170,10 +171,10 @@ final class PushCoordinator {
       return
     }
     do {
-      try await client.resolvePermission(
-        sessionId: payload.sessionId,
-        requestId: requestId,
-        allow ? .allow() : .deny(message: "Denied from a notification", interrupt: false))
+      let decision: PermissionDecision =
+        allow ? .allow(updatedInputJson: nil) : .deny(message: "Denied from a notification", interrupt: false)
+      try await client.perform(
+        resolvePermissionCall(sessionId: payload.sessionId, requestId: requestId, decision: decision))
     } catch {
       // It may have expired, or been answered on the desktop a second earlier.
       // Either way the tap deserves an answer rather than silence.

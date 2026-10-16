@@ -15,9 +15,9 @@ let package = Package(
     .library(name: "WorkerDeckSession", targets: ["WorkerDeckSession"]),
   ],
   targets: [
-    .target(name: "WorkerDeckKit"),
+    .target(name: "WorkerDeckKit", dependencies: ["WorkerDeckCore"]),
     .target(name: "WorkerDeckActivity"),
-    .testTarget(name: "WorkerDeckKitTests", dependencies: ["WorkerDeckKit"]),
+    .testTarget(name: "WorkerDeckKitTests", dependencies: ["WorkerDeckKit", "WorkerDeckCore"]),
     .testTarget(
       name: "WorkerDeckActivityTests", dependencies: ["WorkerDeckActivity"],
       resources: [.copy("Fixtures")]),

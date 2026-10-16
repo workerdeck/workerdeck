@@ -1032,82 +1032,6 @@ public struct WriteHostFileRequest: Encodable, Sendable, Equatable {
   }
 }
 
-// MARK: - Permission resolution over REST
-
-/// Body of `POST /sessions/:id/permissions/:requestId` - the REST counterpart of
-/// the WS `permission_decision` command (e.g. answering from a push notification).
-public enum ResolvePermissionRequest: Sendable, Equatable {
-  case allow(updatedInput: [String: JSONValue]? = nil)
-  case deny(message: String? = nil, interrupt: Bool? = nil)
-}
-
-extension ResolvePermissionRequest: Encodable {
-  private enum CodingKeys: String, CodingKey {
-    case behavior, updatedInput, message, interrupt
-  }
-
-  public func encode(to encoder: Encoder) throws {
-    var container = encoder.container(keyedBy: CodingKeys.self)
-    switch self {
-    case .allow(let updatedInput):
-      try container.encode("allow", forKey: .behavior)
-      try container.encodeIfPresent(updatedInput, forKey: .updatedInput)
-    case .deny(let message, let interrupt):
-      try container.encode("deny", forKey: .behavior)
-      try container.encodeIfPresent(message, forKey: .message)
-      try container.encodeIfPresent(interrupt, forKey: .interrupt)
-    }
-  }
-}
-
-/// Body of `PATCH /sessions/:id` - mirrors protocol's `UpdateSessionRequest`.
-///
-/// `title` is a three-state field and the encoding has to keep all three: a
-/// string renames, an explicit `null` clears the override (restoring the derived
-/// title), and *absent* leaves it alone. `String?` alone would collapse the last
-/// two, so the wrapper spells the distinction out.
-public struct UpdateSessionRequest: Encodable, Sendable {
-  public enum TitleEdit: Sendable {
-    case set(String)
-    case clear
-  }
-
-  public enum StatusEdit: Sendable {
-    case set(text: String, emoji: String?)
-    case clear
-  }
-
-  public let title: TitleEdit?
-  public let statusLabel: StatusEdit?
-
-  public init(title: TitleEdit? = nil, statusLabel: StatusEdit? = nil) {
-    self.title = title
-    self.statusLabel = statusLabel
-  }
-
-  private enum CodingKeys: String, CodingKey { case title, statusLabel }
-
-  private struct StatusInput: Encodable {
-    let text: String
-    let emoji: String?
-  }
-
-  public func encode(to encoder: any Encoder) throws {
-    var container = encoder.container(keyedBy: CodingKeys.self)
-    switch title {
-    case .set(let value): try container.encode(value, forKey: .title)
-    case .clear: try container.encodeNil(forKey: .title)
-    case nil: break
-    }
-    switch statusLabel {
-    case .set(let text, let emoji):
-      try container.encode(StatusInput(text: text, emoji: emoji), forKey: .statusLabel)
-    case .clear: try container.encodeNil(forKey: .statusLabel)
-    case nil: break
-    }
-  }
-}
-
 // MARK: - Response envelopes
 
 public struct ListSessionsResponse: Decodable, Sendable {
@@ -1216,8 +1140,4 @@ public struct ToolResultResponse: Decodable, Sendable, Equatable {
 
   /// The result as one string, by the same rule the reducer folds a block with.
   public var text: String { content?.joinedText ?? "" }
-}
-
-public struct ErrorResponse: Decodable, Sendable {
-  public let error: String
 }

@@ -1124,7 +1124,7 @@ still `in_progress` on a session whose turn has ended (`sessionLive`) draws as *
 running: the agent forgot to settle it, and a spinner would claim work that is not happening.
 
 A running shell and a task the engine marks `stoppable` carry a **stop button** on their row
-(`WorkerClient.killShell` / `stopTask`, the latter `POST /sessions/:id/tasks/:toolUseId/stop`). It
+(the core's `killShellCall` / `stopTaskCall`, the latter `POST /sessions/:id/tasks/:toolUseId/stop`). It
 is a `.borderless` button inside the row's `NavigationLink`, which is what gives it a target of its
 own; the UI test presses it and checks nothing was pushed. The card and its steps read as **one
 block**: step rows lower the list's minimum row height to 30pt (`defaultMinListRowHeight`), start

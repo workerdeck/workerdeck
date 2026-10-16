@@ -1,18 +1,13 @@
 import Foundation
+import WorkerDeckCore
 
 #if canImport(FoundationNetworking)
   import FoundationNetworking
 #endif
 
-/// A failed workerdeck call.
-///
-/// Mirrors the reference client's `#call`: when the server answered with a JSON
-/// body carrying `{"error": "..."}` that message is used verbatim, otherwise the
-/// message is synthesized as `"METHOD path failed with STATUS"`.
+// A failed call, as the core classified the answer (`restError`): the gateway's own `{"error"}` when it gave one.
 public struct WorkerClientError: Error, LocalizedError, Equatable, Sendable {
-  /// Server-supplied message when the body had one, else a synthesized summary.
   public let message: String
-  /// HTTP status, when the failure came from a response (nil for transport/URL errors).
   public let statusCode: Int?
 
   public init(message: String, statusCode: Int? = nil) {
@@ -20,24 +15,18 @@ public struct WorkerClientError: Error, LocalizedError, Equatable, Sendable {
     self.statusCode = statusCode
   }
 
+  public init(_ error: RestError) {
+    self.init(message: error.message, statusCode: Int(error.status))
+  }
+
   public var errorDescription: String? { message }
 }
 
-/// REST + WebSocket client for a workerdeck gateway.
-///
-/// Swift port of `WorkerDeckClient` (packages/client/src/index.ts). The job
-/// queue surface (`/jobs`, `/queue`) is deliberately not mirrored yet - it is a
-/// later phase of the mobile plan.
-///
-/// Auth is the header transport: a native client is not a browser, so it never
-/// relies on the login cookie the dashboard uses. `authKey` rides as
-/// `Authorization: Bearer <key>` on every REST request *and* on the WebSocket
-/// handshake (URLSession can set handshake headers; a browser cannot, which is
-/// the whole reason the server also accepts a cookie).
+// The transport for a gateway: the core names every call (`HttpCall`) and classifies every answer; this moves the
+// bytes and carries the key as `Authorization: Bearer`, on REST and on the socket handshake alike.
 public struct WorkerClient: Sendable {
-  /// REST base including the version path, e.g. `http://127.0.0.1:8787/v1`.
+  // REST base including the version path, e.g. `http://127.0.0.1:8787/v1`.
   public let baseURL: URL
-  /// Bearer token, or nil for an unauthenticated server.
   public let authKey: String?
 
   private let urlSession: URLSession
@@ -48,52 +37,67 @@ public struct WorkerClient: Sendable {
     self.urlSession = urlSession
   }
 
+  // MARK: - Transport
+
+  // A JSON answer: anything else, or a refusal, throws as the core reads it.
+  @discardableResult
+  public func perform(_ call: HttpCall) async throws -> Data {
+    let (data, response) = try await send(call)
+    let status = UInt16(clamping: response.statusCode)
+    let contentType = response.value(forHTTPHeaderField: "content-type")
+    if let error = restError(status: status, contentType: contentType, body: String(decoding: data, as: UTF8.self)) {
+      throw WorkerClientError(error)
+    }
+    return data
+  }
+
+  // Bytes (pictures, files, shell output): any 2xx is the answer, a refusal still reads as the core says.
+  public func fetch(_ call: HttpCall) async throws -> (Data, HTTPURLResponse) {
+    let (data, response) = try await send(call)
+    guard (200..<300).contains(response.statusCode) else {
+      let status = UInt16(clamping: response.statusCode)
+      let contentType = response.value(forHTTPHeaderField: "content-type")
+      let error = restError(status: status, contentType: contentType, body: String(decoding: data, as: UTF8.self))
+      throw error.map(WorkerClientError.init) ?? WorkerClientError(message: "The gateway answered \(status)", statusCode: Int(status))
+    }
+    return (data, response)
+  }
+
+  private func send(_ call: HttpCall) async throws -> (Data, HTTPURLResponse) {
+    var request = URLRequest(url: try makeURL(call.path))
+    request.httpMethod = call.method
+    if let body = call.body {
+      request.setValue("application/json", forHTTPHeaderField: "content-type")
+      request.httpBody = Data(body.utf8)
+    }
+    applyAuth(&request)
+    let (data, response) = try await urlSession.data(for: request)
+    guard let http = response as? HTTPURLResponse else {
+      throw WorkerClientError(message: "The gateway did not answer")
+    }
+    return (data, http)
+  }
+
   // MARK: - Sessions
 
-  /// Start a session. The returned info's `id` is what every other session route takes (not the underlying SDK session id).
+  // The start of a session; the returned id is what every session route takes (not the engine's own id).
   public func createSession(_ request: CreateSessionRequest) async throws -> SessionInfo {
     let data = try await call("POST", "/sessions", body: request)
     return try decode(SessionResponse.self, from: data).session
   }
 
   public func listSessions() async throws -> [SessionInfo] {
-    let data = try await call("GET", "/sessions")
-    return try decode(ListSessionsResponse.self, from: data).sessions
+    try await listSessionsBody().sessions
   }
 
-  // The same list plus the body as received, for a reader (the native core) that decodes it on its own.
+  // The same list plus the body as received, for the core's list view model.
   public func listSessionsBody() async throws -> (sessions: [SessionInfo], body: String) {
-    let data = try await call("GET", "/sessions")
+    let data = try await perform(listSessionsCall())
     return (try decode(ListSessionsResponse.self, from: data).sessions, String(decoding: data, as: UTF8.self))
   }
 
   public func getSession(id: String) async throws -> SessionInfo {
-    let data = try await call("GET", "/sessions/\(Self.encodeComponent(id))")
-    return try decode(SessionResponse.self, from: data).session
-  }
-
-  /// Rename a session - a gateway edit, so the dashboard and the VS Code
-  /// extension see the same name. Never a local override: a title only this
-  /// device knows is a title nobody else can search for.
-  @discardableResult
-  public func updateSession(id: String, _ patch: UpdateSessionRequest) async throws -> SessionInfo {
-    let data = try await call("PATCH", "/sessions/\(Self.encodeComponent(id))", body: patch)
-    return try decode(SessionResponse.self, from: data).session
-  }
-
-  /// Stop the session's engine child while the session stays listed; the next
-  /// message resumes it. A 409 carries the gateway's reason for refusing.
-  @discardableResult
-  public func sleepSession(id: String) async throws -> SessionInfo {
-    let data = try await call("POST", "/sessions/\(Self.encodeComponent(id))/sleep")
-    return try decode(SessionResponse.self, from: data).session
-  }
-
-  /// Terminate a session. Returns its final snapshot.
-  @discardableResult
-  public func deleteSession(id: String) async throws -> SessionInfo {
-    let data = try await call("DELETE", "/sessions/\(Self.encodeComponent(id))")
-    return try decode(SessionResponse.self, from: data).session
+    try decode(SessionResponse.self, from: try await perform(getSessionCall(id: id))).session
   }
 
   /// List the files in a session's scratch filesystem (deliverables the agent
@@ -107,22 +111,17 @@ public struct WorkerClient: Sendable {
   /// Download one session file. Returned as bytes so binary deliverables survive;
   /// decode with `String(decoding:as:)` for text.
   public func fetchSessionFile(sessionId: String, path: String) async throws -> Data {
-    let url = try sessionFileURL(sessionId: sessionId, path: path)
-    var request = URLRequest(url: url)
-    request.httpMethod = "GET"
-    applyAuth(&request)
-    let (data, response) = try await urlSession.data(for: request)
-    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    guard (200..<300).contains(status) else {
-      throw Self.error(from: data, status: status, summary: "GET file")
-    }
-    return data
+    try await raw(Self.sessionFilePath(sessionId, path)).0
   }
 
   /// Direct download URL for a session file. Carries no headers - on an
   /// authenticated server use `fetchSessionFile` instead.
   public func sessionFileURL(sessionId: String, path: String) throws -> URL {
-    try makeURL("/sessions/\(Self.encodeComponent(sessionId))/files/\(Self.encodeFilePath(path))")
+    try makeURL(Self.sessionFilePath(sessionId, path))
+  }
+
+  private static func sessionFilePath(_ sessionId: String, _ path: String) -> String {
+    "/sessions/\(encodeComponent(sessionId))/files/\(encodeFilePath(path))"
   }
 
   // MARK: - Attachments
@@ -147,9 +146,10 @@ public struct WorkerClient: Sendable {
     request.setValue(mediaType, forHTTPHeaderField: "content-type")
     applyAuth(&request)
     let (body, response) = try await urlSession.upload(for: request, from: data)
-    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    guard (200..<300).contains(status) else {
-      throw Self.error(from: body, status: status, summary: "POST attachment")
+    let status = UInt16(clamping: (response as? HTTPURLResponse)?.statusCode ?? 0)
+    let contentType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "content-type")
+    if let error = restError(status: status, contentType: contentType, body: String(decoding: body, as: UTF8.self)) {
+      throw WorkerClientError(error)
     }
     return try decode(UploadAttachmentResponse.self, from: body).attachment
   }
@@ -157,18 +157,7 @@ public struct WorkerClient: Sendable {
   /// Download an attachment's bytes. Header auth means the phone fetches these
   /// itself rather than pointing an image view at a URL.
   public func fetchAttachment(sessionId: String, attachmentId: String) async throws -> Data {
-    var request = URLRequest(
-      url: try makeURL(
-        "/sessions/\(Self.encodeComponent(sessionId))/attachments/\(Self.encodeComponent(attachmentId))"
-      ))
-    request.httpMethod = "GET"
-    applyAuth(&request)
-    let (data, response) = try await urlSession.data(for: request)
-    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    guard (200..<300).contains(status) else {
-      throw Self.error(from: data, status: status, summary: "GET attachment")
-    }
-    return data
+    try await raw("/sessions/\(Self.encodeComponent(sessionId))/attachments/\(Self.encodeComponent(attachmentId))").0
   }
 
   // MARK: - MCP
@@ -189,19 +178,6 @@ public struct WorkerClient: Sendable {
       "/sessions/\(Self.encodeComponent(sessionId))/mcp/\(Self.encodeComponent(serverName))",
       body: McpServerActionRequest(action: action))
     return try decode(McpServersResponse.self, from: data).servers
-  }
-
-  /// Resolve a pending permission over REST - the counterpart of the WS
-  /// `permission_decision` command, for answering from a push notification or
-  /// any context without a live attach. Throws when the request is unknown,
-  /// already resolved, or expired.
-  public func resolvePermission(
-    sessionId: String, requestId: String, _ decision: ResolvePermissionRequest
-  ) async throws {
-    _ = try await call(
-      "POST",
-      "/sessions/\(Self.encodeComponent(sessionId))/permissions/\(Self.encodeComponent(requestId))",
-      body: decision)
   }
 
   // MARK: - Shells
@@ -231,49 +207,16 @@ public struct WorkerClient: Sendable {
   ) async throws -> String {
     var suffix = "?view=\(view.rawValue)"
     if let tail { suffix += "&tail=\(tail)" }
-    let data = try await call(
-      "GET",
-      "/sessions/\(Self.encodeComponent(sessionId))/shells/\(Self.encodeComponent(shellId))/output\(suffix)"
-    )
+    let (data, _) = try await raw(
+      "/sessions/\(Self.encodeComponent(sessionId))/shells/\(Self.encodeComponent(shellId))/output\(suffix)")
     return String(decoding: data, as: UTF8.self)
-  }
-
-  /// Kill a running shell's process group. Answers with the settled record.
-  @discardableResult
-  public func killShell(sessionId: String, shellId: String) async throws -> ShellInfo {
-    let data = try await call(
-      "POST",
-      "/sessions/\(Self.encodeComponent(sessionId))/shells/\(Self.encodeComponent(shellId))/kill")
-    return try decode(ShellResponse.self, from: data).shell
-  }
-
-  /// Stop a running background task (a backgrounded Bash, a spawned task) by
-  /// the `tool_use` id that started it. Only offered where the record says
-  /// `stoppable`; a 404 means it had already finished.
-  public func stopTask(sessionId: String, toolUseId: String) async throws {
-    _ = try await call(
-      "POST",
-      "/sessions/\(Self.encodeComponent(sessionId))/tasks/\(Self.encodeComponent(toolUseId))/stop")
-  }
-
-  // Moves a running foreground Bash or subagent call to the background; nil moves every one.
-  // 404 when nothing matched, 501 when the engine cannot.
-  public func backgroundTask(sessionId: String, toolUseId: String? = nil) async throws {
-    let task = toolUseId.map { "/tasks/\(Self.encodeComponent($0))/background" } ?? "/tasks/background"
-    _ = try await call("POST", "/sessions/\(Self.encodeComponent(sessionId))\(task)")
   }
 
   // MARK: - Profiles
 
-  /// The profiles this caller may use, plus whether it may create new ones.
-  /// Servers predating profiles 404 here - catch and treat as none declared.
-  public func listProfiles() async throws -> ListProfilesResponse {
-    try await listProfilesWithBody().response
-  }
-
-  // The body as received too, for the core's profile-aware view models.
+  // Servers predating profiles 404 here; the body is for the core's profile-aware view models.
   public func listProfilesWithBody() async throws -> (response: ListProfilesResponse, body: String) {
-    let data = try await call("GET", "/profiles")
+    let data = try await perform(listProfilesCall())
     return (try decode(ListProfilesResponse.self, from: data), String(decoding: data, as: UTF8.self))
   }
 
@@ -366,9 +309,7 @@ public struct WorkerClient: Sendable {
   /// generated PNG is routinely megabytes, which is what made the old path
   /// fail by default.
   public func readProducedFile(sessionId: String, fileId: String) async throws -> Data {
-    try await call(
-      "GET",
-      "/sessions/\(Self.encodeComponent(sessionId))/produced/\(Self.encodeComponent(fileId))")
+    try await raw("/sessions/\(Self.encodeComponent(sessionId))/produced/\(Self.encodeComponent(fileId))").0
   }
 
   /// The bytes behind a `ProjectIcon.image` - the session-scoped icon route.
@@ -388,65 +329,26 @@ public struct WorkerClient: Sendable {
   /// would say *why* a path was refused). Treat it as "draw no image", never
   /// as an error worth reporting.
   public func projectIcon(sessionId: String) async throws -> Data {
-    try await call("GET", "/sessions/\(Self.encodeComponent(sessionId))/project/icon")
+    try await raw("/sessions/\(Self.encodeComponent(sessionId))/project/icon").0
   }
 
   // MARK: - Agents
 
-  public func meta() async throws -> GatewayMeta {
-    try decode(GatewayMeta.self, from: try await call("GET", "/meta"))
-  }
-
-  // `GET /v1/meta` and `GET /v1/profiles` as received, for the native core, which decodes them on its own.
-  public func metaBody() async throws -> String {
-    String(decoding: try await call("GET", "/meta"), as: UTF8.self)
-  }
-
-  public func profilesBody() async throws -> String {
-    String(decoding: try await call("GET", "/profiles"), as: UTF8.self)
-  }
-
   // Operator-only: a gateway without agents, or a scoped caller, answers 404.
-  public func listAgents() async throws -> [AgentInfo] {
-    try decode(AgentsResponse.self, from: try await call("GET", "/agents")).agents
-  }
-
   @discardableResult
   public func createAgent(_ request: CreateAgentRequest) async throws -> AgentResponse {
     try decode(AgentResponse.self, from: try await call("POST", "/agents", body: request))
   }
 
-  @discardableResult
-  public func updateAgent(id: String, _ patch: UpdateAgentRequest) async throws -> AgentResponse {
-    try decode(AgentResponse.self, from: try await call("PATCH", Self.agentPath(id), body: patch))
-  }
-
-  @discardableResult
-  public func restartAgent(id: String, prompt: String? = nil) async throws -> AgentResponse {
-    let body = prompt.map { ["prompt": $0] } ?? [:]
-    return try decode(
-      AgentResponse.self, from: try await call("POST", Self.agentPath(id, "/restart"), body: body))
-  }
-
-  @discardableResult
-  public func retireAgent(id: String, _ request: RetireAgentRequest = RetireAgentRequest())
-    async throws -> RetireAgentResponse
-  {
-    try decode(
-      RetireAgentResponse.self, from: try await call("DELETE", Self.agentPath(id), body: request))
-  }
-
-  @discardableResult
-  public func changeAgentAvatar(id: String, seed: String? = nil) async throws -> AgentResponse {
-    let body = seed.map { ["seed": $0] } ?? [:]
-    return try decode(
-      AgentResponse.self, from: try await call("POST", Self.agentPath(id, "/avatar"), body: body))
+  // A new conversation for the agent: the session it started, when the gateway says.
+  public func restartAgent(id: String, prompt: String? = nil) async throws -> SessionInfo? {
+    try decode(AgentResponse.self, from: try await perform(restartAgentCall(id: id, prompt: prompt))).session
   }
 
   // `durations` is set on the busy strip only: one entry per frame, frames laid out left to right.
   public func agentAvatar(id: String, busy: Bool = false) async throws -> AgentAvatarImage {
     let path = Self.agentPath(id, busy ? "/avatar-busy.png" : "/avatar.png")
-    let (data, response) = try await callRaw("GET", path)
+    let (data, response) = try await raw(path)
     return AgentAvatarImage(
       data: data, durations: frameDurations(response.value(forHTTPHeaderField: "x-frame-durations")))
   }
@@ -494,15 +396,12 @@ public struct WorkerClient: Sendable {
   public func toolResultImage(
     sessionId: String, seq: Int, toolUseId: String, partIndex: Int
   ) async throws -> Data {
-    try await call(
-      "GET",
-      "/sessions/\(Self.encodeComponent(sessionId))/events/\(seq)/result"
-        + "?toolUseId=\(Self.encodeComponent(toolUseId))&part=\(partIndex)")
+    try await raw(resultImagePath(sessionId: sessionId, seq: Int64(seq), toolUseId: toolUseId, partIndex: Int64(partIndex))).0
   }
 
   // Raw bytes at a path under the REST base, as the core names one (a produced file, a host `/fs/read`).
   public func bytes(path: String) async throws -> Data {
-    try await call("GET", path)
+    try await raw(path).0
   }
 
   // MARK: - Plumbing
@@ -512,29 +411,15 @@ public struct WorkerClient: Sendable {
     request.setValue("Bearer \(authKey)", forHTTPHeaderField: "Authorization")
   }
 
+  // A route this client still names itself; R2 and R3 move them into the core.
   @discardableResult
-  private func call(_ method: String, _ path: String, body: (any Encodable)? = nil) async throws
-    -> Data
-  {
-    try await callRaw(method, path, body: body).0
+  private func call(_ method: String, _ path: String, body: (any Encodable)? = nil) async throws -> Data {
+    let json = try body.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
+    return try await perform(HttpCall(method: method, path: path, body: json))
   }
 
-  private func callRaw(_ method: String, _ path: String, body: (any Encodable)? = nil) async throws
-    -> (Data, HTTPURLResponse)
-  {
-    var request = URLRequest(url: try makeURL(path))
-    request.httpMethod = method
-    if let body {
-      request.setValue("application/json", forHTTPHeaderField: "content-type")
-      request.httpBody = try JSONEncoder().encode(body)
-    }
-    applyAuth(&request)
-    let (data, response) = try await urlSession.data(for: request)
-    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-    guard (200..<300).contains(status) else {
-      throw Self.error(from: data, status: status, summary: "\(method) \(path)")
-    }
-    return (data, response as? HTTPURLResponse ?? HTTPURLResponse())
+  private func raw(_ path: String) async throws -> (Data, HTTPURLResponse) {
+    try await fetch(HttpCall(method: "GET", path: path, body: nil))
   }
 
   private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
@@ -555,12 +440,6 @@ public struct WorkerClient: Sendable {
     var string = url.absoluteString
     while string.hasSuffix("/") { string.removeLast() }
     return string
-  }
-
-  private static func error(from data: Data, status: Int, summary: String) -> WorkerClientError {
-    let message = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.error
-    return WorkerClientError(
-      message: message ?? "\(summary) failed with \(status)", statusCode: status)
   }
 
   // MARK: - Percent encoding

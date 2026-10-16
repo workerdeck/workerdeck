@@ -2,6 +2,7 @@ import Foundation
 import LocalAuthentication
 import UIKit
 import WorkerDeckActivity
+import WorkerDeckCore
 import WorkerDeckKit
 
 /// Performs a Live Activity button, in the app process.
@@ -40,7 +41,8 @@ struct ActivityActionHandler {
 
     await activities.paint(sessionId: sessionId, hostId: hostId, decision: SessionActivityDecision.sending)
     do {
-      try await client.resolvePermission(sessionId: sessionId, requestId: requestId(of: action), decision)
+      try await client.perform(
+        resolvePermissionCall(sessionId: sessionId, requestId: requestId(of: action), decision: decision))
       await activities.paint(sessionId: sessionId, hostId: hostId, decision: SessionActivityDecision.sent)
     } catch let error as WorkerClientError {
       // 404 is answered-or-expired, 409 is parked. Both are the server telling the truth, and its
@@ -104,19 +106,20 @@ struct ActivityActionHandler {
 
   // MARK: - Decisions
 
-  private func decision(for action: SessionActivityAction, sessionId: String, hostId: String?) -> ResolvePermissionRequest? {
+  private func decision(for action: SessionActivityAction, sessionId: String, hostId: String?) -> PermissionDecision? {
     switch action {
     case .approve:
-      return .allow()
+      return .allow(updatedInputJson: nil)
     case .deny:
       return .deny(message: "Denied from the Live Activity", interrupt: false)
     case .choose(_, _, _, let choiceIndex):
       guard
         let request = activities.request(sessionId: sessionId, hostId: hostId),
         let inputJSON = request.inputJSON,
-        let updated = answeredInput(inputJSON: inputJSON, choiceIndex: choiceIndex)
+        let updated = answeredInput(inputJSON: inputJSON, choiceIndex: choiceIndex),
+        let json = try? JSONEncoder().encode(updated)
       else { return nil }
-      return .allow(updatedInput: updated)
+      return .allow(updatedInputJson: String(decoding: json, as: UTF8.self))
     }
   }
 

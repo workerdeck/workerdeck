@@ -27,8 +27,11 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     `@workerdeck/protocol` (see `WorkerProtocol.version`, kept in lockstep with
     `PROTOCOL_VERSION`): the REST records and the Live Activity's types only. The session socket's
     frames and events are decoded by the core.
-  - `WorkerClient.swift` - the REST client. Auth is `Authorization: Bearer <key>`; the session
-    socket is the core's.
+  - `WorkerClient.swift` - the REST transport. The core names each call (`HttpCall`: method,
+    base-relative path, JSON body) and classifies each answer (`restError`); `perform` moves the
+    bytes with `Authorization: Bearer <key>` and `fetch` takes raw bytes. Routes the core does not
+    name yet (create forms, files, MCP, shells) still build their paths here. The session socket is
+    the core's.
   - `ModelName.swift` - `friendlyModel`, a 1:1 port of the rule in
     `packages/ui/src/lib/format.ts`: `claude-haiku-4-5-20251001` → "Haiku 4.5". A port and it has
     to stay one - a sessions list is where the same person reads all three clients, and a model

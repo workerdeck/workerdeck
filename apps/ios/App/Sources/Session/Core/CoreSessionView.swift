@@ -79,7 +79,7 @@ struct CoreSessionView: View {
     .confirmationDialog("Close this session?", isPresented: $confirmClose, titleVisibility: .visible) {
       // Over REST rather than the socket: leaving tears the socket down at once, and a close must outlive the screen.
       Button("Close session", role: .destructive) {
-        if let client { Task { [sessionId] in _ = try? await client.deleteSession(id: sessionId) } }
+        if let client { Task { [sessionId] in _ = try? await client.perform(deleteSessionCall(id: sessionId)) } }
         dismiss()
       }
     } message: {

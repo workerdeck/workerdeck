@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+import WorkerDeckCore
 @testable import WorkerDeckKit
 
 #if canImport(FoundationNetworking)
@@ -12,6 +13,7 @@ import Testing
 private struct StubResponse: Sendable {
   var status: Int = 200
   var body: Data = Data("{}".utf8)
+  var contentType = "application/json; charset=utf-8"
 }
 
 /// Shared stub state for `StubURLProtocol`. Lock-guarded because URLProtocol
@@ -52,7 +54,8 @@ private final class StubURLProtocol: URLProtocol {
   override func startLoading() {
     let stub = StubStore.shared.handle(request)
     let response = HTTPURLResponse(
-      url: request.url!, statusCode: stub.status, httpVersion: "HTTP/1.1", headerFields: nil)!
+      url: request.url!, statusCode: stub.status, httpVersion: "HTTP/1.1",
+      headerFields: ["content-type": stub.contentType])!
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: stub.body)
     client?.urlProtocolDidFinishLoading(self)
@@ -137,9 +140,24 @@ struct WorkerClientTests {
     let client = makeStubClient()
 
     await #expect(throws: WorkerClientError(
-      message: "GET /sessions failed with 502", statusCode: 502)) {
+      message: "The gateway answered 502", statusCode: 502)) {
       _ = try await client.listSessions()
     }
+  }
+
+  @Test func anHtmlAnswerIsTheWrongAddressOrKey() async throws {
+    StubStore.shared.install { _ in StubResponse(body: Data("<html>".utf8), contentType: "text/html") }
+    let client = makeStubClient()
+    await #expect(throws: WorkerClientError(
+      message: "Not a WorkerDeck gateway, or the auth key is wrong", statusCode: 200)) {
+      _ = try await client.listSessions()
+    }
+  }
+
+  @Test func bytesAcceptAnyContentType() async throws {
+    StubStore.shared.install { _ in StubResponse(body: Data("png".utf8), contentType: "image/png") }
+    let client = makeStubClient()
+    #expect(try await client.bytes(path: "/sessions/s/produced/f") == Data("png".utf8))
   }
 
   @Test func percentEncodesPathSegments() async throws {
@@ -187,8 +205,9 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data("{}".utf8)) }
     let client = makeStubClient()
 
-    try await client.resolvePermission(
-      sessionId: "sess_1", requestId: "req_1", .deny(message: "not now", interrupt: true))
+    try await client.perform(
+      resolvePermissionCall(
+        sessionId: "sess_1", requestId: "req_1", decision: .deny(message: "not now", interrupt: true)))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "POST")
@@ -302,25 +321,11 @@ struct WorkerClientTests {
     }
   }
 
-  @Test func renameEncodesItsThreeStates() throws {
-    // A rename is a gateway edit, and `title` carries three meanings the wire
-    // has to keep apart: set it, clear the override (restoring the derived
-    // title), or leave it alone. A plain `String?` would encode the last two
-    // identically, and "clear" would silently become "don't touch".
-    let encode = { (patch: UpdateSessionRequest) in
-      String(decoding: try JSONEncoder().encode(patch), as: UTF8.self)
-    }
-    #expect(try encode(UpdateSessionRequest(title: .set("Parity work")))
-      == #"{"title":"Parity work"}"#)
-    #expect(try encode(UpdateSessionRequest(title: .clear)) == #"{"title":null}"#)
-    #expect(try encode(UpdateSessionRequest(title: nil)) == "{}")
-  }
-
   @Test func renamePatchesTheSessionRoute() async throws {
     StubStore.shared.install { _ in StubResponse(body: Data(sessionJSON.utf8)) }
     let client = makeStubClient()
 
-    _ = try await client.updateSession(id: "sess_1", UpdateSessionRequest(title: .set("Named")))
+    try await client.perform(updateSessionCall(id: "sess_1", patch: SessionPatch(title: .set(value: "Named"))))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "PATCH")
@@ -331,9 +336,8 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(sessionJSON.utf8)) }
     let client = makeStubClient()
 
-    let session = try await client.sleepSession(id: "sess_1")
+    try await client.perform(sleepSessionCall(id: "sess_1"))
 
-    #expect(session.id == "sess_1")
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "POST")
     #expect(request.url?.path == "/v1/sessions/sess_1/sleep")
@@ -346,7 +350,7 @@ struct WorkerClientTests {
     let client = makeStubClient()
 
     await #expect(throws: WorkerClientError(message: "session is running", statusCode: 409)) {
-      _ = try await client.sleepSession(id: "sess_1")
+      try await client.perform(sleepSessionCall(id: "sess_1"))
     }
   }
 
@@ -354,8 +358,8 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"ok":true}"#.utf8)) }
     let client = makeStubClient()
 
-    try await client.backgroundTask(sessionId: "sess_1", toolUseId: "tu_1")
-    try await client.backgroundTask(sessionId: "sess_1")
+    try await client.perform(backgroundTaskCall(sessionId: "sess_1", toolUseId: "tu_1"))
+    try await client.perform(backgroundTaskCall(sessionId: "sess_1"))
 
     let paths = StubStore.shared.requests.map { "\($0.httpMethod ?? "") \($0.url?.path ?? "")" }
     #expect(
@@ -374,7 +378,7 @@ struct WorkerClientTests {
       throws: WorkerClientError(
         message: "no foreground task to move to the background", statusCode: 404)
     ) {
-      try await client.backgroundTask(sessionId: "sess_1")
+      try await client.perform(backgroundTaskCall(sessionId: "sess_1"))
     }
   }
 }

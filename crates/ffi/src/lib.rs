@@ -15,6 +15,7 @@ mod bookmarks;
 mod list;
 mod pickers;
 mod prompt;
+mod rest;
 mod scrubber;
 mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
@@ -24,6 +25,7 @@ pub use list::{
 };
 pub use pickers::{ModePicker, ModeRow, ModelPicker, PickerRow};
 pub use prompt::{ChoiceKey, Prompt, PromptChoice, PromptKind, Question, QuestionOption, Selection};
+pub use rest::*;
 pub use scrubber::{ScrubBand, ScrubCluster, ScrubMark, ScrubPeek, ScrubPeekLine};
 pub use usage::{ContextSlice, ContextView, CostModelRow, CostView, SessionUsageView, Severity, SpendView, UsageWindowView};
 
@@ -760,16 +762,6 @@ pub fn gateway_names(base_urls: Vec<String>) -> Vec<String> {
 #[uniffi::export]
 pub fn cleartext_refusal(base_url: String) -> Option<String> {
     wd_native::vm::gateway::cleartext_refusal(&base_url)
-}
-
-#[uniffi::export]
-pub fn classify_answer(status: u16, content_type: Option<String>) -> Option<String> {
-    wd_native::vm::gateway::classify_answer(status, content_type.as_deref())
-}
-
-#[uniffi::export]
-pub fn answer_error(status: u16, content_type: Option<String>, body: String) -> Option<String> {
-    wd_native::vm::gateway::answer_error(status, content_type.as_deref(), &body)
 }
 
 #[uniffi::export]

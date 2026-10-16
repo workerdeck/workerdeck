@@ -5,6 +5,9 @@ use serde_json::{Map, Value};
 use std::fmt;
 use std::marker::PhantomData;
 
+pub mod calls;
+pub mod error;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entries<V>(pub Vec<(String, V)>);
 

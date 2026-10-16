@@ -517,8 +517,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       worker.act { $0.responded(id: id, status: status, body: body) }
       return
     }
-    let encoded = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(["/"])) ?? sessionId
-    let address = scoped ? "\(apiBase)/sessions/\(encoded)\(path)" : apiBase + path
+    let address = apiBase + sessionRequestCall(sessionId: sessionId, method: method, path: path, scoped: scoped).path
     guard let url = URL(string: address) else {
       worker.act { $0.responded(id: id, status: 0, body: "") }
       return

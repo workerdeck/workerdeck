@@ -175,8 +175,8 @@ final class SessionListModel {
   private func ensureMetas() async {
     for host in hostStore.hosts where !metaRead.contains(host.id) && snapshots[host.id]?.probe == .connected {
       guard let client = context(for: host.id)?.client,
-        let body = try? await client.metaBody(),
-        core.setMeta(hostId: host.id.uuidString, body: body)
+        let meta = try? await client.perform(metaCall()),
+        core.setMeta(hostId: host.id.uuidString, body: String(decoding: meta, as: UTF8.self))
       else { continue }
       metaRead.insert(host.id)
       revision &+= 1
@@ -358,7 +358,7 @@ final class SessionListModel {
   func close(_ item: ListItem) async {
     guard let hostId = item.hostUUID, let client = context(for: hostId)?.client else { return }
     do {
-      try await client.deleteSession(id: item.info.id)
+      try await client.perform(deleteSessionCall(id: item.info.id))
       // Its mark is noise now, and would count the whole history as read if the same id ever reappeared.
       unread.forget(host: hostId, sessionId: item.info.id)
       await refresh()
@@ -371,21 +371,21 @@ final class SessionListModel {
   func rename(_ item: ListItem, to title: String) async {
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
     await act(on: item) {
-      _ = try await $0.updateSession(
-        id: item.info.id, UpdateSessionRequest(title: trimmed.isEmpty ? .clear : .set(trimmed)))
+      try await $0.perform(
+        updateSessionCall(id: item.info.id, patch: SessionPatch(title: trimmed.isEmpty ? .clear : .set(value: trimmed))))
     }
   }
 
   func stopTask(_ item: ListItem, toolUseId: String) async {
-    await act(on: item) { try await $0.stopTask(sessionId: item.info.id, toolUseId: toolUseId) }
+    await act(on: item) { try await $0.perform(stopTaskCall(sessionId: item.info.id, toolUseId: toolUseId)) }
   }
 
   func sleep(_ item: ListItem) async {
-    await act(on: item) { _ = try await $0.sleepSession(id: item.info.id) }
+    await act(on: item) { try await $0.perform(sleepSessionCall(id: item.info.id)) }
   }
 
   func killShell(_ item: ListItem, shellId: String) async {
-    await act(on: item) { _ = try await $0.killShell(sessionId: item.info.id, shellId: shellId) }
+    await act(on: item) { try await $0.perform(killShellCall(sessionId: item.info.id, shellId: shellId)) }
   }
 
   private func act(on item: ListItem, _ body: (WorkerClient) async throws -> Void) async {
@@ -403,9 +403,8 @@ final class SessionListModel {
   func setStatus(_ item: ListItem, to text: String) async {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     await agentAct(on: item, "Could not set the status") {
-      _ = try await $0.updateSession(
-        id: item.info.id,
-        UpdateSessionRequest(statusLabel: trimmed.isEmpty ? .clear : .set(text: trimmed, emoji: nil)))
+      let label: StatusEdit = trimmed.isEmpty ? .clear : .set(text: trimmed, emoji: nil)
+      try await $0.perform(updateSessionCall(id: item.info.id, patch: SessionPatch(statusLabel: label)))
     }
   }
 
@@ -413,14 +412,14 @@ final class SessionListModel {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let agent = item.info.agent, !trimmed.isEmpty, trimmed != agent.name else { return }
     await agentAct(on: item, "Rename failed") {
-      _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(name: trimmed))
+      try await $0.perform(updateAgentCall(id: agent.id, patch: AgentPatch(name: trimmed)))
     }
   }
 
   func changeAvatar(_ item: ListItem) async {
     guard let agent = item.info.agent else { return }
     await agentAct(on: item, "Could not change the avatar") {
-      _ = try await $0.changeAgentAvatar(id: agent.id)
+      try await $0.perform(rerollAvatarCall(id: agent.id))
     }
   }
 
@@ -442,8 +441,8 @@ final class SessionListModel {
     let crossing = crossOwner ? true : nil
     await agentAct(on: item, "Could not join the team") { client in
       if let agent = item.info.agent {
-        try await client.updateAgent(
-          id: agent.id, UpdateAgentRequest(lead: .join(lead.agentId), crossOwner: crossing))
+        try await client.perform(
+          updateAgentCall(id: agent.id, patch: AgentPatch(lead: .set(value: lead.agentId), crossOwner: crossing)))
       } else {
         try await client.createAgent(
           CreateAgentRequest(lead: lead.agentId, adopt: item.info.id, crossOwner: crossing))
@@ -454,7 +453,7 @@ final class SessionListModel {
   func leave(_ item: ListItem) async {
     guard let agent = item.info.agent else { return }
     await agentAct(on: item, "Could not leave the team") {
-      _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(lead: .leave))
+      try await $0.perform(updateAgentCall(id: agent.id, patch: AgentPatch(lead: .clear)))
     }
   }
 
@@ -462,7 +461,7 @@ final class SessionListModel {
     let members = core.teamMembers(hostId: item.row.hostId, sessionId: item.row.sessionId)
     await agentAct(on: item, "Could not dissolve the team") { client in
       for id in members {
-        try await client.updateAgent(id: id, UpdateAgentRequest(lead: .leave))
+        try await client.perform(updateAgentCall(id: id, patch: AgentPatch(lead: .clear)))
       }
     }
   }
@@ -470,7 +469,7 @@ final class SessionListModel {
   func setSharing(_ item: ListItem, _ sharing: AgentSharing) async {
     guard let agent = item.info.agent else { return }
     await agentAct(on: item, "Could not change sharing") {
-      _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(sharing: sharing))
+      try await $0.perform(updateAgentCall(id: agent.id, patch: AgentPatch(sharing: sharing == .shared ? .shared : .private)))
     }
   }
 
@@ -478,7 +477,7 @@ final class SessionListModel {
     guard let agent = item.info.agent else { return nil }
     var started: SessionInfo?
     await agentAct(on: item, "Could not start a new conversation") {
-      started = try await $0.restartAgent(id: agent.id).session
+      started = try await $0.restartAgent(id: agent.id)
     }
     return started
   }
@@ -486,7 +485,7 @@ final class SessionListModel {
   func retire(_ item: ListItem) async {
     guard let agent = item.info.agent else { return }
     await agentAct(on: item, "Could not retire the agent") {
-      _ = try await $0.retireAgent(id: agent.id)
+      try await $0.perform(retireAgentCall(id: agent.id))
     }
   }
 

@@ -2479,10 +2479,28 @@ names where each module came from:
 | `controller/` | `TranscriptView` (the app's `TerminalTranscriptModel`: presses return effects such as `FetchResult` / `OpenSubagent` instead of calling closures), `ReplayHold`, `TranscriptSeqIndex`, `StickyPrompt`, `TranscriptScrollGeometry` |
 | `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `prompt` (`packages/ui`'s `permissionPromptModel`, `shell-request`, `question-answers`, plus the iOS whole-subject rule), `fmt`; ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
 | `rest.rs` | the REST/wire records the view models read (`SessionInfo`, `AgentInfo`, ...), serde camelCase, unknown fields ignored |
+| `rest/calls.rs`, `rest/error.rs` | the REST layer below: `WorkerClient.swift`'s paths and request bodies, and its error reading |
 | `markdown.rs` | `MarkdownBlocks.swift` and a portable inline parser (Apple's `AttributedString(markdown:)` is not available off Darwin, and differs on an unclosed `**`) |
 | `cells.rs` | `Terminal/TerminalCells.swift`: extended graphemes, the plain-ASCII fast path, the word wrapper |
 | `book.rs` | `Terminal/TerminalHeightBook.swift` + `TerminalPlanCache`; 256 or more misses plan in parallel |
 | `vt.rs` | `Terminal/VTScreen.swift` + `VTTypes.swift`; parsing is the `vte` crate, dispatch mirrors the Swift handlers |
+
+**The REST layer.** The core owns every route it names: path (under the API base, ids through
+`encode_component`), query, JSON body, and the reading of the answer. `rest::calls` has one builder
+per endpoint returning an `HttpCall { method, path, body }`; three-state fields (`title`,
+`statusLabel`, an agent's `lead`) are `Edit::Set` / `Edit::Clear` / absent. `rest::error::classify(status,
+content_type, body)` turns an answer into `RestError { status, kind, message }` with
+`answer_error`'s rules: status 0 is `Transport`, 401/403 `Auth`, anything not JSON (the dashboard's
+HTML behind a wrong key or path) `NotGateway`, then `NotFound`, `Conflict` and `Refused` carrying the
+gateway's own `{error}`; a 204 is a success. The FFI exports them as free functions (`*_call`,
+`session_request_call` for a live session's `Request` effect, `rest_error`). The apps keep only
+transport (Swift `WorkerClient.perform` / `fetch`, Kotlin `GatewayClient.perform`): base URL, auth
+header, TLS, timeouts, and byte fetches, where any 2xx is the answer. A body a core view model eats
+(`SessionList.set_host`, `set_meta`, `set_profiles`) goes to it whole. Moved so far (R1): sessions
+list, get, update, sleep, delete, stop and background task, kill shell, resolve permission, agents
+list, restart, retire, update, avatar reroll, meta, profiles. Create forms, SDK sessions and profile
+detail (R2), then files, host files, attachments, MCP, shells and tool results (R3) still build
+their routes in Swift, through the same transport.
 
 **Still missing**: the scrubber and the app-side view models (`CreateSessionModel`,
 prompt completion, unread). The plan, with its
