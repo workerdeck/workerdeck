@@ -109,7 +109,7 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(status: 201, body: Data(sessionJSON.utf8)) }
     let client = makeStubClient()
 
-    let session = try await client.createSession(CreateSessionRequest(cwd: "/repo", profile: "main"))
+    let session = try await client.createSession(CreateForm.session(cwd: "/repo").call())
 
     #expect(session.id == "sess_1")
     #expect(session.status == .running)
@@ -131,7 +131,7 @@ struct WorkerClientTests {
 
     await #expect(throws: WorkerClientError(
       message: "profile 'ghost' is not declared", statusCode: 400)) {
-      _ = try await client.createSession(CreateSessionRequest(cwd: "/repo", profile: "ghost"))
+      _ = try await client.createSession(CreateForm.session(cwd: "/repo").call())
     }
   }
 
@@ -193,7 +193,7 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"sdkSessions":[]}"#.utf8)) }
     let client = makeStubClient()
 
-    _ = try await client.listSdkSessions(dir: "/repo", limit: 10, offset: 5, profile: "codex")
+    _ = try await client.listSdkSessions(listSdkSessionsCall(dir: "/repo", limit: 10, offset: 5, profile: "codex"))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(

@@ -170,17 +170,23 @@ pub fn mode_summary(mode: PermissionMode) -> &'static str {
     }
 }
 
+pub fn mode_picker(state: &TranscriptState, default_mode: Option<PermissionMode>, can_bypass: Option<bool>) -> ModePicker {
+    let declared: Vec<PermissionMode> = state.capabilities.as_ref().map(|caps| caps.permission_modes.clone()).unwrap_or_default();
+    let current = state.permission_mode.as_deref();
+    mode_rows(&declared, |mode| current == Some(mode_wire(mode)), default_mode, can_bypass)
+}
+
 // Only the modes the engine declares, bypass pinned last; the CLI refuses to switch into bypass unless the session
 // was spawned for it, so it is greyed with the reason rather than hidden. An unknown `can_bypass` offers it.
-pub fn mode_picker(state: &TranscriptState, default_mode: Option<PermissionMode>, can_bypass: Option<bool>) -> ModePicker {
-    let declared: Vec<PermissionMode> = state
-        .capabilities
-        .as_ref()
-        .map(|caps| caps.permission_modes.iter().copied().filter(|mode| *mode != PermissionMode::Unknown).collect())
-        .unwrap_or_default();
+pub fn mode_rows(
+    declared: &[PermissionMode],
+    is_current: impl Fn(PermissionMode) -> bool,
+    default_mode: Option<PermissionMode>,
+    can_bypass: Option<bool>,
+) -> ModePicker {
+    let declared: Vec<PermissionMode> = declared.iter().copied().filter(|mode| *mode != PermissionMode::Unknown).collect();
     let bypass = PermissionMode::BypassPermissions;
     let ordered = declared.iter().filter(|mode| **mode != bypass).chain(declared.iter().filter(|mode| **mode == bypass));
-    let current = state.permission_mode.as_deref();
     let rows = ordered
         .map(|&mode| {
             let disabled = mode == bypass && can_bypass == Some(false);
@@ -188,7 +194,7 @@ pub fn mode_picker(state: &TranscriptState, default_mode: Option<PermissionMode>
                 mode,
                 title: mode_label(mode).to_owned(),
                 summary: if disabled { "Only available to a session started in this mode" } else { mode_summary(mode) }.to_owned(),
-                selected: current == Some(mode_wire(mode)),
+                selected: is_current(mode),
                 is_default: default_mode == Some(mode),
                 disabled,
             }

@@ -229,12 +229,6 @@ extension ToolResultContent: Codable {
   }
 }
 
-public enum QuestionBehavior: String, Codable, Sendable {
-  case ask
-  case auto
-  case deny
-}
-
 // MARK: - Capabilities (models / slash commands)
 
 public struct ModelOption: Codable, Sendable, Equatable, Identifiable {
@@ -418,8 +412,6 @@ public struct ContextReading: Decodable, Sendable, Equatable {
 
 /// Emitted only for claude.ai subscription sessions - API-key sessions may never
 /// produce one, so clients must render nothing (not 0%) until data arrives.
-/// Codable rather than Decodable because it also rides inside `ProfileInfo`
-/// (via `ProfileUsage`), whose whole record is Codable.
 public struct RateLimitInfo: Codable, Sendable, Equatable {
   /// 'allowed' | 'allowed_warning' | 'rejected' - kept as String, the SDK union may grow.
   public let status: String

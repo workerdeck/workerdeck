@@ -1,4 +1,5 @@
-use super::{Sharing, encode_component};
+use super::{AgentConfig, PermissionMode, Sharing, encode_component};
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 // One REST request under the API base (`.../v1`): the core names it, the platform moves the bytes. A `body` is JSON
@@ -58,6 +59,66 @@ pub enum PermissionDecision {
     Deny { message: Option<String>, interrupt: Option<bool> },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SettingSource {
+    User,
+    Project,
+    Local,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewSession {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<PermissionMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_dangerously_skip_permissions: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub setting_sources: Option<Vec<SettingSource>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_turns: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_budget_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resume: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fork_session: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_partial_messages: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<Map<String, Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct NewAgent {
+    pub name: Option<String>,
+    pub config: Option<AgentConfig>,
+    pub prompt: Option<String>,
+    pub lead: Option<String>,
+    pub adopt: Option<String>,
+    pub sharing: Option<Sharing>,
+    pub cross_owner: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SdkSessionQuery {
+    pub dir: Option<String>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+    pub profile: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RetireMembers {
     Release,
@@ -84,6 +145,48 @@ fn put<T: Into<Value> + Clone>(body: &mut Map<String, Value>, key: &str, value: 
     if let Some(v) = value {
         body.insert(key.to_owned(), v.clone().into());
     }
+}
+
+pub fn create_session(request: &NewSession) -> HttpCall {
+    HttpCall::with("POST", "/sessions".to_owned(), serde_json::to_value(request).unwrap_or_else(|_| json!({})))
+}
+
+pub fn create_agent(request: &NewAgent) -> HttpCall {
+    let mut body = Map::new();
+    put(&mut body, "name", &request.name);
+    if let Some(config) = &request.config {
+        body.insert("config".to_owned(), serde_json::to_value(config).unwrap_or_else(|_| json!({})));
+    }
+    put(&mut body, "prompt", &request.prompt);
+    put(&mut body, "lead", &request.lead);
+    put(&mut body, "adopt", &request.adopt);
+    if let Some(sharing) = request.sharing.and_then(sharing_name) {
+        body.insert("sharing".to_owned(), json!(sharing));
+    }
+    put(&mut body, "crossOwner", &request.cross_owner);
+    HttpCall::with("POST", "/agents".to_owned(), Value::Object(body))
+}
+
+pub fn list_sdk_sessions(query: &SdkSessionQuery) -> HttpCall {
+    let mut pairs = Vec::new();
+    if let Some(dir) = &query.dir {
+        pairs.push(format!("dir={}", encode_component(dir)));
+    }
+    if let Some(limit) = query.limit {
+        pairs.push(format!("limit={limit}"));
+    }
+    if let Some(offset) = query.offset {
+        pairs.push(format!("offset={offset}"));
+    }
+    if let Some(profile) = &query.profile {
+        pairs.push(format!("profile={}", encode_component(profile)));
+    }
+    let suffix = if pairs.is_empty() { String::new() } else { format!("?{}", pairs.join("&")) };
+    HttpCall::get(format!("/sdk-sessions{suffix}"))
+}
+
+pub fn get_profile(name: &str) -> HttpCall {
+    HttpCall::get(format!("/profiles/{}", encode_component(name)))
 }
 
 pub fn list_sessions() -> HttpCall {
@@ -270,6 +373,42 @@ mod tests {
         assert_eq!(retire_agent("a", Some(RetireMembers::Retire)).body.as_deref(), Some(r#"{"members":"retire"}"#));
         assert_eq!(reroll_avatar("a", None), call("POST", "/agents/a/avatar", Some("{}")));
         assert_eq!(reroll_avatar("a", Some("x")).body.as_deref(), Some(r#"{"seed":"x"}"#));
+    }
+
+    #[test]
+    fn a_new_session_omits_every_unset_field() {
+        assert_eq!(create_session(&NewSession::default()), call("POST", "/sessions", Some("{}")));
+        let request = NewSession {
+            cwd: Some("/w".into()),
+            permission_mode: Some(PermissionMode::BypassPermissions),
+            allow_dangerously_skip_permissions: Some(true),
+            setting_sources: Some(vec![SettingSource::User, SettingSource::Local]),
+            max_turns: Some(3),
+            ..Default::default()
+        };
+        assert_eq!(
+            create_session(&request).body.as_deref(),
+            Some(
+                r#"{"cwd":"/w","permissionMode":"bypassPermissions","allowDangerouslySkipPermissions":true,"settingSources":["user","local"],"maxTurns":3}"#
+            )
+        );
+    }
+
+    #[test]
+    fn a_new_agent_carries_its_config_and_team() {
+        let adopt = NewAgent { adopt: Some("s1".into()), lead: Some("a2".into()), cross_owner: Some(true), ..Default::default() };
+        assert_eq!(create_agent(&adopt), call("POST", "/agents", Some(r#"{"lead":"a2","adopt":"s1","crossOwner":true}"#)));
+        let config = AgentConfig { cwd: Some("/w".into()), brief: Some("b".into()), ..Default::default() };
+        let named = NewAgent { name: Some("Ada".into()), config: Some(config), sharing: Some(Sharing::Shared), ..Default::default() };
+        assert_eq!(create_agent(&named).body.as_deref(), Some(r#"{"name":"Ada","config":{"cwd":"/w","brief":"b"},"sharing":"shared"}"#));
+    }
+
+    #[test]
+    fn sdk_sessions_and_profile_detail() {
+        assert_eq!(list_sdk_sessions(&SdkSessionQuery::default()), call("GET", "/sdk-sessions", None));
+        let query = SdkSessionQuery { dir: Some("/a b".into()), limit: Some(20), offset: None, profile: Some("p&q".into()) };
+        assert_eq!(list_sdk_sessions(&query), call("GET", "/sdk-sessions?dir=%2Fa%20b&limit=20&profile=p%26q", None));
+        assert_eq!(get_profile("my profile"), call("GET", "/profiles/my%20profile", None));
     }
 
     #[test]

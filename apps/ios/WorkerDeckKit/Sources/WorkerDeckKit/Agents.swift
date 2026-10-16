@@ -172,29 +172,6 @@ public struct AgentInfo: Decodable, Sendable, Equatable, Identifiable {
   }
 }
 
-public struct CreateAgentRequest: Encodable, Sendable {
-  public var name: String?
-  public var config: AgentConfig?
-  public var prompt: String?
-  public var lead: String?
-  public var adopt: String?
-  public var sharing: AgentSharing?
-  public var crossOwner: Bool?
-
-  public init(
-    name: String? = nil, config: AgentConfig? = nil, prompt: String? = nil, lead: String? = nil,
-    adopt: String? = nil, sharing: AgentSharing? = nil, crossOwner: Bool? = nil
-  ) {
-    self.name = name
-    self.config = config
-    self.prompt = prompt
-    self.lead = lead
-    self.adopt = adopt
-    self.sharing = sharing
-    self.crossOwner = crossOwner
-  }
-}
-
 public struct AgentResponse: Decodable, Sendable {
   public let agent: AgentInfo
   public let session: SessionInfo?

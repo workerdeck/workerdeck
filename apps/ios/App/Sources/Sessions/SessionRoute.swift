@@ -58,29 +58,10 @@ enum SessionRoute: Hashable {
   }
 }
 
-/// Pre-fill for the create form. Carries only what a caller can know up front -
-/// the Resume tab supplies both fields, the "+" button neither.
+// Pre-fill for the create form: the Resume tab supplies both strings, the "+" button a recent cwd. `agent` asks for an
+// agent form, which the core seeds from the gateway's meta.
 struct CreateSessionSeed: Hashable {
   var cwd: String = ""
-  /// SDK session id to resume (`CreateSessionRequest.resume`).
   var resume: String?
-  var agent: AgentSeed?
-}
-
-// The list core's new-agent seed for one gateway, re-read when the create form's profile changes.
-struct AgentSeeding {
-  let adoptProfiles: (String) -> Void
-  let seed: (String?) -> AgentSeed?
-}
-
-struct AgentSeed: Hashable {
-  struct Lead: Hashable, Identifiable {
-    let id: String
-    let name: String
-  }
-
-  var leads: [Lead] = []
-  var lead: String?
-  var allowShared = false
-  var sharing: AgentSharing = .private
+  var agent = false
 }

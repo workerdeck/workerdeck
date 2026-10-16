@@ -71,7 +71,7 @@ impl From<pickers::ModePicker> for ModePicker {
 }
 
 impl Mode {
-    fn from_wire(mode: PermissionMode) -> Option<Self> {
+    pub(crate) fn from_wire(mode: PermissionMode) -> Option<Self> {
         Some(match mode {
             PermissionMode::Default => Mode::Default,
             PermissionMode::AcceptEdits => Mode::AcceptEdits,

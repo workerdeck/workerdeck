@@ -208,7 +208,7 @@ final class SessionListModel {
         guard let client = context(for: host.id)?.client else { continue }
         group.addTask {
           do {
-            return (host.id, .success(try await client.listSdkSessions(limit: 50)))
+            return (host.id, .success(try await client.listSdkSessions(listSdkSessionsCall(limit: 50))))
           } catch {
             return (host.id, .failure(error))
           }
@@ -425,7 +425,7 @@ final class SessionListModel {
 
   func makeAgent(_ item: ListItem) async {
     await agentAct(on: item, "Could not make an agent") {
-      _ = try await $0.createAgent(CreateAgentRequest(adopt: item.info.id))
+      try await $0.perform(createAgentCall(request: NewAgent(adopt: item.info.id)))
     }
   }
 
@@ -444,8 +444,8 @@ final class SessionListModel {
         try await client.perform(
           updateAgentCall(id: agent.id, patch: AgentPatch(lead: .set(value: lead.agentId), crossOwner: crossing)))
       } else {
-        try await client.createAgent(
-          CreateAgentRequest(lead: lead.agentId, adopt: item.info.id, crossOwner: crossing))
+        try await client.perform(
+          createAgentCall(request: NewAgent(lead: lead.agentId, adopt: item.info.id, crossOwner: crossing)))
       }
     }
   }
@@ -489,25 +489,17 @@ final class SessionListModel {
     }
   }
 
-  // The create form's lead picker and sharing default, from the core; nil while the gateway has not said it runs
-  // agents. `profile` is the form's pick, whose own owner and sharing win over the gateway's.
-  func agentSeed(for hostId: UUID, lead: ListItem? = nil, profile: String? = nil) -> AgentSeed? {
+  // Nil while the gateway has not said it runs agents.
+  func agentSeed(for hostId: UUID) -> NewAgentSeed? {
     _ = revision
-    guard let seed = core.agentSeed(hostId: hostId.uuidString, leadSessionId: lead?.info.id, profile: profile)
-    else { return nil }
-    return AgentSeed(
-      leads: seed.leads.map { AgentSeed.Lead(id: $0.agentId, name: $0.name) }, lead: seed.lead,
-      allowShared: seed.allowShared, sharing: seed.shared ? .shared : .private)
+    return core.agentSeed(hostId: hostId.uuidString, leadSessionId: nil, profile: nil)
   }
 
-  func agentSeeding(for hostId: UUID, lead: String?) -> AgentSeeding {
-    AgentSeeding(
-      adoptProfiles: { [core] body in _ = core.setProfiles(hostId: hostId.uuidString, body: body) },
-      seed: { [weak self] profile in
-        guard var seed = self?.agentSeed(for: hostId, profile: profile) else { return nil }
-        seed.lead = lead
-        return seed
-      })
+  // The create form's agent seeding reads the list core directly.
+  func createForm(for hostId: UUID, seed: CreateSessionSeed) -> CreateForm {
+    seed.agent
+      ? CreateForm.agent(cwd: seed.cwd, list: core, hostId: hostId.uuidString)
+      : CreateForm.session(cwd: seed.cwd, resume: seed.resume)
   }
 
   private func agentAct(on item: ListItem, _ failure: String, _ body: (WorkerClient) async throws -> Void) async {

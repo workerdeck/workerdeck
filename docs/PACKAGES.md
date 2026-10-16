@@ -2477,7 +2477,7 @@ names where each module came from:
 | `controller/session.rs` | The session connection as a sans-IO state machine: socket events and commands in, `Open`/`Send`/`Close`/`WakeAt` effects and app signals out; backoff, outbox, close-after-drain, acked prompts and `resync`, one rule set with the TS client (`plans/CONNECTION-PARITY.md`). `Close` means the host reports nothing more from that socket |
 | `controller/live.rs` | `LiveSession`, the one session object: the connection, the reducer (attach seed, hydration), the replay hold over a buffered state, the seq index and `TranscriptView`, with connection state (`connecting`/`unreachable` before any open), a stale-attach resync (react's `staleAttach`), replayed running shells verified once, and one merged `WakeAt`. Effects are drained after every call; a burst of frames costs one view update |
 | `controller/` | `TranscriptView` (the app's `TerminalTranscriptModel`: presses return effects such as `FetchResult` / `OpenSubagent` instead of calling closures), `ReplayHold`, `TranscriptSeqIndex`, `StickyPrompt`, `TranscriptScrollGeometry` |
-| `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `prompt` (`packages/ui`'s `permissionPromptModel`, `shell-request`, `question-answers`, plus the iOS whole-subject rule), `fmt`; ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
+| `vm/` | the `packages/protocol` view models (`session_list`, `agents`, `pricing`, `usage`, `watermarks`, `peer_mentions`, `checklist`, `tool_titles`, `model_menu`, `status_label`), `recap` (`packages/react`), `prompt` (`packages/ui`'s `permissionPromptModel`, `shell-request`, `question-answers`, plus the iOS whole-subject rule), `fmt`, `create_form` (the iOS `CreateSessionModel`, coercion after the web's `engineFormOptions`); ported from TypeScript, not from the kit. `collate.rs` approximates `localeCompare` |
 | `rest.rs` | the REST/wire records the view models read (`SessionInfo`, `AgentInfo`, ...), serde camelCase, unknown fields ignored |
 | `rest/calls.rs`, `rest/error.rs` | the REST layer below: `WorkerClient.swift`'s paths and request bodies, and its error reading |
 | `markdown.rs` | `MarkdownBlocks.swift` and a portable inline parser (Apple's `AttributedString(markdown:)` is not available off Darwin, and differs on an unclosed `**`) |
@@ -2498,12 +2498,25 @@ transport (Swift `WorkerClient.perform` / `fetch`, Kotlin `GatewayClient.perform
 header, TLS, timeouts, and byte fetches, where any 2xx is the answer. A body a core view model eats
 (`SessionList.set_host`, `set_meta`, `set_profiles`) goes to it whole. Moved so far (R1): sessions
 list, get, update, sleep, delete, stop and background task, kill shell, resolve permission, agents
-list, restart, retire, update, avatar reroll, meta, profiles. Create forms, SDK sessions and profile
-detail (R2), then files, host files, attachments, MCP, shells and tool results (R3) still build
-their routes in Swift, through the same transport.
+list, restart, retire, update, avatar reroll, meta, profiles; then (R2) create session and agent,
+SDK sessions and profile detail. Files, host files, attachments, MCP, shells and tool results (R3)
+still build their routes in Swift, through the same transport.
 
-**Still missing**: the scrubber and the app-side view models (`CreateSessionModel`,
-prompt completion, unread). The plan, with its
+**The create form** is `vm::create_form` (FFI `CreateForm`, built by `CreateForm.session` or, for an
+agent, `CreateForm.agent` over the `SessionList`, whose meta and profiles seed it and which it feeds
+the `/profiles` body). The app binds `CreateFormFields` through `update`, which answers the fields
+as kept: a profile change adopts that profile's default model and mode, and snaps a mode, a catalog
+or provider model, or an effort the new engine lacks back to what it offers (the web's
+`engineFormOptions` rule). `state()` is everything else the form draws; `call()` is the create.
+The request rules: trimmed strings, empty ones omitted; `cwd` omitted when the record says
+`hostCwd: false`; settings sources and budgets only when the record offers them; `resume` only
+with the `resume` capability, `forkSession` only with it and `forkSession`; bypass sends
+`allowDangerouslySkipPermissions`; a stored session's title rides `meta.title` while its id is
+still the one in the field. An agent sends `sharing` only for an explicit choice outside a team,
+and `crossOwner` when its lead belongs to another owner. With no record of its own, a profile reads
+the static `ENGINE_CAPABILITIES` table (`ProfileEngine::capabilities`).
+
+**Still missing**: the scrubber and the app-side view models (prompt completion, unread). The plan, with its
 phases and decisions, is gitignored (`_docs/plans/RUST-NATIVE-CORE.md`).
 
 **Conformance goldens** replace "mirror by convention" for the reducer. `conformance/corpus.ts`

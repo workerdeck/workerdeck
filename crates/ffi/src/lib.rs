@@ -12,6 +12,7 @@ use wd_native::vt::VtKey;
 
 mod avatar;
 mod bookmarks;
+mod create_form;
 mod list;
 mod pickers;
 mod prompt;
@@ -19,6 +20,7 @@ mod rest;
 mod scrubber;
 mod usage;
 pub use bookmarks::{Bookmarks, RowMenu};
+pub use create_form::{CreateForm, CreateFormFields, CreateFormState, FormLead, FormProfile};
 pub use list::{
     ListError, ListFacet, ListFilter, ListGroup, ListGroupBy, ListRow, ListSortBy, Mark, NewAgentSeed, RowState, SessionList, StepKind,
     StepShow,

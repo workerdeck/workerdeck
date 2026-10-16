@@ -140,10 +140,9 @@ struct SessionListView: View {
 
   @ViewBuilder
   private func createScreen(_ hostId: UUID, _ seed: CreateSessionSeed) -> some View {
-    if let context = model?.context(for: hostId) {
+    if let model, let context = model.context(for: hostId) {
       CreateSessionView(
-        seed: seed, client: context.client,
-        seeding: seed.agent.flatMap { agent in model?.agentSeeding(for: hostId, lead: agent.lead) },
+        form: model.createForm(for: hostId, seed: seed), client: context.client,
         onAgentCreated: { response in
           if let cwd = response.agent.config.cwd { context.rememberCwd(cwd) }
           path = response.session.map { [.session(hostId: hostId, sessionId: $0.id)] } ?? []
@@ -807,10 +806,10 @@ struct SessionListView: View {
           } label: {
             Label("New session", systemImage: "bubble.left")
           }
-          if let agent = model?.agentSeed(for: host.id) {
+          if model?.agentSeed(for: host.id) != nil {
             Button {
               var agentSeed = seed(for: host)
-              agentSeed.agent = agent
+              agentSeed.agent = true
               path.append(.create(hostId: host.id, seed: agentSeed))
             } label: {
               Label("New agent", systemImage: "person.crop.square")

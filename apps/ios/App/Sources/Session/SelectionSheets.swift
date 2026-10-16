@@ -1,3 +1,4 @@
+import WorkerDeckCore
 import WorkerDeckKit
 import SwiftUI
 
@@ -147,27 +148,17 @@ private struct SelectionRow: View {
 /// versions follow under "More models" in the same scroll rather than behind a
 /// second screen, which on a phone is the cheaper of the two.
 struct ModelPickerSheet: View {
-  let models: [ModelOption]
-  /// The model in force, as the session reports it (a resolved wire id).
-  let current: String?
-  /// What the default resolved to at `system_init`, for the tag.
-  let defaultModel: String?
+  // The core's rows: `main` in the card, `more` under "More models", `efforts` (empty hides it) below.
+  let picker: ModelPicker
   let onSelect: (String?) -> Void
-  // Empty hides the effort group.
-  var efforts: [String] = []
-  var currentEffort: String?
-  // nil = back to the model's default.
   var onSelectEffort: (String?) -> Void = { _ in }
 
   @Environment(\.dismiss) private var dismiss
   @HotReloaded private var hot
 
-  private var primary: [ModelOption] { models.filter { $0.primary ?? true } }
-  private var secondary: [ModelOption] { models.filter { !($0.primary ?? true) } }
-
   var body: some View {
-    SelectionSheet(title: efforts.isEmpty ? "Select model" : "Select model and effort") {
-      if models.isEmpty {
+    SelectionSheet(title: picker.title) {
+      if picker.main.isEmpty && picker.more.isEmpty {
         // Before `capabilities` lands there is nothing to list - and nothing to
         // pick either, since every id here comes from the CLI.
         Text("This session hasn't reported its models yet.")
@@ -176,16 +167,16 @@ struct ModelPickerSheet: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(16)
       }
-      rows(primary)
+      rows(picker.main, onSelect)
     } trailing: {
-      if !secondary.isEmpty {
+      if !picker.more.isEmpty {
         groupHeading("More models")
-        VStack(spacing: 0) { rows(secondary) }
+        VStack(spacing: 0) { rows(picker.more, onSelect) }
           .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
       }
-      if !efforts.isEmpty {
+      if !picker.efforts.isEmpty {
         groupHeading("Effort")
-        VStack(spacing: 0) { effortRows }
+        VStack(spacing: 0) { rows(picker.efforts, onSelectEffort) }
           .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
       }
     }
@@ -201,42 +192,17 @@ struct ModelPickerSheet: View {
       .padding(.horizontal, 4)
   }
 
-  // "Default" is never checked: the session reports the effort it resolved to, not that it
-  // came from the default.
   @ViewBuilder
-  private var effortRows: some View {
-    SelectionRow(
-      title: "Default", summary: "Whatever this model uses by default",
-      isSelected: false, isDefault: false, showsDivider: true
-    ) {
-      onSelectEffort(nil)
-      dismiss()
-    }
-    ForEach(Array(efforts.enumerated()), id: \.element) { index, effort in
+  private func rows(_ rows: [PickerRow], _ select: @escaping (String?) -> Void) -> some View {
+    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
       SelectionRow(
-        title: effort.prefix(1).uppercased() + effort.dropFirst(),
-        summary: nil,
-        isSelected: effort == currentEffort,
-        isDefault: false,
-        showsDivider: index < efforts.count - 1
+        title: row.title,
+        summary: row.summary,
+        isSelected: row.selected,
+        isDefault: row.isDefault,
+        showsDivider: index < rows.count - 1
       ) {
-        onSelectEffort(effort)
-        dismiss()
-      }
-    }
-  }
-
-  @ViewBuilder
-  private func rows(_ options: [ModelOption]) -> some View {
-    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
-      SelectionRow(
-        title: option.displayName,
-        summary: option.description,
-        isSelected: current.map(option.matches) ?? false,
-        isDefault: defaultModel.map(option.matches) ?? false,
-        showsDivider: index < options.count - 1
-      ) {
-        onSelect(option.value)
+        select(row.value)
         dismiss()
       }
     }
@@ -245,46 +211,29 @@ struct ModelPickerSheet: View {
 
 /// Pick how much of the approval gate this session gives away.
 ///
-/// `bypassPermissions` is always last and often unusable: the CLI refuses to
-/// switch into it unless the session was *spawned* for it, so a session that
-/// didn't ask up front can never gain it. It is shown greyed rather than hidden -
-/// "you can't have this here" is a more useful answer than a row that silently
-/// isn't there, and the reason is spelled out where its description would be.
+/// The core orders the rows, pins `bypassPermissions` last and greys it, with
+/// the reason as its summary, where the CLI would refuse the switch.
 struct ModePickerSheet: View {
-  /// Only the modes this session's engine implements - the caller filters.
-  let modes: [PermissionMode]
-  let current: PermissionMode?
-  let defaultMode: PermissionMode?
-  /// Nil = unknown: offer it rather than block it.
-  let canBypass: Bool?
-  let onSelect: (PermissionMode) -> Void
+  let picker: ModePicker
+  let onSelect: (Mode) -> Void
 
   @Environment(\.dismiss) private var dismiss
   @HotReloaded private var hot
 
-  /// Ordered by how much they give away, and `bypassPermissions` pinned last
-  /// wherever the caller had it.
-  private var ordered: [PermissionMode] {
-    modes.filter { $0 != .bypassPermissions } + modes.filter { $0 == .bypassPermissions }
-  }
-
   var body: some View {
     SelectionSheet(title: "Select mode") {
-      ForEach(Array(ordered.enumerated()), id: \.element) { index, mode in
-        let disabled = mode == .bypassPermissions && canBypass == false
+      ForEach(Array(picker.rows.enumerated()), id: \.offset) { index, row in
         SelectionRow(
-          title: mode.label,
-          summary: disabled
-            ? "Only available to a session started in this mode"
-            : mode.summary,
-          symbol: mode.symbol,
-          symbolTint: mode.symbolTint,
-          isSelected: mode == current,
-          isDefault: mode == defaultMode,
-          showsDivider: index < ordered.count - 1,
-          isDisabled: disabled
+          title: row.title,
+          summary: row.summary,
+          symbol: row.mode.symbol,
+          symbolTint: row.mode.symbolTint,
+          isSelected: row.selected,
+          isDefault: row.isDefault,
+          showsDivider: index < picker.rows.count - 1,
+          isDisabled: row.disabled
         ) {
-          onSelect(mode)
+          onSelect(row.mode)
           dismiss()
         }
       }

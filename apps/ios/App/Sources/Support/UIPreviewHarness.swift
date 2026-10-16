@@ -26,6 +26,7 @@ enum UIPreview: String {
   case teams
   case core
   case coreextras
+  case createform
 
   static var active: UIPreview? {
     ProcessInfo.processInfo.environment["UIPREVIEW"].flatMap(UIPreview.init(rawValue:))
@@ -542,6 +543,19 @@ private struct StepsPreview: View {
 
 struct UIPreviewHarness: View {
   let variant: UIPreview
+
+  private static func createForm() -> CreateForm {
+    let form = CreateForm.session(cwd: "/Users/you/projects/app")
+    let profiles = #"""
+      {"profiles":[
+        {"name":"work","engine":"claude","defaults":{"permissionMode":"plan"},
+         "models":[{"value":"opus","displayName":"Opus"},{"value":"sonnet","displayName":"Sonnet"}]},
+        {"name":"openai","engine":"codex","models":[{"value":"gpt-5","displayName":"GPT-5"}]}
+      ]}
+      """#
+    _ = form.setProfiles(body: profiles)
+    return form
+  }
   /// Editing a fixture and watching it land is the whole point of this screen.
   @HotReloaded private var hot
 
@@ -580,6 +594,14 @@ struct UIPreviewHarness: View {
 
     case .coreextras:
       CoreExtrasPreview()
+
+    case .createform:
+      // A claude and a codex profile, fed before the form asks, so no request leaves the phone.
+      let unreachable = Host(name: "mini", baseURL: "http://127.0.0.1:1")
+      NavigationStack {
+        CreateSessionView(form: Self.createForm(), client: WorkerClient(baseURL: URL(string: "http://127.0.0.1:1")!)) { _ in }
+      }
+      .environment(HostContext(host: unreachable))
 
     case .projects:
       // Every shape line two can take, because each one is a different rule and

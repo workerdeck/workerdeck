@@ -1,282 +1,99 @@
+import WorkerDeckCore
 import WorkerDeckKit
 import Foundation
 import Observation
 
-/// Form state for `POST /sessions`, kept out of the view so the field
-/// interdependencies (profile → engine → legal permission modes → model list) are
-/// testable and readable in one place.
+// The create form over the core's `CreateForm`, which owns the field rules (profile -> engine -> modes, models,
+// efforts) and builds the request. This keeps the fields observable and moves the bytes.
 @MainActor
 @Observable
 final class CreateSessionModel {
-  // Basics
-  var cwd: String
-  var profileName: String?
-  var permissionMode: PermissionMode = .default
-  var model: String = ""
-  var prompt: String = ""
-
-  // Advanced
-  var useUserSettings = true
-  var useProjectSettings = true
-  var useLocalSettings = false
-  var includePartialMessages = true
-  var maxTurns: String = ""
-  var maxBudgetUsd: String = ""
-  var resume: String
-  var forkSession = false
-  /// The stored session the resume picker chose, kept only so `buildRequest`
-  /// can carry its title - a resumed session is otherwise titleless, because
-  /// the derived fallback reads a first prompt that a resume never sends.
-  /// Ignored the moment the id field stops matching it (a hand-edited id must
-  /// not inherit another thread's title).
-  private var pickedStored: SdkSessionSummary?
-  /// '' = the engine's default. Only sent when the capability record offers it.
-  var reasoningEffort: String = ""
-
-  private(set) var agent: AgentSeed?
-  var agentName = ""
-  var brief = ""
-  var lead: String?
-  private var sharingChoice: AgentSharing?
-  var sharing: AgentSharing {
-    get { sharingChoice ?? agent?.sharing ?? .private }
-    set { sharingChoice = newValue }
-  }
-
-  private(set) var profiles: [ProfileInfo] = []
-  /// Set when `/profiles` 404s - a server predating profiles, not an error.
-  private(set) var profilesUnavailable = false
+  private var stored: CreateFormFields
+  private(set) var state: CreateFormState
   private(set) var isLoadingProfiles = false
   private(set) var isSubmitting = false
   private(set) var errorMessage: String?
 
+  private let form: CreateForm
   private let client: WorkerClient
-  private let seeding: AgentSeeding?
 
-  init(seed: CreateSessionSeed, client: WorkerClient, seeding: AgentSeeding? = nil) {
-    cwd = seed.cwd
-    resume = seed.resume ?? ""
-    agent = seed.agent
-    lead = seed.agent?.lead
-    self.seeding = seeding
-    // Resuming defaults to continuing, not forking - forking is the deliberate
-    // choice ("keep the original intact"), so it stays opt-in.
+  init(form: CreateForm, client: WorkerClient) {
+    self.form = form
     self.client = client
+    stored = form.fields()
+    state = form.state()
   }
 
-  /// The gateway this form posts to, for the folder picker - which browses the
-  /// same host filesystem an open session does, only from the roots down rather
-  /// than from a cwd that doesn't exist yet.
+  // Every edit goes through the core, which answers the fields as it keeps them (a profile change adopts defaults).
+  var fields: CreateFormFields {
+    get { stored }
+    set {
+      stored = form.update(fields: newValue)
+      state = form.state()
+    }
+  }
+
+  var sharing: Sharing {
+    get { state.sharing }
+    set { fields.sharing = newValue }
+  }
+
+  // The folder picker browses the same gateway's host filesystem.
   var fileClient: WorkerClient { client }
 
-  var selectedProfile: ProfileInfo? {
-    profiles.first { $0.name == profileName }
-  }
+  var canSubmit: Bool { state.canSubmit && !isSubmitting }
 
-  /// Engine the session will actually run on. Absent profile info reads as claude,
-  /// matching `ProfileInfo.resolvedEngine`.
-  var engine: ProfileEngine {
-    selectedProfile?.resolvedEngine ?? .claude
-  }
-
-  /// The capability record the form renders around - the server-stamped copy
-  /// when present, else the engine's static default. Never branch on the
-  /// engine name for an affordance this record answers.
-  var capabilities: EngineCapabilities {
-    selectedProfile?.resolvedCapabilities ?? engine.defaultCapabilities
-  }
-
-  /// Only the modes this engine understands, in the record's order - offering
-  /// the rest would just produce a server-side rejection.
-  var availableModes: [PermissionMode] { capabilities.permissionModes }
-
-  /// Model ids the chosen profile advertises. Empty → free-text field.
-  var modelOptions: [String] {
-    selectedProfile?.provider?.models ?? []
-  }
-
-  /// The engine's model catalog, served with the profile from the server's
-  /// first response (claude and codex ship one with each release; provider
-  /// profiles list ids in `provider.models` instead).
-  var claudeModels: [ModelOption] {
-    selectedProfile?.models ?? []
-  }
-
-  /// Reasoning efforts offerable right now: the chosen catalog row's list when
-  /// it declares one, else the record's engine-wide set. Empty hides the
-  /// control - never a picker that does nothing.
-  var effortOptions: [String] {
-    let trimmed = model.trimmingCharacters(in: .whitespaces)
-    if !trimmed.isEmpty, let row = claudeModels.first(where: { $0.matches(trimmed) }),
-      let efforts = row.reasoningEfforts
-    {
-      return efforts
-    }
-    return capabilities.reasoningEfforts ?? []
-  }
-
-  /// What the profile's default resolves to, for the picker's DEFAULT tag.
-  var defaultModel: String? { selectedProfile?.defaultModel }
-
-  /// The chosen model, named. Empty selection is the profile's own default,
-  /// which is a legitimate answer here in a way it never is mid-session: this
-  /// form is where "default" is a choice.
-  var modelLabel: String {
-    let trimmed = model.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty else { return "Profile default" }
-    return claudeModels.first { $0.matches(trimmed) }?.displayName ?? trimmed
-  }
-
-  /// Hidden when the server offers exactly one profile - there is no choice to make.
-  var showsProfilePicker: Bool { profiles.count > 1 }
-
-  var canSubmit: Bool {
-    !cwd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSubmitting
-  }
+  var modelPicker: ModelPicker { form.modelPicker() }
+  var modePicker: ModePicker { form.modePicker() }
 
   func loadProfiles() async {
-    guard profiles.isEmpty, !profilesUnavailable else { return }
+    guard state.needsProfiles else { return }
     isLoadingProfiles = true
     defer { isLoadingProfiles = false }
     do {
-      let (response, body) = try await client.listProfilesWithBody()
-      if agent != nil { seeding?.adoptProfiles(body) }
-      profiles = response.profiles
-      if profileName == nil { profileName = response.profiles.first?.name }
-      applyProfileDefaults()
+      let body = try await client.perform(listProfilesCall())
+      _ = form.setProfiles(body: String(decoding: body, as: UTF8.self))
     } catch let error as WorkerClientError where error.statusCode == 404 {
-      profilesUnavailable = true
+      form.setProfilesUnavailable()
     } catch {
       errorMessage = SessionListModel.describe(error)
     }
+    reload()
   }
 
-  /// Adopt the profile's declared defaults, and snap out-of-range choices back
-  /// to the capability record's coercion targets - a sticky mode or effort from
-  /// another engine must not survive into a request this one would 400.
-  func applyProfileDefaults() {
-    if agent != nil, let seeding, let seed = seeding.seed(profileName) { agent = seed }
-    guard let profile = selectedProfile else { return }
-    let capabilities = profile.resolvedCapabilities
-    if let defaultModel = profile.defaults?.model, model.isEmpty { model = defaultModel }
-    if let defaultMode = profile.defaults?.permissionMode,
-      capabilities.permissionModes.contains(defaultMode)
-    {
-      permissionMode = defaultMode
-    } else if !capabilities.permissionModes.contains(permissionMode) {
-      permissionMode = capabilities.defaultPermissionMode
-    }
-    if !modelOptions.isEmpty, !modelOptions.contains(model) {
-      model = profile.provider?.model ?? modelOptions[0]
-    }
-    if !reasoningEffort.isEmpty, !effortOptions.contains(reasoningEffort) {
-      reasoningEffort = ""
-    }
-  }
-
-  /// Stored sessions this form could resume, scoped the way the other clients
-  /// scope their pickers: to the directory in the cwd field (blank lists the
-  /// whole store) and to the chosen profile, so the server lists that engine's
-  /// store rather than claude's.
   func loadResumeCandidates() async throws -> [SdkSessionSummary] {
-    let dir = cwd.trimmingCharacters(in: .whitespacesAndNewlines)
-    return try await client.listSdkSessions(
-      dir: dir.isEmpty ? nil : dir, limit: 20,
-      profile: profilesUnavailable ? nil : profileName)
+    try await client.listSdkSessions(form.resumeCandidatesCall())
   }
 
-  /// Adopt a picked stored session: id into the resume field, and its recorded
-  /// directory into cwd - the thread lives there, and resuming it under another
-  /// root is a deliberate act (the field stays editable), not a default.
   func adoptStoredSession(_ summary: SdkSessionSummary) {
-    resume = summary.sessionId
-    if let dir = summary.cwd, !dir.isEmpty { cwd = dir }
-    pickedStored = summary
+    form.adoptStoredSession(
+      sessionId: summary.sessionId, cwd: summary.cwd, customTitle: summary.customTitle, summary: summary.summary)
+    reload()
   }
 
-  /// Create the session. Returns nil (and sets `errorMessage`) on failure.
   func submit() async -> SessionInfo? {
-    isSubmitting = true
-    defer { isSubmitting = false }
-    do {
-      let info = try await client.createSession(buildRequest())
-      errorMessage = nil
-      return info
-    } catch {
-      errorMessage = SessionListModel.describe(error)
-      return nil
-    }
+    await creating { try await $0.createSession($1) }
   }
 
   func submitAgent() async -> AgentResponse? {
+    await creating { try await $0.createAgent($1) }
+  }
+
+  private func creating<T>(_ send: (WorkerClient, HttpCall) async throws -> T) async -> T? {
     isSubmitting = true
     defer { isSubmitting = false }
     do {
-      let response = try await client.createAgent(buildAgentRequest())
+      let created = try await send(client, form.call())
       errorMessage = nil
-      return response
+      return created
     } catch {
       errorMessage = SessionListModel.describe(error)
       return nil
     }
   }
 
-  func buildAgentRequest() -> CreateAgentRequest {
-    let session = buildRequest()
-    let trimmedName = agentName.trimmingCharacters(in: .whitespacesAndNewlines)
-    let trimmedBrief = brief.trimmingCharacters(in: .whitespacesAndNewlines)
-    return CreateAgentRequest(
-      name: trimmedName.isEmpty ? nil : trimmedName,
-      config: AgentConfig(
-        cwd: session.cwd, profile: session.profile, model: session.model,
-        reasoningEffort: session.reasoningEffort, permissionMode: session.permissionMode,
-        brief: trimmedBrief.isEmpty ? nil : trimmedBrief),
-      prompt: session.prompt,
-      lead: lead,
-      sharing: lead == nil && agent?.allowShared == true ? sharing : nil)
-  }
-
-  func buildRequest() -> CreateSessionRequest {
-    var sources: [SettingSource] = []
-    if useUserSettings { sources.append(.user) }
-    if useProjectSettings { sources.append(.project) }
-    if useLocalSettings { sources.append(.local) }
-
-    let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-    let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
-    let trimmedResume = resume.trimmingCharacters(in: .whitespacesAndNewlines)
-    let capabilities = self.capabilities
-    let isResume = capabilities.resume && !trimmedResume.isEmpty
-    let storedTitle: String? = {
-      guard isResume, let picked = pickedStored, picked.sessionId == trimmedResume else {
-        return nil
-      }
-      let title = (picked.customTitle ?? picked.summary)
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      return title.isEmpty ? nil : title
-    }()
-
-    return CreateSessionRequest(
-      cwd: cwd.trimmingCharacters(in: .whitespacesAndNewlines),
-      profile: profilesUnavailable ? nil : profileName,
-      prompt: trimmedPrompt.isEmpty ? nil : trimmedPrompt,
-      permissionMode: permissionMode,
-      // Picking bypass up front also pre-authorizes switching back to it later -
-      // without this the mode can be set once and never re-enabled mid-session.
-      allowDangerouslySkipPermissions: permissionMode == .bypassPermissions ? true : nil,
-      // Fields the record forswears are omitted, not sent-and-refused: the
-      // gateway 400s them, and the form should never build such a request.
-      settingSources: capabilities.settingSources ? sources : nil,
-      model: trimmedModel.isEmpty ? nil : trimmedModel,
-      maxTurns: capabilities.budgets
-        ? Int(maxTurns.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
-      maxBudgetUsd: capabilities.budgets
-        ? Double(maxBudgetUsd.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
-      resume: isResume ? trimmedResume : nil,
-      forkSession: engine == .claude && !trimmedResume.isEmpty && forkSession ? true : nil,
-      reasoningEffort: !reasoningEffort.isEmpty && effortOptions.contains(reasoningEffort)
-        ? reasoningEffort : nil,
-      includePartialMessages: includePartialMessages,
-      meta: storedTitle.map { ["title": .string($0)] })
+  private func reload() {
+    stored = form.fields()
+    state = form.state()
   }
 }

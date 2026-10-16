@@ -80,10 +80,9 @@ public struct WorkerClient: Sendable {
 
   // MARK: - Sessions
 
-  // The start of a session; the returned id is what every session route takes (not the engine's own id).
-  public func createSession(_ request: CreateSessionRequest) async throws -> SessionInfo {
-    let data = try await call("POST", "/sessions", body: request)
-    return try decode(SessionResponse.self, from: data).session
+  // `POST /sessions` as the core's create form built it; the returned id is what every session route takes.
+  public func createSession(_ call: HttpCall) async throws -> SessionInfo {
+    try decode(SessionResponse.self, from: try await perform(call)).session
   }
 
   public func listSessions() async throws -> [SessionInfo] {
@@ -212,42 +211,11 @@ public struct WorkerClient: Sendable {
     return String(decoding: data, as: UTF8.self)
   }
 
-  // MARK: - Profiles
-
-  // Servers predating profiles 404 here; the body is for the core's profile-aware view models.
-  public func listProfilesWithBody() async throws -> (response: ListProfilesResponse, body: String) {
-    let data = try await perform(listProfilesCall())
-    return (try decode(ListProfilesResponse.self, from: data), String(decoding: data, as: UTF8.self))
-  }
-
-  /// One profile plus a view-only snapshot of its config directory (settings,
-  /// skills, agents, commands - env var *names* only, never values).
-  public func getProfile(name: String) async throws -> GetProfileResponse {
-    let data = try await call("GET", "/profiles/\(Self.encodeComponent(name))")
-    return try decode(GetProfileResponse.self, from: data)
-  }
-
   // MARK: - SDK sessions
 
-  /// List an engine's on-disk sessions, for resume across server restarts.
-  /// Feed a result's `sessionId` to `CreateSessionRequest.resume` - under a
-  /// profile of the same engine. `profile` names whose store to list (claude →
-  /// the Agent SDK store, codex → CODEX_HOME threads); nil, the server resolves
-  /// it implicitly when it declares exactly one profile, else lists the Claude
-  /// engine's store.
-  public func listSdkSessions(
-    dir: String? = nil, limit: Int? = nil, offset: Int? = nil, profile: String? = nil
-  )
-    async throws -> [SdkSessionSummary]
-  {
-    var query: [String] = []
-    if let dir { query.append("dir=\(Self.encodeQueryValue(dir))") }
-    if let limit { query.append("limit=\(limit)") }
-    if let offset { query.append("offset=\(offset)") }
-    if let profile { query.append("profile=\(Self.encodeQueryValue(profile))") }
-    let suffix = query.isEmpty ? "" : "?\(query.joined(separator: "&"))"
-    let data = try await call("GET", "/sdk-sessions\(suffix)")
-    return try decode(ListSdkSessionsResponse.self, from: data).sdkSessions
+  // An engine's on-disk sessions, for resume across gateway restarts.
+  public func listSdkSessions(_ call: HttpCall) async throws -> [SdkSessionSummary] {
+    try decode(ListSdkSessionsResponse.self, from: try await perform(call)).sdkSessions
   }
 
   // MARK: - Host filesystem
@@ -334,10 +302,9 @@ public struct WorkerClient: Sendable {
 
   // MARK: - Agents
 
-  // Operator-only: a gateway without agents, or a scoped caller, answers 404.
-  @discardableResult
-  public func createAgent(_ request: CreateAgentRequest) async throws -> AgentResponse {
-    try decode(AgentResponse.self, from: try await call("POST", "/agents", body: request))
+  // `POST /agents` as the core's create form built it.
+  public func createAgent(_ call: HttpCall) async throws -> AgentResponse {
+    try decode(AgentResponse.self, from: try await perform(call))
   }
 
   // A new conversation for the agent: the session it started, when the gateway says.

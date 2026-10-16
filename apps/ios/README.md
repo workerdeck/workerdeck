@@ -30,7 +30,7 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
   - `WorkerClient.swift` - the REST transport. The core names each call (`HttpCall`: method,
     base-relative path, JSON body) and classifies each answer (`restError`); `perform` moves the
     bytes with `Authorization: Bearer <key>` and `fetch` takes raw bytes. Routes the core does not
-    name yet (create forms, files, MCP, shells) still build their paths here. The session socket is
+    name yet (files, MCP, shells) still build their paths here. The session socket is
     the core's.
   - `ModelName.swift` - `friendlyModel`, a 1:1 port of the rule in
     `packages/ui/src/lib/format.ts`: `claude-haiku-4-5-20251001` → "Haiku 4.5". A port and it has
@@ -171,9 +171,14 @@ cards renderer, the composer, the status bar or `UIPREVIEW` variants other than 
     underneath the keyboard. The measurement is a `GeometryReader`, floored by the composer's
     focus state - belt and braces, because whether SwiftUI shrinks this particular stack for the
     keyboard is not something to bet a layout on.
-  - The New Session form opens the *same* model and mode pickers as a live session. Its model
-    list comes from `ProfileInfo.models`, which the server remembers from the last session that
-    ran on that profile - so a server that has never run one still shows a text field.
+  - The New Session / New Agent form is the core's `CreateForm` (`crates/core/src/vm/create_form.rs`):
+    `CreateSessionModel` only binds its fields (`update` answers them back, adopting a new
+    profile's defaults) and reads `state()`; the core decides the offered modes, models and
+    efforts, builds the `POST /sessions` or `POST /agents` call, and draws the rows of the same
+    model and mode sheets a live session uses. Its model list comes from the profile's `models`,
+    which the server remembers from the last session that ran on that profile - so a server that
+    has never run one still shows a text field. `UIPREVIEW=createform` draws it over two canned
+    profiles (`CreateFormUITests`).
   - `App/Sources/Session/{ContextSheet,UsageSheet,SessionInfoSheet}.swift` - the three sheets
     that were one "Session details" list. They answer different questions at different moments
     (what is in the window / how much plan is left / what is this session), so scrolling past

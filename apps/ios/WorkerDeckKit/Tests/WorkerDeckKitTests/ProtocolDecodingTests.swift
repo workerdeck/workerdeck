@@ -150,23 +150,4 @@ struct ProtocolDecodingTests {
     #expect(try decode("}").effort == nil)
     #expect(try decode(#","effort":3}"#).effort == nil)
   }
-
-  @Test func decodesPerModelEffortDefaults() throws {
-    let json = #"{"model":"gpt-6","efforts":{"gpt-6":"high"}}"#
-    let defaults = try JSONDecoder().decode(ProfileDefaults.self, from: Data(json.utf8))
-    #expect(defaults.efforts == ["gpt-6": "high"])
-    let bare = try JSONDecoder().decode(ProfileDefaults.self, from: Data("{}".utf8))
-    #expect(bare.efforts == nil)
-  }
-
-
-  @Test func encodesCreateSessionRequestOmittingNils() throws {
-    let request = CreateSessionRequest(cwd: "/tmp/project", permissionMode: .plan)
-    let data = try JSONEncoder().encode(request)
-    let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-    #expect(object["cwd"] as? String == "/tmp/project")
-    #expect(object["permissionMode"] as? String == "plan")
-    #expect(object.keys.contains("resume") == false)
-    #expect(object.keys.contains("model") == false)
-  }
 }

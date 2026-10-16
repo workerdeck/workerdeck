@@ -213,6 +213,116 @@ pub struct EngineCapabilities {
     pub streaming: StreamingMode,
 }
 
+impl ProfileEngine {
+    // The protocol's `ENGINE_CAPABILITIES`: the record for a profile or session that carries none of its own.
+    pub fn capabilities(self) -> EngineCapabilities {
+        use PermissionMode::*;
+        let modes = |modes: &[PermissionMode]| modes.to_vec();
+        let efforts = |efforts: &[&str]| Some(efforts.iter().map(|e| (*e).to_owned()).collect());
+        match self {
+            ProfileEngine::Codex => EngineCapabilities {
+                interactive_approvals: true,
+                permission_modes: modes(&[Default, AcceptEdits, BypassPermissions, Auto]),
+                default_permission_mode: Default,
+                resume: true,
+                resume_backfill: true,
+                fork_session: Some(false),
+                list_sessions: true,
+                context_usage: true,
+                rate_limits: true,
+                mcp_status: true,
+                mcp_server_actions: false,
+                session_mcp_servers: true,
+                tool_filters: ToolFilters::Mcp,
+                slash_commands: false,
+                clear_context: Some(true),
+                skills_list: true,
+                setting_sources: false,
+                budgets: false,
+                attachments: vec![AttachmentKind::Image, AttachmentKind::Text],
+                reasoning_efforts: efforts(&["minimal", "low", "medium", "high", "xhigh"]),
+                vfs: false,
+                host_cwd: Some(true),
+                system_instructions: Some(true),
+                engine_sleep: Some(true),
+                background_tasks: None,
+                streaming: StreamingMode::Token,
+            },
+            ProfileEngine::Provider => EngineCapabilities {
+                interactive_approvals: false,
+                permission_modes: modes(&[Default, BypassPermissions, DontAsk]),
+                default_permission_mode: Default,
+                resume: false,
+                resume_backfill: false,
+                fork_session: Some(false),
+                list_sessions: false,
+                context_usage: false,
+                rate_limits: false,
+                mcp_status: true,
+                mcp_server_actions: false,
+                session_mcp_servers: false,
+                tool_filters: ToolFilters::None,
+                slash_commands: false,
+                clear_context: Some(true),
+                skills_list: false,
+                setting_sources: false,
+                budgets: false,
+                attachments: vec![AttachmentKind::Image, AttachmentKind::Pdf, AttachmentKind::Text],
+                reasoning_efforts: None,
+                vfs: true,
+                host_cwd: Some(false),
+                system_instructions: Some(true),
+                engine_sleep: Some(false),
+                background_tasks: None,
+                streaming: StreamingMode::Token,
+            },
+            ProfileEngine::Claude | ProfileEngine::Unknown => EngineCapabilities {
+                interactive_approvals: true,
+                permission_modes: modes(&[Default, AcceptEdits, BypassPermissions, Plan, DontAsk, Auto]),
+                default_permission_mode: Default,
+                resume: true,
+                resume_backfill: true,
+                fork_session: Some(true),
+                list_sessions: true,
+                context_usage: true,
+                rate_limits: true,
+                mcp_status: true,
+                mcp_server_actions: true,
+                session_mcp_servers: true,
+                tool_filters: ToolFilters::All,
+                slash_commands: true,
+                clear_context: Some(true),
+                skills_list: false,
+                setting_sources: true,
+                budgets: true,
+                attachments: vec![AttachmentKind::Image, AttachmentKind::Pdf, AttachmentKind::Text],
+                reasoning_efforts: efforts(&["low", "medium", "high", "xhigh", "max"]),
+                vfs: false,
+                host_cwd: Some(true),
+                system_instructions: Some(true),
+                engine_sleep: Some(true),
+                background_tasks: Some(true),
+                streaming: StreamingMode::Token,
+            },
+        }
+    }
+}
+
+impl ProfileInfo {
+    pub fn resolved_engine(&self) -> ProfileEngine {
+        match self.engine {
+            Some(ProfileEngine::Codex) => ProfileEngine::Codex,
+            Some(ProfileEngine::Provider) => ProfileEngine::Provider,
+            _ => ProfileEngine::Claude,
+        }
+    }
+
+    // The wire copy when the gateway stamped one, else the engine's static record.
+    pub fn resolved_capabilities(&self) -> EngineCapabilities {
+        self.capabilities.clone().unwrap_or_else(|| self.resolved_engine().capabilities())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelOption {
@@ -579,6 +689,16 @@ pub struct ProfileDefaults {
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProviderConfig {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProfileInfo {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -587,6 +707,8 @@ pub struct ProfileInfo {
     pub engine: Option<ProfileEngine>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defaults: Option<ProfileDefaults>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

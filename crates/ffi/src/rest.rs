@@ -213,3 +213,49 @@ pub fn list_profiles_call() -> HttpCall {
 pub fn session_request_call(session_id: String, method: String, path: String, scoped: bool) -> HttpCall {
     HttpCall { method, path: calls::session_request_path(&session_id, &path, scoped), body: None }
 }
+
+// An agent made from what already exists (`adopt` a session, join a `lead`); a configured new agent comes from
+// `CreateForm.call`.
+#[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Record)]
+pub struct NewAgent {
+    #[uniffi(default)]
+    pub name: Option<String>,
+    #[uniffi(default)]
+    pub prompt: Option<String>,
+    #[uniffi(default)]
+    pub lead: Option<String>,
+    #[uniffi(default)]
+    pub adopt: Option<String>,
+    #[uniffi(default)]
+    pub sharing: Option<Sharing>,
+    #[uniffi(default)]
+    pub cross_owner: Option<bool>,
+}
+
+#[uniffi::export]
+pub fn create_agent_call(request: NewAgent) -> HttpCall {
+    let sharing = request.sharing.map(|s| match s {
+        Sharing::Private => wd_native::rest::Sharing::Private,
+        Sharing::Shared => wd_native::rest::Sharing::Shared,
+    });
+    let request = calls::NewAgent {
+        name: request.name,
+        config: None,
+        prompt: request.prompt,
+        lead: request.lead,
+        adopt: request.adopt,
+        sharing,
+        cross_owner: request.cross_owner,
+    };
+    calls::create_agent(&request).into()
+}
+
+#[uniffi::export(default(dir = None, limit = None, offset = None, profile = None))]
+pub fn list_sdk_sessions_call(dir: Option<String>, limit: Option<u32>, offset: Option<u32>, profile: Option<String>) -> HttpCall {
+    calls::list_sdk_sessions(&calls::SdkSessionQuery { dir, limit, offset, profile }).into()
+}
+
+#[uniffi::export]
+pub fn get_profile_call(name: String) -> HttpCall {
+    calls::get_profile(&name).into()
+}

@@ -1,3 +1,4 @@
+import WorkerDeckCore
 import WorkerDeckKit
 import SwiftUI
 
@@ -20,11 +21,11 @@ struct CreateSessionView: View {
   private let onAgentCreated: (AgentResponse) -> Void
 
   init(
-    seed: CreateSessionSeed, client: WorkerClient, seeding: AgentSeeding? = nil,
+    form: CreateForm, client: WorkerClient,
     onAgentCreated: @escaping (AgentResponse) -> Void = { _ in },
     onCreated: @escaping (SessionInfo) -> Void
   ) {
-    _model = State(initialValue: CreateSessionModel(seed: seed, client: client, seeding: seeding))
+    _model = State(initialValue: CreateSessionModel(form: form, client: client))
     self.onCreated = onCreated
     self.onAgentCreated = onAgentCreated
   }
@@ -40,13 +41,13 @@ struct CreateSessionView: View {
         }
       }
 
-      if let agent = model.agent {
-        agentSection(agent, model: model)
+      if model.state.isAgent {
+        agentSection(model)
       }
 
       Section {
         HStack(spacing: 8) {
-          TextField("/Users/you/projects/app", text: $model.cwd)
+          TextField("/Users/you/projects/app", text: $model.fields.cwd)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .font(.callout.monospaced())
@@ -63,20 +64,19 @@ struct CreateSessionView: View {
           .accessibilityLabel("Browse folders")
         }
         if !context.recentCwds.isEmpty {
-          RecentCwdChips(paths: context.recentCwds) { model.cwd = $0 }
+          RecentCwdChips(paths: context.recentCwds) { model.fields.cwd = $0 }
         }
       } header: {
         Text("Working directory")
       }
 
-      if model.showsProfilePicker {
+      if model.state.showsProfilePicker {
         Section("Profile") {
-          Picker("Profile", selection: $model.profileName) {
-            ForEach(model.profiles) { profile in
+          Picker("Profile", selection: $model.fields.profile) {
+            ForEach(model.state.profiles, id: \.name) { profile in
               ProfileLabel(profile: profile).tag(Optional(profile.name))
             }
           }
-          .onChange(of: model.profileName) { _, _ in model.applyProfileDefaults() }
         }
       }
 
@@ -84,32 +84,32 @@ struct CreateSessionView: View {
       // means the same thing (and looks the same) before a session exists as
       // after one does.
       Section("Permissions") {
-        PickerRow(label: "Mode", value: model.permissionMode.label) { sheet = .mode }
+        PickerRow(label: "Mode", value: model.state.modeLabel) { sheet = .mode }
       }
 
       Section("Model") {
-        if !model.claudeModels.isEmpty {
-          PickerRow(label: "Model", value: model.modelLabel) { sheet = .model }
-        } else if model.modelOptions.isEmpty {
+        if model.state.hasCatalog {
+          PickerRow(label: "Model", value: model.state.modelLabel) { sheet = .model }
+        } else if model.state.modelOptions.isEmpty {
           // No list to offer: an engine that ships no catalog and a profile
           // that declares no ids. The id still has to be typeable.
-          TextField("Profile default", text: $model.model)
+          TextField("Profile default", text: $model.fields.model)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
         } else {
-          Picker("Model", selection: $model.model) {
+          Picker("Model", selection: $model.fields.model) {
             Text("Profile default").tag("")
-            ForEach(model.modelOptions, id: \.self) { option in
+            ForEach(model.state.modelOptions, id: \.self) { option in
               Text(option).tag(option)
             }
           }
         }
         // Present exactly when the record (or the chosen catalog row) offers
         // efforts - never a control that silently does nothing.
-        if !model.effortOptions.isEmpty {
-          Picker("Effort", selection: $model.reasoningEffort) {
+        if !model.state.effortOptions.isEmpty {
+          Picker("Effort", selection: $model.fields.reasoningEffort) {
             Text("Default").tag("")
-            ForEach(model.effortOptions, id: \.self) { effort in
+            ForEach(model.state.effortOptions, id: \.self) { effort in
               Text(effort).tag(effort)
             }
           }
@@ -117,7 +117,7 @@ struct CreateSessionView: View {
       }
 
       Section {
-        TextField("Ask for something, or leave blank", text: $model.prompt, axis: .vertical)
+        TextField("Ask for something, or leave blank", text: $model.fields.prompt, axis: .vertical)
           .lineLimit(3...8)
       } header: {
         Text("Initial prompt")
@@ -125,32 +125,32 @@ struct CreateSessionView: View {
         Text("Optional. Slash commands work here too, e.g. `/wrapup`.")
       }
 
-      if model.agent == nil {
+      if !model.state.isAgent {
       Section {
         DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
           // Sections the capability record forswears are hidden, not disabled:
           // an affordance the engine has no meaning for is not a choice.
-          if model.capabilities.settingSources {
-            Toggle("User settings", isOn: $model.useUserSettings)
-            Toggle("Project settings", isOn: $model.useProjectSettings)
-            Toggle("Local settings", isOn: $model.useLocalSettings)
+          if model.state.settingSources {
+            Toggle("User settings", isOn: $model.fields.userSettings)
+            Toggle("Project settings", isOn: $model.fields.projectSettings)
+            Toggle("Local settings", isOn: $model.fields.localSettings)
           }
-          Toggle("Stream partial messages", isOn: $model.includePartialMessages)
-          if model.capabilities.budgets {
+          Toggle("Stream partial messages", isOn: $model.fields.partialMessages)
+          if model.state.budgets {
             LabeledContent("Max turns") {
-              TextField("unlimited", text: $model.maxTurns)
+              TextField("unlimited", text: $model.fields.maxTurns)
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.trailing)
             }
             LabeledContent("Max budget (USD)") {
-              TextField("unlimited", text: $model.maxBudgetUsd)
+              TextField("unlimited", text: $model.fields.maxBudgetUsd)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
             }
           }
-          if model.capabilities.resume {
+          if model.state.resume {
             HStack(spacing: 8) {
-              TextField("Resume session id", text: $model.resume)
+              TextField("Resume session id", text: $model.fields.resume)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.caption.monospaced())
@@ -158,7 +158,7 @@ struct CreateSessionView: View {
               // the same answer applies: the picker lists what the server's
               // disk holds, the field stays authoritative, so an id from
               // anywhere else can still be pasted.
-              if model.capabilities.listSessions {
+              if model.state.listSessions {
                 Button {
                   sheet = .resumeSession
                 } label: {
@@ -169,26 +169,25 @@ struct CreateSessionView: View {
                 .accessibilityLabel("Browse stored sessions")
               }
             }
-            if model.engine == .claude {
-              Toggle("Fork instead of continue", isOn: $model.forkSession)
-                .disabled(model.resume.trimmingCharacters(in: .whitespaces).isEmpty)
+            if model.state.showsFork {
+              Toggle("Fork instead of continue", isOn: $model.fields.forkSession)
+                .disabled(model.fields.resume.trimmingCharacters(in: .whitespaces).isEmpty)
             }
           }
         }
       }
       }
     }
-    .navigationTitle(
-      model.agent != nil ? "New agent" : model.resume.isEmpty ? "New session" : "Resume session")
+    .navigationTitle(model.state.title)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .confirmationAction) {
         if model.isSubmitting {
           ProgressView()
         } else {
-          Button(model.agent != nil ? "Create" : "Start") {
+          Button(model.state.submitLabel) {
             Task {
-              if model.agent != nil {
+              if model.state.isAgent {
                 if let response = await model.submitAgent() { onAgentCreated(response) }
               } else if let info = await model.submit() {
                 onCreated(info)
@@ -203,33 +202,21 @@ struct CreateSessionView: View {
       switch sheet {
       case .folder:
         FolderPickerView(client: model.fileClient) { path in
-          model.cwd = path
+          model.fields.cwd = path
         }
       case .model:
-        ModelPickerSheet(
-          models: model.claudeModels,
-          current: model.model.isEmpty ? nil : model.model,
-          defaultModel: model.defaultModel,
-          onSelect: { model.model = $0 ?? "" })
+        ModelPickerSheet(picker: model.modelPicker, onSelect: { model.fields.model = $0 ?? "" })
       case .resumeSession:
         StoredSessionPickerView(model: model)
       case .mode:
-        ModePickerSheet(
-          modes: model.availableModes,
-          current: model.permissionMode,
-          defaultMode: model.selectedProfile?.defaults?.permissionMode ?? .default,
-          // Creating a session is exactly when bypass *can* be chosen - the CLI
-          // only refuses to switch into it later. A server that forbids it
-          // outright says so when the request lands.
-          canBypass: true,
-          onSelect: { model.permissionMode = $0 })
+        ModePickerSheet(picker: model.modePicker, onSelect: { model.fields.permissionMode = $0 })
       }
     }
     .task {
       await model.loadProfiles()
       // Arriving from Resume: the advanced section holds the pre-filled ids, so
       // open it rather than hide what the user is about to act on.
-      if !model.resume.isEmpty { showAdvanced = true }
+      if !model.fields.resume.isEmpty { showAdvanced = true }
     }
   }
 }
@@ -240,24 +227,24 @@ struct CreateSessionView: View {
 /// the id field (and adopts the thread's directory); both stay editable.
 extension CreateSessionView {
   @ViewBuilder
-  fileprivate func agentSection(_ agent: AgentSeed, model: CreateSessionModel) -> some View {
+  fileprivate func agentSection(_ model: CreateSessionModel) -> some View {
     @Bindable var model = model
     Section {
-      TextField("Name (the gateway suggests one)", text: $model.agentName)
+      TextField("Name (the gateway suggests one)", text: $model.fields.agentName)
         .textInputAutocapitalization(.words)
         .autocorrectionDisabled()
-      if !agent.leads.isEmpty {
-        Picker("Team", selection: $model.lead) {
+      if !model.state.leads.isEmpty {
+        Picker("Team", selection: $model.fields.lead) {
           Text("None").tag(String?.none)
-          ForEach(agent.leads) { lead in
-            Text(lead.name).tag(Optional(lead.id))
+          ForEach(model.state.leads, id: \.agentId) { lead in
+            Text(lead.name).tag(Optional(lead.agentId))
           }
         }
       }
-      if agent.allowShared, model.lead == nil {
+      if model.state.showsSharing {
         Picker("Sharing", selection: $model.sharing) {
-          Text("Private").tag(AgentSharing.private)
-          Text("Shared").tag(AgentSharing.shared)
+          Text("Private").tag(Sharing.private)
+          Text("Shared").tag(Sharing.shared)
         }
       }
     } header: {
@@ -266,7 +253,7 @@ extension CreateSessionView {
       Text("An agent keeps its name, avatar and team across conversations.")
     }
     Section {
-      TextField("Who this agent is and what it works on", text: $model.brief, axis: .vertical)
+      TextField("Who this agent is and what it works on", text: $model.fields.brief, axis: .vertical)
         .lineLimit(3...8)
     } header: {
       Text("Brief")
@@ -300,7 +287,7 @@ private struct StoredSessionPickerView: View {
               Label("Nothing to resume", systemImage: "clock.arrow.circlepath")
             } description: {
               Text(
-                model.cwd.trimmingCharacters(in: .whitespaces).isEmpty
+                model.fields.cwd.trimmingCharacters(in: .whitespaces).isEmpty
                   ? "No stored sessions on this server."
                   : "No stored sessions for this directory. Clear the working directory to list every stored session.")
             }
@@ -399,18 +386,18 @@ private struct RecentCwdChips: View {
 }
 
 private struct ProfileLabel: View {
-  let profile: ProfileInfo
+  let profile: FormProfile
 
   var body: some View {
     HStack(spacing: 6) {
       Text(profile.name)
-        .foregroundStyle(profile.isUnavailable ? .secondary : .primary)
-      Text(profile.resolvedEngine.rawValue)
+        .foregroundStyle(profile.unavailable ? .secondary : .primary)
+      Text(profile.engine)
         .font(.caption2)
         .foregroundStyle(.secondary)
       // Greyed, never hidden: availability is display-only and the probe can
       // be stale - the row stays selectable.
-      if profile.isUnavailable {
+      if profile.unavailable {
         Text("unavailable")
           .font(.caption2)
           .foregroundStyle(.orange)

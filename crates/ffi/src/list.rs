@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, SessionInfo, Sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
+use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
 use wd_native::vm::engine_mark::{EngineMark, engine_mark};
 use wd_native::vm::session_list::{
     self as vm, GroupBy, GroupOptions, SessionRow, SessionState, SortBy, StepDisplay, ViewConfig, filter_rows, group_rows,
@@ -386,7 +387,7 @@ impl State {
     }
 }
 
-fn engine_name(engine: ProfileEngine) -> String {
+pub(crate) fn engine_name(engine: ProfileEngine) -> String {
     serde_json::to_value(engine).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default()
 }
 
@@ -488,6 +489,22 @@ pub struct SessionList {
 impl SessionList {
     fn state(&self) -> std::sync::MutexGuard<'_, State> {
         self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    // `agent_seed` for the create form, each lead with its owner so a cross-owner join can say so.
+    pub(crate) fn form_seed(&self, host_id: &str, profile: Option<&str>) -> Option<FormSeed> {
+        let seed = self.agent_seed(host_id.to_owned(), None, profile.map(str::to_owned))?;
+        let state = self.state();
+        let leads = seed
+            .leads
+            .into_iter()
+            .map(|lead| SeedLead {
+                owner: state.find(host_id, &lead.session_id).and_then(|info| info.owner.clone()),
+                agent_id: lead.agent_id,
+                name: lead.name,
+            })
+            .collect();
+        Some(FormSeed { leads, allow_shared: seed.allow_shared, shared: seed.shared, owner: seed.owner })
     }
 }
 
