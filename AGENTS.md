@@ -84,6 +84,9 @@ Detail for every one of these is in `docs/PACKAGES.md` / `docs/CLIENTS.md`.
   publish itself and move every `latest` backwards; `docs/RELEASING.md` has the incident.
 - Real-SDK smokes cost tokens and never run in `pnpm test`, but permission-path,
   CLI-control-request and codex process-contract changes need one. See `docs/DEVELOPMENT.md`.
+- **Wrap up before 350k context.** Run `/dev:wrapup` (commit, notes in `_docs/NEXT-SESSION.md`) before the context
+  window passes ~350k tokens; an agent may then restart itself on a clean session with `context_reset`, its prompt
+  pointing at the next-session notes.
 - Docs conventions: `docs/` and `_docs/` are `UPPER-CASE-DASH.md`. `_docs/` is **gitignored**, so
   harvest anything worth keeping out of it before deleting.
 
