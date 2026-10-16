@@ -1308,7 +1308,8 @@ the effort is unknown, so a gateway too old to know `set_effort` is never sent o
 for the selected row)
 and `AgentAvatarView` (pixelated, busy strip sliced from `avatar-busy.png` by `x-frame-durations`
 and stepped in a `TimelineView`, desaturated asleep, a dashed engine tile with no picture);
-`AgentAvatarLoader` caches per gateway and avatar path. A card whose session or team needs an
+`AgentAvatarLoader` fetches what the core list's `avatarFetches` names (per gateway and avatar
+path, retried a minute after a failure) and keeps the decoded frames. A card whose session or team needs an
 answer is tinted orange. Verbs follow the web menu (rename, status, avatar, make agent, add to
 team, leave, dissolve, sharing, new conversation, retire), from the `···`, a long press, and
 swipes (leading rename and new conversation). New agent reuses the New session form with an

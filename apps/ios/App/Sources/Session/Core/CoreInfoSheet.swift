@@ -11,7 +11,7 @@ import UIKit
 /// everything here is fixed at creation and looked up once.
 struct SessionInfoSheet: View {
   let chrome: SessionChrome?
-  let session: SessionInfo?
+  let facts: SessionExtras
   let fileAccess: SessionFileAccess?
 
   @Environment(\.dismiss) private var dismiss
@@ -27,20 +27,20 @@ struct SessionInfoSheet: View {
           if let mode = chrome?.modeLabel {
             LabeledContent("Permission mode", value: mode)
           }
-          LabeledContent("Engine", value: (session?.resolvedEngine ?? .claude).rawValue)
-          if let profile = session?.profile {
+          LabeledContent("Engine", value: facts.engine)
+          if let profile = facts.profile {
             LabeledContent("Profile", value: profile)
           }
-          if let apiKeySource = session?.apiKeySource {
+          if let apiKeySource = facts.apiKeySource {
             LabeledContent("Credentials", value: apiKeySource)
           }
         }
 
         Section {
-          if let cwd = session?.cwd {
+          if let cwd = facts.cwd {
             CopyableRow(label: "Working directory", value: cwd)
           }
-          if let sdkSessionId = session?.sdkSessionId {
+          if let sdkSessionId = facts.sdkSessionId {
             CopyableRow(label: "SDK session id", value: sdkSessionId)
           }
         }

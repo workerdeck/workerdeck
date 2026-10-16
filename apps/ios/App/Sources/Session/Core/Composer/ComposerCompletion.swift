@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import WorkerDeckCore
 import WorkerDeckKit
 
 // The suggestion list for the prompt tokens. `/` filters commands and skills locally, `#` the other sessions on the

@@ -1,195 +1,140 @@
-import WorkerDeckKit
 import Foundation
 import Observation
+import WorkerDeckCore
+import WorkerDeckKit
 
-/// One session's window onto the host filesystem: the client, plus the working
-/// directory everything is scoped to.
-///
-/// The server's `hostFiles.roots` remain the security boundary - this is a UI
-/// scope, not an enforcement one. What it buys is the right question: on a phone
-/// you want *this session's* project, not a root picker, and a session whose cwd
-/// the server does not expose should say so instead of offering somewhere else.
+// How the file screens reach a gateway: a call the core named, its answer back whole for the core to read.
+typealias HostTransport = @Sendable (HttpCall) async -> HttpAnswer
+
+// One session's window onto the host filesystem: the transport, plus the working directory it is rooted at. The
+// gateway's roots stay the security boundary; this is the UI's scope.
 struct HostFileScope: Sendable {
-  let client: WorkerClient
+  let transport: HostTransport
   let cwd: String
+
+  init(client: WorkerClient, cwd: String) {
+    self.init(transport: { await client.answer($0) }, cwd: cwd)
+  }
+
+  init(transport: @escaping HostTransport, cwd: String) {
+    self.transport = transport
+    self.cwd = cwd
+  }
 }
 
-/// Browsing state for one session's working directory.
-///
-/// The whole surface is optional server-side, and a 404 is the *normal* answer
-/// from a gateway started without `--fs-root` - so availability is a first-class
-/// state rather than an error banner: the browser explains how to turn it on
-/// instead of looking broken.
-///
-/// Listings are cached per canonical path so walking back up is instant; pull to
-/// refresh re-fetches the level on screen, which is also how you notice the agent
-/// changed something.
+// The browser over the core's `HostFiles`, which owns availability, the listing cache and what is in flight. This
+// moves the bytes and republishes the core's state after each answer.
 @MainActor
 @Observable
 final class HostFilesModel {
-  enum Availability: Equatable {
-    case loading
-    /// The server exposes no host files at all.
-    case unavailable
-    /// The server exposes files, but not this session's working directory.
-    case outsideRoots
-    case ready(canWrite: Bool)
-    /// Reaching the server failed - distinct from the two above, which are answers.
-    case failed(String)
-  }
-
   let scope: HostFileScope
-  private(set) var availability: Availability = .loading
-  /// Listings by canonical directory path.
-  private(set) var listings: [String: ListHostDirResponse] = [:]
-  /// Paths with a fetch in flight, so a row can spin without a global overlay.
-  private(set) var loading: Set<String> = []
-  var errorMessage: String?
+  private(set) var availability: HostFilesAvailability = .loading
+  private(set) var errorMessage: String?
+  private var revision = 0
+
+  private let files: HostFiles
 
   init(scope: HostFileScope) {
     self.scope = scope
+    files = HostFiles.session(cwd: scope.cwd)
   }
 
-  var client: WorkerClient { scope.client }
+  var transport: HostTransport { scope.transport }
   var cwd: String { scope.cwd }
-
   var canWrite: Bool {
-    if case .ready(let canWrite) = availability { return canWrite }
-    return false
+    if case .ready(let canWrite) = availability { canWrite } else { false }
   }
 
-  /// Two questions in one pass: does this gateway serve files at all (`/fs/roots`),
-  /// and is *this* session's directory one it will serve (the first listing)? They
-  /// have different answers and deserve different screens - "no file access" is a
-  /// flag the operator can add, "outside the roots" is a path they'd have to widen.
   func load() async {
-    if case .ready = availability { return }
-    availability = .loading
-    let canWrite: Bool
-    do {
-      canWrite = try await client.listHostRoots().canWrite
-    } catch let error as WorkerClientError {
-      availability = error.statusCode == 404 ? .unavailable : .failed(error.message)
-      return
-    } catch {
-      availability = .failed(error.localizedDescription)
-      return
+    guard let call = files.loadCall() else { return }
+    sync()
+    if let next = files.rootsAnswered(answer: await transport(call)) {
+      files.cwdAnswered(answer: await transport(next))
     }
-    do {
-      let listing = try await client.listHostDir(path: cwd)
-      listings[listing.path] = listing
-      if listing.path != cwd { listings[cwd] = listing }
-      availability = .ready(canWrite: canWrite)
-    } catch let error as WorkerClientError {
-      // Every filesystem refusal is a uniform 404 by design (it must not become an
-      // existence oracle), so this covers both "not under a root" and "gone".
-      availability = error.statusCode == 404 ? .outsideRoots : .failed(error.message)
-    } catch {
-      availability = .failed(error.localizedDescription)
-    }
+    sync()
   }
 
-  /// Fetch a directory, unless it is already cached. `force` re-fetches - the agent
-  /// is editing this tree, so a cached listing goes stale on its own.
   func loadDirectory(_ path: String, force: Bool = false) async {
-    if !force, listings[path] != nil { return }
-    guard !loading.contains(path) else { return }
-    loading.insert(path)
-    defer { loading.remove(path) }
-    do {
-      let response = try await client.listHostDir(path: path)
-      // Keyed by the *canonical* path the server answered with, not the one asked
-      // for: they differ whenever the request crossed a symlink, and caching under
-      // the request would make the same directory appear twice.
-      listings[response.path] = response
-      if response.path != path { listings[path] = response }
-    } catch let error as WorkerClientError {
-      errorMessage = error.message
-    } catch {
-      errorMessage = error.localizedDescription
-    }
+    guard let call = files.listCall(path: path, force: force) else { return }
+    sync()
+    files.listed(path: path, answer: await transport(call))
+    sync()
   }
 
-  func listing(for path: String) -> ListHostDirResponse? { listings[path] }
-  func isLoading(_ path: String) -> Bool { loading.contains(path) }
+  func dismissError() {
+    files.clearError()
+    sync()
+  }
+
+  func listing(for path: String) -> HostListing? {
+    _ = revision
+    return files.listing(path: path)
+  }
+
+  func isLoading(_ path: String) -> Bool {
+    _ = revision
+    return files.isLoading(path: path)
+  }
+
+  private func sync() {
+    availability = files.availability()
+    errorMessage = files.error()
+    revision &+= 1
+  }
 }
 
-/// A file open in the viewer/editor.
-///
-/// Holds both what was read and what is being edited, because saving needs the
-/// hash of the former: every write on this API is conditional, so an edit that
-/// loses track of its base can only be rebased, never forced.
+// One host file in the viewer/editor over the core's `HostFileEditor`, which holds the draft, the base hash every
+// save is conditional on, and what a 409 means.
 @MainActor
 @Observable
 final class HostFileModel {
-  enum Content: Equatable {
-    case loading
-    /// Editable text plus the hash the edit is based on.
-    case text(original: String, hash: String)
-    /// A file the editor declines to open rather than corrupt on save.
-    case binary(bytes: Int)
-    case failed(String)
-  }
-
   let path: String
-  private(set) var content: Content = .loading
-  private(set) var modifiedAt: Double?
-  /// Live buffer, diverging from `original` as the user types.
-  var draft: String = ""
-  private(set) var saving = false
-  var errorMessage: String?
-  /// Set when the server refused the write because the file changed underneath -
-  /// worth its own message, since the fix is to reload rather than to retry.
-  private(set) var conflict = false
+  private(set) var state: HostFileState
+  private let editor: HostFileEditor
+  private let transport: HostTransport
 
-  private let client: WorkerClient
-
-  init(client: WorkerClient, path: String) {
-    self.client = client
+  init(transport: @escaping HostTransport, path: String) {
+    self.transport = transport
     self.path = path
+    editor = HostFileEditor(path: path)
+    state = editor.state()
   }
 
-  var isDirty: Bool {
-    guard case .text(let original, _) = content else { return false }
-    return draft != original
+  var draft: String {
+    get { editor.draft() }
+    set {
+      editor.setDraft(draft: newValue)
+      state = editor.state()
+    }
+  }
+
+  var errorMessage: String? {
+    get { state.error }
+    set {
+      if newValue == nil { editor.clearError() }
+      state = editor.state()
+    }
   }
 
   func load() async {
-    content = .loading
-    conflict = false
-    do {
-      let response = try await client.readHostFile(path: path)
-      modifiedAt = response.modifiedAt
-      if let text = response.text {
-        content = .text(original: text, hash: response.hash)
-        draft = text
-      } else {
-        content = .binary(bytes: response.bytes)
-      }
-    } catch let error as WorkerClientError {
-      content = .failed(error.message)
-    } catch {
-      content = .failed(error.localizedDescription)
-    }
+    let call = editor.loadCall()
+    state = editor.state()
+    editor.readAnswered(answer: await transport(call))
+    state = editor.state()
   }
 
   func save() async {
-    guard case .text(_, let hash) = content, !saving else { return }
-    saving = true
-    defer { saving = false }
-    do {
-      let response = try await client.writeHostFile(
-        WriteHostFileRequest(path: path, text: draft, expectedHash: hash))
-      // The write's own hash becomes the base for the next one, so a second save
-      // without an intervening read still satisfies the precondition.
-      content = .text(original: draft, hash: response.hash)
-      modifiedAt = response.modifiedAt
-      conflict = false
-    } catch let error as WorkerClientError {
-      conflict = error.statusCode == 409
-      errorMessage = error.message
-    } catch {
-      errorMessage = error.localizedDescription
-    }
+    guard let call = editor.saveCall() else { return }
+    state = editor.state()
+    editor.saveAnswered(answer: await transport(call))
+    state = editor.state()
   }
+}
+
+extension HostEntry: @retroactive Identifiable {
+  public var id: String { path }
+}
+
+extension HostRoot: @retroactive Identifiable {
+  public var id: String { path }
 }

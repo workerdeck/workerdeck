@@ -9,6 +9,7 @@ final class CoreSessionModel {
   let sessionId: String
   private(set) var ui = CoreSessionUi()
   var skills: [SkillInfo] { ui.composer.skills }
+  var skillSections: [SkillSection] { ui.composer.skillSections }
   var insertion: String?
   private let baseURL: String
   private let authKey: String?

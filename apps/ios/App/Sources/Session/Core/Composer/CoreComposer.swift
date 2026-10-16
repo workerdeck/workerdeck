@@ -4,20 +4,27 @@ import UIKit
 import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
 
-// What the composer reaches over REST: uploads, the `@file` search and the `#` peer list. Absent pieces switch their
-// feature off.
+// What the composer reaches over REST: uploads (answering the attachment's id), the `@file` search and the `#` peer
+// list. Absent pieces switch their feature off. The core names each call and reads each answer.
 struct CoreComposerServices: Sendable {
-  var upload: (@Sendable (String, String, Data) async throws -> MessageAttachment)?
+  var upload: (@Sendable (String, String, Data) async throws -> String)?
   var findFiles: (@Sendable (_ cwd: String, _ query: String) async throws -> [HostFileMatch])?
   var listPeers: (@Sendable () async throws -> [PeerSession])?
 
   static func live(client: WorkerClient, sessionId: String) -> Self {
     Self(
       upload: { name, mediaType, data in
-        try await client.uploadAttachment(sessionId: sessionId, name: name, mediaType: mediaType, data: data)
+        let body = try await client.upload(
+          uploadAttachmentCall(sessionId: sessionId, name: name), mediaType: mediaType, data: data)
+        guard let id = uploadedAttachmentId(body: String(decoding: body, as: UTF8.self)) else {
+          throw WorkerClientError(message: "The gateway's answer could not be read")
+        }
+        return id
       },
       findFiles: { cwd, query in
-        try await client.findHostFiles(in: cwd, matching: query, limit: PromptCompletionModel.fileSearchLimit).matches
+        let call = findHostFilesCall(
+          directory: cwd, query: query, limit: UInt32(PromptCompletionModel.fileSearchLimit))
+        return hostFileMatches(body: String(decoding: try await client.perform(call), as: UTF8.self)) ?? []
       },
       listPeers: {
         PromptCompletionModel.peerSessions(try await client.listSessions(), excluding: sessionId)

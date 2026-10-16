@@ -1,4 +1,5 @@
 import Foundation
+import WorkerDeckCore
 import WorkerDeckKit
 
 // A long session as gateway frames, for driving the core preview with no gateway: each turn is a prompt, a Bash call
@@ -190,13 +191,13 @@ enum CoreReplayFixture {
   static let composerServices = CoreComposerServices(
     upload: { name, mediaType, data in
       try await Task.sleep(for: .milliseconds(300))
-      return MessageAttachment(id: uploadPrefix + name, name: name, mediaType: mediaType, bytes: data.count)
+      return uploadPrefix + name
     },
     findFiles: { _, query in
       let paths = ["src/main.swift", "src/composer/field.swift", "README.md", "docs/GUIDE.md"]
       let rows = paths.filter { query.isEmpty || $0.lowercased().contains(query.lowercased()) }
-        .map { ["path": "/work/fixture/\($0)", "relative": $0] }
-      return try JSONDecoder().decode([HostFileMatch].self, from: JSONSerialization.data(withJSONObject: rows))
+        .map { HostFileMatch(path: "/work/fixture/\($0)", relative: $0) }
+      return rows
     },
     listPeers: {
       [

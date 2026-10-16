@@ -609,53 +609,88 @@ struct UIPreviewHarness: View {
       ProjectsPreview()
 
     case .folders:
-      let root = "/Users/you/projects"
       FolderPickerView(
-        // Never contacted: the seeded model already has every answer the screen
-        // asks for, and both fetches short-circuit on what they find.
-        client: WorkerClient(baseURL: URL(string: "http://127.0.0.1:1")!),
-        onSelect: { _ in },
-        seeded: FolderPickerModel(
-          client: WorkerClient(baseURL: URL(string: "http://127.0.0.1:1")!),
-          roots: [HostFileRoot(path: root, name: "projects")],
-          listings: [
-            root: [
-              HostDirEntry(name: "workerdeck", path: "\(root)/workerdeck", type: .dir),
-              HostDirEntry(name: "silkweave", path: "\(root)/silkweave", type: .dir),
-              HostDirEntry(name: "gtm", path: "\(root)/gtm", type: .dir),
-              HostDirEntry(name: "scratch", path: "\(root)/scratch", type: .symlink),
-            ]
-          ]))
+        client: WorkerClient(baseURL: URL(string: "http://127.0.0.1:1")!), onSelect: { _ in },
+        transport: PreviewGateway.transport)
     }
   }
 }
 
 
+// A canned gateway behind the file and MCP screens, so the core's view models read real answers: a path it does
+// not know is a 404, `/fs/write` answers a conflict for `stale.txt`.
+enum PreviewGateway {
+  static let root = "/Users/you/projects"
+
+  private static let answers: [String: String] = [
+    "/fs/roots": #"{"roots":[{"path":"\#(root)","name":"projects"}],"canWrite":true}"#,
+    "/fs/list?path=\(encoded(root))": #"""
+      {"path":"\#(root)","entries":[{"name":"workerdeck","path":"\#(root)/workerdeck","type":"dir"},
+      {"name":"silkweave","path":"\#(root)/silkweave","type":"dir"},{"name":"gtm","path":"\#(root)/gtm","type":"dir"},
+      {"name":"scratch","path":"\#(root)/scratch","type":"symlink"},
+      {"name":"notes.md","path":"\#(root)/notes.md","type":"file","bytes":12},
+      {"name":"stale.txt","path":"\#(root)/stale.txt","type":"file","bytes":5}]}
+      """#,
+    "/fs/read?path=\(encoded(root + "/notes.md"))":
+      #"{"path":"\#(root)/notes.md","content":"Notes\n","encoding":"utf8","bytes":8,"hash":"h1","modifiedAt":1}"#,
+    "/fs/read?path=\(encoded(root + "/stale.txt"))":
+      #"{"path":"\#(root)/stale.txt","content":"old","encoding":"utf8","bytes":3,"hash":"h0","modifiedAt":1}"#,
+    "/sessions/preview/mcp": #"""
+      {"servers":[{"name":"workerdeck","status":"connected","scope":"user","transport":"stdio","command":"workerdeck",
+      "tools":[{"name":"peers_list","title":"Peers","description":"List peer sessions"},{"name":"set_status"}]},
+      {"name":"figma","status":"needs-auth","scope":"project","transport":"http","url":"https://example.test/mcp"}]}
+      """#,
+  ]
+
+  static let transport: HostTransport = { call in
+    if call.path == "/fs/write" {
+      let stale = call.body?.contains("stale.txt") == true
+      return stale
+        ? HttpAnswer(status: 409, contentType: "application/json", body: #"{"error":"changed on disk since it was read"}"#)
+        : HttpAnswer(status: 200, contentType: "application/json", body: #"{"path":"x","bytes":1,"hash":"h2","modifiedAt":2}"#)
+    }
+    if call.method == "POST", call.path.hasPrefix("/sessions/preview/mcp/") {
+      return HttpAnswer(status: 200, contentType: "application/json", body: answers["/sessions/preview/mcp"]!)
+    }
+    guard let body = answers[call.path] else {
+      return HttpAnswer(status: 404, contentType: "application/json", body: #"{"error":"not found"}"#)
+    }
+    return HttpAnswer(status: 200, contentType: "application/json", body: body)
+  }
+
+  private static func encoded(_ path: String) -> String {
+    path.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? path
+  }
+}
+
 private struct CoreExtrasPreview: View {
   @State private var sheet: CoreExtrasSheet?
 
-  private let skills: [SkillInfo] = {
-    let json = #"[{"name":"wrapup","description":"Wrap up a session.","scope":"user","enabled":true},{"name":"repo-skill","displayName":"Repo skill","shortDescription":"Project helper","scope":"repo","enabled":false}]"#
-    return (try? JSONDecoder().decode([SkillInfo].self, from: Data(json.utf8))) ?? []
-  }()
-
-  private let servers = [
-    McpServerStatusInfo(name: "workerdeck", status: "connected", scope: "user", transport: "stdio"),
-    McpServerStatusInfo(name: "figma", status: "needs-auth", scope: "project", transport: "http", url: "https://example.test/mcp"),
-  ]
+  private let sections: [SkillSection] = skillSections(skills: [
+    Skill(
+      name: "wrapup", description: "Wrap up a session.", shortDescription: nil, displayName: nil, defaultPrompt: nil,
+      scope: "user", enabled: true),
+    Skill(
+      name: "repo-skill", description: nil, shortDescription: "Project helper", displayName: "Repo skill",
+      defaultPrompt: nil, scope: "repo", enabled: false),
+  ])
 
   var body: some View {
     List {
       Button("Session info") { sheet = .info }
       Button("MCP servers") { sheet = .mcp }
       Button("Skills") { sheet = .skills }
+      Button("Files") { sheet = .files }
     }
     .sheet(item: $sheet) { sheet in
       switch sheet {
-      case .info: SessionInfoSheet(chrome: nil, session: nil, fileAccess: nil)
-      case .mcp: McpServersView(load: { servers }, act: { _, _ in servers }, canManage: true)
-      case .skills: SkillsView(skills: skills, onUse: { _ in })
-      case .files: EmptyView()
+      case .info: SessionInfoSheet(chrome: nil, facts: sessionExtrasUnknown(), fileAccess: nil)
+      case .mcp:
+        McpServersView(
+          model: McpServersModel(
+            servers: McpServers(sessionId: "preview", canManage: true), transport: PreviewGateway.transport))
+      case .skills: SkillsView(sections: sections, onUse: { _ in })
+      case .files: HostFilesView(scope: HostFileScope(transport: PreviewGateway.transport, cwd: PreviewGateway.root))
       }
     }
   }

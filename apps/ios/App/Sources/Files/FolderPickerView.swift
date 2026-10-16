@@ -1,3 +1,4 @@
+import WorkerDeckCore
 import WorkerDeckKit
 import SwiftUI
 
@@ -14,9 +15,8 @@ import SwiftUI
 struct FolderPickerView: View {
   let client: WorkerClient
   let onSelect: (String) -> Void
-  /// Pre-built state, for `UIPreviewHarness`. Nil in the app, where the model is
-  /// created on appear and loads itself.
-  var seeded: FolderPickerModel?
+  // A canned gateway, for `UIPreviewHarness`; the app goes through `client`.
+  var transport: HostTransport?
 
   @Environment(\.dismiss) private var dismiss
   @State private var model: FolderPickerModel?
@@ -39,7 +39,7 @@ struct FolderPickerView: View {
       }
     }
     .task {
-      let live = model ?? seeded ?? FolderPickerModel(client: client)
+      let live = model ?? FolderPickerModel(transport: transport ?? { await client.answer($0) })
       model = live
       await live.load()
     }
@@ -48,7 +48,7 @@ struct FolderPickerView: View {
   @ViewBuilder
   private func content(_ model: FolderPickerModel) -> some View {
     switch model.availability {
-    case .loading:
+    case .loading, .outsideRoots:
       ProgressView()
     case .unavailable:
       ContentUnavailableView {
@@ -66,7 +66,8 @@ struct FolderPickerView: View {
       } actions: {
         Button("Try again") { Task { await model.load() } }
       }
-    case .ready(let roots):
+    case .ready:
+      let roots = model.roots
       // One root is not a choice - start inside it, so the first screen is
       // already the list you came to look at.
       if roots.count == 1, let root = roots.first {
@@ -109,7 +110,7 @@ private struct FolderLevelView: View {
           NavigationLink {
             FolderLevelView(model: model, path: entry.path, select: select)
           } label: {
-            FolderRow(name: entry.name, subtitle: nil, isSymlink: entry.type == .symlink)
+            FolderRow(name: entry.name, subtitle: nil, isSymlink: entry.kind == .symlink)
           }
         }
       } else if model.isLoading(path) {

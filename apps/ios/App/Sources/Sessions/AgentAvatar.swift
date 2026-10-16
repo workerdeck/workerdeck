@@ -1,64 +1,52 @@
 import SwiftUI
 import UIKit
+import WorkerDeckCore
 import WorkerDeckKit
 
 struct AgentAvatarFrames: Equatable {
   let still: UIImage
   let busy: [UIImage]
   let durations: [Double]
-
-  var busyPeriod: Double { durations.reduce(0, +) }
 }
 
-// Keyed by gateway plus `AgentRef.avatar`, which is versioned by the avatar's seed, so each picture is fetched once.
+// The pictures the core list says to fetch (`avatarFetches`, keyed by gateway plus the seed-versioned
+// `AgentRef.avatar`, retried a minute after a failure); this moves the bytes and slices the busy strip.
 @MainActor
 @Observable
 final class AgentAvatarLoader {
-  private static let retryAfter: TimeInterval = 60
-
   private var frames: [String: AgentAvatarFrames] = [:]
-  private var inFlight: Set<String> = []
-  private var failedAt: [String: Date] = [:]
 
   func frames(hostId: String, agent: AgentRef?) -> AgentAvatarFrames? {
-    guard let agent, let path = agent.avatar else { return nil }
-    return frames[Self.key(hostId, path)]
+    guard let avatar = agent?.avatar else { return nil }
+    return frames[avatarKey(hostId: hostId, avatar: avatar)]
   }
 
-  func ensure(hostId: String, agent: AgentRef?, client: WorkerClient?) {
-    guard let agent, let path = agent.avatar, let client else { return }
-    let key = Self.key(hostId, path)
-    if frames[key] != nil || inFlight.contains(key) { return }
-    if let failed = failedAt[key], Date().timeIntervalSince(failed) < Self.retryAfter { return }
-    inFlight.insert(key)
-    let agentId = agent.id
-    Task { [weak self] in
-      defer { self?.inFlight.remove(key) }
-      do {
-        let still = try await client.agentAvatar(id: agentId)
-        let busy = try? await client.agentAvatar(id: agentId, busy: true)
-        guard let image = UIImage(data: still.data) else {
-          self?.failedAt[key] = Date()
-          return
-        }
-        let strip = busy.flatMap { Self.slice($0) } ?? []
-        self?.failedAt[key] = nil
-        self?.frames[key] = AgentAvatarFrames(
-          still: image, busy: strip, durations: strip.isEmpty ? [] : busy?.durations ?? [])
-      } catch {
-        self?.failedAt[key] = Date()
+  func ensure(list: SessionList, clientFor: (String) -> WorkerClient?) {
+    let now = Date().timeIntervalSince1970 * 1000
+    for fetch in list.avatarFetches(nowMs: now) {
+      guard let client = clientFor(fetch.hostId) else {
+        list.avatarSettled(key: fetch.key, loaded: false, nowMs: now)
+        continue
+      }
+      Task { [weak self] in
+        let still = try? await client.fetch(Self.get(fetch.stillPath)).0
+        let busy = try? await client.fetch(Self.get(fetch.busyPath))
+        let image = still.flatMap(UIImage.init(data:))
+        list.avatarSettled(key: fetch.key, loaded: image != nil, nowMs: Date().timeIntervalSince1970 * 1000)
+        guard let image else { return }
+        let durations = avatarFrameDurations(header: busy?.1.value(forHTTPHeaderField: "x-frame-durations"))
+        let strip = busy.flatMap { Self.slice($0.0, durations) } ?? []
+        self?.frames[fetch.key] = AgentAvatarFrames(still: image, busy: strip, durations: strip.isEmpty ? [] : durations)
       }
     }
   }
 
-  private static func key(_ hostId: String, _ path: String) -> String { "\(hostId)|\(path)" }
+  private static func get(_ path: String) -> HttpCall { HttpCall(method: "GET", path: path, body: nil) }
 
-  private static func slice(_ strip: AgentAvatarImage) -> [UIImage]? {
-    guard let durations = strip.durations, durations.count > 1,
-      let image = UIImage(data: strip.data)?.cgImage
+  private static func slice(_ data: Data, _ durations: [Double]) -> [UIImage]? {
+    guard let image = UIImage(data: data)?.cgImage,
+      let width = avatarStripWidth(frames: UInt32(durations.count), imageWidth: UInt32(image.width)).map(Int.init)
     else { return nil }
-    let width = image.width / durations.count
-    guard width > 0 else { return nil }
     let frames = (0..<durations.count).compactMap { index in
       image.cropping(to: CGRect(x: index * width, y: 0, width: width, height: image.height))
         .map { UIImage(cgImage: $0) }
@@ -122,14 +110,7 @@ struct AgentAvatarView: View {
   }
 
   private func busyFrame(_ frames: AgentAvatarFrames, at date: Date) -> Int {
-    let period = frames.busyPeriod
-    guard period > 0 else { return 0 }
-    var at = (date.timeIntervalSinceReferenceDate * 1000).truncatingRemainder(dividingBy: period)
-    for (index, duration) in frames.durations.enumerated() {
-      if at < duration { return index }
-      at -= duration
-    }
-    return frames.durations.count - 1
+    Int(avatarBusyFrame(durations: frames.durations, atMs: date.timeIntervalSinceReferenceDate * 1000))
   }
 }
 

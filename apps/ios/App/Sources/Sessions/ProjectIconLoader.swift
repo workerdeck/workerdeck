@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import WorkerDeckCore
 import WorkerDeckKit
 
 /// Project icon bytes for the sessions list, keyed by the icon's own **content
@@ -101,7 +102,7 @@ final class ProjectIconLoader {
       Task { [weak self] in
         defer { self?.inFlight.remove(hash) }
         do {
-          let data = try await client.projectIcon(sessionId: request.sessionId)
+          let (data, _) = try await client.fetch(projectIconCall(sessionId: request.sessionId))
           // A decode failure is the same answer as a refusal: the gateway caps
           // and re-checks these, but nothing promises UIKit can read the result.
           guard let image = UIImage(data: data) else {

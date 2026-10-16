@@ -164,11 +164,8 @@ final class SessionListModel {
   }
 
   private func ensureAgentAvatars() {
-    for (hostId, snapshot) in snapshots {
-      let client = context(for: hostId)?.client
-      for info in snapshot.sessions where info.agent != nil {
-        agentAvatars.ensure(hostId: hostId.uuidString, agent: info.agent, client: client)
-      }
+    agentAvatars.ensure(list: core) { [weak self] hostId in
+      UUID(uuidString: hostId).flatMap { self?.context(for: $0)?.client }
     }
   }
 

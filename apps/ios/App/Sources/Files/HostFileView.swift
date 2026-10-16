@@ -1,3 +1,4 @@
+import WorkerDeckCore
 import WorkerDeckKit
 import SwiftUI
 
@@ -26,19 +27,16 @@ struct HostFileView: View {
     .navigationBarTitleDisplayMode(.inline)
     .task {
       guard file == nil else { return }
-      let live = HostFileModel(client: modelClient, path: path)
+      let live = HostFileModel(transport: model.transport, path: path)
       file = live
       await live.load()
     }
   }
 
-  /// The browser model owns the client; the file model needs the same one.
-  private var modelClient: WorkerClient { model.client }
-
   @ViewBuilder
   private func content(_ file: HostFileModel) -> some View {
     @Bindable var file = file
-    switch file.content {
+    switch file.state.content {
     case .loading:
       ProgressView()
     case .failed(let message):
@@ -55,7 +53,7 @@ struct HostFileView: View {
       ContentUnavailableView {
         Label("Binary file", systemImage: "doc.badge.gearshape")
       } description: {
-        Text("\(Fmt.bytes(bytes)) that isn't UTF-8 text. Opening it here could only corrupt it.")
+        Text("\(Fmt.bytes(Int(bytes))) that isn't UTF-8 text. Opening it here could only corrupt it.")
       }
     case .text:
       editor(file)
@@ -74,11 +72,11 @@ struct HostFileView: View {
       .disabled(!model.canWrite)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
-          if file.saving {
+          if file.state.saving {
             ProgressView().controlSize(.small)
           } else if model.canWrite {
             Button("Save") { Task { await file.save() } }
-              .disabled(!file.isDirty)
+              .disabled(!file.state.dirty)
           }
         }
         ToolbarItemGroup(placement: .keyboard) {
@@ -87,7 +85,7 @@ struct HostFileView: View {
         }
       }
       .alert(
-        file.conflict ? "File changed on the server" : "Save failed",
+        file.state.conflict ? "File changed on the server" : "Save failed",
         isPresented: Binding(
           get: { file.errorMessage != nil },
           set: { if !$0 { file.errorMessage = nil } })
@@ -95,7 +93,7 @@ struct HostFileView: View {
         // A conflict is not retryable: something else - most likely the agent -
         // wrote this file since it was read, and forcing would discard that.
         // Reloading is the only honest option, and it costs the local edit.
-        if file.conflict {
+        if file.state.conflict {
           Button("Reload", role: .destructive) { Task { await file.load() } }
           Button("Keep editing", role: .cancel) {}
         } else {

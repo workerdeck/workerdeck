@@ -176,21 +176,3 @@ public struct AgentResponse: Decodable, Sendable {
   public let agent: AgentInfo
   public let session: SessionInfo?
 }
-
-public struct AgentAvatarImage: Sendable, Equatable {
-  public let data: Data
-  public let durations: [Double]?
-
-  public init(data: Data, durations: [Double]? = nil) {
-    self.data = data
-    self.durations = durations
-  }
-}
-
-public func frameDurations(_ header: String?) -> [Double]? {
-  guard let header, !header.isEmpty else { return nil }
-  let durations = header.split(separator: ",").compactMap {
-    Double($0.trimmingCharacters(in: .whitespaces))
-  }.filter { $0.isFinite && $0 > 0 }
-  return durations.isEmpty ? nil : durations
-}

@@ -1,3 +1,4 @@
+import WorkerDeckCore
 import WorkerDeckKit
 import SwiftUI
 import UIKit
@@ -5,7 +6,7 @@ import UIKit
 /// The two operations the UI needs against a session's file store, closed over
 /// the client and session id.
 struct SessionFileAccess: Sendable {
-  var list: @Sendable () async throws -> [SessionFileInfo]
+  var list: @Sendable () async throws -> [SessionFile]
   var download: @Sendable (String) async throws -> URL
 
   /// Materialize downloaded bytes as a real file so the share sheet can offer
@@ -123,13 +124,13 @@ struct SessionFilesSection: View {
   let access: SessionFileAccess?
   let downloader: FileDownloader
 
-  @State private var files: [SessionFileInfo] = []
+  @State private var files: [SessionFile] = []
 
   var body: some View {
     Group {
       if !files.isEmpty {
         Section("Files") {
-          ForEach(files) { file in
+          ForEach(files, id: \.path) { file in
             Button {
               downloader.download(file.path)
             } label: {
@@ -144,7 +145,7 @@ struct SessionFilesSection: View {
                 if downloader.inFlight == file.path {
                   ProgressView().controlSize(.mini)
                 } else {
-                  Text(Fmt.bytes(file.bytes))
+                  Text(Fmt.bytes(Int(file.bytes)))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                 }

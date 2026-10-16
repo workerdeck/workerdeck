@@ -46,7 +46,7 @@ final class ComposerAttachment: Identifiable {
 final class ComposerAttachmentStore {
   private(set) var items: [ComposerAttachment] = []
   var errorText: String?
-  var upload: (@Sendable (String, String, Data) async throws -> MessageAttachment)?
+  var upload: (@Sendable (String, String, Data) async throws -> String)?
 
   var isEmpty: Bool { items.isEmpty }
 
@@ -79,7 +79,7 @@ final class ComposerAttachmentStore {
     Task {
       do {
         let uploaded = try await upload(name, mediaType, data)
-        item.settle(.ready(remoteId: uploaded.id))
+        item.settle(.ready(remoteId: uploaded))
       } catch {
         let message = (error as? WorkerClientError)?.message ?? error.localizedDescription
         item.settle(.failed(message))

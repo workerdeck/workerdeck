@@ -1,3 +1,4 @@
+import WorkerDeckCore
 import WorkerDeckKit
 import SwiftUI
 
@@ -93,7 +94,7 @@ private struct HostDirectoryView: View {
         ForEach(listing.entries) { entry in
           row(entry)
         }
-        if listing.truncated == true {
+        if listing.truncated {
           Text("Listing truncated - this directory has more entries than the server returns.")
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -112,8 +113,8 @@ private struct HostDirectoryView: View {
   }
 
   @ViewBuilder
-  private func row(_ entry: HostDirEntry) -> some View {
-    switch entry.type {
+  private func row(_ entry: HostEntry) -> some View {
+    switch entry.kind {
     case .dir:
       NavigationLink {
         HostDirectoryView(model: model, path: entry.path)
@@ -135,19 +136,19 @@ private struct HostDirectoryView: View {
 }
 
 private struct EntryRow: View {
-  let entry: HostDirEntry
+  let entry: HostEntry
 
   var body: some View {
     HStack(spacing: 10) {
       Image(systemName: icon)
-        .foregroundStyle(entry.type == .dir ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+        .foregroundStyle(entry.kind == .dir ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
         .frame(width: 20)
       Text(entry.name)
         .lineLimit(1)
         .truncationMode(.middle)
       Spacer(minLength: 8)
       if let bytes = entry.bytes {
-        Text(Fmt.bytes(bytes))
+        Text(Fmt.bytes(Int(bytes)))
           .font(.caption.monospacedDigit())
           .foregroundStyle(.secondary)
       }
@@ -155,7 +156,7 @@ private struct EntryRow: View {
   }
 
   private var icon: String {
-    switch entry.type {
+    switch entry.kind {
     case .dir: "folder.fill"
     case .file: "doc"
     case .symlink: "arrow.turn.up.right"
