@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import WorkerDeckKit
+@preconcurrency import WorkerDeckSession
 
 /// Fetches the pictures a tool result carried, one box at a time, as the reader
 /// scrolls them into view.
@@ -25,8 +26,10 @@ import WorkerDeckKit
 ///   "image unavailable" instead of retrying on every pass.
 @MainActor
 final class TerminalImageLoader {
-  /// Set by the session view: (seq, toolUseId, partIndex) -> bytes.
-  var fetch: (@Sendable (Int, String, Int) async throws -> Data)?
+  // Set by the session view: a path under the REST base -> bytes. `host` names where a host-path picture is served.
+  var fetch: (@Sendable (String) async throws -> Data)?
+  var host: ((String) -> HostImageFetch?)?
+  var sessionId = ""
 
   private let cache = NSCache<NSString, UIImage>()
   private var failed: Set<String> = []
@@ -47,9 +50,12 @@ final class TerminalImageLoader {
   {
     guard case .placeholder = state(for: box), let fetch else { return nil }
     let key = box.key
+    let target = target(box)
     return Task { @MainActor [weak self] in
-      let data = try? await fetch(box.sourceSeq, box.toolUseId, box.partIndex)
+      var body: Data?
+      if let target { body = try? await fetch(target.path) }
       guard !Task.isCancelled, let self else { return }
+      let data = target?.fsRead == true ? body.flatMap { Self.fsImage($0, box.hostPath ?? "") } : body
       guard let data, let image = UIImage(data: data) else {
         // Undecodable is a failure like any other: the box says so and keeps
         // its size. It must never collapse - a row that changed height because
@@ -61,6 +67,23 @@ final class TerminalImageLoader {
       self.cache.setObject(image, forKey: key as NSString)
       onSettle(.loaded(image))
     }
+  }
+}
+
+extension TerminalImageLoader {
+  private func target(_ box: TermImageBox) -> HostImageFetch? {
+    guard let path = box.hostPath else {
+      return HostImageFetch(
+        path: resultImagePath(
+          sessionId: sessionId, seq: Int64(box.sourceSeq), toolUseId: box.toolUseId, partIndex: Int64(box.partIndex)),
+        fsRead: false)
+    }
+    return host?(path) ?? nil
+  }
+
+  private static func fsImage(_ body: Data, _ path: String) -> Data? {
+    String(data: body, encoding: .utf8).flatMap { hostImageBase64(body: $0, path: path) }
+      .flatMap { Data(base64Encoded: $0) }
   }
 }
 

@@ -44,6 +44,7 @@ final class TerminalRowCell: UICollectionViewCell {
   private var imageTasks: [Task<Void, Never>] = []
   private weak var imageLoader: TerminalImageLoader?
   private var press: ((TermPress) -> Void)?
+  private var openImage: ((UIImage) -> Void)?
   /// How much text was selected when the finger went down - see `handleTap`.
   private var selectionAtTouchDown = 0
   /// Was the transcript already moving when the finger went down, and where was
@@ -115,8 +116,10 @@ final class TerminalRowCell: UICollectionViewCell {
     lines: [TermLine], typography: TerminalTypography, metrics: TerminalMetrics,
     gapAbove: Bool, bleed: CGFloat, read: Bool = false,
     imageLoader: TerminalImageLoader? = nil,
+    onImage: ((UIImage) -> Void)? = nil,
     onPress: @escaping (TermPress) -> Void
   ) {
+    self.openImage = onImage
     self.lines = lines
     self.geometry = TerminalRowGeometry(metrics: metrics, bleed: bleed)
     self.topInset = gapAbove ? metrics.line : 0
@@ -145,6 +148,7 @@ final class TerminalRowCell: UICollectionViewCell {
     stopPulse()
     cancelImageLoads()
     press = nil
+    openImage = nil
     lines = []
     imageLoader = nil
     imageBoxes.forEach { $0.removeFromSuperview() }
@@ -276,6 +280,9 @@ final class TerminalRowCell: UICollectionViewCell {
     }
     guard !lines.isEmpty else { return }
     let point = recognizer.location(in: contentView)
+    if let openImage, let image = imageBoxes.first(where: { $0.frame.contains(point) })?.image {
+      return openImage(image)
+    }
     // Clamped rather than bounds-checked, which is the row's whole hit-target
     // story: a one-line block is `metrics.line` tall - around 19pt, well under
     // anyone's thumb - and the blank line `gapAbove` puts above it is dead
@@ -645,10 +652,12 @@ extension TerminalRowCell {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+    var image: UIImage? { picture.image }
+
     func render(_ state: TerminalImageState) {
       switch state {
       case .placeholder:
-        label.text = TermImage.placeholder(bytes: box.bytes)
+        label.text = box.placeholder ?? TermImage.placeholder(bytes: box.bytes)
         picture.image = nil
         picture.isHidden = true
       case .loaded(let image):

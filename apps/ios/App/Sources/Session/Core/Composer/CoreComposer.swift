@@ -245,6 +245,7 @@ struct CoreComposer: View {
       model.send(draft, attachmentIds: attachments.readyIds)
       attachments.clear()
     }
+    model.clearRecap()
     draft = ""
     selection = NSRange(location: 0, length: 0)
     focused = true

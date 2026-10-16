@@ -567,7 +567,8 @@ struct UIPreviewHarness: View {
     case .core:
       NavigationStack {
         CoreSessionView(
-          fixture: CoreReplayFixture.frames,
+          fixture: ProcessInfo.processInfo.environment["UIPREVIEW_CORE"].flatMap(CoreMediaFixture.frames)
+            ?? CoreReplayFixture.frames,
           recap: ProcessInfo.processInfo.environment["UIPREVIEW_RECAP"].flatMap(Int.init).map {
             CatchUpMark(itemCount: $0, seenAt: Date().timeIntervalSince1970 * 1000 - 42 * 60 * 1000)
           })
@@ -575,6 +576,7 @@ struct UIPreviewHarness: View {
       .environment(AppSettings())
       .environment(UnreadModel())
       .environment(PushCoordinator())
+      .environment(CoreMediaFixture.bookmarks)
 
     case .coreextras:
       CoreExtrasPreview()

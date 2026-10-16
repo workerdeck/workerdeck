@@ -139,7 +139,7 @@ enum CoreReplayFixture {
     case ("GET", "/shells/\(shellId)"): return (200, #"{"shell":\#(shellRecord("running"))}"#)
     case ("POST", "/shells/\(shellId)/kill"): return (200, #"{"shell":\#(shellRecord("exited"))}"#)
     case ("GET", "/profiles"): return (200, profiles)
-    default: return (404, "")
+    default: return CoreMediaFixture.respond(method, path) ?? (404, "")
     }
   }
 

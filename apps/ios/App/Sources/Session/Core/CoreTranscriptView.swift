@@ -70,6 +70,7 @@ struct CoreTranscriptView: View {
   let scroll: TranscriptScrollModel
   let imageLoader: TerminalImageLoader
   let hideThinking: Bool
+  @Environment(\.coreRowActions) private var actions
   private let typography = TerminalTypography.session
 
   var body: some View {
@@ -99,16 +100,17 @@ struct CoreTranscriptView: View {
     return VirtualizedTranscriptView(
       content: content, scroll: scroll, reveal: content.rows.reveal, focus: inFrame ? nil : model.ui.focus,
       showsScrollIndicator: false,
-      configureRow: { [model, imageLoader, typography] cell, index in
+      configureRow: { [model, imageLoader, typography, actions] cell, index in
         cell.configure(
           lines: content.rows.linesAt(index)?.enumerated().map { $1.termLine(press: $0) } ?? [],
           typography: typography, metrics: content.metrics, gapAbove: content.rows.rows[index].gapAbove,
-          bleed: bleed, read: content.read(index), imageLoader: imageLoader,
+          bleed: bleed, read: content.read(index), imageLoader: imageLoader, onImage: actions?.openImage,
           onPress: { press in
             guard case .line(let line) = press else { return }
             if inFrame { model.framePress(row: index, line: line) } else { model.press(row: index, line: line) }
           })
       },
+      menuForRow: actions.map { actions in { actions.menu($0, inFrame) } },
       onVisibleRows: { [model] first, last in
         if inFrame { model.frameVisible(first: first, last: last) } else { model.visible(first: first, last: last) }
       }
@@ -195,7 +197,8 @@ extension TranscriptLine {
       image: image.map {
         TermImageBox(
           toolUseId: $0.toolUseId, sourceSeq: Int($0.sourceSeq), partIndex: Int($0.partIndex),
-          mediaType: $0.mediaType, bytes: Int($0.bytes), lines: $0.lines)
+          mediaType: $0.mediaType, bytes: Int($0.bytes), lines: $0.lines,
+          hostPath: $0.hostPath.isEmpty ? nil : $0.hostPath, placeholder: $0.placeholder.isEmpty ? nil : $0.placeholder)
       },
       inOpen: inOpen, elapsedSince: elapsedSince)
   }

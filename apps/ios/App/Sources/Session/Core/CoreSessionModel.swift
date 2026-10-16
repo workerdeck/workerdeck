@@ -46,6 +46,7 @@ final class CoreSessionModel {
       DispatchQueue.main.async { MainActor.assumeIsolated { self?.ui = ui } }
     }
     if let recap { driver.setRecap(boundary: recap.itemCount, since: recap.seenAt) }
+    if !bookmarkIds.isEmpty { driver.setBookmarks(bookmarkIds) }
     self.driver = driver
     entry = nil
   }
@@ -54,6 +55,27 @@ final class CoreSessionModel {
     recap = mark
     driver?.setRecap(boundary: mark.itemCount, since: mark.seenAt)
   }
+
+  func clearRecap() {
+    recap = nil
+    driver?.clearRecap()
+  }
+
+  private var bookmarkIds: [String] = []
+
+  func setBookmarks(_ ids: [String]) {
+    bookmarkIds = ids
+    driver?.setBookmarks(ids)
+  }
+
+  func rowMenu(row: Int, inFrame: Bool) -> RowMenu? {
+    driver?.rowMenu(row: row, taskId: inFrame ? ui.frame?.taskId : nil)
+  }
+
+  func hostImage(_ path: String) -> HostImageFetch? { driver?.hostImage(path) }
+  func backgroundTask(_ toolUseId: String) { driver?.backgroundTask(toolUseId) }
+  func sleep() { driver?.sleep() }
+  func dismissError() { driver?.dismissError() }
 
   func visible(first: Int, last: Int) { driver?.visible(first: first, last: last) }
 
