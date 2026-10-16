@@ -77,7 +77,7 @@ as its own `rust` job. The toolchain is pinned in `rust-toolchain.toml` (1.98, w
 ```sh
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 pnpm fixtures:golden                          # TS reducer -> crates/core/tests/conformance; --check in CI
-(cd apps/ios/WorkerDeckKit && WD_CONFORMANCE_WRITE=1 swift test --filter Conformance)  # kit -> planner + VT goldens
+WD_CONFORMANCE_WRITE=1 cargo test -p wd-native --test conformance   # Rust -> planner + VT goldens
 node crates/bench/fixtures/gen.mjs            # synthetic, deterministic: session.jsonl + shell.txt (gitignored)
 cargo run --release -p wd-native-bench        # the workloads, as JSON; `-- <dir> dump|dump-vt` for the cross-checks
 cargo run --release -p wd-native-bench -- <dir> live   # LiveSession per frame, no FFI: tells core cost from binding cost

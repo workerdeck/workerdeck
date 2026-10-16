@@ -2502,17 +2502,16 @@ until the goldens are regenerated, and the `rust` job then shows what the port m
 ids come from the tape's running counter, so inserting a case renumbers the ones after it: append.
 
 **The planner and the VT screen have no TypeScript counterpart** (the web has no line planner and
-draws shells with xterm.js), so their goldens are owned by the **Swift kit** until iOS moves onto
-the core. `ConformanceGoldenTests` in `WorkerDeckKit` plans every case's transcript into
-`<case>.lines.jsonl` (one JSON line per planned line: tones, gutter, text, inline runs as
-`[utf8Start, utf8Len, intent]`, columns, indent, band, flags) and feeds every
-`conformance/vt-corpus.ts` input (`vt-<case>.vt.json`) into a `VTScreen`, writing
+draws shells with xterm.js), so **Rust owns their goldens** (frozen from the Swift kit's output when
+iOS moved onto the core and the kit planner and VT were deleted). `crates/core/tests/conformance.rs`
+plans every case's transcript into `<case>.lines.jsonl` (one JSON line per planned line: tones,
+gutter, text, inline runs as `[utf8Start, utf8Len, intent]`, columns, indent, band, flags) and feeds
+every `conformance/vt-corpus.ts` input (`vt-<case>.vt.json`) into a `VtScreen`, writing
 `vt-<case>.screen.json` (cursor, modes, title, bell count, every row as styled runs). With
-`WD_CONFORMANCE_WRITE=1` it rewrites them; without, it fails on any drift, so a kit change that
-moves a line shows up in `swift test`. CI cannot run Swift, so after adding a case or changing
-the kit, run `WD_CONFORMANCE_WRITE=1 swift test --filter Conformance` in `apps/ios/WorkerDeckKit`
-and commit the result; the Rust test `every_case_has_its_kit_golden` fails in CI when one is
-missing. Each line also carries its tap target (`press`, spelled `toggle:call:<id>`,
+`WD_CONFORMANCE_WRITE=1` it rewrites them; without, it fails on any drift. A planner or VT change
+that moves a line is therefore a deliberate golden rewrite: after adding a case or changing either,
+run `WD_CONFORMANCE_WRITE=1 cargo test -p wd-native --test conformance`, read the diff and commit it;
+`every_case_has_its_golden` fails when one is missing. Each line also carries its tap target (`press`, spelled `toggle:call:<id>`,
 `expandFull:<id>`, `openSubagent:<id>`, ...) and image box when it has one. Three more variants
 per case: `<case>.open.lines.jsonl` (recap at the halfway item, every expansion key open, no
 budgets lifted), `<case>.full.lines.jsonl` (`TerminalExpansion.everything`: budgets lifted,

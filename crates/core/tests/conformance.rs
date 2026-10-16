@@ -60,13 +60,55 @@ fn diff(path: &str, want: &Value, got: &Value, out: &mut Vec<String>) {
     }
 }
 
-fn check(suffix: &str, pending: &[&str], want: impl Fn(&str) -> Value, got: impl Fn(&str) -> Value) {
+fn cases(suffix: &str) -> Vec<String> {
     let mut cases: Vec<String> = std::fs::read_dir(dir())
         .expect("goldens: run `pnpm fixtures:golden`")
         .filter_map(|entry| entry.ok()?.file_name().to_str()?.strip_suffix(suffix).map(str::to_owned))
         .filter(|case| !case.contains('.'))
         .collect();
     cases.sort();
+    cases
+}
+
+fn canonical(value: Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<(String, Value)> = map.into_iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Object(entries.into_iter().map(|(key, value)| (key, canonical(value))).collect())
+        }
+        Value::Array(values) => Value::Array(values.into_iter().map(canonical).collect()),
+        Value::Number(number) => match number.as_f64() {
+            Some(float) if number.is_f64() && float.fract() == 0.0 && float.abs() < 9e15 => json!(float as i64),
+            _ => Value::Number(number),
+        },
+        other => other,
+    }
+}
+
+// WD_CONFORMANCE_WRITE=1 rewrites the goldens Rust owns from every source case; otherwise a change that moves one fails.
+fn own(suffix: &str, source: &str, pending: &[&str], lines: bool, got: impl Fn(&str) -> Value) {
+    if std::env::var("WD_CONFORMANCE_WRITE").is_ok_and(|value| value == "1") {
+        for case in cases(source) {
+            let path = dir().join(format!("{case}{suffix}"));
+            let value = canonical(got(&case));
+            let body = match value {
+                Value::Array(values) if lines => values.iter().map(|value| format!("{value}\n")).collect::<String>(),
+                value => format!("{value}\n"),
+            };
+            if body.is_empty() && suffix == ".frames.lines.jsonl" {
+                let _ = std::fs::remove_file(path);
+            } else {
+                std::fs::write(path, body).expect("write golden");
+            }
+        }
+    }
+    let want = |case: &str| if lines { jsonl(&format!("{case}{suffix}")) } else { json(&read(&format!("{case}{suffix}"))) };
+    check(suffix, pending, want, got);
+}
+
+fn check(suffix: &str, pending: &[&str], want: impl Fn(&str) -> Value, got: impl Fn(&str) -> Value) {
+    let cases = cases(suffix);
     assert!(!cases.is_empty(), "no {suffix} goldens");
     let mut failures = Vec::new();
     for case in &cases {
@@ -163,77 +205,57 @@ fn recap_rows(items: &[Item]) -> TerminalRows {
 }
 
 #[test]
-fn planner_matches_kit_goldens() {
-    check(
-        ".lines.jsonl",
-        LINES_PENDING,
-        |case| jsonl(&format!("{case}.lines.jsonl")),
-        |case| {
-            let mut out = Vec::new();
-            planned(&TerminalRows::build(&items(case)), &TerminalExpansion::default(), None, &mut out);
-            Value::Array(out)
-        },
-    );
+fn planner_matches_goldens() {
+    own(".lines.jsonl", ".events.jsonl", LINES_PENDING, true, |case| {
+        let mut out = Vec::new();
+        planned(&TerminalRows::build(&items(case)), &TerminalExpansion::default(), None, &mut out);
+        Value::Array(out)
+    });
 }
 
 #[test]
-fn open_rows_match_kit_goldens() {
-    check(
-        ".open.lines.jsonl",
-        OPEN_PENDING,
-        |case| jsonl(&format!("{case}.open.lines.jsonl")),
-        |case| {
-            let rows = recap_rows(&items(case));
-            let open = TerminalExpansion { open: TerminalExpansion::everything(&rows.rows).open, ..TerminalExpansion::default() };
-            let mut out = Vec::new();
-            planned(&rows, &open, None, &mut out);
-            Value::Array(out)
-        },
-    );
+fn open_rows_match_goldens() {
+    own(".open.lines.jsonl", ".events.jsonl", OPEN_PENDING, true, |case| {
+        let rows = recap_rows(&items(case));
+        let open = TerminalExpansion { open: TerminalExpansion::everything(&rows.rows).open, ..TerminalExpansion::default() };
+        let mut out = Vec::new();
+        planned(&rows, &open, None, &mut out);
+        Value::Array(out)
+    });
 }
 
 #[test]
-fn full_rows_match_kit_goldens() {
-    check(
-        ".full.lines.jsonl",
-        FULL_PENDING,
-        |case| jsonl(&format!("{case}.full.lines.jsonl")),
-        |case| {
-            let rows = recap_rows(&items(case));
-            let mut out = Vec::new();
-            planned(&rows, &TerminalExpansion::everything(&rows.rows), None, &mut out);
-            Value::Array(out)
-        },
-    );
+fn full_rows_match_goldens() {
+    own(".full.lines.jsonl", ".events.jsonl", FULL_PENDING, true, |case| {
+        let rows = recap_rows(&items(case));
+        let mut out = Vec::new();
+        planned(&rows, &TerminalExpansion::everything(&rows.rows), None, &mut out);
+        Value::Array(out)
+    });
 }
 
 #[test]
-fn subagent_frames_match_kit_goldens() {
-    check(
-        ".frames.lines.jsonl",
-        FRAMES_PENDING,
-        |case| jsonl(&format!("{case}.frames.lines.jsonl")),
-        |case| {
-            let items = items(case);
-            let mut seen: Vec<&str> = Vec::new();
-            let mut out = Vec::new();
-            for id in items.iter().filter_map(parent_tool_use_id) {
-                if seen.contains(&id) {
-                    continue;
-                }
-                seen.push(id);
-                let task = subagent_task(&items, id);
-                let rows = TerminalRows::build_with(
-                    &subagent_items(&items, id),
-                    &BuildOptions { frame_task: task.as_deref(), ..BuildOptions::default() },
-                );
-                out.push(json!({ "frame": id }));
-                planned(&rows, &TerminalExpansion::default(), Some(id), &mut out);
-                planned(&rows, &TerminalExpansion::everything(&rows.rows), Some(id), &mut out);
+fn subagent_frames_match_goldens() {
+    own(".frames.lines.jsonl", ".events.jsonl", FRAMES_PENDING, true, |case| {
+        let items = items(case);
+        let mut seen: Vec<&str> = Vec::new();
+        let mut out = Vec::new();
+        for id in items.iter().filter_map(parent_tool_use_id) {
+            if seen.contains(&id) {
+                continue;
             }
-            Value::Array(out)
-        },
-    );
+            seen.push(id);
+            let task = subagent_task(&items, id);
+            let rows = TerminalRows::build_with(
+                &subagent_items(&items, id),
+                &BuildOptions { frame_task: task.as_deref(), ..BuildOptions::default() },
+            );
+            out.push(json!({ "frame": id }));
+            planned(&rows, &TerminalExpansion::default(), Some(id), &mut out);
+            planned(&rows, &TerminalExpansion::everything(&rows.rows), Some(id), &mut out);
+        }
+        Value::Array(out)
+    });
 }
 
 fn color(color: Color) -> u32 {
@@ -245,67 +267,62 @@ fn color(color: Color) -> u32 {
 }
 
 #[test]
-fn vt_matches_kit_goldens() {
-    check(
-        ".screen.json",
-        SCREEN_PENDING,
-        |case| json(&read(&format!("{case}.screen.json"))),
-        |case| {
-            let input = json(&read(&format!("{case}.vt.json")));
-            let mut vt = VtScreen::new(input["cols"].as_u64().unwrap() as usize, input["rows"].as_u64().unwrap() as usize, 1000);
-            vt.feed(input["input"].as_str().unwrap());
-            let lines: Vec<Value> = (0..vt.total_rows())
-                .map(|index| {
-                    let mut runs: Vec<(wd_native::vt::Style, String)> = Vec::new();
-                    for cell in vt.line(index).iter().filter(|cell| !cell.continuation) {
-                        let text = match &cell.text {
-                            CellText::None => " ".to_owned(),
-                            CellText::Char(c) => c.to_string(),
-                            CellText::Cluster(s) => s.to_string(),
-                        };
-                        match runs.last_mut() {
-                            Some((style, run)) if *style == cell.style => run.push_str(&text),
-                            _ => runs.push((cell.style, text)),
-                        }
+fn vt_matches_goldens() {
+    own(".screen.json", ".vt.json", SCREEN_PENDING, false, |case| {
+        let input = json(&read(&format!("{case}.vt.json")));
+        let mut vt = VtScreen::new(input["cols"].as_u64().unwrap() as usize, input["rows"].as_u64().unwrap() as usize, 1000);
+        vt.feed(input["input"].as_str().unwrap());
+        let lines: Vec<Value> = (0..vt.total_rows())
+            .map(|index| {
+                let mut runs: Vec<(wd_native::vt::Style, String)> = Vec::new();
+                for cell in vt.line(index).iter().filter(|cell| !cell.continuation) {
+                    let text = match &cell.text {
+                        CellText::None => " ".to_owned(),
+                        CellText::Char(c) => c.to_string(),
+                        CellText::Cluster(s) => s.to_string(),
+                    };
+                    match runs.last_mut() {
+                        Some((style, run)) if *style == cell.style => run.push_str(&text),
+                        _ => runs.push((cell.style, text)),
                     }
-                    Value::Array(
-                        runs.into_iter()
-                            .map(|(s, text)| {
-                                let attrs = s.bold as u8
-                                    | (s.dim as u8) << 1
-                                    | (s.italic as u8) << 2
-                                    | (s.underline as u8) << 3
-                                    | (s.inverse as u8) << 4
-                                    | (s.strikethrough as u8) << 5
-                                    | (s.hidden as u8) << 6;
-                                json!({ "fg": color(s.fg), "bg": color(s.bg), "attrs": attrs, "text": text })
-                            })
-                            .collect(),
-                    )
-                })
-                .collect();
-            let (row, col) = vt.cursor();
-            let mut screen = json!({
-                "cursor": [row, col],
-                "cursorVisible": vt.cursor_visible,
-                "altScreen": vt.alt_screen_active,
-                "bellCount": vt.bell_count,
-                "applicationCursorKeys": vt.application_cursor_keys,
-                "bracketedPaste": vt.bracketed_paste,
-                "sgrMouse": vt.sgr_mouse,
-                "focusReporting": vt.focus_reporting,
-                "lines": lines,
-            });
-            if let Some(title) = &vt.title {
-                screen["title"] = json!(title);
-            }
-            screen
-        },
-    );
+                }
+                Value::Array(
+                    runs.into_iter()
+                        .map(|(s, text)| {
+                            let attrs = s.bold as u8
+                                | (s.dim as u8) << 1
+                                | (s.italic as u8) << 2
+                                | (s.underline as u8) << 3
+                                | (s.inverse as u8) << 4
+                                | (s.strikethrough as u8) << 5
+                                | (s.hidden as u8) << 6;
+                            json!({ "fg": color(s.fg), "bg": color(s.bg), "attrs": attrs, "text": text })
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        let (row, col) = vt.cursor();
+        let mut screen = json!({
+            "cursor": [row, col],
+            "cursorVisible": vt.cursor_visible,
+            "altScreen": vt.alt_screen_active,
+            "bellCount": vt.bell_count,
+            "applicationCursorKeys": vt.application_cursor_keys,
+            "bracketedPaste": vt.bracketed_paste,
+            "sgrMouse": vt.sgr_mouse,
+            "focusReporting": vt.focus_reporting,
+            "lines": lines,
+        });
+        if let Some(title) = &vt.title {
+            screen["title"] = json!(title);
+        }
+        screen
+    });
 }
 
 #[test]
-fn every_case_has_its_kit_golden() {
+fn every_case_has_its_golden() {
     let names: Vec<String> =
         std::fs::read_dir(dir()).expect("goldens").filter_map(|entry| entry.ok()?.file_name().to_str().map(str::to_owned)).collect();
     let missing: Vec<String> = names
@@ -322,7 +339,7 @@ fn every_case_has_its_kit_golden() {
         })
         .flatten()
         .collect();
-    assert!(missing.is_empty(), "kit goldens missing, run WD_CONFORMANCE_WRITE=1 swift test --filter Conformance: {missing:?}");
+    assert!(missing.is_empty(), "goldens missing, run WD_CONFORMANCE_WRITE=1 cargo test -p wd-native --test conformance: {missing:?}");
 }
 
 #[test]
