@@ -22,7 +22,7 @@ import { httpErrorStatus, json } from './lib/http.ts'
 import { detectDefaultProfiles } from './lib/profile-env.ts'
 import { reloadPlan } from './lib/reload-plan.ts'
 import type { DiagnosticSink, WorkerServer, WorkerServerOptions } from './options.ts'
-import { rerollAvatar } from './routes/agents.ts'
+import { restartAgent, rerollAvatar } from './routes/agents.ts'
 import { createQueueSocketHub } from './routes/queue-ws.ts'
 import { upgradeSession } from './routes/session-upgrade.ts'
 import { dispatchRoute, httpRoutes } from './routes/table.ts'
@@ -175,7 +175,19 @@ export function createWorkerServer(options: WorkerServerOptions = {}): WorkerSer
   const contextResets =
     options.agentContextReset === false
       ? undefined
-      : new ContextResetService({ ...options.agentContextReset, onError: (error) => diagnose(error, 'context-reset') })
+      : new ContextResetService({
+          ...options.agentContextReset,
+          agentOf: (sessionId) => agents.bySession(sessionId)?.id,
+          restartAgent: async (agentId, sessionId, prompt) => {
+            const agent = agents.get(agentId)
+            if (!agent || agent.sessionId !== sessionId) {
+              throw new Error('the agent moved to another session before its reset ran')
+            }
+            const scope = registry.get(sessionId)?.info().scope
+            await restartAgent(ctx, agent, prompt, { ok: true, operator: true, ...(scope ? { scope } : {}) })
+          },
+          onError: (error) => diagnose(error, 'context-reset'),
+        })
   let ownContextResets = contextResets
   installContextResetDirectory(contextResets)
   const avatarChanges: AvatarDirectory | undefined = options.avatars

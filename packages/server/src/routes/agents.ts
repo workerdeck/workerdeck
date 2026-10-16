@@ -59,18 +59,8 @@ export async function handleAgents(
   if (action === 'restart') {
     requireMethod(req, 'POST')
     const body = ((await readJsonBody(req, ctx.maxBodyBytes)) ?? {}) as { prompt?: unknown }
-    const previous = agent.sessionId === undefined ? undefined : ctx.registry.get(agent.sessionId)
-    const created = await startSession(ctx, agent, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
-    const status = previous?.info().status
-    if (previous && status !== 'closed' && status !== 'failed') {
-      previous.close('server')
-    }
-    const bound = await bindWithAvatar(ctx, agent, created)
-    if (isAgentRefusal(bound)) {
-      ctx.registry.get(created.id)?.close('server')
-      fail(bound.status, bound.error)
-    }
-    await respond(ctx, res, 200, bound, created)
+    const restarted = await restartAgent(ctx, agent, typeof body.prompt === 'string' ? body.prompt : undefined, auth)
+    await respond(ctx, res, 200, restarted.agent, restarted.session)
     return
   }
   if (action === 'avatar') {
@@ -405,6 +395,27 @@ async function sendImage(req: IncomingMessage, res: ServerResponse, image: Avata
     return
   }
   res.writeHead(200, headers).end(Buffer.from(image.png))
+}
+
+// A fresh session for the agent, its old one closed and kept: `POST /agents/:id/restart` and the agent's own `context_reset`.
+export async function restartAgent(
+  ctx: ServerContext,
+  agent: StoredAgent,
+  prompt: string | undefined,
+  auth: AuthContext,
+): Promise<{ agent: StoredAgent; session: SessionInfo }> {
+  const previous = agent.sessionId === undefined ? undefined : ctx.registry.get(agent.sessionId)
+  const created = await startSession(ctx, agent, prompt, auth)
+  const status = previous?.info().status
+  if (previous && status !== 'closed' && status !== 'failed') {
+    previous.close('server')
+  }
+  const bound = await bindWithAvatar(ctx, agent, created)
+  if (isAgentRefusal(bound)) {
+    ctx.registry.get(created.id)?.close('server')
+    fail(bound.status, bound.error)
+  }
+  return { agent: bound, session: created }
 }
 
 async function startSession(ctx: ServerContext, agent: StoredAgent, prompt: string | undefined, auth: AuthContext): Promise<SessionInfo> {

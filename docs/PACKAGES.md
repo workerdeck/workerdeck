@@ -804,7 +804,9 @@ may add `apply` to write one transition's records together, both built-ins do),
 
 **Agent context reset** lives in `services/context-resets.ts` (`ContextResetService`, the
 directory behind `context_reset`: one `onRegister` watcher per runner, the pending request, the rate
-limits, and the clear-then-prompt run at the next idle). `buildRunner` stamps `config.contextReset`
+limits, and the run at the next idle: for a session bound to an agent, `restartAgent` (the code behind
+`POST /agents/:id/restart`, under an operator context carrying the old session's scope), else
+clear-then-prompt). `buildRunner` stamps `config.contextReset`
 (a transient host-only key) from request, profile default, then the `agentContextReset` option;
 `false` builds no service at all. Rules in `docs/GOTCHAS.md` §Agent context reset.
 

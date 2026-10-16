@@ -9,6 +9,9 @@ export type AgentContextResetOptions = {
 }
 
 export type ContextResetServiceOptions = AgentContextResetOptions & {
+  // An agent's reset starts it a new session instead of clearing this one; limits count per agent, across its sessions.
+  agentOf?: (sessionId: string) => string | undefined
+  restartAgent?: (agentId: string, sessionId: string, prompt: string) => Promise<void>
   onError?: (error: unknown, sessionId: string) => void
   now?: () => number
   resetTimeoutMs?: number
@@ -19,11 +22,17 @@ export const CONTEXT_RESET_MAX_PER_HOUR = 3
 const HOUR_MS = 60 * 60_000
 const RESET_TIMEOUT_MS = 60_000
 
+export const CONTEXT_RESET_RESTART_SCHEDULED =
+  'Reset scheduled. It runs when this turn ends: this session is closed and kept for the human, and a new session of yours ' +
+  'starts with your prompt as its first message. End your turn now and start no new work. If the turn is interrupted or ' +
+  'ends in an error, the reset is cancelled.'
+
 export const CONTEXT_RESET_SCHEDULED =
   'Reset scheduled. It runs when this turn ends: your conversation is cleared and your prompt becomes the first message of a ' +
   'fresh one. End your turn now and start no new work. If the turn is interrupted or ends in an error, the reset is cancelled.'
 
-// One gateway generation's agent-requested resets: held until the requesting session's turn ends, then run as clear-then-prompt.
+// One gateway generation's agent-requested resets: held until the requesting session's turn ends, then run as a new session for
+// an agent, clear-then-prompt for any other session.
 export class ContextResetService implements ContextResetDirectory {
   #options: ContextResetServiceOptions
   #runners = new Map<string, Runner>()
@@ -61,19 +70,24 @@ export class ContextResetService implements ContextResetDirectory {
     if (this.#closed || !runner || runner.info().agentContextReset !== true) {
       throw new Error('context reset is not enabled for this session')
     }
-    if (!runner.clearContext) {
+    const agent = this.#agentOf(sessionId)
+    if (agent === undefined && !runner.clearContext) {
       throw new Error('this engine cannot clear its conversation')
     }
     if (this.#pending.has(sessionId) || this.#running.has(sessionId)) {
       throw new Error('a reset is already scheduled for this session')
     }
-    const refused = this.#rateRefusal(sessionId)
+    const refused = this.#rateRefusal(agent === undefined ? sessionId : `agent:${agent}`)
     if (refused) {
       throw new Error(refused)
     }
     this.#pending.set(sessionId, { prompt: request.prompt, reason: request.reason })
     this.#turnFailed.delete(sessionId)
-    return CONTEXT_RESET_SCHEDULED
+    return agent === undefined ? CONTEXT_RESET_SCHEDULED : CONTEXT_RESET_RESTART_SCHEDULED
+  }
+
+  #agentOf(sessionId: string): string | undefined {
+    return this.#options.restartAgent ? this.#options.agentOf?.(sessionId) : undefined
   }
 
   close(): void {
@@ -82,11 +96,11 @@ export class ContextResetService implements ContextResetDirectory {
     this.#runners.clear()
   }
 
-  #rateRefusal(sessionId: string): string | null {
+  #rateRefusal(key: string): string | null {
     const now = this.#now()
     const minInterval = this.#options.minIntervalMs ?? CONTEXT_RESET_MIN_INTERVAL_MS
     const maxPerHour = this.#options.maxPerHour ?? CONTEXT_RESET_MAX_PER_HOUR
-    const recent = (this.#history.get(sessionId) ?? []).filter((at) => now - at < HOUR_MS)
+    const recent = (this.#history.get(key) ?? []).filter((at) => now - at < HOUR_MS)
     const last = recent.at(-1)
     if (last !== undefined && now - last < minInterval) {
       return `refused: the last reset was ${minutes(now - last)} ago and resets need ${minutes(minInterval)} between them; keep working`
@@ -123,22 +137,35 @@ export class ContextResetService implements ContextResetDirectory {
   async #run(runner: Runner, request: ContextResetRequest): Promise<void> {
     this.#running.add(runner.id)
     try {
+      const agent = this.#agentOf(runner.id)
+      if (agent !== undefined) {
+        await this.#options.restartAgent!(agent, runner.id, request.prompt)
+        this.#record(`agent:${agent}`)
+        return
+      }
+      if (!runner.clearContext) {
+        throw new Error('this engine cannot clear its conversation')
+      }
       const reset = nextReset(runner, this.#options.resetTimeoutMs ?? RESET_TIMEOUT_MS)
       try {
-        await runner.clearContext!({ agentReason: request.reason })
+        await runner.clearContext({ agentReason: request.reason })
         await reset.done
       } finally {
         reset.cancel()
       }
-      const history = (this.#history.get(runner.id) ?? []).filter((at) => this.#now() - at < HOUR_MS)
-      history.push(this.#now())
-      this.#history.set(runner.id, history)
+      this.#record(runner.id)
       runner.sendMessage(request.prompt)
     } catch (error) {
       this.#options.onError?.(error, runner.id)
     } finally {
       this.#running.delete(runner.id)
     }
+  }
+
+  #record(key: string): void {
+    const history = (this.#history.get(key) ?? []).filter((at) => this.#now() - at < HOUR_MS)
+    history.push(this.#now())
+    this.#history.set(key, history)
   }
 
   #now(): number {

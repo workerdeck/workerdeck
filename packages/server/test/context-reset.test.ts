@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { ClearContextOptions, Runner } from '@workerdeck/core'
-import type { SessionEvent, SessionEventBody, SessionInfo, SessionStatus } from '@workerdeck/protocol'
-import { CONTEXT_RESET_SCHEDULED, ContextResetService } from '../src/services/context-resets.ts'
+import type { AgentInfo, AgentResponse, SessionEvent, SessionEventBody, SessionInfo, SessionStatus } from '@workerdeck/protocol'
+import { CONTEXT_RESET_RESTART_SCHEDULED, CONTEXT_RESET_SCHEDULED, ContextResetService } from '../src/services/context-resets.ts'
 import { fakeHarness } from './helpers.ts'
 import { attachSocket, createSession, get, shellFixture } from './shell-helpers.ts'
 
@@ -114,6 +114,54 @@ describe('ContextResetService', () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(runner.cleared).toEqual([])
     await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_SCHEDULED)
+  })
+
+  it('starts an agent a new session at the turn end instead of clearing, and counts limits per agent', async () => {
+    let now = 1_000_000
+    const restarts: Array<[string, string, string]> = []
+    const owners = new Map([
+      ['s1', 'a1'],
+      ['s2', 'a1'],
+    ])
+    const service = new ContextResetService({
+      minIntervalMs: 5 * 60_000,
+      now: () => now,
+      agentOf: (sessionId) => owners.get(sessionId),
+      restartAgent: async (agentId, sessionId, prompt) => {
+        restarts.push([agentId, sessionId, prompt])
+      },
+    })
+    const first = scriptedRunner('s1')
+    service.watch(first)
+
+    await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_RESTART_SCHEDULED)
+    first.emit({ type: 'status_changed', status: 'idle' })
+    await vi.waitFor(() => expect(restarts).toEqual([['a1', 's1', REQUEST.prompt]]))
+    expect(first.cleared).toEqual([])
+    expect(first.sent).toEqual([])
+
+    const second = scriptedRunner('s2')
+    service.watch(second)
+    now += 60_000
+    await expect(service.request('s2', REQUEST)).rejects.toThrow(/last reset was 1 minute ago/)
+  })
+
+  it('reports a failed agent restart and leaves the session as it was', async () => {
+    const errors: unknown[] = []
+    const service = new ContextResetService({
+      agentOf: () => 'a1',
+      restartAgent: async () => {
+        throw new Error('profile unavailable')
+      },
+      onError: (error) => errors.push(error),
+    })
+    const runner = scriptedRunner('s1')
+    service.watch(runner)
+    await service.request('s1', REQUEST)
+    runner.emit({ type: 'status_changed', status: 'idle' })
+    await vi.waitFor(() => expect(errors).toHaveLength(1))
+    expect(runner.cleared).toEqual([])
+    await expect(service.request('s1', REQUEST)).resolves.toBe(CONTEXT_RESET_RESTART_SCHEDULED)
   })
 
   it('rate-limits by the minimum interval and by the hourly cap', async () => {
@@ -262,5 +310,28 @@ describe('context_reset through the gateway', () => {
     const reset = await collector.waitFor((frame) => frame.type === 'event' && frame.event.type === 'conversation_reset')
     expect(reset).toMatchObject({ event: { agentReason: REQUEST.reason, sdkSessionId: 'sdk-2' } })
     ws.close()
+  })
+  it("closes an agent's session after the turn and binds the agent to a new one that starts with the prompt", async () => {
+    const harness = fakeHarness()
+    const { base } = await fx.startServer(harness)
+    const created = await fetch(`${base}/agents`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer operator', 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Wren', config: { cwd: fx.tempDir() }, prompt: 'work' }),
+    })
+    const { agent, session } = (await created.json()) as AgentResponse
+    await vi.waitFor(() => expect(harness.captured.options).toBeDefined())
+    harness.emit(INIT)
+
+    const result = await gatewayTools(harness).context_reset!.handler(REQUEST, {})
+    expect(result.content[0]!.text).toBe(CONTEXT_RESET_RESTART_SCHEDULED)
+    harness.emit(RESULT)
+
+    const moved = async (): Promise<AgentInfo> => ((await (await get(base, `/agents/${agent.id}`)).json()) as AgentResponse).agent
+    await vi.waitFor(async () => expect((await moved()).sessionId).not.toBe(session!.id))
+    const fresh = (await moved()).sessionId!
+    expect((await info(base, session!.id)).status).toBe('closed')
+    expect(await info(base, fresh)).toMatchObject({ agentContextReset: true, agent: { name: 'Wren', conversation: 2 } })
+    await vi.waitFor(() => expect(inputTexts(harness)).toEqual(['work', REQUEST.prompt]))
   })
 })

@@ -17,12 +17,14 @@ const CONTEXT_RESET_SLOT = globalSlot<ContextResetDirectory>('workerdeck.context
 const CONTEXT_RESET_TOOL_SHAPES = {
   [CONTEXT_RESET_TOOL]: {
     description:
-      'Clear your own conversation and continue in a fresh context window. The reset never happens mid-turn: it runs once ' +
-      'your current turn ends, so end your turn right after calling this. The new conversation starts with `prompt` as its ' +
-      'first message and nothing else from this conversation survives, so first save anything worth keeping to files, then ' +
-      'write `prompt` as complete instructions to your future self: the goal, where the handoff notes are, and the next step. ' +
-      'Use it during long unattended work when session_info shows the context filling up. `reason` is one short line shown ' +
-      'to the human. The gateway rate-limits resets and may refuse one.',
+      'Continue in a fresh context window. If this session belongs to a WorkerDeck agent, this closes it, keeps it ' +
+      'for the human, and starts you a brand-new one; otherwise it clears this conversation. The reset never happens ' +
+      'mid-turn: it runs once your current turn ends, so end your turn right after calling this. The fresh start begins ' +
+      'with `prompt` as its first message and nothing else from this conversation survives, so first save anything worth ' +
+      'keeping to files, then write `prompt` as complete instructions to your future self: the goal, where the handoff ' +
+      'notes are, and the next step. Use it when you finish one task and move to the next, or during long unattended work ' +
+      'when session_info shows the context filling up. `reason` is one short line shown to the human. The gateway ' +
+      'rate-limits resets and may refuse one.',
     shape: {
       prompt: z.string().trim().min(1).max(CONTEXT_RESET_PROMPT_MAX).describe('The first message of the fresh conversation'),
       reason: z.string().trim().min(1).max(CONTEXT_RESET_REASON_MAX).describe('Why you are resetting, one short line'),

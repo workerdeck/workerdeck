@@ -128,10 +128,11 @@ stay in step, because there is one ordered, seq-numbered stream and everything r
   beside the model, one click switches it live, and `--effort-default opus=high` sets a level per
   model. The agent can read its own effort through the `session_info` tool.
 - **Agents that manage their own context.** With `--agent-context-reset on` (or per session or
-  profile), an agent gets the `context_reset` tool: once its turn ends, the gateway clears its
-  conversation and sends the prompt it wrote as the first message of a fresh one. That's how a long
-  unattended session keeps going on a clean context. Resets are rate-limited, and each one leaves
-  a line in the transcript saying why.
+  profile), a session gets the `context_reset` tool: once its turn ends, the gateway gives it a
+  clean start and sends the prompt it wrote as the first message. A named agent gets a brand-new
+  session (the old one is closed and kept), any other session has its conversation cleared. That's
+  how a long unattended session keeps going on a clean context, or an agent moves on to its next
+  task. Resets are rate-limited, and each one leaves a line in the transcript saying why.
 - **Reaching a person who isn't watching.** Server-wide webhooks for the four moments a human acts
   on (permission requested, turn finished, error, closed). The permission payload carries the
   whole request, so a consumer can answer it over REST - which is what makes an Approve button in

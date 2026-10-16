@@ -1276,6 +1276,16 @@ A one-line status a session shows under its name (`StatusLabel`: text up to 80, 
 
 ## Agent context reset (`context_reset`, `agentContextReset`)
 
+- **An agent gets a new session, not a `/clear`.** When the session is bound to an agent
+  (`agents.bySession`), the turn-end run is `restartAgent`, the same code as `POST /agents/:id/restart`:
+  a new session from the agent's stored config with the prompt as its first message, the old one
+  closed and kept, the agent rebound (`conversation` + 1). It runs under an operator `AuthContext`
+  carrying the old session's scope, because the stored config was vetted when it was stored, the
+  same trust a dormant wake extends. Limits key on `agent:<id>`, so they survive the session change.
+  No `conversation_reset` is emitted; the reason shows on the old session's `context_reset` call.
+  A failed restart leaves the old session as it was and goes to `onError`. Any other session keeps
+  the clear-then-prompt path below.
+
 - **The tool schedules; the gateway runs it.** `context_reset` can only ever be called mid-turn, so
   the handler just records `{ prompt, reason }` in the server's `ContextResetService` and answers
   "scheduled, end your turn". The reset runs on the next `status_changed: idle`: `clearContext({
