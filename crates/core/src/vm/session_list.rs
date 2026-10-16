@@ -993,9 +993,80 @@ pub fn clear_filters(config: &ViewConfig) -> ViewConfig {
     }
 }
 
+// Top-level agents on the row's gateway that could take it as a member: leads first, then solo agents. The web's
+// `teamLeads` (`SessionCardActions.tsx`), for the row menu's "Add to team".
+pub fn team_leads<'a>(rows: &'a [SessionRow], row: &SessionRow) -> Vec<&'a SessionRow> {
+    let agent = row.info.agent.as_ref();
+    if agent.is_some_and(|a| a.lead.is_some() || a.leads == Some(true)) {
+        return Vec::new();
+    }
+    let open: Vec<&SessionRow> = rows
+        .iter()
+        .filter(|other| {
+            other.info.agent.as_ref().is_some_and(|candidate| {
+                other.host_id == row.host_id
+                    && other.info.id != row.info.id
+                    && candidate.lead.is_none()
+                    && agent.is_none_or(|a| a.id != candidate.id)
+            })
+        })
+        .collect();
+    let (mut leads, solo): (Vec<&SessionRow>, Vec<&SessionRow>) =
+        open.into_iter().partition(|r| r.info.agent.as_ref().and_then(|a| a.leads) == Some(true));
+    leads.extend(solo);
+    leads
+}
+
+// The members whose lead is this row's agent, on its gateway.
+pub fn team_members<'a>(row: &SessionRow, rows: &'a [SessionRow]) -> Vec<&'a SessionRow> {
+    let Some(id) = row.info.agent.as_ref().map(|a| a.id.as_str()) else { return Vec::new() };
+    rows.iter()
+        .filter(|r| r.host_id == row.host_id && r.info.agent.as_ref().and_then(|a| a.lead.as_deref()) == Some(id))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn agent_row(host: &str, id: &str, agent: serde_json::Value) -> SessionRow {
+        let info: SessionInfo = serde_json::from_value(serde_json::json!({
+            "id": id, "status": "idle", "cwd": "/w", "createdAt": 0, "lastSeq": 0, "pendingPermissionCount": 0,
+            "agent": agent,
+        }))
+        .unwrap();
+        SessionRow {
+            host_id: host.into(),
+            host_name: host.into(),
+            local: false,
+            adapter: "claude".into(),
+            state: session_state(&info),
+            info,
+            unseen: 0,
+            members: None,
+            team_state: None,
+            context: None,
+        }
+    }
+
+    #[test]
+    fn team_leads_offer_leads_first_then_solo_agents_on_the_same_gateway() {
+        let rows = vec![
+            agent_row("h", "solo", serde_json::json!({ "id": "a-solo", "name": "Solo" })),
+            agent_row("h", "lead", serde_json::json!({ "id": "a-lead", "name": "Lead", "leads": true })),
+            agent_row("h", "member", serde_json::json!({ "id": "a-m", "name": "M", "lead": "a-lead" })),
+            agent_row("other", "far", serde_json::json!({ "id": "a-far", "name": "Far", "leads": true })),
+        ];
+        let plain = agent_row("h", "plain", serde_json::Value::Null);
+        let ids: Vec<&str> = team_leads(&rows, &plain).iter().map(|r| r.info.id.as_str()).collect();
+        assert_eq!(ids, ["lead", "solo"]);
+        let ids: Vec<&str> = team_leads(&rows, &rows[0]).iter().map(|r| r.info.id.as_str()).collect();
+        assert_eq!(ids, ["lead"]);
+        assert!(team_leads(&rows, &rows[1]).is_empty());
+        assert!(team_leads(&rows, &rows[2]).is_empty());
+        let members: Vec<&str> = team_members(&rows[1], &rows).iter().map(|r| r.info.id.as_str()).collect();
+        assert_eq!(members, ["member"]);
+    }
 
     #[test]
     fn shows_gateway_only_for_several_outside_project_grouping() {

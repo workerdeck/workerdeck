@@ -7,8 +7,7 @@
 #   apps/ios/scripts/deploy.sh --no-launch  # install only (works on a locked phone)
 #   apps/ios/scripts/deploy.sh --hot        # ...and bundle InjectionNext, for hot reload
 #   apps/ios/scripts/deploy.sh --release    # optimized build - what a shipped app costs
-#   apps/ios/scripts/deploy.sh --core       # rebuild the Rust core first (build-core.sh)
-#   apps/ios/scripts/deploy.sh --no-core    # leave the core out even if Native/ is built
+#   apps/ios/scripts/deploy.sh --core       # rebuild the Rust core first (built anyway when Native/ is empty)
 #   apps/ios/scripts/deploy.sh --device "Tobias's iPhone"
 #
 # Three facts shape this script (learned the hard way, see apps/ios/README.md):
@@ -56,7 +55,6 @@ while [[ $# -gt 0 ]]; do
     --hot) hot=1; shift ;;
     --release) configuration="Release"; shift ;;
     --core) core="build"; shift ;;
-    --no-core) core="off"; shift ;;
     -h|--help) sed -n '3,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -119,15 +117,12 @@ device_name="$(jq -r --arg u "$udid" '
   .result.devices[] | select(.identifier == $u) | .deviceProperties.name' "$devices_json")"
 
 # --- core --------------------------------------------------------------------
-# The app links the Rust core whenever Native/ holds a build, unless --no-core.
-if [[ "$core" == "build" ]]; then
+# The app always links the Rust core; it is built here when Native/ holds none yet.
+if [[ "$core" == "build" || ! -f "$IOS_DIR/WorkerDeckKit/Native/WdFFI.xcframework/Info.plist" ]]; then
   step "Building the Rust core"
   "$IOS_DIR/scripts/build-core.sh" || fail "build-core.sh failed."
 fi
-native="NO"
-if [[ "$core" != "off" && -f "$IOS_DIR/WorkerDeckKit/Native/WdFFI.xcframework/Info.plist" ]]; then
-  native="YES"
-fi
+native="YES"
 
 # --- generate ----------------------------------------------------------------
 if [[ $generate -eq 1 ]]; then
@@ -137,7 +132,7 @@ if [[ $generate -eq 1 ]]; then
     || "$(cat "$stamp" 2>/dev/null)" != "$native" ]]; then
     step "xcodegen generate (native core: $native)"
     command -v xcodegen >/dev/null || fail "xcodegen is required (brew install xcodegen)."
-    (cd "$IOS_DIR" && WD_NATIVE_CORE="$([[ $native == YES ]] && echo YES)" xcodegen generate --quiet)
+    (cd "$IOS_DIR" && xcodegen generate --quiet)
     echo "$native" >"$stamp"
   fi
 fi

@@ -1,7 +1,8 @@
-import WorkerDeckKit
 import Foundation
 import Observation
 import UserNotifications
+import WorkerDeckCore
+import WorkerDeckKit
 
 /// Every configured gateway's sessions in one model - the phone's counterpart of
 /// the VS Code extension's `SessionsModel`. The gateway is a *facet* of the one
@@ -10,11 +11,9 @@ import UserNotifications
 /// list, not a broken screen - on a tailnet the usual failure is "VPN dropped",
 /// not "the data is gone".
 ///
-/// The derived chain (`rows` → `filtered` → `groups`, plus `subset`) is the
-/// shared rules from the kit's `SessionList.swift`; nothing else in the app
-/// decides what is visible. The workspace scope those rules know about is passed
-/// as nil throughout: a phone has no open folders, so the scope filter is
-/// genuinely inert here rather than hiding everything.
+/// What is visible, in which group and order, with which steps and unread counts, is the native core's `SessionList`
+/// (shared with Android); this model only fetches, feeds it the bodies, and runs the actions. A phone has no open
+/// folders, so the core's workspace scope is inert here.
 @MainActor
 @Observable
 final class SessionListModel {
@@ -43,12 +42,19 @@ final class SessionListModel {
   }
 
   var tab: Tab = .live
-  /// How the list is filtered, grouped and sorted - persisted, so the phone
-  /// keeps the reader's layout the way the webview keeps its `bridge.setState`.
+  // How the list is filtered, grouped and sorted. The core owns it (and normalizes what is set); this is its last
+  // reading, for the filter menu and the search box. Persisted so the phone keeps the reader's layout.
   var config: ViewConfig {
-    didSet { persistConfig() }
+    get { storedConfig }
+    set {
+      core.setConfigJson(json: Self.encode(newValue))
+      syncConfig()
+    }
   }
+  private var storedConfig = ViewConfig.default
   private(set) var snapshots: [UUID: HostSnapshot] = [:]
+  // Bumped whenever the core was fed, so Observation re-derives what reads it: the core is not observable.
+  private(set) var revision = 0
   private(set) var hasLoaded = false
   /// Project icon bytes, keyed by content hash and shared across every gateway
   /// in the list - see `ProjectIconLoader`. Held here because this is where the
@@ -69,18 +75,29 @@ final class SessionListModel {
 
   private static let configKey = "bi.atomic.workerdeck.ios.sessionListConfig"
 
+  private var core: SessionList { unread.list }
+
   init(hosts: HostStore, unread: UnreadModel, defaults: UserDefaults = .standard) {
     self.hostStore = hosts
     self.unread = unread
     self.defaults = defaults
-    config =
-      defaults.data(forKey: Self.configKey)
-      .flatMap { try? JSONDecoder().decode(ViewConfig.self, from: $0) } ?? .default
+    if let stored = defaults.string(forKey: Self.configKey)
+      ?? defaults.data(forKey: Self.configKey).map({ String(decoding: $0, as: UTF8.self) })
+    {
+      unread.list.setConfigJson(json: stored)
+    }
+    syncConfig()
   }
 
-  private func persistConfig() {
-    guard let data = try? JSONEncoder().encode(config) else { return }
-    defaults.set(data, forKey: Self.configKey)
+  private func syncConfig() {
+    let json = core.configJson()
+    storedConfig = (try? JSONDecoder().decode(ViewConfig.self, from: Data(json.utf8))) ?? .default
+    defaults.set(json, forKey: Self.configKey)
+    revision &+= 1
+  }
+
+  private static func encode(_ config: ViewConfig) -> String {
+    (try? JSONEncoder().encode(config)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
   }
 
   // MARK: - Contexts
@@ -101,11 +118,14 @@ final class SessionListModel {
   /// that host's probe, never the list's.
   func refresh() async {
     let hosts = hostStore.hosts
-    // Forget worlds whose host is gone.
+    // Forget worlds whose host is gone, read marks included.
+    for id in snapshots.keys where !hosts.contains(where: { $0.id == id }) {
+      unread.forget(host: id)
+    }
     snapshots = snapshots.filter { id, _ in hosts.contains { $0.id == id } }
     contexts = contexts.filter { id, _ in hosts.contains { $0.id == id } }
 
-    await withTaskGroup(of: (UUID, Result<[SessionInfo], any Error>).self) { group in
+    await withTaskGroup(of: (UUID, Result<(sessions: [SessionInfo], body: String), any Error>).self) { group in
       for host in hosts {
         guard let client = context(for: host.id)?.client else {
           snapshots[host.id, default: HostSnapshot()].probe = .failed("Invalid server address")
@@ -113,27 +133,31 @@ final class SessionListModel {
         }
         group.addTask {
           do {
-            return (host.id, .success(try await client.listSessions()))
+            return (host.id, .success(try await client.listSessionsBody()))
           } catch {
             return (host.id, .failure(error))
           }
         }
       }
       for await (id, outcome) in group {
+        let host = hosts.first { $0.id == id }
         switch outcome {
-        case .success(let sessions):
+        case .success(let reading):
           snapshots[id, default: HostSnapshot()].probe = .connected
-          // Most recently active first; a session that never emitted an event
-          // sorts by creation instead of falling to the bottom. (The shared sort
-          // re-orders anyway - this keeps recency as the preserved input order.)
-          snapshots[id, default: HostSnapshot()].sessions = sessions.sorted {
-            ($0.lastActivityAt ?? $0.createdAt) > ($1.lastActivityAt ?? $1.createdAt)
-          }
+          snapshots[id, default: HostSnapshot()].sessions = reading.sessions
+          _ = try? core.setHost(
+            hostId: id.uuidString, hostName: host?.displayName ?? "", local: host?.isLoopback ?? false,
+            body: reading.body)
         case .failure(let error):
           snapshots[id, default: HostSnapshot()].probe = .failed(Self.describe(error))
+          // An unreachable gateway's rows leave the list (its marks stay); the probe says why.
+          _ = try? core.setHost(
+            hostId: id.uuidString, hostName: host?.displayName ?? "", local: host?.isLoopback ?? false,
+            body: #"{"sessions":[]}"#)
         }
       }
     }
+    reindex()
     hasLoaded = true
     ensureProjectIcons()
     ensureAgentAvatars()
@@ -156,11 +180,9 @@ final class SessionListModel {
         let meta = try? await client.meta()
       else { continue }
       metas[host.id] = meta
+      core.setRelay(hostId: host.id.uuidString, gateway: meta.relay?.gateway)
+      revision &+= 1
     }
-  }
-
-  var relayHosts: [String: String] {
-    relayHostsOf(Dictionary(uniqueKeysWithValues: metas.map { ($0.key.uuidString, $0.value.relay) }))
   }
 
   func agentDefaults(for hostId: UUID) -> GatewayAgentDefaults? { metas[hostId]?.agents }
@@ -221,50 +243,76 @@ final class SessionListModel {
   /// The poll follows the work, like the extension's: while anything runs or
   /// waits on a human the rollups move fast enough that 5s reads as asleep.
   var pollInterval: Duration {
-    let busy = rows.contains { $0.state == .attention || $0.state == .working }
-    return busy ? .seconds(2) : .seconds(5)
+    _ = revision
+    return core.busy() ? .seconds(2) : .seconds(5)
   }
 
-  // MARK: - Derived list (the shared rules)
+  // MARK: - Derived list (the core)
 
-  /// Every connected gateway's sessions, flattened, with unseen counts attached.
-  var rows: [SessionRow] {
-    var out: [SessionRow] = []
-    for host in hostStore.hosts {
-      guard let snapshot = snapshots[host.id], snapshot.probe == .connected else { continue }
-      for info in snapshot.sessions {
-        out.append(
-          SessionRow(
-            hostId: host.id.uuidString,
-            hostName: host.displayName,
-            local: host.isLoopback,
-            adapter: (info.engine ?? .claude).rawValue,
-            state: sessionState(info),
-            info: info,
-            unseen: unread.unseen(host: host.id, info: info)))
-      }
+  // Every connected gateway's rollups by `host:session`, the core's row key.
+  private var infos: [String: SessionInfo] = [:]
+
+  private func reindex() {
+    var out: [String: SessionInfo] = [:]
+    for (hostId, snapshot) in snapshots where snapshot.probe == .connected {
+      for info in snapshot.sessions { out["\(hostId.uuidString):\(info.id)"] = info }
     }
-    return out
+    infos = out
+    revision &+= 1
   }
 
-  var filtered: [SessionRow] { filterRows(rows, config: config, scope: nil) }
+  func info(hostId: String, sessionId: String) -> SessionInfo? { infos["\(hostId):\(sessionId)"] }
 
-  var groups: [SessionGroup] {
-    groupRows(
-      filtered, config: config, gatewayCount: Set(rows.map(\.hostId)).count, all: rows,
-      relayHosts: relayHosts)
+  // Reads `unread.revision` too: a mark the session screen wrote must clear this list's badge.
+  func sections(now: Double) -> [ListSection] {
+    _ = (revision, unread.revision)
+    return core.sections(now: now) { infos[$0] }
   }
 
-  /// The one "you are seeing a subset" signal - nil when nothing is hidden.
-  var subset: SubsetSummary? {
-    subsetSummary(config: config, scope: nil, shown: filtered.count, total: rows.count)
+  // When the soonest lingering Member leaves Auto, as of the last `sections` call.
+  var lingerEnds: Double? { core.lingerEnds() }
+
+  // The Member opened last: a phone's stand-in for the dashboard's selected row.
+  func select(hostId: String, sessionId: String) {
+    core.select(hostId: hostId, sessionId: sessionId)
+    revision &+= 1
   }
 
-  /// Adapter chips for the filter menu, derived from what is actually present.
-  var adapters: [String] { adaptersOf(rows) }
-  /// The projects present, for the filter control. Derived like `adapters`, and
-  /// handed to `FilterMenu` as a value for the reason documented there.
-  var projects: [ProjectOption] { projectsOf(rows) }
+  var subset: Subset? {
+    _ = (revision, unread.revision)
+    return core.subset()
+  }
+
+  var adapters: [String] {
+    _ = revision
+    return core.adapters()
+  }
+
+  var projects: [ProjectOption] {
+    _ = revision
+    return core.projects().map { ProjectOption(key: $0.key, label: $0.label) }
+  }
+
+  func clearFilters() {
+    core.clearFilters()
+    syncConfig()
+  }
+
+  func toggleEarlier() {
+    core.toggleGroup(key: "earlier")
+    syncConfig()
+  }
+
+  func toggleTeam(_ item: ListItem) {
+    core.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
+    syncConfig()
+  }
+
+  // Agents on the row's gateway it could join, leads first.
+  func teamLeads(for item: ListItem) -> [TeamLead] {
+    _ = revision
+    return core.teamLeads(hostId: item.row.hostId, sessionId: item.row.sessionId)
+  }
 
   /// Gateways that failed their last fetch, in host order, for the trouble strip.
   var failedHosts: [(host: Host, message: String)] {
@@ -297,75 +345,55 @@ final class SessionListModel {
 
   // MARK: - App icon badge
 
-  /// Rows unseen, summed over the sessions the filter is *showing* - the VS Code
-  /// rule: a badge counting rows in hidden sessions sends you looking for
-  /// something that isn't there.
+  // Rows unseen over the sessions the filter is showing (the VS Code rule): a badge counting hidden sessions sends
+  // you looking for something that isn't there.
   var unseenTotal: Int {
-    filtered.reduce(0) { $0 + $1.unseen }
+    _ = (revision, unread.revision)
+    return Int(core.unseenTotal())
   }
 
-  /// Stamp `unseenTotal` on the app icon. Fails silently when the badge
-  /// permission was declined - the in-app badges still work.
+  // Fails silently when the badge permission was declined; the in-app badges still work.
   func syncAppBadge() async {
     try? await UNUserNotificationCenter.current().setBadgeCount(unseenTotal)
   }
 
   // MARK: - Actions
 
-  func close(_ row: SessionRow) async {
-    guard let hostId = UUID(uuidString: row.hostId),
-      let client = context(for: hostId)?.client
-    else { return }
+  func close(_ item: ListItem) async {
+    guard let hostId = item.hostUUID, let client = context(for: hostId)?.client else { return }
     do {
-      try await client.deleteSession(id: row.info.id)
-      // Its mark is noise now - and would count the whole history as read if
-      // the same id ever reappeared.
-      unread.forget(host: hostId, sessionId: row.info.id)
+      try await client.deleteSession(id: item.info.id)
+      // Its mark is noise now, and would count the whole history as read if the same id ever reappeared.
+      unread.forget(host: hostId, sessionId: item.info.id)
       await refresh()
     } catch {
       snapshots[hostId, default: HostSnapshot()].probe = .failed(Self.describe(error))
     }
   }
 
-  /// Rename a session on its gateway.
-  ///
-  /// `PATCH /sessions/:id`, never a local override - the dashboard and the VS
-  /// Code extension read the same `meta.title`, and a name only this phone knew
-  /// would be a name nobody else could search for. An empty string clears the
-  /// override, restoring the title the gateway derives.
-  func rename(_ row: SessionRow, to title: String) async {
-    guard let hostId = UUID(uuidString: row.hostId),
-      let client = context(for: hostId)?.client
-    else { return }
+  // `PATCH /sessions/:id`, never a local override: every client reads the same `meta.title`. Empty clears it.
+  func rename(_ item: ListItem, to title: String) async {
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    do {
-      try await client.updateSession(
-        id: row.info.id,
-        UpdateSessionRequest(title: trimmed.isEmpty ? .clear : .set(trimmed)))
-      await refresh()
-    } catch {
-      snapshots[hostId, default: HostSnapshot()].probe = .failed(Self.describe(error))
+    await act(on: item) {
+      _ = try await $0.updateSession(
+        id: item.info.id, UpdateSessionRequest(title: trimmed.isEmpty ? .clear : .set(trimmed)))
     }
   }
 
-  /// Stop a background task the engine offered to stop (`stoppable`), then
-  /// refresh so its row settles.
-  func stopTask(_ row: SessionRow, toolUseId: String) async {
-    await act(on: row) { try await $0.stopTask(sessionId: row.info.id, toolUseId: toolUseId) }
+  func stopTask(_ item: ListItem, toolUseId: String) async {
+    await act(on: item) { try await $0.stopTask(sessionId: item.info.id, toolUseId: toolUseId) }
   }
 
-  func sleep(_ row: SessionRow) async {
-    await act(on: row) { _ = try await $0.sleepSession(id: row.info.id) }
+  func sleep(_ item: ListItem) async {
+    await act(on: item) { _ = try await $0.sleepSession(id: item.info.id) }
   }
 
-  func killShell(_ row: SessionRow, shellId: String) async {
-    await act(on: row) { _ = try await $0.killShell(sessionId: row.info.id, shellId: shellId) }
+  func killShell(_ item: ListItem, shellId: String) async {
+    await act(on: item) { _ = try await $0.killShell(sessionId: item.info.id, shellId: shellId) }
   }
 
-  private func act(on row: SessionRow, _ body: (WorkerClient) async throws -> Void) async {
-    guard let hostId = UUID(uuidString: row.hostId),
-      let client = context(for: hostId)?.client
-    else { return }
+  private func act(on item: ListItem, _ body: (WorkerClient) async throws -> Void) async {
+    guard let hostId = item.hostUUID, let client = context(for: hostId)?.client else { return }
     do {
       try await body(client)
       await refresh()
@@ -376,113 +404,109 @@ final class SessionListModel {
 
   // MARK: - Agents
 
-  func setStatus(_ row: SessionRow, to text: String) async {
+  func setStatus(_ item: ListItem, to text: String) async {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    await agentAct(on: row, "Could not set the status") {
+    await agentAct(on: item, "Could not set the status") {
       _ = try await $0.updateSession(
-        id: row.info.id,
+        id: item.info.id,
         UpdateSessionRequest(statusLabel: trimmed.isEmpty ? .clear : .set(text: trimmed, emoji: nil)))
     }
   }
 
-  func renameAgent(_ row: SessionRow, to name: String) async {
+  func renameAgent(_ item: ListItem, to name: String) async {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let agent = row.info.agent, !trimmed.isEmpty, trimmed != agent.name else { return }
-    await agentAct(on: row, "Rename failed") {
+    guard let agent = item.info.agent, !trimmed.isEmpty, trimmed != agent.name else { return }
+    await agentAct(on: item, "Rename failed") {
       _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(name: trimmed))
     }
   }
 
-  func changeAvatar(_ row: SessionRow) async {
-    guard let agent = row.info.agent else { return }
-    await agentAct(on: row, "Could not change the avatar") {
+  func changeAvatar(_ item: ListItem) async {
+    guard let agent = item.info.agent else { return }
+    await agentAct(on: item, "Could not change the avatar") {
       _ = try await $0.changeAgentAvatar(id: agent.id)
     }
   }
 
-  func makeAgent(_ row: SessionRow) async {
-    await agentAct(on: row, "Could not make an agent") {
-      _ = try await $0.createAgent(CreateAgentRequest(adopt: row.info.id))
+  func makeAgent(_ item: ListItem) async {
+    await agentAct(on: item, "Could not make an agent") {
+      _ = try await $0.createAgent(CreateAgentRequest(adopt: item.info.id))
     }
   }
 
-  // Owners differ only when both rows name one; the gateway refuses a cross-owner join without `crossOwner`.
-  func crossesOwners(_ row: SessionRow, into lead: SessionRow) -> Bool {
-    guard let mine = row.info.owner, let theirs = lead.info.owner else { return false }
-    return mine != theirs
+  // The lead's owner when it differs from the row's; the gateway refuses a cross-owner join without `crossOwner`.
+  func crossedOwner(_ item: ListItem, into lead: TeamLead) -> String? {
+    guard let mine = item.info.owner,
+      let theirs = info(hostId: item.row.hostId, sessionId: lead.sessionId)?.owner, mine != theirs
+    else { return nil }
+    return theirs
   }
 
-  func join(_ row: SessionRow, lead: SessionRow, crossOwner: Bool = false) async {
-    guard let leadId = lead.info.agent?.id else { return }
+  func join(_ item: ListItem, lead: TeamLead, crossOwner: Bool = false) async {
     let crossing = crossOwner ? true : nil
-    await agentAct(on: row, "Could not join the team") { client in
-      if let agent = row.info.agent {
+    await agentAct(on: item, "Could not join the team") { client in
+      if let agent = item.info.agent {
         try await client.updateAgent(
-          id: agent.id, UpdateAgentRequest(lead: .join(leadId), crossOwner: crossing))
+          id: agent.id, UpdateAgentRequest(lead: .join(lead.agentId), crossOwner: crossing))
       } else {
         try await client.createAgent(
-          CreateAgentRequest(lead: leadId, adopt: row.info.id, crossOwner: crossing))
+          CreateAgentRequest(lead: lead.agentId, adopt: item.info.id, crossOwner: crossing))
       }
     }
   }
 
-  func leave(_ row: SessionRow) async {
-    guard let agent = row.info.agent else { return }
-    await agentAct(on: row, "Could not leave the team") {
+  func leave(_ item: ListItem) async {
+    guard let agent = item.info.agent else { return }
+    await agentAct(on: item, "Could not leave the team") {
       _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(lead: .leave))
     }
   }
 
-  func dissolve(_ row: SessionRow) async {
-    let members = teamMembers(row, in: rows).compactMap(\.info.agent?.id)
-    await agentAct(on: row, "Could not dissolve the team") { client in
+  func dissolve(_ item: ListItem) async {
+    let members = core.teamMembers(hostId: item.row.hostId, sessionId: item.row.sessionId)
+    await agentAct(on: item, "Could not dissolve the team") { client in
       for id in members {
         try await client.updateAgent(id: id, UpdateAgentRequest(lead: .leave))
       }
     }
   }
 
-  func setSharing(_ row: SessionRow, _ sharing: AgentSharing) async {
-    guard let agent = row.info.agent else { return }
-    await agentAct(on: row, "Could not change sharing") {
+  func setSharing(_ item: ListItem, _ sharing: AgentSharing) async {
+    guard let agent = item.info.agent else { return }
+    await agentAct(on: item, "Could not change sharing") {
       _ = try await $0.updateAgent(id: agent.id, UpdateAgentRequest(sharing: sharing))
     }
   }
 
-  func restart(_ row: SessionRow) async -> SessionInfo? {
-    guard let agent = row.info.agent else { return nil }
+  func restart(_ item: ListItem) async -> SessionInfo? {
+    guard let agent = item.info.agent else { return nil }
     var started: SessionInfo?
-    await agentAct(on: row, "Could not start a new conversation") {
+    await agentAct(on: item, "Could not start a new conversation") {
       started = try await $0.restartAgent(id: agent.id).session
     }
     return started
   }
 
-  func retire(_ row: SessionRow) async {
-    guard let agent = row.info.agent else { return }
-    await agentAct(on: row, "Could not retire the agent") {
+  func retire(_ item: ListItem) async {
+    guard let agent = item.info.agent else { return }
+    await agentAct(on: item, "Could not retire the agent") {
       _ = try await $0.retireAgent(id: agent.id)
     }
   }
 
-  func agentSeed(for hostId: UUID, lead: SessionRow? = nil) -> AgentSeed {
-    let leads = rows.filter {
-      $0.hostId == hostId.uuidString && $0.info.agent != nil && $0.info.agent?.lead == nil
-    }
-    .sorted { ($0.info.agent?.isLead == true ? 0 : 1) < ($1.info.agent?.isLead == true ? 0 : 1) }
-    .compactMap { row in row.info.agent.map { AgentSeed.Lead(id: $0.id, name: $0.name) } }
+  // The create form's lead picker: this gateway's top-level agents, leads first.
+  func agentSeed(for hostId: UUID, lead: ListItem? = nil) -> AgentSeed {
+    let agents = (snapshots[hostId]?.sessions ?? []).compactMap(\.agent).filter { $0.lead == nil }
+    let leads = (agents.filter { $0.isLead == true } + agents.filter { $0.isLead != true })
+      .map { AgentSeed.Lead(id: $0.id, name: $0.name) }
     let defaults = agentDefaults(for: hostId)
     return AgentSeed(
       leads: leads, lead: lead?.info.agent?.id, allowShared: defaults?.allowShared ?? false,
       sharing: defaults?.sharing ?? .private)
   }
 
-  private func agentAct(
-    on row: SessionRow, _ failure: String, _ body: (WorkerClient) async throws -> Void
-  ) async {
-    guard let hostId = UUID(uuidString: row.hostId),
-      let client = context(for: hostId)?.client
-    else { return }
+  private func agentAct(on item: ListItem, _ failure: String, _ body: (WorkerClient) async throws -> Void) async {
+    guard let hostId = item.hostUUID, let client = context(for: hostId)?.client else { return }
     do {
       try await body(client)
     } catch {

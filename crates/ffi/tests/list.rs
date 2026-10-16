@@ -120,3 +120,80 @@ fn auto_shows_busy_and_selected_members_and_trays_the_rest() {
     assert!(drawn.iter().any(|r| r.session_id == "quiet1"));
     assert!(drawn.iter().find(|r| r.session_id == "lead").unwrap().team_expanded);
 }
+
+#[test]
+fn a_search_reports_the_subset_and_clearing_shows_all() {
+    let list = SessionList::new(None, None);
+    let sessions = [idle("s1", r#","title":"Alpha""#), idle("s2", r#","title":"Beta""#)];
+    list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
+    assert!(list.subset().is_none());
+    list.set_search("alpha".into());
+    let subset = list.subset().unwrap();
+    assert_eq!((subset.shown, subset.total), (1, 2));
+    assert_eq!(subset.causes, ["search"]);
+    list.clear_filters();
+    assert!(list.subset().is_none());
+    assert_eq!(list.adapters(), ["claude"]);
+    assert_eq!(list.projects().len(), 1);
+}
+
+#[test]
+fn a_config_set_whole_is_normalized_and_kept() {
+    let list = SessionList::new(None, None);
+    list.set_config_json(r#"{"groupBy":"gateway","adapters":["codex"],"search":"x"}"#.into());
+    let stored: serde_json::Value = serde_json::from_str(&list.config_json()).unwrap();
+    assert_eq!(stored["groupBy"], "project");
+    assert_eq!(stored["adapters"], serde_json::json!(["codex"]));
+    list.set_config_json("not json".into());
+    let stored: serde_json::Value = serde_json::from_str(&list.config_json()).unwrap();
+    assert_eq!(stored["search"], "");
+}
+
+#[test]
+fn a_lead_pulled_in_by_a_filter_is_a_context_row() {
+    let list = SessionList::new(None, None);
+    let sessions = [
+        idle("lead", r#","title":"Lead","agent":{"id":"L","name":"Lead","leads":true}"#),
+        session("m", "running", r#","pendingPermissionCount":0,"title":"Worker","agent":{"id":"M","name":"Worker","lead":"L"}"#),
+    ];
+    list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
+    list.set_search("worker".into());
+    let rows: Vec<_> = list.groups(0.0).into_iter().flat_map(|g| g.rows).collect();
+    let lead = rows.iter().find(|r| r.session_id == "lead").unwrap();
+    assert!(lead.context);
+    assert_eq!(lead.team_state, Some(RowState::Working));
+    assert_eq!(list.team_members("h1".into(), "lead".into()), ["M"]);
+}
+
+#[test]
+fn a_member_whose_lead_is_behind_a_relay_draws_under_it() {
+    let list = SessionList::new(None, None);
+    list.set_host("h1".into(), "mac".into(), true, body(&[idle("lead", r#","agent":{"id":"L","name":"Lead","leads":true}"#)])).unwrap();
+    let member = idle("m", r#","agent":{"id":"M","name":"M","lead":"mac/L","leadGateway":"mac"}"#);
+    list.set_host("h2".into(), "box".into(), false, body(&[member])).unwrap();
+    let depth = |list: &SessionList| list.groups(0.0).into_iter().flat_map(|g| g.rows).find(|r| r.session_id == "m").map(|r| r.depth);
+    list.toggle_team("h1".into(), "lead".into());
+    assert_eq!(depth(&list), Some(0));
+    list.set_relay("h1".into(), Some("mac".into()));
+    assert_eq!(depth(&list), Some(1));
+}
+
+#[test]
+fn a_session_screen_mark_keeps_rows_for_the_catch_up_seam() {
+    let list = SessionList::new(None, None);
+    assert!(list.since("h1".into(), "s1".into()).is_none());
+    assert!(list.mark("h1".into(), "s1".into(), Some(40), Some(40), Some(5), Some(2), 1_000.0));
+    let mark = list.since("h1".into(), "s1".into()).unwrap();
+    assert_eq!((mark.item_count, mark.seen_at), (40, 1_000.0));
+    assert!(!list.mark("h1".into(), "s1".into(), Some(30), Some(30), Some(5), Some(2), 2_000.0));
+}
+
+#[test]
+fn team_leads_name_the_agents_a_row_could_join() {
+    let list = SessionList::new(None, None);
+    let sessions = [idle("plain", ""), idle("lead", r#","agent":{"id":"L","name":"Lead","leads":true}"#)];
+    list.set_host("h1".into(), "mac".into(), true, body(&sessions)).unwrap();
+    let leads = list.team_leads("h1".into(), "plain".into());
+    assert_eq!(leads.len(), 1);
+    assert_eq!((leads[0].session_id.as_str(), leads[0].agent_id.as_str(), leads[0].name.as_str()), ("lead", "L", "Lead"));
+}

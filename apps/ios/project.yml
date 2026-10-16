@@ -15,10 +15,10 @@ packages:
   WorkerDeckKit:
     path: WorkerDeckKit
 
-# The Rust core (P5), linked only when the environment asks; WorkerDeckWidgets never links it.
+# The Rust core (P5): the app needs it since the sessions list moved onto it (`scripts/build-core.sh` builds it into
+# WorkerDeckKit/Native). WorkerDeckWidgets never links it.
 include:
   - path: native.yml
-    enable: ${WD_NATIVE_CORE}
 
 settings:
   base:

@@ -1,15 +1,17 @@
 import SwiftUI
+import WorkerDeckCore
 import WorkerDeckKit
 
+// A lead's tray in Auto: the core already cut it to the pictures drawn and a `+n` overflow.
 struct TeamTray {
-  let view: TeamView
-  let frames: (SessionRow) -> AgentAvatarFrames?
-  let select: (SessionRow) -> Void
+  let row: ListRow
+  let members: [(member: TrayMember, info: SessionInfo)]
+  let frames: (TrayMember, SessionInfo) -> AgentAvatarFrames?
+  let select: (TrayMember) -> Void
   let toggle: () -> Void
 
-  static let max = 3
-  var avatars: [SessionRow] { Array(view.tray.prefix(view.tray.count > Self.max ? Self.max - 1 : Self.max)) }
-  var overflow: Int { view.tray.count - avatars.count }
+  var expanded: Bool { row.teamExpanded }
+  var overflow: Int { Int(row.trayOverflow) }
 }
 
 struct AgentCardView<MenuContent: View>: View {
@@ -19,7 +21,7 @@ struct AgentCardView<MenuContent: View>: View {
       : EdgeInsets(top: 8, leading: 12, bottom: hasSteps ? 2 : 8, trailing: 16)
   }
 
-  let row: SessionRow
+  let item: ListItem
   let frames: AgentAvatarFrames?
   var member = false
   var badgeState: SessionState?
@@ -28,7 +30,7 @@ struct AgentCardView<MenuContent: View>: View {
   let onOpen: () -> Void
   @ViewBuilder var menu: () -> MenuContent
 
-  private var info: SessionInfo { row.info }
+  private var info: SessionInfo { item.info }
   private var agent: AgentRef? { info.agent }
   private var status: String? { statusLine(info.statusLabel) }
   private var time: String? { info.lastActivityAt.map { Fmt.ago(epochMs: $0) } }
@@ -62,7 +64,7 @@ struct AgentCardView<MenuContent: View>: View {
             Text(time).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
           }
           Spacer(minLength: 0)
-          UnreadBadge(count: row.unseen, live: row.state == .working || row.state == .attention)
+          UnreadBadge(count: item.unseen, live: item.live)
           if teamUnseen > 0 {
             Label("\(teamUnseen)", systemImage: "person.2.fill")
               .labelStyle(.titleAndIcon)
@@ -95,7 +97,7 @@ struct AgentCardView<MenuContent: View>: View {
         Text(status).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer(minLength: 0)
-      UnreadBadge(count: row.unseen, live: row.state == .working || row.state == .attention)
+      UnreadBadge(count: item.unseen, live: item.live)
       if let time {
         Text(time).font(.caption).foregroundStyle(.secondary).lineLimit(1)
       }
@@ -146,18 +148,18 @@ struct AgentCardView<MenuContent: View>: View {
 
   private func trayButton(_ tray: TeamTray) -> some View {
     HStack(spacing: 4) {
-      ForEach(tray.avatars) { member in
-        Button { tray.select(member) } label: {
-          AgentAvatarView(info: member.info, frames: tray.frames(member), size: 18, badge: false)
+      ForEach(tray.members, id: \.member.key) { entry in
+        Button { tray.select(entry.member) } label: {
+          AgentAvatarView(info: entry.info, frames: tray.frames(entry.member, entry.info), size: 18, badge: false)
         }
         .buttonStyle(.borderless)
-        .accessibilityLabel("Open \(member.info.agent?.name ?? sessionLabel(member.info))")
+        .accessibilityLabel("Open \(entry.member.title)")
       }
       Button(action: tray.toggle) {
         trayGlyph(tray).padding(.vertical, 4).contentShape(Rectangle())
       }
       .buttonStyle(.borderless)
-      .accessibilityLabel(tray.view.expanded ? "Show only active Members" : "Show all Team Members")
+      .accessibilityLabel(tray.expanded ? "Show only active Members" : "Show all Team Members")
     }
     .padding(.leading, 10)
     .padding(.bottom, 4)
@@ -165,8 +167,8 @@ struct AgentCardView<MenuContent: View>: View {
 
   private func trayLabel(_ tray: TeamTray) -> some View {
     HStack(spacing: 4) {
-      ForEach(tray.avatars) { member in
-        AgentAvatarView(info: member.info, frames: tray.frames(member), size: 18, badge: false)
+      ForEach(tray.members, id: \.member.key) { entry in
+        AgentAvatarView(info: entry.info, frames: tray.frames(entry.member, entry.info), size: 18, badge: false)
       }
       trayGlyph(tray)
     }
@@ -176,10 +178,10 @@ struct AgentCardView<MenuContent: View>: View {
   @ViewBuilder
   private func trayGlyph(_ tray: TeamTray) -> some View {
     Group {
-      if tray.overflow > 0 && !tray.view.expanded {
+      if tray.overflow > 0 && !tray.expanded {
         Text("+\(tray.overflow)").monospacedDigit()
       } else {
-        Image(systemName: tray.view.expanded ? "chevron.down" : "chevron.right")
+        Image(systemName: tray.expanded ? "chevron.down" : "chevron.right")
           .font(.caption2.weight(.semibold))
       }
     }
@@ -224,8 +226,4 @@ func modelTint(_ info: SessionInfo) -> Color {
 
 enum ListAttention {
   static var background: Color { Color.orange.opacity(0.12) }
-
-  static func needsYou(_ row: SessionRow, badgeState: SessionState? = nil) -> Bool {
-    row.state == .attention || row.teamState == .attention || badgeState == .attention
-  }
 }

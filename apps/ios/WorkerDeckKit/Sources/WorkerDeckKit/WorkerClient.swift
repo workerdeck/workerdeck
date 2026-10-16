@@ -74,6 +74,12 @@ public struct WorkerClient: Sendable {
     return try decode(ListSessionsResponse.self, from: data).sessions
   }
 
+  // The same list plus the body as received, for a reader (the native core) that decodes it on its own.
+  public func listSessionsBody() async throws -> (sessions: [SessionInfo], body: String) {
+    let data = try await call("GET", "/sessions")
+    return (try decode(ListSessionsResponse.self, from: data).sessions, String(decoding: data, as: UTF8.self))
+  }
+
   public func getSession(id: String) async throws -> SessionInfo {
     let data = try await call("GET", "/sessions/\(Self.encodeComponent(id))")
     return try decode(SessionResponse.self, from: data).session

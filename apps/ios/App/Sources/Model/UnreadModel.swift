@@ -1,59 +1,41 @@
-import WorkerDeckKit
 import Foundation
 import Observation
+import WorkerDeckCore
+import WorkerDeckKit
 
-/// The app's unread memory: the kit's `Watermarks` (the shared monotonic rules)
-/// backed by UserDefaults, wrapped so views re-derive when a mark moves.
-///
-/// The rules - monotonicity, the once-a-minute touch, the 30-day prune, and
-/// `unseenCount`'s rows-not-turns arithmetic - live in the kit as a port of
-/// `packages/protocol/src/watermarks.ts`, because the VS Code extension and the
-/// dashboard count unread the same way and a second implementation would drift.
-/// All that is iOS-shaped is where the marks are kept, and the `revision`
-/// counter: `Watermarks` is not observable, so reading a count through here is
-/// what lets a badge learn that answering a prompt just cleared it - reading
-/// rows is silent (no poll, no event), and `mark`'s return value is the only
-/// signal there is.
+// The app's unread memory. The marks live in the core's `SessionList` (the shared watermark rules), which the sessions
+// list draws from too, so a mark the session screen writes clears the list's badge with no second copy to drift. The
+// store keeps the kit's old format, so marks carry over. `revision` is what Observation sees: the core is not observable.
 @MainActor
 @Observable
 final class UnreadModel {
   private static let key = "bi.atomic.workerdeck.ios.watermarks"
 
-  private let marks: Watermarks
-  /// Bumped whenever a mark moves, so Observation re-runs anything that read a
-  /// count through this model.
+  let list: SessionList
+  private let defaults: UserDefaults
   private(set) var revision = 0
 
   init(defaults: UserDefaults = .standard) {
-    marks = Watermarks(
-      store: WatermarkStore(
-        read: {
-          defaults.data(forKey: Self.key)
-            .flatMap { try? JSONDecoder().decode([String: Watermark].self, from: $0) }
-        },
-        write: { updated in
-          guard let data = try? JSONEncoder().encode(updated) else { return }
-          defaults.set(data, forKey: Self.key)
-        }))
+    self.defaults = defaults
+    list = SessionList(configJson: nil, marksJson: defaults.string(forKey: Self.key) ?? Self.legacy(defaults))
   }
 
-  /// Record what is on screen now. Callers own the "genuinely on screen" test -
-  /// the session view visible and showing it - because that is a fact about the
-  /// UI, not about storage.
+  // The kit stored the map as `Data`; the core reads the same JSON as text.
+  private static func legacy(_ defaults: UserDefaults) -> String? {
+    defaults.data(forKey: key).flatMap { String(data: $0, encoding: .utf8) }
+  }
+
+  // Callers own the "genuinely on screen" test: that is a fact about the UI, not about storage.
   @discardableResult
-  func mark(host: UUID, sessionId: String, itemCount: Int?, activity: Int?, prose: Int?, turns: Int?)
-    -> Bool
-  {
-    let moved = marks.mark(
-      hostId: host.uuidString, sessionId: sessionId, itemCount: itemCount, activity: activity,
-      prose: prose, turns: turns)
-    if moved { revision &+= 1 }
+  func mark(host: UUID, sessionId: String, itemCount: Int?, activity: Int?, prose: Int?, turns: Int?) -> Bool {
+    let moved = list.mark(
+      hostId: host.uuidString, sessionId: sessionId, itemCount: itemCount.map(UInt32.init),
+      activity: activity.map(UInt32.init), prose: prose.map(UInt32.init), turns: turns.map(UInt32.init),
+      nowMs: Date().timeIntervalSince1970 * 1000)
+    if moved { changed() }
     return moved
   }
 
-  /// The same, straight off a rollup record - every caller has one, and reading
-  /// the three counters out by hand at four call sites is how one of them came
-  /// to miss a number the badge depends on.
   @discardableResult
   func mark(host: UUID, sessionId: String, itemCount: Int?, info: SessionInfo) -> Bool {
     mark(
@@ -61,34 +43,29 @@ final class UnreadModel {
       prose: info.proseCount, turns: info.numTurns)
   }
 
-  /// Rows this phone has not seen, from the rollup alone.
-  func unseen(host: UUID, info: SessionInfo) -> Int {
-    // Registers the dependency: a mark written by the session screen must
-    // re-derive every list that counted through this model.
-    _ = revision
-    return unseenCount(
-      mark: marks.get(hostId: host.uuidString, sessionId: info.id), info: info)
-  }
-
-  /// Where this phone had read to, and when - the catch-up seam's whole input.
-  /// Deliberately **not** `revision`-dependent: the boundary is fixed when a
-  /// session is opened, and a mark that moved under a reader would walk the
-  /// recap row down the transcript while they read it.
+  // Deliberately not `revision`-dependent: the boundary is fixed when a session is opened, and a mark that moved under
+  // a reader would walk the recap row down the transcript while they read it.
   func since(host: UUID, sessionId: String) -> CatchUpMark? {
-    guard let mark = marks.get(hostId: host.uuidString, sessionId: sessionId) else { return nil }
-    return CatchUpMark(itemCount: mark.itemCount, seenAt: mark.seenAt)
+    list.since(hostId: host.uuidString, sessionId: sessionId).map {
+      CatchUpMark(itemCount: Int($0.itemCount), seenAt: $0.seenAt)
+    }
   }
 
-  /// The session was deleted; its mark is now noise.
   func forget(host: UUID, sessionId: String) {
-    marks.forget(hostId: host.uuidString, sessionId: sessionId)
+    if list.forget(hostId: host.uuidString, sessionId: sessionId) { changed() }
+  }
+
+  func forget(host: UUID) {
+    if list.removeHost(hostId: host.uuidString) { changed() }
+  }
+
+  private func changed() {
+    defaults.set(list.marksJson(), forKey: Self.key)
     revision &+= 1
   }
 }
 
-/// What a session screen was handed at mount: how much of the transcript had
-/// been read, and when that was true. Epoch milliseconds, the wire's unit and
-/// the kit's - the phone converts once, where it draws.
+// What a session screen was handed at mount: how much of the transcript had been read, and when (epoch ms).
 struct CatchUpMark: Equatable {
   var itemCount: Int
   var seenAt: Double

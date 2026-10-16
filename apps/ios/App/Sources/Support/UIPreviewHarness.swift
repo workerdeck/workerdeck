@@ -1,5 +1,6 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckCore
+import WorkerDeckKit
 
 /// A screen of the app, rendered from canned data with no gateway behind it.
 ///
@@ -48,44 +49,71 @@ enum UIPreview: String {
   }
 }
 
+// Canned rollups through the app's own core list: a preview proves only what the list ships if it derives the same
+// way. `unseen` fakes a read mark under each count.
+@MainActor
+private final class PreviewList {
+  let hostId = UUID().uuidString
+  let list = SessionList(configJson: nil, marksJson: nil)
+  private var infos: [String: SessionInfo] = [:]
+
+  init(_ sessions: [[String: Any]], unseen: [String: Int] = [:], config: String? = nil) {
+    if let config { list.setConfigJson(json: config) }
+    var fed = sessions
+    for index in fed.indices {
+      guard let id = fed[index]["id"] as? String, let count = unseen[id] else { continue }
+      _ = list.mark(hostId: hostId, sessionId: id, itemCount: nil, activity: 0, prose: 0, turns: 0, nowMs: 0)
+      fed[index]["proseCount"] = count
+    }
+    let body = ListFixture.body(fed)
+    _ = try? list.setHost(hostId: hostId, hostName: "mini", local: true, body: body)
+    for info in ListFixture.infos(body) { infos["\(hostId):\(info.id)"] = info }
+  }
+
+  func sections() -> [ListSection] {
+    list.sections(now: Date().timeIntervalSince1970 * 1000) { infos[$0] }
+  }
+
+  func info(_ member: TrayMember) -> SessionInfo? { infos[member.key] }
+}
+
 /// The grid, fed a stream with no socket behind it.
 private struct TeamsPreview: View {
-  private static let hostId = UUID().uuidString
-  private static var now: Double { Date().timeIntervalSince1970 * 1000 }
+  private static var ago: Double { Date().timeIntervalSince1970 * 1000 - 6 * 60 * 1000 }
 
   private static func row(
-    _ id: String, agent: AgentRef?, status: SessionStatus = .idle, pending: Int = 0,
-    unseen: Int = 0, label: String? = nil, title: String? = nil, model: String = "claude-opus-5",
-    asleep: Bool = false
-  ) -> SessionRow {
-    let info = SessionInfo(
-      id: id, status: status, cwd: "/Users/you/projects/workerdeck", model: model, createdAt: 0,
-      lastSeq: 0, pendingPermissionCount: pending, title: title,
-      lastActivityAt: now - 6 * 60 * 1000,
-      contextUsage: ContextReading(totalTokens: 60_000, maxTokens: 200_000, percentage: 30),
-      engineAsleep: asleep ? true : nil, agent: agent,
-      statusLabel: label.map { StatusLabel(text: $0, setAt: 0) })
-    return SessionRow(
-      hostId: hostId, hostName: "mini", local: true, adapter: "claude", state: sessionState(info),
-      info: info, unseen: unseen)
+    _ id: String, agent: [String: Any]?, status: String = "idle", pending: Int = 0, label: String? = nil,
+    title: String? = nil, model: String = "claude-opus-5", asleep: Bool = false
+  ) -> [String: Any] {
+    var extra: [String: Any] = [
+      "model": model, "pendingPermissionCount": pending, "lastActivityAt": ago,
+      "contextUsage": ["totalTokens": 60_000, "maxTokens": 200_000, "percentage": 30],
+    ]
+    if let agent { extra["agent"] = agent }
+    if let title { extra["title"] = title }
+    if asleep { extra["engineAsleep"] = true }
+    if let label { extra["statusLabel"] = ["text": label, "setAt": 0] }
+    return ListFixture.session(id, status: status, extra)
   }
 
-  private static var rows: [SessionRow] {
-    [
-      row("lead", agent: AgentRef(id: "A", name: "WD-Lead", avatar: "/a", leads: true, conversation: 4),
-          status: .running, unseen: 2, label: "cutting 3.13.0"),
-      row("m1", agent: AgentRef(id: "B", name: "WD-Review", avatar: "/b", lead: "A", team: "WD-Lead", order: 0),
-          pending: 1, label: "needs your call"),
-      row("m2", agent: AgentRef(id: "C", name: "WD-MonkeyArt", avatar: "/c", lead: "A", team: "WD-Lead", order: 1),
-          status: .running, unseen: 1),
-      row("m3", agent: AgentRef(id: "D", name: "WD-Docs", avatar: "/d", lead: "A", team: "WD-Lead", order: 2),
-          asleep: true),
-      row("solo", agent: AgentRef(id: "E", name: "BOX-Lead", avatar: "/e", shared: true),
-          label: "🧪 smoke green"),
-      row("plain", agent: nil, status: .awaitingApproval, pending: 1, title: "Fix the relay drop", model: "gpt-6-sol"),
-      row("old", agent: nil, status: .closed, title: "Old one-off"),
-    ]
+  private static func member(_ id: String, _ name: String, order: Int) -> [String: Any] {
+    ["id": id, "name": name, "avatar": "/\(id)", "lead": "A", "team": "WD-Lead", "order": order]
   }
+
+  @State private var model = PreviewList(
+    [
+      row("lead", agent: ["id": "A", "name": "WD-Lead", "avatar": "/a", "leads": true, "conversation": 4],
+          status: "running", label: "cutting 3.13.0"),
+      row("m1", agent: member("B", "WD-Review", order: 0), pending: 1, label: "needs your call"),
+      row("m2", agent: member("C", "WD-MonkeyArt", order: 1), status: "running"),
+      row("m3", agent: member("D", "WD-Docs", order: 2), asleep: true),
+      row("solo", agent: ["id": "E", "name": "BOX-Lead", "avatar": "/e", "shared": true], label: "🧪 smoke green"),
+      row("plain", agent: nil, status: "awaiting_approval", pending: 1, title: "Fix the relay drop", model: "gpt-6-sol"),
+      row("old", agent: nil, status: "closed", title: "Old one-off"),
+    ],
+    unseen: ["lead": 2, "m2": 1],
+    config: #"{"groupBy":"none"}"#)
+  @State private var revision = 0
 
   private static func picture(_ seed: Int) -> AgentAvatarFrames {
     let hues: [CGFloat] = [0.08, 0.55, 0.33, 0.75, 0.95]
@@ -100,35 +128,36 @@ private struct TeamsPreview: View {
     return AgentAvatarFrames(still: image, busy: [], durations: [])
   }
 
-  @State private var config = ViewConfig(groupBy: .none)
-
   var body: some View {
+    let _ = revision
     NavigationStack {
       List {
-        ForEach(groupRows(Self.rows, config: config)) { group in
+        ForEach(model.sections()) { section in
           Section {
-            if !group.earlier || config.earlierOpen {
-              ForEach(Array(group.rows.enumerated()), id: \.element.id) { index, row in
-                card(row, index: index)
-                if row.members != nil {
-                  ForEach(Array(view(row).shown.enumerated()), id: \.element.id) { offset, member in
-                    AgentCardView(
-                      row: member, frames: Self.picture(offset + 1), member: true, onOpen: {},
-                      menu: { Button("Leave team") {} })
-                    .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(
-                      ZStack {
-                        if ListAttention.needsYou(member) { ListAttention.background }
-                        TeamTreeLine()
-                      })
-                  }
+            if !section.group.collapsed {
+              ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
+                if item.row.depth > 0 {
+                  AgentCardView(
+                    item: item, frames: Self.picture(index), member: true, onOpen: {},
+                    menu: { Button("Leave team") {} })
+                  .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
+                  .listRowSeparator(.hidden)
+                  .listRowBackground(
+                    ZStack {
+                      if item.needsYou { ListAttention.background }
+                      TeamTreeLine()
+                    })
+                } else {
+                  card(item, index: index)
                 }
               }
             }
           } header: {
-            if group.earlier {
-              Button("Earlier \(group.rows.count)") { config.earlierOpen.toggle() }
+            if section.earlier {
+              Button("Earlier \(section.group.sessions)") {
+                model.list.toggleGroup(key: "earlier")
+                revision += 1
+              }
             }
           }
         }
@@ -139,28 +168,27 @@ private struct TeamsPreview: View {
     }
   }
 
-  private func view(_ row: SessionRow) -> TeamView {
-    teamView(row, config: config, selected: nil, now: Date().timeIntervalSince1970 * 1000)
-  }
-
   @ViewBuilder
-  private func card(_ row: SessionRow, index: Int) -> some View {
-    if row.info.agent != nil {
-      let team = view(row)
+  private func card(_ item: ListItem, index: Int) -> some View {
+    if item.info.agent != nil {
       AgentCardView(
-        row: row, frames: index == 0 ? Self.picture(0) : Self.picture(4),
-        tray: team.tray.isEmpty && !team.expanded
+        item: item, frames: index == 0 ? Self.picture(0) : Self.picture(4),
+        tray: item.row.tray.isEmpty && !item.row.teamExpanded
           ? nil
           : TeamTray(
-            view: team, frames: { _ in Self.picture(1) }, select: { _ in },
-            toggle: { config = toggleTeamExpanded(config, row) }),
+            row: item.row, members: item.row.tray.compactMap { m in model.info(m).map { (m, $0) } },
+            frames: { _, _ in Self.picture(1) }, select: { _ in },
+            toggle: {
+              model.list.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
+              revision += 1
+            }),
         onOpen: {}, menu: { Button("New conversation") {} })
       .listRowInsets(AgentCardView<EmptyView>.insets(member: false, hasSteps: false))
-      .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
+      .listRowBackground(item.needsYou ? ListAttention.background : nil)
     } else {
-      SessionCardView(row: row, onOpen: {}, menu: { Button("Close") {} })
+      SessionCardView(item: item, onOpen: {}, menu: { Button("Close") {} })
         .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: false))
-        .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
+        .listRowBackground(item.needsYou ? ListAttention.background : nil)
     }
   }
 }
@@ -215,128 +243,99 @@ private struct ShellGridPreview: View {
 /// to each other in a column of them, which no single-row preview can show. Same
 /// six sessions, same order, so the two can be put side by side.
 private struct SessionsPreview: View {
-  private static let hostId = UUID()
-
-  private static func row(
-    id: String, title: String, status: SessionStatus = .running, unseen: Int = 0,
-    engine: ProfileEngine = .claude, model: String = "claude-opus-5", profile: String? = nil,
-    cost: Double? = nil, context: Double? = nil, pending: Int = 0,
-    subagents: [SubagentInfo]? = nil, checklist: [ChecklistItem]? = nil,
-    shells: [ShellInfo]? = nil, hostName: String = "mini"
-  ) -> SessionRow {
-    let info = SessionInfo(
-      id: id, status: status, cwd: "/Users/you/projects/workerdeck", profile: profile,
-      engine: engine, model: model, createdAt: 0, lastSeq: 0, pendingPermissionCount: pending,
-      title: title, totalCostUsd: cost,
-      lastActivityAt: Date().timeIntervalSince1970 * 1000 - 4 * 60 * 1000,
-      subagents: subagents, checklist: checklist,
-      project: ProjectInfo(
-        name: "WorkerDeck", root: "/Users/you/projects/workerdeck", icon: .glyph(name: "layers")),
-      contextUsage: context.map {
-        ContextReading(totalTokens: Int($0 * 2_000), maxTokens: 200_000, percentage: $0)
-      },
-      shells: shells)
-    return SessionRow(
-      hostId: hostId.uuidString, hostName: hostName, local: true, adapter: engine.rawValue,
-      state: sessionState(info), info: info, unseen: unseen)
-  }
-
-  private static func route(for row: SessionRow, step: Step? = nil) -> SessionRoute {
-    // The app's own rule, called rather than restated - see `SessionRoute.step`.
-    guard let step else { return .session(hostId: hostId, sessionId: row.info.id) }
-    return .step(hostId: hostId, sessionId: row.info.id, step: step)
-  }
-
-  private static var agents: [SubagentInfo] {
-    [
-      SubagentInfo(
-        toolUseId: "a", agentType: "Explore", description: "Fix base-url and re-run",
-        status: .done, startedAt: 0, toolCount: 4),
-      SubagentInfo(
-        toolUseId: "b", agentType: "Explore", description: "Fix base-url and re-run",
-        status: .running, startedAt: 0, toolCount: 7),
-      SubagentInfo(
-        toolUseId: "c", agentType: "fable", description: "Fix base-url and re-run",
-        status: .done, startedAt: 0, toolCount: 0),
-    ]
-  }
-
-  private static var checklist: [ChecklistItem] {
-    [
-      ChecklistItem(text: "Read the runner", status: .completed),
-      ChecklistItem(text: "Rewrite the fold", status: .inProgress),
-      ChecklistItem(text: "Update the docs", status: .pending),
-    ]
-  }
-
   private static var now: Double { Date().timeIntervalSince1970 * 1000 }
 
-  private static var server: [ShellInfo] {
+  private static func row(
+    id: String, title: String, status: String = "running", engine: String = "claude", model: String = "claude-opus-5",
+    profile: String? = nil, cost: Double? = nil, context: Double? = nil, pending: Int = 0,
+    subagents: [[String: Any]]? = nil, checklist: [[String: Any]]? = nil, shells: [[String: Any]]? = nil
+  ) -> [String: Any] {
+    var extra: [String: Any] = [
+      "engine": engine, "model": model, "pendingPermissionCount": pending, "title": title,
+      "lastActivityAt": now - 4 * 60 * 1000,
+      "project": [
+        "name": "WorkerDeck", "root": "/Users/you/projects/workerdeck", "icon": ["type": "glyph", "name": "layers"],
+      ],
+    ]
+    if let profile { extra["profile"] = profile }
+    if let cost { extra["totalCostUsd"] = cost }
+    if let context {
+      extra["contextUsage"] = ["totalTokens": Int(context * 2_000), "maxTokens": 200_000, "percentage": context]
+    }
+    if let subagents { extra["subagents"] = subagents }
+    if let checklist { extra["checklist"] = checklist }
+    if let shells { extra["shells"] = shells }
+    return ListFixture.session(id, status: status, extra)
+  }
+
+  private static func agent(_ id: String, _ type: String, _ status: String, tools: Int) -> [String: Any] {
     [
-      ShellInfo(
-        id: "sh1", sessionId: "3", ordinal: 1, command: "pnpm dev --port 4179",
-        label: "pnpm dev --port 4179", cwd: "/Users/you/projects/workerdeck", status: .running,
-        startedAt: now - 60_000),
-      ShellInfo(
-        id: "sh2", sessionId: "3", ordinal: 2, command: "pnpm test", label: "pnpm test",
-        cwd: "/Users/you/projects/workerdeck", status: .exited, startedAt: now - 50_000,
-        endedAt: now - 20_000, exitCode: 1, endReason: .exit),
+      "toolUseId": id, "agentType": type, "description": "Fix base-url and re-run", "status": status, "startedAt": 0,
+      "toolCount": tools,
     ]
   }
 
-  private static var background: [SubagentInfo] {
+  private static var agents: [[String: Any]] {
+    [agent("a", "Explore", "done", tools: 4), agent("b", "Explore", "running", tools: 7), agent("c", "fable", "done", tools: 0)]
+  }
+
+  private static var checklist: [[String: Any]] {
+    [
+      ["text": "Read the runner", "status": "completed"],
+      ["text": "Rewrite the fold", "status": "in_progress"],
+      ["text": "Update the docs", "status": "pending"],
+    ]
+  }
+
+  private static func shell(_ id: String, _ ordinal: Int, _ command: String, _ extra: [String: Any]) -> [String: Any] {
+    var base: [String: Any] = [
+      "id": id, "sessionId": "3", "ordinal": ordinal, "command": command, "label": command,
+      "cwd": "/Users/you/projects/workerdeck", "owner": "user", "bytes": 0, "cols": 80, "rows": 24,
+    ]
+    base.merge(extra) { _, new in new }
+    return base
+  }
+
+  private static var server: [[String: Any]] {
+    [
+      shell("sh1", 1, "pnpm dev --port 4179", ["status": "running", "startedAt": now - 60_000]),
+      shell(
+        "sh2", 2, "pnpm test",
+        ["status": "exited", "startedAt": now - 50_000, "endedAt": now - 20_000, "exitCode": 1, "endReason": "exit"]),
+    ]
+  }
+
+  private static var background: [[String: Any]] {
     agents + [
-      SubagentInfo(
-        toolUseId: "bg", description: "node packages/cli/cli.ts --port 4179", status: .running,
-        startedAt: 0, toolCount: 0, stoppable: true)
+      [
+        "toolUseId": "bg", "description": "node packages/cli/cli.ts --port 4179", "status": "running", "startedAt": 0,
+        "toolCount": 0, "stoppable": true,
+      ]
     ]
   }
 
-  private struct Item: Identifiable {
-    let row: SessionRow
-    var id: String { row.info.id }
-  }
-
-  private var items: [Item] {
+  @State private var model = PreviewList(
     [
-      Item(row: Self.row(id: "1", title: "Session 1 Title", unseen: 5, context: 34, subagents: Self.agents)),
-      Item(
-        row: Self.row(
-          id: "2", title: "Session 2 Title", status: .idle, unseen: 3, context: 62,
-          checklist: Self.checklist)),
-      Item(
-        row: Self.row(
-          id: "3", title: "Session 3 Title", unseen: 5, context: 34, subagents: Self.background,
-          checklist: Self.checklist, shells: Self.server)),
-      Item(
-        row: Self.row(
-          id: "4", title: "Rework the transcript reducer so replay holds across reconnects",
-          unseen: 3, profile: "staging", cost: 12.4, context: 88, subagents: Self.agents)),
-      Item(
-        row: Self.row(
-          id: "5", title: "Session 6 Title", status: .awaitingApproval, unseen: 12, context: 12,
-          pending: 1)),
-      Item(
-        row: Self.row(
-          id: "6", title: "Codex parity sweep", engine: .codex, model: "gpt-5-codex",
-          context: 41)),
-    ]
-  }
-
+      row(id: "1", title: "Session 1 Title", context: 34, subagents: agents),
+      row(id: "2", title: "Session 2 Title", status: "idle", context: 62, checklist: checklist),
+      row(id: "3", title: "Session 3 Title", context: 34, subagents: background, checklist: checklist, shells: server),
+      row(
+        id: "4", title: "Rework the transcript reducer so replay holds across reconnects", profile: "staging",
+        cost: 12.4, context: 88, subagents: agents),
+      row(id: "5", title: "Session 6 Title", status: "awaiting_approval", context: 12, pending: 1),
+      row(id: "6", title: "Codex parity sweep", engine: "codex", model: "gpt-5-codex", context: 41),
+    ],
+    unseen: ["1": 5, "2": 3, "3": 5, "4": 3, "5": 12],
+    config: #"{"groupBy":"none"}"#)
   @State private var config = ViewConfig.default
   @State private var path: [SessionRoute] = []
-
-  private func steps(_ row: SessionRow) -> [Step] {
-    sessionSteps(
-      row.info, config.subagents, now: Self.now, shells: config.shells, tasks: config.tasks)
-  }
 
   var body: some View {
     NavigationStack(path: $path) {
       List {
-        ForEach(items) { item in
+        ForEach(model.sections().flatMap(\.items)) { item in
           SessionCardView(
-            row: item.row, onOpen: { path.append(Self.route(for: item.row)) },
+            item: item, onOpen: { item.hostUUID.map { path.append(.session(hostId: $0, sessionId: item.info.id)) } },
             hostName: item.row.hostName,
             // The app's own actions, spelled out rather than left empty: the
             // menu is part of what this harness exists to check.
@@ -344,9 +343,9 @@ private struct SessionsPreview: View {
               Button { } label: { Label("Rename", systemImage: "pencil") }
               Button(role: .destructive) { } label: { Label("Close", systemImage: "xmark.circle") }
             })
-          .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps(item.row).isEmpty))
-          .listRowSeparator(steps(item.row).isEmpty ? .automatic : .hidden, edges: .bottom)
-          SessionStepRows(row: item.row, steps: steps(item.row)) { step in
+          .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !item.row.steps.isEmpty))
+          .listRowSeparator(item.row.steps.isEmpty ? .automatic : .hidden, edges: .bottom)
+          SessionStepRows(row: item, steps: item.row.steps) { step in
             step.killable ? {} : nil
           }
         }
@@ -368,7 +367,6 @@ private struct SessionsPreview: View {
       }
     }
   }
-
 }
 
 /// The sessions list's second line, in every project state it has.
@@ -527,39 +525,40 @@ private struct ProjectsPreview: View {
 /// one state cannot show that; a column of them can.
 /// Every step-row rule on one screen - see `UIPREVIEW=steps` in the switch below.
 private struct StepsPreview: View {
-  private static func sub(
-    _ id: String, agent: String?, description: String?, status: SubagentStatus,
-    tools: Int
-  ) -> SubagentInfo {
-    SubagentInfo(
-      toolUseId: id, agentType: agent, description: description, status: status,
-      startedAt: 0, toolCount: tools)
+  private static func sub(_ id: String, agent: String?, description: String?, status: String, tools: Int) -> [String: Any] {
+    var out: [String: Any] = ["toolUseId": id, "status": status, "startedAt": 0, "toolCount": tools]
+    if let agent { out["agentType"] = agent }
+    if let description { out["description"] = description }
+    return out
   }
 
   /// Deliberately interleaved on the wire: the fixture only proves the sort if
   /// the input is out of order. Dispatch order here is task, agent, task,
   /// agent, agent, task - and the screen must read agents first, each group
   /// still in the order it arrived.
-  private static var session: SessionInfo {
-    SessionInfo(
-      id: "s1", status: .running, cwd: "/Users/you/projects/workerdeck", engine: .claude,
-      createdAt: 0, lastSeq: 0, pendingPermissionCount: 0, title: "Mixed steps",
-      lastActivityAt: Date().timeIntervalSince1970 * 1000 - 60_000,
-      subagents: [
-        sub("t1", agent: nil, description: "rewrite the height budget", status: .done, tools: 0),
-        sub("a1", agent: "Explore", description: "map the web theme", status: .running, tools: 7),
-        sub("t2", agent: nil, description: "check a capture", status: .running, tools: 0),
-        sub("a2", agent: "Plan", description: "size the port", status: .failed, tools: 2),
-        // No description: the label falls back to the bare type.
-        sub("a3", agent: "general-purpose", description: nil, status: .done, tools: 0),
-        sub("t3", agent: nil, description: "and a task that failed", status: .failed, tools: 0),
-      ])
-  }
+  @State private var model = PreviewList(
+    [
+      ListFixture.session(
+        "s1", status: "running",
+        [
+          "engine": "claude", "title": "Mixed steps", "lastActivityAt": Date().timeIntervalSince1970 * 1000 - 60_000,
+          "subagents": [
+            sub("t1", agent: nil, description: "rewrite the height budget", status: "done", tools: 0),
+            sub("a1", agent: "Explore", description: "map the web theme", status: "running", tools: 7),
+            sub("t2", agent: nil, description: "check a capture", status: "running", tools: 0),
+            sub("a2", agent: "Plan", description: "size the port", status: "failed", tools: 2),
+            // No description: the label falls back to the bare type.
+            sub("a3", agent: "general-purpose", description: nil, status: "done", tools: 0),
+            sub("t3", agent: nil, description: "and a task that failed", status: "failed", tools: 0),
+          ],
+        ])
+    ],
+    config: #"{"subagents":"all","tasks":"all"}"#)
 
   private static let hostId = UUID()
 
   var body: some View {
-    let steps = sessionSteps(Self.session, .all, tasks: .all)
+    let steps = model.sections().flatMap(\.items).first?.row.steps ?? []
     // Inside a stack, and each row is the `NavigationLink` the list gives it -
     // a bare `SessionStepRow` is a *simpler* composition than the app ships, and
     // where a press goes is half of what these rows are for. The destination

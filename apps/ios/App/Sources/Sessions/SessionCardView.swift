@@ -1,5 +1,5 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckKit
 
 /// One session card: the two-line row and, when there is something to disclose,
 /// the step count that opens it.
@@ -15,7 +15,7 @@ struct SessionCardView<MenuContent: View>: View {
     EdgeInsets(top: 10, leading: 16, bottom: hasSteps ? 2 : 10, trailing: 16)
   }
 
-  let row: SessionRow
+  let item: ListItem
   let onOpen: () -> Void
   var hostName: String?
   var projectImage: UIImage?
@@ -29,7 +29,7 @@ struct SessionCardView<MenuContent: View>: View {
   var body: some View {
     Button(action: onOpen) {
       SessionRowView(
-        session: row.info, hostName: hostName, unseen: row.unseen,
+        session: item.info, hostName: hostName, unseen: item.unseen,
         projectImage: projectImage, showsProject: showsProject)
         // A list-row button paints its label in the accent colour; the title must stay primary.
         .foregroundStyle(.primary)

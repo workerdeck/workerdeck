@@ -1,5 +1,6 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckCore
+import WorkerDeckKit
 
 /// One step under its session row: the state marker, the label, its tool count,
 /// and - for a running shell or a task the engine can stop - a stop button.
@@ -16,7 +17,7 @@ import SwiftUI
 /// a checklist line is the plan rather than a worker. Failure outranks all
 /// three, and a pending task is dimmed.
 struct SessionStepRow: View {
-  let step: Step
+  let step: ListStep
   /// Stops a running shell or task. Nil draws no button.
   var onKill: (() -> Void)?
 
@@ -100,13 +101,13 @@ struct SessionStepRow: View {
 /// only under the last step (the card hides its own bottom one when it has
 /// steps).
 struct SessionStepRows: View {
-  let row: SessionRow
-  let steps: [Step]
-  var onKill: (Step) -> (() -> Void)? = { _ in nil }
+  let row: ListItem
+  let steps: [ListStep]
+  var onKill: (ListStep) -> (() -> Void)? = { _ in nil }
 
   var body: some View {
     ForEach(steps) { step in
-      let route = UUID(uuidString: row.hostId).map {
+      let route = row.hostUUID.map {
         SessionRoute.step(hostId: $0, sessionId: row.info.id, step: step)
       }
       let label = SessionStepRow(step: step, onKill: onKill(step))

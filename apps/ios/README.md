@@ -653,9 +653,11 @@ case.
 apps/ios/scripts/deploy.sh              # generate, build, install, launch
 apps/ios/scripts/deploy.sh --no-launch  # install only - works on a locked phone
 apps/ios/scripts/deploy.sh --release    # optimized build - what a shipped app costs
-apps/ios/scripts/deploy.sh --core       # rebuild the Rust core first; Native/ present = core linked
-apps/ios/scripts/deploy.sh --no-core    # leave the core out even when Native/ is built
+apps/ios/scripts/deploy.sh --core       # rebuild the Rust core first (built anyway when Native/ is empty)
 ```
+
+The app always links the Rust core (`scripts/build-core.sh`, needs cargo): the sessions list,
+unread marks and bookmarks run on it. `swift test` in `WorkerDeckKit` still runs without it.
 
 `--release` matters for one thing and it is not cosmetic: **any performance number taken off a
 Debug build is a number about the build.** The transcript fold alone is ~5.6× slower unoptimized

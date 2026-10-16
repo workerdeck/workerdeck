@@ -1,4 +1,5 @@
 import Foundation
+import WorkerDeckCore
 import WorkerDeckKit
 
 /// Everything reachable from the session list's navigation stack.
@@ -36,7 +37,7 @@ enum SessionRoute: Hashable {
   // because the preview harness routes its own copy of the same rows: with the
   // rule spelled twice, a test driving the preview proves only that the preview
   // agrees with itself.
-  static func step(hostId: UUID, sessionId: String, step: Step) -> SessionRoute {
+  static func step(hostId: UUID, sessionId: String, step: ListStep) -> SessionRoute {
     switch step.kind {
     case .agent:
       return .session(hostId: hostId, sessionId: sessionId, subagent: step.key)

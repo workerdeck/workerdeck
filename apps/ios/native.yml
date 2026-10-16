@@ -1,4 +1,4 @@
-# Merged by project.yml only when WD_NATIVE_CORE is set (scripts/deploy.sh sets it once build-core.sh has run).
+# Merged by project.yml. `WD_NATIVE_CORE` still gates the session-screen preview code until slice 7 deletes the gate.
 targets:
   WorkerDeckApp:
     dependencies:

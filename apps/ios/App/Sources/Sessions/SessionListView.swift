@@ -1,11 +1,12 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckCore
+import WorkerDeckKit
 
 /// The app's home screen: every gateway's sessions in ONE list, with the gateway
 /// as a facet (filter/group/sort) rather than the frame - the model the VS Code
-/// extension proved. Search, the three facets, group/sort, and the subset line
-/// all come from the shared rules in the kit (`SessionList.swift`); this view
-/// only renders what they derive. Owns the navigation stack for everything
+/// extension proved. Search, the three facets, group/sort, teams, steps and the
+/// subset line all come from the native core's `SessionList`; this view only
+/// renders what it derives. Owns the navigation stack for everything
 /// below, and each route names its gateway explicitly.
 struct SessionListView: View {
   @Environment(HostStore.self) private var hosts
@@ -18,26 +19,25 @@ struct SessionListView: View {
   @State private var path: [SessionRoute] = []
   @State private var showHostManager = false
   @State private var showSettings = false
-  @State private var pendingClose: SessionRow?
+  @State private var pendingClose: ListItem?
   /// The row being renamed, and the text so far. An alert with a text field
   /// rather than an inline editor: a List row is a navigation target on a phone,
   /// so an editable label inside one fights the tap that opens the session.
-  @State private var pendingRename: SessionRow?
+  @State private var pendingRename: ListItem?
   @State private var renameText = ""
-  @State private var pendingStatus: SessionRow?
+  @State private var pendingStatus: ListItem?
   @State private var statusText = ""
-  @State private var pendingRetire: SessionRow?
+  @State private var pendingRetire: ListItem?
   @State private var pendingCrossing: Crossing?
 
   private struct Crossing {
-    let row: SessionRow
-    let lead: SessionRow
+    let row: ListItem
+    let lead: TeamLead
+    let owner: String
   }
   /// The search bar is shown on request, like the dashboard's; closing it
   /// clears the query, so a hidden search can never be what empties the list.
   @State private var searchOpen = false
-  /// The member opened last: the phone's stand-in for the dashboard's selected row.
-  @State private var lastOpened: String?
   @State private var clock = Date()
 
   /// Restarting identity for the poll loop: any of these changing means the
@@ -104,8 +104,7 @@ struct SessionListView: View {
     guard let route = push.pendingRoute else { return }
     let target =
       route.hostId
-      ?? model?.rows.first { $0.info.id == route.sessionId }
-      .flatMap { UUID(uuidString: $0.hostId) }
+      ?? hosts.hosts.first { model?.info(hostId: $0.id.uuidString, sessionId: route.sessionId) != nil }?.id
       ?? hosts.hosts.first?.id
     guard let hostId = target, hosts.hosts.contains(where: { $0.id == hostId }) else {
       // A route naming a gateway this phone no longer has can never be served.
@@ -324,7 +323,7 @@ struct SessionListView: View {
       Button("Cancel", role: .cancel) { pendingCrossing = nil }
     } message: {
       Text(
-        "\(pendingCrossing?.lead.info.agent?.name ?? "This lead") belongs to \(pendingCrossing?.lead.info.owner ?? "another owner"). Its team will be able to message and read this agent.")
+        "\(pendingCrossing?.lead.name ?? "This lead") belongs to \(pendingCrossing?.owner ?? "another owner"). Its team will be able to message and read this agent.")
     }
     .alert(
       "Something went wrong",
@@ -336,7 +335,7 @@ struct SessionListView: View {
     }
   }
 
-  private func subsetLine(_ subset: SubsetSummary, model: SessionListModel) -> some View {
+  private func subsetLine(_ subset: Subset, model: SessionListModel) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 6) {
       Text("\(subset.shown) of \(subset.total)")
         .monospacedDigit()
@@ -344,9 +343,7 @@ struct SessionListView: View {
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: 0)
-      Button("Show all") {
-        model.config = clearFilters(model.config)
-      }
+      Button("Show all") { model.clearFilters() }
     }
     .font(.caption)
     .foregroundStyle(.secondary)
@@ -359,31 +356,36 @@ struct SessionListView: View {
   @ViewBuilder
   private func liveList(_ model: SessionListModel) -> some View {
     @Bindable var model = model
+    let sections = model.sections(now: clockMs)
     List {
-      if model.groups.isEmpty, model.hasLoaded {
+      if sections.isEmpty, model.hasLoaded {
         emptyState(model)
           .listRowSeparator(.hidden)
           .listRowBackground(Color.clear)
       }
-      ForEach(model.groups) { group in
+      ForEach(sections) { section in
         Section {
-          if !group.earlier || model.config.earlierOpen {
-            ForEach(group.rows) { row in
-              unit(row, model: model)
+          if !section.group.collapsed {
+            ForEach(section.items) { item in
+              if item.row.depth > 0 {
+                memberUnit(item, model: model)
+              } else {
+                unit(item, section: section, model: model)
+              }
             }
           }
         } header: {
-          if group.earlier {
-            earlierHeader(group, model: model)
-          } else if let label = group.label {
+          if section.earlier {
+            earlierHeader(section, model: model)
+          } else if let label = section.group.label {
             Text(label)
           }
         }
       }
     }
     .listStyle(.plain)
-    .task(id: lingerEnds(model)) {
-      guard let end = lingerEnds(model) else { return }
+    .task(id: model.lingerEnds) {
+      guard let end = model.lingerEnds else { return }
       try? await Task.sleep(for: .milliseconds(max(0, end - Date().timeIntervalSince1970 * 1000) + 50))
       clock = Date()
     }
@@ -393,69 +395,69 @@ struct SessionListView: View {
   }
 
   @ViewBuilder
-  private func unit(_ row: SessionRow, model: SessionListModel) -> some View {
-    if let route = sessionRoute(for: row) {
-      if row.info.agent != nil {
-        let view = teamView(row, model.config, now: clockMs)
+  private func unit(_ item: ListItem, section: ListSection, model: SessionListModel) -> some View {
+    if let route = sessionRoute(for: item) {
+      let steps = item.row.steps
+      if item.info.agent != nil {
         AgentCardView(
-          row: row, frames: model.agentAvatars.frames(hostId: row.hostId, agent: row.info.agent),
-          tray: view.tray.isEmpty && !view.expanded
+          item: item, frames: model.agentAvatars.frames(hostId: item.row.hostId, agent: item.info.agent),
+          tray: item.row.tray.isEmpty && !item.row.teamExpanded
             ? nil
             : TeamTray(
-              view: view,
-              frames: { model.agentAvatars.frames(hostId: $0.hostId, agent: $0.info.agent) },
-              select: { member in
-                if let route = sessionRoute(for: member) { open(member, route) }
+              row: item.row,
+              members: item.row.tray.compactMap { member in
+                model.info(hostId: member.hostId, sessionId: member.sessionId).map { (member, $0) }
               },
-              toggle: { model.config = toggleTeamExpanded(model.config, row) }),
+              frames: { model.agentAvatars.frames(hostId: $0.hostId, agent: $1.agent) },
+              select: { member in open(member, model: model) },
+              toggle: { model.toggleTeam(item) }),
           onOpen: { path.append(route) },
-          menu: { rowActions(for: row, model: model) })
-        .opacity(row.context ? 0.5 : 1)
-        .modifier(rowChrome(row, model: model))
-        .contextMenu { rowActions(for: row, model: model) }
-        .listRowInsets(
-          AgentCardView<EmptyView>.insets(member: false, hasSteps: !steps(for: row, model: model).isEmpty))
-        .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
-        stepRows(for: row, model: model)
-        ForEach(view.shown) { member in
-          memberUnit(member, model: model)
-        }
+          menu: { rowActions(for: item, model: model) })
+        .opacity(item.row.context ? 0.5 : 1)
+        .modifier(rowChrome(item, model: model))
+        .contextMenu { rowActions(for: item, model: model) }
+        .listRowInsets(AgentCardView<EmptyView>.insets(member: false, hasSteps: !steps.isEmpty))
+        .listRowBackground(item.needsYou ? ListAttention.background : nil)
+        stepRows(for: item, model: model)
       } else {
         SessionCardView(
-          row: row,
+          item: item,
           onOpen: { path.append(route) },
           // Grouped by project, the section header already names the gateway.
           hostName: showsHostNames(model) && model.config.groupBy != .project
-            ? row.hostName : nil,
-          projectImage: projectImage(for: row, model: model),
+            ? item.row.hostName : nil,
+          projectImage: projectImage(for: item, model: model),
           // Grouped by project, the section header already names it.
           showsProject: model.config.groupBy != .project,
-          menu: { rowActions(for: row, model: model) })
-        .modifier(rowChrome(row, model: model))
-        .contextMenu { rowActions(for: row, model: model) }
-        .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps(for: row, model: model).isEmpty))
-        .listRowSeparator(steps(for: row, model: model).isEmpty ? .automatic : .hidden, edges: .bottom)
-        .listRowBackground(ListAttention.needsYou(row) ? ListAttention.background : nil)
-        stepRows(for: row, model: model)
+          menu: { rowActions(for: item, model: model) })
+        .modifier(rowChrome(item, model: model))
+        .contextMenu { rowActions(for: item, model: model) }
+        .listRowInsets(SessionCardView<EmptyView>.insets(hasSteps: !steps.isEmpty))
+        .listRowSeparator(steps.isEmpty ? .automatic : .hidden, edges: .bottom)
+        .listRowBackground(item.needsYou ? ListAttention.background : nil)
+        stepRows(for: item, model: model)
       }
     }
   }
 
   @ViewBuilder
-  private func memberUnit(_ row: SessionRow, model: SessionListModel) -> some View {
-    if let route = sessionRoute(for: row) {
+  private func memberUnit(_ item: ListItem, model: SessionListModel) -> some View {
+    if let route = sessionRoute(for: item) {
       AgentCardView(
-        row: row, frames: model.agentAvatars.frames(hostId: row.hostId, agent: row.info.agent),
+        item: item, frames: model.agentAvatars.frames(hostId: item.row.hostId, agent: item.info.agent),
         member: true,
-        onOpen: { open(row, route) },
-        menu: { rowActions(for: row, model: model) })
-      .modifier(rowChrome(row, model: model))
-        .contextMenu { rowActions(for: row, model: model) }
+        onOpen: {
+          model.select(hostId: item.row.hostId, sessionId: item.row.sessionId)
+          path.append(route)
+        },
+        menu: { rowActions(for: item, model: model) })
+      .modifier(rowChrome(item, model: model))
+      .contextMenu { rowActions(for: item, model: model) }
       .listRowInsets(AgentCardView<EmptyView>.insets(member: true, hasSteps: false))
       .listRowSeparator(.hidden)
       .listRowBackground(
         ZStack {
-          if ListAttention.needsYou(row) { ListAttention.background }
+          if item.needsYou { ListAttention.background }
           TeamTreeLine()
         })
     }
@@ -463,31 +465,22 @@ struct SessionListView: View {
 
   private var clockMs: Double { clock.timeIntervalSince1970 * 1000 }
 
-  private func teamView(_ row: SessionRow, _ config: ViewConfig, now: Double) -> TeamView {
-    WorkerDeckKit.teamView(row, config: config, selected: lastOpened, now: now)
+  // A tray avatar opens its Member, which then counts as selected and so stays drawn under the lead.
+  private func open(_ member: TrayMember, model: SessionListModel) {
+    guard let hostId = UUID(uuidString: member.hostId) else { return }
+    model.select(hostId: member.hostId, sessionId: member.sessionId)
+    path.append(.session(hostId: hostId, sessionId: member.sessionId))
   }
 
-  private func open(_ member: SessionRow, _ route: SessionRoute) {
-    lastOpened = member.id
-    path.append(route)
-  }
-
-  /// When the next lingering Member leaves Auto, so the list redraws then.
-  private func lingerEnds(_ model: SessionListModel) -> Double? {
-    model.groups.flatMap(\.rows).compactMap { row in
-      row.members == nil ? nil : teamLingerEnds(teamView(row, model.config, now: clockMs), now: clockMs)
-    }.min()
-  }
-
-  private func earlierHeader(_ group: SessionGroup, model: SessionListModel) -> some View {
+  private func earlierHeader(_ section: ListSection, model: SessionListModel) -> some View {
     Button {
-      model.config.earlierOpen.toggle()
+      model.toggleEarlier()
     } label: {
       HStack(spacing: 4) {
-        Image(systemName: model.config.earlierOpen ? "chevron.down" : "chevron.right")
+        Image(systemName: section.group.collapsed ? "chevron.right" : "chevron.down")
           .font(.caption2.weight(.semibold))
-        Text(group.label ?? "Earlier")
-        Text("\(group.rows.count)").monospacedDigit().foregroundStyle(.tertiary)
+        Text(section.group.label ?? "Earlier")
+        Text("\(section.group.sessions)").monospacedDigit().foregroundStyle(.tertiary)
         Spacer(minLength: 0)
       }
       .contentShape(Rectangle())
@@ -495,7 +488,7 @@ struct SessionListView: View {
     .buttonStyle(.plain)
   }
 
-  private func rowChrome(_ row: SessionRow, model: SessionListModel) -> RowChrome {
+  private func rowChrome(_ row: ListItem, model: SessionListModel) -> RowChrome {
     RowChrome(
       row: row,
       onClose: {
@@ -509,7 +502,7 @@ struct SessionListView: View {
       onRestart: row.info.agent == nil ? nil : { Task { _ = await model.restart(row) } })
   }
 
-  private func beginRename(_ row: SessionRow) {
+  private func beginRename(_ row: ListItem) {
     renameText = row.info.agent?.name ?? row.info.title ?? ""
     pendingRename = row
   }
@@ -519,7 +512,7 @@ struct SessionListView: View {
   // `···`, a long press, and (for the destructive half) a trailing swipe. Close
   // and Remove are the same gesture wearing two meanings - see the swipe.
   @ViewBuilder
-  private func rowActions(for row: SessionRow, model: SessionListModel) -> some View {
+  private func rowActions(for row: ListItem, model: SessionListModel) -> some View {
     let agent = row.info.agent
     if let owner = row.info.owner {
       Text("Owner: \(owner)")
@@ -550,13 +543,13 @@ struct SessionListView: View {
         Label("Make agent", systemImage: "person.badge.plus")
       }
     }
-    let leads = teamLeads(model.rows, for: row)
+    let leads = model.teamLeads(for: row)
     if !leads.isEmpty {
       Menu {
-        ForEach(leads) { lead in
-          Button(lead.info.agent?.name ?? sessionLabel(lead.info)) {
-            if model.crossesOwners(row, into: lead) {
-              pendingCrossing = Crossing(row: row, lead: lead)
+        ForEach(leads, id: \.agentId) { lead in
+          Button(lead.name) {
+            if let owner = model.crossedOwner(row, into: lead) {
+              pendingCrossing = Crossing(row: row, lead: lead, owner: owner)
             } else {
               Task { await model.join(row, lead: lead) }
             }
@@ -580,7 +573,7 @@ struct SessionListView: View {
         Label("Dissolve team", systemImage: "person.2.slash")
       }
     }
-    if let agent, agent.lead == nil, let hostId = UUID(uuidString: row.hostId) {
+    if let agent, agent.lead == nil, let hostId = row.hostUUID {
       if agent.shared == true {
         Button {
           Task { await model.setSharing(row, .private) }
@@ -602,9 +595,7 @@ struct SessionListView: View {
         Label("New conversation", systemImage: "arrow.counterclockwise")
       }
     }
-    if row.info.resolvedCapabilities.engineSleep, row.info.status == .idle,
-      row.info.engineAsleep != true
-    {
+    if row.row.canSleep {
       Button {
         Task { await model.sleep(row) }
       } label: {
@@ -639,7 +630,7 @@ struct SessionListView: View {
   /// The picture for this row's project, when it declared an image one and the
   /// loader has it. Nil for a glyph (drawn from SF Symbols, no bytes involved),
   /// for bytes not in yet, and for an icon that could not be decoded.
-  private func projectImage(for row: SessionRow, model: SessionListModel) -> UIImage? {
+  private func projectImage(for row: ListItem, model: SessionListModel) -> UIImage? {
     guard case .image(_, let hash) = row.info.project?.icon else { return nil }
     return model.projectIcons.image(forHash: hash)
   }
@@ -666,7 +657,7 @@ struct SessionListView: View {
       } description: {
         Text("No session matches the current search and filters.")
       } actions: {
-        Button("Clear filters") { model.config = clearFilters(model.config) }
+        Button("Clear filters") { model.clearFilters() }
       }
     } else {
       ContentUnavailableView {
@@ -677,32 +668,21 @@ struct SessionListView: View {
     }
   }
 
-  private func sessionRoute(for row: SessionRow) -> SessionRoute? {
-    UUID(uuidString: row.hostId).map { .session(hostId: $0, sessionId: row.info.id) }
+  private func sessionRoute(for row: ListItem) -> SessionRoute? {
+    row.hostUUID.map { .session(hostId: $0, sessionId: row.info.id) }
   }
 
   // MARK: - Step lines
 
-  /// The steps a card draws, under the list's three display settings. `now` at
-  /// the body pass decides whether a shell has lasted long enough to earn a
-  /// line; the list re-derives on every poll, so that advances without a timer.
-  private func steps(for row: SessionRow, model: SessionListModel) -> [Step] {
-    sessionSteps(
-      row.info, model.config.subagents, now: Date().timeIntervalSince1970 * 1000,
-      shells: model.config.shells, tasks: model.config.tasks)
-  }
-
-  /// One list row per step, in the kit's order: agents, tasks, shells. Rows
-  /// rather than a stack inside the card, because a full-width row is a real
-  /// thumb target and a line inside a two-line row is not. The press follows
-  /// the kind (`SessionRoute.step`).
-  private func stepRows(for row: SessionRow, model: SessionListModel) -> some View {
-    SessionStepRows(row: row, steps: steps(for: row, model: model)) {
+  // One list row per step, in the core's order (agents, tasks, shells). Rows rather than a stack inside the card,
+  // because a full-width row is a real thumb target; the press follows the kind (`SessionRoute.step`).
+  private func stepRows(for row: ListItem, model: SessionListModel) -> some View {
+    SessionStepRows(row: row, steps: row.row.steps) {
       kill($0, row: row, model: model)
     }
   }
 
-  private func kill(_ step: Step, row: SessionRow, model: SessionListModel) -> (() -> Void)? {
+  private func kill(_ step: ListStep, row: ListItem, model: SessionListModel) -> (() -> Void)? {
     guard step.killable else { return nil }
     switch step.kind {
     case .shell:
@@ -900,7 +880,7 @@ private struct SessionSearch: ViewModifier {
 }
 
 private struct RowChrome: ViewModifier {
-  let row: SessionRow
+  let row: ListItem
   let onClose: () -> Void
   let onRename: () -> Void
   let onRestart: (() -> Void)?

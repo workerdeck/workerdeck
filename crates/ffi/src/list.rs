@@ -134,6 +134,8 @@ pub struct ListRow {
     pub state: RowState,
     pub state_label: String,
     pub badge: Option<StatusBadge>,
+    pub team_state: Option<RowState>,
+    pub context: bool,
     pub unseen: u32,
     pub status: Option<String>,
     pub model: Option<String>,
@@ -185,8 +187,38 @@ struct Host {
     sessions: Vec<SessionInfo>,
 }
 
+// The "you are seeing a subset" line: shown of total, and every cause.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Subset {
+    pub shown: u32,
+    pub total: u32,
+    pub causes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProjectChoice {
+    pub key: String,
+    pub label: String,
+}
+
+// A session another row could join as a member, for the row menu's "Add to team".
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TeamLead {
+    pub session_id: String,
+    pub agent_id: String,
+    pub name: String,
+}
+
+// Where this phone had read a session to, and when: the catch-up seam's whole input.
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
+pub struct ReadMark {
+    pub item_count: u32,
+    pub seen_at: f64,
+}
+
 struct State {
     hosts: Vec<Host>,
+    relay_hosts: Entries<String>,
     config: ViewConfig,
     marks: Watermarks,
     avatars: AvatarLoads,
@@ -215,6 +247,10 @@ impl State {
             }
         }
         out
+    }
+
+    fn row(&self, host_id: &str, session_id: &str) -> Option<SessionRow> {
+        self.rows().into_iter().find(|r| r.host_id == host_id && r.info.id == session_id)
     }
 
     fn find(&self, host_id: &str, session_id: &str) -> Option<&SessionInfo> {
@@ -290,6 +326,8 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         state: state.into(),
         state_label: state.label().to_owned(),
         badge: vm::status_badge(state, info).map(Into::into),
+        team_state: row.team_state.map(Into::into),
+        context: row.context == Some(true),
         unseen: row.unseen as u32,
         status,
         model: info.model.clone(),
@@ -335,6 +373,7 @@ impl SessionList {
         std::sync::Arc::new(SessionList {
             inner: Mutex::new(State {
                 hosts: Vec::new(),
+                relay_hosts: Entries::new(),
                 config: normalize_view_config(stored.as_ref()),
                 marks: Watermarks::new(marks),
                 avatars: AvatarLoads::default(),
@@ -368,6 +407,7 @@ impl SessionList {
     pub fn remove_host(&self, host_id: String) -> bool {
         let mut state = self.state();
         state.hosts.retain(|h| h.id != host_id);
+        state.relay_hosts.0.retain(|(_, host)| *host != host_id);
         state.avatars.forget_host(&host_id);
         state.marks.forget_host(&host_id)
     }
@@ -377,7 +417,11 @@ impl SessionList {
         let mut state = self.state();
         let rows = state.rows();
         let filtered = filter_rows(&rows, &state.config, None);
-        let options = GroupOptions { gateway_count: Some(state.hosts.len()), all: Some(rows.clone()), relay_hosts: None };
+        let options = GroupOptions {
+            gateway_count: Some(state.hosts.len()),
+            all: Some(rows.clone()),
+            relay_hosts: Some(state.relay_hosts.clone()),
+        };
         let config = &state.config;
         let show_gateway = vm::shows_gateway(state.hosts.len(), config);
         let mut linger: Option<f64> = None;
@@ -477,6 +521,69 @@ impl SessionList {
         self.state().config.search = search;
     }
 
+    // A whole config, as the filter menu edited it; normalized like a stored one, so an unknown value degrades.
+    pub fn set_config_json(&self, json: String) {
+        let value = serde_json::from_str::<serde_json::Value>(&json).ok();
+        self.state().config = normalize_view_config(value.as_ref());
+    }
+
+    // Every filter off; the layout choices survive.
+    pub fn clear_filters(&self) {
+        let mut state = self.state();
+        state.config = vm::clear_filters(&state.config);
+    }
+
+    // The relay gateway name `GET /v1/meta` reports for a host (None without a relay), so a member whose lead lives
+    // on another configured gateway still draws under that lead. `relay_hosts_of`, one host at a time.
+    pub fn set_relay(&self, host_id: String, gateway: Option<String>) {
+        let mut state = self.state();
+        state.relay_hosts.0.retain(|(_, host)| *host != host_id);
+        if let Some(gateway) = gateway {
+            state.relay_hosts.set(gateway, host_id);
+        }
+    }
+
+    pub fn subset(&self) -> Option<Subset> {
+        let state = self.state();
+        let rows = state.rows();
+        let shown = filter_rows(&rows, &state.config, None).len() as u64;
+        vm::subset_summary(&state.config, None, shown, rows.len() as u64).map(|s| Subset {
+            shown: s.shown as u32,
+            total: s.total as u32,
+            causes: s.causes,
+        })
+    }
+
+    // The engines and projects present, for the filter menu's chips.
+    pub fn adapters(&self) -> Vec<String> {
+        vm::adapters_of(&self.state().rows())
+    }
+
+    pub fn projects(&self) -> Vec<ProjectChoice> {
+        vm::projects_of(&self.state().rows()).into_iter().map(|p| ProjectChoice { key: p.key, label: p.label }).collect()
+    }
+
+    pub fn team_leads(&self, host_id: String, session_id: String) -> Vec<TeamLead> {
+        let state = self.state();
+        let rows = state.rows();
+        let Some(row) = rows.iter().find(|r| r.host_id == host_id && r.info.id == session_id) else { return Vec::new() };
+        vm::team_leads(&rows, row)
+            .into_iter()
+            .filter_map(|lead| {
+                let agent = lead.info.agent.as_ref()?;
+                Some(TeamLead { session_id: lead.info.id.clone(), agent_id: agent.id.clone(), name: agent.name.clone() })
+            })
+            .collect()
+    }
+
+    // The agent ids of a lead's members, for dissolving the team.
+    pub fn team_members(&self, host_id: String, session_id: String) -> Vec<String> {
+        let state = self.state();
+        let rows = state.rows();
+        let Some(row) = state.row(&host_id, &session_id) else { return Vec::new() };
+        vm::team_members(&row, &rows).into_iter().filter_map(|m| m.info.agent.as_ref().map(|a| a.id.clone())).collect()
+    }
+
     // Marks the session read up to its rollup counters; true when the mark moved and `marks_json` is worth saving.
     pub fn mark_seen(&self, host_id: String, session_id: String, now_ms: f64) -> bool {
         let mut state = self.state();
@@ -488,6 +595,33 @@ impl SessionList {
             turns: info.num_turns.map(f64::from),
         };
         state.marks.mark(&host_id, &session_id, &seen, now_ms)
+    }
+
+    // A session screen's mark: rows it rendered plus the rollup counters it last read. True when the mark moved.
+    #[allow(clippy::too_many_arguments)]
+    pub fn mark(
+        &self,
+        host_id: String,
+        session_id: String,
+        item_count: Option<u32>,
+        activity: Option<u32>,
+        prose: Option<u32>,
+        turns: Option<u32>,
+        now_ms: f64,
+    ) -> bool {
+        let seen = Seen {
+            item_count: item_count.map(f64::from),
+            activity: activity.map(f64::from),
+            prose: prose.map(f64::from),
+            turns: turns.map(f64::from),
+        };
+        self.state().marks.mark(&host_id, &session_id, &seen, now_ms)
+    }
+
+    pub fn since(&self, host_id: String, session_id: String) -> Option<ReadMark> {
+        let state = self.state();
+        let mark = state.marks.get(&host_id, &session_id)?;
+        Some(ReadMark { item_count: mark.item_count as u32, seen_at: mark.seen_at })
     }
 
     pub fn forget(&self, host_id: String, session_id: String) -> bool {
