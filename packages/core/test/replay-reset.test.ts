@@ -6,8 +6,14 @@ function seqd(bodies: SessionEventBody[]): SessionEvent[] {
   return bodies.map((body, index) => ({ ...body, seq: index + 1, ts: 1000 + index }))
 }
 
-const user = (text: string): SessionEventBody => ({ type: 'user_message', message: { role: 'user', content: text }, parentToolUseId: null })
-const status = (value: 'running' | 'idle'): SessionEventBody => ({ type: 'status_changed', status: value })
+function user(text: string): SessionEventBody {
+  return { type: 'user_message', message: { role: 'user', content: text }, parentToolUseId: null }
+}
+
+function status(value: 'running' | 'idle'): SessionEventBody {
+  return { type: 'status_changed', status: value }
+}
+
 const sdk: SessionEventBody = { type: 'sdk_event', payload: { type: 'system', subtype: 'task_started' } }
 const asked: SessionEventBody = { type: 'permission_requested', request: { id: 'p1' } as never }
 const answered: SessionEventBody = { type: 'permission_resolved', requestId: 'p1' } as never

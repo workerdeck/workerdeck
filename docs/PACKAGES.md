@@ -55,7 +55,12 @@ must replay. `transcriptContent(event)` sits
 beside it and is a *different* rule - does the reducer mutate items, which is broader than
 "counts a row" (deltas and tool results count zero and still mutate): it is what
 `SessionRunner.subscribe` skips below a `conversation_reset` (`/clear`) so a re-attach doesn't
-resurrect a cleared conversation while state events still replay; `activityCount` stays
+resurrect a cleared conversation while state events still replay. A client attach
+(`coalesceReplay`) goes further: below the reset only the latest of each session-state event
+survives (`resetResidueSeqs` in core `replay.ts`: model, effort, mode, status, init,
+capabilities, skills, plan, rate limits, produced files, tool titles), so a long-lived session
+that is cleared often opens as fast as a fresh one; internal subscribers still get every
+state event. `activityCount` stays
 monotonic across the reset, because it is an unread cursor, not an item count.
 `snapshotRetains(event)` is the fourth of the same family and the same shape of claim as the
 coalescer: which events a *store* may drop without any client being able to tell. A
