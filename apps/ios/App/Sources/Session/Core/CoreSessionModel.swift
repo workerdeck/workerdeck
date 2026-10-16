@@ -59,6 +59,16 @@ final class CoreSessionModel {
   }
 
   func press(row: Int, line: Int) { driver?.press(row: row, line: line) }
+  func openFrame(_ taskId: String) { driver?.openFrame(taskId) }
+  func closeFrame(_ taskId: String) { driver?.closeFrame(taskId) }
+  func framePress(row: Int, line: Int) { driver?.framePress(row: row, line: line) }
+  func frameVisible(first: Int, last: Int) { driver?.frameVisible(first: first, last: last) }
+
+  func railSize(railH: Double, viewportH: Double, inFrame: Bool) {
+    driver?.railSize(railH: railH, viewportH: viewportH, inFrame: inFrame)
+  }
+
+  func peek(_ cluster: ScrubCluster?, y: Double, inFrame: Bool) { driver?.peek(cluster, y: y, inFrame: inFrame) }
   func openShell(_ id: String, cols: Int, rows: Int) { driver?.openShell(id, cols: cols, rows: rows) }
   func resizeShell(_ id: String, cols: Int, rows: Int) { driver?.resizeShell(id, cols: cols, rows: rows) }
   func scrollShell(_ lines: Int) { driver?.scrollShell(lines) }
@@ -85,6 +95,12 @@ final class CoreSessionModel {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     driver?.send(trimmed)
+  }
+
+  func runShell(_ command: String) {
+    let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    driver?.runShell(trimmed)
   }
 
   // A session left from its shell screen never saw its own disappear close it.

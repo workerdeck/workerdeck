@@ -10,6 +10,7 @@ struct CoreSessionView: View {
   @State private var scroll = TranscriptScrollModel()
   @State private var images = TerminalImageLoader()
   @State private var draft = ""
+  @State private var shellMode = false
   private let hostId: UUID
   private let sessionId: String
   private let client: WorkerClient?
@@ -60,6 +61,15 @@ struct CoreSessionView: View {
     ) {
       if let id = ui.shell?.id { CoreShellScreen(model: model, shellId: id) }
     }
+    .navigationDestination(
+      isPresented: Binding(
+        get: { ui.frame != nil },
+        set: { if !$0, let id = model.ui.frame?.taskId { model.closeFrame(id) } })
+    ) {
+      if let id = ui.frame?.taskId {
+        CoreFrameScreen(model: model, taskId: id, imageLoader: images, hideThinking: !settings.showThinking)
+      }
+    }
     .onAppear {
       if let client {
         images.fetch = { [sessionId] seq, toolUseId, part in
@@ -70,27 +80,51 @@ struct CoreSessionView: View {
         model.setRecap(mark)
       }
     }
-    // Pushing the shell screen hides this one too; only leaving the session closes it.
-    .onDisappear { if model.ui.shell == nil { model.close() } }
+    // Pushing a shell or sub-agent screen hides this one too; only leaving the session closes it.
+    .onDisappear { if model.ui.shell == nil && model.ui.frame == nil { model.close() } }
   }
 
+  // A `$` typed into an empty draft switches to shell mode when the session can run one; tapping the `$` leaves it.
   private func composer(_ chrome: SessionChrome?) -> some View {
-    HStack(alignment: .bottom, spacing: 8) {
-      TextField("Message", text: $draft, axis: .vertical)
+    let canRunShell = model.ui.canRunShell
+    return HStack(alignment: .bottom, spacing: 8) {
+      if shellMode {
+        Button("$") {
+          draft = exitDraft(draft: draft)
+          shellMode = false
+        }
+        .font(.body.monospaced().bold())
+        .foregroundStyle(TerminalPalette.color(.magenta))
+        .accessibilityLabel("Leave shell mode")
+      }
+      TextField(shellMode ? "Run a command on the host" : "Message", text: $draft, axis: .vertical)
         .lineLimit(1...6)
         .textFieldStyle(.roundedBorder)
+        .font(shellMode ? .body.monospaced() : .body)
+        .textInputAutocapitalization(shellMode ? .never : .sentences)
+        .autocorrectionDisabled(shellMode)
+        .accessibilityIdentifier(shellMode ? "Shell command" : "Message")
+        .onChange(of: draft) { old, new in
+          guard old.isEmpty, new.count == 1,
+            composerTrigger(character: new, isShellMode: shellMode, canRunShell: canRunShell) == .enter
+          else { return }
+          draft = ""
+          shellMode = true
+        }
       if chrome?.busy == true {
         Button("Stop", systemImage: "stop.fill", action: model.interrupt)
           .labelStyle(.iconOnly)
           .buttonStyle(.bordered)
       }
-      Button("Send", systemImage: "arrow.up") {
-        model.send(draft)
+      Button(shellMode ? "Run" : "Send", systemImage: shellMode ? "return" : "arrow.up") {
+        if shellMode { model.runShell(draft) } else { model.send(draft) }
         draft = ""
+        shellMode = false
         scroll.scrollToBottom()
       }
       .labelStyle(.iconOnly)
       .buttonStyle(.borderedProminent)
+      .tint(shellMode ? TerminalPalette.color(.magenta) : nil)
       .disabled(chrome?.enabled != true || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
     .padding(8)
@@ -193,7 +227,7 @@ private struct CoreStatusLine: View {
   }
 }
 
-private struct CorePromptCard: View {
+struct CorePromptCard: View {
   let prompt: Prompt
   let planLines: [TranscriptLine]
   let model: CoreSessionModel

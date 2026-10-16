@@ -3,11 +3,8 @@ import Foundation
 import OSLog
 @preconcurrency import WorkerDeckSession
 
-struct CoreSessionUi: @unchecked Sendable {
-  var title: String?
-  var connection: WorkerDeckSession.ConnectionState = .connecting
-  var error: String?
-  var progress: ReplayProgress?
+// One transcript surface as the core lays it out: the session's own rows, or an open sub-agent frame's.
+struct CoreRows: @unchecked Sendable {
   var rows: [LayoutRow] = []
   var book = CoreHeightBook([])
   var promptRows: [Int] = []
@@ -16,6 +13,38 @@ struct CoreSessionUi: @unchecked Sendable {
   var startRow = 0
   var lines: [[TranscriptLine]] = []
   var linesRevision = 0
+  var rail: [ScrubCluster] = []
+
+  func linesAt(_ row: Int) -> [TranscriptLine]? {
+    let index = row - startRow
+    return lines.indices.contains(index) ? lines[index] : nil
+  }
+
+  mutating func lay(_ bytes: Data?) {
+    let layout = bytes.flatMap { try? Snapshots.transcriptLayout($0) }
+    rows = layout?.rows ?? []
+    book = CoreHeightBook(rows)
+    promptRows = rows.indices.filter { rows[$0].prompt }
+    recapRow = rows.firstIndex(where: \.recap)
+    reveal = layout?.revealRow.map {
+      TranscriptRevealRequest(row: $0, nonce: Int(truncatingIfNeeded: layout?.revealNonce ?? 0))
+    }
+  }
+
+  mutating func show(_ bytes: Data?) {
+    guard let bytes, let lines = try? Snapshots.transcriptLines(bytes) else { return }
+    startRow = lines.startRow
+    self.lines = lines.rows
+    linesRevision &+= 1
+  }
+}
+
+struct CoreSessionUi: @unchecked Sendable {
+  var title: String?
+  var connection: WorkerDeckSession.ConnectionState = .connecting
+  var error: String?
+  var progress: ReplayProgress?
+  var main = CoreRows()
   var pinned: CorePinnedLine?
   var chrome: SessionChrome?
   var modelPicker: ModelPicker?
@@ -23,12 +52,28 @@ struct CoreSessionUi: @unchecked Sendable {
   var prompt: Prompt?
   var planLines: [TranscriptLine] = []
   var openSeconds: Double?
+  var canRunShell = false
   var shell: CoreShellState?
+  var frame: CoreFrameState?
+  var peek: CoreRailPeek?
+}
 
-  func linesAt(_ row: Int) -> [TranscriptLine]? {
-    let index = row - startRow
-    return lines.indices.contains(index) ? lines[index] : nil
-  }
+// The open sub-agent takeover: one agent's own rows, read through the core's frame window.
+struct CoreFrameState: @unchecked Sendable {
+  let taskId: String
+  var strip: FrameStrip?
+  var rows = CoreRows()
+}
+
+struct CoreRailPeek: @unchecked Sendable {
+  let inFrame: Bool
+  let y: Double
+  let peek: ScrubPeek
+}
+
+struct CoreRailSize: Equatable {
+  let railH: Double
+  let viewportH: Double
 }
 
 // The open shell screen. `sized` turns true once the screen measured itself and attached, so a grid is read only after.
@@ -61,6 +106,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
 
   private var ui = CoreSessionUi()
   private var socket: URLSessionWebSocketTask?
+  private var railSize: CoreRailSize?
+  private var frameRailSize: CoreRailSize?
 
   // Socket callbacks arrive on URLSession's queue, maybe before the worker stored the socket, so each task carries its
   // generation and a callback from a replaced one is dropped by number.
@@ -83,7 +130,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     worker = SessionWorker(session: session) { [weak self] effects in self?.handle(effects) }
     let now = Date().timeIntervalSince1970 * 1000
     worker.act {
-      $0.setWallClock(nowMs: now) + $0.setNavigation(subagents: false, shells: true)
+      $0.setWallClock(nowMs: now) + $0.setNavigation(subagents: true, shells: true)
         + $0.setHideThinking(hide: hideThinking) + $0.takeEffects()
     }
   }
@@ -92,6 +139,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   func press(row: Int, line: Int) { worker.act { $0.pressLine(row: UInt32(row), line: UInt32(line)) } }
   func reconnect() { worker.act { $0.reconnectNow() } }
   func send(_ text: String) { worker.act { $0.send(text: text, attachmentIds: []) } }
+  func runShell(_ command: String) { worker.act { $0.runShell(command: command) } }
   func interrupt() { worker.act { $0.interrupt() } }
   func setModel(_ model: String?) { worker.act { $0.setModel(model: model) } }
   func setEffort(_ effort: String?) { worker.act { $0.setEffort(effort: effort) } }
@@ -115,11 +163,11 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   // A row's first line for the sticky prompt, read on its own when the row sits outside the held window.
   func pinLine(row: Int) {
     worker.act { [self] session in
-      guard ui.rows.indices.contains(row),
+      guard ui.main.rows.indices.contains(row),
         let line = (try? Snapshots.transcriptLines(session.transcriptLines(start: UInt32(row), end: UInt32(row + 1))))?
           .rows.first?.first
       else { return [] }
-      ui.pinned = CorePinnedLine(key: ui.rows[row].key, line: line)
+      ui.pinned = CorePinnedLine(key: ui.main.rows[row].key, line: line)
       publish(ui)
       return []
     }
@@ -128,9 +176,84 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   func visible(first: Int, last: Int) {
     worker.act { [self] session in
       if let bytes = session.showRows(first: UInt32(max(0, first)), last: UInt32(max(0, last))) {
-        showLines(bytes)
+        ui.main.show(bytes)
         publish(ui)
       }
+      return []
+    }
+  }
+
+  func openFrame(_ taskId: String) {
+    worker.act { [self] session in
+      if ui.frame?.taskId != taskId {
+        ui.frame = CoreFrameState(taskId: taskId)
+        frameRailSize = nil
+      }
+      let effects = session.openFrame(taskId: taskId)
+      readFrame()
+      publish(ui)
+      return effects
+    }
+  }
+
+  func closeFrame(_ taskId: String) {
+    worker.act { [self] session in
+      if ui.frame?.taskId == taskId {
+        ui.frame = nil
+        frameRailSize = nil
+        if ui.peek?.inFrame == true { ui.peek = nil }
+        publish(ui)
+      }
+      return session.closeFrame(taskId: taskId)
+    }
+  }
+
+  func framePress(row: Int, line: Int) {
+    worker.act { [self] session in
+      guard let taskId = ui.frame?.taskId else { return [] }
+      return session.framePressLine(taskId: taskId, row: UInt32(row), line: UInt32(line))
+    }
+  }
+
+  func frameVisible(first: Int, last: Int) {
+    worker.act { [self] session in
+      guard let taskId = ui.frame?.taskId,
+        let bytes = session.frameShowRows(
+          taskId: taskId, first: UInt32(max(0, first)), last: UInt32(max(0, last)))
+      else { return [] }
+      ui.frame?.rows.show(bytes)
+      publish(ui)
+      return []
+    }
+  }
+
+  // The rail's size in layout points; its clusters follow from it and the transcript.
+  func railSize(railH: Double, viewportH: Double, inFrame: Bool) {
+    worker.act { [self] _ in
+      let size = CoreRailSize(railH: railH, viewportH: viewportH)
+      if inFrame {
+        guard frameRailSize != size else { return [] }
+        frameRailSize = size
+        readFrame()
+      } else {
+        guard railSize != size else { return [] }
+        railSize = size
+        readRail()
+      }
+      publish(ui)
+      return []
+    }
+  }
+
+  // What the finger is over on a rail, or nil once it lifts.
+  func peek(_ cluster: ScrubCluster?, y: Double, inFrame: Bool) {
+    worker.act { [self] session in
+      let taskId = inFrame ? ui.frame?.taskId : nil
+      if inFrame && taskId == nil { return [] }
+      ui.peek = cluster.flatMap { session.scrubberPeek(taskId: taskId, cluster: $0, y: y) }.map {
+        CoreRailPeek(inFrame: inFrame, y: y, peek: $0)
+      }
+      publish(ui)
       return []
     }
   }
@@ -214,7 +337,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
         guard ui.shell?.id != id else { break }
         ui.shell = CoreShellState(id: id)
         publish(ui)
-      case .openSubagent, .wakeAt: break
+      case .openSubagent(let taskId): openFrame(taskId)
+      case .wakeAt: break
       }
     }
   }
@@ -331,15 +455,8 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   // Each part is re-read only when the core says it moved: a replay's progress ticks never touch the layout.
   private func changed(_ changed: Changed) {
     if changed.transcript {
-      let layout = try? Snapshots.transcriptLayout(session.transcriptLayout())
-      ui.rows = layout?.rows ?? []
-      ui.book = CoreHeightBook(ui.rows)
-      ui.promptRows = ui.rows.indices.filter { ui.rows[$0].prompt }
-      ui.recapRow = ui.rows.firstIndex(where: \.recap)
-      ui.reveal = layout?.revealRow.map {
-        TranscriptRevealRequest(row: $0, nonce: Int(truncatingIfNeeded: layout?.revealNonce ?? 0))
-      }
-      showLines(session.viewportLines())
+      ui.main.lay(session.transcriptLayout())
+      ui.main.show(session.viewportLines())
     }
     if changed.chrome {
       ui.title = session.sessionTitle()
@@ -348,6 +465,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       ui.chrome = session.chrome()
       ui.modelPicker = session.modelPicker()
       ui.modePicker = session.modePicker()
+      ui.canRunShell = session.canRunShell()
     }
     if changed.prompt { ui.prompt = session.prompt() }
     if (changed.prompt || changed.transcript) && ui.prompt?.kind == .plan {
@@ -355,10 +473,12 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     }
     if changed.progress || changed.transcript { ui.progress = session.replayProgress() }
     if changed.shells { readShell() }
-    if ui.openSeconds == nil, ui.connection == .live, ui.progress == nil, !ui.rows.isEmpty {
+    if changed.transcript || changed.prompt { readRail() }
+    if changed.frames || changed.transcript || changed.prompt { readFrame() }
+    if ui.openSeconds == nil, ui.connection == .live, ui.progress == nil, !ui.main.rows.isEmpty {
       let seconds = ProcessInfo.processInfo.systemUptime - startedAt
       ui.openSeconds = seconds
-      Self.log.notice("session open: \(seconds, format: .fixed(precision: 3)) s, \(self.ui.rows.count) rows")
+      Self.log.notice("session open: \(seconds, format: .fixed(precision: 3)) s, \(self.ui.main.rows.count) rows")
     }
     publish(ui)
   }
@@ -368,11 +488,23 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     ui.shell?.grid = session.shellWindow(shellId: shell.id).flatMap { try? Snapshots.shellGrid($0) }
   }
 
-  private func showLines(_ bytes: Data) {
-    guard let lines = try? Snapshots.transcriptLines(bytes) else { return }
-    ui.startRow = lines.startRow
-    ui.lines = lines.rows
-    ui.linesRevision &+= 1
+  private func readRail() {
+    guard let size = railSize else { return }
+    ui.main.rail = session.scrubber(bookmarks: [], railH: size.railH, viewportH: size.viewportH)
+  }
+
+  // Within a worker turn the core's frame is always open when `ui.frame` is, so a missing layout means the task left.
+  private func readFrame() {
+    guard let taskId = ui.frame?.taskId, let layout = session.frameLayout(taskId: taskId) else { return }
+    var rows = ui.frame?.rows ?? CoreRows()
+    rows.lay(layout)
+    rows.show(session.frameViewportLines(taskId: taskId))
+    rows.rail =
+      frameRailSize.flatMap {
+        session.frameScrubber(taskId: taskId, railH: $0.railH, viewportH: $0.viewportH)
+      } ?? []
+    ui.frame?.strip = session.frameStrip(taskId: taskId)
+    ui.frame?.rows = rows
   }
 }
 #endif

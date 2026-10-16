@@ -2,10 +2,16 @@
 import Foundation
 
 // A long session as gateway frames, for driving the core preview with no gateway: each turn is a prompt, a Bash call
-// whose output is long enough to fold, and a markdown answer.
+// whose output is long enough to fold, and a markdown answer. Turn `taskTurn` hands its work to a sub-agent instead,
+// whose `agentSteps` Bash steps scroll in its takeover; step `failedStep` fails, so its rail has a mark.
 enum CoreReplayFixture {
   static let turns = 60
   static let outputLines = 30
+  static let taskTurn = 56
+  static let taskId = "toolu_task"
+  static let taskDescription = "Survey every batch"
+  static let agentSteps = 40
+  static let failedStep = 25
 
   static var frames: [String] {
     var seq = 0
@@ -15,7 +21,38 @@ enum CoreReplayFixture {
       events.append(#"{"type":"event","event":{"#+body+#","seq":\#(seq),"ts":\#(1_760_000_000_000 + seq * 1000)}}"#)
     }
     event(#""type":"status_changed","status":"running""#)
+    func agent(_ body: String) { event(body + #","parentToolUseId":"\#(taskId)""#) }
+    func taskTurnEvents(_ turn: Int) {
+      event(
+        #""type":"user_message","message":{"role":"user","content":"Turn \#(turn): survey the batches with a sub-agent."},"parentToolUseId":null,"uuid":"u-\#(turn)""#
+      )
+      event(
+        #""type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"\#(taskId)","name":"Task","input":{"description":"\#(taskDescription)","prompt":"Count the files in every batch."}}]},"parentToolUseId":null,"uuid":"a-\#(turn)""#
+      )
+      for step in 1...agentSteps {
+        agent(
+          #""type":"assistant_message","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_step_\#(step)","name":"Bash","input":{"command":"agent step \#(step)"}}]},"uuid":"as-\#(step)""#
+        )
+        let failed = step == failedStep ? #","is_error":true"# : ""
+        agent(
+          #""type":"user_message","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_step_\#(step)","content":"step \#(step) done"\#(failed)}]},"synthetic":true,"uuid":"toolu_step_\#(step):result""#
+        )
+      }
+      agent(
+        #""type":"assistant_message","message":{"role":"assistant","content":[{"type":"text","text":"Every batch surveyed."}]},"uuid":"as-done""#
+      )
+      event(
+        #""type":"user_message","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"\#(taskId)","content":"Every batch surveyed."}]},"parentToolUseId":null,"synthetic":true,"uuid":"\#(taskId):result""#
+      )
+      event(
+        #""type":"assistant_message","message":{"role":"assistant","content":[{"type":"text","text":"The sub-agent surveyed every batch."}]},"parentToolUseId":null,"uuid":"r-\#(turn)""#
+      )
+    }
     for turn in 1...turns {
+      if turn == taskTurn {
+        taskTurnEvents(turn)
+        continue
+      }
       event(
         #""type":"user_message","message":{"role":"user","content":"Turn \#(turn): count the files in batch \#(turn)."},"parentToolUseId":null,"uuid":"u-\#(turn)""#
       )
@@ -35,7 +72,7 @@ enum CoreReplayFixture {
     )
     event(#""type":"status_changed","status":"idle""#)
     let attached =
-      #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"lastSeq":\#(seq),"pendingPermissionCount":0}}"#
+      #"{"type":"attached","protocolVersion":1,"replayingFrom":0,"acks":true,"shell":true,"session":{"id":"fixture","title":"Core fixture","status":"idle","cwd":"/work/fixture","createdAt":1,"lastSeq":\#(seq),"pendingPermissionCount":0}}"#
     return [attached] + events
   }
 
@@ -45,10 +82,37 @@ enum CoreReplayFixture {
   static let shellCommand = "npm run dev"
   static let scrollback = 80
 
-  private static func shellRecord(_ status: String) -> String {
-    let ended = status == "exited" ? #""endReason":"killed","# : ""
+  private static func shellRecord(
+    _ status: String, id: String = shellId, command: String = shellCommand, ended: String = #""endReason":"killed","#
+  ) -> String {
+    let ended = status == "exited" ? ended : ""
     return
-    #"{"id":"\#(shellId)","sessionId":"fixture","ordinal":1,"command":"\#(shellCommand)","label":"\#(shellCommand)","cwd":"/work/fixture","owner":"user","status":"\#(status)",\#(ended)"startedAt":1,"bytes":0,"cols":80,"rows":24}"#
+    #"{"id":"\#(id)","sessionId":"fixture","ordinal":1,"command":"\#(command)","label":"\#(command)","cwd":"/work/fixture","owner":"user","status":"\#(status)",\#(ended)"startedAt":1,"bytes":0,"cols":80,"rows":24}"#
+  }
+
+  // A composer `$` command lands as one more shell row, exited at once, numbered after the replay.
+  static let ranOutput = "ran-ok"
+  private static let seq = Counter(frames.count - 1)
+
+  private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Int
+    init(_ value: Int) { self.value = value }
+    func next() -> Int {
+      lock.lock()
+      defer { lock.unlock() }
+      value += 1
+      return value
+    }
+  }
+
+  private static func ran(_ command: String) -> String {
+    let seq = seq.next()
+    let quoted = (try? JSONSerialization.data(withJSONObject: [command], options: .fragmentsAllowed))
+      .flatMap { String(data: $0, encoding: .utf8) }.map { String($0.dropFirst(2).dropLast(2)) } ?? command
+    let record = shellRecord("exited", id: "sh_run_\(seq)", command: quoted, ended: #""exitCode":0,"endReason":"exit","#)
+    return
+      #"{"type":"event","event":{"type":"user_message","message":{"role":"user","content":"<local-command-stdout>$ \#(quoted)\n\#(ranOutput)</local-command-stdout>"},"parentToolUseId":null,"synthetic":true,"shell":\#(record),"uuid":"sh-run-\#(seq)","seq":\#(seq),"ts":\#(1_760_000_000_000 + seq * 1000)}}"#
   }
 
   static func respond(_ method: String, _ path: String) -> (UInt16, String) {
@@ -61,9 +125,12 @@ enum CoreReplayFixture {
 
   static func replies(to sent: String) -> [String] {
     guard let data = sent.data(using: .utf8),
-      let frame = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      frame["shellId"] as? String == shellId
+      let frame = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return [] }
+    if frame["type"] as? String == "shell_command", let command = frame["command"] as? String {
+      return [ran(command)]
+    }
+    guard frame["shellId"] as? String == shellId else { return [] }
     switch frame["type"] as? String {
     case "shell_attach":
       let lines = (1...scrollback).map { String(format: "boot %03d", $0) }.joined(separator: "\r\n")

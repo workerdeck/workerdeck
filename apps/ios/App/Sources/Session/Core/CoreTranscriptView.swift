@@ -44,27 +44,30 @@ struct CoreHeightBook: TranscriptRowBook {
 
 // Rows outside the window the core holds draw empty at their planned height until `show_rows` brings their lines.
 struct CoreTranscriptContent: TranscriptContent {
-  let ui: CoreSessionUi
+  let rows: CoreRows
   let metrics: TerminalMetrics
 
-  var count: Int { ui.rows.count }
-  var book: CoreHeightBook { ui.book }
-  func key(at index: Int) -> String { ui.rows[index].key }
+  var count: Int { rows.rows.count }
+  var book: CoreHeightBook { rows.book }
+  func key(at index: Int) -> String { rows.rows[index].key }
 
   func sameEpoch(as other: Self) -> Bool {
-    ui.linesRevision == other.ui.linesRevision && metrics == other.metrics
+    rows.linesRevision == other.rows.linesRevision && metrics == other.metrics
   }
 
   func redraws(_ index: Int, from old: Self) -> Bool {
-    metrics != old.metrics || ui.rows[index] != old.ui.rows[index] || ui.linesAt(index) != old.ui.linesAt(index)
-      || read(index) != old.read(index)
+    metrics != old.metrics || rows.rows[index] != old.rows.rows[index]
+      || rows.linesAt(index) != old.rows.linesAt(index) || read(index) != old.read(index)
   }
 
-  func read(_ index: Int) -> Bool { ui.recapRow.map { index < $0 } ?? false }
+  func read(_ index: Int) -> Bool { rows.recapRow.map { index < $0 } ?? false }
 }
 
+// The session's transcript, or with `frame` set an open sub-agent's own rows: no sticky prompt there, since a
+// sub-agent's brief is not a prompt.
 struct CoreTranscriptView: View {
   let model: CoreSessionModel
+  var frame: String?
   let scroll: TranscriptScrollModel
   let imageLoader: TerminalImageLoader
   let hideThinking: Bool
@@ -73,10 +76,10 @@ struct CoreTranscriptView: View {
   var body: some View {
     GeometryReader { proxy in
       let bleed = typography.cell
-      let metrics = typography.metrics(width: proxy.size.width - 2 * bleed)
+      let metrics = typography.metrics(width: proxy.size.width - 2 * bleed - CoreScrubberRail.railWidth)
       Group {
-        if let planned = model.metrics, proxy.size.width > 0 {
-          transcript(CoreTranscriptContent(ui: model.ui, metrics: planned), bleed: bleed)
+        if let planned = model.metrics, proxy.size.width > 0, let rows {
+          transcript(CoreTranscriptContent(rows: rows, metrics: planned), bleed: bleed)
         } else {
           Color.clear
         }
@@ -87,22 +90,38 @@ struct CoreTranscriptView: View {
     .background(Color(uiColor: .systemBackground))
   }
 
+  private var rows: CoreRows? {
+    guard let frame else { return model.ui.main }
+    return model.ui.frame?.taskId == frame ? model.ui.frame?.rows : nil
+  }
+
   private func transcript(_ content: CoreTranscriptContent, bleed: CGFloat) -> some View {
-    VirtualizedTranscriptView(
-      content: content, scroll: scroll, reveal: content.ui.reveal, showsScrollIndicator: true,
+    let inFrame = frame != nil
+    return VirtualizedTranscriptView(
+      content: content, scroll: scroll, reveal: content.rows.reveal, showsScrollIndicator: false,
       configureRow: { [model, imageLoader, typography] cell, index in
         cell.configure(
-          lines: content.ui.linesAt(index)?.enumerated().map { $1.termLine(press: $0) } ?? [],
-          typography: typography, metrics: content.metrics, gapAbove: content.ui.rows[index].gapAbove, bleed: bleed,
-          read: content.read(index), imageLoader: imageLoader,
+          lines: content.rows.linesAt(index)?.enumerated().map { $1.termLine(press: $0) } ?? [],
+          typography: typography, metrics: content.metrics, gapAbove: content.rows.rows[index].gapAbove,
+          bleed: bleed, read: content.read(index), imageLoader: imageLoader,
           onPress: { press in
-            if case .line(let line) = press { model.press(row: index, line: line) }
+            guard case .line(let line) = press else { return }
+            if inFrame { model.framePress(row: index, line: line) } else { model.press(row: index, line: line) }
           })
       },
-      onVisibleRows: { [model] first, last in model.visible(first: first, last: last) }
+      onVisibleRows: { [model] first, last in
+        if inFrame { model.frameVisible(first: first, last: last) } else { model.visible(first: first, last: last) }
+      }
     )
     .overlay(alignment: .top) {
-      CoreStickyPrompt(model: model, content: content, scroll: scroll, typography: typography, bleed: bleed)
+      if !inFrame {
+        CoreStickyPrompt(model: model, content: content, scroll: scroll, typography: typography, bleed: bleed)
+      }
+    }
+    .overlay(alignment: .trailing) {
+      CoreScrubberRail(
+        model: model, inFrame: inFrame, clusters: content.rows.rail, total: content.book.totalHeight,
+        scroll: scroll, typography: typography)
     }
   }
 }
@@ -138,22 +157,22 @@ private struct CoreStickyPrompt: View {
     }
     .task(id: pin?.row) {
       guard let row = pin?.row, line(of: row) == nil else { return }
-      model.pinLine(row: row, key: content.ui.rows[row].key)
+      model.pinLine(row: row, key: content.rows.rows[row].key)
     }
   }
 
   private var pin: StickyPrompt.Pin? {
-    let rows = content.ui.rows
+    let rows = content.rows.rows
     return StickyPrompt.resolve(
-      promptRows: content.ui.promptRows,
+      promptRows: content.rows.promptRows,
       contentTop: { content.book.offset(at: $0) + (rows[$0].gapAbove ? line : 0) },
       top: scroll.contentOffset, line: line, stripHeight: line + Self.rule)
   }
 
   private func line(of row: Int) -> TermLine? {
-    guard content.ui.rows.indices.contains(row) else { return nil }
-    if let first = content.ui.linesAt(row)?.first { return first.termLine(press: nil) }
-    guard let pinned = content.ui.pinned, pinned.key == content.ui.rows[row].key else { return nil }
+    guard content.rows.rows.indices.contains(row) else { return nil }
+    if let first = content.rows.linesAt(row)?.first { return first.termLine(press: nil) }
+    guard let pinned = model.ui.pinned, pinned.key == content.rows.rows[row].key else { return nil }
     return pinned.line.termLine(press: nil)
   }
 }
