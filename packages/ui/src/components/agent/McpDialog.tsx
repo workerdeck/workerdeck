@@ -105,6 +105,11 @@ export function useMcpPanel(client: WorkerDeckClient | undefined, sessionId: str
         listed.setData(await client.mcpServerAction(sessionId, name, action))
       } catch (e) {
         setActError(errorMessage(e, `Could not ${action} ${name}`))
+        // A refusal can still move the server: an Enable whose connect fails answers 400 with the server now failed.
+        const fresh = await client.listMcpServers(sessionId).catch(() => undefined)
+        if (fresh) {
+          listed.setData(fresh)
+        }
       } finally {
         setBusyServer(undefined)
       }
