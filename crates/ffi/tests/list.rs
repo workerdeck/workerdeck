@@ -32,6 +32,15 @@ fn a_rollup_becomes_display_rows() {
 }
 
 #[test]
+fn an_agent_row_is_named_by_the_agent_not_its_session_title() {
+    let list = SessionList::new(None, None);
+    let lead = idle("s1", r#","title":"ok great, let's wrap up","agent":{"id":"L","name":"WD-Lead","leads":true}"#);
+    list.set_host("h1".into(), "mac".into(), true, body(&[lead])).unwrap();
+    let row = list.groups(0.0).into_iter().flat_map(|g| g.rows).next().unwrap();
+    assert_eq!(row.agent.as_deref(), Some("WD-Lead"));
+}
+
+#[test]
 fn a_mark_counts_prose_after_it_as_unseen() {
     let list = SessionList::new(None, None);
     list.set_host("h1".into(), "mac".into(), true, body(&[idle("s1", r#","proseCount":2"#)])).unwrap();

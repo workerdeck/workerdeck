@@ -51,7 +51,7 @@ struct AgentCardView<MenuContent: View>: View {
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 6) {
           name
-          if row.lead { LeadChip() }
+          if row.lead { LeadChip().fixedSize() }
           if row.shared {
             Image(systemName: "globe")
               .font(.caption2)
@@ -59,7 +59,7 @@ struct AgentCardView<MenuContent: View>: View {
               .accessibilityLabel("Shared with other owners")
           }
           if let time {
-            Text(time).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+            Text(time).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).fixedSize()
           }
           Spacer(minLength: 0)
           UnreadBadge(count: item.unseen, live: item.live)

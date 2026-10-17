@@ -483,7 +483,7 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         status,
         model: info.model.clone(),
         model_label: wd_native::vm::model_name::friendly_model(info.model.as_deref()),
-        agent: info.agent.as_ref().map(|_| vm::session_label(info)),
+        agent: info.agent.as_ref().map(|a| a.name.clone()),
         agent_id: info.agent.as_ref().map(|a| a.id.clone()),
         avatar_key: info.agent.as_ref().and_then(|a| avatar_key(&row.host_id, a)),
         avatar_busy: state == SessionState::Working && !asleep,
