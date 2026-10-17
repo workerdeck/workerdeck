@@ -2,6 +2,11 @@ package bi.atomic.workerdeck.app.session
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -124,9 +129,7 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 }
                 if (ui.rows.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        if (ui.progress == null && ui.connection == ConnectionState.LIVE) {
-                            Text("No messages yet", style = MaterialTheme.typography.bodyMedium, color = Wd.colors.tertiary)
-                        }
+                        if (ui.progress == null && ui.connection == ConnectionState.LIVE) EmptyState(extras.cwd ?: chrome?.cwd, ui.canRunShell)
                     }
                 } else {
                     TranscriptList(
@@ -314,5 +317,43 @@ private fun SessionTopBar(
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
         )
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(colors.separator))
+    }
+}
+
+// Sheds its parts as the height shrinks (glyph, then path, then everything); promises only what this composer does.
+@Composable
+private fun EmptyState(cwd: String?, canRunShell: Boolean) {
+    val colors = Wd.colors
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val height = maxHeight
+        if (height < 130.dp) return@BoxWithConstraints
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            if (height >= 320.dp) {
+                Box(Modifier.size(58.dp).background(colors.secondary.copy(alpha = 0.12f), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+                    Text(">_", fontFamily = FontFamily.Monospace, fontSize = 20.sp, color = colors.secondary)
+                }
+            }
+            if (height >= 230.dp && cwd != null) {
+                Text(
+                    cwd,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = colors.secondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.StartEllipsis,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+            }
+            val hints = listOfNotNull("✎" to "Tell me what to do", ("$" to "Type $ to run a command on the host.").takeIf { canRunShell })
+            Column(Modifier.padding(horizontal = 20.dp).fillMaxWidth().background(colors.secondary.copy(alpha = 0.10f), RoundedCornerShape(16.dp))) {
+                hints.forEachIndexed { index, (glyph, text) ->
+                    if (index > 0) Box(Modifier.padding(start = 46.dp).fillMaxWidth().height(0.5.dp).background(colors.separator))
+                    Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(glyph, fontFamily = FontFamily.Monospace, color = colors.secondary, modifier = Modifier.width(22.dp))
+                        Text(text, style = MaterialTheme.typography.bodySmall, color = colors.secondary)
+                    }
+                }
+            }
+        }
     }
 }

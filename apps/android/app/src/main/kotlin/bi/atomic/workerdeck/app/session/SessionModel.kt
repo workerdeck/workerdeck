@@ -72,6 +72,7 @@ data class SessionUi(
     val rail: List<ScrubCluster> = emptyList(),
     val usage: SessionUsageView? = null,
     val skills: List<SkillSection> = emptyList(),
+    val canRunShell: Boolean = false,
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
@@ -376,6 +377,7 @@ class SessionModel(private val client: Transport, private val sessionId: String,
                 modePicker = session.modePicker(),
                 usage = usageNow(),
                 skills = skillSections(session.skills()),
+                canRunShell = session.canRunShell(),
             )
             composer.read(session)
         }

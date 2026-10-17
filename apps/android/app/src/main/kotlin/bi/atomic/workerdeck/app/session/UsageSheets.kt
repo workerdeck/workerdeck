@@ -111,7 +111,7 @@ fun UsageHud(usage: SessionUsageView, open: (Meter) -> Unit) {
                     RadialGauge(window.fill, barTint(window.barSeverity, colors), window.initial, Modifier.alpha(if (window.stale) 0.45f else 1f))
                 }
                 usage.hudCostText != null -> Text(usage.hudCostText!!, style = MaterialTheme.typography.labelMedium, color = colors.secondary)
-                else -> RadialGauge(0.0, colors.secondary, null)
+                else -> Text("usage", style = MaterialTheme.typography.labelMedium, color = colors.secondary)
             }
         }
     }
