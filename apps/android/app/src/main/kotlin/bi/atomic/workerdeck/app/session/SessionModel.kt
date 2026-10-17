@@ -26,6 +26,10 @@ import bi.atomic.workerdeck.core.ffi.Session
 import bi.atomic.workerdeck.core.ffi.SessionChrome
 import bi.atomic.workerdeck.core.ffi.Selection
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.Response
@@ -99,6 +103,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     private var railSize: RailSize? = null
     private var frameRailSize: RailSize? = null
     private var bookmarkIds: List<String> = emptyList()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val composer = ComposerModel(sessionId, client, scope)
 
     fun hostImagePath(path: String): HostImageFetch = session.hostImagePath(sessionId, path)
     private var socket: WebSocket? = null
@@ -131,9 +137,9 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         menuState.value = null
     }
 
-    fun backgroundTask(toolUseId: String) = worker.act { it.backgroundTask(toolUseId) }
+    fun backgroundTask(toolUseId: String?) = worker.act { it.backgroundTask(toolUseId) }
 
-    fun send(text: String) = worker.act { it.send(text, emptyList()) }
+    fun send(text: String, attachmentIds: List<String>) = worker.act { it.send(text, attachmentIds) }
 
     fun runShell(command: String) = worker.act { it.runShell(command) }
 
@@ -240,12 +246,14 @@ class SessionModel(private val client: Transport, private val sessionId: String,
 
     override fun close() {
         generation++
+        scope.cancel()
         worker.act {
             socket?.close(1000, null)
             socket = null
             emptyList()
         }
         worker.close()
+        composer.close()
     }
 
     // The core panicked and the worker stopped: nothing more will arrive, so the screen says so and drops the socket.
@@ -317,7 +325,10 @@ class SessionModel(private val client: Transport, private val sessionId: String,
         if (changed.chrome) {
             ui = ui.copy(title = session.sessionTitle(), connection = session.connection(), error = session.takeProtocolError() ?: ui.error)
         }
-        if (changed.chrome) ui = ui.copy(chrome = session.chrome(), modelPicker = session.modelPicker(), modePicker = session.modePicker())
+        if (changed.chrome) {
+            ui = ui.copy(chrome = session.chrome(), modelPicker = session.modelPicker(), modePicker = session.modePicker())
+            composer.read(session)
+        }
         if (changed.prompt) ui = ui.copy(prompt = session.prompt())
         if ((changed.prompt || changed.transcript) && ui.prompt?.kind == PromptKind.PLAN) {
             ui = ui.copy(planLines = Snapshots.transcriptLines(session.promptPlanLines()).rows.firstOrNull().orEmpty())

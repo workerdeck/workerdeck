@@ -1,5 +1,6 @@
 package bi.atomic.workerdeck.app.gateway
 
+import bi.atomic.workerdeck.core.ffi.HttpAnswer
 import bi.atomic.workerdeck.core.ffi.HttpCall
 import bi.atomic.workerdeck.core.ffi.killShellCall
 import bi.atomic.workerdeck.core.ffi.listSessionsCall
@@ -15,8 +16,10 @@ import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -32,6 +35,12 @@ interface Transport {
 
     // Raw bytes under the API base, `null` on any failure: tool-result pictures.
     suspend fun bytes(path: String): ByteArray?
+
+    // A call the core named, answered whatever the status; status 0 when no answer came.
+    suspend fun answer(call: HttpCall): HttpAnswer
+
+    // `bytes` as the body of `call` under `mediaType`, answered like `answer`.
+    suspend fun upload(call: HttpCall, mediaType: String, bytes: ByteArray): HttpAnswer
 }
 
 class GatewayClient(val gateway: Gateway) : Transport {
@@ -79,6 +88,20 @@ class GatewayClient(val gateway: Gateway) : Transport {
             restError(response.code.toUShort(), response.header("content-type"), text)?.let { throw GatewayException(it.message) }
             text
         }
+    }
+
+    override suspend fun answer(call: HttpCall): HttpAnswer = exchange(call, body(call))
+
+    override suspend fun upload(call: HttpCall, mediaType: String, bytes: ByteArray): HttpAnswer =
+        exchange(call, bytes.toRequestBody(mediaType.toMediaTypeOrNull()))
+
+    private suspend fun exchange(call: HttpCall, body: RequestBody?): HttpAnswer = withContext(Dispatchers.IO) {
+        runCatching {
+            val request = authed(Request.Builder().url(gateway.apiBase + call.path)).method(call.method, body).build()
+            http.newCall(request).execute().use { response ->
+                HttpAnswer(response.code.toUShort(), response.header("content-type"), response.body?.string().orEmpty())
+            }
+        }.getOrElse { HttpAnswer(0u, null, "") }
     }
 
     private fun body(call: HttpCall) =

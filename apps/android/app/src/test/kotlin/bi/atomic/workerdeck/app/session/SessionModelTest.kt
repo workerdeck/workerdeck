@@ -1,7 +1,12 @@
 package bi.atomic.workerdeck.app.session
 
 import bi.atomic.workerdeck.app.gateway.Transport
+import bi.atomic.workerdeck.core.ffi.AttachmentStatus
 import bi.atomic.workerdeck.core.ffi.ConnectionState
+import bi.atomic.workerdeck.core.ffi.Gutter
+import bi.atomic.workerdeck.core.ffi.HttpAnswer
+import bi.atomic.workerdeck.core.ffi.HttpCall
+import bi.atomic.workerdeck.core.ffi.Outgoing
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.PromptKind
 import bi.atomic.workerdeck.core.ffi.Selection
@@ -51,6 +56,15 @@ class SessionModelTest {
 
         override suspend fun bytes(path: String): ByteArray? = null
 
+        val calls = CopyOnWriteArrayList<HttpCall>()
+        val uploads = CopyOnWriteArrayList<Pair<HttpCall, String>>()
+        @Volatile var answers: (HttpCall) -> HttpAnswer = { HttpAnswer(404u, null, "") }
+
+        override suspend fun answer(call: HttpCall): HttpAnswer = answers(call).also { calls.add(call) }
+
+        override suspend fun upload(call: HttpCall, mediaType: String, bytes: ByteArray): HttpAnswer =
+            answers(call).also { uploads.add(call to mediaType) }
+
         fun open(): Pair<FakeSocket, WebSocketListener> {
             val (socket, listener) = sockets.last()
             val response = Response.Builder().request(socket.request()).protocol(Protocol.HTTP_1_1).code(101).message("").build()
@@ -89,6 +103,65 @@ class SessionModelTest {
         model.close()
         eventually("the socket closed") { socket.closed }
         listener.onMessage(socket, user(3, "late"))
+    }
+
+    @Test
+    fun aFileSearchWaitsOutItsDebounceAndOnlyTheLatestQueryGoesOut() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            if (call.path.startsWith("/fs/find")) {
+                HttpAnswer(200u, "application/json", """{"base":"/r","matches":[{"path":"/r/ab.ts","relative":"ab.ts"}]}""")
+            } else {
+                HttpAnswer(404u, null, "")
+            }
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        eventually("live") { model.ui.value.connection == ConnectionState.LIVE }
+        eventually("the composer read the chrome") { model.composer.view("", 0).enabled }
+        model.composer.edit("@a", 2)
+        model.composer.edit("@ab", 3)
+        eventually("the suggestion") { model.composer.ui.value.suggestions.isNotEmpty() }
+        assertEquals(listOf("/fs/find?path=%2Fr&q=ab&limit=8"), transport.calls.map { it.path }.filter { it.startsWith("/fs/find") })
+        assertEquals("ab.ts", model.composer.ui.value.suggestions.single().title)
+        assertEquals("@ab.ts ", model.composer.accept(0, "@ab", 3)?.text)
+        model.close()
+    }
+
+    @Test
+    fun aDollarIntoAnEmptyFieldEntersShellModeWhenTheGatewayOffersShells() {
+        val transport = FakeTransport()
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED.replace("\"acks\":true", "\"acks\":true,\"shell\":true"))
+        eventually("the chrome offers shells") { model.ui.value.chrome?.canRunShell == true }
+        assertTrue(model.composer.leadingTrigger("$"))
+        assertEquals(Gutter.SHELL, model.composer.view("", 0).gutter)
+        assertEquals(Outgoing.Shell("ls"), model.composer.send("ls", false))
+        model.close()
+    }
+
+    @Test
+    fun anAttachmentUploadsAndItsIdGoesOutWithTheMessage() {
+        val transport = FakeTransport()
+        transport.answers = { call ->
+            if (call.path.contains("attachments")) HttpAnswer(200u, "application/json", """{"attachment":{"id":"att_1"}}""") else HttpAnswer(404u, null, "")
+        }
+        val model = SessionModel(transport, "s1", Metrics(8.0, 16.0, 800.0, 13.0))
+        eventually("a socket") { transport.sockets.isNotEmpty() }
+        val (socket, listener) = transport.open()
+        listener.onMessage(socket, ATTACHED)
+        eventually("the composer read the chrome") { model.composer.view("", 0).enabled }
+        model.composer.add(PickedFile("a.txt", "text/plain", "hi".toByteArray(), null))
+        eventually("the upload settled") { model.composer.ui.value.chips.singleOrNull()?.status == AttachmentStatus.Ready }
+        assertEquals("text/plain", transport.uploads.single().second)
+        val outgoing = model.composer.send("look", false) as Outgoing.Message
+        assertEquals(listOf("att_1"), outgoing.attachmentIds)
+        assertTrue(model.composer.ui.value.chips.isEmpty())
+        model.close()
     }
 
     @Test

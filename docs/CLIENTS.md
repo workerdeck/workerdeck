@@ -1356,8 +1356,12 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   the composer's top (magenta in shell mode), a gutter cell on the transcript's marker column
   (`❯`, `✕` to interrupt while busy, `$` to leave shell mode), the field, and the `↵` cell. What
   the strip and the composer read is the core's `Session.chrome()`; the core flags `chrome` in
-  `Changed` whenever that record moves, including on status events. Typing `$` into an empty
-  field enters shell mode through the core's `composerTrigger`, so the rule is the iOS one.
+  `Changed` whenever that record moves, including on status events. The composer itself is the
+  core's FFI `Composer` (`session/ComposerModel.kt`, the iOS `ComposerModel` mirror): token tint,
+  `/ # @` completions (the core names the debounced file search; Kotlin waits, checks the
+  generation, performs), attachments (refusal, `imagePlan` keep-or-JPEG, upload, chips), shell mode
+  via `leadingTrigger`, the note and Send now (`view().wakeAt`). Kotlin holds no composer rule.
+  `@` needs host files on the gateway: a 404 switches file search off for that screen.
 - **Approvals and questions dock above the status strip** (`session/PromptView.kt`), drawn like the
   iOS terminal prompts: a strip ruled in the prompt's tint, a body that scrolls under a cap of half
   the screen (220 dp floor), and the actions pinned below it. Only the head of the queue is drawn,

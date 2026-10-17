@@ -277,6 +277,9 @@ XCUITest drives the app through `testmanagerd` and works. So a hit-testing claim
 controls in one list row take separate taps") is now a test rather than an argument, which is
 exactly the kind of thing that had been shipping on a screenshot. `docs/CLIENTS.md` §`apps/ios` has
 the command and the xcodegen scheme gotcha that comes with adding a second target.
+**Android Gradle wants Android Studio's JDK** (`JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`,
+what `scripts/android.sh` falls back to): the default JDK 26 fails with a bare "26.0.1", and a GraalVM 21 picked by
+`java_home -v 21` compiles but fails the unit tests in `jlink`.
 **The UI suite is heavy (about 6 minutes, every test relaunches the app over the 60-turn fixture), so it runs
 in tiers.** While a slice is in progress run only the classes it touches (`-only-testing:WorkerDeckAppUITests/<Class>`);
 the full suite runs once before a commit. Logic belongs in a Rust unit test, not a UI assertion. Build the core with

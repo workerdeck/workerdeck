@@ -54,6 +54,7 @@ import bi.atomic.workerdeck.app.ui.Palette
 import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Metrics
+import bi.atomic.workerdeck.core.ffi.Outgoing
 
 private val FONT_SIZE = 13.sp
 private val LINE_HEIGHT = 18.sp
@@ -86,7 +87,6 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
             LaunchedEffect(bookmarkRevision) { model.bookmarks(bookmarks.ids()) }
             val ui by model.ui.collectAsStateWithLifecycle()
             var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
-            var shellMode by rememberSaveable { mutableStateOf(false) }
             var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
             var clearing by rememberSaveable { mutableStateOf(false) }
             val chrome = ui.chrome
@@ -141,17 +141,19 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     }
                     StatusStrip(chrome, ui.connection, model::reconnect) { picker = it }
                     Composer(
-                        state = ComposerState(draft, shellMode),
-                        onState = {
-                            draft = it.draft
-                            shellMode = it.shellMode
+                        composer = model.composer,
+                        draft = draft,
+                        onDraft = { draft = it },
+                        onSend = { outgoing ->
+                            when (outgoing) {
+                                is Outgoing.Shell -> model.runShell(outgoing.command)
+                                is Outgoing.Message -> {
+                                    model.send(outgoing.text, outgoing.attachmentIds)
+                                    if (outgoing.background) model.backgroundTask(null)
+                                }
+                            }
                         },
-                        busy = chrome?.busy == true,
-                        enabled = chrome?.enabled != false,
-                        canRunShell = chrome?.canRunShell == true,
-                        queued = chrome?.queued ?: 0u,
-                        onSend = { text, shell -> if (shell) model.runShell(text) else model.send(text) },
-                        onStop = model::interrupt,
+                        onInterrupt = model::interrupt,
                     )
                 }
             }
