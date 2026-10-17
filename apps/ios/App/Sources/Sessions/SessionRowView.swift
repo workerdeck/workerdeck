@@ -179,10 +179,6 @@ struct SessionRowView: View {
     for extra in [
       hostName,
       session.profile.map { "@\($0)" },
-      // `TermFmt.cost`, not `Fmt.cost`: the kit's is the port of the web's
-      // `formatCost` ($3.10, and `<$0.01` rather than a fourth decimal), and a
-      // list row is exactly where the same person compares the three clients.
-      // `Fmt.cost` keeps its four decimals where a *single turn* is priced.
       (session.costUsd ?? session.totalCostUsd ?? 0) > 0
         ? TermFmt.cost(session.costUsd ?? session.totalCostUsd) : nil,
     ].compactMap({ $0 }) {

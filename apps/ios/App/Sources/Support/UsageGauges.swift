@@ -1,5 +1,6 @@
 import SwiftUI
 import WorkerDeckKit
+@preconcurrency import WorkerDeckSession
 
 /// A progress ring with its own label inside it - the shared shape behind every
 /// gauge in the app, so the context reading, the rate-limit windows and a
@@ -74,30 +75,11 @@ struct ContextRing: View {
   var body: some View {
     RadialGauge(
       fraction: percentage / 100,
-      tint: ringTint(percentage),
-      label: showsLabel ? "\(min(99, max(0, Int(percentage.rounded()))))" : nil,
+      tint: severityTint(meterSeverity(percentage: percentage)),
+      label: showsLabel ? ringLabel(percentage: percentage) : nil,
       diameter: diameter,
       lineWidth: lineWidth)
       .accessibilityElement(children: .ignore)
-      .accessibilityLabel("Context \(Fmt.percent(percentage)) used")
+      .accessibilityLabel("Context \(percentText(value: percentage)) used")
   }
 }
-
-/// A **bar's** fill, over a 0-100 percentage - the web's `meterTintClass`.
-func usageTint(_ percentage: Double) -> Color {
-  switch percentage {
-  case ..<70: return .accentColor
-  case ..<90: return .orange
-  default: return .red
-  }
-}
-
-/// A **ring's** stroke - the web's `meterColorClass`: a ramp that turns
-/// later than a bar and is neutral below the first turn. The session card's ring is a reading, and a reading that is blue from
-/// 1% to 79% has spent the accent saying nothing.
-func ringTint(_ percentage: Double) -> Color {
-  if percentage >= 95 { return .red }
-  if percentage >= 80 { return .orange }
-  return .secondary
-}
-

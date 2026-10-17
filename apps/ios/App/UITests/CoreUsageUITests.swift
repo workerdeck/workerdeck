@@ -28,8 +28,8 @@ final class CoreUsageUITests: XCTestCase {
 
     usage.tap()
     XCTAssertTrue(app.navigationBars["Usage"].waitForExistence(timeout: 5))
-    XCTAssertTrue(has(app, "$1.6200"), "the gateway's own cost is not the one shown")
-    XCTAssertTrue(app.staticTexts["Claude Code reports $1.8400 for the same tokens."].exists)
+    XCTAssertTrue(has(app, "$1.62"), "the gateway's own cost is not the one shown")
+    XCTAssertTrue(app.staticTexts["Claude Code reports $1.84 for the same tokens."].exists)
     XCTAssertTrue(app.staticTexts["claude-opus-4-6"].exists)
     snap(app, "3-usage")
     app.swipeUp()

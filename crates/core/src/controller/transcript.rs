@@ -5,7 +5,7 @@ use crate::rows::{BuildOptions, Row, TerminalRows};
 use crate::scrubber::{self, Cluster, Peek, Recap, ScrubberInput, build_clusters};
 use crate::transcript::{Item, ShellItem, ToolCall};
 use crate::vm::fmt::ago;
-use crate::vm::recap::{recap_line, summarize_since};
+use crate::vm::recap::{CatchUp, catch_up, recap_line, summarize_since};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -98,6 +98,10 @@ impl TranscriptView {
 
     pub fn recap_row(&self) -> Option<usize> {
         self.rows.recap_row()
+    }
+
+    pub fn catch_up(&self) -> Option<CatchUp> {
+        catch_up(self.items.len(), self.recap_at, self.rows.recap_row())
     }
 
     pub fn update(&mut self, update: Update) -> bool {

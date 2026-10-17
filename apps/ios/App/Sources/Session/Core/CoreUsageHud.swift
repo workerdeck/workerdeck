@@ -18,6 +18,15 @@ func severityTint(_ severity: Severity) -> Color {
   }
 }
 
+// A bar's fill and a plan window's ring, on the core's earlier 70/90 ramp: the accent until it turns.
+func barTint(_ severity: Severity) -> Color {
+  switch severity {
+  case .error: .red
+  case .warning: .orange
+  case .none: .accentColor
+  }
+}
+
 // The status line's meters: the context ring, then one ring per plan window (session, weekly, then per model; three
 // at most), or the session's cost when no window reports. Each opens its own sheet. Everything comes from the core's
 // `SessionUsageView`; nothing here decides what is stale or alarming.
@@ -29,12 +38,10 @@ struct CoreUsageHud: View {
     HStack(spacing: 12) {
       if let context = usage.context {
         Button { open(.context) } label: {
-          RadialGauge(
-            fraction: context.percentage / 100, tint: severityTint(context.severity),
-            label: "\(min(99, max(0, Int(context.percentage.rounded()))))")
+          RadialGauge(fraction: context.fill, tint: severityTint(context.severity), label: context.ringLabel)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Context \(Fmt.percent(context.percentage)) used")
+        .accessibilityLabel(context.accessibilityLabel)
         .accessibilityIdentifier("Context ring")
       }
       Button { open(.usage) } label: { usageLabel }
@@ -50,31 +57,20 @@ struct CoreUsageHud: View {
     if !windows.isEmpty {
       HStack(spacing: 4) {
         ForEach(windows, id: \.key) { window in
-          RadialGauge(
-            fraction: window.utilization / 100, tint: usageTint(window.utilization), label: Self.initial(window.key)
-          )
+          RadialGauge(fraction: window.fill, tint: barTint(window.barSeverity), label: window.initial)
           .opacity(window.stale ? 0.45 : 1)
         }
       }
       .accessibilityElement(children: .ignore)
-      .accessibilityLabel(
-        windows.map { "\(Fmt.rateLimitWindow($0.key)) \(Fmt.percent($0.utilization))" }.joined(separator: ", "))
-    } else if let cost = usage.cost.displayUsd, cost > 0 {
-      Text(Fmt.cost(cost))
+      .accessibilityLabel(usage.hudLabel)
+    } else if let cost = usage.hudCostText {
+      Text(cost)
         .monospacedDigit()
         .foregroundStyle(.secondary)
-        .accessibilityLabel("Session cost \(Fmt.cost(cost))")
+        .accessibilityLabel("Session cost \(cost)")
     } else {
       Image(systemName: "gauge").foregroundStyle(.secondary).accessibilityLabel("Usage")
     }
-  }
-
-  // 'five_hour' is S, 'seven_day' W, a per-model weekly its model's initial.
-  static func initial(_ key: String) -> String {
-    if key == "five_hour" { return "S" }
-    if key == "seven_day" { return "W" }
-    guard key.hasPrefix("seven_day_"), let first = key.dropFirst("seven_day_".count).first else { return "?" }
-    return String(first).uppercased()
   }
 }
 
@@ -90,13 +86,11 @@ struct CoreContextSheet: View {
           List {
             Section {
               LabeledContent("Used") {
-                Text("\(Fmt.tokens(Int(context.totalTokens))) / \(Fmt.tokens(Int(context.maxTokens)))")
-                  .monospacedDigit()
+                Text(context.usedText).monospacedDigit()
               }
               HStack(spacing: 6) {
-                ProgressView(value: min(max(context.percentage, 0), 100), total: 100)
-                  .tint(usageTint(context.percentage))
-                Text(Fmt.percent(context.percentage)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                ProgressView(value: context.fill).tint(barTint(context.barSeverity))
+                Text(context.percentText).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
               }
             } footer: {
               if let model = context.model { Text(model) }
@@ -105,7 +99,7 @@ struct CoreContextSheet: View {
             if !context.categories.isEmpty {
               Section("Breakdown") {
                 ForEach(Array(context.categories.enumerated()), id: \.offset) { _, slice in
-                  slice.row(max: max(context.maxTokens, 1))
+                  slice.row
                 }
               }
             }
@@ -129,16 +123,16 @@ struct CoreContextSheet: View {
 
 extension ContextSlice {
   // The wire `color` is often a CLI theme token rather than a color; it is honoured only when it parses.
-  fileprivate func row(max: Int64) -> some View {
+  fileprivate var row: some View {
     let tint = Color(cliToken: color) ?? .accentColor
     return VStack(alignment: .leading, spacing: 4) {
       HStack(spacing: 6) {
         Circle().fill(tint).frame(width: 7, height: 7)
         Text(name).font(.caption)
         Spacer(minLength: 0)
-        Text(Fmt.tokens(Int(tokens))).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        Text(tokensText).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
       }
-      ProgressView(value: Double(tokens), total: Double(max)).tint(tint)
+      ProgressView(value: fill).tint(tint)
     }
     .padding(.vertical, 2)
   }
@@ -148,29 +142,27 @@ extension ContextSlice {
 // then what the session cost and the evidence for it, the profile's spend, and the pricing note.
 struct CoreUsageSheet: View {
   let usage: SessionUsageView
+  // A fresh reading at a given time: resets and freshness lines move with the clock, not with the session.
+  var reading: (Date) -> SessionUsageView? = { _ in nil }
   @Environment(\.dismiss) private var dismiss
 
   private var claude: Bool { usage.engine == "claude" }
-  private var engineName: String { claude ? "Claude Code" : usage.engine.capitalized }
 
   var body: some View {
     NavigationStack {
       List {
         Section {
           if usage.windows.isEmpty {
-            Text(
-              claude
-                ? "No plan windows reported. API-key profiles have none, and a subscription account reports them once any of its sessions has run a turn."
-                : "Plan windows are a claude.ai subscription thing; this session runs on the \(usage.engine) engine."
-            )
+            Text(usage.windowsEmptyText)
             .font(.callout)
             .foregroundStyle(.secondary)
           } else {
             TimelineView(.periodic(from: .now, by: 60)) { context in
+              let windows = reading(context.date)?.windows ?? usage.windows
               VStack(spacing: 14) {
-                ForEach(Array(usage.windows.enumerated()), id: \.element.key) { index, window in
+                ForEach(Array(windows.enumerated()), id: \.element.key) { index, window in
                   if index > 0 { Divider() }
-                  CoreUsageWindowCard(window: window, now: context.date)
+                  CoreUsageWindowCard(window: window)
                 }
               }
               .padding(.vertical, 4)
@@ -182,12 +174,10 @@ struct CoreUsageSheet: View {
         costSection
         if let spend = usage.spend {
           Section("This profile") {
-            LabeledContent("Last 7 days") { Text(Fmt.cost(spend.weekUsd)).monospacedDigit() }
-            LabeledContent("Last 30 days") { Text(Fmt.cost(spend.monthUsd)).monospacedDigit() }
-            if let ratio = spend.ratio, let share = spend.weeklyShareUsd, let monthly = spend.monthlyUsd {
-              Text(
-                "\(ratio >= 10 ? "\(Int(ratio.rounded()))x" : String(format: "%.1fx", ratio)) the \(Fmt.cost(share)) weekly share of your \(Fmt.cost(monthly)) a month. A subscription is a flat fee, so this is leverage, not a bill."
-              )
+            LabeledContent("Last 7 days") { Text(spend.weekText).monospacedDigit() }
+            LabeledContent("Last 30 days") { Text(spend.monthText).monospacedDigit() }
+            if let ratio = spend.ratioText {
+              Text(ratio)
               .font(.caption)
               .foregroundStyle(.secondary)
             }
@@ -213,7 +203,7 @@ struct CoreUsageSheet: View {
         Image("ClaudeCode").resizable().aspectRatio(contentMode: .fit).frame(width: 22, height: 22)
           .accessibilityHidden(true)
       }
-      Text(engineName).font(.headline).foregroundStyle(.primary)
+      Text(usage.engineName).font(.headline).foregroundStyle(.primary)
       Spacer(minLength: 8)
       if let plan = usage.subscriptionType, !plan.isEmpty {
         Text(plan.capitalized)
@@ -231,42 +221,32 @@ struct CoreUsageSheet: View {
   private var costSection: some View {
     let cost = usage.cost
     return Section("This session") {
-      LabeledContent("Cost") { Text(cost.displayUsd.map(Fmt.cost) ?? "none").monospacedDigit() }
+      LabeledContent("Cost") { Text(cost.displayText).monospacedDigit() }
       if !cost.rows.isEmpty {
         Group {
-          LabeledContent("input", value: Fmt.cost(cost.input))
-          LabeledContent("output", value: Fmt.cost(cost.output))
-          LabeledContent("cache write", value: Fmt.cost(cost.cacheWrite))
-          LabeledContent("cache read", value: Fmt.cost(cost.cacheRead))
+          LabeledContent("input", value: cost.inputText)
+          LabeledContent("output", value: cost.outputText)
+          LabeledContent("cache write", value: cost.cacheWriteText)
+          LabeledContent("cache read", value: cost.cacheReadText)
         }
         .font(.caption.monospacedDigit())
         .foregroundStyle(.secondary)
         ForEach(cost.rows, id: \.model) { row in
           LabeledContent(row.model) {
-            Text("\(Fmt.tokens(Int(row.tokens))) · \(row.costUsd.map(Fmt.cost) ?? "no rate")").monospacedDigit()
+            Text(row.text).monospacedDigit()
           }
           .font(.caption)
           .foregroundStyle(.secondary)
         }
       }
-      if cost.showUnpricedWarning {
-        Text(
-          "\(Int((cost.unpricedShare * 100).rounded()))% of these tokens ran on a model with no bundled rate, so the total is an understatement rather than an estimate."
-        )
-        .font(.caption)
-        .foregroundStyle(.orange)
+      if let text = cost.unpricedText {
+        Text(text).font(.caption).foregroundStyle(.orange)
       }
-      if !cost.unknownBasisModels.isEmpty {
-        Text(
-          "\(engineName) matched no rate table of its own to \(cost.unknownBasisModels.joined(separator: ", ")), so the figure it reports for those tokens is a guess rather than a rate."
-        )
-        .font(.caption)
-        .foregroundStyle(.orange)
+      if let text = cost.unknownBasisText {
+        Text(text).font(.caption).foregroundStyle(.orange)
       }
-      if cost.gapUsd != nil, let reported = cost.reportedUsd {
-        Text("\(engineName) reports \(Fmt.cost(reported)) for the same tokens.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+      if let text = cost.gapText {
+        Text(text).font(.caption).foregroundStyle(.secondary)
       }
     }
   }
@@ -274,29 +254,26 @@ struct CoreUsageSheet: View {
 
 private struct CoreUsageWindowCard: View {
   let window: UsageWindowView
-  let now: Date
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(alignment: .firstTextBaseline) {
-        Text(Fmt.rateLimitWindowLong(window.key))
+        Text(window.longLabel)
         Spacer(minLength: 8)
-        Text("\(Fmt.percent(window.utilization)) used")
+        Text(window.usedText)
           .font(.body.weight(.semibold).monospacedDigit())
           .foregroundStyle(window.stale ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
       }
-      CorePaceBar(fraction: window.utilization / 100, pace: pace, tint: usageTint(window.utilization))
+      CorePaceBar(fraction: window.fill, pace: window.pace, tint: barTint(window.barSeverity))
         .opacity(window.stale ? 0.4 : 1)
       HStack(spacing: 5) {
-        if let resetsAt = window.resetsAt, let text = Fmt.resets(epochSeconds: resetsAt, now: now) {
+        if let text = window.resetText {
           Image(systemName: "arrow.counterclockwise")
           Text(text)
         }
         if window.overage { Text("overage").foregroundStyle(.orange) }
-        if window.inferredReset {
-          Text("window reset · nothing reported since")
-        } else if let at = window.updatedAt {
-          Text((window.stale ? "last reported " : "") + Fmt.agoPrecise(Date(timeIntervalSince1970: at / 1000), now: now))
+        if let fresh = window.freshText {
+          Text(fresh)
             .foregroundStyle(window.stale ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
         }
       }
@@ -304,14 +281,6 @@ private struct CoreUsageWindowCard: View {
       .foregroundStyle(.secondary)
     }
     .accessibilityElement(children: .combine)
-  }
-
-  // The elapsed share of the window: where usage would be if it were spent evenly. Needs a duration and a reset.
-  private var pace: Double? {
-    guard let duration = Fmt.rateLimitWindowSeconds(window.key), let resetsAt = window.resetsAt else { return nil }
-    let remaining = resetsAt - now.timeIntervalSince1970
-    guard remaining > 0, remaining < duration else { return nil }
-    return (duration - remaining) / duration
   }
 }
 

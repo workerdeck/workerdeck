@@ -68,7 +68,7 @@ struct CoreSessionView: View {
     .sheet(item: $meterSheet) { sheet in
       switch sheet {
       case .context: CoreContextSheet(context: model.ui.usage?.context)
-      case .usage: if let usage = model.ui.usage { CoreUsageSheet(usage: usage) }
+      case .usage: if let usage = model.ui.usage { CoreUsageSheet(usage: usage, reading: model.usage(at:)) }
       }
     }
     .confirmationDialog("Clear the conversation?", isPresented: $confirmClear, titleVisibility: .visible) {
@@ -130,11 +130,11 @@ struct CoreSessionView: View {
 
   // Only while this session is really on screen: a mark from anywhere else is how an unread badge silently stops
   // working.
-  private func mark(_ seen: CoreSeen) {
+  private func mark(_ seen: SeenCounts) {
     guard client != nil else { return }
     unread.mark(
-      host: hostId, sessionId: sessionId, itemCount: seen.itemCount, activity: seen.activity, prose: seen.prose,
-      turns: seen.turns)
+      host: hostId, sessionId: sessionId, itemCount: Int(seen.itemCount), activity: seen.activity.map(Int.init),
+      prose: seen.prose.map(Int.init), turns: seen.turns.map(Int.init))
   }
 
   // The in-view marks ran off the attach snapshot's counters, so anything the rollup counted since would read as
@@ -142,8 +142,9 @@ struct CoreSessionView: View {
   private func finalizeSeen() {
     guard let client, let seen = model.ui.seen else { return }
     Task { @MainActor [unread, hostId, sessionId] in
-      guard let info = try? await client.getSession(id: sessionId) else { return }
-      unread.mark(host: hostId, sessionId: sessionId, itemCount: seen.itemCount, info: info)
+      let answer = await client.answer(getSessionCall(id: sessionId))
+      guard answer.status == 200 else { return }
+      unread.markSession(host: hostId, sessionId: sessionId, itemCount: Int(seen.itemCount), body: answer.body)
     }
   }
 
@@ -199,9 +200,10 @@ struct CoreSessionView: View {
           CoreEmptyState(cwd: ui.extras.cwd, canRunShell: ui.canRunShell)
         }
       }
-    if let count = ui.extras.newRows, count > 0, let row = ui.main.recapRow, ui.progress == nil {
+    if let catchUp = ui.extras.catchUp, ui.progress == nil {
       CoreCatchUpBar(
-        count: count, onJump: { scroll.scrollToRow(row, anchor: .top, animated: true) }, onDismiss: model.clearRecap)
+        text: catchUp.text, onJump: { scroll.scrollToRow(Int(catchUp.row), anchor: .top, animated: true) },
+        onDismiss: model.clearRecap)
     }
   }
 

@@ -75,6 +75,7 @@ final class CoreSessionModel {
     driver?.rowMenu(row: row, taskId: inFrame ? ui.frame?.taskId : nil)
   }
 
+  func usage(at date: Date) -> SessionUsageView? { driver?.usage(now: date) }
   func hostImage(_ path: String) -> HostImageFetch? { driver?.hostImage(path) }
   func backgroundTask(_ toolUseId: String) { driver?.backgroundTask(toolUseId) }
   func sleep() { driver?.sleep() }

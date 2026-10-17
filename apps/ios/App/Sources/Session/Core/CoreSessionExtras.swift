@@ -5,8 +5,7 @@ import WorkerDeckKit
 
 // The session screen's lesser facts, read when the chrome or the transcript moves.
 struct CoreSessionExtras: Equatable, Sendable {
-  // Items since the read mark, while the recap seam stands.
-  var newRows: Int?
+  var catchUp: CatchUp?
   var canSleep = false
   var cwd: String?
   var mismatch: Int?
@@ -62,14 +61,14 @@ enum CoreRowMenu {
 
 // "N new rows since you were last here", above the composer: the seam is in the transcript, this is the way back.
 struct CoreCatchUpBar: View {
-  let count: Int
+  let text: String
   let onJump: () -> Void
   let onDismiss: () -> Void
 
   var body: some View {
     HStack(spacing: 6) {
       Text(TermGlyph.recap)
-      Text("\(count) new \(count == 1 ? "row" : "rows") since you were last here")
+      Text(text)
         .lineLimit(1)
         .truncationMode(.tail)
         .frame(maxWidth: .infinity, alignment: .leading)

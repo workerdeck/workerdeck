@@ -3,7 +3,9 @@
 // `vm::pricing` and `vm::session_cost`; the platform only fetches the profiles body and draws.
 use crate::Session;
 use serde_json::Value;
+use wd_native::planner::{fmt_cost, fmt_tokens};
 use wd_native::rest::{ByModel, Entries, ProfileEngine, ProfileUsage, RateLimitInfo};
+use wd_native::vm::fmt;
 use wd_native::vm::pricing::{
     PRICING_AS_OF, PricingTable, SubscriptionComparison, default_pricing, merge_pricing, pricing_age_note, pricing_note,
 };
@@ -39,6 +41,17 @@ pub struct UsageWindowView {
     pub inferred_reset: bool,
     pub stale: bool,
     pub severity: Severity,
+    pub label: String,
+    pub long_label: String,
+    pub initial: String,
+    pub percent_text: String,
+    pub used_text: String,
+    pub fill: f64,
+    pub bar_severity: Severity,
+    // The elapsed share of the window, drawn as a marker over the bar.
+    pub pace: Option<f64>,
+    pub reset_text: Option<String>,
+    pub fresh_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -46,6 +59,8 @@ pub struct ContextSlice {
     pub name: String,
     pub tokens: i64,
     pub color: String,
+    pub tokens_text: String,
+    pub fill: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -56,6 +71,12 @@ pub struct ContextView {
     pub model: Option<String>,
     pub categories: Vec<ContextSlice>,
     pub severity: Severity,
+    pub ring_label: String,
+    pub percent_text: String,
+    pub used_text: String,
+    pub fill: f64,
+    pub bar_severity: Severity,
+    pub accessibility_label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -63,6 +84,7 @@ pub struct CostModelRow {
     pub model: String,
     pub tokens: f64,
     pub cost_usd: Option<f64>,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -78,6 +100,14 @@ pub struct CostView {
     pub show_unpriced_warning: bool,
     pub unknown_basis_models: Vec<String>,
     pub gap_usd: Option<f64>,
+    pub display_text: String,
+    pub input_text: String,
+    pub output_text: String,
+    pub cache_write_text: String,
+    pub cache_read_text: String,
+    pub unpriced_text: Option<String>,
+    pub unknown_basis_text: Option<String>,
+    pub gap_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
@@ -87,6 +117,9 @@ pub struct SpendView {
     pub monthly_usd: Option<f64>,
     pub weekly_share_usd: Option<f64>,
     pub ratio: Option<f64>,
+    pub week_text: String,
+    pub month_text: String,
+    pub ratio_text: Option<String>,
 }
 
 // `profile` and `rate_limits` say whether polling `GET /v1/profiles` is worth it: an engine without plan windows, or
@@ -103,6 +136,11 @@ pub struct SessionUsageView {
     pub cost: CostView,
     pub spend: Option<SpendView>,
     pub pricing_note: String,
+    pub engine_name: String,
+    pub windows_empty_text: String,
+    // The status line's reading: the windows' rings spoken, else the session's cost when it has one.
+    pub hud_label: String,
+    pub hud_cost_text: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -122,6 +160,21 @@ pub(crate) fn profile_rows(body: &str) -> Option<Vec<Value>> {
 
 fn profile_row<'a>(rows: &'a [Value], name: &str) -> Option<&'a Value> {
     rows.iter().find(|row| row.get("name").and_then(Value::as_str) == Some(name))
+}
+
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
+}
+
+// A subscription is a flat fee, so the ratio is leverage, not a bill.
+fn ratio_text(ratio: f64, weekly_share_usd: f64, monthly_usd: f64) -> String {
+    let times = if ratio >= 10.0 { format!("{}x", ratio.round() as i64) } else { format!("{ratio:.1}x") };
+    format!(
+        "{times} the {} weekly share of your {} a month. A subscription is a flat fee, so this is leverage, not a bill.",
+        fmt_cost(Some(weekly_share_usd)),
+        fmt_cost(Some(monthly_usd))
+    )
 }
 
 fn engine_name(engine: ProfileEngine) -> String {
@@ -149,20 +202,43 @@ pub(crate) fn usage_view(live: &wd_native::controller::live::LiveSession, profil
         .into_iter()
         .map(|w| {
             let inferred = w.inferred_reset == Some(true);
+            let stale = usage::usage_is_stale(w.updated_at, inferred, now_ms);
+            let utilization = w.info.utilization.unwrap_or(0.0);
+            let updated_at = w.updated_at.filter(|at| *at > 0.0);
             UsageWindowView {
-                stale: usage::usage_is_stale(w.updated_at, inferred, now_ms),
+                label: usage::window_label(&w.key),
+                long_label: usage::window_label_long(&w.key),
+                initial: usage::window_initial(&w.key),
+                percent_text: fmt::percent(utilization),
+                used_text: format!("{} used", fmt::percent(utilization)),
+                fill: usage::fill(utilization),
+                bar_severity: usage::bar_severity(utilization).into(),
+                pace: usage::pace(&w.key, w.info.resets_at, now_ms),
+                reset_text: w.info.resets_at.and_then(|at| fmt::resets(at, now_ms)),
+                fresh_text: if inferred {
+                    Some("window reset \u{00B7} nothing reported since".to_owned())
+                } else {
+                    updated_at.map(|at| format!("{}{}", if stale { "last reported " } else { "" }, fmt::ago_precise(at, now_ms)))
+                },
+                stale,
                 severity: usage::meter_severity(w.info.utilization).into(),
                 key: w.key,
-                utilization: w.info.utilization.unwrap_or(0.0),
+                utilization,
                 status: w.info.status,
                 resets_at: w.info.resets_at,
                 overage: w.info.is_using_overage == Some(true),
-                updated_at: w.updated_at.filter(|at| *at > 0.0),
+                updated_at,
                 inferred_reset: inferred,
             }
         })
-        .collect();
+        .collect::<Vec<UsageWindowView>>();
     let context = state.context_usage.as_ref().map(|c| ContextView {
+        ring_label: usage::ring_label(c.percentage),
+        percent_text: fmt::percent(c.percentage),
+        used_text: format!("{} / {}", fmt_tokens(c.total_tokens as f64), fmt_tokens(c.max_tokens as f64)),
+        fill: usage::fill(c.percentage),
+        bar_severity: usage::bar_severity(c.percentage).into(),
+        accessibility_label: format!("Context {} used", fmt::percent(c.percentage)),
         total_tokens: c.total_tokens,
         max_tokens: c.max_tokens,
         percentage: c.percentage,
@@ -170,7 +246,13 @@ pub(crate) fn usage_view(live: &wd_native::controller::live::LiveSession, profil
         categories: c
             .categories
             .iter()
-            .map(|(name, tokens, color)| ContextSlice { name: name.clone(), tokens: *tokens, color: color.clone() })
+            .map(|(name, tokens, color)| ContextSlice {
+                name: name.clone(),
+                tokens: *tokens,
+                color: color.clone(),
+                tokens_text: fmt_tokens(*tokens as f64),
+                fill: (*tokens as f64 / c.max_tokens.max(1) as f64).clamp(0.0, 1.0),
+            })
             .collect(),
         severity: usage::meter_severity(Some(c.percentage)).into(),
     });
@@ -182,6 +264,9 @@ pub(crate) fn usage_view(live: &wd_native::controller::live::LiveSession, profil
     let reported = (state.total_cost_usd > 0.0).then_some(state.total_cost_usd);
     let cost = session_cost(state.cost_usd, reported, by_model.as_ref(), &pricing);
     let spend = row.and_then(|r| serde_json::from_value::<Spend>(r.get("spend")?.clone()).ok()).map(|s| SpendView {
+        week_text: fmt_cost(Some(s.week_usd)),
+        month_text: fmt_cost(Some(s.month_usd)),
+        ratio_text: s.subscription.map(|c| ratio_text(c.ratio, c.weekly_share_usd, c.monthly_usd)),
         week_usd: s.week_usd,
         month_usd: s.month_usd,
         monthly_usd: s.subscription.map(|c| c.monthly_usd),
@@ -189,7 +274,19 @@ pub(crate) fn usage_view(live: &wd_native::controller::live::LiveSession, profil
         ratio: s.subscription.map(|c| c.ratio),
     });
     let note = pricing_note();
+    let engine_label = if claude { "Claude Code".to_owned() } else { capitalized(&engine) };
+    let hud_label = windows.iter().take(3).map(|w| format!("{} {}", w.label, w.percent_text)).collect::<Vec<_>>().join(", ");
+    let hud_cost_text = cost.display_usd.filter(|usd| windows.is_empty() && *usd > 0.0).map(|usd| fmt_cost(Some(usd)));
+    let windows_empty_text = if claude {
+        "No plan windows reported. API-key profiles have none, and a subscription account reports them once any of its sessions has run a turn.".to_owned()
+    } else {
+        format!("Plan windows are a claude.ai subscription thing; this session runs on the {engine} engine.")
+    };
     SessionUsageView {
+        engine_name: engine_label.clone(),
+        windows_empty_text,
+        hud_label,
+        hud_cost_text,
         profile,
         subscription_type: state.subscription_type.clone(),
         rate_limits: capabilities.map_or(claude, |c| c.rate_limits),
@@ -197,13 +294,43 @@ pub(crate) fn usage_view(live: &wd_native::controller::live::LiveSession, profil
         context,
         windows,
         cost: CostView {
+            display_text: cost.display_usd.map_or_else(|| "none".to_owned(), |usd| fmt_cost(Some(usd))),
+            input_text: fmt_cost(Some(cost.breakdown.input)),
+            output_text: fmt_cost(Some(cost.breakdown.output)),
+            cache_write_text: fmt_cost(Some(cost.breakdown.cache_write)),
+            cache_read_text: fmt_cost(Some(cost.breakdown.cache_read)),
+            unpriced_text: cost.show_unpriced_warning.then(|| {
+                format!(
+                    "{}% of these tokens ran on a model with no bundled rate, so the total is an understatement rather than an estimate.",
+                    (cost.unpriced_share * 100.0).round() as i64
+                )
+            }),
+            unknown_basis_text: (!cost.unknown_basis_models.is_empty()).then(|| {
+                format!(
+                    "{engine_label} matched no rate table of its own to {}, so the figure it reports for those tokens is a guess rather than a rate.",
+                    cost.unknown_basis_models.join(", ")
+                )
+            }),
+            gap_text: cost
+                .gap_usd
+                .and(cost.reported_usd)
+                .map(|reported| format!("{engine_label} reports {} for the same tokens.", fmt_cost(Some(reported)))),
             display_usd: cost.display_usd,
             reported_usd: cost.reported_usd,
             input: cost.breakdown.input,
             output: cost.breakdown.output,
             cache_write: cost.breakdown.cache_write,
             cache_read: cost.breakdown.cache_read,
-            rows: cost.rows.into_iter().map(|r| CostModelRow { model: r.model, tokens: r.tokens, cost_usd: r.cost_usd }).collect(),
+            rows: cost
+                .rows
+                .into_iter()
+                .map(|r| CostModelRow {
+                    text: format!("{} \u{00B7} {}", fmt_tokens(r.tokens), r.cost_usd.map_or_else(|| "no rate".to_owned(), |usd| fmt_cost(Some(usd)))),
+                    model: r.model,
+                    tokens: r.tokens,
+                    cost_usd: r.cost_usd,
+                })
+                .collect(),
             unpriced_share: cost.unpriced_share,
             show_unpriced_warning: cost.show_unpriced_warning,
             unknown_basis_models: cost.unknown_basis_models,
@@ -232,4 +359,20 @@ impl Session {
         let profiles = self.profiles.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone();
         usage_view(&self.live(), profiles.as_deref(), now_ms)
     }
+}
+
+// A ring or a number over a 0-100 reading, for a list row that holds only the percentage.
+#[uniffi::export]
+pub fn meter_severity(percentage: f64) -> Severity {
+    usage::meter_severity(Some(percentage)).into()
+}
+
+#[uniffi::export]
+pub fn ring_label(percentage: f64) -> String {
+    usage::ring_label(percentage)
+}
+
+#[uniffi::export]
+pub fn percent_text(value: f64) -> String {
+    fmt::percent(value)
 }

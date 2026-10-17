@@ -81,3 +81,32 @@ pub fn recap_line(summary: &RecapSummary) -> Option<String> {
     }
     Some(parts.join(" · "))
 }
+
+// The bar over a session reopened with something unread: how many items landed below the seam, where it is, and the
+// sentence. None once nothing is new or the seam is gone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatchUp {
+    pub count: usize,
+    pub row: usize,
+    pub text: String,
+}
+
+pub fn catch_up(item_count: usize, boundary: Option<usize>, recap_row: Option<usize>) -> Option<CatchUp> {
+    let count = item_count.saturating_sub(boundary?);
+    let row = recap_row?;
+    (count > 0).then(|| CatchUp { count, row, text: format!("{} since you were last here", plural(count, "new row", Some("new rows"))) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catch_up_needs_a_seam_and_something_new() {
+        assert_eq!(catch_up(12, Some(10), Some(4)), Some(CatchUp { count: 2, row: 4, text: "2 new rows since you were last here".into() }));
+        assert_eq!(catch_up(11, Some(10), Some(4)).unwrap().text, "1 new row since you were last here");
+        assert_eq!(catch_up(10, Some(10), Some(4)), None);
+        assert_eq!(catch_up(12, Some(10), None), None);
+        assert_eq!(catch_up(12, None, Some(4)), None);
+    }
+}

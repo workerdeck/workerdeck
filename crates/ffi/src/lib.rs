@@ -235,6 +235,21 @@ impl From<wd_native::vm::session_chrome::SessionChrome> for SessionChrome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SeenCounts {
+    pub item_count: u32,
+    pub activity: Option<u32>,
+    pub prose: Option<u32>,
+    pub turns: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CatchUp {
+    pub count: u32,
+    pub row: u32,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SlashCommand {
     pub name: String,
     pub description: Option<String>,
@@ -489,8 +504,26 @@ impl Session {
         self.live().session_info().map(wd_native::vm::session_list::display_name)
     }
 
-    pub fn session_info_json(&self) -> Option<String> {
-        self.live().session_info().and_then(|info| serde_json::to_string(info).ok())
+    // What a read mark records while the session is on screen: the items held plus the attach snapshot's rollup
+    // counters. None before the attach: a session opened over a dead link was never seen.
+    pub fn seen(&self) -> Option<SeenCounts> {
+        let live = self.live();
+        let info = live.session_info()?;
+        Some(SeenCounts {
+            item_count: live.view().item_count() as u32,
+            activity: info.activity_count.map(|n| n as u32),
+            prose: info.prose_count.map(|n| n as u32),
+            turns: info.num_turns,
+        })
+    }
+
+    // A dormant wake renumbers the log, so a push's seq names a row only within its epoch.
+    pub fn session_epoch(&self) -> Option<i64> {
+        self.live().session_info().and_then(|info| info.epoch)
+    }
+
+    pub fn catch_up(&self) -> Option<CatchUp> {
+        self.live().view().catch_up().map(|c| CatchUp { count: c.count as u32, row: c.row as u32, text: c.text })
     }
 
     pub fn can_run_shell(&self) -> bool {

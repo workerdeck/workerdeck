@@ -36,11 +36,14 @@ final class UnreadModel {
     return moved
   }
 
+  // The true-up on leaving: a fresh `GET /v1/sessions/:id` body, read by the core.
   @discardableResult
-  func mark(host: UUID, sessionId: String, itemCount: Int?, info: SessionInfo) -> Bool {
-    mark(
-      host: host, sessionId: sessionId, itemCount: itemCount, activity: info.activityCount,
-      prose: info.proseCount, turns: info.numTurns)
+  func markSession(host: UUID, sessionId: String, itemCount: Int?, body: String) -> Bool {
+    let moved = list.markSession(
+      hostId: host.uuidString, sessionId: sessionId, itemCount: itemCount.map(UInt32.init), body: body,
+      nowMs: Date().timeIntervalSince1970 * 1000)
+    if moved { changed() }
+    return moved
   }
 
   // Deliberately not `revision`-dependent: the boundary is fixed when a session is opened, and a mark that moved under

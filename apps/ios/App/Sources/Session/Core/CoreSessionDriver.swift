@@ -57,18 +57,10 @@ struct CoreSessionUi: @unchecked Sendable {
   var frame: CoreFrameState?
   var peek: CoreRailPeek?
   var focus: TranscriptFocusRequest?
-  var seen: CoreSeen?
+  var seen: SeenCounts?
   var composer = CoreComposerContext()
   var usage: SessionUsageView?
   var extras = CoreSessionExtras()
-}
-
-// What a read mark records once the replay settled: the items on screen and the attach snapshot's rollup counters.
-struct CoreSeen: Equatable, Sendable {
-  var itemCount: Int
-  var activity: Int?
-  var prose: Int?
-  var turns: Int?
 }
 
 // Where a session opens besides its tail. Held until the replay settles, so it lands on a transcript that has the thing.
@@ -132,7 +124,6 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   private var frameRailSize: CoreRailSize?
   private var pending: CoreEntry?
   private var bookmarks: [String] = []
-  private var recapBoundary: Int?
 
   // Socket callbacks arrive on URLSession's queue, maybe before the worker stored the socket, so each task carries its
   // generation and a callback from a replaced one is dropped by number.
@@ -191,16 +182,12 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
   func dismiss(_ requestId: String) { worker.act { $0.dismissQuestion(requestId: requestId) } }
 
   func setRecap(boundary: Int, since: Double) {
-    worker.act { [self] session in
-      recapBoundary = max(0, boundary)
-      return session.setRecap(boundary: UInt32(max(0, boundary)), sinceMs: since)
-    }
+    worker.act { session in session.setRecap(boundary: UInt32(max(0, boundary)), sinceMs: since) }
   }
 
   func clearRecap() {
     worker.act { [self] session in
-      recapBoundary = nil
-      ui.extras.newRows = nil
+      ui.extras.catchUp = nil
       publish(ui)
       return session.setRecap(boundary: nil, sinceMs: nil)
     }
@@ -565,9 +552,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     if changed.progress || changed.transcript { ui.progress = session.replayProgress() }
     if changed.shells { readShell() }
     if changed.transcript || changed.prompt { readRail() }
-    if changed.transcript, let boundary = recapBoundary {
-      ui.extras.newRows = ui.main.recapRow == nil ? nil : max(0, Int(session.itemCount()) - boundary)
-    }
+    if changed.transcript { ui.extras.catchUp = session.catchUp() }
     if changed.frames || changed.transcript || changed.prompt { readFrame() }
     if ui.openSeconds == nil, ui.connection == .live, ui.progress == nil, !ui.main.rows.isEmpty {
       let seconds = ProcessInfo.processInfo.systemUptime - startedAt
@@ -575,7 +560,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
       Self.log.notice("session open: \(seconds, format: .fixed(precision: 3)) s, \(self.ui.main.rows.count) rows")
     }
     if ui.connection == .live, ui.progress == nil {
-      if changed.transcript || changed.chrome || ui.seen == nil { ui.seen = readSeen() }
+      if changed.transcript || changed.chrome || ui.seen == nil { ui.seen = session.seen() }
       if pending != nil, !ui.main.rows.isEmpty { enter() }
     }
     publish(ui)
@@ -587,7 +572,7 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     switch entry {
     case .seq(let seq, let epoch):
       // A dormant wake renumbers the log, so a seq from another epoch is not the row it names.
-      guard (epoch ?? 0) == (sessionEpoch() ?? 0),
+      guard (epoch ?? 0) == Int(session.sessionEpoch() ?? 0),
         let item = session.itemForSeq(seq: Int64(seq))
       else { return }
       focus(row: Int(session.rowForItem(item: item)))
@@ -604,25 +589,11 @@ final class CoreSessionDriver: NSObject, URLSessionWebSocketDelegate, @unchecked
     ui.focus = TranscriptFocusRequest(row: row, nonce: (ui.focus?.nonce ?? 0) &+ 1, complete: true)
   }
 
-  private func sessionInfo() -> [String: Any]? {
-    guard let json = session.sessionInfoJson(), let data = json.data(using: .utf8) else { return nil }
-    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-  }
-
-  private func sessionEpoch() -> Int? { (sessionInfo()?["epoch"] as? NSNumber)?.intValue }
-
-  // Nil before the attach: a session opened over a dead link was never seen, and a zero mark would turn its whole
-  // history unread.
-  private func readSeen() -> CoreSeen? {
-    guard let info = sessionInfo() else { return nil }
-    let count = { (key: String) in (info[key] as? NSNumber)?.intValue }
-    return CoreSeen(
-      itemCount: Int(session.itemCount()), activity: count("activityCount"), prose: count("proseCount"),
-      turns: count("numTurns"))
-  }
-
   // The meters, re-read whenever the core flags the chrome; the first reading that names a profile with plan windows
   // starts the account poll.
+  // Read straight off the core for a sheet that redraws on its own clock.
+  func usage(now: Date) -> SessionUsageView { session.usage(nowMs: now.timeIntervalSince1970 * 1000) }
+
   private func readUsage() {
     let usage = session.usage(nowMs: Date().timeIntervalSince1970 * 1000)
     ui.usage = usage

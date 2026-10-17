@@ -477,6 +477,11 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
 }
 
 #[derive(serde::Deserialize)]
+struct SessionAnswer {
+    session: SessionInfo,
+}
+
+#[derive(serde::Deserialize)]
 struct SessionsResponse {
     sessions: Vec<serde_json::Value>,
 }
@@ -849,6 +854,20 @@ impl SessionList {
             turns: info.num_turns.map(f64::from),
         };
         state.marks.mark(&host_id, &session_id, &seen, now_ms)
+    }
+
+    // Leaving a session trues its mark up once from a fresh `GET /v1/sessions/:id` body: the in-view marks ran off the
+    // attach snapshot's counters, so anything counted since would read unread although it was on screen.
+    pub fn mark_session(&self, host_id: String, session_id: String, item_count: Option<u32>, body: String, now_ms: f64) -> bool {
+        let Ok(answer) = serde_json::from_str::<SessionAnswer>(&body) else { return false };
+        let info = answer.session;
+        let seen = Seen {
+            item_count: item_count.map(f64::from),
+            activity: info.activity_count.map(|n| n as f64),
+            prose: info.prose_count.map(|n| n as f64),
+            turns: info.num_turns.map(f64::from),
+        };
+        self.state().marks.mark(&host_id, &session_id, &seen, now_ms)
     }
 
     // A session screen's mark: rows it rendered plus the rollup counters it last read. True when the mark moved.
