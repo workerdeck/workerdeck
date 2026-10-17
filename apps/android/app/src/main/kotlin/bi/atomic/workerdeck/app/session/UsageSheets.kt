@@ -153,7 +153,7 @@ private fun ContextBody(context: ContextView?) {
         }
         return
     }
-    Section {
+    SheetSection {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             LabelRow("Used", context.usedText)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -165,9 +165,9 @@ private fun ContextBody(context: ContextView?) {
     context.model?.let { Footnote(it) }
     if (context.categories.isNotEmpty()) {
         SheetHeading("Breakdown")
-        Section {
+        SheetSection {
             context.categories.forEachIndexed { index, slice ->
-                if (index > 0) Divider()
+                if (index > 0) SheetDivider()
                 SliceRow(slice)
             }
         }
@@ -199,29 +199,29 @@ private fun hexColor(text: String): Color? {
 private fun UsageBody(usage: SessionUsageView) {
     val colors = Wd.colors
     UsageHeader(usage)
-    Section {
+    SheetSection {
         if (usage.windows.isEmpty()) {
             Text(usage.windowsEmptyText, style = MaterialTheme.typography.bodyMedium, color = colors.secondary, modifier = Modifier.padding(16.dp))
         } else {
             usage.windows.forEachIndexed { index, window ->
-                if (index > 0) Divider()
+                if (index > 0) SheetDivider()
                 WindowCard(window)
             }
         }
     }
     val cost = usage.cost
     SheetHeading("This session")
-    Section {
+    SheetSection {
         LabelRow("Cost", cost.displayText, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
         if (cost.rows.isNotEmpty()) {
-            Divider()
+            SheetDivider()
             Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 SmallRow("input", cost.inputText)
                 SmallRow("output", cost.outputText)
                 SmallRow("cache write", cost.cacheWriteText)
                 SmallRow("cache read", cost.cacheReadText)
             }
-            Divider()
+            SheetDivider()
             Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 cost.rows.forEach { SmallRow(it.model, it.text) }
             }
@@ -229,18 +229,18 @@ private fun UsageBody(usage: SessionUsageView) {
         listOfNotNull(cost.unpricedText to colors.orange, cost.unknownBasisText to colors.orange, cost.gapText to colors.secondary)
             .filter { it.first != null }
             .forEach { (text, tint) ->
-                Divider()
+                SheetDivider()
                 Text(text!!, style = MaterialTheme.typography.bodySmall, color = tint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
             }
     }
     usage.spend?.let { spend ->
         SheetHeading("This profile")
-        Section {
+        SheetSection {
             LabelRow("Last 7 days", spend.weekText, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-            Divider()
+            SheetDivider()
             LabelRow("Last 30 days", spend.monthText, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
             spend.ratioText?.let {
-                Divider()
+                SheetDivider()
                 Text(it, style = MaterialTheme.typography.bodySmall, color = colors.secondary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
             }
         }
@@ -312,17 +312,17 @@ private fun Bar(fraction: Double, tint: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Section(content: @Composable () -> Unit) {
+internal fun SheetSection(content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().background(Wd.colors.secondary.copy(alpha = 0.12f), RoundedCornerShape(18.dp))) { content() }
 }
 
 @Composable
-private fun Divider() {
+internal fun SheetDivider() {
     Spacer(Modifier.padding(start = 16.dp).fillMaxWidth().height(0.5.dp).background(Wd.colors.separator))
 }
 
 @Composable
-private fun LabelRow(label: String, value: String, modifier: Modifier = Modifier) {
+internal fun LabelRow(label: String, value: String, modifier: Modifier = Modifier) {
     val colors = Wd.colors
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyLarge, color = colors.primary, modifier = Modifier.weight(1f))
@@ -340,6 +340,6 @@ private fun SmallRow(label: String, value: String) {
 }
 
 @Composable
-private fun Footnote(text: String) {
+internal fun Footnote(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = Wd.colors.secondary, modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp))
 }

@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontFamily
@@ -55,6 +56,7 @@ import bi.atomic.workerdeck.app.ui.Wd
 import bi.atomic.workerdeck.core.ffi.ConnectionState
 import bi.atomic.workerdeck.core.ffi.Metrics
 import bi.atomic.workerdeck.core.ffi.Outgoing
+import bi.atomic.workerdeck.core.ffi.composerInsert
 
 private val FONT_SIZE = 13.sp
 private val LINE_HEIGHT = 18.sp
@@ -90,6 +92,8 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
             var picker by rememberSaveable { mutableStateOf<Picker?>(null) }
             var clearing by rememberSaveable { mutableStateOf(false) }
             var meter by rememberSaveable { mutableStateOf<Meter?>(null) }
+            var extrasSheet by rememberSaveable { mutableStateOf<ExtrasSheet?>(null) }
+            val extras by model.extras.collectAsStateWithLifecycle()
             val chrome = ui.chrome
             Column(Modifier.fillMaxSize().imePadding()) {
                 SessionTopBar(
@@ -99,6 +103,8 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                     onClearContext = if (chrome?.canClearContext == true) ({ clearing = true }) else null,
                     onMeter = if (ui.usage != null) ({ meter = it }) else null,
                     contextMeter = ui.usage?.contextUsage == true,
+                    sheets = listOfNotNull(ExtrasSheet.INFO, ExtrasSheet.MCP.takeIf { extras.mcp }, ExtrasSheet.SKILLS.takeIf { extras.skills }),
+                    onSheet = { extrasSheet = it },
                 )
                 ui.error?.let { Text(it, color = Wd.colors.red, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(12.dp)) }
                 ui.progress?.let { p ->
@@ -185,6 +191,21 @@ fun SessionScreen(client: GatewayClient, sessionId: String, fallbackTitle: Strin
                 )
             }
             meter?.let { MeterSheet(it, ui.usage, model::refreshUsage) { meter = null } }
+            extrasSheet?.let { sheet ->
+                ExtrasSheetHost(
+                    sheet = sheet,
+                    model = model,
+                    chrome = chrome,
+                    skills = ui.skills,
+                    onUseSkill = { skill ->
+                        val opener = skill.defaultPrompt?.trim()?.takeIf { it.isNotEmpty() } ?: "${'$'}${skill.name}"
+                        val edit = composerInsert(draft.text, opener)
+                        draft = TextFieldValue(edit.text, TextRange(edit.cursor.toInt()))
+                        model.composer.edit(edit.text, edit.cursor.toInt())
+                    },
+                    onDismiss = { extrasSheet = null },
+                )
+            }
             picker?.let {
                 PickerSheet(
                     picker = it,
@@ -210,6 +231,8 @@ private fun SessionTopBar(
     onClearContext: (() -> Unit)?,
     onMeter: ((Meter) -> Unit)?,
     contextMeter: Boolean,
+    sheets: List<ExtrasSheet>,
+    onSheet: (ExtrasSheet) -> Unit,
 ) {
     val colors = Wd.colors
     var menu by remember { mutableStateOf(false) }
@@ -232,6 +255,23 @@ private fun SessionTopBar(
                                 onReconnect()
                             },
                         )
+                        sheets.forEach { sheet ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        when (sheet) {
+                                            ExtrasSheet.INFO -> "Session info"
+                                            ExtrasSheet.MCP -> "MCP servers"
+                                            ExtrasSheet.SKILLS -> "Skills"
+                                        },
+                                    )
+                                },
+                                onClick = {
+                                    menu = false
+                                    onSheet(sheet)
+                                },
+                            )
+                        }
                         onMeter?.let { open ->
                             if (contextMeter) {
                                 DropdownMenuItem(

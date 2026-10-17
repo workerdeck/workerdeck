@@ -24,8 +24,19 @@ import bi.atomic.workerdeck.core.ffi.ScrubCluster
 import bi.atomic.workerdeck.core.ffi.ScrubPeek
 import bi.atomic.workerdeck.core.ffi.Session
 import bi.atomic.workerdeck.core.ffi.SessionChrome
+import bi.atomic.workerdeck.core.ffi.McpServers
+import bi.atomic.workerdeck.core.ffi.SessionExtras
+import bi.atomic.workerdeck.core.ffi.SessionFile
 import bi.atomic.workerdeck.core.ffi.SessionUsageView
+import bi.atomic.workerdeck.core.ffi.SkillSection
+import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.listProfilesCall
+import bi.atomic.workerdeck.core.ffi.sessionExtras
+import bi.atomic.workerdeck.core.ffi.sessionExtrasUnknown
+import bi.atomic.workerdeck.core.ffi.sessionFileCall
+import bi.atomic.workerdeck.core.ffi.sessionFiles
+import bi.atomic.workerdeck.core.ffi.sessionFilesCall
+import bi.atomic.workerdeck.core.ffi.skillSections
 import bi.atomic.workerdeck.core.ffi.Selection
 import java.util.Collections
 import java.util.UUID
@@ -60,6 +71,7 @@ data class SessionUi(
     val jump: Jump? = null,
     val rail: List<ScrubCluster> = emptyList(),
     val usage: SessionUsageView? = null,
+    val skills: List<SkillSection> = emptyList(),
 ) {
     fun linesAt(row: Int): List<TranscriptLine>? = lines.getOrNull(row - startRow)
 }
@@ -113,6 +125,8 @@ class SessionModel(private val client: Transport, private val sessionId: String,
     private var frameRailSize: RailSize? = null
     private var bookmarkIds: List<String> = emptyList()
     private var usagePoll: Job? = null
+    private val extrasState = MutableStateFlow(sessionExtrasUnknown())
+    val extras: StateFlow<SessionExtras> = extrasState
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val composer = ComposerModel(sessionId, client, scope)
 
@@ -125,7 +139,21 @@ class SessionModel(private val client: Transport, private val sessionId: String,
 
     init {
         worker.act { it.setWallClock(System.currentTimeMillis().toDouble()) + it.setNavigation(true, true) + it.takeEffects() }
+        scope.launch {
+            val answer = client.answer(getSessionCall(sessionId))
+            if (answer.status.toInt() in 200..299) sessionExtras(answer.body)?.let { extrasState.value = it }
+        }
     }
+
+    fun mcpServers(): McpModel = McpModel(McpServers(sessionId, extrasState.value.mcpCanManage), client)
+
+    // Only provider sessions keep a file store; a Claude session's 404 reads as no files.
+    suspend fun sessionFileList(): List<SessionFile> {
+        val answer = client.answer(sessionFilesCall(sessionId))
+        return if (answer.status.toInt() in 200..299) sessionFiles(answer.body).orEmpty() else emptyList()
+    }
+
+    suspend fun sessionFile(path: String): ByteArray? = client.bytes(sessionFileCall(sessionId, path).path)
 
     fun resize(metrics: Metrics) = worker.act { it.resize(metrics) }
 
@@ -342,7 +370,13 @@ class SessionModel(private val client: Transport, private val sessionId: String,
             ui = ui.copy(title = session.sessionTitle(), connection = session.connection(), error = session.takeProtocolError() ?: ui.error)
         }
         if (changed.chrome) {
-            ui = ui.copy(chrome = session.chrome(), modelPicker = session.modelPicker(), modePicker = session.modePicker(), usage = usageNow())
+            ui = ui.copy(
+                chrome = session.chrome(),
+                modelPicker = session.modelPicker(),
+                modePicker = session.modePicker(),
+                usage = usageNow(),
+                skills = skillSections(session.skills()),
+            )
             composer.read(session)
         }
         if (changed.prompt) ui = ui.copy(prompt = session.prompt())
