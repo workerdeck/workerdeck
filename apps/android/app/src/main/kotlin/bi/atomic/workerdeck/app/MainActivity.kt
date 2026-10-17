@@ -9,6 +9,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.metrics.performance.JankStats
 import androidx.metrics.performance.PerformanceMetricsState
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import bi.atomic.workerdeck.BuildConfig
 import androidx.activity.ComponentActivity
@@ -29,6 +30,8 @@ import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.gateway.GatewayStore
 import bi.atomic.workerdeck.app.session.Entry
 import bi.atomic.workerdeck.app.session.SessionScreen
+import bi.atomic.workerdeck.app.sessions.CreateScreen
+import bi.atomic.workerdeck.app.sessions.RecentCwds
 import bi.atomic.workerdeck.app.sessions.SessionsModel
 import bi.atomic.workerdeck.app.sessions.SessionsScreen
 import bi.atomic.workerdeck.app.sessions.describe
@@ -72,6 +75,8 @@ private fun App(store: GatewayStore) {
     var gateways by remember { mutableStateOf(store.load()) }
     var adding by rememberSaveable { mutableStateOf(false) }
     var open by rememberSaveable { mutableStateOf<List<String>?>(null) }
+    // hostId, then "agent" or "session"; the form itself is not saved across a process death.
+    var creating by rememberSaveable { mutableStateOf<List<String>?>(null) }
     if (gateways.isEmpty() || adding) {
         BackHandler(enabled = adding) { adding = false }
         JankScreen("pairing")
@@ -91,8 +96,24 @@ private fun App(store: GatewayStore) {
     sessions.attach(gateways)
     val target = open
     val client = target?.let { sessions.client(it[0]) }
-    JankScreen(if (target == null || client == null) "sessions" else "session")
-    if (target == null || client == null) {
+    val context = LocalContext.current
+    val recents = remember { RecentCwds(context) }
+    val create = creating
+    val form = remember(create) { create?.let { sessions.createModel(it[0], it[1] == "agent", recents.of(it[0]).firstOrNull() ?: "", null) } }
+    JankScreen(if (form != null) "create" else if (target == null || client == null) "sessions" else "session")
+    if (create != null && form != null && target == null) {
+        CreateScreen(
+            form,
+            recents.of(create[0]),
+            onCreated = { created ->
+                created.cwd?.let { recents.remember(create[0], it) }
+                sessions.pullRefresh()
+                creating = null
+                created.sessionId?.let { id -> open = listOf(create[0], id, created.cwd?.trimEnd('/')?.substringAfterLast('/') ?: "Session") }
+            },
+            onBack = { creating = null },
+        )
+    } else if (target == null || client == null) {
         SessionsScreen(
             sessions,
             gateways,
@@ -102,7 +123,9 @@ private fun App(store: GatewayStore) {
                 open = listOf(hostId, sessionId, title) + entryParts(entry)
             },
             onAdd = { adding = true },
+            onNew = { hostId, agent -> creating = listOf(hostId, if (agent) "agent" else "session") },
             onForget = { gateway ->
+                recents.forget(gateway.id)
                 sessions.forget(gateway)
                 store.remove(gateway.id)
                 gateways = store.load()

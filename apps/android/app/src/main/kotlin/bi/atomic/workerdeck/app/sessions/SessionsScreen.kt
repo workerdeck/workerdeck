@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -102,6 +103,7 @@ fun SessionsScreen(
     onOpen: (hostId: String, sessionId: String, title: String, entry: Entry?) -> Unit,
     onAdd: () -> Unit,
     onForget: (Gateway) -> Unit,
+    onNew: (hostId: String, agent: Boolean) -> Unit,
 ) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val colors = Wd.colors
@@ -119,7 +121,10 @@ fun SessionsScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Sessions", style = MaterialTheme.typography.titleMedium) },
-                actions = { GatewayMenu(gateways, onAdd, onForget) },
+                actions = {
+                    NewMenu(gateways, model::canCreateAgent, onNew)
+                    GatewayMenu(gateways, onAdd, onForget)
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colors.background),
             )
         },
@@ -160,6 +165,36 @@ fun SessionsScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+// New session, and New agent where the gateway runs agents; with more than one gateway the menu names them. One
+// gateway without agents skips the menu.
+@Composable
+private fun NewMenu(gateways: List<Gateway>, canCreateAgent: (String) -> Boolean, onNew: (String, Boolean) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = {
+            val only = gateways.singleOrNull()
+            if (only != null && !canCreateAgent(only.id)) onNew(only.id, false) else open = true
+        }) { Icon(Icons.Filled.Add, contentDescription = "New") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (gateway in gateways) {
+                if (gateways.size > 1) {
+                    DropdownMenuItem(text = { Text(gateway.name, color = Wd.colors.secondary) }, onClick = {}, enabled = false)
+                }
+                DropdownMenuItem(text = { Text("New session") }, onClick = {
+                    open = false
+                    onNew(gateway.id, false)
+                })
+                if (canCreateAgent(gateway.id)) {
+                    DropdownMenuItem(text = { Text("New agent") }, onClick = {
+                        open = false
+                        onNew(gateway.id, true)
+                    })
                 }
             }
         }

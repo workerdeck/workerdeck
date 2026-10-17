@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import bi.atomic.workerdeck.app.gateway.Gateway
 import bi.atomic.workerdeck.app.gateway.GatewayClient
 import bi.atomic.workerdeck.app.session.BookmarkStore
+import bi.atomic.workerdeck.core.ffi.CreateForm
 import bi.atomic.workerdeck.core.ffi.ListStep
+import bi.atomic.workerdeck.core.ffi.metaCall
 import bi.atomic.workerdeck.core.ffi.StepKind
 import bi.atomic.workerdeck.core.ffi.ListException
 import bi.atomic.workerdeck.core.ffi.ListGroup
@@ -88,8 +90,21 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
             )
         }
         errors = next
+        readMetas(answers.filter { it.second.isSuccess }.map { it.first })
         state.value = state.value.copy(groups = draw(), loaded = true, error = errorText())
         fetchAvatars()
+    }
+
+    private val metaRead = mutableSetOf<String>()
+
+    // Once per gateway that answered: whether it runs agents, which seeds New agent.
+    private suspend fun readMetas(reached: List<GatewayClient>) {
+        for (client in reached) {
+            val id = client.gateway.id
+            if (id in metaRead) continue
+            val body = runCatching { client.perform(metaCall()) }.getOrNull() ?: continue
+            if (list.setMeta(id, body)) metaRead += id
+        }
     }
 
     private fun errorText(): String? {
@@ -119,6 +134,16 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun client(hostId: String): GatewayClient? = clients[hostId]
+
+    // Nil seed until the gateway has said it runs agents.
+    fun canCreateAgent(hostId: String): Boolean = list.agentSeed(hostId, null, null) != null
+
+    // An agent form seeds itself from the list's gateway meta, so it is built here.
+    fun createModel(hostId: String, agent: Boolean, cwd: String, resume: String?): CreateModel? {
+        val client = clients[hostId] ?: return null
+        val form = if (agent) CreateForm.agent(cwd, list, hostId) else CreateForm.session(cwd, resume)
+        return CreateModel(form, client)
+    }
 
     private fun fetchAvatars() {
         for (fetch in list.avatarFetches(System.currentTimeMillis().toDouble())) {
@@ -152,6 +177,7 @@ class SessionsModel(app: Application) : AndroidViewModel(app) {
 
     // Unpairing drops the gateway from the list along with its read marks; a new pairing gets a new id.
     fun forget(gateway: Gateway) {
+        metaRead -= gateway.id
         if (list.removeHost(gateway.id)) prefs.edit().putString("marks", list.marksJson()).apply()
         BookmarkStore.of(getApplication()).removeHost(gateway.id)
         attach(clients.values.map { it.gateway }.filter { it.id != gateway.id })

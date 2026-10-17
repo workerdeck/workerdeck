@@ -1284,7 +1284,8 @@ harness renders it from canned data in the simulator. Both are documented in
 `CoreReplayFixture` (60 turns plus one running shell answered in-process) through `CoreSessionView`
 with no gateway, and `WorkerDeckAppUITests/CoreTranscriptUITests` drives it with
 `xcodebuild test -destination 'id=<hardware UDID>'` (phone unlocked, UI Automation on;
-`xcrun xcresulttool export attachments` pulls the screenshots). The simulator runs it too. Extend
+screenshots are taken only under `TEST_RUNNER_WD_UI_SNAPS=1`, and `xcrun xcresulttool export attachments` pulls
+them). The simulator runs it too. Extend
 the fixture and the test with each slice. The `UIPREVIEW` harness keeps only `core`, `sessions`,
 `steps`, `teams`, `projects` and `folders`.
 
@@ -1362,6 +1363,10 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   generation, performs), attachments (refusal, `imagePlan` keep-or-JPEG, upload, chips), shell mode
   via `leadingTrigger`, the note and Send now (`view().wakeAt`). Kotlin holds no composer rule.
   `@` needs host files on the gateway: a 404 switches file search off for that screen.
+- **New session / New agent is the core's `CreateForm`** (`sessions/CreateModel.kt`, `CreateScreen.kt`), behind the
+  list's `+` (one entry per gateway; New agent only once the gateway's `/meta`, which `SessionsModel` feeds the list,
+  says it runs agents). Kotlin moves bytes and keeps the per-gateway recent folders; every field rule, the sheets'
+  rows and the request are the core's. The folder picker is `HostFiles.folders()` (`sessions/FolderPicker.kt`).
 - **Approvals and questions dock above the status strip** (`session/PromptView.kt`), drawn like the
   iOS terminal prompts: a strip ruled in the prompt's tint, a body that scrolls under a cap of half
   the screen (220 dp floor), and the actions pinned below it. Only the head of the queue is drawn,
