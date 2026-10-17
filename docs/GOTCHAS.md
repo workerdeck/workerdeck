@@ -679,7 +679,8 @@ change is the wrong one. Grouped by where they bite. Architecture lives in
   `ModelOption.resolvedModel` (authoritative when present, including when it disagrees: two rows of
   one family can differ only there, e.g. `claude-fable-5-1` beside `claude-fable-5`), falling back
   to the family token for a server too old to send it. The match rule is written once per client
-  (`ModelSelect.optionMatches`, Swift `ModelOption.matches`) and the two must stay identical.
+  (`ModelSelect.optionMatches` in TS, `vm::model_menu::model_matches` in the Rust core the native apps
+  share) and the two must stay identical.
 
 - **Engine knowledge the gateway needs goes through an adapter hook or a capability, never an
   engine-name branch.** `EngineAdapter.sessionEnv(profile, base)` is how the claude adapter pins
