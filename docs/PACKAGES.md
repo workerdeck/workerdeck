@@ -2499,9 +2499,10 @@ header, TLS, timeouts, and byte fetches, where any 2xx is the answer. A body a c
 (`SessionList.set_host`, `set_meta`, `set_profiles`) goes to it whole. Moved so far (R1): sessions
 list, get, update, sleep, delete, stop and background task, kill shell, resolve permission, agents
 list, restart, retire, update, avatar reroll, meta, profiles; then (R2) create session and agent,
-SDK sessions and profile detail; then (R3) session files, attachment upload and fetch, MCP list
+SDK sessions and profile detail; then (R3) attachment upload and fetch, MCP list
 and action, shells list, get and output, host files (roots, list, find, read, write), produced
-files, project icon, agent avatar and tool result (text and image). An upload is the one call
+files, project icon, agent avatar and tool result (text and image). The native apps serve Claude
+and Codex sessions only, so a provider session's file store (`/sessions/:id/files`) has no call here. An upload is the one call
 with a raw body: the core names the path (`?name=`), the platform sends the bytes under their
 media type (Swift `WorkerClient.upload`). A screen that decides things from an answer takes it
 whole as an `HttpAnswer { status, content_type, body }` (Swift `WorkerClient.answer`, status 0

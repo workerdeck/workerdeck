@@ -688,7 +688,7 @@ private struct CoreExtrasPreview: View {
     }
     .sheet(item: $sheet) { sheet in
       switch sheet {
-      case .info: SessionInfoSheet(chrome: nil, facts: sessionExtrasUnknown(), fileAccess: nil)
+      case .info: SessionInfoSheet(chrome: nil, facts: sessionExtrasUnknown())
       case .mcp:
         McpServersView(
           model: McpServersModel(

@@ -3,8 +3,8 @@ import WorkerDeckKit
 @preconcurrency import WorkerDeckSession
 import UIKit
 
-/// What this session *is*: engine, profile, model, mode, where it runs, which
-/// credentials it found, and the files it has handed over.
+/// What this session *is*: engine, profile, model, mode, where it runs and which
+/// credentials it found.
 ///
 /// The identity half of the old "Session details" list. Context and usage moved
 /// to their own sheets - they change every turn and are consulted mid-run, while
@@ -12,10 +12,8 @@ import UIKit
 struct SessionInfoSheet: View {
   let chrome: SessionChrome?
   let facts: SessionExtras
-  let fileAccess: SessionFileAccess?
 
   @Environment(\.dismiss) private var dismiss
-  @State private var downloader = FileDownloader()
 
   var body: some View {
     NavigationStack {
@@ -44,13 +42,9 @@ struct SessionInfoSheet: View {
             CopyableRow(label: "SDK session id", value: sdkSessionId)
           }
         }
-
-        SessionFilesSection(access: fileAccess, downloader: downloader)
       }
       .navigationTitle("Session info")
       .navigationBarTitleDisplayMode(.inline)
-      .fileDownloadPresentation(downloader)
-      .task { downloader.access = fileAccess }
       .toolbar {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") { dismiss() }

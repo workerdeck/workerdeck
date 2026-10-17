@@ -11,8 +11,6 @@ fn refused(status: u16) -> HttpAnswer {
 #[test]
 fn r3_calls_name_their_routes() {
     let get = |path: &str| HttpCall { method: "GET".into(), path: path.into(), body: None };
-    assert_eq!(session_files_call("s".into()), get("/sessions/s/files"));
-    assert_eq!(session_file_call("s".into(), "out/a b.md".into()), get("/sessions/s/files/out/a%20b.md"));
     assert_eq!(upload_attachment_call("s".into(), "a.png".into()).path, "/sessions/s/attachments?name=a.png");
     assert_eq!(attachment_call("s".into(), "at".into()), get("/sessions/s/attachments/at"));
     assert_eq!(mcp_action_call("s".into(), "x".into(), McpAction::Enable).body.as_deref(), Some(r#"{"action":"enable"}"#));
@@ -32,7 +30,6 @@ fn r3_calls_name_their_routes() {
 
 #[test]
 fn bodies_decode_or_say_none() {
-    assert_eq!(session_files(r#"{"files":[{"path":"a","bytes":2}]}"#.into()), Some(vec![SessionFile { path: "a".into(), bytes: 2 }]));
     assert_eq!(uploaded_attachment_id(r#"{"attachment":{"id":"at1","name":"a.png"}}"#.into()).as_deref(), Some("at1"));
     assert_eq!(
         host_file_matches(r#"{"base":"/r","matches":[{"path":"/r/a","relative":"a"}],"truncated":false}"#.into()).map(|m| m.len()),

@@ -311,16 +311,6 @@ pub enum ShellOutputView {
     Screen,
 }
 
-#[uniffi::export]
-pub fn session_files_call(session_id: String) -> HttpCall {
-    calls::session_files(&session_id).into()
-}
-
-#[uniffi::export]
-pub fn session_file_call(session_id: String, path: String) -> HttpCall {
-    calls::session_file(&session_id, &path).into()
-}
-
 // The platform sends the file's bytes as the body, under its own media type.
 #[uniffi::export]
 pub fn upload_attachment_call(session_id: String, name: String) -> HttpCall {
@@ -393,12 +383,6 @@ pub fn tool_result_image_call(session_id: String, seq: i64, tool_use_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct SessionFile {
-    pub path: String,
-    pub bytes: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct HostFileMatch {
     pub path: String,
     pub relative: String,
@@ -407,11 +391,6 @@ pub struct HostFileMatch {
 // Decoders for a success body (`perform` already turned a refusal into an error); None is a body of another shape.
 fn read<T: serde::de::DeserializeOwned>(body: &str) -> Option<T> {
     serde_json::from_str(body).ok()
-}
-
-#[uniffi::export]
-pub fn session_files(body: String) -> Option<Vec<SessionFile>> {
-    Some(read::<files::SessionFiles>(&body)?.files.into_iter().map(|f| SessionFile { path: f.path, bytes: f.bytes }).collect())
 }
 
 // The upload's answer: the id the message that carries the file names.

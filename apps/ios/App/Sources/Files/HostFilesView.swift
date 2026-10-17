@@ -9,9 +9,7 @@ import SwiftUI
 /// project", not "what does this gateway expose". The server's roots still decide
 /// what is *allowed* - this only decides what is offered.
 ///
-/// Deliberately not the same thing as `SessionFilesSection`, which lists one
-/// session's in-memory deliverables. This reads the operator's real disk,
-/// authorized by the auth key alone.
+/// It reads the operator's real disk, authorized by the auth key alone.
 struct HostFilesView: View {
   let scope: HostFileScope
 

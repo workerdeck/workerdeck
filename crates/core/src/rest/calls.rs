@@ -339,16 +339,6 @@ fn query(pairs: &[(&str, Option<String>)]) -> String {
     if set.is_empty() { String::new() } else { format!("?{}", set.join("&")) }
 }
 
-pub fn session_files(session_id: &str) -> HttpCall {
-    HttpCall::get(format!("{}/files", session(session_id)))
-}
-
-// The web's `sessionFileUrl`: each segment encoded, empty ones dropped.
-pub fn session_file(session_id: &str, path: &str) -> HttpCall {
-    let encoded: Vec<String> = path.split('/').filter(|s| !s.is_empty()).map(encode_component).collect();
-    HttpCall::get(format!("{}/files/{}", session(session_id), encoded.join("/")))
-}
-
 // The body is the file's raw bytes under its own media type, which the platform sends; the answer is `{attachment}`.
 pub fn upload_attachment(session_id: &str, name: &str) -> HttpCall {
     HttpCall::post(format!("{}/attachments{}", session(session_id), query(&[("name", Some(name.to_owned()))])))
@@ -555,9 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn session_file_routes_encode_ids_and_each_path_segment() {
-        assert_eq!(session_files("s 1"), call("GET", "/sessions/s%201/files", None));
-        assert_eq!(session_file("s 1", "/out//my report.md"), call("GET", "/sessions/s%201/files/out/my%20report.md", None));
+    fn session_asset_routes_encode_ids_and_names() {
         assert_eq!(upload_attachment("s", "a+b c.png"), call("POST", "/sessions/s/attachments?name=a%2Bb%20c.png", None));
         assert_eq!(attachment("s", "at/1"), call("GET", "/sessions/s/attachments/at%2F1", None));
         assert_eq!(produced_file("s", "f 1"), call("GET", "/sessions/s/produced/f%201", None));

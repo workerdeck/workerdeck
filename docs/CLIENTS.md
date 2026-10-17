@@ -1380,6 +1380,8 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   it trues the mark up once from a fresh `GET /sessions/:id` (`SessionList.mark_session`). `Session.catch_up()` is the
   bar above the composer (jump puts the seam at the top, dismiss clears the recap); rows above the seam draw at 45%,
   as on iOS. No setting gates it (iOS has a Catch-up mode toggle; Android has no settings screen).
+- **Both native apps serve Claude and Codex sessions only** (Tobias, 2026-10-17). Provider (AI SDK) sessions are a
+  web and embedding concern: their file store and `file_delivered` downloads have no UI on iOS or Android.
 - **Approvals and questions dock above the status strip** (`session/PromptView.kt`), drawn like the
   iOS terminal prompts: a strip ruled in the prompt's tint, a body that scrolls under a cap of half
   the screen (220 dp floor), and the actions pinned below it. Only the head of the queue is drawn,

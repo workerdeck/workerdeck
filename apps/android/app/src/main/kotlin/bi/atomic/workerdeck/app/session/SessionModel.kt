@@ -29,16 +29,12 @@ import bi.atomic.workerdeck.core.ffi.Session
 import bi.atomic.workerdeck.core.ffi.SessionChrome
 import bi.atomic.workerdeck.core.ffi.McpServers
 import bi.atomic.workerdeck.core.ffi.SessionExtras
-import bi.atomic.workerdeck.core.ffi.SessionFile
 import bi.atomic.workerdeck.core.ffi.SessionUsageView
 import bi.atomic.workerdeck.core.ffi.SkillSection
 import bi.atomic.workerdeck.core.ffi.getSessionCall
 import bi.atomic.workerdeck.core.ffi.listProfilesCall
 import bi.atomic.workerdeck.core.ffi.sessionExtras
 import bi.atomic.workerdeck.core.ffi.sessionExtrasUnknown
-import bi.atomic.workerdeck.core.ffi.sessionFileCall
-import bi.atomic.workerdeck.core.ffi.sessionFiles
-import bi.atomic.workerdeck.core.ffi.sessionFilesCall
 import bi.atomic.workerdeck.core.ffi.skillSections
 import bi.atomic.workerdeck.core.ffi.Selection
 import java.util.Collections
@@ -163,14 +159,6 @@ class SessionModel(
     }
 
     fun mcpServers(): McpModel = McpModel(McpServers(sessionId, extrasState.value.mcpCanManage), client)
-
-    // Only provider sessions keep a file store; a Claude session's 404 reads as no files.
-    suspend fun sessionFileList(): List<SessionFile> {
-        val answer = client.answer(sessionFilesCall(sessionId))
-        return if (answer.status.toInt() in 200..299) sessionFiles(answer.body).orEmpty() else emptyList()
-    }
-
-    suspend fun sessionFile(path: String): ByteArray? = client.bytes(sessionFileCall(sessionId, path).path)
 
     fun resize(metrics: Metrics) = worker.act { it.resize(metrics) }
 

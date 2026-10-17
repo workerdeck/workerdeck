@@ -54,7 +54,7 @@ struct CoreExtrasSheets: ViewModifier {
         if let client {
           switch sheet {
           case .info:
-            SessionInfoSheet(chrome: model.ui.chrome, facts: extras.facts, fileAccess: fileAccess(client))
+            SessionInfoSheet(chrome: model.ui.chrome, facts: extras.facts)
           case .files:
             if let cwd = extras.facts.cwd { HostFilesView(scope: HostFileScope(client: client, cwd: cwd)) }
           case .mcp:
@@ -67,19 +67,6 @@ struct CoreExtrasSheets: ViewModifier {
           }
         }
       }
-  }
-
-  private func fileAccess(_ client: WorkerClient) -> SessionFileAccess {
-    let sessionId = sessionId
-    return SessionFileAccess(
-      list: {
-        let body = try await client.perform(sessionFilesCall(sessionId: sessionId))
-        return sessionFiles(body: String(decoding: body, as: UTF8.self)) ?? []
-      },
-      download: { path in
-        let (data, _) = try await client.fetch(sessionFileCall(sessionId: sessionId, path: path))
-        return try SessionFileAccess.writeTemporary(data, named: Fmt.lastComponent(path))
-      })
   }
 
   private func use(_ skill: Skill) {

@@ -1,17 +1,6 @@
 use serde::{Deserialize, Deserializer};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct SessionFile {
-    pub path: String,
-    pub bytes: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct SessionFiles {
-    pub files: Vec<SessionFile>,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct UploadedAttachment {
     pub attachment: AttachmentId,
 }

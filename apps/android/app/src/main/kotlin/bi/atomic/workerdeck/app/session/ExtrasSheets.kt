@@ -3,8 +3,6 @@ package bi.atomic.workerdeck.app.session
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -62,7 +60,6 @@ import bi.atomic.workerdeck.core.ffi.McpServers
 import bi.atomic.workerdeck.core.ffi.McpStatus
 import bi.atomic.workerdeck.core.ffi.SessionChrome
 import bi.atomic.workerdeck.core.ffi.SessionExtras
-import bi.atomic.workerdeck.core.ffi.SessionFile
 import bi.atomic.workerdeck.core.ffi.Skill
 import bi.atomic.workerdeck.core.ffi.SkillRow
 import bi.atomic.workerdeck.core.ffi.SkillSection
@@ -216,7 +213,6 @@ private fun InfoBody(model: SessionModel, chrome: SessionChrome?) {
             }
         }
     }
-    SessionFilesSection(model)
 }
 
 @Composable
@@ -235,70 +231,6 @@ private fun CopyRow(label: String, value: String) {
             Text(value, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = colors.primary)
         }
         Text("Copy", style = MaterialTheme.typography.labelMedium, color = colors.accent)
-    }
-}
-
-@Composable
-private fun SessionFilesSection(model: SessionModel) {
-    val colors = Wd.colors
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var files by remember { mutableStateOf<List<SessionFile>>(emptyList()) }
-    var saving by remember { mutableStateOf<String?>(null) }
-    var failed by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(model) { files = model.sessionFileList() }
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        val path = saving ?: return@rememberLauncherForActivityResult
-        if (uri == null) {
-            saving = null
-            return@rememberLauncherForActivityResult
-        }
-        scope.launch {
-            val bytes = model.sessionFile(path)
-            val written = bytes != null && runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } != null }.getOrDefault(false)
-            failed = if (written) null else "Could not download $path"
-            saving = null
-        }
-    }
-    if (files.isEmpty()) return
-    SheetHeading("Files")
-    SheetSection {
-        files.forEachIndexed { index, file ->
-            if (index > 0) SheetDivider()
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = saving == null) {
-                        saving = file.path
-                        save.launch(file.path.substringAfterLast('/').ifEmpty { "file" })
-                    }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    file.path,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = colors.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                if (saving == file.path) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp, color = colors.secondary)
-                else Text(byteText(file.bytes), style = MaterialTheme.typography.bodySmall, color = colors.secondary)
-            }
-        }
-    }
-    failed?.let { Footnote(it) }
-}
-
-private fun byteText(bytes: ULong): String {
-    val value = bytes.toDouble()
-    return when {
-        value < 1024 -> "$bytes B"
-        value < 1024 * 1024 -> "%.1f KB".format(value / 1024)
-        else -> "%.1f MB".format(value / (1024 * 1024))
     }
 }
 
