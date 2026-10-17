@@ -93,8 +93,8 @@ class SessionModelTest {
         listener.onMessage(socket, SHELL_ROW)
         eventually("rows") { model.ui.value.rows.size >= 2 }
         eventually("lines for the tail") { model.ui.value.linesAt(model.ui.value.rows.size - 1) != null }
-        assertEquals(ConnectionState.LIVE, model.ui.value.connection)
-        assertEquals("Deck work", model.ui.value.title)
+        eventually("live") { model.ui.value.connection == ConnectionState.LIVE }
+        eventually("the title") { model.ui.value.title == "Deck work" }
 
         eventually("the running shell's verify") { transport.requests.isNotEmpty() }
         val (method, path, answer) = transport.requests.first()
