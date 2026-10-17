@@ -1,14 +1,13 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckCore
 
-/// One live session. Title falls back to the working directory's leaf, which is
-/// what the session is "about" before the agent has said anything.
+/// One live session.
 /// Internal rather than private so `UIPreviewHarness` can render it against
 /// canned data: every project state below (bytes in, bytes not in, a glyph this
 /// build cannot map, no project at all) needs a differently-configured gateway
 /// to reach in the real app.
 struct SessionRowView: View {
-  let session: SessionInfo
+  let row: ListRow
   /// Named only when more than one gateway is in the list (and the grouping
   /// isn't already saying it).
   var hostName: String?
@@ -49,7 +48,7 @@ struct SessionRowView: View {
         // The gutter: a fixed cell rather than a bare glyph, so the status above
         // and the engine mark below start at the same x however wide either
         // draws - and so the two text columns agree.
-        SessionStatusIcon(session: session)
+        SessionStatusIcon(row: row)
           .frame(width: 16)
           .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
         Text(title)
@@ -61,7 +60,7 @@ struct SessionRowView: View {
           // `ListPalette.badge`. Live: the tint, because unread is a call to
           // look. Settled: the neutral badge, because the same number is then
           // only a record of what you missed.
-          let live = sessionState(session) == .working || sessionState(session) == .attention
+          let live = row.state == .working || row.state == .attention
           Text("\(unseen)")
             .font(.caption2.weight(.semibold).monospacedDigit())
             .foregroundStyle(live ? Color.white : ListPalette.badgeForeground)
@@ -73,10 +72,10 @@ struct SessionRowView: View {
         // How full the window is, at a glance and across the whole list - the
         // question you cannot ask from inside a session. Absent draws nothing:
         // an empty ring would claim an empty context where there is simply no
-        // reading (see `SessionInfo.contextUsage`).
-        if let context = session.contextUsage {
+        // reading.
+        if let percentage = row.contextPercent {
           ContextRing(
-            percentage: context.percentage, diameter: 14, lineWidth: 2, showsLabel: false)
+            percentage: percentage, diameter: 14, lineWidth: 2, showsLabel: false)
             // The ring sits with the caption text, not with the title's cap
             // height - baseline alignment would hang a circle off the row.
             .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
@@ -99,9 +98,7 @@ struct SessionRowView: View {
         // design's pixels are taken literally rather than translated into
         // Dynamic Type - a glyph cell is a column, and a column that breathes
         // with the text size stops being one.
-        EngineIconView(
-          engine: session.engine?.rawValue ?? "claude", model: session.model, size: 16
-        )
+        EngineIconView(mark: row.mark, tinted: row.markTinted, size: 16)
         .frame(width: 16)
         .padding(.trailing, 8)
         // The project glyph is NOT here. It rides *inside* the run below,
@@ -122,13 +119,11 @@ struct SessionRowView: View {
         // ellipsis ate, which is backwards: `4m` is two characters answering
         // "is this still moving", where a truncated project name still says
         // which repo. Its own atom, and the run yields to it.
-        if let activity = session.lastActivityAt {
-          Text(" · " + Fmt.ago(epochMs: activity))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .layoutPriority(1)
-        }
+        Text(" · " + Fmt.ago(epochMs: row.lastActivityAt))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .layoutPriority(1)
         Spacer(minLength: 6)
         // Same trick for the overflow control the card overlays: reserved here,
         // never measured there, so the identity run truncates before it reaches
@@ -137,18 +132,15 @@ struct SessionRowView: View {
       }
     }
     .padding(.vertical, Self.verticalPadding)
-    .opacity(session.engineAsleep == true ? 0.55 : 1)
+    .opacity(row.asleep ? 0.55 : 1)
   }
 
-  private var title: String {
-    if let title = session.title, !title.isEmpty { return title }
-    return Fmt.lastComponent(session.cwd)
-  }
+  private var title: String { row.title }
 
   /// The project slot: the declared name, or - under a project group - where in
   /// the project this session sits. Nil when there is nothing left to say.
   private var project: String? {
-    showsProject ? projectLabel(session) : projectSubpath(session)
+    showsProject ? row.project : row.projectSubpath
   }
 
   /// Line two, joined the way the dashboard joins it: model, project, gateway,
@@ -159,16 +151,11 @@ struct SessionRowView: View {
   /// vendor's colour and the rest does not - and one `Text` built from two is
   /// still one truncating run, which a stack of two would not be.
   private var detailsText: Text {
-    // The shared rule, ported into the kit: a model spelled `claude-opus-5` here
-    // and `Opus 5` in the sidebar is the same drift the shared list view model
-    // exists to prevent.
     var parts: [Text] = []
-    // The model as a person says it - `claude-opus-5[1m]` is a wire value, and
-    // a card line has no room for a context-window suffix.
-    if let model = friendlyModel(session.model) {
-      parts.append(Text(model).foregroundStyle(modelTint))
+    if let model = row.modelLabel {
+      parts.append(Text(model).foregroundStyle(row.modelTint))
     }
-    if let status = statusLine(session.statusLabel) {
+    if let status = row.status {
       parts.append(Text(status).foregroundStyle(.secondary))
     }
     if let project {
@@ -178,9 +165,8 @@ struct SessionRowView: View {
     }
     for extra in [
       hostName,
-      session.profile.map { "@\($0)" },
-      (session.costUsd ?? session.totalCostUsd ?? 0) > 0
-        ? TermFmt.cost(session.costUsd ?? session.totalCostUsd) : nil,
+      row.profile.map { "@\($0)" },
+      row.costText,
     ].compactMap({ $0 }) {
       parts.append(Text(extra).foregroundStyle(.secondary))
     }
@@ -207,26 +193,13 @@ struct SessionRowView: View {
   /// name is already right there and a box that becomes a picture a beat later
   /// is more movement than the picture is worth.
   private var projectIconText: Text? {
-    guard showsProject, let icon = session.project?.icon else { return nil }
-    switch icon {
-    case .glyph(let name):
+    guard showsProject else { return nil }
+    if let name = row.projectGlyph {
       return Text(Image(systemName: projectSymbol(forLucideName: name)))
         .foregroundStyle(.secondary) + Text("\u{2005}")
-    case .image:
-      // Already scaled to the 16pt box at fetch time: a `Text` has no `.frame`
-      // to constrain a picture with. See `ProjectIconLoader`.
-      guard let projectImage else { return nil }
-      return Text(Image(uiImage: projectImage)) + Text("\u{2005}")
     }
-  }
-
-  /// The model name's colour: the vendor's, but only where the vendor's own
-  /// guidance allows it past the mark - see `EngineMark.tintsName`, and the note
-  /// there on what a full-contrast name does to the title above it.
-  private var modelTint: Color {
-    guard let mark = engineMark(engine: session.engine?.rawValue ?? "claude", model: session.model),
-      mark.tintsName
-    else { return .secondary }
-    return VendorPalette.color(mark)
+    // Already scaled to the 16pt box at fetch time: a `Text` has no `.frame` to constrain a picture with.
+    guard row.projectIconHash != nil, let projectImage else { return nil }
+    return Text(Image(uiImage: projectImage)) + Text("\u{2005}")
   }
 }

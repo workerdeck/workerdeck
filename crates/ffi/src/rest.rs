@@ -424,3 +424,142 @@ pub fn uploaded_attachment_id(body: String) -> Option<String> {
 pub fn host_file_matches(body: String) -> Option<Vec<HostFileMatch>> {
     Some(read::<files::HostMatches>(&body)?.matches.into_iter().map(|m| HostFileMatch { path: m.path, relative: m.relative }).collect())
 }
+
+// What a create answer leads to: the session to open (none for an agent that has not started one) and its directory.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Created {
+    pub session_id: Option<String>,
+    pub cwd: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct SessionBody {
+    session: wd_native::rest::SessionInfo,
+}
+
+#[derive(serde::Deserialize)]
+struct AgentBody {
+    agent: AgentRecord,
+    #[serde(default)]
+    session: Option<wd_native::rest::SessionInfo>,
+}
+
+#[derive(serde::Deserialize)]
+struct AgentRecord {
+    #[serde(default)]
+    config: Option<AgentRecordConfig>,
+}
+
+#[derive(serde::Deserialize)]
+struct AgentRecordConfig {
+    #[serde(default)]
+    cwd: Option<String>,
+}
+
+// The answer to `CreateForm.call()` for a session.
+#[uniffi::export]
+pub fn created_session(body: String) -> Option<Created> {
+    let session = read::<SessionBody>(&body)?.session;
+    Some(Created { session_id: Some(session.id), cwd: Some(session.cwd) })
+}
+
+// The answer to `CreateForm.call()` for an agent: its first session when it started one.
+#[uniffi::export]
+pub fn created_agent(body: String) -> Option<Created> {
+    let answer = read::<AgentBody>(&body)?;
+    let cwd = answer.agent.config.and_then(|c| c.cwd).or_else(|| answer.session.as_ref().map(|s| s.cwd.clone()));
+    Some(Created { session_id: answer.session.map(|s| s.id), cwd })
+}
+
+// A session's wire status from a `GET /v1/sessions/:id` body.
+#[uniffi::export]
+pub fn session_status(body: String) -> Option<String> {
+    let status = read::<SessionBody>(&body)?.session.status;
+    serde_json::to_value(status).ok()?.as_str().map(str::to_owned)
+}
+
+// A stored SDK session a new session can resume. `ago` is drawn against the clock passed to `sdk_sessions`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct SdkSession {
+    pub session_id: String,
+    pub summary: String,
+    pub last_modified: f64,
+    pub custom_title: Option<String>,
+    pub git_branch: Option<String>,
+    pub cwd: Option<String>,
+    pub cwd_name: Option<String>,
+    pub ago: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SdkSessionsBody {
+    sdk_sessions: Vec<SdkSessionWire>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SdkSessionWire {
+    session_id: String,
+    summary: String,
+    last_modified: f64,
+    #[serde(default)]
+    custom_title: Option<String>,
+    #[serde(default)]
+    git_branch: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+}
+
+#[uniffi::export]
+pub fn sdk_sessions(body: String, now_ms: f64) -> Option<Vec<SdkSession>> {
+    Some(
+        read::<SdkSessionsBody>(&body)?
+            .sdk_sessions
+            .into_iter()
+            .map(|s| SdkSession {
+                cwd_name: s.cwd.as_deref().map(|cwd| cwd.rsplit('/').find(|p| !p.is_empty()).unwrap_or(cwd).to_owned()),
+                ago: wd_native::vm::fmt::ago(s.last_modified, now_ms),
+                session_id: s.session_id,
+                summary: s.summary,
+                last_modified: s.last_modified,
+                custom_title: s.custom_title,
+                git_branch: s.git_branch,
+                cwd: s.cwd,
+            })
+            .collect(),
+    )
+}
+
+#[cfg(test)]
+mod answer_tests {
+    use super::*;
+
+    const SESSION: &str = r#"{"id":"s1","status":"awaiting_approval","cwd":"/w/app","createdAt":1,"lastSeq":0,"pendingPermissionCount":1}"#;
+
+    #[test]
+    fn create_answers_name_the_session_and_its_directory() {
+        assert_eq!(
+            created_session(format!(r#"{{"session":{SESSION}}}"#)),
+            Some(Created { session_id: Some("s1".into()), cwd: Some("/w/app".into()) })
+        );
+        assert_eq!(
+            created_agent(r#"{"agent":{"id":"a","name":"Ada","config":{"cwd":"/w/agent"}}}"#.into()),
+            Some(Created { session_id: None, cwd: Some("/w/agent".into()) })
+        );
+        assert_eq!(
+            created_agent(format!(r#"{{"agent":{{"id":"a","name":"Ada"}},"session":{SESSION}}}"#)),
+            Some(Created { session_id: Some("s1".into()), cwd: Some("/w/app".into()) })
+        );
+        assert_eq!(created_session("<html>".into()), None);
+        assert_eq!(session_status(format!(r#"{{"session":{SESSION}}}"#)).as_deref(), Some("awaiting_approval"));
+    }
+
+    #[test]
+    fn sdk_sessions_read_their_rows_with_an_age() {
+        let body = r#"{"sdkSessions":[{"sessionId":"x","summary":"Fix it","lastModified":0,"cwd":"/w/app/","gitBranch":"main"}]}"#;
+        let rows = sdk_sessions(body.into(), 7_200_000.0).unwrap();
+        assert_eq!((rows[0].cwd_name.as_deref(), rows[0].ago.as_str(), rows[0].git_branch.as_deref()), (Some("app"), "2h", Some("main")));
+        assert_eq!(sdk_sessions("{}".into(), 0.0), None);
+    }
+}

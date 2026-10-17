@@ -36,8 +36,7 @@ final class SessionListModel {
   /// probe says the reading is stale, the rows say what was true last time.
   struct HostSnapshot {
     var probe: Probe = .pending
-    var sessions: [SessionInfo] = []
-    var sdkSessions: [SdkSessionSummary] = []
+    var sdkSessions: [SdkSession] = []
     var hasLoadedSdkSessions = false
   }
 
@@ -123,7 +122,7 @@ final class SessionListModel {
     snapshots = snapshots.filter { id, _ in hosts.contains { $0.id == id } }
     contexts = contexts.filter { id, _ in hosts.contains { $0.id == id } }
 
-    await withTaskGroup(of: (UUID, Result<(sessions: [SessionInfo], body: String), any Error>).self) { group in
+    await withTaskGroup(of: (UUID, Result<String, any Error>).self) { group in
       for host in hosts {
         guard let client = context(for: host.id)?.client else {
           snapshots[host.id, default: HostSnapshot()].probe = .failed("Invalid server address")
@@ -131,7 +130,7 @@ final class SessionListModel {
         }
         group.addTask {
           do {
-            return (host.id, .success(try await client.listSessionsBody()))
+            return (host.id, .success(String(decoding: try await client.perform(listSessionsCall()), as: UTF8.self)))
           } catch {
             return (host.id, .failure(error))
           }
@@ -139,13 +138,15 @@ final class SessionListModel {
       }
       for await (id, outcome) in group {
         let host = hosts.first { $0.id == id }
-        switch outcome {
-        case .success(let reading):
+        let read = outcome.flatMap { body in
+          Result {
+            try core.setHost(
+              hostId: id.uuidString, hostName: host?.displayName ?? "", local: host?.isLoopback ?? false, body: body)
+          }
+        }
+        switch read {
+        case .success:
           snapshots[id, default: HostSnapshot()].probe = .connected
-          snapshots[id, default: HostSnapshot()].sessions = reading.sessions
-          _ = try? core.setHost(
-            hostId: id.uuidString, hostName: host?.displayName ?? "", local: host?.isLoopback ?? false,
-            body: reading.body)
         case .failure(let error):
           snapshots[id, default: HostSnapshot()].probe = .failed(Self.describe(error))
           // An unreachable gateway's rows leave the list (its marks stay); the probe says why.
@@ -155,7 +156,7 @@ final class SessionListModel {
         }
       }
     }
-    reindex()
+    revision &+= 1
     hasLoaded = true
     ensureProjectIcons()
     ensureAgentAvatars()
@@ -180,18 +181,13 @@ final class SessionListModel {
     }
   }
 
-  /// Ask for any project icon this list needs and does not have.
-  ///
-  /// Driven off `snapshots` rather than `rows` for the plain reason that these
-  /// are keyed by the gateway's `UUID`, which is what `context(for:)` wants -
-  /// `SessionRow.hostId` is that id stringified for the shared view model.
-  /// Cheap on the common path: a walk that finds every hash already known.
+  // Any project picture a drawn row needs and the loader does not have; cheap when every hash is already known.
   private func ensureProjectIcons() {
     var requests: Set<ProjectIconLoader.Request> = []
-    for (hostId, snapshot) in snapshots {
-      for info in snapshot.sessions {
-        guard case .image(_, let hash) = info.project?.icon else { continue }
-        requests.insert(.init(hostId: hostId, sessionId: info.id, hash: hash))
+    for group in core.groups(nowMs: Date().timeIntervalSince1970 * 1000) {
+      for row in group.rows {
+        guard let hash = row.projectIconHash, let hostId = UUID(uuidString: row.hostId) else { continue }
+        requests.insert(.init(hostId: hostId, sessionId: row.sessionId, hash: hash))
       }
     }
     projectIcons.ensure(requests) { [weak self] id in self?.context(for: id)?.client }
@@ -200,12 +196,16 @@ final class SessionListModel {
   /// The Agent SDK's on-disk sessions, per gateway, for the Resume tab.
   func refreshSdkSessions() async {
     let hosts = hostStore.hosts
-    await withTaskGroup(of: (UUID, Result<[SdkSessionSummary], any Error>).self) { group in
+    await withTaskGroup(of: (UUID, Result<[SdkSession], any Error>).self) { group in
       for host in hosts {
         guard let client = context(for: host.id)?.client else { continue }
         group.addTask {
           do {
-            return (host.id, .success(try await client.listSdkSessions(listSdkSessionsCall(limit: 50))))
+            let body = String(decoding: try await client.perform(listSdkSessionsCall(limit: 50)), as: UTF8.self)
+            guard let stored = sdkSessions(body: body, nowMs: Date().timeIntervalSince1970 * 1000) else {
+              throw WorkerClientError(message: "The gateway sent stored sessions this app cannot read")
+            }
+            return (host.id, .success(stored))
           } catch {
             return (host.id, .failure(error))
           }
@@ -242,24 +242,17 @@ final class SessionListModel {
 
   // MARK: - Derived list (the core)
 
-  // Every connected gateway's rollups by `host:session`, the core's row key.
-  private var infos: [String: SessionInfo] = [:]
+  // The rows the last `sections` call drew, by the core's `host:session` key.
+  @ObservationIgnored private var drawn: [String: ListRow] = [:]
 
-  private func reindex() {
-    var out: [String: SessionInfo] = [:]
-    for (hostId, snapshot) in snapshots where snapshot.probe == .connected {
-      for info in snapshot.sessions { out["\(hostId.uuidString):\(info.id)"] = info }
-    }
-    infos = out
-    revision &+= 1
-  }
-
-  func info(hostId: String, sessionId: String) -> SessionInfo? { infos["\(hostId):\(sessionId)"] }
+  func row(hostId: String, sessionId: String) -> ListRow? { drawn["\(hostId):\(sessionId)"] }
 
   // Reads `unread.revision` too: a mark the session screen wrote must clear this list's badge.
   func sections(now: Double) -> [ListSection] {
     _ = (revision, unread.revision)
-    return core.sections(now: now) { infos[$0] }
+    let sections = core.sections(now: now)
+    drawn = Dictionary(sections.flatMap(\.items).map { ($0.id, $0.row) }) { first, _ in first }
+    return sections
   }
 
   // When the soonest lingering Member leaves Auto, as of the last `sections` call.
@@ -355,9 +348,9 @@ final class SessionListModel {
   func close(_ item: ListItem) async {
     guard let hostId = item.hostUUID, let client = context(for: hostId)?.client else { return }
     do {
-      try await client.perform(deleteSessionCall(id: item.info.id))
+      try await client.perform(deleteSessionCall(id: item.sessionId))
       // Its mark is noise now, and would count the whole history as read if the same id ever reappeared.
-      unread.forget(host: hostId, sessionId: item.info.id)
+      unread.forget(host: hostId, sessionId: item.sessionId)
       await refresh()
     } catch {
       snapshots[hostId, default: HostSnapshot()].probe = .failed(Self.describe(error))
@@ -369,20 +362,20 @@ final class SessionListModel {
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
     await act(on: item) {
       try await $0.perform(
-        updateSessionCall(id: item.info.id, patch: SessionPatch(title: trimmed.isEmpty ? .clear : .set(value: trimmed))))
+        updateSessionCall(id: item.sessionId, patch: SessionPatch(title: trimmed.isEmpty ? .clear : .set(value: trimmed))))
     }
   }
 
   func stopTask(_ item: ListItem, toolUseId: String) async {
-    await act(on: item) { try await $0.perform(stopTaskCall(sessionId: item.info.id, toolUseId: toolUseId)) }
+    await act(on: item) { try await $0.perform(stopTaskCall(sessionId: item.sessionId, toolUseId: toolUseId)) }
   }
 
   func sleep(_ item: ListItem) async {
-    await act(on: item) { try await $0.perform(sleepSessionCall(id: item.info.id)) }
+    await act(on: item) { try await $0.perform(sleepSessionCall(id: item.sessionId)) }
   }
 
   func killShell(_ item: ListItem, shellId: String) async {
-    await act(on: item) { try await $0.perform(killShellCall(sessionId: item.info.id, shellId: shellId)) }
+    await act(on: item) { try await $0.perform(killShellCall(sessionId: item.sessionId, shellId: shellId)) }
   }
 
   private func act(on item: ListItem, _ body: (WorkerClient) async throws -> Void) async {
@@ -401,56 +394,54 @@ final class SessionListModel {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     await agentAct(on: item, "Could not set the status") {
       let label: StatusEdit = trimmed.isEmpty ? .clear : .set(text: trimmed, emoji: nil)
-      try await $0.perform(updateSessionCall(id: item.info.id, patch: SessionPatch(statusLabel: label)))
+      try await $0.perform(updateSessionCall(id: item.sessionId, patch: SessionPatch(statusLabel: label)))
     }
   }
 
   func renameAgent(_ item: ListItem, to name: String) async {
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let agent = item.info.agent, !trimmed.isEmpty, trimmed != agent.name else { return }
+    guard let agentId = item.row.agentId, !trimmed.isEmpty, trimmed != item.row.agent else { return }
     await agentAct(on: item, "Rename failed") {
-      try await $0.perform(updateAgentCall(id: agent.id, patch: AgentPatch(name: trimmed)))
+      try await $0.perform(updateAgentCall(id: agentId, patch: AgentPatch(name: trimmed)))
     }
   }
 
   func changeAvatar(_ item: ListItem) async {
-    guard let agent = item.info.agent else { return }
+    guard let agentId = item.row.agentId else { return }
     await agentAct(on: item, "Could not change the avatar") {
-      try await $0.perform(rerollAvatarCall(id: agent.id))
+      try await $0.perform(rerollAvatarCall(id: agentId))
     }
   }
 
   func makeAgent(_ item: ListItem) async {
     await agentAct(on: item, "Could not make an agent") {
-      try await $0.perform(createAgentCall(request: NewAgent(adopt: item.info.id)))
+      try await $0.perform(createAgentCall(request: NewAgent(adopt: item.sessionId)))
     }
   }
 
   // The lead's owner when it differs from the row's; the gateway refuses a cross-owner join without `crossOwner`.
   func crossedOwner(_ item: ListItem, into lead: TeamLead) -> String? {
-    guard let mine = item.info.owner,
-      let theirs = info(hostId: item.row.hostId, sessionId: lead.sessionId)?.owner, mine != theirs
-    else { return nil }
+    guard let mine = item.row.owner, let theirs = lead.owner, mine != theirs else { return nil }
     return theirs
   }
 
   func join(_ item: ListItem, lead: TeamLead, crossOwner: Bool = false) async {
     let crossing = crossOwner ? true : nil
     await agentAct(on: item, "Could not join the team") { client in
-      if let agent = item.info.agent {
+      if let agentId = item.row.agentId {
         try await client.perform(
-          updateAgentCall(id: agent.id, patch: AgentPatch(lead: .set(value: lead.agentId), crossOwner: crossing)))
+          updateAgentCall(id: agentId, patch: AgentPatch(lead: .set(value: lead.agentId), crossOwner: crossing)))
       } else {
         try await client.perform(
-          createAgentCall(request: NewAgent(lead: lead.agentId, adopt: item.info.id, crossOwner: crossing)))
+          createAgentCall(request: NewAgent(lead: lead.agentId, adopt: item.sessionId, crossOwner: crossing)))
       }
     }
   }
 
   func leave(_ item: ListItem) async {
-    guard let agent = item.info.agent else { return }
+    guard let agentId = item.row.agentId else { return }
     await agentAct(on: item, "Could not leave the team") {
-      try await $0.perform(updateAgentCall(id: agent.id, patch: AgentPatch(lead: .clear)))
+      try await $0.perform(updateAgentCall(id: agentId, patch: AgentPatch(lead: .clear)))
     }
   }
 
@@ -464,25 +455,23 @@ final class SessionListModel {
   }
 
   func setSharing(_ item: ListItem, _ sharing: AgentSharing) async {
-    guard let agent = item.info.agent else { return }
+    guard let agentId = item.row.agentId else { return }
     await agentAct(on: item, "Could not change sharing") {
-      try await $0.perform(updateAgentCall(id: agent.id, patch: AgentPatch(sharing: sharing == .shared ? .shared : .private)))
+      try await $0.perform(updateAgentCall(id: agentId, patch: AgentPatch(sharing: sharing == .shared ? .shared : .private)))
     }
   }
 
-  func restart(_ item: ListItem) async -> SessionInfo? {
-    guard let agent = item.info.agent else { return nil }
-    var started: SessionInfo?
+  func restart(_ item: ListItem) async {
+    guard let agentId = item.row.agentId else { return }
     await agentAct(on: item, "Could not start a new conversation") {
-      started = try await $0.restartAgent(id: agent.id)
+      try await $0.perform(restartAgentCall(id: agentId, prompt: nil))
     }
-    return started
   }
 
   func retire(_ item: ListItem) async {
-    guard let agent = item.info.agent else { return }
+    guard let agentId = item.row.agentId else { return }
     await agentAct(on: item, "Could not retire the agent") {
-      try await $0.perform(retireAgentCall(id: agent.id))
+      try await $0.perform(retireAgentCall(id: agentId))
     }
   }
 

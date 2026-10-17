@@ -103,46 +103,6 @@ public struct WorkerClient: Sendable {
     return (data, http)
   }
 
-  // MARK: - Sessions
-
-  // `POST /sessions` as the core's create form built it; the returned id is what every session route takes.
-  public func createSession(_ call: HttpCall) async throws -> SessionInfo {
-    try decode(SessionResponse.self, from: try await perform(call)).session
-  }
-
-  public func listSessions() async throws -> [SessionInfo] {
-    try await listSessionsBody().sessions
-  }
-
-  // The same list plus the body as received, for the core's list view model.
-  public func listSessionsBody() async throws -> (sessions: [SessionInfo], body: String) {
-    let data = try await perform(listSessionsCall())
-    return (try decode(ListSessionsResponse.self, from: data).sessions, String(decoding: data, as: UTF8.self))
-  }
-
-  public func getSession(id: String) async throws -> SessionInfo {
-    try decode(SessionResponse.self, from: try await perform(getSessionCall(id: id))).session
-  }
-
-  // MARK: - SDK sessions
-
-  // An engine's on-disk sessions, for resume across gateway restarts.
-  public func listSdkSessions(_ call: HttpCall) async throws -> [SdkSessionSummary] {
-    try decode(ListSdkSessionsResponse.self, from: try await perform(call)).sdkSessions
-  }
-
-  // MARK: - Agents
-
-  // `POST /agents` as the core's create form built it.
-  public func createAgent(_ call: HttpCall) async throws -> AgentResponse {
-    try decode(AgentResponse.self, from: try await perform(call))
-  }
-
-  // A new conversation for the agent: the session it started, when the gateway says.
-  public func restartAgent(id: String, prompt: String? = nil) async throws -> SessionInfo? {
-    try decode(AgentResponse.self, from: try await perform(restartAgentCall(id: id, prompt: prompt))).session
-  }
-
   // Raw bytes at a path under the REST base, as the core names one (a produced file, a host `/fs/read`).
   public func bytes(path: String) async throws -> Data {
     try await raw(path).0
@@ -157,12 +117,6 @@ public struct WorkerClient: Sendable {
 
   private func raw(_ path: String) async throws -> (Data, HTTPURLResponse) {
     try await fetch(HttpCall(method: "GET", path: path, body: nil))
-  }
-
-  private func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-    // Never a key-conversion strategy: the protocol types own their key spelling
-    // (camelCase for workerdeck's own shapes, snake_case for API mirrors).
-    try JSONDecoder().decode(type, from: data)
   }
 
   private func makeURL(_ path: String) throws -> URL {

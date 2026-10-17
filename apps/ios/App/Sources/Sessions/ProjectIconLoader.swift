@@ -6,7 +6,7 @@ import WorkerDeckKit
 /// Project icon bytes for the sessions list, keyed by the icon's own **content
 /// hash**.
 ///
-/// `SessionInfo.project` carries an *address* - media type, byte count, and a
+/// A session's project carries an *address* - media type, byte count, and a
 /// sha256 of the bytes - never the picture. The bytes come from
 /// `GET /sessions/:id/project/icon`, which is session-scoped so the fetch rides
 /// the same authorization gate as every other session route.

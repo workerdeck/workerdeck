@@ -5,11 +5,11 @@ import WorkerDeckKit
 // A lead's tray in Auto: the core already cut it to the pictures drawn and a `+n` overflow.
 struct TeamTray {
   let row: ListRow
-  let members: [(member: TrayMember, info: SessionInfo)]
-  let frames: (TrayMember, SessionInfo) -> AgentAvatarFrames?
+  let frames: (TrayMember) -> AgentAvatarFrames?
   let select: (TrayMember) -> Void
   let toggle: () -> Void
 
+  var members: [TrayMember] { row.tray }
   var expanded: Bool { row.teamExpanded }
   var overflow: Int { Int(row.trayOverflow) }
 }
@@ -24,16 +24,14 @@ struct AgentCardView<MenuContent: View>: View {
   let item: ListItem
   let frames: AgentAvatarFrames?
   var member = false
-  var badgeState: SessionState?
   var teamUnseen = 0
   var tray: TeamTray?
   let onOpen: () -> Void
   @ViewBuilder var menu: () -> MenuContent
 
-  private var info: SessionInfo { item.info }
-  private var agent: AgentRef? { info.agent }
-  private var status: String? { statusLine(info.statusLabel) }
-  private var time: String? { info.lastActivityAt.map { Fmt.ago(epochMs: $0) } }
+  private var row: ListRow { item.row }
+  private var status: String? { row.status }
+  private var time: String? { Fmt.ago(epochMs: row.lastActivityAt) }
 
   var body: some View {
     Button(action: onOpen) {
@@ -41,7 +39,7 @@ struct AgentCardView<MenuContent: View>: View {
         if member { memberRow } else { card }
       }
       .foregroundStyle(.primary)
-      .opacity(info.engineAsleep == true ? 0.6 : 1)
+      .opacity(row.asleep ? 0.6 : 1)
       .contentShape(Rectangle())
     }
     .overlay(alignment: member ? .trailing : .bottomTrailing) { controls }
@@ -49,12 +47,12 @@ struct AgentCardView<MenuContent: View>: View {
 
   private var card: some View {
     HStack(alignment: .center, spacing: 10) {
-      AgentAvatarView(info: info, frames: frames, size: 44, state: badgeState)
+      AgentAvatarView(row: row, frames: frames, size: 44)
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 6) {
           name
-          if agent?.isLead == true { LeadChip() }
-          if agent?.shared == true {
+          if row.lead { LeadChip() }
+          if row.shared {
             Image(systemName: "globe")
               .font(.caption2)
               .foregroundStyle(.secondary)
@@ -75,8 +73,8 @@ struct AgentCardView<MenuContent: View>: View {
               .background(Capsule().fill(.tint))
               .accessibilityLabel("\(teamUnseen) new messages in the team")
           }
-          if let context = info.contextUsage {
-            ContextRing(percentage: context.percentage, diameter: 14, lineWidth: 2, showsLabel: false)
+          if let percentage = row.contextPercent {
+            ContextRing(percentage: percentage, diameter: 14, lineWidth: 2, showsLabel: false)
           }
         }
         HStack(spacing: 0) {
@@ -91,7 +89,7 @@ struct AgentCardView<MenuContent: View>: View {
 
   private var memberRow: some View {
     HStack(spacing: 8) {
-      AgentAvatarView(info: info, frames: frames, size: 32)
+      AgentAvatarView(row: row, frames: frames, size: 32)
       name
       if let status {
         Text(status).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
@@ -106,7 +104,7 @@ struct AgentCardView<MenuContent: View>: View {
   }
 
   private var name: some View {
-    Text(agent?.name ?? sessionLabel(info))
+    Text(row.agent ?? row.title)
       .font(member ? .subheadline.weight(.medium) : .body.weight(.medium))
       .lineLimit(1)
       .layoutPriority(1)
@@ -114,8 +112,8 @@ struct AgentCardView<MenuContent: View>: View {
 
   private var detailText: Text {
     var parts: [Text] = []
-    if let model = friendlyModel(info.model) {
-      parts.append(Text(model).foregroundStyle(modelTint(info)))
+    if let model = row.modelLabel {
+      parts.append(Text(model).foregroundStyle(row.modelTint))
     }
     if let status { parts.append(Text(status).foregroundStyle(.secondary)) }
     return parts.enumerated().reduce(Text("")) { joined, part in
@@ -148,12 +146,12 @@ struct AgentCardView<MenuContent: View>: View {
 
   private func trayButton(_ tray: TeamTray) -> some View {
     HStack(spacing: 4) {
-      ForEach(tray.members, id: \.member.key) { entry in
-        Button { tray.select(entry.member) } label: {
-          AgentAvatarView(info: entry.info, frames: tray.frames(entry.member, entry.info), size: 18, badge: false)
+      ForEach(tray.members, id: \.key) { member in
+        Button { tray.select(member) } label: {
+          TrayAvatarView(member: member, frames: tray.frames(member))
         }
         .buttonStyle(.borderless)
-        .accessibilityLabel("Open \(entry.member.title)")
+        .accessibilityLabel("Open \(member.title)")
       }
       Button(action: tray.toggle) {
         trayGlyph(tray).padding(.vertical, 4).contentShape(Rectangle())
@@ -167,8 +165,8 @@ struct AgentCardView<MenuContent: View>: View {
 
   private func trayLabel(_ tray: TeamTray) -> some View {
     HStack(spacing: 4) {
-      ForEach(tray.members, id: \.member.key) { entry in
-        AgentAvatarView(info: entry.info, frames: tray.frames(entry.member, entry.info), size: 18, badge: false)
+      ForEach(tray.members, id: \.key) { member in
+        TrayAvatarView(member: member, frames: tray.frames(member))
       }
       trayGlyph(tray)
     }
@@ -215,13 +213,6 @@ struct TeamTreeLine: View {
       Spacer(minLength: 0)
     }
   }
-}
-
-func modelTint(_ info: SessionInfo) -> Color {
-  guard let mark = engineMark(engine: info.engine?.rawValue ?? "claude", model: info.model),
-    mark.tintsName
-  else { return .secondary }
-  return VendorPalette.color(mark)
 }
 
 enum ListAttention {

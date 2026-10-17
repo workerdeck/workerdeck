@@ -39,7 +39,6 @@ enum UIPreview: String {
 private final class PreviewList {
   let hostId = UUID().uuidString
   let list = SessionList(configJson: nil, marksJson: nil)
-  private var infos: [String: SessionInfo] = [:]
 
   init(_ sessions: [[String: Any]], unseen: [String: Int] = [:], config: String? = nil) {
     if let config { list.setConfigJson(json: config) }
@@ -49,16 +48,12 @@ private final class PreviewList {
       _ = list.mark(hostId: hostId, sessionId: id, itemCount: nil, activity: 0, prose: 0, turns: 0, nowMs: 0)
       fed[index]["proseCount"] = count
     }
-    let body = ListFixture.body(fed)
-    _ = try? list.setHost(hostId: hostId, hostName: "mini", local: true, body: body)
-    for info in ListFixture.infos(body) { infos["\(hostId):\(info.id)"] = info }
+    _ = try? list.setHost(hostId: hostId, hostName: "mini", local: true, body: ListFixture.body(fed))
   }
 
   func sections() -> [ListSection] {
-    list.sections(now: Date().timeIntervalSince1970 * 1000) { infos[$0] }
+    list.sections(now: Date().timeIntervalSince1970 * 1000)
   }
-
-  func info(_ member: TrayMember) -> SessionInfo? { infos[member.key] }
 }
 
 /// The grid, fed a stream with no socket behind it.
@@ -154,14 +149,13 @@ private struct TeamsPreview: View {
 
   @ViewBuilder
   private func card(_ item: ListItem, index: Int) -> some View {
-    if item.info.agent != nil {
+    if item.row.agent != nil {
       AgentCardView(
         item: item, frames: index == 0 ? Self.picture(0) : Self.picture(4),
         tray: item.row.tray.isEmpty && !item.row.teamExpanded
           ? nil
           : TeamTray(
-            row: item.row, members: item.row.tray.compactMap { m in model.info(m).map { (m, $0) } },
-            frames: { _, _ in Self.picture(1) }, select: { _ in },
+            row: item.row, frames: { _ in Self.picture(1) }, select: { _ in },
             toggle: {
               model.list.toggleTeam(hostId: item.row.hostId, sessionId: item.row.sessionId)
               revision += 1
@@ -279,7 +273,7 @@ private struct SessionsPreview: View {
         let _ = revision
         ForEach(model.sections().flatMap(\.items)) { item in
           SessionCardView(
-            item: item, onOpen: { item.hostUUID.map { path.append(.session(hostId: $0, sessionId: item.info.id)) } },
+            item: item, onOpen: { item.hostUUID.map { path.append(.session(hostId: $0, sessionId: item.sessionId)) } },
             hostName: item.row.hostName,
             // The app's own actions, spelled out rather than left empty: the
             // menu is part of what this harness exists to check.
@@ -326,24 +320,30 @@ private struct SessionsPreview: View {
 /// differently-configured gateway to produce for real, which is exactly what
 /// this harness is for.
 private struct ProjectsPreview: View {
+  @MainActor
   private static func session(
-    id: String, title: String, cwd: String, project: ProjectInfo? = nil,
-    status: SessionStatus = .idle, pending: Int = 0, context: Double? = nil,
+    id: String, title: String, cwd: String, project: [String: Any]? = nil,
+    status: String = "idle", pending: Int = 0, context: Double? = nil,
     cost: Double? = nil
-  ) -> SessionInfo {
-    SessionInfo(
-      id: id, status: status, cwd: cwd, engine: .claude, model: "claude-opus-5",
-      createdAt: 0, lastSeq: 0, pendingPermissionCount: pending, title: title,
-      totalCostUsd: cost,
+  ) -> ListRow? {
+    var extra: [String: Any] = [
+      "engine": "claude", "model": "claude-opus-5", "pendingPermissionCount": pending, "title": title, "cwd": cwd,
       // A plausible age: `lastActivityAt` is epoch **ms**, and a fixture that
       // reads "20684d" is a fixture nobody trusts the rest of.
-      lastActivityAt: Date().timeIntervalSince1970 * 1000 - 15 * 60 * 1000,
-      project: project,
-      // The percentage is the only field the ring reads; the tokens are what a
-      // long-press would say, so they are plausible rather than derived.
-      contextUsage: context.map {
-        ContextReading(totalTokens: Int($0 * 2_000), maxTokens: 200_000, percentage: $0)
-      })
+      "lastActivityAt": Date().timeIntervalSince1970 * 1000 - 15 * 60 * 1000,
+    ]
+    if let project { extra["project"] = project }
+    if let cost { extra["totalCostUsd"] = cost }
+    if let context {
+      extra["contextUsage"] = ["totalTokens": Int(context * 2_000), "maxTokens": 200_000, "percentage": context]
+    }
+    return PreviewList([ListFixture.session(id, status: status, extra)]).sections().first?.items.first?.row
+  }
+
+  private static func project(_ name: String, root: String, icon: [String: Any]? = nil) -> [String: Any] {
+    var out: [String: Any] = ["name": name, "root": root]
+    if let icon { out["icon"] = icon }
+    return out
   }
 
   /// A coloured square, so "the bytes arrived" is unmistakable against "they
@@ -367,14 +367,14 @@ private struct ProjectsPreview: View {
   private struct Case: Identifiable {
     let id = UUID()
     let caption: String
-    let session: SessionInfo
+    let session: ListRow?
     var image: UIImage?
   }
 
   private var cases: [Case] {
-    let wd = ProjectInfo(
-      name: "WorkerDeck", root: "/Users/you/projects/workerdeck",
-      icon: .image(mediaType: .png, hash: "abc"))
+    let wd = Self.project(
+      "WorkerDeck", root: "/Users/you/projects/workerdeck",
+      icon: ["type": "image", "mediaType": "image/png", "hash": "abc"])
     return [
       Case(
         caption: "image icon, bytes in, session at the project root",
@@ -397,28 +397,27 @@ private struct ProjectsPreview: View {
         caption: "SVG: Apple cannot decode one from bytes, so it reads as no icon",
         session: Self.session(
           id: "4", title: "The platform limit", cwd: "/Users/you/projects/deck",
-          project: ProjectInfo(
-            name: "Deck", root: "/Users/you/projects/deck",
-            icon: .image(mediaType: .svg, hash: "svg")))),
+          project: Self.project(
+            "Deck", root: "/Users/you/projects/deck",
+            icon: ["type": "image", "mediaType": "image/svg+xml", "hash": "svg"]))),
       Case(
         caption: "glyph this build maps (tree-pine → tree)",
         session: Self.session(
           id: "5", title: "Theme rework", cwd: "/Users/you/projects/silktree/app",
-          project: ProjectInfo(
-            name: "Silktree", root: "/Users/you/projects/silktree",
-            icon: .glyph(name: "tree-pine")))),
+          project: Self.project(
+            "Silktree", root: "/Users/you/projects/silktree", icon: ["type": "glyph", "name": "tree-pine"]))),
       Case(
         caption: "well-formed glyph this build has never heard of → folder, not a hole",
         session: Self.session(
           id: "6", title: "Grid layout", cwd: "/Users/you/projects/zigby",
-          project: ProjectInfo(
-            name: "Zigby", root: "/Users/you/projects/zigby",
-            icon: .glyph(name: "some-icon-shipped-last-tuesday")))),
+          project: Self.project(
+            "Zigby", root: "/Users/you/projects/zigby",
+            icon: ["type": "glyph", "name": "some-icon-shipped-last-tuesday"]))),
       Case(
         caption: "cwd NOT under root (a symlinked start) - name alone, never a wrong path",
         session: Self.session(
           id: "7", title: "Through a symlink", cwd: "/tmp/deck-link/packages/ui",
-          project: ProjectInfo(name: "WorkerDeck", root: "/private/tmp/deck", icon: nil))),
+          project: Self.project("WorkerDeck", root: "/private/tmp/deck"))),
       Case(
         caption: "no .workerdeck.json anywhere above it - the folder name, no path",
         session: Self.session(
@@ -436,12 +435,12 @@ private struct ProjectsPreview: View {
         caption: "context ring: filling up (past 80, where a ring turns - a bar turns at 70)",
         session: Self.session(
           id: "10", title: "Getting long", cwd: "/Users/you/projects/workerdeck",
-          project: wd, status: .running, context: 84, cost: 3.10)),
+          project: wd, status: "running", context: 84, cost: 3.10)),
       Case(
         caption: "context ring: nearly out (past 95), and waiting on a person",
         session: Self.session(
           id: "11", title: "Almost full", cwd: "/Users/you/projects/workerdeck",
-          project: wd, status: .awaitingApproval, pending: 2, context: 96, cost: 12.80)),
+          project: wd, status: "awaiting_approval", pending: 2, context: 96, cost: 12.80)),
       Case(
         caption: "no reading at all - draws NO ring, never an empty one",
         session: Self.session(
@@ -455,7 +454,9 @@ private struct ProjectsPreview: View {
         ForEach(cases) { item in
           VStack(alignment: .leading, spacing: 2) {
             Text(item.caption).font(.caption2).foregroundStyle(.tertiary)
-            SessionRowView(session: item.session, unseen: 0, projectImage: item.image)
+            if let row = item.session {
+              SessionRowView(row: row, unseen: 0, projectImage: item.image)
+            }
           }
         }
       }

@@ -27,95 +27,6 @@ public enum WorkerProtocol {
   public static let shellLingerMs: Double = 60_000
 }
 
-// MARK: - Shells
-
-public enum ShellOwner: String, Decodable, Sendable, Equatable, Hashable {
-  case user
-  case agent
-}
-
-public enum ShellStatus: String, Decodable, Sendable, Equatable, Hashable {
-  case running
-  case exited
-}
-
-/// Why a shell stopped. The one union in this mirror that decodes **leniently**,
-/// and deliberately: the closed list is protocol 1's final one, so a gateway
-/// sending anything else is ahead of this build, and widening the Swift side
-/// later would otherwise cost a `PROTOCOL_VERSION` bump (the `ChecklistStatus`
-/// argument, applied before it can bite). An unrecognised reason reads as
-/// ``unknown`` and the row says "ended", never a failed decode that would take
-/// the whole message down with it.
-public enum ShellEndReason: String, Decodable, Sendable, Equatable, Hashable {
-  case exit
-  case killed
-  case timeout
-  case serverStopped = "server_stopped"
-  case serverRestarted = "server_restarted"
-  case spawnFailed = "spawn_failed"
-  case unknown
-
-  public init(from decoder: Decoder) throws {
-    let raw = try decoder.singleValueContainer().decode(String.self)
-    self = ShellEndReason(rawValue: raw) ?? .unknown
-  }
-}
-
-/// One tracked shell - the record every `$` invocation gets, and the entity the
-/// transcript row, the session list and (later) the drill-in are all views over.
-public struct ShellInfo: Decodable, Sendable, Equatable, Hashable, Identifiable {
-  /// Gateway-minted (`sh_` + base32), never the pid.
-  public let id: String
-  public let sessionId: String
-  /// Per-session counter - what "shell #3" means to a person and to the model.
-  public let ordinal: Int
-  public let command: String
-  /// First line of `command`, clipped to ``WorkerProtocol/shellLabelMax``.
-  public let label: String
-  public let cwd: String
-  public let owner: ShellOwner
-  public let status: ShellStatus
-  public let startedAt: Double
-  public let endedAt: Double?
-  public let exitCode: Int?
-  public let signal: Int?
-  public let endReason: ShellEndReason?
-  /// Raw bytes captured so far.
-  public let bytes: Int
-  /// The artifact hit its cap; only the tail ring advanced after.
-  public let capped: Bool?
-  public let cols: Int
-  public let rows: Int
-  public let agentWrite: Bool?
-
-  public init(
-    id: String, sessionId: String, ordinal: Int, command: String, label: String, cwd: String,
-    owner: ShellOwner = .user, status: ShellStatus = .running, startedAt: Double,
-    endedAt: Double? = nil, exitCode: Int? = nil, signal: Int? = nil,
-    endReason: ShellEndReason? = nil, bytes: Int = 0, capped: Bool? = nil, cols: Int = 120,
-    rows: Int = 40, agentWrite: Bool? = nil
-  ) {
-    self.id = id
-    self.sessionId = sessionId
-    self.ordinal = ordinal
-    self.command = command
-    self.label = label
-    self.cwd = cwd
-    self.owner = owner
-    self.status = status
-    self.startedAt = startedAt
-    self.endedAt = endedAt
-    self.exitCode = exitCode
-    self.signal = signal
-    self.endReason = endReason
-    self.bytes = bytes
-    self.capped = capped
-    self.cols = cols
-    self.rows = rows
-    self.agentWrite = agentWrite
-  }
-}
-
 // MARK: - Session lifecycle
 
 public enum SessionStatus: String, Codable, Sendable {
@@ -126,15 +37,6 @@ public enum SessionStatus: String, Codable, Sendable {
   case parked
   case failed
   case closed
-}
-
-public enum PermissionMode: String, Codable, Sendable, CaseIterable {
-  case `default`
-  case acceptEdits
-  case bypassPermissions
-  case plan
-  case dontAsk
-  case auto
 }
 
 // MARK: - API message content (structural mirror of Anthropic message shapes)
@@ -390,26 +292,6 @@ public struct SlashCommandInfo: Decodable, Sendable, Equatable, Identifiable {
 
 // MARK: - Usage telemetry
 
-/// The context reading that rides the **sessions list**, as opposed to the full
-/// ``ContextUsage`` that rides the event stream.
-///
-/// Three numbers, and the omission is the design: the category breakdown belongs
-/// to a sheet with a live session behind it, and this rides every row of a list
-/// polled at 1.2s. `percentage` alone would size a ring; the token pair is what
-/// lets a row *say* `142k / 200k` without a second round trip.
-public struct ContextReading: Decodable, Sendable, Equatable {
-  public let totalTokens: Int
-  public let maxTokens: Int
-  /// Used share of the window, 0-100.
-  public let percentage: Double
-
-  public init(totalTokens: Int, maxTokens: Int, percentage: Double) {
-    self.totalTokens = totalTokens
-    self.maxTokens = maxTokens
-    self.percentage = percentage
-  }
-}
-
 /// Emitted only for claude.ai subscription sessions - API-key sessions may never
 /// produce one, so clients must render nothing (not 0%) until data arrives.
 public struct RateLimitInfo: Codable, Sendable, Equatable {
@@ -458,45 +340,4 @@ public struct MessageAttachment: Codable, Sendable, Equatable, Identifiable {
 
   /// Images render as a thumbnail; everything else gets a named chip.
   public var isImage: Bool { mediaType.hasPrefix("image/") }
-}
-
-// The wire's `effort: string | null`. `unsupported` is the null: the model takes no effort
-// parameter. Absent on the wire is the Swift nil around it.
-public enum SessionEffort: Decodable, Sendable, Equatable {
-  case unsupported
-  case level(String)
-
-  public init(from decoder: Decoder) throws {
-    let container = try decoder.singleValueContainer()
-    self = container.decodeNil() ? .unsupported : .level(try container.decode(String.self))
-  }
-
-  public var level: String? {
-    if case .level(let value) = self { return value }
-    return nil
-  }
-}
-
-public enum ChecklistStatus: String, Decodable, Sendable, Equatable, Hashable {
-  case pending
-  case inProgress = "in_progress"
-  case completed
-}
-
-public struct ChecklistItem: Decodable, Sendable, Equatable, Hashable {
-  public let text: String
-  public let status: ChecklistStatus
-
-  public init(text: String, status: ChecklistStatus) {
-    self.text = text
-    self.status = status
-  }
-}
-
-extension KeyedDecodingContainer {
-  public func decodeIfPresent(_ type: SessionEffort.Type, forKey key: Key) throws -> SessionEffort? {
-    guard contains(key) else { return nil }
-    if try decodeNil(forKey: key) { return .unsupported }
-    return (try? decode(String.self, forKey: key)).map(SessionEffort.level)
-  }
 }

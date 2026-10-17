@@ -27,7 +27,7 @@ struct PushPayload: Sendable, Equatable {
   /// Optional like `hostId`, and for the same reason: a hand-crafted
   /// `simctl push` carries none and must still deep-link to the session.
   let seq: Int?
-  /// Which log `seq` counts in (`SessionInfo.epoch`). A wake renumbers the log, so a payload
+  /// Which log `seq` counts in (the session's `epoch`). A wake renumbers the log, so a payload
   /// that outlived one has to be told from a current one, which the core does.
   let epoch: Int?
 

@@ -1,5 +1,6 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckCore
+import WorkerDeckKit
 
 /// The session's state as one glyph, mirroring the dashboard's
 /// `SessionStatusIcon` - same vocabulary, same precedence.
@@ -9,24 +10,14 @@ import SwiftUI
 /// list the state is the thing you scan *past* until it is not idle. Waiting on
 /// a person still wins over everything, because that is the one state that is
 /// about you.
-///
-/// **It takes the whole `SessionInfo` and asks `sessionState`, rather than a bare
-/// status**, and the old signature is why: given only `(status, pendingCount)` it
-/// was *unable* to be right. `sessionState` folds in the arm no glyph can see for
-/// itself - a **background** sub-agent outlives its turn by design, so the turn
-/// ends, `status` comes to rest at `.idle`, and the agent keeps working. Off the
-/// raw status this drew a moon on a row filed under the "Working" header.
-///
-/// The terminal symbols still come off `session.status`, because `.ended`
-/// collapses failed and closed into one bucket and those are worth telling apart.
 struct SessionStatusIcon: View {
-  let session: SessionInfo
+  let row: ListRow
 
-  private var status: SessionStatus { session.status }
-  private var pendingCount: Int { session.pendingPermissionCount }
-  var state: SessionState?
+  private var status: SessionStatus { SessionStatus(rawValue: row.sessionStatus) ?? .idle }
+  private var pendingCount: Int { Int(row.pendingPermissions) }
+  var state: RowState?
 
-  private var shown: SessionState { state ?? sessionState(session) }
+  private var shown: RowState { state ?? row.state }
 
   var body: some View {
     icon
@@ -77,11 +68,11 @@ struct SessionStatusIcon: View {
     }
     // A background agent working past its turn is the case the status cannot
     // name: "Idle" would be a lie to a screen reader too, not just to the eye.
-    let running = runningSubagents(session).count
+    let running = Int(row.runningAgents)
     if shown == .working, status != .running, status != .starting, running > 0 {
       return "Working - \(running) sub-agent\(running == 1 ? "" : "s")"
     }
-    if session.engineAsleep == true, shown != .working {
+    if row.asleep, shown != .working {
       return "Asleep, wakes on your next message"
     }
     return status.label

@@ -104,7 +104,7 @@ struct SessionListView: View {
     guard let route = push.pendingRoute else { return }
     let target =
       route.hostId
-      ?? hosts.hosts.first { model?.info(hostId: $0.id.uuidString, sessionId: route.sessionId) != nil }?.id
+      ?? hosts.hosts.first { model?.row(hostId: $0.id.uuidString, sessionId: route.sessionId) != nil }?.id
       ?? hosts.hosts.first?.id
     guard let hostId = target, hosts.hosts.contains(where: { $0.id == hostId }) else {
       // A route naming a gateway this phone no longer has can never be served.
@@ -143,14 +143,14 @@ struct SessionListView: View {
     if let model, let context = model.context(for: hostId) {
       CreateSessionView(
         form: model.createForm(for: hostId, seed: seed), client: context.client,
-        onAgentCreated: { response in
-          if let cwd = response.agent.config.cwd { context.rememberCwd(cwd) }
-          path = response.session.map { [.session(hostId: hostId, sessionId: $0.id)] } ?? []
+        onAgentCreated: { created in
+          if let cwd = created.cwd { context.rememberCwd(cwd) }
+          path = created.sessionId.map { [.session(hostId: hostId, sessionId: $0)] } ?? []
         }
-      ) { info in
-        context.rememberCwd(info.cwd)
+      ) { created in
+        if let cwd = created.cwd { context.rememberCwd(cwd) }
         // Replace the create step so Back from the session lands on the list.
-        path = [.session(hostId: hostId, sessionId: info.id)]
+        path = created.sessionId.map { [.session(hostId: hostId, sessionId: $0)] } ?? []
       }
       .environment(context)
     } else {
@@ -234,14 +234,14 @@ struct SessionListView: View {
       Text("The run is terminated on the server. Its transcript is no longer attachable.")
     }
     .alert(
-      pendingRename?.info.agent != nil ? "Rename agent" : "Rename session",
+      pendingRename?.row.agent != nil ? "Rename agent" : "Rename session",
       isPresented: Binding(
         get: { pendingRename != nil }, set: { if !$0 { pendingRename = nil } })
     ) {
       TextField("Name", text: $renameText)
       Button("Save") {
         if let row = pendingRename {
-          if row.info.agent != nil {
+          if row.row.agent != nil {
             Task { await model.renameAgent(row, to: renameText) }
           } else {
             Task { await model.rename(row, to: renameText) }
@@ -255,7 +255,7 @@ struct SessionListView: View {
       // name lands on every client, and clearing it is how you get the derived
       // one back.
       Text(
-        pendingRename?.info.agent != nil
+        pendingRename?.row.agent != nil
           ? "The agent keeps this name across conversations, on every client."
           : "The name is stored on the gateway, so every client sees it. Leave it empty to go back to the derived name.")
     }
@@ -275,7 +275,7 @@ struct SessionListView: View {
       Text("A short line under the name, on every client. Leave it empty to clear it.")
     }
     .confirmationDialog(
-      "Retire \(pendingRetire?.info.agent?.name ?? "this agent")?",
+      "Retire \(pendingRetire?.row.agent ?? "this agent")?",
       isPresented: Binding(get: { pendingRetire != nil }, set: { if !$0 { pendingRetire = nil } }),
       titleVisibility: .visible
     ) {
@@ -289,7 +289,7 @@ struct SessionListView: View {
     } message: {
       Text(
         "The agent and its session end. "
-          + (pendingRetire?.info.agent?.isLead == true
+          + (pendingRetire?.row.lead == true
             ? "Its members are released and stay as agents. " : "")
           + "Past conversations stay resumable from the engine's store.")
     }
@@ -381,17 +381,14 @@ struct SessionListView: View {
   private func unit(_ item: ListItem, section: ListSection, model: SessionListModel) -> some View {
     if let route = sessionRoute(for: item) {
       let steps = item.row.steps
-      if item.info.agent != nil {
+      if item.row.agent != nil {
         AgentCardView(
-          item: item, frames: model.agentAvatars.frames(hostId: item.row.hostId, agent: item.info.agent),
+          item: item, frames: model.agentAvatars.frames(key: item.row.avatarKey),
           tray: item.row.tray.isEmpty && !item.row.teamExpanded
             ? nil
             : TeamTray(
               row: item.row,
-              members: item.row.tray.compactMap { member in
-                model.info(hostId: member.hostId, sessionId: member.sessionId).map { (member, $0) }
-              },
-              frames: { model.agentAvatars.frames(hostId: $0.hostId, agent: $1.agent) },
+              frames: { model.agentAvatars.frames(key: $0.avatarKey) },
               select: { member in open(member, model: model) },
               toggle: { model.toggleTeam(item) }),
           onOpen: { path.append(route) },
@@ -427,7 +424,7 @@ struct SessionListView: View {
   private func memberUnit(_ item: ListItem, model: SessionListModel) -> some View {
     if let route = sessionRoute(for: item) {
       AgentCardView(
-        item: item, frames: model.agentAvatars.frames(hostId: item.row.hostId, agent: item.info.agent),
+        item: item, frames: model.agentAvatars.frames(key: item.row.avatarKey),
         member: true,
         onOpen: {
           model.select(hostId: item.row.hostId, sessionId: item.row.sessionId)
@@ -475,18 +472,18 @@ struct SessionListView: View {
     RowChrome(
       row: row,
       onClose: {
-        if row.info.status == .closed {
+        if row.closed {
           Task { await model.close(row) }
         } else {
           pendingClose = row
         }
       },
       onRename: { beginRename(row) },
-      onRestart: row.info.agent == nil ? nil : { Task { _ = await model.restart(row) } })
+      onRestart: row.row.agentId == nil ? nil : { Task { await model.restart(row) } })
   }
 
   private func beginRename(_ row: ListItem) {
-    renameText = row.info.agent?.name ?? row.info.title ?? ""
+    renameText = row.row.title
     pendingRename = row
   }
 
@@ -496,8 +493,8 @@ struct SessionListView: View {
   // and Remove are the same gesture wearing two meanings - see the swipe.
   @ViewBuilder
   private func rowActions(for row: ListItem, model: SessionListModel) -> some View {
-    let agent = row.info.agent
-    if let owner = row.info.owner {
+    let agent = row.row.agent
+    if let owner = row.row.owner {
       Text("Owner: \(owner)")
     }
     Button {
@@ -506,12 +503,12 @@ struct SessionListView: View {
       Label(agent != nil ? "Rename agent" : "Rename session", systemImage: "pencil")
     }
     Button {
-      statusText = row.info.statusLabel?.text ?? ""
+      statusText = row.row.statusText ?? ""
       pendingStatus = row
     } label: {
-      Label(row.info.statusLabel != nil ? "Change status" : "Set status", systemImage: "text.bubble")
+      Label(row.row.statusText != nil ? "Change status" : "Set status", systemImage: "text.bubble")
     }
-    if agent?.avatar != nil {
+    if row.row.avatarKey != nil {
       Button {
         Task { await model.changeAvatar(row) }
       } label: {
@@ -542,22 +539,22 @@ struct SessionListView: View {
         Label("Add to team", systemImage: "person.2")
       }
     }
-    if let agent, agent.lead != nil {
+    if row.row.member {
       Button {
         Task { await model.leave(row) }
       } label: {
-        Label("Leave \(agent.team ?? "team")", systemImage: "rectangle.portrait.and.arrow.right")
+        Label("Leave \(row.row.team ?? "team")", systemImage: "rectangle.portrait.and.arrow.right")
       }
     }
-    if agent?.isLead == true {
+    if row.row.lead {
       Button {
         Task { await model.dissolve(row) }
       } label: {
         Label("Dissolve team", systemImage: "person.2.slash")
       }
     }
-    if let agent, agent.lead == nil, let hostId = row.hostUUID {
-      if agent.shared == true {
+    if agent != nil, !row.row.member, let hostId = row.hostUUID {
+      if row.row.shared {
         Button {
           Task { await model.setSharing(row, .private) }
         } label: {
@@ -573,7 +570,7 @@ struct SessionListView: View {
     }
     if agent != nil {
       Button {
-        Task { _ = await model.restart(row) }
+        Task { await model.restart(row) }
       } label: {
         Label("New conversation", systemImage: "arrow.counterclockwise")
       }
@@ -586,7 +583,7 @@ struct SessionListView: View {
       }
     }
     Divider()
-    if row.info.status == .closed {
+    if row.closed {
       Button(role: .destructive) {
         Task { await model.close(row) }
       } label: {
@@ -614,7 +611,7 @@ struct SessionListView: View {
   /// loader has it. Nil for a glyph (drawn from SF Symbols, no bytes involved),
   /// for bytes not in yet, and for an icon that could not be decoded.
   private func projectImage(for row: ListItem, model: SessionListModel) -> UIImage? {
-    guard case .image(_, let hash) = row.info.project?.icon else { return nil }
+    guard let hash = row.row.projectIconHash else { return nil }
     return model.projectIcons.image(forHash: hash)
   }
 
@@ -652,7 +649,7 @@ struct SessionListView: View {
   }
 
   private func sessionRoute(for row: ListItem) -> SessionRoute? {
-    row.hostUUID.map { .session(hostId: $0, sessionId: row.info.id) }
+    row.hostUUID.map { .session(hostId: $0, sessionId: row.sessionId) }
   }
 
   // MARK: - Step lines
@@ -713,7 +710,7 @@ struct SessionListView: View {
         let summaries = model.snapshots[host.id]?.sdkSessions ?? []
         if !summaries.isEmpty {
           Section {
-            ForEach(summaries) { summary in
+            ForEach(summaries, id: \.sessionId) { summary in
               NavigationLink(
                 value: SessionRoute.create(
                   hostId: host.id,
@@ -874,7 +871,7 @@ private struct RowChrome: ViewModifier {
     content
       .swipeActions(edge: .trailing) {
         Button(role: .destructive, action: onClose) {
-          if row.info.status == .closed {
+          if row.closed {
             Label("Remove", systemImage: "trash")
           } else {
             Label("Close", systemImage: "xmark.circle")

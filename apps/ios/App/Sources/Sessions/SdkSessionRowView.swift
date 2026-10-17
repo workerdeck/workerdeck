@@ -1,11 +1,11 @@
-import WorkerDeckKit
 import SwiftUI
+import WorkerDeckCore
 
 /// One stored SDK session: title, directory, branch, age. Internal rather than
 /// private because the create form's resume picker draws the same rows - a
 /// stored session should look the same wherever it is offered.
 struct SdkSessionRowView: View {
-  let summary: SdkSessionSummary
+  let summary: SdkSession
 
   var body: some View {
     VStack(alignment: .leading, spacing: 5) {
@@ -13,8 +13,8 @@ struct SdkSessionRowView: View {
         .font(.body)
         .lineLimit(2)
       HStack(spacing: 8) {
-        if let cwd = summary.cwd {
-          Text(Fmt.lastComponent(cwd))
+        if let cwdName = summary.cwdName {
+          Text(cwdName)
             .lineLimit(1)
         }
         if let branch = summary.gitBranch, !branch.isEmpty {

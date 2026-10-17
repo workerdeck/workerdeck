@@ -61,29 +61,36 @@ final class CreateSessionModel {
     reload()
   }
 
-  func loadResumeCandidates() async throws -> [SdkSessionSummary] {
-    try await client.listSdkSessions(form.resumeCandidatesCall())
+  func loadResumeCandidates() async throws -> [SdkSession] {
+    let body = String(decoding: try await client.perform(form.resumeCandidatesCall()), as: UTF8.self)
+    guard let stored = sdkSessions(body: body, nowMs: Date().timeIntervalSince1970 * 1000) else {
+      throw WorkerClientError(message: "The gateway sent stored sessions this app cannot read")
+    }
+    return stored
   }
 
-  func adoptStoredSession(_ summary: SdkSessionSummary) {
+  func adoptStoredSession(_ summary: SdkSession) {
     form.adoptStoredSession(
       sessionId: summary.sessionId, cwd: summary.cwd, customTitle: summary.customTitle, summary: summary.summary)
     reload()
   }
 
-  func submit() async -> SessionInfo? {
-    await creating { try await $0.createSession($1) }
+  func submit() async -> Created? {
+    await creating(createdSession(body:))
   }
 
-  func submitAgent() async -> AgentResponse? {
-    await creating { try await $0.createAgent($1) }
+  func submitAgent() async -> Created? {
+    await creating(createdAgent(body:))
   }
 
-  private func creating<T>(_ send: (WorkerClient, HttpCall) async throws -> T) async -> T? {
+  private func creating(_ read: (String) -> Created?) async -> Created? {
     isSubmitting = true
     defer { isSubmitting = false }
     do {
-      let created = try await send(client, form.call())
+      let body = String(decoding: try await client.perform(form.call()), as: UTF8.self)
+      guard let created = read(body) else {
+        throw WorkerClientError(message: "The gateway answered in a shape this app cannot read")
+      }
       errorMessage = nil
       return created
     } catch {

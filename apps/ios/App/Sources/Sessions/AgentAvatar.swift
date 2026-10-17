@@ -9,16 +9,15 @@ struct AgentAvatarFrames: Equatable {
   let durations: [Double]
 }
 
-// The pictures the core list says to fetch (`avatarFetches`, keyed by gateway plus the seed-versioned
-// `AgentRef.avatar`, retried a minute after a failure); this moves the bytes and slices the busy strip.
+// The pictures the core list says to fetch (`avatarFetches`, keyed like a row's `avatarKey`, retried a minute after a
+// failure); this moves the bytes and slices the busy strip.
 @MainActor
 @Observable
 final class AgentAvatarLoader {
   private var frames: [String: AgentAvatarFrames] = [:]
 
-  func frames(hostId: String, agent: AgentRef?) -> AgentAvatarFrames? {
-    guard let avatar = agent?.avatar else { return nil }
-    return frames[avatarKey(hostId: hostId, avatar: avatar)]
+  func frames(key: String?) -> AgentAvatarFrames? {
+    key.flatMap { frames[$0] }
   }
 
   func ensure(list: SessionList, clientFor: (String) -> WorkerClient?) {
@@ -56,14 +55,14 @@ final class AgentAvatarLoader {
 }
 
 struct AgentAvatarView: View {
-  let info: SessionInfo
+  let row: ListRow
   let frames: AgentAvatarFrames?
   var size: CGFloat = 32
-  var state: SessionState?
+  var state: RowState?
   var badge = true
 
-  private var shown: SessionState { state ?? sessionState(info) }
-  private var asleep: Bool { info.engineAsleep == true }
+  private var shown: RowState { state ?? row.state }
+  private var asleep: Bool { row.asleep }
   private var corner: CGFloat { size >= 28 ? 14 : 11 }
 
   var body: some View {
@@ -71,14 +70,14 @@ struct AgentAvatarView: View {
       .frame(width: size, height: size)
       .overlay(alignment: .bottomTrailing) {
         if badge, shown != .idle || asleep {
-          SessionStatusIcon(session: info, state: shown)
+          SessionStatusIcon(row: row, state: shown)
             .font(.system(size: corner * 0.7))
             .frame(width: corner, height: corner)
             .background(Circle().fill(Color(.systemBackground)))
             .offset(x: 4, y: 4)
         }
       }
-      .accessibilityLabel(info.agent?.name ?? "Session")
+      .accessibilityLabel(row.agent ?? "Session")
   }
 
   @ViewBuilder
@@ -96,8 +95,7 @@ struct AgentAvatarView: View {
         .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
         .foregroundStyle(.tertiary)
         .overlay {
-          EngineIconView(
-            engine: info.engine?.rawValue ?? "claude", model: info.model, size: size / 2)
+          EngineIconView(mark: row.mark, tinted: row.markTinted, size: size / 2)
         }
     }
   }
@@ -126,28 +124,28 @@ struct LeadChip: View {
   }
 }
 
-struct AgentHeadingView: View {
-  let info: SessionInfo
+// A tray picture: idle by definition (Auto shows every busy Member as a row), so no badge and no animation.
+struct TrayAvatarView: View {
+  let member: TrayMember
   let frames: AgentAvatarFrames?
+  var size: CGFloat = 18
 
   var body: some View {
-    if let agent = info.agent {
-      HStack(spacing: 8) {
-        AgentAvatarView(info: info, frames: frames, size: 24)
-        VStack(alignment: .leading, spacing: 0) {
-          HStack(spacing: 6) {
-            Text(agent.name).font(.headline).lineLimit(1)
-            if agent.isLead { LeadChip() }
-          }
-          Text(detail(agent)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-        }
+    Group {
+      if let frames {
+        Image(uiImage: frames.still)
+          .interpolation(.none)
+          .resizable()
+          .clipShape(RoundedRectangle(cornerRadius: 4))
+          .saturation(member.asleep ? 0 : 1)
+          .opacity(member.asleep ? 0.6 : 1)
+      } else {
+        RoundedRectangle(cornerRadius: 4)
+          .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+          .foregroundStyle(.tertiary)
       }
     }
-  }
-
-  private func detail(_ agent: AgentRef) -> String {
-    let team = agent.lead != nil ? agent.team.map { "\($0) team" } : nil
-    return [team, "conversation \(agent.conversation ?? 1)"].compactMap { $0 }.joined(
-      separator: " · ")
+    .frame(width: size, height: size)
+    .accessibilityLabel(member.title)
   }
 }

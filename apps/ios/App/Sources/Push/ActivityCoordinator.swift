@@ -2,6 +2,7 @@ import ActivityKit
 import Observation
 import UIKit
 import WorkerDeckActivity
+import WorkerDeckCore
 import WorkerDeckKit
 
 /// Everything Live Activity on the app's side: the push-to-start token, the per-card update tokens,
@@ -245,20 +246,19 @@ final class ActivityCoordinator {
         await activity.end(nil, dismissalPolicy: .immediate)
         continue
       }
-      do {
-        let info = try await client.getSession(id: attributes.sessionId)
-        if info.status != .running && info.status != .awaitingApproval {
-          ActivityTrail.note("recon-end-status \(attributes.sessionId.prefix(8)) \(info.status)")
-          await activity.end(nil, dismissalPolicy: .immediate)
-        }
-      } catch let error as WorkerClientError where error.statusCode == 404 {
+      let answer = await client.answer(getSessionCall(id: attributes.sessionId))
+      if answer.status == 404 {
         ActivityTrail.note("recon-end-404 \(attributes.sessionId.prefix(8))")
         await activity.end(nil, dismissalPolicy: .immediate)
-      } catch {
+      } else if (200..<300).contains(answer.status), let status = sessionStatus(body: answer.body) {
+        if status != "running" && status != "awaiting_approval" {
+          ActivityTrail.note("recon-end-status \(attributes.sessionId.prefix(8)) \(status)")
+          await activity.end(nil, dismissalPolicy: .immediate)
+        }
+      } else {
         ActivityTrail.note("recon-skip-unreachable \(attributes.sessionId.prefix(8))")
         // Unreachable is not gone. `stale-date` already dims the card, and ending it here would
         // delete a live turn's card every time the tailnet hiccups.
-        continue
       }
     }
   }

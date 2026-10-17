@@ -2,7 +2,8 @@
 // display-ready groups come out. The rules are `wd_native::vm::session_list`; nothing here decides visibility.
 use crate::avatar::AvatarFetch;
 use std::sync::Mutex;
-use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, SessionInfo, Sharing};
+use wd_native::planner::fmt_cost;
+use wd_native::rest::{Entries, GatewayAgentDefaults, GatewayRelayMeta, ProfileEngine, ProfileInfo, ProjectIcon, SessionInfo, Sharing};
 use wd_native::vm::agent_avatar::{AvatarLoads, avatar_key};
 use wd_native::vm::agents::{new_agent_owner, new_agent_sharing};
 use wd_native::vm::create_form::{AgentSeed as FormSeed, SeedLead};
@@ -155,6 +156,26 @@ pub struct ListRow {
     pub tray_overflow: u32,
     pub steps: Vec<ListStep>,
     pub last_activity_at: f64,
+    pub context_percent: Option<f64>,
+    pub lead: bool,
+    pub member: bool,
+    pub team: Option<String>,
+    pub shared: bool,
+    // An agent's second line: its team when it is a Member, and which conversation it is on.
+    pub agent_detail: Option<String>,
+    pub owner: Option<String>,
+    pub profile: Option<String>,
+    pub cost_text: Option<String>,
+    pub cwd: String,
+    pub cwd_name: String,
+    pub project_subpath: Option<String>,
+    pub project_icon_hash: Option<String>,
+    pub project_glyph: Option<String>,
+    // The status label's text without its emoji: what an edit starts from.
+    pub status_text: Option<String>,
+    pub session_status: String,
+    pub pending_permissions: u32,
+    pub running_agents: u32,
 }
 
 // A Member the lead's tray holds in Auto: a picture to tap, which opens that Member.
@@ -210,6 +231,7 @@ pub struct TeamLead {
     pub session_id: String,
     pub agent_id: String,
     pub name: String,
+    pub owner: Option<String>,
 }
 
 // Where this phone had read a session to, and when: the catch-up seam's whole input.
@@ -473,6 +495,34 @@ fn list_row(row: &SessionRow, depth: u8, show_gateway: bool, team: Option<&vm::T
         tray_overflow: (tray.len() - drawn) as u32,
         steps,
         last_activity_at: info.last_activity_at.unwrap_or(info.created_at),
+        context_percent: info.context_usage.as_ref().map(|c| c.percentage),
+        lead: info.agent.as_ref().is_some_and(|a| a.leads == Some(true)),
+        member: info.agent.as_ref().is_some_and(|a| a.lead.is_some()),
+        team: info.agent.as_ref().and_then(|a| a.team.clone()),
+        shared: info.agent.as_ref().is_some_and(|a| a.shared == Some(true)),
+        agent_detail: info.agent.as_ref().map(|a| {
+            let team = a.lead.as_ref().and(a.team.as_ref()).map(|t| format!("{t} team"));
+            let conversation = format!("conversation {}", a.conversation.unwrap_or(1));
+            team.into_iter().chain([conversation]).collect::<Vec<_>>().join(" \u{00B7} ")
+        }),
+        owner: info.owner.clone(),
+        profile: info.profile.clone(),
+        cost_text: info.cost_usd.or(info.total_cost_usd).filter(|usd| *usd > 0.0).map(|usd| fmt_cost(Some(usd))),
+        cwd: info.cwd.clone(),
+        cwd_name: info.cwd.rsplit('/').find(|part| !part.is_empty()).unwrap_or(&info.cwd).to_owned(),
+        project_subpath: vm::project_subpath(info),
+        project_icon_hash: info.project.as_ref().and_then(|p| match &p.icon {
+            Some(ProjectIcon::Image { hash, .. }) => Some(hash.clone()),
+            _ => None,
+        }),
+        project_glyph: info.project.as_ref().and_then(|p| match &p.icon {
+            Some(ProjectIcon::Glyph { name }) => Some(name.clone()),
+            _ => None,
+        }),
+        status_text: info.status_label.as_ref().map(|label| label.text.clone()),
+        session_status: serde_json::to_value(info.status).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default(),
+        pending_permissions: info.pending_permission_count,
+        running_agents: vm::running_subagents(info).len() as u32,
     }
 }
 
@@ -789,7 +839,12 @@ impl SessionList {
             .into_iter()
             .filter_map(|lead| {
                 let agent = lead.info.agent.as_ref()?;
-                Some(TeamLead { session_id: lead.info.id.clone(), agent_id: agent.id.clone(), name: agent.name.clone() })
+                Some(TeamLead {
+                    session_id: lead.info.id.clone(),
+                    agent_id: agent.id.clone(),
+                    name: agent.name.clone(),
+                    owner: lead.info.owner.clone(),
+                })
             })
             .collect();
         let lead = lead_session_id.and_then(|id| state.find(&host_id, &id)?.agent.as_ref().map(|a| a.id.clone()));
@@ -830,7 +885,12 @@ impl SessionList {
             .into_iter()
             .filter_map(|lead| {
                 let agent = lead.info.agent.as_ref()?;
-                Some(TeamLead { session_id: lead.info.id.clone(), agent_id: agent.id.clone(), name: agent.name.clone() })
+                Some(TeamLead {
+                    session_id: lead.info.id.clone(),
+                    agent_id: agent.id.clone(),
+                    name: agent.name.clone(),
+                    owner: lead.info.owner.clone(),
+                })
             })
             .collect()
     }

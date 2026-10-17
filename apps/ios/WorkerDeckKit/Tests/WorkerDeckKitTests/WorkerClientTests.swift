@@ -87,7 +87,7 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"sessions":[]}"#.utf8)) }
     let client = makeStubClient()
 
-    _ = try await client.listSessions()
+    _ = try await client.perform(listSessionsCall())
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer s3cret")
@@ -99,7 +99,7 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"sessions":[]}"#.utf8)) }
     let client = makeStubClient(authKey: nil)
 
-    _ = try await client.listSessions()
+    _ = try await client.perform(listSessionsCall())
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
@@ -109,14 +109,11 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(status: 201, body: Data(sessionJSON.utf8)) }
     let client = makeStubClient()
 
-    let session = try await client.createSession(CreateForm.session(cwd: "/repo").call())
+    let body = try await client.perform(CreateForm.session(cwd: "/repo").call())
+    let created = try #require(createdSession(body: String(decoding: body, as: UTF8.self)))
 
-    #expect(session.id == "sess_1")
-    #expect(session.status == .running)
-    #expect(session.cwd == "/repo")
-    #expect(session.profile == "main")
-    #expect(session.permissionMode == .default)
-    #expect(session.resolvedEngine == .claude)
+    #expect(created.sessionId == "sess_1")
+    #expect(created.cwd == "/repo")
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.httpMethod == "POST")
@@ -131,7 +128,7 @@ struct WorkerClientTests {
 
     await #expect(throws: WorkerClientError(
       message: "profile 'ghost' is not declared", statusCode: 400)) {
-      _ = try await client.createSession(CreateForm.session(cwd: "/repo").call())
+      _ = try await client.perform(CreateForm.session(cwd: "/repo").call())
     }
   }
 
@@ -141,7 +138,7 @@ struct WorkerClientTests {
 
     await #expect(throws: WorkerClientError(
       message: "The gateway answered 502", statusCode: 502)) {
-      _ = try await client.listSessions()
+      _ = try await client.perform(listSessionsCall())
     }
   }
 
@@ -150,7 +147,7 @@ struct WorkerClientTests {
     let client = makeStubClient()
     await #expect(throws: WorkerClientError(
       message: "Not a WorkerDeck gateway, or the auth key is wrong", statusCode: 200)) {
-      _ = try await client.listSessions()
+      _ = try await client.perform(listSessionsCall())
     }
   }
 
@@ -164,7 +161,7 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"session":{}}"#.utf8)) }
     let client = makeStubClient()
 
-    _ = try? await client.getSession(id: "a/b c")
+    _ = try? await client.perform(getSessionCall(id: "a/b c"))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(request.url?.absoluteString == "http://127.0.0.1:8787/v1/sessions/a%2Fb%20c")
@@ -186,7 +183,7 @@ struct WorkerClientTests {
     StubStore.shared.install { _ in StubResponse(body: Data(#"{"sdkSessions":[]}"#.utf8)) }
     let client = makeStubClient()
 
-    _ = try await client.listSdkSessions(listSdkSessionsCall(dir: "/repo", limit: 10, offset: 5, profile: "codex"))
+    _ = try await client.perform(listSdkSessionsCall(dir: "/repo", limit: 10, offset: 5, profile: "codex"))
 
     let request = try #require(StubStore.shared.requests.first)
     #expect(

@@ -17,13 +17,13 @@ struct CreateSessionView: View {
   @State private var model: CreateSessionModel
   @State private var showAdvanced = false
   @State private var sheet: Sheet?
-  private let onCreated: (SessionInfo) -> Void
-  private let onAgentCreated: (AgentResponse) -> Void
+  private let onCreated: (Created) -> Void
+  private let onAgentCreated: (Created) -> Void
 
   init(
     form: CreateForm, client: WorkerClient,
-    onAgentCreated: @escaping (AgentResponse) -> Void = { _ in },
-    onCreated: @escaping (SessionInfo) -> Void
+    onAgentCreated: @escaping (Created) -> Void = { _ in },
+    onCreated: @escaping (Created) -> Void
   ) {
     _model = State(initialValue: CreateSessionModel(form: form, client: client))
     self.onCreated = onCreated
@@ -188,9 +188,9 @@ struct CreateSessionView: View {
           Button(model.state.submitLabel) {
             Task {
               if model.state.isAgent {
-                if let response = await model.submitAgent() { onAgentCreated(response) }
-              } else if let info = await model.submit() {
-                onCreated(info)
+                if let created = await model.submitAgent() { onAgentCreated(created) }
+              } else if let created = await model.submit() {
+                onCreated(created)
               }
             }
           }
@@ -267,7 +267,7 @@ private struct StoredSessionPickerView: View {
   let model: CreateSessionModel
 
   @Environment(\.dismiss) private var dismiss
-  @State private var summaries: [SdkSessionSummary]?
+  @State private var summaries: [SdkSession]?
   @State private var errorText: String?
 
   var body: some View {
@@ -292,7 +292,7 @@ private struct StoredSessionPickerView: View {
                   : "No stored sessions for this directory. Clear the working directory to list every stored session.")
             }
           } else {
-            List(summaries) { summary in
+            List(summaries, id: \.sessionId) { summary in
               Button {
                 model.adoptStoredSession(summary)
                 dismiss()

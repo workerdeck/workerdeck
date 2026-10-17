@@ -108,7 +108,7 @@ struct SessionStepRows: View {
   var body: some View {
     ForEach(steps) { step in
       let route = row.hostUUID.map {
-        SessionRoute.step(hostId: $0, sessionId: row.info.id, step: step)
+        SessionRoute.step(hostId: $0, sessionId: row.sessionId, step: step)
       }
       let label = SessionStepRow(step: step, onKill: onKill(step))
       Group {
