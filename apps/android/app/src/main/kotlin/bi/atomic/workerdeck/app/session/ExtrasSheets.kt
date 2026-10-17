@@ -87,7 +87,7 @@ class McpModel(private val servers: McpServers, private val transport: Transport
     }
 
     suspend fun perform(server: String, action: McpAction) {
-        servers.answered(transport.answer(servers.actionCall(server, action)))
+        servers.actionAnswered(transport.answer(servers.actionCall(server, action)))?.let { servers.answered(transport.answer(it)) }
         revisionState.update { it + 1 }
     }
 }
@@ -408,6 +408,7 @@ private fun McpServerBody(mcp: McpModel, name: String, push: (Page) -> Unit) {
                 }
             }
         }
+        mcp.core.error()?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.orange, modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 10.dp)) }
         Footnote("Applies to this session only. Your .mcp.json is untouched.")
     }
 }

@@ -104,7 +104,13 @@ impl McpServers {
     }
 
     pub fn action_call(&self, server: String, action: McpAction) -> HttpCall {
+        self.lock().acting();
         calls::mcp_action(&self.session_id, &server, action.into()).into()
+    }
+
+    // The action's answer; a refusal returns the refetch to make, whose answer goes to `answered`.
+    pub fn action_answered(&self, answer: HttpAnswer) -> Option<HttpCall> {
+        self.lock().action_answered(answer.core()).then(|| calls::mcp_servers(&self.session_id).into())
     }
 
     pub fn answered(&self, answer: HttpAnswer) {

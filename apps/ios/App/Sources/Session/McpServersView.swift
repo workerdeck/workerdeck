@@ -4,7 +4,7 @@ import WorkerDeckCore
 
 // The `/mcp` screens as a navigation stack (servers, one server, its tools, one tool), Claude Code's own `/mcp`
 // picker. The core's `McpServers` holds the last answer and says what every level shows; an action answers with the
-// refreshed list, so one call updates the whole stack.
+// refreshed list, so one call updates the whole stack (a refused one refetches it).
 @MainActor
 @Observable
 final class McpServersModel {
@@ -35,7 +35,9 @@ final class McpServersModel {
   }
 
   func perform(_ name: String, _ action: McpAction) async {
-    servers.answered(answer: await transport(servers.actionCall(server: name, action: action)))
+    if let refetch = servers.actionAnswered(answer: await transport(servers.actionCall(server: name, action: action))) {
+      servers.answered(answer: await transport(refetch))
+    }
     revision &+= 1
   }
 
@@ -189,7 +191,10 @@ private struct McpServerDetailView: View {
               actionButton(action)
             }
           } footer: {
-            Text("Applies to this session only - your .mcp.json is untouched.")
+            VStack(alignment: .leading, spacing: 6) {
+              if let error = model.error { Text(error).foregroundStyle(.orange) }
+              Text("Applies to this session only - your .mcp.json is untouched.")
+            }
           }
         }
       }

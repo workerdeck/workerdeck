@@ -159,6 +159,7 @@ fn sorted(value: &Value) -> Value {
 pub struct McpView {
     servers: Vec<McpServer>,
     error: Option<String>,
+    action_error: Option<String>,
     loading: bool,
     can_manage: bool,
 }
@@ -170,6 +171,28 @@ impl McpView {
 
     pub fn refreshing(&mut self) {
         self.loading = true;
+        self.action_error = None;
+    }
+
+    pub fn acting(&mut self) {
+        self.action_error = None;
+    }
+
+    // A refused action may still have moved the server (an Enable whose connect fails answers 400 with that error,
+    // the server now `failed`), so the list is stale: true asks for a refetch, and the refusal stays shown across it.
+    pub fn action_answered(&mut self, answer: Answer) -> bool {
+        match answer.read::<McpServers>() {
+            Ok(list) => {
+                self.servers = list.servers;
+                self.error = None;
+                self.action_error = None;
+                false
+            }
+            Err(error) => {
+                self.action_error = Some(error.message);
+                true
+            }
+        }
     }
 
     pub fn answered(&mut self, answer: Answer) {
@@ -188,7 +211,7 @@ impl McpView {
     }
 
     pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
+        self.action_error.as_deref().or(self.error.as_deref())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -480,6 +503,23 @@ mod tests {
         empty.answered(Answer::new(501, JSON, r#"{"error":"no MCP here"}"#));
         assert!(!empty.loading() && empty.is_empty());
         assert_eq!(empty.error(), Some("no MCP here"));
+    }
+
+    #[test]
+    fn a_refused_action_asks_for_a_refetch_and_keeps_saying_why() {
+        let mut v = view(SERVERS, true);
+        v.acting();
+        assert!(v.action_answered(Answer::new(400, JSON, r#"{"error":"connect failed"}"#)));
+        assert_eq!(v.server("n").unwrap().status, "disabled");
+        v.answered(Answer::new(200, JSON, &SERVERS.replace(r#""name":"n","status":"disabled""#, r#""name":"n","status":"failed""#)));
+        assert_eq!(v.server("n").unwrap().status, "failed");
+        assert_eq!(v.error(), Some("connect failed"));
+        v.acting();
+        assert!(!v.action_answered(Answer::new(200, JSON, SERVERS)));
+        assert_eq!(v.error(), None);
+        v.action_answered(Answer::new(400, JSON, r#"{"error":"again"}"#));
+        v.refreshing();
+        assert_eq!(v.error(), None);
     }
 
     fn skill(name: &str, scope: Option<&str>) -> Skill {
