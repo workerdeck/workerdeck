@@ -1367,6 +1367,13 @@ The Android app's Gradle root (outside pnpm and turbo): **`:core`**, an Android 
   list's `+` (one entry per gateway; New agent only once the gateway's `/meta`, which `SessionsModel` feeds the list,
   says it runs agents). Kotlin moves bytes and keeps the per-gateway recent folders; every field rule, the sheets'
   rows and the request are the core's. The folder picker is `HostFiles.folders()` (`sessions/FolderPicker.kt`).
+- **Meters, extras and files are core readings too.** The status strip's rings and the Context/Usage sheets draw
+  `Session.usage(now)` (`session/UsageSheets.kt`); `SessionModel` polls `GET /v1/profiles` every 60 s only once a
+  reading names a profile with plan windows, seeds a new screen from that gateway's last body, and stops on a 404. The
+  session menu's Session info, MCP servers and Skills sheets (`session/ExtrasSheets.kt`) read `session_extras` from
+  `GET /sessions/:id`, the core `McpServers` (wrapped by `McpModel`, whose `revision` is the only recompose signal) and
+  `skill_sections`; their pages are a stack that system back pops. Files (`session/HostFilesScreen.kt`) is
+  `HostFiles.session(cwd)` plus `HostFileEditor`, offered only when the session record says files are served.
 - **Approvals and questions dock above the status strip** (`session/PromptView.kt`), drawn like the
   iOS terminal prompts: a strip ruled in the prompt's tint, a body that scrolls under a cap of half
   the screen (220 dp floor), and the actions pinned below it. Only the head of the queue is drawn,
